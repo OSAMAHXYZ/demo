@@ -2555,16 +2555,24 @@
                 document.getElementById('ftDateTrigger').setAttribute('aria-expanded', willOpen ? 'true' : 'false');
             });
             document.getElementById('ftDatePanel')?.addEventListener('click', (e) => e.stopPropagation());
-            document.getElementById('ftDateDone')?.addEventListener('click', () => {
+            document.getElementById('ftDateDone')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 pushDatesToNatives();
+                dateControl?.classList.remove('is-open');
+                document.getElementById('ftDateTrigger')?.setAttribute('aria-expanded', 'false');
                 closeAllFtPanels();
                 applyTrackFilter();
             });
-            document.getElementById('ftDateToday')?.addEventListener('click', () => {
+            document.getElementById('ftDateToday')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const today = getSaudiTodayIso();
                 document.getElementById('ftDateFromUi').value = today;
                 document.getElementById('ftDateToUi').value = today;
                 pushDatesToNatives();
+                dateControl?.classList.remove('is-open');
+                document.getElementById('ftDateTrigger')?.setAttribute('aria-expanded', 'false');
                 closeAllFtPanels();
                 applyTrackFilter();
             });

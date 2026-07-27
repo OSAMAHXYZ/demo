@@ -970,12 +970,15 @@ body.admin-console tbody tr:hover {
 }
 
 .ft-date-panel {
-  display: grid;
   gap: 12px;
   padding: 14px;
   width: 300px;
   max-height: none;
   overflow: visible;
+}
+
+.ft-control.is-open > .ft-panel.ft-date-panel {
+  display: grid;
 }
 
 .ft-date-panel .ft-date-field {
