@@ -832,6 +832,86 @@
         .pct-status-pill--done b { color: #4ade80; }
         .pct-status-pill--pending { border-color: rgba(245, 158, 11, 0.35); }
         .pct-status-pill--pending b { color: #fbbf24; }
+
+        /* Delivered / Total progress chart */
+        .pct-chart-card--delivered-total {
+            grid-column: 1 / -1;
+            border-color: rgba(34, 197, 94, 0.4);
+            background:
+                linear-gradient(120deg, rgba(34, 197, 94, 0.14), transparent 45%),
+                linear-gradient(165deg, rgba(255,255,255,0.08), rgba(15, 23, 42, 0.55));
+        }
+        .delivered-total-layout {
+            display: grid;
+            grid-template-columns: 200px minmax(0, 1fr);
+            gap: 20px;
+            align-items: center;
+        }
+        .delivered-total-meter {
+            display: grid;
+            gap: 14px;
+        }
+        .delivered-total-numbers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 18px;
+            align-items: baseline;
+        }
+        .delivered-total-numbers .big {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #4ade80;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            font-family: 'Changa', 'Tajawal', sans-serif;
+        }
+        .delivered-total-numbers .of {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #cbd5e1;
+        }
+        .delivered-total-numbers .of b {
+            color: #f8fafc;
+            font-size: 1.35rem;
+        }
+        .delivered-total-pct-badge {
+            margin-inline-start: auto;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.45);
+            color: #86efac;
+            font-size: 1.25rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+        .delivered-total-bar {
+            height: 22px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+            position: relative;
+        }
+        .delivered-total-bar > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #16a34a, #4ade80);
+            min-width: 0;
+            transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.35);
+        }
+        .delivered-total-caption {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        .delivered-total-caption strong { color: #e2e8f0; }
+        @media (max-width: 900px) {
+            .delivered-total-layout { grid-template-columns: 1fr; }
+            .delivered-total-pct-badge { margin-inline-start: 0; }
+        }
         .xfer-dash-count-pct {
             display: flex;
             flex-direction: column;
@@ -889,6 +969,276 @@
             .pct-chart-layout,
             .pct-chart-card--status .pct-chart-layout { grid-template-columns: 1fr; }
             .pct-status-strip { grid-template-columns: 1fr; }
+        }
+
+        /* —— Super smooth & flexible admin shell —— */
+        html { scroll-behavior: smooth; }
+        body.delivery-hub.admin-console {
+            background-attachment: fixed;
+        }
+        .admin-console .hub-shell {
+            width: min(1280px, calc(100% - 24px));
+            max-width: none;
+            margin-inline: auto;
+            padding: 12px 0 64px;
+            animation: adminFadeIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .admin-console .hub-topbar {
+            gap: 14px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(10, 14, 22, 0.72);
+            backdrop-filter: blur(18px) saturate(1.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .admin-console .hub-brand h1 {
+            font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+        }
+        .admin-console .hub-actions {
+            gap: 8px;
+        }
+        .admin-console .hub-btn {
+            border-radius: 999px;
+            transition:
+                transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                background 0.22s ease,
+                border-color 0.22s ease,
+                box-shadow 0.22s ease,
+                color 0.22s ease;
+        }
+        .admin-console .hub-btn:hover {
+            transform: translateY(-2px);
+        }
+        .admin-console .hub-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+        .admin-console .hub-btn--primary {
+            box-shadow: 0 10px 28px rgba(235, 10, 30, 0.28);
+        }
+        .admin-console .hub-btn--primary:hover {
+            box-shadow: 0 14px 34px rgba(235, 10, 30, 0.4);
+        }
+
+        .admin-console .hub-fold-actions,
+        .admin-console .admin-track-note,
+        .admin-console .admin-restore-box,
+        .admin-console .admin-filter-bar,
+        .admin-console .hub-section.hub-fold {
+            animation: adminRise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .admin-console .hub-fold-actions { animation-delay: 0.02s; }
+        .admin-console .admin-track-note { animation-delay: 0.05s; }
+        .admin-console .admin-restore-box { animation-delay: 0.08s; }
+        .admin-console .admin-filter-bar { animation-delay: 0.11s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(1) { animation-delay: 0.14s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(2) { animation-delay: 0.17s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(3) { animation-delay: 0.2s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(4) { animation-delay: 0.23s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(5) { animation-delay: 0.26s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(6) { animation-delay: 0.29s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(7) { animation-delay: 0.32s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(8) { animation-delay: 0.35s; }
+        .admin-console .hub-section.hub-fold:nth-of-type(9) { animation-delay: 0.38s; }
+        @keyframes adminRise {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .admin-console .hub-section.hub-fold {
+            border-radius: 18px;
+            margin-bottom: 10px;
+            background: rgba(15, 23, 42, 0.48);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(14px);
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                background 0.3s ease,
+                transform 0.3s ease;
+        }
+        .admin-console .hub-section.hub-fold:hover {
+            border-color: rgba(255, 255, 255, 0.16);
+            transform: translateY(-1px);
+        }
+        .admin-console .hub-section.hub-fold.is-open {
+            background: rgba(15, 23, 42, 0.62);
+            border-color: rgba(235, 10, 30, 0.32);
+            box-shadow:
+                0 24px 56px rgba(0, 0, 0, 0.36),
+                inset 0 1px 0 rgba(255, 255, 255, 0.07);
+            transform: none;
+        }
+        .hub-fold-body {
+            transition: grid-template-rows 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .hub-fold-content {
+            transition:
+                opacity 0.32s ease,
+                transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .hub-fold-toggle {
+            padding: 15px 18px;
+            transition: background 0.25s ease;
+        }
+        .hub-fold-chevron {
+            transition:
+                transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                background 0.25s ease,
+                border-color 0.25s ease,
+                box-shadow 0.25s ease;
+        }
+        .hub-fold.is-open .hub-fold-chevron {
+            box-shadow: 0 0 16px rgba(235, 10, 30, 0.35);
+        }
+
+        .admin-filter-bar,
+        .admin-restore-box,
+        .admin-track-note {
+            transition:
+                border-color 0.25s ease,
+                box-shadow 0.3s ease,
+                transform 0.25s ease;
+        }
+        .admin-filter-bar:focus-within,
+        .admin-restore-box:hover {
+            border-color: rgba(235, 10, 30, 0.4);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+        }
+        .admin-filter-grid {
+            grid-template-columns: minmax(200px, 1.4fr) repeat(2, minmax(140px, 1fr)) auto;
+        }
+        .admin-filter-field select,
+        .admin-filter-field input[type="date"],
+        .admin-console .hub-input,
+        .admin-console .hub-textarea {
+            transition:
+                border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                background 0.2s ease;
+        }
+        .admin-filter-field select:hover,
+        .admin-filter-field input[type="date"]:hover,
+        .admin-console .hub-input:hover {
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+
+        .pct-charts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .pct-chart-card {
+            transition:
+                transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.3s ease,
+                border-color 0.25s ease;
+        }
+        .pct-chart-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+        }
+        .pct-chart-card--delivered-total:hover,
+        .pct-chart-card--status:hover {
+            transform: translateY(-2px);
+        }
+
+        .admin-console .hub-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+        }
+        .admin-console .hub-stat {
+            border-radius: 16px;
+            transition:
+                transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.28s ease,
+                border-color 0.28s ease;
+        }
+        .admin-console .hub-table-wrap {
+            border-radius: 14px;
+            transition: border-color 0.25s ease;
+        }
+        .admin-console .hub-table tbody tr {
+            transition: background 0.18s ease;
+        }
+        .admin-console .hub-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .xfer-dash {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .xfer-dash-card {
+            transition:
+                transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.28s ease,
+                border-color 0.25s ease;
+        }
+        .xfer-dash-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+        .xfer-dash-row,
+        .xfer-account-item {
+            transition:
+                background 0.2s ease,
+                border-color 0.2s ease,
+                transform 0.2s ease;
+        }
+
+        .admin-gate-card {
+            animation: adminRise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+            backdrop-filter: blur(16px);
+        }
+
+        @media (max-width: 1100px) {
+            .admin-console .hub-shell { width: min(100%, calc(100% - 16px)); }
+            .admin-filter-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .admin-filter-actions { grid-column: 1 / -1; }
+        }
+        @media (max-width: 700px) {
+            .admin-console .hub-topbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .admin-console .hub-actions {
+                width: 100%;
+            }
+            .admin-console .hub-actions .hub-btn {
+                flex: 1 1 auto;
+            }
+            .admin-filter-grid { grid-template-columns: 1fr; }
+            .pct-charts { grid-template-columns: 1fr; }
+            .xfer-dash { grid-template-columns: 1fr; }
+            .hub-fold-title { font-size: 0.9rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .admin-console .hub-shell,
+            .admin-console .hub-fold-actions,
+            .admin-console .admin-track-note,
+            .admin-console .admin-restore-box,
+            .admin-console .admin-filter-bar,
+            .admin-console .hub-section.hub-fold,
+            .admin-gate-card {
+                animation: none !important;
+            }
+            .admin-console .hub-btn,
+            .admin-console .hub-stat,
+            .pct-chart-card,
+            .xfer-dash-card,
+            .hub-fold-body,
+            .hub-fold-content,
+            .hub-fold-chevron,
+            .delivered-total-bar > span {
+                transition: none !important;
+            }
         }
     </style>
 </head>
@@ -1068,6 +1418,24 @@
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
                         <div class="pct-charts">
+                            <div class="pct-chart-card pct-chart-card--delivered-total">
+                                <h3>إجمالي المُرحَّل من الإجمالي — Delivered of Total</h3>
+                                <p class="pct-chart-sub">عدد السيارات التي تم ترحيلها نسبةً إلى إجمالي السيارات في النطاق الحالي</p>
+                                <div class="delivered-total-layout">
+                                    <div class="pct-donut-wrap" id="deliveredTotalDonut"></div>
+                                    <div class="delivered-total-meter">
+                                        <div class="delivered-total-numbers">
+                                            <span class="big" id="deliveredTotalDone">0</span>
+                                            <span class="of">من إجمالي <b id="deliveredTotalAll">0</b></span>
+                                            <span class="delivered-total-pct-badge" id="deliveredTotalPct">0%</span>
+                                        </div>
+                                        <div class="delivered-total-bar" aria-hidden="true">
+                                            <span id="deliveredTotalBarFill" style="width:0%"></span>
+                                        </div>
+                                        <p class="delivered-total-caption" id="deliveredTotalCaption">لا توجد بيانات بعد</p>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="pct-chart-card pct-chart-card--status">
                                 <h3>نسبة الترحيل — Delivered vs Still</h3>
                                 <p class="pct-chart-sub">تم الترحيل مقابل ما لم يُرحّل بعد من قائمة المنسق (ضمن الفلتر)</p>
@@ -2097,6 +2465,94 @@
             ].filter((r) => delivered + still > 0);
         }
 
+        /** Delivered count vs overall total in the current filter scope. */
+        function deliveredOfTotalStats() {
+            const queue = filteredQueue();
+            const vehicles = filteredVehicleList();
+            const drafts = filteredDrafts();
+            const { type } = getTrackFilter();
+
+            let delivered = queue.filter((q) => q.agentStatus === 'delivered').length;
+            // Prefer queue total; fall back to vehicles in scope, then drafts
+            let total = queue.length;
+            if (!total && (type === 'proforma' || type === 'invoice')) {
+                total = vehicles.length;
+                // Count delivered among those VINs even if not all are in queue
+                const vinSet = new Set(vehicles.map((v) => normVinKey(v.vin)));
+                delivered = (allQueue || []).filter(
+                    (q) => vinSet.has(normVinKey(q.vin)) && q.agentStatus === 'delivered'
+                ).length;
+            }
+            if (!total && drafts.length) {
+                total = drafts.length;
+                delivered = drafts.length;
+            }
+            if (!total && !hasActiveTrackFilter()) {
+                total = (allQueue || []).length || (allVehicles || []).length;
+                delivered = (allQueue || []).filter((q) => q.agentStatus === 'delivered').length;
+            }
+
+            const pct = total ? Math.round((delivered / total) * 1000) / 10 : 0;
+            return { delivered, total, pct, remaining: Math.max(0, total - delivered) };
+        }
+
+        function renderDeliveredOfTotalChart() {
+            const stats = deliveredOfTotalStats();
+            const doneEl = document.getElementById('deliveredTotalDone');
+            const allEl = document.getElementById('deliveredTotalAll');
+            const pctEl = document.getElementById('deliveredTotalPct');
+            const barEl = document.getElementById('deliveredTotalBarFill');
+            const capEl = document.getElementById('deliveredTotalCaption');
+            const donutEl = document.getElementById('deliveredTotalDonut');
+
+            if (doneEl) doneEl.textContent = String(stats.delivered);
+            if (allEl) allEl.textContent = String(stats.total);
+            if (pctEl) pctEl.textContent = `${stats.pct}%`;
+            if (barEl) barEl.style.width = `${Math.min(100, stats.pct)}%`;
+            if (capEl) {
+                const { type } = getTrackFilter();
+                const scope =
+                    type === 'proforma' ? 'نطاق البروفورما'
+                        : type === 'invoice' ? 'نطاق الفاتورة'
+                            : hasActiveTrackFilter() ? 'نطاق مذكرة الترحيل'
+                                : 'كل البيانات';
+                capEl.innerHTML = stats.total
+                    ? `<strong>${stats.delivered}</strong> مُرحَّلة من أصل <strong>${stats.total}</strong> (${scope}) · متبقي <strong>${stats.remaining}</strong>`
+                    : 'لا توجد بيانات في النطاق الحالي';
+            }
+
+            const rows = stats.total
+                ? [
+                    {
+                        name: 'تم الترحيل',
+                        count: stats.delivered,
+                        color: '#22c55e',
+                        pctClass: 'is-green'
+                    },
+                    {
+                        name: 'باقي الإجمالي',
+                        count: stats.remaining,
+                        color: '#64748b',
+                        pctClass: 'is-amber'
+                    }
+                ]
+                : [];
+
+            // Reuse donut renderer without legend (legend lives in the meter)
+            const legendHost = document.createElement('div');
+            renderPercentChart(
+                donutEl,
+                legendHost,
+                rows.filter((r) => r.count > 0 || stats.total > 0),
+                'لا توجد بيانات',
+                {
+                    large: true,
+                    centerPct: stats.total ? stats.pct : null,
+                    centerLabel: 'من الإجمالي'
+                }
+            );
+        }
+
         function aggregateCompanyCities(drafts) {
             const companies = new Map();
             drafts.forEach((d) => {
@@ -2234,6 +2690,8 @@
                         ? 'حالة الترحيل لسيارات تاريخ البروفورما ضمن الفترة'
                         : 'حالة الترحيل لسيارات تاريخ الفاتورة ضمن الفترة';
             }
+
+            renderDeliveredOfTotalChart();
 
             renderPercentChart(
                 document.getElementById('statusPctDonut'),
