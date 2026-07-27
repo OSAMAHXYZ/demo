@@ -732,8 +732,43 @@ body.admin-console tbody tr:hover {
   color: #e2e8f0;
 }
 
-.invoice-status-stats .is-done { color: #86efac; background: rgba(34,197,94,0.12); }
-.invoice-status-stats .is-pending { color: #fcd34d; background: rgba(245,158,11,0.12); }
+.lead-company-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 16px;
+}
+
+.lead-company-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.lead-company-row select {
+  min-width: min(360px, 100%);
+  max-width: 100%;
+}
+
+.lead-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.lead-badge--1 { color: #86efac; background: rgba(34,197,94,0.14); }
+.lead-badge--2 { color: #93c5fd; background: rgba(59,130,246,0.14); }
+.lead-badge--3 { color: #fcd34d; background: rgba(245,158,11,0.14); }
+.lead-badge--na { color: #94a3b8; background: rgba(148,163,184,0.12); }
+
+.invoice-status-stats .is-d1 { color: #86efac; background: rgba(34,197,94,0.12); }
+.invoice-status-stats .is-d2 { color: #93c5fd; background: rgba(59,130,246,0.12); }
+.invoice-status-stats .is-d3 { color: #fcd34d; background: rgba(245,158,11,0.12); }
 
 .invoice-status-bars {
   display: grid;

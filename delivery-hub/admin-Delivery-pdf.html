@@ -1614,14 +1614,37 @@
                         <div class="saas-section saas-card" id="invoiceStatusCard" style="margin:0 0 16px;box-shadow:none">
                             <div class="saas-section__head">
                                 <div>
-                                    <h3>حالة الفاتورة حسب VIN</h3>
-                                    <p>تم التسليم = يوجد تاريخ Proforma وتاريخ Invoice معًا · غير ذلك = Pending</p>
+                                    <h3>زمن التسليم حسب الشركة (Lead Time)</h3>
+                                    <p>الفرق بالأيام بين تاريخ الفاتورة (Invoice) وتاريخ مذكرة الترحيل — اختر شركة لعرض سياراتها</p>
                                 </div>
                                 <div class="invoice-status-stats" id="invoiceStatusStats" aria-live="polite"></div>
+                            </div>
+                            <div class="lead-company-row">
+                                <label for="leadTimeCompanySelect">الشركة</label>
+                                <select id="leadTimeCompanySelect" class="ft-native" aria-label="اختر شركة لزمن التسليم">
+                                    <option value="">— اختر شركة —</option>
+                                </select>
                             </div>
                             <div class="invoice-status-layout">
                                 <div id="invoiceStatusChart" style="min-height:260px"></div>
                                 <div class="invoice-status-bars" id="invoiceStatusBars"></div>
+                            </div>
+                            <div class="hub-table-wrap" style="margin-top:16px">
+                                <table class="hub-table saas-table">
+                                    <thead>
+                                        <tr>
+                                            <th>VIN</th>
+                                            <th>Invoice</th>
+                                            <th>Delivery Note</th>
+                                            <th>الأيام</th>
+                                            <th>الفئة</th>
+                                            <th>المنتج</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leadTimeCarsBody">
+                                        <tr><td colspan="6" class="hub-empty">اختر شركة لعرض السيارات وزمن التسليم</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
@@ -3102,6 +3125,15 @@
             renderCompanyRecordsPanel('');
         }
 
+        document.getElementById('leadTimeCompanySelect')?.addEventListener('change', () => {
+            const sel = document.getElementById('leadTimeCompanySelect');
+            selectedCompany = String(sel?.value || '').trim();
+            updateCompanyFilterChip();
+            refreshTransferDashboard();
+            if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
+            else renderCompanyRecordsPanel('');
+        });
+
         function tallyField(drafts, getter) {
             const map = new Map();
             drafts.forEach((d) => {
@@ -3258,85 +3290,199 @@
             }
         }
 
-        function vehicleHasDate(value) {
-            return Boolean(String(value || '').trim());
+        function parseIsoDateOnly(value) {
+            const s = String(value || '').trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+            const [y, m, d] = s.split('-').map(Number);
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            if (Number.isNaN(dt.getTime())) return null;
+            return dt;
         }
 
-        /** VIN is Delivered only when both Proforma + Invoice dates exist. */
-        function invoiceDeliveryStats(vehicles) {
-            const list = Array.isArray(vehicles) ? vehicles : filteredVehicleList();
-            let delivered = 0;
-            let pending = 0;
-            let proformaOnly = 0;
-            let invoiceOnly = 0;
-            let neither = 0;
-            list.forEach((v) => {
-                const hasP = vehicleHasDate(v.proformaDate);
-                const hasI = vehicleHasDate(v.invoiceDate);
-                if (hasP && hasI) {
-                    delivered += 1;
-                    return;
+        function daysBetweenIso(a, b) {
+            const da = parseIsoDateOnly(a);
+            const db = parseIsoDateOnly(b);
+            if (!da || !db) return null;
+            const ms = Math.abs(db.getTime() - da.getTime());
+            return Math.round(ms / 86400000);
+        }
+
+        function leadTimeBucket(days) {
+            if (days == null || days < 0) return null;
+            if (days <= 1) return '1';
+            if (days === 2) return '2';
+            return '3plus';
+        }
+
+        function leadTimeBucketLabel(bucket) {
+            if (bucket === '1') return '١ يوم';
+            if (bucket === '2') return '٢ يوم';
+            if (bucket === '3plus') return '٣+ أيام';
+            return '—';
+        }
+
+        /** Build VIN lead-time rows for a company (invoice date → delivery note date). */
+        function companyLeadTimeRows(company) {
+            const key = String(company || '').trim();
+            if (!key) return [];
+            const byVin = vehicleByVin();
+            const map = new Map();
+
+            dateScopedDrafts().forEach((d) => {
+                if (draftCompanyName(d) !== key) return;
+                const vin = normVinKey(d.vin);
+                if (!vin) return;
+                const vehicle = byVin.get(vin);
+                const noteDate = draftEventIso(d) || String(vehicle?.deliveryNoteDate || '').slice(0, 10);
+                const invoiceDate = String(vehicle?.invoiceDate || '').slice(0, 10);
+                const existing = map.get(vin);
+                // Prefer latest delivery-note date if multiple drafts
+                if (!existing || (noteDate && noteDate > (existing.deliveryNoteDate || ''))) {
+                    const days = daysBetweenIso(invoiceDate, noteDate);
+                    map.set(vin, {
+                        vin,
+                        product: d.product || d.model || vehicle?.product || vehicle?.model || '',
+                        invoiceDate: invoiceDate || '',
+                        deliveryNoteDate: noteDate || '',
+                        days,
+                        bucket: leadTimeBucket(days)
+                    });
                 }
-                pending += 1;
-                if (hasP && !hasI) proformaOnly += 1;
-                else if (!hasP && hasI) invoiceOnly += 1;
-                else neither += 1;
             });
-            const total = list.length;
-            const pct = total ? Math.round((delivered / total) * 1000) / 10 : 0;
-            return { delivered, pending, total, pct, proformaOnly, invoiceOnly, neither };
+
+            // Also include filtered vehicles for this company via draft linkage only
+            return Array.from(map.values()).sort((a, b) => {
+                const da = a.days == null ? 9999 : a.days;
+                const db = b.days == null ? 9999 : b.days;
+                return da - db || a.vin.localeCompare(b.vin);
+            });
+        }
+
+        function leadTimeStats(rows) {
+            let day1 = 0;
+            let day2 = 0;
+            let day3plus = 0;
+            let missing = 0;
+            (rows || []).forEach((r) => {
+                if (r.bucket === '1') day1 += 1;
+                else if (r.bucket === '2') day2 += 1;
+                else if (r.bucket === '3plus') day3plus += 1;
+                else missing += 1;
+            });
+            const measured = day1 + day2 + day3plus;
+            return { day1, day2, day3plus, missing, measured, total: (rows || []).length };
+        }
+
+        function populateLeadTimeCompanySelect() {
+            const sel = document.getElementById('leadTimeCompanySelect');
+            if (!sel) return;
+            const names = tallyField(dateScopedDrafts(), (d) => draftCompanyName(d)).map((r) => r.name);
+            const current = selectedCompany || sel.value || '';
+            sel.innerHTML = '<option value="">— اختر شركة —</option>' + names.map((name) =>
+                `<option value="${escapeHtml(name)}"${name === current ? ' selected' : ''}>${escapeHtml(name)}</option>`
+            ).join('');
+            if (current && names.includes(current)) sel.value = current;
         }
 
         function renderInvoiceDeliveryChart() {
-            const stats = invoiceDeliveryStats(filteredVehicleList());
+            populateLeadTimeCompanySelect();
+            const sel = document.getElementById('leadTimeCompanySelect');
+            const company = String(selectedCompany || sel?.value || '').trim();
+            if (sel && company && sel.value !== company) sel.value = company;
+
             const statsEl = document.getElementById('invoiceStatusStats');
             const barsEl = document.getElementById('invoiceStatusBars');
             const chartEl = document.getElementById('invoiceStatusChart');
+            const tbody = document.getElementById('leadTimeCarsBody');
             if (!chartEl) return;
+
+            if (!company) {
+                if (statsEl) statsEl.innerHTML = '<span>اختر شركة</span>';
+                if (barsEl) barsEl.innerHTML = '';
+                chartEl.innerHTML = '<div class="saas-empty">اختر شركة لعرض زمن التسليم (Invoice → Delivery Note)</div>';
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">اختر شركة لعرض السيارات وزمن التسليم</td></tr>';
+                }
+                return;
+            }
+
+            const rows = companyLeadTimeRows(company);
+            const stats = leadTimeStats(rows);
+            const base = stats.measured || 1;
 
             if (statsEl) {
                 statsEl.innerHTML = `
-                    <span class="is-done">Delivered ${stats.delivered}</span>
-                    <span class="is-pending">Pending ${stats.pending}</span>
-                    <span>Total ${stats.total}</span>
-                    <span>${stats.pct}%</span>
+                    <span class="is-d1">١ يوم: ${stats.day1}</span>
+                    <span class="is-d2">٢ يوم: ${stats.day2}</span>
+                    <span class="is-d3">٣+: ${stats.day3plus}</span>
+                    <span>VINs ${stats.total}</span>
+                    <span>بقياس ${stats.measured}</span>
                 `;
             }
 
+            const pct = (n) => Math.round((n / base) * 1000) / 10;
             if (barsEl) {
-                const total = stats.total || 1;
-                const deliveredW = Math.round((stats.delivered / total) * 1000) / 10;
-                const pendingW = Math.round((stats.pending / total) * 1000) / 10;
                 barsEl.innerHTML = `
                     <div class="invoice-status-row">
                         <div class="invoice-status-row__head">
-                            <span>Delivered — Proforma + Invoice</span>
-                            <small>${stats.delivered} · ${deliveredW}%</small>
+                            <span>١ يوم (أو أقل)</span>
+                            <small>${stats.day1} · ${stats.measured ? pct(stats.day1) : 0}%</small>
                         </div>
                         <div class="invoice-status-row__track" aria-hidden="true">
-                            <span style="width:${Math.min(100, deliveredW)}%;background:linear-gradient(90deg,#22c55e,#4ade80)"></span>
+                            <span style="width:${stats.measured ? Math.min(100, pct(stats.day1)) : 0}%;background:linear-gradient(90deg,#22c55e,#4ade80)"></span>
                         </div>
                     </div>
                     <div class="invoice-status-row">
                         <div class="invoice-status-row__head">
-                            <span>Pending — missing Proforma and/or Invoice</span>
-                            <small>${stats.pending} · ${pendingW}%</small>
+                            <span>٢ يوم</span>
+                            <small>${stats.day2} · ${stats.measured ? pct(stats.day2) : 0}%</small>
                         </div>
                         <div class="invoice-status-row__track" aria-hidden="true">
-                            <span style="width:${Math.min(100, pendingW)}%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></span>
+                            <span style="width:${stats.measured ? Math.min(100, pct(stats.day2)) : 0}%;background:linear-gradient(90deg,#3b82f6,#60a5fa)"></span>
+                        </div>
+                    </div>
+                    <div class="invoice-status-row">
+                        <div class="invoice-status-row__head">
+                            <span>٣ أيام فأكثر</span>
+                            <small>${stats.day3plus} · ${stats.measured ? pct(stats.day3plus) : 0}%</small>
+                        </div>
+                        <div class="invoice-status-row__track" aria-hidden="true">
+                            <span style="width:${stats.measured ? Math.min(100, pct(stats.day3plus)) : 0}%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></span>
                         </div>
                     </div>
                     <div class="invoice-status-row" style="opacity:0.85">
                         <div class="invoice-status-row__head">
-                            <span>Pending breakdown</span>
-                            <small>Proforma only ${stats.proformaOnly} · Invoice only ${stats.invoiceOnly} · Neither ${stats.neither}</small>
+                            <span>بدون تاريخ كامل</span>
+                            <small>${stats.missing} VIN بدون Invoice أو Delivery Note</small>
                         </div>
                     </div>
                 `;
             }
 
-            if (!stats.total) {
-                chartEl.innerHTML = '<div class="saas-empty">لا توجد مركبات في النطاق الحالي</div>';
+            if (tbody) {
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">لا توجد سيارات لهذه الشركة في النطاق</td></tr>';
+                } else {
+                    tbody.innerHTML = rows.map((r) => {
+                        const badgeClass = r.bucket === '1' ? 'lead-badge--1'
+                            : r.bucket === '2' ? 'lead-badge--2'
+                                : r.bucket === '3plus' ? 'lead-badge--3'
+                                    : 'lead-badge--na';
+                        const daysText = r.days == null ? '—' : String(r.days);
+                        return `<tr>
+                            <td class="hub-vin">${escapeHtml(r.vin)}</td>
+                            <td>${escapeHtml(r.invoiceDate || '—')}</td>
+                            <td>${escapeHtml(r.deliveryNoteDate || '—')}</td>
+                            <td><strong>${escapeHtml(daysText)}</strong></td>
+                            <td><span class="lead-badge ${badgeClass}">${escapeHtml(leadTimeBucketLabel(r.bucket))}</span></td>
+                            <td>${escapeHtml(r.product || '—')}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+
+            if (!stats.measured) {
+                chartEl.innerHTML = '<div class="saas-empty">لا توجد سيارات بتاريخ Invoice + Delivery Note لهذه الشركة</div>';
                 return;
             }
 
@@ -3349,9 +3495,9 @@
                     fontFamily: 'Inter, sans-serif'
                 },
                 theme: { mode: 'dark' },
-                labels: ['Delivered', 'Pending'],
-                series: [stats.delivered, stats.pending],
-                colors: ['#22C55E', '#F59E0B'],
+                labels: ['١ يوم', '٢ يوم', '٣+ أيام'],
+                series: [stats.day1, stats.day2, stats.day3plus],
+                colors: ['#22C55E', '#3B82F6', '#F59E0B'],
                 stroke: { width: 0 },
                 legend: {
                     position: 'bottom',
@@ -3373,9 +3519,9 @@
                                 },
                                 total: {
                                     show: true,
-                                    label: `${stats.pct}%`,
+                                    label: 'VIN',
                                     color: '#F8FAFC',
-                                    formatter: () => String(stats.total)
+                                    formatter: () => String(stats.measured)
                                 }
                             }
                         }
@@ -3383,9 +3529,7 @@
                 },
                 tooltip: {
                     theme: 'dark',
-                    y: {
-                        formatter: (val) => `${val} VIN`
-                    }
+                    y: { formatter: (val) => `${val} VIN` }
                 }
             });
         }
