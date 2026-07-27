@@ -123,7 +123,9 @@
         }
         .warehouse-delivery-actions {
             margin-top: 12px;
-            display: grid;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
             gap: 6px;
         }
         .btn-warehouse {
@@ -131,11 +133,13 @@
             color: #fff;
             border: 0;
             border-radius: 12px;
-            padding: 12px 16px;
+            padding: 12px 18px;
             font: inherit;
             font-weight: 700;
             cursor: pointer;
-            width: 100%;
+            width: auto;
+            max-width: 100%;
+            text-align: center;
         }
         .btn-warehouse:hover {
             filter: brightness(1.05);
@@ -1072,9 +1076,9 @@
                             <textarea id="attachments" name="attachments" rows="2"></textarea>
                             <div class="warehouse-delivery-actions no-print">
                                 <button type="button" class="btn btn-warehouse" id="btnWarehouseDelivery">
-                                    التسليم في المستودع
+                                    في حال استلام العميل من المستودع يرجى الضغط
                                 </button>
-                                <p class="searchable-select-hint">يضع الشركة: مستودع الهاتفية · والمرفقات: تم الاستلام من قبل صاحب المركبة</p>
+                                <p class="searchable-select-hint">يضع الشركة: مستودع الهاتفية · الفرع: المستودع · والمرفقات: تم الاستلام من قبل صاحب المركبة</p>
                             </div>
                         </div>
                     </div>
@@ -2199,6 +2203,7 @@
         }
 
         const WAREHOUSE_COMPANY = 'مستودع الهاتفية';
+        const WAREHOUSE_BRANCH = 'المستودع';
         const WAREHOUSE_ATTACHMENT = 'تم الاستلام من قبل صاحب المركبة';
 
         function ensureWarehouseCompanyOption() {
@@ -2209,9 +2214,19 @@
             }
         }
 
+        function ensureWarehouseBranchOption() {
+            const list = searchableSelectOptions.branch_to;
+            if (!list) return;
+            if (!list.some((x) => String(x).trim() === WAREHOUSE_BRANCH)) {
+                list.unshift(WAREHOUSE_BRANCH);
+            }
+        }
+
         function applyWarehouseDelivery() {
             ensureWarehouseCompanyOption();
+            ensureWarehouseBranchOption();
             const companyInput = document.getElementById('company_rep');
+            const branchInput = document.getElementById('branch_to');
             const attachments = document.getElementById('attachments');
             if (companyInput) {
                 companyInput.value = WAREHOUSE_COMPANY;
@@ -2220,13 +2235,20 @@
                 companyInput.dispatchEvent(new Event('input', { bubbles: true }));
                 companyInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            if (branchInput) {
+                branchInput.value = WAREHOUSE_BRANCH;
+                branchInput.classList.remove('is-invalid');
+                branchInput.setCustomValidity('');
+                branchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                branchInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             if (attachments) {
                 attachments.value = WAREHOUSE_ATTACHMENT;
                 attachments.dispatchEvent(new Event('input', { bubbles: true }));
                 attachments.dispatchEvent(new Event('change', { bubbles: true }));
             }
             if (typeof updatePreview === 'function') updatePreview();
-            setStatus('تم تعبئة التسليم في المستودع: مستودع الهاتفية', 'ok');
+            setStatus('تم تعبئة التسليم في المستودع: مستودع الهاتفية · الفرع المستودع', 'ok');
         }
 
         function isExactSearchableOption(fieldId, value) {
