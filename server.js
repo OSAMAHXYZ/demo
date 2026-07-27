@@ -975,6 +975,41 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
   }
 });
 
+/**
+ * Admin restore from delivery_export_*.xlsx
+ * (Vehicle Inventory + Print Drafts + Coordinator Queue).
+ */
+app.post('/api/delivery-inventory/restore-export', (req, res) => {
+  try {
+    const { fileData, filename } = req.body || {};
+    if (!fileData) return res.status(400).json({ error: 'ملف التصدير مطلوب' });
+    const buffer = parseDataUrl(fileData);
+    const parsed = parseSalesWorkbook(buffer, filename || 'delivery_export.xlsx');
+    if (!parsed.isExport) {
+      return res.status(400).json({
+        error: 'هذا ليس ملف تصدير اللوحة. استخدم delivery_export_….xlsx (أوراق Vehicle Inventory / Print Drafts). لرفع Sales Raw استخدم صفحة المنسق.'
+      });
+    }
+    if (!parsed.vehicles.length && !(parsed.drafts || []).length) {
+      return res.status(400).json({ error: 'الملف لا يحتوي على مركبات أو مسودات' });
+    }
+    const refresh = applyParsedInventory(parsed);
+    persistAndBroadcast();
+    res.json({
+      ok: true,
+      imported: parsed.vehicles.length,
+      draftsImported: (parsed.drafts || []).length,
+      queueImported: (parsed.queue || []).length,
+      sheetName: parsed.sheetName,
+      filename: parsed.filename,
+      queueRefreshed: refresh.total
+    });
+  } catch (err) {
+    console.error('[restore-export]', err);
+    res.status(500).json({ error: err.message || 'فشل استيراد الأرشيف' });
+  }
+});
+
 /** Paste Excel cells (TSV/CSV) → same inventory parse as file upload. */
 app.post('/api/delivery-inventory/paste', (req, res) => {
   try {

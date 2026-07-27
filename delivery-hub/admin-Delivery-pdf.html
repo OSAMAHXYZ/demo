@@ -758,6 +758,35 @@
             font-size: 0.82rem;
             font-weight: 600;
         }
+        .admin-restore-box {
+            margin-bottom: 14px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px dashed rgba(235, 10, 30, 0.35);
+            background: linear-gradient(165deg, rgba(235, 10, 30, 0.08), rgba(255,255,255,0.02));
+        }
+        .admin-restore-box h3 {
+            margin: 0 0 6px;
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .admin-restore-box p {
+            margin: 0 0 12px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        .admin-restore-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .admin-restore-actions input[type="file"] {
+            display: none;
+        }
         @media (max-width: 900px) {
             .admin-filter-grid { grid-template-columns: 1fr 1fr; }
             .admin-filter-actions { grid-column: 1 / -1; }
@@ -802,8 +831,23 @@
         </div>
 
         <p class="admin-track-note">
-            لوحة متابعة فقط — رفع البيانات الخام يتم من صفحة المنسق. استخدم الفلاتر أدناه حسب تاريخ المذكرة / البروفورما / الفاتورة (مرتبط بالشاسيه من الـ Raw).
+            لوحة متابعة — رفع Sales Raw اليومي من صفحة المنسق. لاستعادة أرشيف قديم استخدم «استيراد بيانات قديمة» أدناه (ملف delivery_export).
         </p>
+
+        <div class="admin-restore-box" id="adminRestoreBox">
+            <h3>استيراد بيانات قديمة — Restore Old Export</h3>
+            <p>
+                ارفع ملف التصدير مثل <strong>delivery_export_….xlsx</strong> لاستعادة:
+                سجل المركبات · قائمة المنسق · مسودات الطباعة (PDF).
+                هذا يستبدل البيانات الحالية في اللوحة.
+            </p>
+            <div class="admin-restore-actions">
+                <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
+                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">اختيار ملف التصدير</button>
+                <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
+            </div>
+            <p class="hub-status" id="restoreExportStatus"></p>
+        </div>
 
         <div class="admin-filter-bar" id="adminFilterBar">
             <h3>فلاتر التتبع — Tracking Filters</h3>
@@ -2189,6 +2233,55 @@
                     return hay.includes(String(q).trim().toUpperCase());
                 });
             renderTable(list);
+        });
+
+        function setRestoreStatus(msg, type) {
+            const el = document.getElementById('restoreExportStatus');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.className = 'hub-status' + (type ? ` ${type}` : '');
+        }
+
+        async function restoreExportFile(file) {
+            if (!file) return;
+            if (!confirm('استيراد هذا الأرشيف سيستبدل المخزون / القائمة / المسودات الحالية. متابعة؟')) {
+                return;
+            }
+            setRestoreStatus('جاري استيراد الأرشيف…');
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const res = await fetch('/api/delivery-inventory/restore-export', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
+                    const meta = document.getElementById('restoreExportMeta');
+                    if (meta) {
+                        meta.textContent = `${file.name} · ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة`;
+                    }
+                    setRestoreStatus(
+                        `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} في القائمة`,
+                        'ok'
+                    );
+                    await loadDashboard();
+                    if (data.draftsImported) openFold('draftsSection', { scroll: true });
+                    else openFold('inventorySection', { scroll: true });
+                } catch (err) {
+                    setRestoreStatus(err.message, 'err');
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.getElementById('btnRestoreExport')?.addEventListener('click', () => {
+            document.getElementById('restoreExportInput')?.click();
+        });
+        document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
+            restoreExportFile(e.target.files?.[0]);
+            e.target.value = '';
         });
 
         document.getElementById('btnExportExcel').addEventListener('click', exportAllToExcel);
