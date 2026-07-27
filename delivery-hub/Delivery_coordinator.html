@@ -1,0 +1,345 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منسق الترحيل — Delivery Coordinator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="delivery-hub-theme.css">
+</head>
+<body class="delivery-hub">
+    <div class="hub-shell">
+        <header class="hub-topbar">
+            <div class="hub-brand">
+                <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+                <div>
+                    <h1>منسق الترحيل</h1>
+                    <p>رفع البيانات وإرسال الشاسيه للفريق</p>
+                </div>
+            </div>
+            <div class="hub-actions">
+                <a href="admin-Delivery-pdf.html" class="hub-btn">لوحة الإدارة</a>
+                <a href="Delivery_pdf.html" class="hub-btn">مذكرة الترحيل</a>
+            </div>
+        </header>
+
+        <div class="hub-stats" id="stats"></div>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>١ — رفع بيانات خام — Raw Data Excel</h2>
+                <span class="hub-hint">مطلوب أولاً · Product · GT · Location</span>
+            </div>
+            <label class="hub-upload" id="uploadZone">
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+                <strong>اسحب ملف Excel أو انقر للاختيار</strong>
+                <p class="hub-meta">ارفع Sales Raw Data أولاً قبل إضافة أرقام الشاسيه</p>
+            </label>
+            <p class="hub-status" id="uploadStatus"></p>
+        </section>
+
+        <section class="hub-section" id="vinSection">
+            <div class="hub-section-head">
+                <h2>٢ — إضافة أرقام الشاسيه — Paste VINs</h2>
+                <span class="hub-hint" id="vinSectionHint">ارفع البيانات الخام أولاً</span>
+            </div>
+            <div id="vinGateMsg" class="hub-status err" style="margin-bottom:12px">
+                ارفع ملف Excel أولاً — بعدها يمكنك لصق أرقام الشاسيه لعرضها في القائمة
+            </div>
+            <div id="vinPromptBanner" class="hub-status ok" style="display:none;margin-bottom:12px"></div>
+            <textarea id="vinPaste" class="hub-textarea" placeholder="الصق أرقام الشاسيه هنا — سطر لكل VIN أو مفصولة بمسافة" disabled></textarea>
+            <div class="hub-actions-row">
+                <button type="button" class="hub-btn hub-btn--primary" id="btnSubmitVins" disabled>إرسال الشاسيه للفريق</button>
+            </div>
+            <p class="hub-status" id="vinStatus"></p>
+            <div id="missingVinBox" class="hub-section" style="display:none;margin-top:12px;padding:14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.28)">
+                <div class="hub-section-head" style="margin-bottom:8px">
+                    <h2 style="font-size:0.88rem;color:#fecaca">شاسيه غير موجودة في Excel</h2>
+                    <span class="hub-hint" id="missingVinCount"></span>
+                </div>
+                <pre id="missingVinList" style="margin:0;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;color:#fecaca;line-height:1.6"></pre>
+            </div>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>٣ — قائمة الشاسيه المرسلة — Submitted Queue</h2>
+                <span class="hub-hint">تحديث فوري — Live sync</span>
+            </div>
+            <div class="hub-table-wrap">
+                <table class="hub-table">
+                    <thead>
+                        <tr>
+                            <th>الشاسيه</th>
+                            <th>Product</th>
+                            <th>GT</th>
+                            <th>Location</th>
+                            <th>المسؤول</th>
+                            <th>التصنيف</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueBody">
+                        <tr><td colspan="7" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function setStatus(elId, msg, type) {
+            const el = document.getElementById(elId);
+            el.textContent = msg || '';
+            el.className = 'hub-status' + (type ? ` ${type}` : '');
+        }
+
+        function renderStats(stats, hasRaw) {
+            document.getElementById('stats').innerHTML = `
+                <div class="hub-stat"><span>إجمالي الشاسيه</span><b>${stats.total || 0}</b></div>
+                <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${stats.available || 0}</b></div>
+                <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${stats.in_stock || 0}</b></div>
+                <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${stats.ready_for_delivery || 0}</b></div>
+                <div class="hub-stat"><span>بيانات خام</span><b style="font-size:1rem">${hasRaw ? '✓' : '—'}</b></div>
+                <div class="hub-stat hub-stat--avail"><span>تم الترحيل</span><b>${stats.delivered || 0}</b></div>
+            `;
+        }
+
+        let currentQueue = [];
+        let rawUploaded = false;
+
+        function setVinSectionEnabled(enabled) {
+            rawUploaded = Boolean(enabled);
+            const paste = document.getElementById('vinPaste');
+            const btn = document.getElementById('btnSubmitVins');
+            const gate = document.getElementById('vinGateMsg');
+            const hint = document.getElementById('vinSectionHint');
+            paste.disabled = !rawUploaded;
+            btn.disabled = !rawUploaded;
+            if (rawUploaded) {
+                gate.style.display = 'none';
+                hint.textContent = 'فقط الشاسيه الموجودة في ملف Excel · المكرر يُتخطى';
+            } else {
+                gate.style.display = '';
+                gate.textContent = 'ارفع ملف Excel أولاً — بعدها يمكنك لصق أرقام الشاسيه لعرضها في القائمة';
+                hint.textContent = 'ارفع البيانات الخام أولاً';
+                paste.value = '';
+                hideVinPrompt();
+            }
+        }
+
+        function hideVinPrompt() {
+            const banner = document.getElementById('vinPromptBanner');
+            banner.style.display = 'none';
+            banner.textContent = '';
+        }
+
+        function promptAddNewVins({ imported, matchedUpdated, notInNewFile } = {}) {
+            setVinSectionEnabled(true);
+            const banner = document.getElementById('vinPromptBanner');
+            const parts = [`تم استيراد ${imported || 0} صف من Excel`];
+            if (matchedUpdated) parts.push(`تم تحديث ${matchedUpdated} شاسيه موجودة في القائمة`);
+            if (notInNewFile) parts.push(`${notInNewFile} في القائمة غير موجودة في الملف الجديد`);
+            parts.push('الآن أضف أرقام الشاسيه الجديدة أدناه (المكرر يُتخطى تلقائياً)');
+            banner.textContent = parts.join(' · ');
+            banner.style.display = '';
+            banner.className = 'hub-status ok';
+            const paste = document.getElementById('vinPaste');
+            paste.value = '';
+            document.getElementById('vinSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setTimeout(() => paste.focus(), 250);
+            setStatus('vinStatus', 'الصق أرقام الشاسيه الجديدة ثم اضغط إرسال', 'ok');
+            const missingBox = document.getElementById('missingVinBox');
+            if (missingBox) {
+                missingBox.style.display = 'none';
+                document.getElementById('missingVinList').textContent = '';
+            }
+        }
+
+        function parseVinList(input) {
+            return String(input || '')
+                .split(/[\s,;\n\r\t]+/)
+                .map((s) => s.trim().toUpperCase())
+                .filter(Boolean);
+        }
+
+        function queueBadgeClass(item) {
+            if (item.status === 'available') return 'hub-badge--avail';
+            if (item.agentStatus === 'delivered') return 'hub-badge--delivered';
+            if (item.agentStatus === 'in_stock') return 'hub-badge--stock';
+            if (item.agentStatus === 'ready_for_delivery') return 'hub-badge--ready';
+            if (item.agentStatus === 'out_of_delivery') return 'hub-badge--out';
+            return 'hub-badge--claimed';
+        }
+
+        function renderQueue(queue) {
+            const tbody = document.getElementById('queueBody');
+            if (!rawUploaded) {
+                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>';
+                return;
+            }
+            const seen = new Set();
+            const unique = [];
+            (queue || []).forEach((item) => {
+                const vin = String(item.vin || '').trim().toUpperCase();
+                if (!vin || seen.has(vin)) return;
+                seen.add(vin);
+                unique.push(item);
+            });
+            if (!unique.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">لا توجد شاسيه بعد — الصق أرقام الشاسيه أعلاه</td></tr>';
+                return;
+            }
+            tbody.innerHTML = unique.map((item) => {
+                const avail = item.status === 'available';
+                const label = avail ? 'متاح' : (item.statusLabel || 'محجوز');
+                return `<tr>
+                    <td class="hub-vin">${item.vin}</td>
+                    <td>${item.product || '—'}</td>
+                    <td>${item.gt || '—'}</td>
+                    <td>${item.location || '—'}</td>
+                    <td>${item.assignedTo || '—'}</td>
+                    <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
+                    <td>${avail ? 'متاح' : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز')}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function loadQueue() {
+            const res = await fetch('/api/delivery-coordinator/queue?admin=1');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'فشل التحميل');
+            currentQueue = data.queue || [];
+            setVinSectionEnabled(Boolean(data.rawUploaded));
+            renderStats(data.stats, data.rawUploaded);
+            renderQueue(currentQueue);
+        }
+
+        document.getElementById('btnSubmitVins').addEventListener('click', async () => {
+            if (!rawUploaded) {
+                return setStatus('vinStatus', 'ارفع البيانات الخام أولاً', 'err');
+            }
+            const inputEl = document.getElementById('vinPaste');
+            const parsed = parseVinList(inputEl.value);
+            if (!parsed.length) return setStatus('vinStatus', 'أدخل شاسيه واحد على الأقل', 'err');
+
+            const existing = new Set(currentQueue.map((item) => String(item.vin || '').trim().toUpperCase()).filter(Boolean));
+            const seenInPaste = new Set();
+            const newVins = [];
+            let pastedDuplicates = 0;
+            let queueDuplicates = 0;
+
+            parsed.forEach((vin) => {
+                if (seenInPaste.has(vin)) {
+                    pastedDuplicates++;
+                    return;
+                }
+                seenInPaste.add(vin);
+                if (existing.has(vin)) {
+                    queueDuplicates++;
+                    return;
+                }
+                newVins.push(vin);
+            });
+
+            if (!newVins.length) {
+                return setStatus(
+                    'vinStatus',
+                    `كل الشاسيهات مكررة${pastedDuplicates ? ` (${pastedDuplicates} داخل اللصق)` : ''}${queueDuplicates ? ` (${queueDuplicates} موجودة مسبقاً)` : ''}`,
+                    'err'
+                );
+            }
+
+            setStatus('vinStatus', 'جاري الإرسال…');
+            try {
+                const res = await fetch('/api/delivery-coordinator/submit-vins', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vins: newVins })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل الإرسال');
+                const missing = Array.isArray(data.missingVins) ? data.missingVins : [];
+                // Keep unfound VINs in the paste box so they stay visible
+                inputEl.value = missing.length ? missing.join('\n') : '';
+                hideVinPrompt();
+                const parts = [];
+                if (data.added) parts.push(`تم إضافة ${data.added}`);
+                if (pastedDuplicates) parts.push(`${pastedDuplicates} مكررة داخل اللصق`);
+                if (queueDuplicates) parts.push(`${queueDuplicates} موجودة مسبقاً`);
+                if (missing.length) parts.push(`${missing.length} غير موجودة في Excel`);
+                else if (data.skipped) parts.push(`${data.skipped} تم تخطيها`);
+                setStatus(
+                    'vinStatus',
+                    parts.join(' · ') || 'لم تتم إضافة شاسيه',
+                    data.added && !missing.length ? 'ok' : (data.added ? 'ok' : 'err')
+                );
+                const missingBox = document.getElementById('missingVinBox');
+                const missingList = document.getElementById('missingVinList');
+                const missingCount = document.getElementById('missingVinCount');
+                if (missing.length) {
+                    missingBox.style.display = '';
+                    missingCount.textContent = `${missing.length} رقم`;
+                    missingList.textContent = missing.join('\n');
+                } else {
+                    missingBox.style.display = 'none';
+                    missingList.textContent = '';
+                    missingCount.textContent = '';
+                }
+                await loadQueue();
+            } catch (err) {
+                setStatus('vinStatus', err.message, 'err');
+            }
+        });
+
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setStatus('uploadStatus', 'جاري الرفع…');
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const res = await fetch('/api/delivery-inventory/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'فشل الرفع');
+                    setStatus(
+                        'uploadStatus',
+                        `تم رفع الملف · ${data.imported} صف · حدّثت القائمة من البيانات الجديدة`,
+                        'ok'
+                    );
+                    await loadQueue();
+                    promptAddNewVins({
+                        imported: data.imported,
+                        matchedUpdated: data.matchedUpdated || 0,
+                        notInNewFile: data.notInNewFile || 0
+                    });
+                } catch (err) {
+                    setStatus('uploadStatus', err.message, 'err');
+                }
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        });
+
+        const zone = document.getElementById('uploadZone');
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            const file = e.dataTransfer.files?.[0];
+            if (file) document.getElementById('fileInput').files = e.dataTransfer.files;
+            document.getElementById('fileInput').dispatchEvent(new Event('change'));
+        });
+
+        setVinSectionEnabled(false);
+        loadQueue().catch((err) => setStatus('vinStatus', err.message, 'err'));
+    </script>
+    <script src="delivery-hub-live.js"></script>
+    <script>DeliveryHubLive.start(loadQueue);</script>
+</body>
+</html>

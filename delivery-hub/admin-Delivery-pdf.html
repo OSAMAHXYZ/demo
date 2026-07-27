@@ -1,0 +1,1471 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة مذكرة الترحيل — Delivery Inventory</title>
+    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="delivery-hub-theme.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        #adminGate {
+            position: fixed; inset: 0; z-index: 300;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(235, 10, 30, 0.22), transparent),
+                #0b0f17;
+        }
+        #adminGate.hidden { display: none !important; }
+        .admin-gate-card {
+            width: min(400px, 100%);
+            padding: 28px 24px;
+            border-radius: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+        .admin-gate-card h2 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #f8fafc;
+            margin-bottom: 8px;
+        }
+        .admin-gate-card p {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 18px;
+        }
+        .admin-gate-card label {
+            display: block;
+            text-align: right;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .admin-gate-card input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: #1e293b;
+            color: #f8fafc;
+            font: inherit;
+            margin-bottom: 14px;
+        }
+        .admin-gate-card input:focus {
+            outline: none;
+            border-color: rgba(235,10,30,0.55);
+            box-shadow: 0 0 0 3px rgba(235,10,30,0.15);
+        }
+        .admin-gate-card .hub-btn { width: 100%; }
+        .admin-gate-status {
+            min-height: 1.2em;
+            margin-top: 12px;
+            font-size: 0.82rem;
+            color: #f87171;
+        }
+        #adminApp.hidden { display: none !important; }
+
+        /* —— Admin console visual polish (Toyota dark) —— */
+        body.delivery-hub.admin-console {
+            font-family: 'Tajawal', 'Changa', sans-serif;
+            background-color: #070a10;
+            background-image:
+                radial-gradient(ellipse 90% 55% at 70% -10%, rgba(235, 10, 30, 0.32), transparent 55%),
+                radial-gradient(ellipse 60% 40% at 10% 30%, rgba(235, 10, 30, 0.1), transparent 50%),
+                radial-gradient(ellipse 50% 35% at 90% 80%, rgba(30, 58, 95, 0.22), transparent 55%),
+                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+            background-size: auto, auto, auto, 44px 44px, 44px 44px;
+        }
+        .admin-console .hub-brand h1,
+        .admin-console .hub-section-head h2,
+        .admin-console .xfer-dash-card h3 {
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            letter-spacing: -0.01em;
+        }
+        .admin-console .hub-stat {
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .admin-console .hub-stat:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.16);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+        }
+        .admin-console .hub-stat--avail:hover {
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(74, 222, 128, 0.18);
+        }
+        .admin-console .hub-stat--stock:hover {
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(96, 165, 250, 0.18);
+        }
+        .admin-console .hub-stat--ready:hover {
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(251, 191, 36, 0.16);
+        }
+        .admin-console .hub-stat--primary:hover {
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(235, 10, 30, 0.22);
+        }
+        .admin-console .hub-section--xfer {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(235, 10, 30, 0.22);
+            background:
+                linear-gradient(135deg, rgba(235, 10, 30, 0.08), transparent 42%),
+                rgba(12, 18, 32, 0.72);
+            box-shadow:
+                0 24px 60px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+        .admin-console .hub-section--xfer::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg, #eb0a1e, #ff4d5e 45%, transparent);
+            pointer-events: none;
+        }
+
+        .xfer-date-filter {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 12px;
+            margin: 0 0 16px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(14px);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .xfer-date-filter label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        .xfer-date-filter input[type="date"] {
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(15, 23, 42, 0.85);
+            color: #f1f5f9;
+            font: inherit;
+            font-size: 0.85rem;
+            color-scheme: dark;
+        }
+        .xfer-date-filter input[type="date"]:focus {
+            outline: none;
+            border-color: rgba(235, 10, 30, 0.55);
+            box-shadow: 0 0 0 3px rgba(235, 10, 30, 0.15);
+        }
+        .xfer-date-label {
+            margin-inline-start: auto;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .xfer-dash {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .xfer-dash-card {
+            position: relative;
+            background: linear-gradient(165deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 18px;
+            padding: 16px 16px 12px;
+            min-height: 180px;
+            backdrop-filter: blur(18px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+        }
+        .xfer-dash-card::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; left: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #eb0a1e, rgba(251, 113, 133, 0.7), transparent);
+            pointer-events: none;
+        }
+        .xfer-dash-card--city::before {
+            background: linear-gradient(90deg, #2563eb, rgba(96, 165, 250, 0.75), transparent);
+        }
+        .xfer-dash-card h3 {
+            margin: 0 0 4px;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #f1f5f9;
+        }
+        .xfer-dash-sub {
+            margin: 0 0 14px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+        .xfer-dash-list { display: grid; gap: 10px; }
+        .xfer-dash-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px 12px;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 10px;
+            padding: 6px 4px;
+            margin: 0 -4px;
+            transition: background 0.15s;
+        }
+        .xfer-dash-row:hover { background: rgba(255,255,255,0.04); }
+        .xfer-dash-row.is-active { background: rgba(235, 10, 30, 0.1); }
+        .xfer-dash-name {
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .xfer-dash-count {
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: #f87171;
+            font-variant-numeric: tabular-nums;
+        }
+        .xfer-dash-bar {
+            grid-column: 1 / -1;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
+        }
+        .xfer-dash-bar > span {
+            display: block;
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #eb0a1e, #fb7185);
+            min-width: 2px;
+            animation: xferBarFill 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .xfer-dash-card--city .xfer-dash-bar > span {
+            background: linear-gradient(90deg, #2563eb, #60a5fa);
+        }
+        .xfer-dash-card--city .xfer-dash-count { color: #60a5fa; }
+        @keyframes xferBarFill {
+            from { width: 0; }
+            to { width: var(--bar-w, 0%); }
+        }
+        .xfer-dash-top {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            font-size: 0.8rem;
+            color: #cbd5e1;
+        }
+        .xfer-dash-top strong { color: #fff; }
+        .xfer-dash-card--account {
+            grid-column: 1 / -1;
+        }
+        .xfer-account-list {
+            display: grid;
+            gap: 12px;
+            max-height: 420px;
+            overflow: auto;
+            padding-left: 2px;
+        }
+        .xfer-account-item {
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, transform 0.15s;
+        }
+        .xfer-account-item:hover {
+            border-color: rgba(235, 10, 30, 0.4);
+            background: rgba(235, 10, 30, 0.06);
+            transform: translateY(-1px);
+        }
+        .xfer-account-item.is-active {
+            border-color: rgba(235, 10, 30, 0.65);
+            background: rgba(235, 10, 30, 0.12);
+            box-shadow: 0 0 0 1px rgba(235, 10, 30, 0.25);
+        }
+        .xfer-account-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .xfer-account-name {
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .xfer-account-total {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #fda4af;
+            white-space: nowrap;
+        }
+        .xfer-account-cities {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .xfer-account-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.12);
+            border: 1px solid rgba(96, 165, 250, 0.22);
+            color: #dbeafe;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .xfer-account-chip b {
+            color: #93c5fd;
+            font-variant-numeric: tabular-nums;
+        }
+        .xfer-records {
+            margin-top: 14px;
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(15, 23, 42, 0.55);
+        }
+        .xfer-records.hidden { display: none !important; }
+        .xfer-records-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .xfer-records-head h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .xfer-records-head p {
+            margin: 4px 0 0;
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .xfer-records .hub-table-wrap { margin-top: 0; }
+        .options-manage-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .options-manage-card {
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03);
+        }
+        .options-manage-card h3 {
+            margin: 0 0 12px;
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: #f1f5f9;
+        }
+        .options-add-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .options-add-row .hub-input { flex: 1; }
+        .options-list {
+            display: grid;
+            gap: 6px;
+            max-height: 280px;
+            overflow: auto;
+            padding-right: 2px;
+        }
+        .options-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(15, 23, 42, 0.45);
+        }
+        .options-item span {
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        @media (max-width: 800px) {
+            .options-manage-grid { grid-template-columns: 1fr; }
+        }
+        .xfer-dash-empty {
+            color: #64748b;
+            font-size: 0.85rem;
+            padding: 18px 4px;
+        }
+        @media (max-width: 900px) {
+            .xfer-dash { grid-template-columns: 1fr; }
+            .xfer-date-label { margin-inline-start: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body class="delivery-hub admin-console">
+    <div id="adminGate">
+        <div class="admin-gate-card">
+            <h2>دخول لوحة الإدارة</h2>
+            <p>أدخل كلمة المرور للوصول إلى إدارة الترحيل</p>
+            <label for="adminPassword">كلمة المرور</label>
+            <input id="adminPassword" type="password" placeholder="Password" autocomplete="current-password">
+            <button type="button" class="hub-btn hub-btn--primary" id="btnAdminLogin">دخول</button>
+            <p class="admin-gate-status" id="adminGateStatus"></p>
+        </div>
+    </div>
+
+    <div class="hub-shell hidden" id="adminApp">
+        <header class="hub-topbar">
+            <div class="hub-brand">
+                <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+                <div>
+                    <h1>لوحة إدارة الترحيل</h1>
+                    <p>بيانات الشاسيه · قائمة المنسق · المخزون</p>
+                </div>
+            </div>
+            <div class="hub-actions">
+                <a href="Delivery_coordinator.html" class="hub-btn">منسق الترحيل</a>
+                <a href="Delivery_pdf.html" class="hub-btn">مذكرة الترحيل</a>
+                <button type="button" class="hub-btn hub-btn--primary" id="btnExportExcel">تصدير Excel</button>
+                <button type="button" class="hub-btn hub-btn--danger" id="btnClear">مسح البيانات</button>
+                <button type="button" class="hub-btn" id="btnAdminLogout">خروج</button>
+            </div>
+        </header>
+
+        <div class="hub-stats" id="stats"></div>
+        <div class="hub-stats" id="queueStats"></div>
+
+        <section class="hub-section" id="optionsManagerSection">
+            <div class="hub-section-head">
+                <h2>إدارة القوائم — Companies & Cities Lists</h2>
+                <span class="hub-hint">إضافة أو حذف الشركات والمدن المستخدمة في المذكرة</span>
+            </div>
+            <div class="options-manage-grid">
+                <div class="options-manage-card">
+                    <h3>شركات النقل</h3>
+                    <div class="options-add-row">
+                        <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
+                        <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
+                    </div>
+                    <p class="hub-status" id="companyOptionsStatus"></p>
+                    <div class="options-list" id="companyOptionsList"></div>
+                </div>
+                <div class="options-manage-card">
+                    <h3>المدن / الفروع</h3>
+                    <div class="options-add-row">
+                        <input type="text" id="newCityInput" class="hub-input" placeholder="اسم المدينة أو الفرع…" autocomplete="off">
+                        <button type="button" class="hub-btn hub-btn--primary" id="btnAddCity">إضافة</button>
+                    </div>
+                    <p class="hub-status" id="cityOptionsStatus"></p>
+                    <div class="options-list" id="cityOptionsList"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hub-section hub-section--xfer">
+            <div class="hub-section-head">
+                <h2>لوحة النقل — Companies & Cities</h2>
+                <span class="hub-hint">من مسودات الطباعة المحفوظة (شركة النقل والفرع)</span>
+            </div>
+            <div class="xfer-date-filter" id="xferDateFilterBar">
+                <label for="xferDateFilter">تاريخ الترحيل</label>
+                <input type="date" id="xferDateFilter" aria-label="تصفية حسب تاريخ الترحيل">
+                <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" id="btnXferDateToday">اليوم</button>
+                <button type="button" class="hub-btn hub-btn--sm" id="btnXferDateAll">كل التواريخ</button>
+                <span class="xfer-date-label" id="xferDateLabel">عرض كل التواريخ</span>
+            </div>
+            <div class="xfer-dash">
+                <div class="xfer-dash-card">
+                    <h3>أكثر شركات النقل اختياراً</h3>
+                    <p class="xfer-dash-sub">حقل اسم الشركة / Company في المذكرة</p>
+                    <div id="companyDashList" class="xfer-dash-list">
+                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                    </div>
+                    <div class="xfer-dash-top" id="companyDashTop"></div>
+                </div>
+                <div class="xfer-dash-card xfer-dash-card--city">
+                    <h3>أكثر الفروع / المدن تحويلاً</h3>
+                    <p class="xfer-dash-sub">حقل محولة إلى فرع / Branch</p>
+                    <div id="cityDashList" class="xfer-dash-list">
+                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                    </div>
+                    <div class="xfer-dash-top" id="cityDashTop"></div>
+                </div>
+                <div class="xfer-dash-card xfer-dash-card--account">
+                    <h3>حساب كل شركة حسب المدن</h3>
+                    <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها المحفوظة — القائمة كاملة</p>
+                    <div id="companyCityBreakdown" class="xfer-account-list">
+                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                    </div>
+                    <div class="xfer-dash-top" id="companyCityTop"></div>
+                    <div class="xfer-records hidden" id="companyRecordsPanel">
+                        <div class="xfer-records-head">
+                            <div>
+                                <h3 id="companyRecordsTitle">سجلات الشركة</h3>
+                                <p id="companyRecordsMeta"></p>
+                            </div>
+                            <button type="button" class="hub-btn hub-btn--sm" id="btnClearCompanyFilter">إظهار الكل</button>
+                        </div>
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>الشاسيه</th>
+                                        <th>Product</th>
+                                        <th>المسؤول</th>
+                                        <th>مندوب الشركة</th>
+                                        <th>الفرع</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="companyRecordsBody">
+                                    <tr><td colspan="7" class="hub-empty">اختر شركة</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>قائمة المنسق — Coordinator Queue</h2>
+                <span class="hub-hint">تحديث فوري — Live sync</span>
+            </div>
+            <p class="hub-meta" style="margin-bottom:12px">متاح · مع الفاضل/ياسين/البراء · تم الترحيل</p>
+            <div class="hub-table-wrap">
+                <table class="hub-table">
+                    <thead>
+                        <tr>
+                            <th>الشاسيه</th>
+                            <th>Product</th>
+                            <th>GT</th>
+                            <th>Location</th>
+                            <th>المسؤول</th>
+                            <th>التصنيف</th>
+                            <th>الحالة</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueBody">
+                        <tr><td colspan="8" class="hub-empty">لا توجد شاسيه في القائمة</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>مسودات الطباعة — Print Drafts</h2>
+                <span class="hub-hint">تصدير PDF لأي مسودة محفوظة</span>
+            </div>
+            <div class="hub-table-wrap">
+                <table class="hub-table">
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>الشاسيه</th>
+                            <th>Product</th>
+                            <th>المسؤول</th>
+                            <th>مندوب الشركة</th>
+                            <th>اسم الشركة</th>
+                            <th>الفرع</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="draftsBody">
+                        <tr><td colspan="7" class="hub-empty">لا توجد مسودات بعد</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>رفع بيانات خام — Upload Raw Data</h2>
+            </div>
+            <label class="hub-upload" id="uploadZone">
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+                <strong>اسحب ملف Excel أو انقر للاختيار</strong>
+                <p class="hub-meta">Sales Raw Data — أعمدة VIN / Product / Plate</p>
+            </label>
+            <p class="hub-meta" id="uploadMeta">لم يتم رفع ملف بعد</p>
+            <p class="hub-status" id="uploadStatus"></p>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>توزيع المنتجات — Products</h2>
+            </div>
+            <div class="hub-chips" id="productsGrid">
+                <span class="hub-empty">لا توجد بيانات</span>
+            </div>
+        </section>
+
+        <section class="hub-section">
+            <div class="hub-section-head">
+                <h2>سجل المركبات — Vehicle Inventory</h2>
+            </div>
+            <div class="hub-toolbar">
+                <input type="search" id="searchInput" class="hub-input" placeholder="بحث بالشاسيه، المنتج، اللوحة، العميل…">
+            </div>
+            <div class="hub-table-wrap">
+                <table class="hub-table">
+                    <thead>
+                        <tr>
+                            <th>صورة</th>
+                            <th>الشاسية / VIN</th>
+                            <th>المنتج / Product</th>
+                            <th>اللوحة</th>
+                            <th>العميل</th>
+                            <th>الموقع</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr><td colspan="6" class="hub-empty">لا توجد بيانات — ارفع ملف Excel</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const ADMIN_PASSWORD = '1234';
+        let adminAuthed = false;
+        let allVehicles = [];
+        let allQueue = [];
+        let allDrafts = [];
+        let lastDashboard = null;
+
+        function unlockAdmin() {
+            adminAuthed = true;
+            document.getElementById('adminGate').classList.add('hidden');
+            document.getElementById('adminApp').classList.remove('hidden');
+            loadDashboard().catch((err) => setUploadStatus(err.message, 'err'));
+            if (window.DeliveryHubLive) {
+                DeliveryHubLive.start(() => {
+                    if (!adminAuthed) return;
+                    return loadDashboard();
+                });
+            }
+        }
+
+        function lockAdmin() {
+            adminAuthed = false;
+            document.getElementById('adminApp').classList.add('hidden');
+            document.getElementById('adminGate').classList.remove('hidden');
+            document.getElementById('adminPassword').value = '';
+            document.getElementById('adminGateStatus').textContent = '';
+            if (window.DeliveryHubLive) DeliveryHubLive.stop();
+        }
+
+        function tryAdminLogin() {
+            const statusEl = document.getElementById('adminGateStatus');
+            const password = document.getElementById('adminPassword').value;
+            if (password === ADMIN_PASSWORD) {
+                statusEl.textContent = '';
+                unlockAdmin();
+                return;
+            }
+            statusEl.textContent = 'كلمة المرور غير صحيحة';
+        }
+
+        document.getElementById('btnAdminLogin').addEventListener('click', tryAdminLogin);
+        document.getElementById('adminPassword').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') tryAdminLogin();
+        });
+        document.getElementById('btnAdminLogout').addEventListener('click', lockAdmin);
+
+        function setUploadStatus(msg, type) {
+            const el = document.getElementById('uploadStatus');
+            el.textContent = msg || '';
+            el.className = 'hub-status' + (type ? ` ${type}` : '');
+        }
+
+        function excelStamp() {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+        }
+
+        function exportAllToExcel() {
+            if (typeof XLSX === 'undefined') {
+                setUploadStatus('مكتبة Excel غير محمّلة — حدّث الصفحة', 'err');
+                return;
+            }
+            const hasAny = allVehicles.length || allQueue.length || allDrafts.length;
+            if (!hasAny) {
+                setUploadStatus('لا توجد بيانات للتصدير', 'err');
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+
+            const inventoryRows = allVehicles.map((v) => ({
+                'Chassis / VIN': v.vin || '',
+                Product: v.product || v.model || '',
+                Plate: v.plate || '',
+                Customer: v.customerName || '',
+                Location: v.location || '',
+                GT: v.gt || '',
+                Model: v.model || '',
+                'Image URL': v.imageUrl || ''
+            }));
+            XLSX.utils.book_append_sheet(
+                wb,
+                XLSX.utils.json_to_sheet(inventoryRows.length ? inventoryRows : [{ 'Chassis / VIN': '' }]),
+                'Vehicle Inventory'
+            );
+
+            const queueRows = allQueue.map((item) => ({
+                'Chassis / VIN': item.vin || '',
+                Product: item.product || item.model || '',
+                GT: item.gt || '',
+                Location: item.location || '',
+                'Assigned To': item.assignedTo || '',
+                Status: item.status || '',
+                'Status Label': item.statusLabel || '',
+                'Agent Status': item.agentStatus || '',
+                Classification: item.status === 'available'
+                    ? 'متاح'
+                    : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'),
+                Plate: item.plate || '',
+                Customer: item.customerName || '',
+                'Added At': item.addedAt || '',
+                'Assigned At': item.assignedAt || ''
+            }));
+            XLSX.utils.book_append_sheet(
+                wb,
+                XLSX.utils.json_to_sheet(queueRows.length ? queueRows : [{ 'Chassis / VIN': '' }]),
+                'Coordinator Queue'
+            );
+
+            const draftRows = allDrafts.map((d) => {
+                const p = d.payload || {};
+                return {
+                    'Draft ID': d.id || '',
+                    'Printed At': d.printedAt || '',
+                    'Chassis / VIN': d.vin || '',
+                    Product: d.product || d.model || '',
+                    'Assigned To': d.assignedTo || '',
+                    'Company Name': p.company_rep || '',
+                    'Company Rep': p.customer_name || d.customerName || '',
+                    'Branch To': p.branch_to || '',
+                    'Branch From': p.branch_from || '',
+                    Plate: p.plate || d.plate || '',
+                    GT: p.gt || d.gt || '',
+                    Location: p.location || d.location || '',
+                    Remarks: p.remarks || '',
+                    'Customer ID': p.customer_id || '',
+                    Phone: p.phone || ''
+                };
+            });
+            XLSX.utils.book_append_sheet(
+                wb,
+                XLSX.utils.json_to_sheet(draftRows.length ? draftRows : [{ 'Draft ID': '' }]),
+                'Print Drafts'
+            );
+
+            const topProducts = (lastDashboard && lastDashboard.topProducts) || [];
+            const productRows = topProducts.map((p) => ({
+                Product: p.product || '',
+                Count: p.count != null ? p.count : 0
+            }));
+            XLSX.utils.book_append_sheet(
+                wb,
+                XLSX.utils.json_to_sheet(productRows.length ? productRows : [{ Product: '', Count: 0 }]),
+                'Products'
+            );
+
+            const summary = [{
+                'Total Vehicles': (lastDashboard && lastDashboard.totalVehicles) || allVehicles.length,
+                'Unique Products': (lastDashboard && lastDashboard.uniqueProducts) || 0,
+                'Queue Total': allQueue.length,
+                'Drafts Total': allDrafts.length,
+                Filename: (lastDashboard && lastDashboard.filename) || '',
+                'Sheet Name': (lastDashboard && lastDashboard.sheetName) || '',
+                'Uploaded At': (lastDashboard && lastDashboard.uploadedAt) || '',
+                'Exported At': new Date().toISOString()
+            }];
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary');
+
+            XLSX.writeFile(wb, `delivery_export_${excelStamp()}.xlsx`);
+            setUploadStatus(
+                `تم تصدير Excel: ${allVehicles.length} مركبة · ${allQueue.length} قائمة · ${allDrafts.length} مسودة`,
+                'ok'
+            );
+        }
+
+        function renderStats(dashboard) {
+            const d = dashboard || {};
+            document.getElementById('stats').innerHTML = `
+                <div class="hub-stat"><span>إجمالي المركبات</span><b>${d.totalVehicles || 0}</b></div>
+                <div class="hub-stat hub-stat--stock"><span>منتجات مختلفة</span><b>${d.uniqueProducts || 0}</b></div>
+                <div class="hub-stat"><span>آخر رفع</span><b style="font-size:0.95rem">${d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('ar-SA') : '—'}</b></div>
+                <div class="hub-stat"><span>الملف</span><b style="font-size:0.85rem">${d.filename || '—'}</b></div>
+            `;
+            document.getElementById('uploadMeta').textContent = d.sheetName
+                ? `الورقة: ${d.sheetName} · ${d.totalVehicles || 0} مركبة`
+                : 'لم يتم رفع ملف بعد';
+            const grid = document.getElementById('productsGrid');
+            const top = d.topProducts || [];
+            grid.innerHTML = top.length
+                ? top.map((p) => `<span class="hub-chip"><span>${p.count}</span>${p.product}</span>`).join('')
+                : '<span class="hub-empty">لا توجد بيانات</span>';
+        }
+
+        function renderTable(list) {
+            const tbody = document.getElementById('tableBody');
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">لا توجد نتائج</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.slice(0, 300).map((v) => {
+                const img = v.imageUrl
+                    ? `<img class="hub-car-thumb" src="${v.imageUrl}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'hub-car-placeholder',textContent:'—'}))">`
+                    : '<span class="hub-car-placeholder">—</span>';
+                return `<tr>
+                    <td>${img}</td>
+                    <td class="hub-vin">${v.vin || ''}</td>
+                    <td>${v.product || v.model || '—'}</td>
+                    <td>${v.plate || '—'}</td>
+                    <td>${v.customerName || '—'}</td>
+                    <td>${v.location || '—'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function filterVehicles(q) {
+            const s = String(q || '').trim().toLowerCase();
+            if (!s) return allVehicles;
+            return allVehicles.filter((v) => {
+                const hay = [v.vin, v.product, v.model, v.plate, v.customerName, v.location].join(' ').toLowerCase();
+                return hay.includes(s);
+            });
+        }
+
+        let selectedCompany = '';
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function getSaudiTodayIso() {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Riyadh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        }
+
+        function draftEventIso(d) {
+            if (d && d.printedAt) {
+                const dt = new Date(d.printedAt);
+                if (!Number.isNaN(dt.getTime())) {
+                    return new Intl.DateTimeFormat('en-CA', {
+                        timeZone: 'Asia/Riyadh',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    }).format(dt);
+                }
+            }
+            const p = (d && d.payload) || {};
+            const fallback = String(p.transfer_date || p.doc_date || '').trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(fallback)) return fallback.slice(0, 10);
+            return '';
+        }
+
+        function getXferDateFilter() {
+            const el = document.getElementById('xferDateFilter');
+            return el ? String(el.value || '').trim() : '';
+        }
+
+        function filteredDrafts() {
+            const date = getXferDateFilter();
+            if (!date) return allDrafts || [];
+            return (allDrafts || []).filter((d) => draftEventIso(d) === date);
+        }
+
+        function updateXferDateLabel() {
+            const label = document.getElementById('xferDateLabel');
+            if (!label) return;
+            const date = getXferDateFilter();
+            label.textContent = date ? `عرض ترحيلات يوم ${date}` : 'عرض كل التواريخ';
+        }
+
+        function refreshTransferDashboard() {
+            updateXferDateLabel();
+            const drafts = filteredDrafts();
+            if (selectedCompany && !drafts.some((d) => draftCompanyName(d) === selectedCompany)) {
+                selectedCompany = '';
+                const panel = document.getElementById('companyRecordsPanel');
+                if (panel) panel.classList.add('hidden');
+            }
+            renderTransferDashboard(drafts);
+        }
+
+        function draftCompanyName(d) {
+            const p = d.payload || {};
+            return String(p.company_rep || p.customer_name || d.customerName || '').trim();
+        }
+
+        function draftsForCompany(company) {
+            const key = String(company || '').trim();
+            if (!key) return [];
+            return filteredDrafts().filter((d) => draftCompanyName(d) === key);
+        }
+
+        function highlightSelectedCompany() {
+            document.querySelectorAll('[data-company]').forEach((el) => {
+                el.classList.toggle('is-active', el.dataset.company === selectedCompany);
+            });
+        }
+
+        function showCompanyRecords(company) {
+            selectedCompany = String(company || '').trim();
+            const panel = document.getElementById('companyRecordsPanel');
+            const title = document.getElementById('companyRecordsTitle');
+            const meta = document.getElementById('companyRecordsMeta');
+            const tbody = document.getElementById('companyRecordsBody');
+            highlightSelectedCompany();
+
+            if (!selectedCompany) {
+                panel.classList.add('hidden');
+                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">اختر شركة</td></tr>';
+                return;
+            }
+
+            const rows = draftsForCompany(selectedCompany);
+            panel.classList.remove('hidden');
+            title.textContent = selectedCompany;
+            meta.textContent = rows.length
+                ? `${rows.length} سجل محفوظ من المذكرات المطبوعة`
+                : 'لا توجد سجلات لهذه الشركة';
+
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">لا توجد سجلات</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map((d) => {
+                const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
+                const p = d.payload || {};
+                const canExport = Boolean(d.id && d.payload);
+                return `<tr>
+                    <td>${escapeHtml(when)}</td>
+                    <td class="hub-vin">${escapeHtml(d.vin || '—')}</td>
+                    <td>${escapeHtml(d.product || d.model || '—')}</td>
+                    <td>${escapeHtml(d.assignedTo || '—')}</td>
+                    <td>${escapeHtml(p.customer_name || '—')}</td>
+                    <td>${escapeHtml(p.branch_to || '—')}</td>
+                    <td>${canExport
+                        ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
+                        : '<span class="hub-meta">—</span>'}</td>
+                </tr>`;
+            }).join('');
+
+            tbody.querySelectorAll('[data-export-pdf]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(btn.dataset.exportPdf)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function tallyField(drafts, getter) {
+            const map = new Map();
+            drafts.forEach((d) => {
+                const raw = String(getter(d) || '').trim();
+                if (!raw || raw === '-' || raw.startsWith('- اختر') || raw.startsWith('—')) return;
+                map.set(raw, (map.get(raw) || 0) + 1);
+            });
+            return Array.from(map.entries())
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+        }
+
+        function renderRankList(listEl, topEl, rows, emptyText, label, { clickableCompanies = false } = {}) {
+            if (!rows.length) {
+                listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText}</div>`;
+                topEl.innerHTML = '';
+                return;
+            }
+            const max = rows[0].count || 1;
+            listEl.innerHTML = rows.map((row) => {
+                const pct = Math.max(4, Math.round((row.count / max) * 100));
+                const safeName = escapeHtml(row.name);
+                const clickAttrs = clickableCompanies
+                    ? ` class="xfer-dash-row" data-company="${safeName}" role="button" tabindex="0"`
+                    : ' class="xfer-dash-row"';
+                return `<div${clickAttrs}>
+                    <div class="xfer-dash-name" title="${safeName}">${safeName}</div>
+                    <div class="xfer-dash-count">${row.count}</div>
+                    <div class="xfer-dash-bar"><span style="--bar-w:${pct}%"></span></div>
+                </div>`;
+            }).join('');
+
+            if (clickableCompanies) {
+                listEl.querySelectorAll('[data-company]').forEach((el) => {
+                    const open = () => showCompanyRecords(el.dataset.company);
+                    el.addEventListener('click', open);
+                    el.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            open();
+                        }
+                    });
+                });
+            }
+
+            const leader = rows[0];
+            const total = rows.reduce((s, r) => s + r.count, 0);
+            const share = total ? Math.round((leader.count / total) * 100) : 0;
+            topEl.innerHTML = `الأكثر: <strong>${escapeHtml(leader.name)}</strong> — ${leader.count} من ${total} (${share}%) · ${rows.length} ${label}`;
+        }
+
+        function aggregateCompanyCities(drafts) {
+            const companies = new Map();
+            drafts.forEach((d) => {
+                const p = d.payload || {};
+                const company = draftCompanyName(d);
+                const city = String(p.branch_to || '').trim();
+                if (!company || !city || company === '-' || city === '-' || company.startsWith('—') || city.startsWith('—')) return;
+                if (!companies.has(company)) companies.set(company, { total: 0, cities: new Map() });
+                const entry = companies.get(company);
+                entry.total++;
+                entry.cities.set(city, (entry.cities.get(city) || 0) + 1);
+            });
+
+            return Array.from(companies.entries())
+                .map(([company, info]) => ({
+                    company,
+                    total: info.total,
+                    cities: Array.from(info.cities.entries())
+                        .map(([city, count]) => ({ city, count }))
+                        .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, 'ar'))
+                }))
+                .sort((a, b) => b.total - a.total || a.company.localeCompare(b.company, 'ar'));
+        }
+
+        function renderCompanyCityBreakdown(drafts, emptyText) {
+            const listEl = document.getElementById('companyCityBreakdown');
+            const topEl = document.getElementById('companyCityTop');
+            const rows = aggregateCompanyCities(drafts);
+            if (!rows.length) {
+                listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText || 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'}</div>`;
+                topEl.innerHTML = '';
+                document.getElementById('companyRecordsPanel').classList.add('hidden');
+                return;
+            }
+
+            listEl.innerHTML = rows.map((row) => {
+                const safeCompany = escapeHtml(row.company);
+                const citiesHtml = row.cities.map((cityRow) => {
+                    const safeCity = escapeHtml(cityRow.city);
+                    return `<span class="xfer-account-chip">${safeCity} <b>${cityRow.count}</b></span>`;
+                }).join('');
+                return `<div class="xfer-account-item" data-company="${safeCompany}" role="button" tabindex="0">
+                    <div class="xfer-account-head">
+                        <div class="xfer-account-name" title="${safeCompany}">${safeCompany}</div>
+                        <div class="xfer-account-total">${row.total} حركة</div>
+                    </div>
+                    <div class="xfer-account-cities">${citiesHtml || '<span class="xfer-dash-empty">لا توجد مدن</span>'}</div>
+                </div>`;
+            }).join('');
+
+            listEl.querySelectorAll('[data-company]').forEach((el) => {
+                const open = () => showCompanyRecords(el.dataset.company);
+                el.addEventListener('click', open);
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        open();
+                    }
+                });
+            });
+
+            const companyCount = rows.length;
+            const cityPairs = rows.reduce((sum, row) => sum + row.cities.length, 0);
+            topEl.innerHTML = `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة محفوظة — اضغط شركة لعرض السجلات`;
+
+            if (selectedCompany && draftsForCompany(selectedCompany).length) {
+                showCompanyRecords(selectedCompany);
+            } else if (selectedCompany) {
+                selectedCompany = '';
+                document.getElementById('companyRecordsPanel').classList.add('hidden');
+            }
+        }
+
+        function renderTransferDashboard(drafts) {
+            const list = Array.isArray(drafts) ? drafts : filteredDrafts();
+            const dateFiltered = Boolean(getXferDateFilter());
+            const emptyDate = 'لا توجد ترحيلات في هذا التاريخ';
+            const companies = tallyField(list, (d) => draftCompanyName(d));
+            const cities = tallyField(list, (d) => (d.payload || {}).branch_to);
+            renderRankList(
+                document.getElementById('companyDashList'),
+                document.getElementById('companyDashTop'),
+                companies,
+                dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة',
+                'شركة',
+                { clickableCompanies: true }
+            );
+            renderRankList(
+                document.getElementById('cityDashList'),
+                document.getElementById('cityDashTop'),
+                cities,
+                dateFiltered ? emptyDate : 'لا توجد فروع بعد — اطبع مذكرة مع اختيار الفرع',
+                'فرع'
+            );
+            renderCompanyCityBreakdown(
+                list,
+                dateFiltered ? emptyDate : 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'
+            );
+            highlightSelectedCompany();
+        }
+
+        document.getElementById('btnClearCompanyFilter').addEventListener('click', () => {
+            showCompanyRecords('');
+        });
+
+        document.getElementById('xferDateFilter').addEventListener('change', () => {
+            refreshTransferDashboard();
+        });
+        document.getElementById('btnXferDateToday').addEventListener('click', () => {
+            document.getElementById('xferDateFilter').value = getSaudiTodayIso();
+            refreshTransferDashboard();
+        });
+        document.getElementById('btnXferDateAll').addEventListener('click', () => {
+            document.getElementById('xferDateFilter').value = '';
+            refreshTransferDashboard();
+        });
+        updateXferDateLabel();
+
+        let managedCompanies = [];
+        let managedCities = [];
+
+        function setOptionStatus(elId, msg, type) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            el.textContent = msg || '';
+            el.className = 'hub-status' + (type ? ` ${type}` : '');
+        }
+
+        function renderOptionsList(listElId, items, kind) {
+            const listEl = document.getElementById(listElId);
+            if (!items.length) {
+                listEl.innerHTML = '<div class="hub-empty">القائمة فارغة</div>';
+                return;
+            }
+            listEl.innerHTML = items.map((name) => {
+                const safe = escapeHtml(name);
+                return `<div class="options-item">
+                    <span title="${safe}">${safe}</span>
+                    <button type="button" class="hub-btn hub-btn--sm hub-btn--danger" data-remove-option="${safe}" data-kind="${kind}">حذف</button>
+                </div>`;
+            }).join('');
+            listEl.querySelectorAll('[data-remove-option]').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const name = btn.dataset.removeOption;
+                    if (!confirm(`حذف «${name}»؟`)) return;
+                    try {
+                        const res = await fetch(`/api/delivery-options/${kind}`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'فشل الحذف');
+                        if (kind === 'companies') {
+                            managedCompanies = data.companies || [];
+                            renderOptionsList('companyOptionsList', managedCompanies, 'companies');
+                            setOptionStatus('companyOptionsStatus', 'تم الحذف', 'ok');
+                        } else {
+                            managedCities = data.cities || [];
+                            renderOptionsList('cityOptionsList', managedCities, 'cities');
+                            setOptionStatus('cityOptionsStatus', 'تم الحذف', 'ok');
+                        }
+                    } catch (err) {
+                        setOptionStatus(
+                            kind === 'companies' ? 'companyOptionsStatus' : 'cityOptionsStatus',
+                            err.message,
+                            'err'
+                        );
+                    }
+                });
+            });
+        }
+
+        async function loadManagedOptions() {
+            const res = await fetch('/api/delivery-options');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'فشل تحميل القوائم');
+            managedCompanies = data.companies || [];
+            managedCities = data.cities || [];
+            renderOptionsList('companyOptionsList', managedCompanies, 'companies');
+            renderOptionsList('cityOptionsList', managedCities, 'cities');
+        }
+
+        async function addManagedOption(kind, inputId, statusId) {
+            const input = document.getElementById(inputId);
+            const name = String(input.value || '').trim();
+            if (!name) {
+                setOptionStatus(statusId, 'أدخل اسماً', 'err');
+                return;
+            }
+            setOptionStatus(statusId, 'جاري الإضافة…');
+            try {
+                const res = await fetch(`/api/delivery-options/${kind}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل الإضافة');
+                input.value = '';
+                if (kind === 'companies') {
+                    managedCompanies = data.companies || [];
+                    renderOptionsList('companyOptionsList', managedCompanies, 'companies');
+                } else {
+                    managedCities = data.cities || [];
+                    renderOptionsList('cityOptionsList', managedCities, 'cities');
+                }
+                setOptionStatus(statusId, 'تمت الإضافة', 'ok');
+            } catch (err) {
+                setOptionStatus(statusId, err.message, 'err');
+            }
+        }
+
+        document.getElementById('btnAddCompany').addEventListener('click', () => {
+            addManagedOption('companies', 'newCompanyInput', 'companyOptionsStatus');
+        });
+        document.getElementById('btnAddCity').addEventListener('click', () => {
+            addManagedOption('cities', 'newCityInput', 'cityOptionsStatus');
+        });
+        document.getElementById('newCompanyInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addManagedOption('companies', 'newCompanyInput', 'companyOptionsStatus');
+        });
+        document.getElementById('newCityInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addManagedOption('cities', 'newCityInput', 'cityOptionsStatus');
+        });
+
+        async function loadDashboard() {
+            const [invRes, queueRes] = await Promise.all([
+                fetch('/api/delivery-inventory'),
+                fetch('/api/delivery-coordinator/queue?admin=1')
+            ]);
+            const data = await invRes.json();
+            const queueData = await queueRes.json();
+            if (!invRes.ok) throw new Error(data.error || 'فشل تحميل البيانات');
+            allVehicles = data.vehicles || [];
+            lastDashboard = data.dashboard || null;
+            renderStats(data.dashboard);
+            renderTable(allVehicles);
+            if (queueRes.ok) {
+                allQueue = queueData.queue || [];
+                allDrafts = queueData.drafts || [];
+                renderQueueStats(queueData.stats);
+                renderQueueTable(allQueue);
+                renderDraftsTable(allDrafts);
+                renderTransferDashboard(filteredDrafts());
+            } else {
+                allQueue = [];
+                allDrafts = [];
+                renderTransferDashboard(filteredDrafts());
+            }
+            loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
+        }
+
+        function renderDraftsTable(drafts) {
+            const tbody = document.getElementById('draftsBody');
+            if (!drafts.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد مسودات بعد</td></tr>';
+                return;
+            }
+            tbody.innerHTML = drafts.slice(0, 100).map((d) => {
+                const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
+                const p = d.payload || {};
+                const canExport = Boolean(d.id && d.payload);
+                return `<tr>
+                    <td>${when}</td>
+                    <td class="hub-vin">${d.vin || '—'}</td>
+                    <td>${d.product || d.model || '—'}</td>
+                    <td>${d.assignedTo || '—'}</td>
+                    <td>${p.customer_name || '—'}</td>
+                    <td>${p.company_rep || d.customerName || '—'}</td>
+                    <td>${p.branch_to || '—'}</td>
+                    <td>${canExport
+                        ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${d.id}">تصدير PDF</button>`
+                        : '<span class="hub-meta">—</span>'}</td>
+                </tr>`;
+            }).join('');
+            tbody.querySelectorAll('[data-export-pdf]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.exportPdf;
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+        }
+
+        function renderQueueStats(stats) {
+            const s = stats || {};
+            document.getElementById('queueStats').innerHTML = `
+                <div class="hub-stat"><span>قائمة المنسق</span><b>${s.total || 0}</b></div>
+                <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${s.available || 0}</b></div>
+                <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${s.in_stock || 0}</b></div>
+                <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${s.ready_for_delivery || 0}</b></div>
+                <div class="hub-stat hub-stat--primary"><span>Out</span><b>${s.out_of_delivery || 0}</b></div>
+                <div class="hub-stat hub-stat--avail"><span>تم الترحيل</span><b>${s.delivered || 0}</b></div>
+                <div class="hub-stat"><span>مسودات</span><b>${s.drafts || 0}</b></div>
+            `;
+        }
+
+        function queueBadgeClass(item) {
+            if (item.status === 'available') return 'hub-badge--avail';
+            if (item.agentStatus === 'delivered') return 'hub-badge--delivered';
+            if (item.agentStatus === 'in_stock') return 'hub-badge--stock';
+            if (item.agentStatus === 'ready_for_delivery') return 'hub-badge--ready';
+            if (item.agentStatus === 'out_of_delivery') return 'hub-badge--out';
+            return 'hub-badge--claimed';
+        }
+
+        function renderQueueTable(queue) {
+            const tbody = document.getElementById('queueBody');
+            if (!queue.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد شاسيه — أضف من صفحة المنسق</td></tr>';
+                return;
+            }
+            tbody.innerHTML = queue.map((item) => {
+                const avail = item.status === 'available';
+                const label = avail ? 'متاح' : (item.statusLabel || 'محجوز');
+                return `<tr class="${avail ? 'row-available' : ''}" data-vin="${item.vin}" data-available="${avail ? '1' : '0'}">
+                    <td class="hub-vin">${item.vin}</td>
+                    <td>${item.product || '—'}</td>
+                    <td>${item.gt || '—'}</td>
+                    <td>${item.location || '—'}</td>
+                    <td>${item.assignedTo || '—'}</td>
+                    <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
+                    <td>${avail ? 'متاح' : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز')}</td>
+                    <td>${avail || item.agentStatus === 'delivered' ? '' : `<button type="button" class="hub-btn hub-btn--sm" data-release="${item.vin}">إتاحة</button>`}</td>
+                </tr>`;
+            }).join('');
+            tbody.querySelectorAll('tr.row-available').forEach((row) => {
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('[data-release]')) return;
+                    window.location.href = 'Delivery_pdf.html?vin=' + encodeURIComponent(row.dataset.vin);
+                });
+            });
+            tbody.querySelectorAll('[data-release]').forEach((btn) => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const vin = btn.dataset.release;
+                    await fetch('/api/delivery-coordinator/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ vin })
+                    });
+                    loadDashboard();
+                });
+            });
+        }
+
+        async function uploadFile(file) {
+            if (!file) return;
+            setUploadStatus('جاري الرفع والمعالجة…');
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const res = await fetch('/api/delivery-inventory/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'فشل الرفع');
+                    setUploadStatus(`تم استيراد ${data.imported} مركبة — تم تحديث Product/GT/Location من الملف الجديد`, 'ok');
+                    await loadDashboard();
+                } catch (err) {
+                    setUploadStatus(err.message, 'err');
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            uploadFile(e.target.files?.[0]);
+            e.target.value = '';
+        });
+
+        const zone = document.getElementById('uploadZone');
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            uploadFile(e.dataTransfer.files?.[0]);
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            renderTable(filterVehicles(e.target.value));
+        });
+
+        document.getElementById('btnExportExcel').addEventListener('click', exportAllToExcel);
+
+        document.getElementById('btnClear').addEventListener('click', async () => {
+            if (!confirm('مسح كل بيانات الشاسيه؟')) return;
+            const res = await fetch('/api/delivery-inventory', { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) return setUploadStatus(data.error, 'err');
+            allVehicles = [];
+            allQueue = [];
+            allDrafts = [];
+            lastDashboard = data.dashboard || null;
+            renderStats(data.dashboard);
+            renderTable([]);
+            renderQueueStats({ total: 0, available: 0, claimed: 0 });
+            renderQueueTable([]);
+            renderDraftsTable([]);
+            renderTransferDashboard(filteredDrafts());
+            setUploadStatus('تم مسح البيانات', 'ok');
+        });
+    </script>
+    <script src="delivery-hub-live.js"></script>
+</body>
+</html>
