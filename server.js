@@ -1424,6 +1424,21 @@ app.post('/api/delivery-note/generate', (req, res) => {
   }
 });
 
+// Serve React admin dashboard (built assets)
+const adminDist = path.join(ROOT, 'admin-app', 'dist');
+if (fs.existsSync(adminDist)) {
+  app.use('/admin-app', express.static(adminDist, {
+    setHeaders(res, filePath) {
+      if (/\.(html|js|css)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  }));
+  app.get('/admin-app/*', (_req, res) => {
+    res.sendFile(path.join(adminDist, 'index.html'));
+  });
+}
+
 // Static files (hub UI + assets)
 app.use(express.static(ROOT, {
   extensions: ['html'],

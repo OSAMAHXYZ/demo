@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>إدارة مذكرة الترحيل — Delivery Inventory</title>
-    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <title>لوحة متابعة الترحيل — Delivery Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="delivery-hub-theme.css">
+    <link rel="stylesheet" href="admin-saas.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
         #adminGate {
             position: fixed; inset: 0; z-index: 300;
@@ -71,21 +73,17 @@
 
         /* —— Admin console visual polish (Toyota dark) —— */
         body.delivery-hub.admin-console {
-            font-family: 'Tajawal', 'Changa', sans-serif;
-            background-color: #070a10;
+            font-family: Inter, 'Tajawal', 'Segoe UI', sans-serif;
+            background-color: #0B1120;
             background-image:
-                radial-gradient(ellipse 90% 55% at 70% -10%, rgba(235, 10, 30, 0.32), transparent 55%),
-                radial-gradient(ellipse 60% 40% at 10% 30%, rgba(235, 10, 30, 0.1), transparent 50%),
-                radial-gradient(ellipse 50% 35% at 90% 80%, rgba(30, 58, 95, 0.22), transparent 55%),
-                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-            background-size: auto, auto, auto, 44px 44px, 44px 44px;
+                radial-gradient(ellipse 70% 45% at 90% -10%, rgba(59, 130, 246, 0.16), transparent 55%),
+                radial-gradient(ellipse 45% 35% at 0% 15%, rgba(34, 197, 94, 0.06), transparent 50%);
         }
         .admin-console .hub-brand h1,
         .admin-console .hub-section-head h2,
         .admin-console .xfer-dash-card h3 {
-            font-family: 'Changa', 'Tajawal', sans-serif;
-            letter-spacing: -0.01em;
+            font-family: Inter, 'Tajawal', sans-serif;
+            letter-spacing: -0.02em;
         }
         .admin-console .hub-stat {
             transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
@@ -1299,42 +1297,31 @@
     </div>
 
     <div class="hub-shell hidden" id="adminApp">
-        <header class="hub-topbar">
-            <div class="hub-brand">
-                <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
-                <div>
-                    <h1>لوحة إدارة الترحيل</h1>
-                    <p>بيانات الشاسيه · قائمة المنسق · المخزون</p>
-                </div>
+        <header class="saas-header saas-card">
+            <div>
+                <p class="saas-header__eyebrow">Toyota Delivery Hub</p>
+                <h1>لوحة متابعة الترحيل</h1>
             </div>
-            <div class="hub-actions">
-                <a href="Delivery_coordinator.html" class="hub-btn">منسق الترحيل</a>
-                <a href="Delivery_pdf.html" class="hub-btn">مذكرة الترحيل</a>
-                <button type="button" class="hub-btn hub-btn--primary" id="btnExportExcel">تصدير Excel</button>
-                <button type="button" class="hub-btn hub-btn--danger" id="btnClear">مسح البيانات</button>
-                <button type="button" class="hub-btn" id="btnAdminLogout">خروج</button>
+            <div class="saas-header__actions">
+                <a href="Delivery_coordinator.html" class="saas-btn saas-btn--ghost saas-btn--sm">المنسق</a>
+                <button type="button" class="saas-btn saas-btn--primary" id="btnExportExcel">تصدير Excel</button>
+                <button type="button" class="saas-btn saas-btn--sm" id="btnExpandAll">فتح الكل</button>
+                <button type="button" class="saas-btn saas-btn--sm" id="btnCollapseAll">طي الكل</button>
+                <button type="button" class="saas-btn saas-btn--danger saas-btn--sm" id="btnClear">مسح</button>
+                <button type="button" class="saas-btn" id="btnAdminLogout">خروج</button>
             </div>
         </header>
 
-        <div class="hub-fold-actions">
-            <button type="button" class="hub-btn hub-btn--sm" id="btnExpandAll">فتح الكل</button>
-            <button type="button" class="hub-btn hub-btn--sm" id="btnCollapseAll">طي الكل</button>
-        </div>
-
-        <p class="admin-track-note">
-            لوحة متابعة — رفع Sales Raw اليومي من صفحة المنسق. لاستعادة أرشيف قديم استخدم «استيراد بيانات قديمة» أدناه (ملف delivery_export).
-        </p>
-
-        <div class="admin-restore-box" id="adminRestoreBox">
-            <h3>استيراد بيانات قديمة — Restore Old Export</h3>
-            <p>
-                ارفع ملف التصدير مثل <strong>delivery_export_….xlsx</strong> لاستعادة:
-                سجل المركبات · قائمة المنسق · مسودات الطباعة (PDF).
-                هذا يستبدل البيانات الحالية في اللوحة.
-            </p>
+        <div class="admin-restore-box saas-card saas-section" id="adminRestoreBox" style="margin-top:14px">
+            <div class="saas-section__head">
+                <div>
+                    <h3>الإعدادات والأرشيف</h3>
+                    <p>استعادة تصدير قديم أو دمج تواريخ Proforma/Invoice من Sales Raw</p>
+                </div>
+            </div>
             <div class="admin-restore-actions">
                 <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
-                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">اختيار ملف التصدير</button>
+                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">استيراد أرشيف delivery_export</button>
                 <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
             </div>
             <p class="hub-status" id="restoreExportStatus"></p>
@@ -1346,45 +1333,175 @@
             <p class="hub-status" id="mergeDatesStatus"></p>
         </div>
 
-        <div class="admin-filter-bar" id="adminFilterBar">
-            <h3>فلاتر التتبع — Tracking Filters</h3>
-            <p class="hub-meta" id="trackFilterHint" style="margin:-2px 0 12px">
-                اختر نوع التاريخ ثم الفترة — الرسوم البيانية والقوائم تتحدّث حسب النطاق.
-            </p>
-            <div class="admin-filter-grid">
-                <div class="admin-filter-field">
-                    <label for="trackDateType">نطاق السيارات حسب</label>
-                    <select id="trackDateType">
-                        <option value="delivery_note">تاريخ مذكرة الترحيل (من المسودات المحفوظة)</option>
-                        <option value="proforma">تاريخ البروفورما Proforma (من Sales Raw)</option>
-                        <option value="invoice">تاريخ الفاتورة Invoice (من Sales Raw)</option>
-                    </select>
+        <div class="ft-shell" id="adminFilterBar">
+            <div class="ft-toolbar" role="search" aria-label="Filter toolbar">
+                <div class="ft-search">
+                    <svg class="ft-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <path d="m20 20-3.5-3.5"></path>
+                    </svg>
+                    <input
+                        type="search"
+                        class="ft-input"
+                        id="ftSearchInput"
+                        placeholder="Search by VIN, Company, Branch..."
+                        autocomplete="off"
+                        aria-label="Search by VIN, Company, Branch"
+                    >
+                    <button type="button" class="ft-search__clear" id="ftSearchClear" aria-label="Clear search">×</button>
                 </div>
-                <div class="admin-filter-field">
-                    <label for="trackDateFrom">من</label>
-                    <input type="date" id="trackDateFrom">
+
+                <div class="ft-control ft-control--date" id="ftDateControl">
+                    <button type="button" class="ft-control__trigger" id="ftDateTrigger" aria-haspopup="dialog" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                            <path d="M3 10h18M8 3v4M16 3v4"></path>
+                        </svg>
+                        <span class="ft-control__value is-placeholder" id="ftDateLabel">Date Range</span>
+                    </button>
+                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
+                    <div class="ft-panel ft-date-panel" id="ftDatePanel" role="dialog" aria-label="Date range">
+                        <label>From
+                            <input type="date" id="ftDateFromUi">
+                        </label>
+                        <label>To
+                            <input type="date" id="ftDateToUi">
+                        </label>
+                        <div class="ft-date-actions">
+                            <button type="button" class="ft-btn ft-btn--ghost" id="ftDateToday" style="height:40px;flex:1">Today</button>
+                            <button type="button" class="ft-btn ft-btn--primary" id="ftDateDone" style="height:40px;flex:1">Done</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="admin-filter-field">
-                    <label for="trackDateTo">إلى</label>
-                    <input type="date" id="trackDateTo">
+
+                <div class="ft-control" id="ftCompanyControl" data-ft-select="company">
+                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"></path>
+                        </svg>
+                        <span class="ft-control__value is-placeholder" data-ft-label>Company</span>
+                    </button>
+                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
+                    <div class="ft-panel" role="listbox">
+                        <div class="ft-panel__search"><input type="search" placeholder="Search company…" data-ft-q></div>
+                        <div data-ft-options></div>
+                    </div>
                 </div>
-                <div class="admin-filter-actions">
-                    <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" id="btnTrackApply">تطبيق</button>
-                    <button type="button" class="hub-btn hub-btn--sm" id="btnTrackToday">اليوم</button>
-                    <button type="button" class="hub-btn hub-btn--sm" id="btnTrackClear">مسح الفلتر</button>
+
+                <div class="ft-control" id="ftBranchControl" data-ft-select="branch">
+                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"></path>
+                            <circle cx="12" cy="10" r="2.5"></circle>
+                        </svg>
+                        <span class="ft-control__value is-placeholder" data-ft-label>Branch</span>
+                    </button>
+                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
+                    <div class="ft-panel" role="listbox">
+                        <div class="ft-panel__search"><input type="search" placeholder="Search branch…" data-ft-q></div>
+                        <div data-ft-options></div>
+                    </div>
+                </div>
+
+                <div class="ft-control" id="ftStatusControl" data-ft-select="status">
+                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M3 7h13l5 5v5a2 2 0 0 1-2 2H3z"></path>
+                            <circle cx="7.5" cy="16.5" r="1.5"></circle>
+                            <circle cx="16.5" cy="16.5" r="1.5"></circle>
+                        </svg>
+                        <span class="ft-control__value is-placeholder" data-ft-label>Status</span>
+                    </button>
+                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
+                    <div class="ft-panel" role="listbox">
+                        <div data-ft-options></div>
+                    </div>
+                </div>
+
+                <div class="ft-actions">
+                    <div class="ft-more" id="ftMoreWrap">
+                        <button type="button" class="ft-btn ft-btn--more" id="ftMoreBtn" aria-expanded="false">
+                            More Filters
+                        </button>
+                        <div class="ft-more__panel" id="ftMorePanel">
+                            <div>
+                                <div class="ft-more__label">Date type</div>
+                                <select class="ft-native" id="ftDateTypeUi">
+                                    <option value="delivery_note">Delivery note</option>
+                                    <option value="proforma">Proforma</option>
+                                    <option value="invoice">Invoice</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="ft-more__label">Coordinator</div>
+                                <div class="ft-control" id="ftCoordinatorControl" data-ft-select="coordinator" style="min-width:0">
+                                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <circle cx="12" cy="8" r="4"></circle>
+                                            <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path>
+                                        </svg>
+                                        <span class="ft-control__value is-placeholder" data-ft-label>Coordinator</span>
+                                    </button>
+                                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
+                                    <div class="ft-panel" role="listbox" style="inset-inline-end:0;inset-inline-start:auto">
+                                        <div class="ft-panel__search"><input type="search" placeholder="Search…" data-ft-q></div>
+                                        <div data-ft-options></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="ft-btn ft-btn--primary" id="btnTrackApply">Apply Filters</button>
+                    <button type="button" class="ft-btn ft-btn--ghost" id="btnTrackClear">Reset</button>
                 </div>
             </div>
-            <p class="admin-filter-meta" id="trackFilterMeta">عرض كل البيانات بدون فلتر تاريخ</p>
+
+            <div class="ft-chips" id="filterChipsBar" aria-label="Active filters"></div>
+            <p class="ft-meta admin-filter-meta" id="trackFilterMeta">Showing all records</p>
+            <p class="hub-meta" id="trackFilterHint" hidden></p>
+
+            <div class="ft-hidden-natives" aria-hidden="true">
+                <select id="trackDateType">
+                    <option value="delivery_note">Delivery note</option>
+                    <option value="proforma">Proforma</option>
+                    <option value="invoice">Invoice</option>
+                </select>
+                <input type="date" id="trackDateFrom">
+                <input type="date" id="trackDateTo">
+                <button type="button" id="btnTrackToday" hidden>Today</button>
+                <button type="button" id="btnClearCompanyScope" hidden>Clear company</button>
+            </div>
         </div>
 
-        <div class="company-filter-chip hidden" id="companyFilterChip">
-            <span class="label">عرض شركة فقط</span>
+        <div class="company-filter-chip saas-chip-bar hidden" id="companyFilterChip" hidden>
+            <span class="label">Company</span>
             <span class="name" id="companyFilterName">—</span>
             <span class="meta" id="companyFilterMeta"></span>
-            <button type="button" class="hub-btn hub-btn--sm" id="btnClearCompanyScope">إظهار كل الشركات</button>
         </div>
 
-        <section class="hub-section hub-fold" id="statsFold" data-fold>
+        <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
+
+        <section class="saas-hero saas-card" id="heroProgressCard" aria-label="تقدم الترحيل">
+            <div>
+                <p class="saas-hero__eyebrow">Delivery Progress</p>
+                <h2>تقدم الترحيل</h2>
+                <p class="saas-hero__caption" id="deliveredTotalCaption">لا توجد بيانات بعد</p>
+            </div>
+            <div>
+                <div class="saas-hero__pct" id="deliveredTotalPct">0%</div>
+                <div class="saas-hero__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                    <span id="deliveredTotalBarFill"></span>
+                </div>
+                <div class="saas-hero__stats">
+                    <div><b id="deliveredTotalDone">0</b><span>تم الترحيل</span></div>
+                    <div><b id="deliveredTotalRemaining">0</b><span>متبقي</span></div>
+                    <div><b id="deliveredTotalAll">0</b><span>الإجمالي</span></div>
+                </div>
+            </div>
+            <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
+        </section>
+
+        <section class="hub-section hub-fold" id="statsFold" data-fold hidden>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">ملخص المخزون — Inventory Stats</span>
                 <span class="hub-fold-meta">
@@ -1402,7 +1519,7 @@
             </div>
         </section>
 
-        <section class="hub-section hub-fold" id="queueStatsFold" data-fold>
+        <section class="hub-section hub-fold" id="queueStatsFold" data-fold hidden>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">ملخص القائمة — Queue Stats</span>
                 <span class="hub-fold-meta">
@@ -1468,28 +1585,34 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <div class="pct-charts">
-                            <div class="pct-chart-card pct-chart-card--delivered-total">
-                                <h3>إجمالي المُرحَّل من الإجمالي — Delivered of Total</h3>
-                                <p class="pct-chart-sub">عدد السيارات التي تم ترحيلها نسبةً إلى إجمالي السيارات في النطاق الحالي</p>
-                                <div class="delivered-total-layout">
-                                    <div class="pct-donut-wrap" id="deliveredTotalDonut"></div>
-                                    <div class="delivered-total-meter">
-                                        <div class="delivered-total-numbers">
-                                            <span class="big" id="deliveredTotalDone">0</span>
-                                            <span class="of">من إجمالي <b id="deliveredTotalAll">0</b></span>
-                                            <span class="delivered-total-pct-badge" id="deliveredTotalPct">0%</span>
-                                        </div>
-                                        <div class="delivered-total-bar" aria-hidden="true">
-                                            <span id="deliveredTotalBarFill" style="width:0%"></span>
-                                        </div>
-                                        <p class="delivered-total-caption" id="deliveredTotalCaption">لا توجد بيانات بعد</p>
+                        <div class="saas-grid-2" style="margin:0 0 16px">
+                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
+                                <div class="saas-section__head">
+                                    <div>
+                                        <h3>اتجاهات الترحيل</h3>
+                                        <p>عدد المذكرات حسب يوم الطباعة</p>
                                     </div>
                                 </div>
+                                <div id="trendChartEl" style="min-height:280px"></div>
                             </div>
-                            <div class="pct-chart-card pct-chart-card--status">
-                                <h3>نسبة الترحيل — Delivered vs Still</h3>
-                                <p class="pct-chart-sub">تم الترحيل مقابل ما لم يُرحّل بعد من قائمة المنسق (ضمن الفلتر)</p>
+                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
+                                <div class="saas-section__head">
+                                    <div>
+                                        <h3>أبرز الشركات</h3>
+                                        <p>اضغط شركة لعرض بياناتها فقط</p>
+                                    </div>
+                                </div>
+                                <div id="companyDashList" class="saas-company-list xfer-dash-list">
+                                    <div class="saas-empty">لا توجد بيانات بعد</div>
+                                </div>
+                                <div class="xfer-dash-top" id="companyDashTop" hidden></div>
+                            </div>
+                        </div>
+
+                        <div class="pct-charts saas-grid-2 equal" style="margin:0 0 16px">
+                            <div class="pct-chart-card pct-chart-card--status saas-section" style="margin:0">
+                                <h3>حالة الترحيل</h3>
+                                <p class="pct-chart-sub">الدونات الوحيد — تم الترحيل مقابل المتبقي</p>
                                 <div class="pct-chart-layout">
                                     <div class="pct-donut-wrap" id="statusPctDonut"></div>
                                     <div>
@@ -1498,21 +1621,15 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="pct-chart-card">
-                                <h3>نسبة كل شركة من الإجمالي</h3>
-                                <p class="pct-chart-sub">حسب المذكرات ضمن الفلتر الحالي</p>
-                                <div class="pct-chart-layout">
-                                    <div class="pct-donut-wrap" id="companyPctDonut"></div>
-                                    <div class="pct-legend" id="companyPctLegend"></div>
-                                </div>
+                            <div class="pct-chart-card saas-section" style="margin:0">
+                                <h3>الفروع / المدن</h3>
+                                <p class="pct-chart-sub">ترتيب أفقي حسب عدد التحويلات</p>
+                                <div id="cityPctDonut" style="min-height:280px"></div>
+                                <div class="pct-legend" id="cityPctLegend" hidden></div>
                             </div>
-                            <div class="pct-chart-card">
-                                <h3>نسبة الفروع / المدن</h3>
-                                <p class="pct-chart-sub">توزيع التحويل حسب الفرع</p>
-                                <div class="pct-chart-layout">
-                                    <div class="pct-donut-wrap" id="cityPctDonut"></div>
-                                    <div class="pct-legend" id="cityPctLegend"></div>
-                                </div>
+                            <div class="pct-chart-card" hidden>
+                                <div class="pct-donut-wrap" id="companyPctDonut"></div>
+                                <div class="pct-legend" id="companyPctLegend"></div>
                             </div>
                         </div>
                         <div class="xfer-date-filter" id="xferDateFilterBar" style="display:none">
@@ -1523,17 +1640,9 @@
                             <span class="xfer-date-label" id="xferDateLabel">عرض كل التواريخ</span>
                         </div>
                         <div class="xfer-dash">
-                            <div class="xfer-dash-card">
-                                <h3>أكثر شركات النقل اختياراً</h3>
-                                <p class="xfer-dash-sub">حقل اسم الشركة / Company في المذكرة</p>
-                                <div id="companyDashList" class="xfer-dash-list">
-                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
-                                </div>
-                                <div class="xfer-dash-top" id="companyDashTop"></div>
-                            </div>
                             <div class="xfer-dash-card xfer-dash-card--city">
-                                <h3>أكثر الفروع / المدن تحويلاً</h3>
-                                <p class="xfer-dash-sub">حقل محولة إلى فرع / Branch</p>
+                                <h3>ترتيب الفروع</h3>
+                                <p class="xfer-dash-sub">قائمة سريعة للفروع</p>
                                 <div id="cityDashList" class="xfer-dash-list">
                                     <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
                                 </div>
@@ -1541,7 +1650,7 @@
                             </div>
                             <div class="xfer-dash-card xfer-dash-card--account">
                                 <h3>حساب كل شركة حسب المدن</h3>
-                                <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها المحفوظة — القائمة كاملة</p>
+                                <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها</p>
                                 <div id="companyCityBreakdown" class="xfer-account-list">
                                     <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
                                 </div>
@@ -1688,7 +1797,7 @@
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
                         <div class="hub-toolbar">
-                            <input type="search" id="searchInput" class="hub-input" placeholder="بحث بالشاسيه، المنتج، اللوحة، العميل…">
+                            <input type="search" id="searchInput" class="hub-input" placeholder="Search by VIN, Company, Branch..." hidden aria-hidden="true">
                         </div>
                         <div class="hub-table-wrap">
                             <table class="hub-table">
@@ -1940,22 +2049,145 @@
             );
         }
 
+        function renderPremiumKpis() {
+            const host = document.getElementById('premiumKpiGrid');
+            if (!host) return;
+            const progress = deliveredOfTotalStats();
+            const drafts = filteredDrafts();
+            const vehicles = filteredVehicleList();
+            const companies = new Set(drafts.map(draftCompanyName).filter(Boolean)).size;
+            const branches = new Set(
+                drafts.map((d) => String((d.payload || {}).branch_to || '').trim()).filter((n) => n && n !== '-')
+            ).size;
+            const cards = [
+                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#3B82F6', icon: '🚗' },
+                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#22C55E', icon: '✓' },
+                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ / غير مرحّل', accent: '#F59E0B', icon: '⏳' },
+                { label: 'الشركات', value: companies, trend: 'من المذكرات المصفّاة', accent: '#3B82F6', icon: '🏢' },
+                { label: 'الفروع', value: branches, trend: 'وجهات التحويل', accent: '#64748B', icon: '📍' },
+                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#22C55E', icon: '%' }
+            ];
+            host.innerHTML = cards.map((c) => `
+                <article class="saas-kpi saas-card">
+                    <div class="saas-kpi__icon" style="color:${c.accent};background:${c.accent}22">${c.icon}</div>
+                    <div class="saas-kpi__label">${c.label}</div>
+                    <div class="saas-kpi__value">${c.value}</div>
+                    <div class="saas-kpi__trend">${c.trend}</div>
+                    <span class="saas-kpi__accent" style="background:${c.accent}"></span>
+                </article>
+            `).join('');
+        }
+
+        const apexChartsByEl = new WeakMap();
+
+        function renderApex(el, options) {
+            if (!el || typeof ApexCharts === 'undefined') return;
+            const prev = apexChartsByEl.get(el);
+            if (prev) {
+                prev.destroy();
+                apexChartsByEl.delete(el);
+            }
+            el.innerHTML = '';
+            const chart = new ApexCharts(el, options);
+            chart.render();
+            apexChartsByEl.set(el, chart);
+        }
+
+        function draftsTrendRows(drafts) {
+            const map = new Map();
+            (drafts || []).forEach((d) => {
+                const iso = draftEventIso(d);
+                if (!iso) return;
+                map.set(iso, (map.get(iso) || 0) + 1);
+            });
+            return Array.from(map.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([date, count]) => ({ date, count }));
+        }
+
+        function renderTrendChart(drafts) {
+            const el = document.getElementById('trendChartEl');
+            if (!el) return;
+            const rows = draftsTrendRows(drafts);
+            if (!rows.length) {
+                el.innerHTML = '<div class="saas-empty">لا توجد بيانات اتجاه بعد</div>';
+                return;
+            }
+            renderApex(el, {
+                chart: { type: 'area', height: 280, toolbar: { show: false }, background: 'transparent', fontFamily: 'Inter, sans-serif' },
+                theme: { mode: 'dark' },
+                stroke: { curve: 'smooth', width: 2.5, colors: ['#3B82F6'] },
+                fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0.02 } },
+                colors: ['#3B82F6'],
+                dataLabels: { enabled: false },
+                grid: { borderColor: 'rgba(255,255,255,0.06)', strokeDashArray: 3 },
+                series: [{ name: 'مذكرات', data: rows.map((r) => r.count) }],
+                xaxis: {
+                    categories: rows.map((r) => r.date),
+                    labels: { style: { colors: '#94A3B8', fontSize: '11px' } },
+                    axisBorder: { show: false },
+                    axisTicks: { show: false }
+                },
+                yaxis: { labels: { style: { colors: '#94A3B8', fontSize: '11px' } } },
+                tooltip: { theme: 'dark' }
+            });
+        }
+
+        function renderHorizontalBars(el, rows, color) {
+            if (!el) return;
+            if (!rows.length) {
+                el.innerHTML = '<div class="saas-empty">لا توجد بيانات</div>';
+                return;
+            }
+            const top = rows.slice(0, 10);
+            renderApex(el, {
+                chart: {
+                    type: 'bar',
+                    height: Math.max(260, top.length * 36),
+                    toolbar: { show: false },
+                    background: 'transparent',
+                    fontFamily: 'Inter, sans-serif'
+                },
+                theme: { mode: 'dark' },
+                plotOptions: { bar: { horizontal: true, borderRadius: 8, barHeight: '62%' } },
+                colors: [color || '#3B82F6'],
+                dataLabels: { enabled: false },
+                grid: { borderColor: 'rgba(255,255,255,0.06)' },
+                series: [{ name: 'العدد', data: top.map((r) => r.count) }],
+                xaxis: {
+                    categories: top.map((r) => r.name),
+                    labels: { style: { colors: '#94A3B8', fontSize: '11px' } }
+                },
+                yaxis: { labels: { style: { colors: '#F8FAFC', fontSize: '12px' } } },
+                tooltip: { theme: 'dark' }
+            });
+        }
+
         function renderStats(dashboard) {
             const d = dashboard || {};
-            document.getElementById('stats').innerHTML = `
+            const statsEl = document.getElementById('stats');
+            if (statsEl) {
+                statsEl.innerHTML = `
                 <div class="hub-stat"><span>إجمالي المركبات</span><b>${d.totalVehicles || 0}</b></div>
                 <div class="hub-stat hub-stat--stock"><span>منتجات مختلفة</span><b>${d.uniqueProducts || 0}</b></div>
                 <div class="hub-stat"><span>آخر رفع</span><b style="font-size:0.95rem">${d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('ar-SA') : '—'}</b></div>
                 <div class="hub-stat"><span>الملف</span><b style="font-size:0.85rem">${d.filename || '—'}</b></div>
             `;
-            document.getElementById('uploadMeta').textContent = d.sheetName
-                ? `الورقة: ${d.sheetName} · ${d.totalVehicles || 0} مركبة`
-                : 'لم يتم رفع ملف بعد';
+            }
+            const meta = document.getElementById('uploadMeta');
+            if (meta) {
+                meta.textContent = d.sheetName
+                    ? `الورقة: ${d.sheetName} · ${d.totalVehicles || 0} مركبة`
+                    : 'لم يتم رفع ملف بعد';
+            }
             const grid = document.getElementById('productsGrid');
-            const top = d.topProducts || [];
-            grid.innerHTML = top.length
-                ? top.map((p) => `<span class="hub-chip"><span>${p.count}</span>${p.product}</span>`).join('')
-                : '<span class="hub-empty">لا توجد بيانات</span>';
+            if (grid) {
+                const top = d.topProducts || [];
+                grid.innerHTML = top.length
+                    ? top.map((p) => `<span class="hub-chip"><span>${p.count}</span>${p.product}</span>`).join('')
+                    : '<span class="hub-empty">لا توجد بيانات</span>';
+            }
+            renderPremiumKpis();
         }
 
         function renderTable(list) {
@@ -1991,7 +2223,404 @@
             });
         }
 
+        function applyDisplayFilters(list, kind) {
+            let out = list || [];
+            const q = String(uiFilters.search || '').trim().toLowerCase();
+            if (q) {
+                out = out.filter((row) => {
+                    const p = row.payload || {};
+                    const hay = [
+                        row.vin, row.product, row.model, row.plate, row.customerName,
+                        row.location, row.assignedTo, p.company_rep, p.customer_name, p.branch_to
+                    ].join(' ').toLowerCase();
+                    return hay.includes(q);
+                });
+            }
+            if (uiFilters.branch) {
+                out = out.filter((row) => {
+                    if (kind === 'draft') return String((row.payload || {}).branch_to || '') === uiFilters.branch;
+                    return String(row.location || '') === uiFilters.branch;
+                });
+            }
+            if (uiFilters.status && kind === 'queue') {
+                out = out.filter((qItem) => {
+                    if (uiFilters.status === 'delivered') return qItem.agentStatus === 'delivered';
+                    if (uiFilters.status === 'available') return qItem.status === 'available';
+                    if (uiFilters.status === 'pending') {
+                        return qItem.status !== 'available' && qItem.agentStatus !== 'delivered';
+                    }
+                    return true;
+                });
+            }
+            if (uiFilters.coordinator) {
+                out = out.filter((row) => String(row.assignedTo || '') === uiFilters.coordinator);
+            }
+            return out;
+        }
+
+        function syncDateControlsFromNatives() {
+            const from = document.getElementById('trackDateFrom')?.value || '';
+            const to = document.getElementById('trackDateTo')?.value || '';
+            const type = document.getElementById('trackDateType')?.value || 'delivery_note';
+            const fromUi = document.getElementById('ftDateFromUi');
+            const toUi = document.getElementById('ftDateToUi');
+            const typeUi = document.getElementById('ftDateTypeUi');
+            const label = document.getElementById('ftDateLabel');
+            if (fromUi) fromUi.value = from;
+            if (toUi) toUi.value = to;
+            if (typeUi) typeUi.value = type;
+            if (label) {
+                if (from || to) {
+                    label.textContent = `${from || '…'} → ${to || '…'}`;
+                    label.classList.remove('is-placeholder');
+                } else {
+                    label.textContent = 'Date Range';
+                    label.classList.add('is-placeholder');
+                }
+            }
+        }
+
+        function pushDatesToNatives() {
+            const fromUi = document.getElementById('ftDateFromUi')?.value || '';
+            const toUi = document.getElementById('ftDateToUi')?.value || '';
+            const typeUi = document.getElementById('ftDateTypeUi')?.value || 'delivery_note';
+            const fromEl = document.getElementById('trackDateFrom');
+            const toEl = document.getElementById('trackDateTo');
+            const typeEl = document.getElementById('trackDateType');
+            if (fromEl) fromEl.value = fromUi;
+            if (toEl) toEl.value = toUi;
+            if (typeEl) typeEl.value = typeUi;
+            syncDateControlsFromNatives();
+        }
+
+        function closeAllFtPanels(except) {
+            document.querySelectorAll('.ft-control.is-open, .ft-more.is-open').forEach((el) => {
+                if (except && el === except) return;
+                el.classList.remove('is-open');
+                const btn = el.querySelector('[aria-expanded]');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            });
+            document.getElementById('ftMoreBtn')?.classList.remove('is-active');
+        }
+
+        function collectSelectOptions() {
+            const companies = new Set();
+            const branches = new Set();
+            const coordinators = new Set();
+            dateScopedDrafts().forEach((d) => {
+                const c = draftCompanyName(d);
+                if (c) companies.add(c);
+                const b = String((d.payload || {}).branch_to || '').trim();
+                if (b) branches.add(b);
+                if (d.assignedTo) coordinators.add(d.assignedTo);
+            });
+            (managedCompanies || []).forEach((c) => companies.add(c));
+            (managedCities || []).forEach((b) => branches.add(b));
+            (allQueue || []).forEach((q) => {
+                if (q.assignedTo) coordinators.add(q.assignedTo);
+                if (q.location) branches.add(q.location);
+            });
+            return {
+                company: Array.from(companies).sort((a, b) => a.localeCompare(b, 'ar')),
+                branch: Array.from(branches).sort((a, b) => a.localeCompare(b, 'ar')),
+                status: [
+                    { value: 'delivered', label: 'Delivered' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'available', label: 'Available' }
+                ],
+                coordinator: Array.from(coordinators).sort((a, b) => a.localeCompare(b, 'ar'))
+            };
+        }
+
+        function currentSelectValue(kind) {
+            if (kind === 'company') return selectedCompany || '';
+            if (kind === 'branch') return uiFilters.branch || '';
+            if (kind === 'status') return uiFilters.status || '';
+            if (kind === 'coordinator') return uiFilters.coordinator || '';
+            return '';
+        }
+
+        function setSelectValue(kind, value) {
+            if (kind === 'company') {
+                selectedCompany = value || '';
+                return;
+            }
+            if (kind === 'branch') uiFilters.branch = value || '';
+            if (kind === 'status') uiFilters.status = value || '';
+            if (kind === 'coordinator') uiFilters.coordinator = value || '';
+        }
+
+        function renderFtSelect(control) {
+            if (!control) return;
+            const kind = control.dataset.ftSelect;
+            const optionsHost = control.querySelector('[data-ft-options]');
+            const labelEl = control.querySelector('[data-ft-label]');
+            const qInput = control.querySelector('[data-ft-q]');
+            if (!optionsHost || !labelEl) return;
+            const all = collectSelectOptions();
+            let items = all[kind] || [];
+            const q = String(qInput?.value || '').trim().toLowerCase();
+            if (kind === 'status') {
+                if (q) items = items.filter((it) => it.label.toLowerCase().includes(q) || it.value.includes(q));
+            } else if (q) {
+                items = items.filter((name) => String(name).toLowerCase().includes(q));
+            }
+            const current = currentSelectValue(kind);
+            const placeholder = kind === 'company' ? 'Company'
+                : kind === 'branch' ? 'Branch'
+                    : kind === 'status' ? 'Status'
+                        : 'Coordinator';
+            if (current) {
+                const pretty = kind === 'status'
+                    ? (all.status.find((s) => s.value === current)?.label || current)
+                    : current;
+                labelEl.textContent = pretty;
+                labelEl.classList.remove('is-placeholder');
+            } else {
+                labelEl.textContent = placeholder;
+                labelEl.classList.add('is-placeholder');
+            }
+
+            const clearRow = `<button type="button" class="ft-option" data-value="">All ${placeholder}</button>`;
+            const rows = kind === 'status'
+                ? items.map((it) => `<button type="button" class="ft-option${it.value === current ? ' is-active' : ''}" data-value="${escapeHtml(it.value)}">${escapeHtml(it.label)}</button>`).join('')
+                : items.map((name) => `<button type="button" class="ft-option${name === current ? ' is-active' : ''}" data-value="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('');
+            optionsHost.innerHTML = clearRow + (rows || '<div class="saas-empty" style="padding:12px">No options</div>');
+            optionsHost.querySelectorAll('.ft-option').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    setSelectValue(kind, btn.dataset.value || '');
+                    closeAllFtPanels();
+                    renderAllFtSelects();
+                    renderFilterChips();
+                    if (kind === 'company') {
+                        applyTrackFilter();
+                    } else {
+                        refreshTransferDashboard();
+                    }
+                });
+            });
+        }
+
+        function renderAllFtSelects() {
+            document.querySelectorAll('[data-ft-select]').forEach((el) => renderFtSelect(el));
+        }
+
+        function renderFilterChips() {
+            const host = document.getElementById('filterChipsBar');
+            if (!host) return;
+            const chips = [];
+            const { type, from, to } = getTrackFilter();
+            if (from || to) {
+                chips.push({
+                    key: 'date',
+                    label: `${from || '…'} → ${to || '…'}`,
+                    clear: () => {
+                        document.getElementById('trackDateFrom').value = '';
+                        document.getElementById('trackDateTo').value = '';
+                        document.getElementById('ftDateFromUi').value = '';
+                        document.getElementById('ftDateToUi').value = '';
+                        syncDateControlsFromNatives();
+                        applyTrackFilter();
+                    }
+                });
+            }
+            if (type && type !== 'delivery_note') {
+                chips.push({
+                    key: 'type',
+                    label: type === 'proforma' ? 'Proforma' : 'Invoice',
+                    clear: () => {
+                        document.getElementById('trackDateType').value = 'delivery_note';
+                        document.getElementById('ftDateTypeUi').value = 'delivery_note';
+                        applyTrackFilter();
+                    }
+                });
+            }
+            if (selectedCompany) {
+                chips.push({
+                    key: 'company',
+                    label: selectedCompany,
+                    clear: () => {
+                        selectedCompany = '';
+                        renderAllFtSelects();
+                        applyTrackFilter();
+                    }
+                });
+            }
+            if (uiFilters.branch) {
+                chips.push({
+                    key: 'branch',
+                    label: uiFilters.branch,
+                    clear: () => {
+                        uiFilters.branch = '';
+                        renderAllFtSelects();
+                        refreshTransferDashboard();
+                    }
+                });
+            }
+            if (uiFilters.status) {
+                const map = { delivered: 'Delivered', pending: 'Pending', available: 'Available' };
+                chips.push({
+                    key: 'status',
+                    label: map[uiFilters.status] || uiFilters.status,
+                    clear: () => {
+                        uiFilters.status = '';
+                        renderAllFtSelects();
+                        refreshTransferDashboard();
+                    }
+                });
+            }
+            if (uiFilters.coordinator) {
+                chips.push({
+                    key: 'coordinator',
+                    label: uiFilters.coordinator,
+                    clear: () => {
+                        uiFilters.coordinator = '';
+                        renderAllFtSelects();
+                        refreshTransferDashboard();
+                    }
+                });
+            }
+            if (uiFilters.search) {
+                chips.push({
+                    key: 'search',
+                    label: `“${uiFilters.search}”`,
+                    clear: () => {
+                        uiFilters.search = '';
+                        const ft = document.getElementById('ftSearchInput');
+                        const legacy = document.getElementById('searchInput');
+                        if (ft) ft.value = '';
+                        if (legacy) legacy.value = '';
+                        document.getElementById('ftSearchClear')?.classList.remove('is-visible');
+                        refreshTransferDashboard();
+                    }
+                });
+            }
+
+            if (!chips.length) {
+                host.innerHTML = '';
+                return;
+            }
+
+            host.innerHTML = chips.map((c) => `
+                <span class="ft-chip" data-chip="${c.key}">
+                    ${escapeHtml(c.label)}
+                    <button type="button" aria-label="Remove filter">×</button>
+                </span>
+            `).join('') + `<button type="button" class="ft-chip ft-chip--clear" id="ftClearAllChips">Clear All</button>`;
+
+            chips.forEach((c) => {
+                host.querySelector(`[data-chip="${c.key}"] button`)?.addEventListener('click', c.clear);
+            });
+            document.getElementById('ftClearAllChips')?.addEventListener('click', () => {
+                document.getElementById('btnTrackClear')?.click();
+            });
+        }
+
+        function initPremiumFilterToolbar() {
+            syncDateControlsFromNatives();
+            renderAllFtSelects();
+            renderFilterChips();
+
+            document.querySelectorAll('[data-ft-select] .ft-control__trigger').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const control = btn.closest('.ft-control');
+                    const willOpen = !control.classList.contains('is-open');
+                    closeAllFtPanels(willOpen ? control : null);
+                    control.classList.toggle('is-open', willOpen);
+                    btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                    if (willOpen) {
+                        renderFtSelect(control);
+                        control.querySelector('[data-ft-q]')?.focus();
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-ft-q]').forEach((input) => {
+                input.addEventListener('input', () => {
+                    const control = input.closest('[data-ft-select]');
+                    renderFtSelect(control);
+                });
+                input.addEventListener('click', (e) => e.stopPropagation());
+            });
+
+            const dateControl = document.getElementById('ftDateControl');
+            document.getElementById('ftDateTrigger')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const willOpen = !dateControl.classList.contains('is-open');
+                closeAllFtPanels(willOpen ? dateControl : null);
+                dateControl.classList.toggle('is-open', willOpen);
+                document.getElementById('ftDateTrigger').setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            });
+            document.getElementById('ftDatePanel')?.addEventListener('click', (e) => e.stopPropagation());
+            document.getElementById('ftDateDone')?.addEventListener('click', () => {
+                pushDatesToNatives();
+                closeAllFtPanels();
+                applyTrackFilter();
+            });
+            document.getElementById('ftDateToday')?.addEventListener('click', () => {
+                const today = getSaudiTodayIso();
+                document.getElementById('ftDateFromUi').value = today;
+                document.getElementById('ftDateToUi').value = today;
+                pushDatesToNatives();
+                closeAllFtPanels();
+                applyTrackFilter();
+            });
+
+            document.getElementById('ftMoreBtn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const wrap = document.getElementById('ftMoreWrap');
+                const willOpen = !wrap.classList.contains('is-open');
+                closeAllFtPanels(willOpen ? wrap : null);
+                wrap.classList.toggle('is-open', willOpen);
+                document.getElementById('ftMoreBtn').classList.toggle('is-active', willOpen);
+                document.getElementById('ftMoreBtn').setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            });
+            document.getElementById('ftMorePanel')?.addEventListener('click', (e) => e.stopPropagation());
+            document.getElementById('ftDateTypeUi')?.addEventListener('change', () => {
+                document.getElementById('trackDateType').value = document.getElementById('ftDateTypeUi').value;
+                updateTrackFilterHint();
+            });
+
+            const search = document.getElementById('ftSearchInput');
+            const clearBtn = document.getElementById('ftSearchClear');
+            let searchTimer = null;
+            search?.addEventListener('input', () => {
+                uiFilters.search = search.value || '';
+                const legacy = document.getElementById('searchInput');
+                if (legacy) legacy.value = search.value;
+                clearBtn?.classList.toggle('is-visible', Boolean(search.value));
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => {
+                    renderFilterChips();
+                    refreshTransferDashboard();
+                }, 160);
+            });
+            clearBtn?.addEventListener('click', () => {
+                search.value = '';
+                uiFilters.search = '';
+                const legacy = document.getElementById('searchInput');
+                if (legacy) legacy.value = '';
+                clearBtn.classList.remove('is-visible');
+                renderFilterChips();
+                refreshTransferDashboard();
+            });
+
+            document.addEventListener('click', () => closeAllFtPanels());
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeAllFtPanels();
+            });
+        }
+
         let selectedCompany = '';
+        let uiFilters = {
+            search: '',
+            branch: '',
+            status: '',
+            coordinator: ''
+        };
+        let managedCompanies = [];
+        let managedCities = [];
 
         function escapeHtml(value) {
             return String(value || '')
@@ -2252,7 +2881,8 @@
                     ? 'الفاتورة (Raw)'
                     : 'مذكرة الترحيل (مسودات)';
             const drafts = filteredDrafts().length;
-            const vehicles = filteredVehicleList().length;
+            const vehiclesAll = filteredVehicleList().length;
+            const vehiclesShown = applyDisplayFilters(filteredVehicleList(), 'vehicle').length;
             const queue = filteredQueue().length;
             const delivered = filteredQueue().filter((q) => q.agentStatus === 'delivered').length;
             const still = queue - delivered;
@@ -2261,16 +2891,19 @@
             const companyBit = selectedCompany
                 ? ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`
                 : '';
+            const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
 
             if (!from && !to) {
-                meta.innerHTML = `عرض الكل${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> مسودة · <strong>${vehicles}</strong> مركبة · تواريخ Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                meta.innerHTML = `${showing}${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> drafts · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 updateCompanyFilterChip();
+                renderFilterChips();
                 return;
             }
-            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong>${companyBit} · 
-                <strong>${vehicles}</strong> سيارة · <strong>${drafts}</strong> مسودة · قائمة <strong>${queue}</strong> 
-                (تم الترحيل <strong>${delivered}</strong> · متبقي <strong>${still}</strong>)`;
+            meta.innerHTML = `${showing}${companyBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
+                <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> 
+                (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
             updateCompanyFilterChip();
+            renderFilterChips();
         }
 
         function computeQueueStats(queue) {
@@ -2307,22 +2940,28 @@
 
         function refreshTransferDashboard() {
             updateXferDateLabel();
-            const drafts = filteredDrafts();
-            const queue = filteredQueue();
-            if (selectedCompany && !drafts.some((d) => draftCompanyName(d) === selectedCompany)) {
+            const draftsBase = filteredDrafts();
+            const queueBase = filteredQueue();
+            if (selectedCompany && !draftsBase.some((d) => draftCompanyName(d) === selectedCompany)) {
                 selectedCompany = '';
                 const panel = document.getElementById('companyRecordsPanel');
                 if (panel) panel.classList.add('hidden');
             }
-            renderTransferDashboard(drafts);
-            renderTable(filteredVehicleList());
+            const drafts = applyDisplayFilters(filteredDrafts(), 'draft');
+            const queue = applyDisplayFilters(filteredQueue(), 'queue');
+            const vehicles = applyDisplayFilters(filteredVehicleList(), 'vehicle');
+            renderTransferDashboard(filteredDrafts());
+            renderTable(vehicles);
             renderQueueTable(queue);
             renderDraftsTable(drafts);
             renderQueueStats(computeQueueStats(queue));
             setFoldCount('queueStatsFoldCount', queue.length);
             setFoldCount('draftsFoldCount', drafts.length);
-            setFoldCount('xferFoldCount', drafts.length);
-            setFoldCount('inventoryFoldCount', filteredVehicleList().length);
+            setFoldCount('xferFoldCount', filteredDrafts().length);
+            setFoldCount('inventoryFoldCount', vehicles.length);
+            renderAllFtSelects();
+            renderFilterChips();
+            syncDateControlsFromNatives();
         }
 
         function applyTrackFilter() {
@@ -2452,46 +3091,54 @@
         }
 
         function renderRankList(listEl, topEl, rows, emptyText, label, { clickableCompanies = false } = {}) {
+            if (!listEl) return;
             if (!rows.length) {
-                listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText}</div>`;
-                topEl.innerHTML = '';
+                listEl.innerHTML = `<div class="saas-empty">${emptyText}</div>`;
+                if (topEl) topEl.innerHTML = '';
                 return;
             }
             const total = rows.reduce((s, r) => s + r.count, 0) || 1;
-            const max = rows[0].count || 1;
-            listEl.innerHTML = rows.map((row) => {
-                const barPct = Math.max(4, Math.round((row.count / max) * 100));
-                const sharePct = Math.round((row.count / total) * 1000) / 10;
-                const safeName = escapeHtml(row.name);
-                const clickAttrs = clickableCompanies
-                    ? ` class="xfer-dash-row" data-company="${safeName}" role="button" tabindex="0"`
-                    : ' class="xfer-dash-row"';
-                return `<div${clickAttrs}>
-                    <div class="xfer-dash-name" title="${safeName}">${safeName}</div>
-                    <div class="xfer-dash-count-pct">
-                        <div class="xfer-dash-count">${row.count}</div>
-                        <div class="pct">${sharePct}%</div>
-                    </div>
-                    <div class="xfer-dash-bar"><span style="--bar-w:${barPct}%"></span></div>
-                </div>`;
-            }).join('');
-
-            if (clickableCompanies) {
+            const showCards = clickableCompanies || listEl.id === 'companyDashList';
+            if (showCards) {
+                listEl.innerHTML = rows.slice(0, 8).map((row, i) => {
+                    const sharePct = Math.round((row.count / total) * 1000) / 10;
+                    const safeName = escapeHtml(row.name);
+                    const active = selectedCompany === row.name ? ' is-active' : '';
+                    return `<button type="button" class="saas-company-card${active}" data-company="${safeName}">
+                        <div class="saas-company-card__top">
+                            <span class="saas-company-card__rank">#${i + 1}</span>
+                            <span>${sharePct}%</span>
+                        </div>
+                        <div class="saas-company-card__name" title="${safeName}">${safeName}</div>
+                        <div class="saas-company-card__meta">${row.count} مذكرة</div>
+                        <div class="saas-company-card__bar"><span style="width:${Math.min(100, sharePct)}%"></span></div>
+                    </button>`;
+                }).join('');
                 listEl.querySelectorAll('[data-company]').forEach((el) => {
-                    const open = () => showCompanyRecords(el.dataset.company);
-                    el.addEventListener('click', open);
-                    el.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            open();
-                        }
-                    });
+                    el.addEventListener('click', () => showCompanyRecords(el.dataset.company));
                 });
+            } else {
+                const max = rows[0].count || 1;
+                listEl.innerHTML = rows.map((row) => {
+                    const barPct = Math.max(4, Math.round((row.count / max) * 100));
+                    const sharePct = Math.round((row.count / total) * 1000) / 10;
+                    const safeName = escapeHtml(row.name);
+                    return `<div class="xfer-dash-row">
+                        <div class="xfer-dash-name" title="${safeName}">${safeName}</div>
+                        <div class="xfer-dash-count-pct">
+                            <div class="xfer-dash-count">${row.count}</div>
+                            <div class="pct">${sharePct}%</div>
+                        </div>
+                        <div class="xfer-dash-bar"><span style="--bar-w:${barPct}%"></span></div>
+                    </div>`;
+                }).join('');
             }
 
-            const leader = rows[0];
-            const share = Math.round((leader.count / total) * 100);
-            topEl.innerHTML = `الأكثر: <strong>${escapeHtml(leader.name)}</strong> — ${leader.count} من ${total} (<strong>${share}%</strong>) · ${rows.length} ${label}`;
+            if (topEl && !topEl.hidden) {
+                const leader = rows[0];
+                const share = Math.round((leader.count / total) * 100);
+                topEl.innerHTML = `الأكثر: <strong>${escapeHtml(leader.name)}</strong> — ${leader.count} من ${total} (<strong>${share}%</strong>) · ${rows.length} ${label}`;
+            }
         }
 
         const CHART_COLORS = [
@@ -2661,8 +3308,12 @@
 
             if (doneEl) doneEl.textContent = String(stats.delivered);
             if (allEl) allEl.textContent = String(stats.total);
+            const remEl = document.getElementById('deliveredTotalRemaining');
+            if (remEl) remEl.textContent = String(stats.remaining);
             if (pctEl) pctEl.textContent = `${stats.pct}%`;
             if (barEl) barEl.style.width = `${Math.min(100, stats.pct)}%`;
+            const heroBar = document.querySelector('#heroProgressCard .saas-hero__bar');
+            if (heroBar) heroBar.setAttribute('aria-valuenow', String(stats.pct));
             if (capEl) {
                 const { type } = getTrackFilter();
                 const scope =
@@ -2675,36 +3326,18 @@
                     : 'لا توجد بيانات في النطاق الحالي';
             }
 
-            const rows = stats.total
-                ? [
-                    {
-                        name: 'تم الترحيل',
-                        count: stats.delivered,
-                        color: '#22c55e',
-                        pctClass: 'is-green'
-                    },
-                    {
-                        name: 'باقي الإجمالي',
-                        count: stats.remaining,
-                        color: '#64748b',
-                        pctClass: 'is-amber'
-                    }
-                ]
-                : [];
-
-            // Reuse donut renderer without legend (legend lives in the meter)
-            const legendHost = document.createElement('div');
-            renderPercentChart(
-                donutEl,
-                legendHost,
-                rows.filter((r) => r.count > 0 || stats.total > 0),
-                'لا توجد بيانات',
-                {
-                    large: true,
-                    centerPct: stats.total ? stats.pct : null,
-                    centerLabel: 'من الإجمالي'
-                }
-            );
+            // Hero replaces the old delivered-total donut; keep call soft if element hidden
+            if (donutEl && !donutEl.hidden) {
+                const rows = stats.total
+                    ? [
+                        { name: 'تم الترحيل', count: stats.delivered, color: '#22c55e', pctClass: 'is-green' },
+                        { name: 'باقي الإجمالي', count: stats.remaining, color: '#64748b', pctClass: 'is-amber' }
+                    ]
+                    : [];
+                const legendHost = document.createElement('div');
+                renderPercentChart(donutEl, legendHost, rows, '', { large: true, centerPct: stats.pct, centerLabel: 'من الإجمالي' });
+            }
+            renderPremiumKpis();
         }
 
         function aggregateCompanyCities(drafts) {
@@ -2862,8 +3495,8 @@
             }
 
             renderDeliveredOfTotalChart();
+            renderTrendChart(list);
 
-            const companyClickable = Boolean(companies.length);
             renderPercentChart(
                 document.getElementById('statusPctDonut'),
                 document.getElementById('statusPctLegend'),
@@ -2876,18 +3509,10 @@
                     stripEl: document.getElementById('statusPctStrip')
                 }
             );
-            renderPercentChart(
-                document.getElementById('companyPctDonut'),
-                document.getElementById('companyPctLegend'),
-                companyRows,
-                dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة',
-                { clickableCompanies: companyClickable }
-            );
-            renderPercentChart(
+            renderHorizontalBars(
                 document.getElementById('cityPctDonut'),
-                document.getElementById('cityPctLegend'),
-                cityRows,
-                dateFiltered ? emptyDate : 'لا توجد فروع بعد — اطبع مذكرة مع اختيار الفرع'
+                cities.length ? cities : cityRows,
+                '#22C55E'
             );
             renderRankList(
                 document.getElementById('companyDashList'),
@@ -2910,22 +3535,48 @@
             );
             updateCompanyFilterChip();
             highlightSelectedCompany();
+            openFold('xferDashSection');
         }
 
         document.getElementById('btnClearCompanyFilter')?.addEventListener('click', clearCompanyScope);
         document.getElementById('btnClearCompanyScope')?.addEventListener('click', clearCompanyScope);
 
-        document.getElementById('btnTrackApply')?.addEventListener('click', applyTrackFilter);
+        document.getElementById('btnTrackApply')?.addEventListener('click', () => {
+            pushDatesToNatives();
+            applyTrackFilter();
+        });
         document.getElementById('btnTrackToday')?.addEventListener('click', () => {
             const today = getSaudiTodayIso();
             document.getElementById('trackDateFrom').value = today;
             document.getElementById('trackDateTo').value = today;
+            const fromUi = document.getElementById('ftDateFromUi');
+            const toUi = document.getElementById('ftDateToUi');
+            if (fromUi) fromUi.value = today;
+            if (toUi) toUi.value = today;
+            syncDateControlsFromNatives();
             applyTrackFilter();
         });
         document.getElementById('btnTrackClear')?.addEventListener('click', () => {
             document.getElementById('trackDateFrom').value = '';
             document.getElementById('trackDateTo').value = '';
+            document.getElementById('trackDateType').value = 'delivery_note';
             document.getElementById('xferDateFilter').value = '';
+            const fromUi = document.getElementById('ftDateFromUi');
+            const toUi = document.getElementById('ftDateToUi');
+            const typeUi = document.getElementById('ftDateTypeUi');
+            if (fromUi) fromUi.value = '';
+            if (toUi) toUi.value = '';
+            if (typeUi) typeUi.value = 'delivery_note';
+            selectedCompany = '';
+            uiFilters = { search: '', branch: '', status: '', coordinator: '' };
+            const ftSearch = document.getElementById('ftSearchInput');
+            const legacySearch = document.getElementById('searchInput');
+            if (ftSearch) ftSearch.value = '';
+            if (legacySearch) legacySearch.value = '';
+            document.getElementById('ftSearchClear')?.classList.remove('is-visible');
+            syncDateControlsFromNatives();
+            renderAllFtSelects();
+            renderFilterChips();
             applyTrackFilter();
         });
         document.getElementById('trackDateType')?.addEventListener('change', () => {
@@ -2946,9 +3597,6 @@
             refreshTransferDashboard();
         });
         updateXferDateLabel();
-
-        let managedCompanies = [];
-        let managedCities = [];
 
         function setOptionStatus(elId, msg, type) {
             const el = document.getElementById(elId);
@@ -3314,6 +3962,8 @@
             updateTrackFilterMeta();
             setUploadStatus('تم مسح البيانات', 'ok');
         });
+
+        initPremiumFilterToolbar();
     </script>
     <script src="delivery-hub-live.js"></script>
 </body>
