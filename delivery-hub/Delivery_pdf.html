@@ -112,6 +112,15 @@
             background: rgba(235, 10, 30, 0.08);
             color: var(--tot-primary);
         }
+        .searchable-select-hint {
+            margin: 6px 0 0;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        .searchable-select input.is-invalid {
+            border-color: #ef4444;
+            outline: 2px solid rgba(239, 68, 68, 0.15);
+        }
         .searchable-select-empty {
             padding: 12px;
             color: var(--tot-muted);
@@ -999,9 +1008,10 @@
                         <div>
                             <label for="company_rep">اسم الشركة / Company</label>
                             <div class="searchable-select">
-                                <input id="company_rep" name="company_rep" type="text" required autocomplete="off" placeholder="اكتب للبحث عن الشركة…" spellcheck="false">
+                                <input id="company_rep" name="company_rep" type="text" required autocomplete="off" placeholder="اختر الشركة من القائمة…" spellcheck="false" data-list-only="1">
                                 <div class="searchable-select-menu" id="company_rep_menu" role="listbox"></div>
                             </div>
+                            <p class="searchable-select-hint">يجب الاختيار من القائمة فقط — لا يُسمح بالكتابة الحرة</p>
                         </div>
                         <div>
                             <label for="customer_name">مندوب الشركة / Company Rep</label>
@@ -1030,9 +1040,10 @@
                         <div>
                             <label for="branch_to">محولة إلى فرع / Branch</label>
                             <div class="searchable-select">
-                                <input id="branch_to" name="branch_to" type="text" required autocomplete="off" placeholder="اكتب للبحث عن الفرع…" spellcheck="false">
+                                <input id="branch_to" name="branch_to" type="text" required autocomplete="off" placeholder="اختر الفرع من القائمة…" spellcheck="false" data-list-only="1">
                                 <div class="searchable-select-menu" id="branch_to_menu" role="listbox"></div>
                             </div>
+                            <p class="searchable-select-hint">يجب الاختيار من القائمة فقط — لا يُسمح بالكتابة الحرة</p>
                         </div>
                         <div class="grid" style="grid-column: 1 / -1">
                             <label for="attachments">المرفقات / Attachments</label>
@@ -1430,10 +1441,12 @@
         });
 
         function doPrintA4() {
+            const isAdminMode = new URLSearchParams(location.search).get('adminExport') === '1'
+                || new URLSearchParams(location.search).get('adminEdit') === '1';
+            if (!isAdminMode && !validateListOnlyFields()) return;
             const vin = getClaimedVin();
             const agent = getAgent();
-            const isAdminExport = new URLSearchParams(location.search).get('adminExport') === '1'
-                || new URLSearchParams(location.search).get('adminEdit') === '1';
+            const isAdminExport = isAdminMode;
             // Rebuild overlay positions, then clone for print (browser print ignores CSS transform/px quirks)
             buildOverlay();
             updatePreview();
@@ -1497,6 +1510,7 @@
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!validateListOnlyFields()) return;
             setStatus('جاري إنشاء ملف Word…');
             const btn = document.getElementById('btnDownload');
             btn.disabled = true;
@@ -1884,6 +1898,8 @@
 
         function applyDraftPayload(payload) {
             if (!payload || typeof payload !== 'object') return;
+            const params = new URLSearchParams(location.search);
+            const adminMode = params.get('adminExport') === '1' || params.get('adminEdit') === '1';
             const setVal = (id, value) => {
                 const el = document.getElementById(id);
                 if (el && value != null && value !== '') el.value = value;
@@ -1892,16 +1908,18 @@
             setVal('invoice_number', payload.invoice_number);
             setVal('dep_hour', payload.dep_hour);
             setVal('dep_minute', payload.dep_minute);
-            if (payload.company_rep) ensureSearchableOption('company_rep', payload.company_rep);
             setVal('customer_name', payload.customer_name);
-            setVal('company_rep', payload.company_rep);
+            if (payload.company_rep && (adminMode || ensureSearchableOption('company_rep', payload.company_rep))) {
+                setVal('company_rep', payload.company_rep);
+            }
             setVal('transfer_date', payload.transfer_date);
             setVal('corresponding_date', payload.corresponding_date);
             setVal('day_name', payload.day_name);
             setVal('trailer_number', payload.trailer_number);
             setVal('car_count', payload.car_count);
-            if (payload.branch_to) ensureSearchableOption('branch_to', payload.branch_to);
-            setVal('branch_to', payload.branch_to);
+            if (payload.branch_to && (adminMode || ensureSearchableOption('branch_to', payload.branch_to))) {
+                setVal('branch_to', payload.branch_to);
+            }
             setVal('attachments', payload.attachments);
             const cars = Array.isArray(payload.cars) ? payload.cars : [];
             cars.forEach((row, i) => {
@@ -2151,12 +2169,55 @@
             }
         }
 
-        function ensureSearchableOption(fieldId, value) {
+        function isExactSearchableOption(fieldId, value) {
             const v = String(value || '').trim();
-            if (!v) return;
-            const list = searchableSelectOptions[fieldId];
-            if (!list) return;
-            if (!list.some((x) => x === v)) list.push(v);
+            if (!v) return false;
+            const list = searchableSelectOptions[fieldId] || [];
+            return list.some((x) => String(x).trim() === v);
+        }
+
+        /** Do not invent new companies/branches — value must already exist in the list. */
+        function ensureSearchableOption(fieldId, value) {
+            return isExactSearchableOption(fieldId, value);
+        }
+
+        function setSearchableValidity(input, ok, message) {
+            if (!input) return;
+            input.classList.toggle('is-invalid', !ok);
+            input.setCustomValidity(ok ? '' : (message || 'يجب الاختيار من القائمة فقط'));
+        }
+
+        function enforceListOnlyValue(fieldId, { clearIfInvalid = true } = {}) {
+            const input = document.getElementById(fieldId);
+            if (!input) return false;
+            const v = String(input.value || '').trim();
+            if (!v) {
+                setSearchableValidity(input, false, 'مطلوب — اختر من القائمة');
+                return false;
+            }
+            if (!isExactSearchableOption(fieldId, v)) {
+                if (clearIfInvalid) input.value = '';
+                setSearchableValidity(input, false, 'يجب الاختيار من القائمة فقط');
+                return false;
+            }
+            input.value = v;
+            setSearchableValidity(input, true, '');
+            return true;
+        }
+
+        function validateListOnlyFields() {
+            const companyOk = enforceListOnlyValue('company_rep', { clearIfInvalid: false });
+            const branchOk = enforceListOnlyValue('branch_to', { clearIfInvalid: false });
+            if (!companyOk || !branchOk) {
+                const firstBad = !companyOk
+                    ? document.getElementById('company_rep')
+                    : document.getElementById('branch_to');
+                firstBad?.reportValidity();
+                firstBad?.focus();
+                setStatus('شركة والنقل: اختر الشركة والفرع من القائمة فقط', 'err');
+                return false;
+            }
+            return true;
         }
 
         function initSearchableSelect(fieldId) {
@@ -2165,6 +2226,7 @@
             if (!input || !menu) return;
             const options = () => searchableSelectOptions[fieldId] || [];
             let activeIdx = -1;
+            let pickedFromList = isExactSearchableOption(fieldId, input.value);
 
             function closeMenu() {
                 menu.classList.remove('open');
@@ -2172,11 +2234,20 @@
                 activeIdx = -1;
             }
 
+            function pickValue(name) {
+                input.value = name;
+                pickedFromList = true;
+                setSearchableValidity(input, true, '');
+                closeMenu();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
             function openMenu(filterText) {
                 const q = String(filterText || '').trim().toLowerCase();
                 const matches = options().filter((name) => !q || String(name).toLowerCase().includes(q));
                 if (!matches.length) {
-                    menu.innerHTML = '<div class="searchable-select-empty">لا توجد نتائج</div>';
+                    menu.innerHTML = '<div class="searchable-select-empty">لا توجد نتائج في القائمة</div>';
                     menu.classList.add('open');
                     activeIdx = -1;
                     return;
@@ -2193,10 +2264,7 @@
                 menu.querySelectorAll('button').forEach((btn) => {
                     btn.addEventListener('mousedown', (e) => {
                         e.preventDefault();
-                        input.value = btn.textContent;
-                        closeMenu();
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        pickValue(btn.textContent);
                     });
                 });
             }
@@ -2210,7 +2278,11 @@
             }
 
             input.addEventListener('focus', () => openMenu(input.value));
-            input.addEventListener('input', () => openMenu(input.value));
+            input.addEventListener('input', () => {
+                pickedFromList = false;
+                setSearchableValidity(input, true, '');
+                openMenu(input.value);
+            });
             input.addEventListener('keydown', (e) => {
                 if (!menu.classList.contains('open')) {
                     if (e.key === 'ArrowDown') openMenu(input.value);
@@ -2230,13 +2302,37 @@
                 } else if (e.key === 'Enter') {
                     if (activeIdx >= 0 && items[activeIdx]) {
                         e.preventDefault();
-                        items[activeIdx].dispatchEvent(new Event('mousedown'));
+                        pickValue(items[activeIdx].textContent);
                     }
                 } else if (e.key === 'Escape') {
                     closeMenu();
                 }
             });
-            input.addEventListener('blur', () => setTimeout(closeMenu, 120));
+            input.addEventListener('blur', () => {
+                setTimeout(() => {
+                    closeMenu();
+                    const v = String(input.value || '').trim();
+                    if (!v) {
+                        setSearchableValidity(input, false, 'مطلوب — اختر من القائمة');
+                        return;
+                    }
+                    if (pickedFromList && isExactSearchableOption(fieldId, v)) {
+                        setSearchableValidity(input, true, '');
+                        return;
+                    }
+                    if (isExactSearchableOption(fieldId, v)) {
+                        pickedFromList = true;
+                        setSearchableValidity(input, true, '');
+                        return;
+                    }
+                    // Free text not allowed — clear and force list choice
+                    input.value = '';
+                    pickedFromList = false;
+                    setSearchableValidity(input, false, 'يجب الاختيار من القائمة فقط');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }, 140);
+            });
         }
 
         initSearchableSelect('branch_to');

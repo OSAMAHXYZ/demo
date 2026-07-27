@@ -705,8 +705,77 @@ body.admin-console tbody tr:hover {
   }
 }
 
-@media (max-width: 480px) {
-  .saas-kpi-grid {
+.invoice-status-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.invoice-status-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.invoice-status-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: #e2e8f0;
+}
+
+.invoice-status-stats .is-done { color: #86efac; background: rgba(34,197,94,0.12); }
+.invoice-status-stats .is-pending { color: #fcd34d; background: rgba(245,158,11,0.12); }
+
+.invoice-status-bars {
+  display: grid;
+  gap: 14px;
+}
+
+.invoice-status-row {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-status-row__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.invoice-status-row__head small {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.invoice-status-row__track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.invoice-status-row__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 900px) {
+  .invoice-status-layout {
     grid-template-columns: 1fr;
   }
 }

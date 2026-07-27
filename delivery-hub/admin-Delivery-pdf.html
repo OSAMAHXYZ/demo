@@ -1611,6 +1611,20 @@
                             </div>
                         </div>
 
+                        <div class="saas-section saas-card" id="invoiceStatusCard" style="margin:0 0 16px;box-shadow:none">
+                            <div class="saas-section__head">
+                                <div>
+                                    <h3>حالة الفاتورة حسب VIN</h3>
+                                    <p>تم التسليم = يوجد تاريخ Proforma وتاريخ Invoice معًا · غير ذلك = Pending</p>
+                                </div>
+                                <div class="invoice-status-stats" id="invoiceStatusStats" aria-live="polite"></div>
+                            </div>
+                            <div class="invoice-status-layout">
+                                <div id="invoiceStatusChart" style="min-height:260px"></div>
+                                <div class="invoice-status-bars" id="invoiceStatusBars"></div>
+                            </div>
+                        </div>
+
                         <div class="pct-charts saas-grid-2 equal" style="margin:0 0 16px">
                             <div class="pct-chart-card pct-chart-card--status saas-section" style="margin:0">
                                 <h3>حالة الترحيل</h3>
@@ -3244,6 +3258,138 @@
             }
         }
 
+        function vehicleHasDate(value) {
+            return Boolean(String(value || '').trim());
+        }
+
+        /** VIN is Delivered only when both Proforma + Invoice dates exist. */
+        function invoiceDeliveryStats(vehicles) {
+            const list = Array.isArray(vehicles) ? vehicles : filteredVehicleList();
+            let delivered = 0;
+            let pending = 0;
+            let proformaOnly = 0;
+            let invoiceOnly = 0;
+            let neither = 0;
+            list.forEach((v) => {
+                const hasP = vehicleHasDate(v.proformaDate);
+                const hasI = vehicleHasDate(v.invoiceDate);
+                if (hasP && hasI) {
+                    delivered += 1;
+                    return;
+                }
+                pending += 1;
+                if (hasP && !hasI) proformaOnly += 1;
+                else if (!hasP && hasI) invoiceOnly += 1;
+                else neither += 1;
+            });
+            const total = list.length;
+            const pct = total ? Math.round((delivered / total) * 1000) / 10 : 0;
+            return { delivered, pending, total, pct, proformaOnly, invoiceOnly, neither };
+        }
+
+        function renderInvoiceDeliveryChart() {
+            const stats = invoiceDeliveryStats(filteredVehicleList());
+            const statsEl = document.getElementById('invoiceStatusStats');
+            const barsEl = document.getElementById('invoiceStatusBars');
+            const chartEl = document.getElementById('invoiceStatusChart');
+            if (!chartEl) return;
+
+            if (statsEl) {
+                statsEl.innerHTML = `
+                    <span class="is-done">Delivered ${stats.delivered}</span>
+                    <span class="is-pending">Pending ${stats.pending}</span>
+                    <span>Total ${stats.total}</span>
+                    <span>${stats.pct}%</span>
+                `;
+            }
+
+            if (barsEl) {
+                const total = stats.total || 1;
+                const deliveredW = Math.round((stats.delivered / total) * 1000) / 10;
+                const pendingW = Math.round((stats.pending / total) * 1000) / 10;
+                barsEl.innerHTML = `
+                    <div class="invoice-status-row">
+                        <div class="invoice-status-row__head">
+                            <span>Delivered — Proforma + Invoice</span>
+                            <small>${stats.delivered} · ${deliveredW}%</small>
+                        </div>
+                        <div class="invoice-status-row__track" aria-hidden="true">
+                            <span style="width:${Math.min(100, deliveredW)}%;background:linear-gradient(90deg,#22c55e,#4ade80)"></span>
+                        </div>
+                    </div>
+                    <div class="invoice-status-row">
+                        <div class="invoice-status-row__head">
+                            <span>Pending — missing Proforma and/or Invoice</span>
+                            <small>${stats.pending} · ${pendingW}%</small>
+                        </div>
+                        <div class="invoice-status-row__track" aria-hidden="true">
+                            <span style="width:${Math.min(100, pendingW)}%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></span>
+                        </div>
+                    </div>
+                    <div class="invoice-status-row" style="opacity:0.85">
+                        <div class="invoice-status-row__head">
+                            <span>Pending breakdown</span>
+                            <small>Proforma only ${stats.proformaOnly} · Invoice only ${stats.invoiceOnly} · Neither ${stats.neither}</small>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (!stats.total) {
+                chartEl.innerHTML = '<div class="saas-empty">لا توجد مركبات في النطاق الحالي</div>';
+                return;
+            }
+
+            renderApex(chartEl, {
+                chart: {
+                    type: 'donut',
+                    height: 260,
+                    toolbar: { show: false },
+                    background: 'transparent',
+                    fontFamily: 'Inter, sans-serif'
+                },
+                theme: { mode: 'dark' },
+                labels: ['Delivered', 'Pending'],
+                series: [stats.delivered, stats.pending],
+                colors: ['#22C55E', '#F59E0B'],
+                stroke: { width: 0 },
+                legend: {
+                    position: 'bottom',
+                    labels: { colors: '#94A3B8' }
+                },
+                dataLabels: { enabled: false },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '72%',
+                            labels: {
+                                show: true,
+                                name: { color: '#94A3B8' },
+                                value: {
+                                    color: '#F8FAFC',
+                                    fontWeight: 700,
+                                    fontSize: '22px',
+                                    formatter: (val) => String(val)
+                                },
+                                total: {
+                                    show: true,
+                                    label: `${stats.pct}%`,
+                                    color: '#F8FAFC',
+                                    formatter: () => String(stats.total)
+                                }
+                            }
+                        }
+                    }
+                },
+                tooltip: {
+                    theme: 'dark',
+                    y: {
+                        formatter: (val) => `${val} VIN`
+                    }
+                }
+            });
+        }
+
         function deliveryStatusRows() {
             const queue = filteredQueue();
             let delivered = 0;
@@ -3505,6 +3651,7 @@
             }
 
             renderDeliveredOfTotalChart();
+            renderInvoiceDeliveryChart();
             renderTrendChart(list);
 
             renderPercentChart(
