@@ -648,38 +648,54 @@
         /* —— Percentage charts —— */
         .pct-charts {
             display: grid;
-            grid-template-columns: 1.1fr 1fr;
+            grid-template-columns: 1fr 1fr;
             gap: 14px;
             margin-bottom: 16px;
         }
         .pct-chart-card {
-            padding: 14px 16px;
+            padding: 16px 18px 18px;
             border-radius: 18px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: linear-gradient(165deg, rgba(255,255,255,0.08), rgba(15, 23, 42, 0.55));
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+        }
+        .pct-chart-card--status {
+            grid-column: 1 / -1;
+            border-color: rgba(34, 197, 94, 0.35);
+            background:
+                linear-gradient(135deg, rgba(34, 197, 94, 0.1), transparent 40%),
+                linear-gradient(165deg, rgba(255,255,255,0.07), rgba(15, 23, 42, 0.55));
         }
         .pct-chart-card h3 {
             margin: 0 0 4px;
-            font-size: 0.92rem;
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            font-size: 1.05rem;
             font-weight: 800;
             color: #f8fafc;
         }
         .pct-chart-sub {
-            margin: 0 0 12px;
-            font-size: 0.75rem;
+            margin: 0 0 14px;
+            font-size: 0.8rem;
             color: #94a3b8;
         }
         .pct-chart-layout {
             display: grid;
-            grid-template-columns: 150px 1fr;
-            gap: 14px;
+            grid-template-columns: 190px minmax(0, 1fr);
+            gap: 18px;
             align-items: center;
+        }
+        .pct-chart-card--status .pct-chart-layout {
+            grid-template-columns: 210px minmax(0, 1fr);
         }
         .pct-donut-wrap {
             position: relative;
-            width: 150px;
-            height: 150px;
+            width: 190px;
+            height: 190px;
             margin: 0 auto;
+        }
+        .pct-chart-card--status .pct-donut-wrap {
+            width: 210px;
+            height: 210px;
         }
         .pct-donut-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         .pct-donut-center {
@@ -689,54 +705,133 @@
             place-content: center;
             text-align: center;
             pointer-events: none;
+            padding: 12px;
         }
         .pct-donut-center b {
-            font-size: 1.35rem;
+            font-size: 1.7rem;
             font-weight: 800;
             color: #f8fafc;
             font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+        .pct-donut-center .pct-main {
+            font-size: 2rem;
+            color: #4ade80;
         }
         .pct-donut-center span {
-            font-size: 0.72rem;
-            color: #94a3b8;
+            font-size: 0.78rem;
+            color: #cbd5e1;
             font-weight: 700;
+            margin-top: 2px;
         }
         .pct-legend {
             display: grid;
-            gap: 8px;
-            max-height: 220px;
+            gap: 10px;
+            max-height: 260px;
             overflow: auto;
+            padding-left: 2px;
         }
         .pct-legend-row {
             display: grid;
-            grid-template-columns: 10px minmax(0, 1fr) auto auto;
-            gap: 8px;
+            grid-template-columns: 14px minmax(0, 1fr) auto;
+            gap: 8px 10px;
             align-items: center;
-            font-size: 0.8rem;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .pct-swatch {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 999px;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.06);
         }
         .pct-legend-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            color: #e2e8f0;
-            font-weight: 700;
+            color: #f1f5f9;
+            font-weight: 800;
+            font-size: 0.88rem;
+        }
+        .pct-legend-pct {
+            color: #fff;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            font-size: 1rem;
+            min-width: 3.6rem;
+            text-align: left;
+            background: rgba(235, 10, 30, 0.2);
+            border: 1px solid rgba(235, 10, 30, 0.35);
+            border-radius: 999px;
+            padding: 2px 8px;
+        }
+        .pct-legend-pct.is-green {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: rgba(34, 197, 94, 0.4);
+            color: #86efac;
+        }
+        .pct-legend-pct.is-amber {
+            background: rgba(245, 158, 11, 0.2);
+            border-color: rgba(245, 158, 11, 0.4);
+            color: #fcd34d;
+        }
+        .pct-legend-meta {
+            grid-column: 2 / -1;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+        }
+        .pct-legend-bar {
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+        .pct-legend-bar > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            min-width: 2px;
         }
         .pct-legend-count {
             color: #94a3b8;
             font-variant-numeric: tabular-nums;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
         }
-        .pct-legend-pct {
-            color: #fda4af;
+        .pct-status-strip {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .pct-status-pill {
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+        }
+        .pct-status-pill span {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .pct-status-pill b {
+            font-size: 1.35rem;
             font-weight: 800;
+            color: #f8fafc;
             font-variant-numeric: tabular-nums;
-            min-width: 3.2rem;
-            text-align: left;
         }
+        .pct-status-pill--done { border-color: rgba(34, 197, 94, 0.35); }
+        .pct-status-pill--done b { color: #4ade80; }
+        .pct-status-pill--pending { border-color: rgba(245, 158, 11, 0.35); }
+        .pct-status-pill--pending b { color: #fbbf24; }
         .xfer-dash-count-pct {
             display: flex;
             flex-direction: column;
@@ -744,7 +839,7 @@
             gap: 2px;
         }
         .xfer-dash-count-pct .pct {
-            font-size: 0.72rem;
+            font-size: 0.78rem;
             font-weight: 800;
             color: #fda4af;
         }
@@ -791,7 +886,9 @@
             .admin-filter-grid { grid-template-columns: 1fr 1fr; }
             .admin-filter-actions { grid-column: 1 / -1; }
             .pct-charts { grid-template-columns: 1fr; }
-            .pct-chart-layout { grid-template-columns: 1fr; }
+            .pct-chart-layout,
+            .pct-chart-card--status .pct-chart-layout { grid-template-columns: 1fr; }
+            .pct-status-strip { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -847,17 +944,26 @@
                 <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
             </div>
             <p class="hub-status" id="restoreExportStatus"></p>
+            <div class="admin-restore-actions" style="margin-top:10px">
+                <input type="file" id="mergeDatesInput" accept=".xlsx,.xls">
+                <button type="button" class="hub-btn" id="btnMergeDates">تحديث تواريخ Proforma/Invoice من Sales Raw</button>
+                <span class="hub-meta" id="mergeDatesMeta">بدون مسح المسودات أو القائمة</span>
+            </div>
+            <p class="hub-status" id="mergeDatesStatus"></p>
         </div>
 
         <div class="admin-filter-bar" id="adminFilterBar">
             <h3>فلاتر التتبع — Tracking Filters</h3>
+            <p class="hub-meta" id="trackFilterHint" style="margin:-2px 0 12px">
+                اختر نوع التاريخ ثم الفترة — الرسوم البيانية والقوائم تتحدّث حسب النطاق.
+            </p>
             <div class="admin-filter-grid">
                 <div class="admin-filter-field">
-                    <label for="trackDateType">نوع التاريخ</label>
+                    <label for="trackDateType">نطاق السيارات حسب</label>
                     <select id="trackDateType">
-                        <option value="delivery_note">تاريخ مذكرة الترحيل</option>
-                        <option value="proforma">تاريخ البروفورما (Proforma)</option>
-                        <option value="invoice">تاريخ الفاتورة (Invoice)</option>
+                        <option value="delivery_note">تاريخ مذكرة الترحيل (من المسودات المحفوظة)</option>
+                        <option value="proforma">تاريخ البروفورما Proforma (من Sales Raw)</option>
+                        <option value="invoice">تاريخ الفاتورة Invoice (من Sales Raw)</option>
                     </select>
                 </div>
                 <div class="admin-filter-field">
@@ -962,6 +1068,17 @@
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
                         <div class="pct-charts">
+                            <div class="pct-chart-card pct-chart-card--status">
+                                <h3>نسبة الترحيل — Delivered vs Still</h3>
+                                <p class="pct-chart-sub">تم الترحيل مقابل ما لم يُرحّل بعد من قائمة المنسق (ضمن الفلتر)</p>
+                                <div class="pct-chart-layout">
+                                    <div class="pct-donut-wrap" id="statusPctDonut"></div>
+                                    <div>
+                                        <div class="pct-legend" id="statusPctLegend"></div>
+                                        <div class="pct-status-strip" id="statusPctStrip"></div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="pct-chart-card">
                                 <h3>نسبة كل شركة من الإجمالي</h3>
                                 <p class="pct-chart-sub">حسب المذكرات ضمن الفلتر الحالي</p>
@@ -1491,10 +1608,14 @@
             return '';
         }
 
+        function normVinKey(vin) {
+            return String(vin || '').trim().toUpperCase();
+        }
+
         function vehicleByVin() {
             const map = new Map();
             (allVehicles || []).forEach((v) => {
-                const vin = String(v.vin || '').trim().toUpperCase();
+                const vin = normVinKey(v.vin);
                 if (vin) map.set(vin, v);
             });
             return map;
@@ -1522,43 +1643,55 @@
             return String(v.deliveryNoteDate || '').slice(0, 10);
         }
 
-        function filteredVehicleList() {
+        function hasActiveTrackFilter() {
+            const { from, to } = getTrackFilter();
+            return Boolean(from || to);
+        }
+
+        /**
+         * VIN universe for the current date filter.
+         * - delivery_note → VINs from saved drafts whose note/print date is in range
+         * - proforma/invoice → VINs from raw inventory whose Proforma/Invoice date is in range
+         * Returns null when no date range is set (show all).
+         */
+        function scopedVinSet() {
             const { type, from, to } = getTrackFilter();
-            if (!from && !to) return allVehicles || [];
+            if (!from && !to) return null;
+
             if (type === 'delivery_note') {
-                // Prefer draft delivery dates; fall back to raw deliveryNoteDate on vehicle
-                const vins = new Set(
-                    filteredDrafts().map((d) => String(d.vin || '').trim().toUpperCase()).filter(Boolean)
-                );
-                const list = (allVehicles || []).filter((v) => {
-                    const vin = String(v.vin || '').trim().toUpperCase();
-                    if (vins.has(vin)) return true;
-                    const iso = vehicleDateIso(v, 'delivery_note');
-                    return iso && isoInRange(iso, from, to);
+                const set = new Set();
+                (allDrafts || []).forEach((d) => {
+                    const iso = draftEventIso(d);
+                    if (!iso || !isoInRange(iso, from, to)) return;
+                    const vin = normVinKey(d.vin);
+                    if (vin) set.add(vin);
                 });
-                return list;
+                return set;
             }
-            return (allVehicles || []).filter((v) => {
+
+            const set = new Set();
+            (allVehicles || []).forEach((v) => {
                 const iso = vehicleDateIso(v, type);
-                return iso && isoInRange(iso, from, to);
+                if (!iso || !isoInRange(iso, from, to)) return;
+                const vin = normVinKey(v.vin);
+                if (vin) set.add(vin);
             });
+            return set;
         }
 
         function getXferDateFilter() {
-            // legacy single-day (hidden) — keep for compatibility
             const el = document.getElementById('xferDateFilter');
             return el ? String(el.value || '').trim() : '';
         }
 
         function filteredDrafts() {
-            const { type, from, to } = getTrackFilter();
             const legacy = getXferDateFilter();
             let list = allDrafts || [];
-
             if (legacy) {
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
 
+            const { type, from, to } = getTrackFilter();
             if (!from && !to) return list;
 
             if (type === 'delivery_note') {
@@ -1568,48 +1701,120 @@
                 });
             }
 
-            const byVin = vehicleByVin();
-            return list.filter((d) => {
-                const vin = String(d.vin || '').trim().toUpperCase();
-                const veh = byVin.get(vin);
-                const iso = vehicleDateIso(veh, type);
-                return iso && isoInRange(iso, from, to);
-            });
+            const vins = scopedVinSet();
+            if (!vins || !vins.size) return [];
+            return list.filter((d) => vins.has(normVinKey(d.vin)));
         }
 
         function filteredQueue() {
+            const vins = scopedVinSet();
+            if (!vins) return allQueue || [];
+            if (!vins.size) return [];
+            return (allQueue || []).filter((q) => vins.has(normVinKey(q.vin)));
+        }
+
+        function filteredVehicleList() {
             const { type, from, to } = getTrackFilter();
-            if (!from && !to) return allQueue || [];
-            if (type === 'delivery_note') {
-                const vins = new Set(
-                    filteredDrafts().map((d) => String(d.vin || '').trim().toUpperCase()).filter(Boolean)
-                );
-                return (allQueue || []).filter((q) => vins.has(String(q.vin || '').trim().toUpperCase()));
-            }
+            if (!from && !to) return allVehicles || [];
+
+            const vins = scopedVinSet() || new Set();
             const byVin = vehicleByVin();
-            return (allQueue || []).filter((q) => {
-                const veh = byVin.get(String(q.vin || '').trim().toUpperCase());
-                const iso = vehicleDateIso(veh, type);
-                return iso && isoInRange(iso, from, to);
+            const list = [];
+
+            vins.forEach((vin) => {
+                const v = byVin.get(vin);
+                if (v) {
+                    list.push(v);
+                    return;
+                }
+                // Stub from draft/queue when VIN not in inventory (common after mixed imports)
+                const draft = (allDrafts || []).find((d) => normVinKey(d.vin) === vin);
+                const q = (allQueue || []).find((item) => normVinKey(item.vin) === vin);
+                list.push({
+                    vin,
+                    product: draft?.product || q?.product || '',
+                    model: draft?.model || q?.model || '',
+                    plate: draft?.plate || q?.plate || '',
+                    customerName: draft?.customerName || q?.customerName || '',
+                    location: draft?.location || q?.location || '',
+                    gt: draft?.gt || q?.gt || '',
+                    imageUrl: '',
+                    proformaDate: '',
+                    invoiceDate: '',
+                    deliveryNoteDate: draft ? draftEventIso(draft) : ''
+                });
             });
+
+            if (type === 'proforma' || type === 'invoice') {
+                return list.sort((a, b) =>
+                    String(vehicleDateIso(a, type)).localeCompare(String(vehicleDateIso(b, type)))
+                );
+            }
+            return list;
+        }
+
+        function updateTrackFilterHint() {
+            const hint = document.getElementById('trackFilterHint');
+            if (!hint) return;
+            const type = getTrackFilter().type;
+            if (type === 'proforma') {
+                hint.textContent = 'نطاق السيارات = تاريخ البروفورما من Sales Raw → ثم عرض حالة الترحيل/المسودات/الرسوم لهذه السيارات.';
+            } else if (type === 'invoice') {
+                hint.textContent = 'نطاق السيارات = تاريخ الفاتورة من Sales Raw → ثم عرض حالة الترحيل/المسودات/الرسوم لهذه السيارات.';
+            } else {
+                hint.textContent = 'نطاق المذكرات = تاريخ الطباعة/الترحيل من المسودات المحفوظة → الرسوم والقوائم ضمن الفترة.';
+            }
         }
 
         function updateTrackFilterMeta() {
             const meta = document.getElementById('trackFilterMeta');
             if (!meta) return;
+            updateTrackFilterHint();
             const { type, from, to } = getTrackFilter();
             const typeLabel = type === 'proforma'
-                ? 'البروفورما'
+                ? 'البروفورما (Raw)'
                 : type === 'invoice'
-                    ? 'الفاتورة'
-                    : 'مذكرة الترحيل';
+                    ? 'الفاتورة (Raw)'
+                    : 'مذكرة الترحيل (مسودات)';
             const drafts = filteredDrafts().length;
             const vehicles = filteredVehicleList().length;
+            const queue = filteredQueue().length;
+            const delivered = filteredQueue().filter((q) => q.agentStatus === 'delivered').length;
+            const still = queue - delivered;
+            const withP = (allVehicles || []).filter((v) => v.proformaDate).length;
+            const withI = (allVehicles || []).filter((v) => v.invoiceDate).length;
+
             if (!from && !to) {
-                meta.innerHTML = `عرض كل البيانات بدون فلتر تاريخ · <strong>${(allDrafts || []).length}</strong> مسودة · <strong>${(allVehicles || []).length}</strong> مركبة`;
+                meta.innerHTML = `عرض الكل · <strong>${(allDrafts || []).length}</strong> مسودة · <strong>${(allVehicles || []).length}</strong> مركبة · تواريخ Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 return;
             }
-            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong> · <strong>${drafts}</strong> مسودة · <strong>${vehicles}</strong> مركبة مطابقة`;
+            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong> · 
+                <strong>${vehicles}</strong> سيارة · <strong>${drafts}</strong> مسودة · قائمة <strong>${queue}</strong> 
+                (تم الترحيل <strong>${delivered}</strong> · متبقي <strong>${still}</strong>)`;
+        }
+
+        function computeQueueStats(queue) {
+            const list = queue || [];
+            const stats = {
+                total: list.length,
+                available: 0,
+                claimed: 0,
+                in_stock: 0,
+                ready_for_delivery: 0,
+                out_of_delivery: 0,
+                delivered: 0,
+                drafts: filteredDrafts().length
+            };
+            list.forEach((q) => {
+                if (q.status === 'available') stats.available += 1;
+                else stats.claimed += 1;
+                const st = q.agentStatus || '';
+                if (st === 'in_stock') stats.in_stock += 1;
+                else if (st === 'ready_for_delivery') stats.ready_for_delivery += 1;
+                else if (st === 'out_of_delivery') stats.out_of_delivery += 1;
+                else if (st === 'delivered') stats.delivered += 1;
+            });
+            return stats;
         }
 
         function updateXferDateLabel() {
@@ -1623,6 +1828,7 @@
         function refreshTransferDashboard() {
             updateXferDateLabel();
             const drafts = filteredDrafts();
+            const queue = filteredQueue();
             if (selectedCompany && !drafts.some((d) => draftCompanyName(d) === selectedCompany)) {
                 selectedCompany = '';
                 const panel = document.getElementById('companyRecordsPanel');
@@ -1630,14 +1836,19 @@
             }
             renderTransferDashboard(drafts);
             renderTable(filteredVehicleList());
-            renderQueueTable(filteredQueue());
+            renderQueueTable(queue);
             renderDraftsTable(drafts);
+            renderQueueStats(computeQueueStats(queue));
+            setFoldCount('queueStatsFoldCount', queue.length);
+            setFoldCount('draftsFoldCount', drafts.length);
+            setFoldCount('xferFoldCount', drafts.length);
+            setFoldCount('inventoryFoldCount', filteredVehicleList().length);
         }
 
         function applyTrackFilter() {
             refreshTransferDashboard();
-            updateFoldCounts();
             openFold('xferDashSection');
+            openFold('queueStatsFold');
         }
 
         function draftCompanyName(d) {
@@ -1783,11 +1994,13 @@
             '#06b6d4', '#f97316', '#ec4899', '#84cc16', '#64748b'
         ];
 
-        function renderPercentChart(donutEl, legendEl, rows, emptyText) {
+        function renderPercentChart(donutEl, legendEl, rows, emptyText, options = {}) {
             if (!donutEl || !legendEl) return;
             if (!rows.length) {
                 donutEl.innerHTML = '';
                 legendEl.innerHTML = `<div class="xfer-dash-empty">${emptyText}</div>`;
+                const strip = options.stripEl;
+                if (strip) strip.innerHTML = '';
                 return;
             }
             const total = rows.reduce((s, r) => s + r.count, 0) || 1;
@@ -1797,36 +2010,91 @@
                 ? [...top, { name: 'أخرى', count: otherCount }]
                 : top;
 
-            const r = 54;
+            const size = options.large ? 160 : 140;
+            const cx = size / 2;
+            const r = options.large ? 62 : 54;
+            const stroke = options.large ? 26 : 22;
             const c = 2 * Math.PI * r;
             let offset = 0;
             const arcs = slices.map((row, i) => {
                 const frac = row.count / total;
                 const len = frac * c;
-                const color = CHART_COLORS[i % CHART_COLORS.length];
-                const arc = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${color}" stroke-width="18"
-                    stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}"
-                    style="transition: stroke-dasharray 0.5s ease"></circle>`;
+                const color = row.color || CHART_COLORS[i % CHART_COLORS.length];
+                const arc = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+                    stroke-dasharray="${len} ${Math.max(0.01, c - len)}" stroke-dashoffset="${-offset}"
+                    stroke-linecap="butt"></circle>`;
                 offset += len;
                 return arc;
             }).join('');
 
+            const centerHtml = options.centerPct != null
+                ? `<b class="pct-main">${options.centerPct}%</b><span>${options.centerLabel || 'تم الترحيل'}</span>`
+                : `<b>${total}</b><span>إجمالي</span>`;
+
             donutEl.innerHTML = `
-                <svg viewBox="0 0 140 140" aria-hidden="true">${arcs}
-                    <circle cx="70" cy="70" r="38" fill="#0b1220"></circle>
+                <svg viewBox="0 0 ${size} ${size}" aria-hidden="true">${arcs}
+                    <circle cx="${cx}" cy="${cx}" r="${r - stroke / 2 - 8}" fill="#0b1220"></circle>
                 </svg>
-                <div class="pct-donut-center"><b>${total}</b><span>إجمالي</span></div>
+                <div class="pct-donut-center">${centerHtml}</div>
             `;
 
             legendEl.innerHTML = slices.map((row, i) => {
                 const pct = Math.round((row.count / total) * 1000) / 10;
+                const color = row.color || CHART_COLORS[i % CHART_COLORS.length];
+                const pctClass = row.pctClass ? ` ${row.pctClass}` : '';
                 return `<div class="pct-legend-row">
-                    <span class="pct-swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>
+                    <span class="pct-swatch" style="background:${color}"></span>
                     <span class="pct-legend-name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</span>
-                    <span class="pct-legend-count">${row.count}</span>
-                    <span class="pct-legend-pct">${pct}%</span>
+                    <span class="pct-legend-pct${pctClass}">${pct}%</span>
+                    <div class="pct-legend-meta">
+                        <div class="pct-legend-bar"><span style="width:${Math.max(3, pct)}%;background:${color}"></span></div>
+                        <span class="pct-legend-count">${row.count} من ${total}</span>
+                    </div>
                 </div>`;
             }).join('');
+
+            if (options.stripEl) {
+                options.stripEl.innerHTML = slices.map((row) => {
+                    const pct = Math.round((row.count / total) * 1000) / 10;
+                    const kind = row.stripClass || '';
+                    return `<div class="pct-status-pill ${kind}">
+                        <span>${escapeHtml(row.name)}</span>
+                        <b>${row.count} · ${pct}%</b>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function deliveryStatusRows() {
+            const queue = filteredQueue();
+            let delivered = 0;
+            let still = 0;
+            queue.forEach((q) => {
+                if (q.agentStatus === 'delivered') delivered += 1;
+                else still += 1;
+            });
+            // If queue empty but drafts exist, treat drafts as delivered baseline
+            if (!queue.length && (allDrafts || []).length) {
+                const drafts = filteredDrafts();
+                delivered = drafts.length;
+                still = 0;
+            }
+            return [
+                {
+                    name: 'تم الترحيل',
+                    count: delivered,
+                    color: '#22c55e',
+                    pctClass: 'is-green',
+                    stripClass: 'pct-status-pill--done'
+                },
+                {
+                    name: 'لم يُرحّل بعد',
+                    count: still,
+                    color: '#f59e0b',
+                    pctClass: 'is-amber',
+                    stripClass: 'pct-status-pill--pending'
+                }
+            ].filter((r) => delivered + still > 0);
         }
 
         function aggregateCompanyCities(drafts) {
@@ -1904,36 +2172,107 @@
 
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
-            const dateFiltered = Boolean(getTrackFilter().from || getTrackFilter().to || getXferDateFilter());
-            const emptyDate = 'لا توجد ترحيلات في هذه الفترة';
-            const companies = tallyField(list, (d) => draftCompanyName(d));
-            const cities = tallyField(list, (d) => (d.payload || {}).branch_to);
+            const { type } = getTrackFilter();
+            const dateFiltered = hasActiveTrackFilter() || Boolean(getXferDateFilter());
+            const emptyDate = 'لا توجد بيانات في هذه الفترة حسب الفلتر';
+            let companies = tallyField(list, (d) => draftCompanyName(d));
+            let cities = tallyField(list, (d) => (d.payload || {}).branch_to);
+            const vehicles = filteredVehicleList();
+            const products = tallyField(
+                vehicles.map((v) => ({ _name: v.product || v.model || '' })),
+                (row) => row._name
+            );
+
+            const companyCard = document.getElementById('companyPctDonut')?.closest('.pct-chart-card');
+            const cityCard = document.getElementById('cityPctDonut')?.closest('.pct-chart-card');
+            const companyTitle = companyCard?.querySelector('h3');
+            const companySub = companyCard?.querySelector('.pct-chart-sub');
+            const cityTitle = cityCard?.querySelector('h3');
+            const citySub = cityCard?.querySelector('.pct-chart-sub');
+
+            // Flexible charts: for Proforma/Invoice scope, prefer product split when no memo companies yet
+            let companyRows = companies;
+            let cityRows = cities;
+            if (type === 'proforma' || type === 'invoice') {
+                if (companyTitle) companyTitle.textContent = companies.length
+                    ? 'نسبة شركات النقل ضمن النطاق'
+                    : 'نسبة المنتجات ضمن نطاق التاريخ';
+                if (companySub) {
+                    companySub.textContent = companies.length
+                        ? 'من المسودات المرتبطة بسيارات Proforma/Invoice في الفترة'
+                        : 'توزيع المنتجات للسيارات في Sales Raw ضمن الفترة';
+                }
+                if (!companies.length) companyRows = products;
+                if (cityTitle) cityTitle.textContent = cities.length
+                    ? 'نسبة الفروع / المدن ضمن النطاق'
+                    : 'توزيع المنتجات (بديل)';
+                if (citySub) {
+                    citySub.textContent = cities.length
+                        ? 'الفروع من المذكرات للسيارات داخل نطاق التاريخ'
+                        : 'يظهر عند عدم وجود فروع في المسودات بعد';
+                }
+                if (!cities.length && products.length) cityRows = products;
+            } else {
+                if (companyTitle) companyTitle.textContent = 'نسبة كل شركة من الإجمالي';
+                if (companySub) companySub.textContent = 'حسب المذكرات ضمن فلتر تاريخ الترحيل';
+                if (cityTitle) cityTitle.textContent = 'نسبة الفروع / المدن';
+                if (citySub) citySub.textContent = 'توزيع التحويل حسب الفرع ضمن الفترة';
+            }
+
+            const statusRows = deliveryStatusRows();
+            const statusTotal = statusRows.reduce((s, r) => s + r.count, 0) || 1;
+            const deliveredRow = statusRows.find((r) => r.name === 'تم الترحيل');
+            const deliveredPct = deliveredRow
+                ? Math.round((deliveredRow.count / statusTotal) * 1000) / 10
+                : 0;
+
+            const statusSub = document.querySelector('.pct-chart-card--status .pct-chart-sub');
+            if (statusSub) {
+                statusSub.textContent = type === 'delivery_note'
+                    ? 'تم الترحيل مقابل المتبقي للمذكرات/القائمة في فترة تاريخ الترحيل'
+                    : type === 'proforma'
+                        ? 'حالة الترحيل لسيارات تاريخ البروفورما ضمن الفترة'
+                        : 'حالة الترحيل لسيارات تاريخ الفاتورة ضمن الفترة';
+            }
+
+            renderPercentChart(
+                document.getElementById('statusPctDonut'),
+                document.getElementById('statusPctLegend'),
+                statusRows,
+                emptyDate,
+                {
+                    large: true,
+                    centerPct: statusRows.length ? deliveredPct : null,
+                    centerLabel: 'تم الترحيل',
+                    stripEl: document.getElementById('statusPctStrip')
+                }
+            );
             renderPercentChart(
                 document.getElementById('companyPctDonut'),
                 document.getElementById('companyPctLegend'),
-                companies,
+                companyRows,
                 dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة'
             );
             renderPercentChart(
                 document.getElementById('cityPctDonut'),
                 document.getElementById('cityPctLegend'),
-                cities,
+                cityRows,
                 dateFiltered ? emptyDate : 'لا توجد فروع بعد — اطبع مذكرة مع اختيار الفرع'
             );
             renderRankList(
                 document.getElementById('companyDashList'),
                 document.getElementById('companyDashTop'),
-                companies,
+                companies.length ? companies : companyRows,
                 dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة',
-                'شركة',
-                { clickableCompanies: true }
+                companies.length ? 'شركة' : 'منتج',
+                { clickableCompanies: Boolean(companies.length) }
             );
             renderRankList(
                 document.getElementById('cityDashList'),
                 document.getElementById('cityDashTop'),
-                cities,
+                cities.length ? cities : cityRows,
                 dateFiltered ? emptyDate : 'لا توجد فروع بعد — اطبع مذكرة مع اختيار الفرع',
-                'فرع'
+                cities.length ? 'فرع' : 'منتج'
             );
             renderCompanyCityBreakdown(
                 list,
@@ -1960,7 +2299,8 @@
             applyTrackFilter();
         });
         document.getElementById('trackDateType')?.addEventListener('change', () => {
-            if (getTrackFilter().from || getTrackFilter().to) applyTrackFilter();
+            updateTrackFilterHint();
+            if (hasActiveTrackFilter()) applyTrackFilter();
             else updateTrackFilterMeta();
         });
 
@@ -2099,18 +2439,13 @@
             if (queueRes.ok) {
                 allQueue = queueData.queue || [];
                 allDrafts = queueData.drafts || [];
-                renderQueueStats(queueData.stats);
             } else {
                 allQueue = [];
                 allDrafts = [];
             }
-            renderTable(filteredVehicleList());
-            renderQueueTable(filteredQueue());
-            renderDraftsTable(filteredDrafts());
-            renderTransferDashboard(filteredDrafts());
             loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
             updateFoldCounts();
-            updateTrackFilterMeta();
+            refreshTransferDashboard();
         }
 
         function renderDraftsTable(drafts) {
@@ -2284,7 +2619,51 @@
             e.target.value = '';
         });
 
-        document.getElementById('btnExportExcel').addEventListener('click', exportAllToExcel);
+        async function mergeDatesFromSalesRaw(file) {
+            if (!file) return;
+            const status = document.getElementById('mergeDatesStatus');
+            const setMerge = (msg, type) => {
+                if (!status) return;
+                status.textContent = msg || '';
+                status.className = 'hub-status' + (type ? ` ${type}` : '');
+            };
+            setMerge('جاري دمج تواريخ Proforma/Invoice…');
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const res = await fetch('/api/delivery-inventory/merge-dates', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'فشل الدمج');
+                    const meta = document.getElementById('mergeDatesMeta');
+                    if (meta) {
+                        meta.textContent = `حدّث ${data.updated || 0} · أضاف ${data.added || 0} · Proforma ${data.withProforma || 0} · Invoice ${data.withInvoice || 0}`;
+                    }
+                    setMerge(
+                        `تم دمج التواريخ: Proforma ${data.withProforma || 0} · Invoice ${data.withInvoice || 0}`,
+                        'ok'
+                    );
+                    await loadDashboard();
+                    applyTrackFilter();
+                } catch (err) {
+                    setMerge(err.message, 'err');
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.getElementById('btnMergeDates')?.addEventListener('click', () => {
+            document.getElementById('mergeDatesInput')?.click();
+        });
+        document.getElementById('mergeDatesInput')?.addEventListener('change', (e) => {
+            mergeDatesFromSalesRaw(e.target.files?.[0]);
+            e.target.value = '';
+        });
+
+        document.getElementById('btnExportExcel')?.addEventListener('click', exportAllToExcel);
 
         document.getElementById('btnClear').addEventListener('click', async () => {
             if (!confirm('مسح كل بيانات الشاسيه؟')) return;

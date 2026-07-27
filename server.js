@@ -1010,6 +1010,78 @@ app.post('/api/delivery-inventory/restore-export', (req, res) => {
   }
 });
 
+/**
+ * Merge Proforma / Invoice (+ delivery note) dates from Sales Raw onto existing
+ * inventory by VIN — keeps drafts/queue intact.
+ */
+app.post('/api/delivery-inventory/merge-dates', (req, res) => {
+  try {
+    const { fileData, filename } = req.body || {};
+    if (!fileData) return res.status(400).json({ error: 'ملف Sales Raw مطلوب' });
+    const buffer = parseDataUrl(fileData);
+    const parsed = parseSalesWorkbook(buffer, filename || 'Sales Raw Data.xlsx');
+    if (parsed.isExport) {
+      return res.status(400).json({
+        error: 'ارفع ملف Sales Raw (ليس delivery_export) لتحديث تواريخ البروفورما/الفاتورة'
+      });
+    }
+    if (!parsed.vehicles.length) {
+      return res.status(400).json({ error: 'لم يتم العثور على مركبات في الملف' });
+    }
+
+    const incoming = new Map(parsed.vehicles.map((v) => [normVin(v.vin), v]));
+    let updated = 0;
+    let added = 0;
+    const seen = new Set();
+
+    store.vehicles = store.vehicles.map((v) => {
+      const vin = normVin(v.vin);
+      seen.add(vin);
+      const src = incoming.get(vin);
+      if (!src) return v;
+      updated += 1;
+      return {
+        ...v,
+        proformaDate: src.proformaDate || v.proformaDate || '',
+        invoiceDate: src.invoiceDate || v.invoiceDate || '',
+        deliveryNoteDate: src.deliveryNoteDate || v.deliveryNoteDate || '',
+        customerName: v.customerName || src.customerName || '',
+        product: v.product || src.product || '',
+        model: v.model || src.model || '',
+        gt: v.gt || src.gt || '',
+        location: v.location || src.location || '',
+        plate: v.plate || src.plate || ''
+      };
+    });
+
+    for (const [vin, src] of incoming) {
+      if (seen.has(vin)) continue;
+      store.vehicles.push(src);
+      added += 1;
+    }
+
+    store.meta = {
+      ...store.meta,
+      datesMergedFrom: parsed.filename || filename || 'Sales Raw',
+      datesMergedAt: new Date().toISOString()
+    };
+    const refresh = refreshQueueFromVehicles();
+    persistAndBroadcast();
+    res.json({
+      ok: true,
+      updated,
+      added,
+      withProforma: store.vehicles.filter((v) => v.proformaDate).length,
+      withInvoice: store.vehicles.filter((v) => v.invoiceDate).length,
+      totalVehicles: store.vehicles.length,
+      queueRefreshed: refresh.total
+    });
+  } catch (err) {
+    console.error('[merge-dates]', err);
+    res.status(500).json({ error: err.message || 'فشل دمج التواريخ' });
+  }
+});
+
 /** Paste Excel cells (TSV/CSV) → same inventory parse as file upload. */
 app.post('/api/delivery-inventory/paste', (req, res) => {
   try {
