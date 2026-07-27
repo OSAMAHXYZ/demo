@@ -345,22 +345,194 @@ function parseDataUrl(fileData) {
   return Buffer.from(b64, 'base64');
 }
 
-function parseSalesWorkbook(buffer, filename) {
-  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+function sheetRows(wb, name) {
+  const sheet = wb.Sheets[name];
+  if (!sheet) return [];
+  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+}
+
+function findSheetName(wb, aliases) {
+  const names = wb.SheetNames || [];
+  for (const alias of aliases) {
+    const a = normalizeHeader(alias);
+    const hit = names.find((n) => normalizeHeader(n) === a || normalizeHeader(n).includes(a));
+    if (hit) return hit;
+  }
+  return '';
+}
+
+const VIN_ALIASES = [
+  'vin no', 'vin no.', 'vin number', 'vin#', 'vin',
+  'chassis', 'chassis / vin', 'chassis/vin', 'chassis no', 'chassis no.',
+  'chassis number', 'شاسيه', 'رقم الشاسيه', 'frame', 'frame no'
+];
+
+function rowToVehicle(row) {
+  const vin = normVin(pickCol(row, VIN_ALIASES));
+  if (!vin || vin.length < 5) return null;
+  if (!/[A-HJ-NPR-Z0-9]/i.test(vin)) return null;
+
+  const product = pickCol(row, ['product', 'product name', 'وصف', 'المنتج', 'الطراز']);
+  const model = pickCol(row, ['model', 'product', 'product name', 'وصف', 'المنتج', 'الطراز']) || product;
+  const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
+  const location = pickCol(row, [
+    'gt location', 'stock location', 'storage location', 'location',
+    'warehouse', 'yard', 'الموقع', 'المستودع'
+  ]);
+  const plate = pickCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
+  const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
+  const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
+  const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
+
+  return {
+    vin,
+    product: product || model,
+    model: model || product,
+    gt,
+    location,
+    plate,
+    customerName,
+    imageUrl,
+    suffix
+  };
+}
+
+/** Admin export workbook (Vehicle Inventory / Print Drafts / Coordinator Queue). */
+function isDeliveryExportWorkbook(wb) {
+  const names = (wb.SheetNames || []).map((n) => normalizeHeader(n));
+  return names.some((n) => n.includes('vehicle inventory') || n === 'print drafts' || n.includes('print draft'));
+}
+
+function parseVehiclesFromRows(rows) {
+  const found = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    const veh = rowToVehicle(row);
+    if (!veh) continue;
+    if (seen.has(veh.vin)) continue;
+    seen.add(veh.vin);
+    found.push(veh);
+  }
+  return found;
+}
+
+function buildDraftPayloadFromExportRow(row, veh) {
+  const today = new Date().toISOString().slice(0, 10);
+  // Export maps: Company Name ← payload.company_rep, Company Rep ← payload.customer_name
+  const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']);
+  const companyRep = pickCol(row, ['company rep', 'rep', 'مندوب الشركة', 'المندوب']);
+  const branchTo = pickCol(row, ['branch to', 'branch', 'الفرع', 'إلى فرع']);
+  const plate = pickCol(row, ['plate', 'plate no', 'لوحة']) || (veh && veh.plate) || '';
+  const product = pickCol(row, ['product', 'model']) || (veh && (veh.product || veh.model)) || '';
+  const vin = normVin(pickCol(row, VIN_ALIASES) || (veh && veh.vin));
+  const printedAt = pickCol(row, ['printed at', 'printed', 'تاريخ الطباعة']);
+  const docDate = printedAt && /^\d{4}-\d{2}-\d{2}/.test(printedAt)
+    ? printedAt.slice(0, 10)
+    : today;
+
+  const cars = Array.from({ length: 10 }, () => emptyCarSlot());
+  cars[0] = {
+    model: product,
+    chassis: vin,
+    plate: plate === '#' ? '' : plate,
+    remarks: pickCol(row, ['remarks', 'notes', 'ملاحظات']) || ''
+  };
+
+  return {
+    doc_date: docDate,
+    invoice_number: '',
+    dep_hour: '',
+    dep_minute: '',
+    customer_name: companyRep,
+    company_rep: companyName,
+    transfer_date: docDate,
+    corresponding_date: docDate,
+    day_name: arabicWeekdayName(docDate),
+    trailer_number: '',
+    car_count: vin ? '1' : '',
+    branch_to: branchTo,
+    attachments: '',
+    cars
+  };
+}
+
+function parsePrintDraftsFromRows(rows) {
+  const drafts = [];
+  for (const row of rows || []) {
+    const vin = normVin(pickCol(row, VIN_ALIASES));
+    if (!vin) continue;
+    const product = pickCol(row, ['product', 'model']);
+    const assignedTo = pickCol(row, ['assigned to', 'agent', 'المسؤول']) || 'admin';
+    const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة']);
+    const idRaw = pickCol(row, ['draft id', 'id', 'draft']);
+    const id = idRaw || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const printedAt = pickCol(row, ['printed at', 'printed']) || new Date().toISOString();
+    const payload = buildDraftPayloadFromExportRow(row, { vin, product, plate: pickCol(row, ['plate']) });
+    drafts.push({
+      id,
+      printedAt,
+      vin,
+      product,
+      model: product,
+      assignedTo,
+      customerName: companyName || pickCol(row, ['company rep', 'customer']) || '',
+      plate: pickCol(row, ['plate']) || '',
+      gt: pickCol(row, ['gt']) || '',
+      location: pickCol(row, ['location']) || '',
+      payload
+    });
+  }
+  return drafts;
+}
+
+function parseQueueFromRows(rows) {
+  const queue = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    const vin = normVin(pickCol(row, VIN_ALIASES));
+    if (!vin || seen.has(vin)) continue;
+    seen.add(vin);
+    const status = pickCol(row, ['status']) || 'available';
+    const agentStatus = pickCol(row, ['agent status']) || '';
+    const assignedTo = pickCol(row, ['assigned to']) || '';
+    queue.push({
+      vin,
+      status: status === 'claimed' || assignedTo ? 'claimed' : 'available',
+      agentStatus,
+      assignedTo,
+      addedAt: pickCol(row, ['added at']) || new Date().toISOString(),
+      assignedAt: pickCol(row, ['assigned at']) || '',
+      product: pickCol(row, ['product', 'model']) || '',
+      model: pickCol(row, ['model', 'product']) || '',
+      gt: pickCol(row, ['gt']) || '',
+      location: pickCol(row, ['location']) || '',
+      plate: pickCol(row, ['plate']) || '',
+      customerName: pickCol(row, ['customer', 'customer name']) || '',
+      imageUrl: ''
+    });
+  }
+  return queue;
+}
+
+function parseSalesFromWorkbook(wb, filename) {
+  // Prefer admin export "Vehicle Inventory", then Sales Raw, then any sheet with VINs
+  const inventorySheet = findSheetName(wb, ['vehicle inventory', 'inventory', 'vehicles']);
   const sheetOrder = [
+    ...(inventorySheet ? [inventorySheet] : []),
     ...wb.SheetNames.filter((n) => /sales\s*raw/i.test(n)),
     ...wb.SheetNames.filter((n) => /raw/i.test(n) && !/sales\s*raw/i.test(n)),
-    ...wb.SheetNames.filter((n) => !/raw/i.test(n))
+    ...wb.SheetNames.filter((n) => {
+      const norm = normalizeHeader(n);
+      return !/raw/i.test(n)
+        && norm !== normalizeHeader(inventorySheet)
+        && !norm.includes('print draft')
+        && !norm.includes('coordinator queue')
+        && norm !== 'products'
+        && norm !== 'summary';
+    })
   ];
-  // unique preserve order
   const sheets = [...new Set(sheetOrder.length ? sheetOrder : wb.SheetNames)];
   if (!sheets.length) throw new Error('لا توجد أوراق في الملف');
-
-  const vinAliases = [
-    'vin no', 'vin no.', 'vin number', 'vin#', 'vin',
-    'chassis', 'chassis / vin', 'chassis/vin', 'chassis no', 'chassis no.',
-    'chassis number', 'شاسيه', 'رقم الشاسيه', 'frame', 'frame no'
-  ];
 
   let preferred = sheets[0];
   let rows = [];
@@ -368,50 +540,17 @@ function parseSalesWorkbook(buffer, filename) {
   let headers = [];
 
   for (const name of sheets) {
-    const sheet = wb.Sheets[name];
-    const sheetRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-    if (!sheetRows.length) continue;
-    const found = [];
-    const seen = new Set();
-    for (const row of sheetRows) {
-      const vin = normVin(pickCol(row, vinAliases));
-      if (!vin || vin.length < 5) continue;
-      // ignore placeholder / non-VIN junk
-      if (!/[A-HJ-NPR-Z0-9]/i.test(vin)) continue;
-      if (seen.has(vin)) continue;
-      seen.add(vin);
-
-      const product = pickCol(row, ['product', 'model', 'product name', 'وصف', 'المنتج', 'الطراز']);
-      const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
-      const location = pickCol(row, [
-        'gt location', 'stock location', 'storage location', 'location',
-        'warehouse', 'yard', 'الموقع', 'المستودع'
-      ]);
-      const plate = pickCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
-      const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
-      const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
-      const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
-
-      found.push({
-        vin,
-        product,
-        model: product,
-        gt,
-        location,
-        plate,
-        customerName,
-        imageUrl,
-        suffix
-      });
-    }
+    const sheetRowsData = sheetRows(wb, name);
+    if (!sheetRowsData.length) continue;
+    const found = parseVehiclesFromRows(sheetRowsData);
     if (found.length) {
       preferred = name;
-      rows = sheetRows;
+      rows = sheetRowsData;
       vehicles = found;
-      headers = Object.keys(sheetRows[0] || {});
+      headers = Object.keys(sheetRowsData[0] || {});
       break;
     }
-    if (!headers.length && sheetRows[0]) headers = Object.keys(sheetRows[0]);
+    if (!headers.length && sheetRowsData[0]) headers = Object.keys(sheetRowsData[0]);
   }
 
   if (!vehicles.length) {
@@ -419,12 +558,159 @@ function parseSalesWorkbook(buffer, filename) {
     throw new Error(`لم يتم العثور على أرقام شاسيه في الملف${headerHint}`);
   }
 
-  return {
+  const result = {
     vehicles,
     sheetName: preferred,
     filename: filename || '',
-    rawRows: rows.slice(0, 5000)
+    rawRows: rows.slice(0, 5000),
+    drafts: [],
+    queue: [],
+    isExport: isDeliveryExportWorkbook(wb)
   };
+
+  if (result.isExport) {
+    const draftsSheet = findSheetName(wb, ['print drafts', 'print draft', 'drafts']);
+    const queueSheet = findSheetName(wb, ['coordinator queue', 'queue']);
+    if (draftsSheet) result.drafts = parsePrintDraftsFromRows(sheetRows(wb, draftsSheet));
+    if (queueSheet) result.queue = parseQueueFromRows(sheetRows(wb, queueSheet));
+  } else {
+    // Pasted Print Drafts grid (single sheet with Draft ID / Company Name columns)
+    const headerKeys = Object.keys(rows[0] || {}).map((h) => normalizeHeader(h));
+    const looksLikeDrafts = headerKeys.some((h) => h.includes('draft id') || h === 'company name' || h.includes('branch to'));
+    if (looksLikeDrafts && headerKeys.some((h) => h.includes('chassis') || h.includes('vin'))) {
+      result.drafts = parsePrintDraftsFromRows(rows);
+      result.isExport = true;
+    }
+  }
+
+  return result;
+}
+
+function parseSalesWorkbook(buffer, filename) {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  return parseSalesFromWorkbook(wb, filename);
+}
+
+/** Paste from Excel clipboard (TSV) or CSV text → same vehicle structure as file upload. */
+function parseSalesText(text, filename) {
+  const raw = String(text || '').replace(/^\uFEFF/, '').trim();
+  if (!raw) throw new Error('الصق بيانات Excel أولاً');
+
+  const firstLine = raw.split(/\r?\n/)[0] || '';
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const FS = tabCount >= 1 && tabCount >= commaCount ? '\t' : ',';
+  const wb = XLSX.read(raw, { type: 'string', FS, cellDates: true });
+  return parseSalesFromWorkbook(wb, filename || 'pasted-excel.tsv');
+}
+
+function applyParsedInventory(parsed) {
+  store.vehicles = parsed.vehicles;
+  store.raw = {
+    filename: parsed.filename,
+    sheetName: parsed.sheetName,
+    rowCount: parsed.rawRows.length,
+    sample: parsed.rawRows.slice(0, 20)
+  };
+  store.meta = {
+    filename: parsed.filename,
+    sheetName: parsed.sheetName,
+    uploadedAt: new Date().toISOString()
+  };
+
+  if (Array.isArray(parsed.drafts) && parsed.drafts.length) {
+    store.drafts = parsed.drafts.slice(0, MAX_DRAFTS);
+  }
+  if (Array.isArray(parsed.queue) && parsed.queue.length) {
+    store.queue = dedupeQueue(parsed.queue);
+  }
+
+  return refreshQueueFromVehicles();
+}
+
+function arabicWeekdayName(isoDate) {
+  const names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  const dt = new Date(`${String(isoDate).trim()}T00:00:00`);
+  if (Number.isNaN(dt.getTime())) return '';
+  return names[dt.getDay()] || '';
+}
+
+function emptyCarSlot() {
+  return { model: '', chassis: '', plate: '', remarks: '' };
+}
+
+/** Build print drafts from inventory vehicles (group by customer, max 10 cars / memo). */
+function createPdfDraftsFromVehicles(vehicles, { assignedTo = 'admin' } = {}) {
+  const list = (vehicles || []).filter((v) => normVin(v.vin));
+  if (!list.length) throw new Error('لا توجد مركبات لتوليد PDF');
+
+  const groups = new Map();
+  for (const v of list) {
+    const company = String(v.customerName || '').trim();
+    const key = company || `__solo_${normVin(v.vin)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(v);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dayName = arabicWeekdayName(today);
+  const created = [];
+
+  for (const [, cars] of groups) {
+    for (let offset = 0; offset < cars.length; offset += 10) {
+      const chunk = cars.slice(offset, offset + 10);
+      const company = String(chunk[0].customerName || '').trim();
+      const carRows = chunk.map((c) => ({
+        model: c.product || c.model || '',
+        chassis: normVin(c.vin),
+        plate: c.plate || '',
+        remarks: ''
+      }));
+      while (carRows.length < 10) carRows.push(emptyCarSlot());
+
+      const payload = {
+        doc_date: today,
+        invoice_number: '',
+        dep_hour: '',
+        dep_minute: '',
+        customer_name: '',
+        company_rep: company,
+        transfer_date: today,
+        corresponding_date: today,
+        day_name: dayName,
+        trailer_number: '',
+        car_count: String(chunk.length),
+        branch_to: '',
+        attachments: '',
+        cars: carRows
+      };
+
+      const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const draft = {
+        id,
+        printedAt: new Date().toISOString(),
+        vin: normVin(chunk[0].vin),
+        product: chunk[0].product || '',
+        model: chunk[0].model || chunk[0].product || '',
+        assignedTo,
+        customerName: company,
+        plate: chunk[0].plate || '',
+        gt: chunk[0].gt || '',
+        location: chunk[0].location || '',
+        payload
+      };
+      store.drafts.unshift(draft);
+      created.push({
+        id: draft.id,
+        vin: draft.vin,
+        carCount: chunk.length,
+        company: company || '—'
+      });
+    }
+  }
+
+  if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
+  return created;
 }
 
 function splitIsoDate(iso) {
@@ -596,23 +882,15 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
     if (!parsed.vehicles.length) {
       return res.status(400).json({ error: 'لم يتم العثور على أرقام شاسيه في الملف' });
     }
-    store.vehicles = parsed.vehicles;
-    store.raw = {
-      filename: parsed.filename,
-      sheetName: parsed.sheetName,
-      rowCount: parsed.rawRows.length,
-      sample: parsed.rawRows.slice(0, 20)
-    };
-    store.meta = {
-      filename: parsed.filename,
-      sheetName: parsed.sheetName,
-      uploadedAt: new Date().toISOString()
-    };
-    // Refresh Product/GT/Location on every queue row from the new raw file + drop duplicate VINs
-    const refresh = refreshQueueFromVehicles();
+    const refresh = applyParsedInventory(parsed);
     persistAndBroadcast();
     res.json({
       imported: parsed.vehicles.length,
+      vehicles: parsed.vehicles.slice(0, 200),
+      draftsImported: (parsed.drafts || []).length,
+      queueImported: (parsed.queue || []).length,
+      isExport: Boolean(parsed.isExport),
+      sheetName: parsed.sheetName,
       queueRefreshed: refresh.total,
       matchedUpdated: refresh.matched,
       notInNewFile: refresh.missing
@@ -620,6 +898,81 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
   } catch (err) {
     console.error('[upload]', err);
     res.status(500).json({ error: err.message || 'فشل رفع الملف' });
+  }
+});
+
+/** Paste Excel cells (TSV/CSV) → same inventory parse as file upload. */
+app.post('/api/delivery-inventory/paste', (req, res) => {
+  try {
+    const text = req.body?.text;
+    const filename = req.body?.filename || 'pasted-excel.tsv';
+    const parsed = parseSalesText(text, filename);
+    if (!parsed.vehicles.length && !(parsed.drafts || []).length) {
+      return res.status(400).json({ error: 'لم يتم العثور على أرقام شاسيه في النص الملصق' });
+    }
+    if (!parsed.vehicles.length && (parsed.drafts || []).length) {
+      // Drafts-only paste: keep existing vehicles, replace drafts
+      store.drafts = parsed.drafts.slice(0, MAX_DRAFTS);
+      persistAndBroadcast();
+      return res.json({
+        imported: 0,
+        vehicles: [],
+        draftsImported: parsed.drafts.length,
+        queueImported: 0,
+        isExport: true,
+        sheetName: parsed.sheetName
+      });
+    }
+    const refresh = applyParsedInventory(parsed);
+    persistAndBroadcast();
+    res.json({
+      imported: parsed.vehicles.length,
+      vehicles: parsed.vehicles,
+      draftsImported: (parsed.drafts || []).length,
+      queueImported: (parsed.queue || []).length,
+      isExport: Boolean(parsed.isExport),
+      sheetName: parsed.sheetName,
+      queueRefreshed: refresh.total,
+      matchedUpdated: refresh.matched,
+      notInNewFile: refresh.missing
+    });
+  } catch (err) {
+    console.error('[paste]', err);
+    res.status(500).json({ error: err.message || 'فشل قراءة البيانات الملصقة' });
+  }
+});
+
+/**
+ * Create print drafts (مذكرة ترحيل) from inventory / selected VINs.
+ * Groups by customer name, max 10 cars per PDF draft.
+ */
+app.post('/api/delivery-inventory/create-pdf-drafts', (req, res) => {
+  try {
+    const vins = Array.isArray(req.body?.vins)
+      ? req.body.vins.map(normVin).filter(Boolean)
+      : null;
+    let vehicles = store.vehicles.slice();
+    if (vins && vins.length) {
+      const want = new Set(vins);
+      vehicles = vehicles.filter((v) => want.has(normVin(v.vin)));
+    }
+    if (!vehicles.length) {
+      return res.status(400).json({
+        error: vins?.length
+          ? 'لم يتم العثور على الشاسيه المحدد في المخزون'
+          : 'لا توجد بيانات مركبات — الصق أو ارفع Excel أولاً'
+      });
+    }
+    const created = createPdfDraftsFromVehicles(vehicles, { assignedTo: 'admin' });
+    persistAndBroadcast();
+    res.json({
+      created: created.length,
+      drafts: created,
+      draftsTotal: store.drafts.length
+    });
+  } catch (err) {
+    console.error('[create-pdf-drafts]', err);
+    res.status(500).json({ error: err.message || 'فشل توليد مسودات PDF' });
   }
 });
 

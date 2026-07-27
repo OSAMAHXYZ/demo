@@ -603,17 +603,45 @@
             </div>
         </section>
 
-        <section class="hub-section">
+        <section class="hub-section" id="excelImportSection">
             <div class="hub-section-head">
-                <h2>رفع بيانات خام — Upload Raw Data</h2>
+                <h2>رفع / لصق Excel — Import Raw Data</h2>
+                <span class="hub-hint">يدعم Sales Raw أو ملف التصدير (Vehicle Inventory + Print Drafts)</span>
             </div>
             <label class="hub-upload" id="uploadZone">
                 <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
                 <strong>اسحب ملف Excel أو انقر للاختيار</strong>
                 <p class="hub-meta">Sales Raw Data — أعمدة VIN / Product / Plate</p>
             </label>
+            <div class="hub-paste-block" style="margin-top:16px">
+                <label class="hub-label" for="excelPaste">أو الصق من Excel (Ctrl+V) — صفوف بأعمدة VIN / Product / Plate / Customer</label>
+                <textarea id="excelPaste" class="hub-textarea" rows="8" placeholder="انسخ الخلايا من Excel ثم الصق هنا&#10;VIN No.	Product	Plate	Customer Name&#10;JTD…	Camry	1234	شركة …"></textarea>
+                <div class="hub-toolbar" style="margin-top:10px;gap:8px;flex-wrap:wrap;display:flex">
+                    <button type="button" class="hub-btn hub-btn--primary" id="btnPasteImport">استيراد البيانات</button>
+                    <button type="button" class="hub-btn" id="btnClearPaste">مسح اللصق</button>
+                    <button type="button" class="hub-btn hub-btn--primary" id="btnGeneratePdfs">توليد مسودات PDF</button>
+                </div>
+            </div>
             <p class="hub-meta" id="uploadMeta">لم يتم رفع ملف بعد</p>
             <p class="hub-status" id="uploadStatus"></p>
+            <div id="pastePreviewWrap" class="hub-table-wrap" style="margin-top:14px;display:none">
+                <div class="hub-section-head" style="margin-bottom:8px;padding:0">
+                    <h3 style="font-size:0.95rem;margin:0">معاينة البيانات المستوردة</h3>
+                    <span class="hub-hint" id="pastePreviewCount"></span>
+                </div>
+                <table class="hub-table">
+                    <thead>
+                        <tr>
+                            <th>الشاسية / VIN</th>
+                            <th>المنتج / Product</th>
+                            <th>اللوحة</th>
+                            <th>العميل</th>
+                            <th>الموقع / GT</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pastePreviewBody"></tbody>
+                </table>
+            </div>
         </section>
 
         <section class="hub-section">
@@ -1406,6 +1434,31 @@
             });
         }
 
+        function renderPastePreview(vehicles) {
+            const wrap = document.getElementById('pastePreviewWrap');
+            const body = document.getElementById('pastePreviewBody');
+            const count = document.getElementById('pastePreviewCount');
+            if (!wrap || !body || !count) return;
+            if (!vehicles || !vehicles.length) {
+                wrap.style.display = 'none';
+                body.innerHTML = '';
+                count.textContent = '';
+                return;
+            }
+            wrap.style.display = '';
+            count.textContent = `${vehicles.length} مركبة`;
+            body.innerHTML = vehicles.slice(0, 100).map((v) => `<tr>
+                <td class="hub-vin">${escapeHtml(v.vin || '—')}</td>
+                <td>${escapeHtml(v.product || v.model || '—')}</td>
+                <td>${escapeHtml(v.plate || '—')}</td>
+                <td>${escapeHtml(v.customerName || '—')}</td>
+                <td>${escapeHtml(v.location || v.gt || '—')}</td>
+            </tr>`).join('');
+            if (vehicles.length > 100) {
+                body.innerHTML += `<tr><td colspan="5" class="hub-meta">… و ${vehicles.length - 100} أخرى في سجل المركبات</td></tr>`;
+            }
+        }
+
         async function uploadFile(file) {
             if (!file) return;
             setUploadStatus('جاري الرفع والمعالجة…');
@@ -1419,13 +1472,82 @@
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || 'فشل الرفع');
-                    setUploadStatus(`تم استيراد ${data.imported} مركبة — تم تحديث Product/GT/Location من الملف الجديد`, 'ok');
+                    setUploadStatus(formatImportStatus(data), 'ok');
+                    renderPastePreview(data.vehicles || []);
                     await loadDashboard();
                 } catch (err) {
                     setUploadStatus(err.message, 'err');
                 }
             };
             reader.readAsDataURL(file);
+        }
+
+        function formatImportStatus(data) {
+            const parts = [`تم استيراد ${data.imported || 0} مركبة`];
+            if (data.draftsImported) parts.push(`${data.draftsImported} مسودة PDF`);
+            if (data.queueImported) parts.push(`${data.queueImported} في قائمة المنسق`);
+            if (data.sheetName) parts.push(data.sheetName);
+            if (data.isExport) parts.push('صيغة تصدير');
+            return parts.join(' · ');
+        }
+
+        async function importPastedExcel() {
+            const text = document.getElementById('excelPaste').value;
+            if (!String(text || '').trim()) {
+                setUploadStatus('الصق بيانات Excel في المربع أولاً', 'err');
+                return;
+            }
+            setUploadStatus('جاري قراءة البيانات الملصقة…');
+            try {
+                const res = await fetch('/api/delivery-inventory/paste', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, filename: 'pasted-excel.tsv' })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
+                setUploadStatus(formatImportStatus(data), 'ok');
+                renderPastePreview(data.vehicles || []);
+                await loadDashboard();
+            } catch (err) {
+                setUploadStatus(err.message, 'err');
+            }
+        }
+
+        async function generatePdfsFromInventory() {
+            if (!allVehicles.length) {
+                setUploadStatus('لا توجد بيانات — الصق أو ارفع Excel أولاً', 'err');
+                return;
+            }
+            if (!confirm(`توليد مسودات PDF من ${allVehicles.length} مركبة؟\n(تجميع حسب العميل، حتى 10 سيارات لكل مذكرة)`)) {
+                return;
+            }
+            setUploadStatus('جاري توليد مسودات PDF…');
+            try {
+                const res = await fetch('/api/delivery-inventory/create-pdf-drafts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل التوليد');
+                setUploadStatus(
+                    `تم إنشاء ${data.created} مسودة PDF — افتح «مسودات الطباعة» واضغط تصدير PDF`,
+                    'ok'
+                );
+                await loadDashboard();
+                const draftsSection = document.querySelector('#draftsBody')?.closest('.hub-section');
+                if (draftsSection) draftsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (data.drafts && data.drafts[0]?.id) {
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(data.drafts[0].id)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                }
+            } catch (err) {
+                setUploadStatus(err.message, 'err');
+            }
         }
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -1440,6 +1562,20 @@
             e.preventDefault();
             zone.classList.remove('dragover');
             uploadFile(e.dataTransfer.files?.[0]);
+        });
+
+        document.getElementById('btnPasteImport').addEventListener('click', importPastedExcel);
+        document.getElementById('btnClearPaste').addEventListener('click', () => {
+            document.getElementById('excelPaste').value = '';
+            renderPastePreview([]);
+            setUploadStatus('');
+        });
+        document.getElementById('btnGeneratePdfs').addEventListener('click', generatePdfsFromInventory);
+        document.getElementById('excelPaste').addEventListener('paste', () => {
+            setTimeout(() => {
+                const text = document.getElementById('excelPaste').value.trim();
+                if (text) setUploadStatus('تم اللصق — اضغط «استيراد البيانات»', 'ok');
+            }, 0);
         });
 
         document.getElementById('searchInput').addEventListener('input', (e) => {
@@ -1459,6 +1595,7 @@
             lastDashboard = data.dashboard || null;
             renderStats(data.dashboard);
             renderTable([]);
+            renderPastePreview([]);
             renderQueueStats({ total: 0, available: 0, claimed: 0 });
             renderQueueTable([]);
             renderDraftsTable([]);
