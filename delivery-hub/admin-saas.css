@@ -713,27 +713,37 @@ body.admin-console tbody tr:hover {
 
 /* ═══════════════════════════════════════════
    Premium Filter Toolbar (Stripe / Linear)
+   Force LTR so English controls don't mirror under page RTL
    ═══════════════════════════════════════════ */
 .ft-shell {
   position: sticky;
   top: 88px;
-  z-index: 45;
+  z-index: 80;
   margin: 14px 0 8px;
+  direction: ltr;
+  text-align: left;
 }
 
 .ft-toolbar {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 1.6fr)
+    minmax(150px, 1fr)
+    minmax(140px, 1fr)
+    minmax(140px, 1fr)
+    minmax(130px, 0.9fr)
+    auto;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px 18px;
   border-radius: 18px;
-  background: rgba(17, 24, 39, 0.8);
+  background: rgba(17, 24, 39, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   animation: ftFadeIn 0.35s ease both;
+  overflow: visible;
 }
 
 @keyframes ftFadeIn {
@@ -743,24 +753,24 @@ body.admin-console tbody tr:hover {
 
 .ft-search {
   position: relative;
-  flex: 1.4 1 220px;
-  min-width: 180px;
+  min-width: 0;
 }
 
 .ft-search__icon {
   position: absolute;
-  inset-inline-start: 14px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   width: 18px;
   height: 18px;
   color: #94a3b8;
   pointer-events: none;
+  z-index: 1;
 }
 
 .ft-search__clear {
   position: absolute;
-  inset-inline-end: 10px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   width: 28px;
@@ -775,6 +785,7 @@ body.admin-console tbody tr:hover {
   justify-content: center;
   font-size: 16px;
   line-height: 1;
+  z-index: 1;
 }
 
 .ft-search__clear.is-visible {
@@ -803,12 +814,13 @@ body.admin-console tbody tr:hover {
 }
 
 .ft-search .ft-input {
-  padding-inline-start: 42px;
-  padding-inline-end: 40px;
+  padding-left: 42px;
+  padding-right: 40px;
 }
 
 .ft-input::placeholder {
   color: #94a3b8;
+  opacity: 1;
 }
 
 .ft-input:hover,
@@ -829,12 +841,16 @@ body.admin-console tbody tr:hover {
 
 .ft-control {
   position: relative;
-  flex: 1 1 140px;
-  min-width: 132px;
+  min-width: 0;
+  z-index: 1;
+}
+
+.ft-control.is-open {
+  z-index: 90;
 }
 
 .ft-control--date {
-  flex: 1.1 1 170px;
+  min-width: 0;
 }
 
 .ft-control__trigger {
@@ -842,8 +858,8 @@ body.admin-console tbody tr:hover {
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  text-align: start;
-  padding-inline-end: 36px;
+  text-align: left;
+  padding-right: 34px;
 }
 
 .ft-control__trigger svg,
@@ -870,7 +886,7 @@ body.admin-console tbody tr:hover {
 
 .ft-control__chevron {
   position: absolute;
-  inset-inline-end: 12px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: #64748b;
@@ -884,19 +900,19 @@ body.admin-console tbody tr:hover {
 
 .ft-panel {
   position: absolute;
-  inset-inline-start: 0;
+  left: 0;
   top: calc(100% + 8px);
-  z-index: 60;
+  z-index: 100;
   min-width: 100%;
-  width: max(100%, 260px);
-  max-height: 280px;
-  overflow: auto;
+  width: max(100%, 280px);
+  max-height: min(320px, 60vh);
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 8px;
   border-radius: 16px;
-  background: rgba(17, 24, 39, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(20px);
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   display: none;
   animation: ftPanelIn 0.2s ease both;
 }
@@ -939,7 +955,7 @@ body.admin-console tbody tr:hover {
   border: 0;
   background: transparent;
   color: #f8fafc;
-  text-align: start;
+  text-align: left;
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
@@ -955,23 +971,29 @@ body.admin-console tbody tr:hover {
 
 .ft-date-panel {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  width: 280px;
+  gap: 12px;
+  padding: 14px;
+  width: 300px;
+  max-height: none;
+  overflow: visible;
 }
 
-.ft-date-panel label {
+.ft-date-panel .ft-date-field {
   display: grid;
   gap: 6px;
+}
+
+.ft-date-panel .ft-date-field span {
   font-size: 12px;
   color: #94a3b8;
   font-weight: 600;
 }
 
 .ft-date-panel input[type="date"] {
-  height: 42px;
+  width: 100%;
+  height: 44px;
   border-radius: 12px;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: #0f172a;
   color: #f8fafc;
   padding: 0 12px;
@@ -988,7 +1010,7 @@ body.admin-console tbody tr:hover {
 .ft-date-actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .ft-btn {
@@ -997,11 +1019,11 @@ body.admin-console tbody tr:hover {
   justify-content: center;
   gap: 8px;
   height: 48px;
-  padding: 0 18px;
+  padding: 0 16px;
   border-radius: 14px;
   border: 1px solid transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -1009,11 +1031,11 @@ body.admin-console tbody tr:hover {
 }
 
 .ft-btn:hover {
-  transform: translateY(-1px) scale(1.02);
+  transform: translateY(-1px);
 }
 
 .ft-btn:active {
-  transform: translateY(1px) scale(0.99);
+  transform: translateY(1px);
 }
 
 .ft-btn--primary {
@@ -1051,27 +1073,31 @@ body.admin-console tbody tr:hover {
 .ft-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
-  margin-inline-start: auto;
 }
 
 .ft-more {
   position: relative;
+  z-index: 1;
+}
+
+.ft-more.is-open {
+  z-index: 90;
 }
 
 .ft-more__panel {
   position: absolute;
-  inset-inline-end: 0;
+  right: 0;
+  left: auto;
   top: calc(100% + 8px);
-  z-index: 70;
-  width: min(340px, 92vw);
+  z-index: 100;
+  width: min(320px, 92vw);
   padding: 14px;
   border-radius: 16px;
-  background: rgba(17, 24, 39, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(20px);
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   display: none;
   animation: ftPanelIn 0.2s ease both;
 }
@@ -1099,7 +1125,7 @@ body.admin-console tbody tr:hover {
   align-items: center;
   gap: 8px;
   margin-top: 12px;
-  min-height: 0;
+  direction: ltr;
 }
 
 .ft-chips:empty {
@@ -1157,6 +1183,8 @@ body.admin-console tbody tr:hover {
   margin: 10px 2px 0;
   font-size: 12px;
   color: #94a3b8;
+  direction: ltr;
+  text-align: left;
 }
 
 .ft-meta strong {
@@ -1182,11 +1210,13 @@ body.admin-console .admin-filter-bar.saas-filters {
 
 @media (max-width: 1200px) {
   .ft-toolbar {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .ft-search {
+    grid-column: 1 / -1;
   }
   .ft-actions {
-    width: 100%;
-    margin-inline-start: 0;
+    grid-column: 1 / -1;
     justify-content: flex-end;
   }
   .ft-shell {
@@ -1196,15 +1226,11 @@ body.admin-console .admin-filter-bar.saas-filters {
 
 @media (max-width: 720px) {
   .ft-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
   }
-  .ft-control,
-  .ft-control--date,
-  .ft-search {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: 100%;
+  .ft-search,
+  .ft-actions {
+    grid-column: auto;
   }
   .ft-actions {
     display: grid;
@@ -1219,5 +1245,8 @@ body.admin-console .admin-filter-bar.saas-filters {
   .saas-header {
     position: relative;
     top: auto;
+  }
+  .ft-date-panel {
+    width: min(300px, calc(100vw - 48px));
   }
 }

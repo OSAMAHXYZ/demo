@@ -1361,12 +1361,14 @@
                     </button>
                     <span class="ft-control__chevron" aria-hidden="true">▾</span>
                     <div class="ft-panel ft-date-panel" id="ftDatePanel" role="dialog" aria-label="Date range">
-                        <label>From
-                            <input type="date" id="ftDateFromUi">
-                        </label>
-                        <label>To
-                            <input type="date" id="ftDateToUi">
-                        </label>
+                        <div class="ft-date-field">
+                            <span>From</span>
+                            <input type="date" id="ftDateFromUi" lang="en">
+                        </div>
+                        <div class="ft-date-field">
+                            <span>To</span>
+                            <input type="date" id="ftDateToUi" lang="en">
+                        </div>
                         <div class="ft-date-actions">
                             <button type="button" class="ft-btn ft-btn--ghost" id="ftDateToday" style="height:40px;flex:1">Today</button>
                             <button type="button" class="ft-btn ft-btn--primary" id="ftDateDone" style="height:40px;flex:1">Done</button>
