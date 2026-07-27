@@ -361,6 +361,57 @@ function findSheetName(wb, aliases) {
   return '';
 }
 
+function normalizeExcelDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const s = String(value || '').trim();
+  if (!s || s === '#' || /^n\/?a$/i.test(s)) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const mdy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (mdy) {
+    let y = Number(mdy[3]);
+    if (y < 100) y += 2000;
+    const month = String(Number(mdy[1])).padStart(2, '0');
+    const day = String(Number(mdy[2])).padStart(2, '0');
+    if (Number(month) > 12 && Number(day) <= 12) {
+      // D/M/YYYY fallback
+      return `${y}-${String(Number(mdy[2])).padStart(2, '0')}-${String(Number(mdy[1])).padStart(2, '0')}`;
+    }
+    return `${y}-${month}-${day}`;
+  }
+  const dt = new Date(s);
+  if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+  return '';
+}
+
+function pickExactishCol(row, aliases) {
+  // Prefer exact / starts-with matches; avoid grabbing "* Date" columns for short keys like plate
+  const keys = Object.keys(row || {});
+  const entries = keys.map((k) => ({ orig: k, norm: normalizeHeader(k) }));
+  for (const alias of aliases) {
+    const a = normalizeHeader(alias);
+    if (!a) continue;
+    const hit = entries.find((e) => e.norm === a);
+    if (hit && row[hit.orig] != null && String(row[hit.orig]).trim() !== '') {
+      return String(row[hit.orig]).trim();
+    }
+  }
+  for (const alias of aliases) {
+    const a = normalizeHeader(alias);
+    if (!a || a.length < 4) continue;
+    const hit = entries.find((e) => {
+      if (!e.norm || e.norm === a) return false;
+      if (/\bdate\b|تاريخ/.test(e.norm) && !/\bdate\b|تاريخ/.test(a)) return false;
+      return e.norm.startsWith(`${a} `) || e.norm.endsWith(` ${a}`) || e.norm.includes(` ${a} `);
+    });
+    if (hit && row[hit.orig] != null && String(row[hit.orig]).trim() !== '') {
+      return String(row[hit.orig]).trim();
+    }
+  }
+  return '';
+}
+
 const VIN_ALIASES = [
   'vin no', 'vin no.', 'vin number', 'vin#', 'vin',
   'chassis', 'chassis / vin', 'chassis/vin', 'chassis no', 'chassis no.',
@@ -373,16 +424,36 @@ function rowToVehicle(row) {
   if (!/[A-HJ-NPR-Z0-9]/i.test(vin)) return null;
 
   const product = pickCol(row, ['product', 'product name', 'وصف', 'المنتج', 'الطراز']);
-  const model = pickCol(row, ['model', 'product', 'product name', 'وصف', 'المنتج', 'الطراز']) || product;
+  // Exact "Model" only — never "Model Year"
+  const modelExact = (() => {
+    const keys = Object.keys(row || {});
+    for (const k of keys) {
+      if (normalizeHeader(k) === 'model' && row[k] != null && String(row[k]).trim() !== '') {
+        return String(row[k]).trim();
+      }
+    }
+    return '';
+  })();
+  const model = modelExact || product;
   const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
   const location = pickCol(row, [
     'gt location', 'stock location', 'storage location', 'location',
     'warehouse', 'yard', 'الموقع', 'المستودع'
   ]);
-  const plate = pickCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
+  const plate = pickExactishCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
   const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
   const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
   const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
+  const proformaDate = normalizeExcelDate(pickCol(row, [
+    'proforma date', 'proforma', 'pro forma date', 'تاريخ البروفورما', 'تاريخ العرض'
+  ]));
+  const invoiceDate = normalizeExcelDate(pickCol(row, [
+    'invoice date', 'inv date', 'billing date', 'تاريخ الفاتورة', 'تاريخ الفاتوره'
+  ]));
+  const deliveryNoteDate = normalizeExcelDate(pickCol(row, [
+    'delivery note date', 'delivery date', 'dn date', 'muthakara date',
+    'transfer date', 'تاريخ المذكرة', 'تاريخ مذكرة الترحيل', 'تاريخ الترحيل'
+  ]));
 
   return {
     vin,
@@ -390,10 +461,13 @@ function rowToVehicle(row) {
     model: model || product,
     gt,
     location,
-    plate,
+    plate: plate === '#' ? '' : plate,
     customerName,
     imageUrl,
-    suffix
+    suffix,
+    proformaDate,
+    invoiceDate,
+    deliveryNoteDate
   };
 }
 
@@ -1178,6 +1252,54 @@ app.get('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   const draft = store.drafts.find((d) => d.id === id);
   if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
   res.json({ draft });
+});
+
+/** Admin edit: update delivery-note draft payload / meta. */
+app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
+  const id = String(req.params.draftId || '').trim();
+  const idx = store.drafts.findIndex((d) => d.id === id);
+  if (idx < 0) return res.status(404).json({ error: 'المسودة غير موجودة' });
+
+  const body = req.body || {};
+  const draft = { ...store.drafts[idx] };
+
+  if (body.payload && typeof body.payload === 'object') {
+    draft.payload = { ...(draft.payload || {}), ...body.payload };
+    if (Array.isArray(body.payload.cars)) {
+      draft.payload.cars = body.payload.cars;
+    }
+    const firstCar = (draft.payload.cars || []).find((c) => c && c.chassis);
+    if (firstCar?.chassis) draft.vin = normVin(firstCar.chassis) || draft.vin;
+    if (firstCar?.model) {
+      draft.product = firstCar.model;
+      draft.model = firstCar.model;
+    }
+    if (firstCar?.plate != null) draft.plate = firstCar.plate;
+    if (draft.payload.company_rep) draft.customerName = draft.payload.company_rep;
+  }
+
+  if (body.assignedTo != null) draft.assignedTo = String(body.assignedTo);
+  if (body.customerName != null) draft.customerName = String(body.customerName);
+  if (body.product != null) {
+    draft.product = String(body.product);
+    draft.model = String(body.product);
+  }
+  draft.updatedAt = new Date().toISOString();
+
+  store.drafts[idx] = draft;
+  persistAndBroadcast();
+  res.json({ ok: true, draft });
+});
+
+app.delete('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
+  const id = String(req.params.draftId || '').trim();
+  const before = store.drafts.length;
+  store.drafts = store.drafts.filter((d) => d.id !== id);
+  if (store.drafts.length === before) {
+    return res.status(404).json({ error: 'المسودة غير موجودة' });
+  }
+  persistAndBroadcast();
+  res.json({ ok: true, draftsTotal: store.drafts.length });
 });
 
 app.post('/api/delivery-note/generate', (req, res) => {

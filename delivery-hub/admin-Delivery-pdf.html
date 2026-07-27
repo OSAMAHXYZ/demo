@@ -421,6 +421,349 @@
             .xfer-dash { grid-template-columns: 1fr; }
             .xfer-date-label { margin-inline-start: 0; width: 100%; }
         }
+
+        /* —— Smooth collapsible panels —— */
+        .admin-console .hub-shell {
+            animation: adminFadeIn 0.45s ease both;
+        }
+        @keyframes adminFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: none; }
+        }
+        .admin-console .hub-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            margin-bottom: 18px;
+            padding: 14px 0 14px;
+            background: linear-gradient(180deg, rgba(7, 10, 16, 0.96), rgba(7, 10, 16, 0.88) 70%, transparent);
+            backdrop-filter: blur(12px);
+            border-bottom-color: rgba(255, 255, 255, 0.08);
+        }
+        .admin-console .hub-section.hub-fold {
+            padding: 0;
+            overflow: hidden;
+            margin-bottom: 12px;
+            transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+        }
+        .admin-console .hub-section.hub-fold:hover {
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+        .admin-console .hub-section.hub-fold.is-open {
+            border-color: rgba(235, 10, 30, 0.28);
+            box-shadow:
+                0 22px 48px rgba(0, 0, 0, 0.32),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+        .hub-fold-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 16px 18px;
+            margin: 0;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: right;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .hub-fold-toggle:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .hub-fold-toggle:focus-visible {
+            outline: 2px solid rgba(235, 10, 30, 0.45);
+            outline-offset: -2px;
+        }
+        .hub-fold-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #f1f5f9;
+            letter-spacing: -0.01em;
+        }
+        .hub-fold-title::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #eb0a1e;
+            box-shadow: 0 0 12px rgba(235, 10, 30, 0.55);
+            flex-shrink: 0;
+        }
+        .hub-fold-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-inline-start: auto;
+        }
+        .hub-fold-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.75rem;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: rgba(235, 10, 30, 0.14);
+            border: 1px solid rgba(235, 10, 30, 0.28);
+            color: #fda4af;
+            font-size: 0.75rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+        .hub-fold-count:empty,
+        .hub-fold-count[data-empty="1"] {
+            display: none;
+        }
+        .hub-fold-chevron {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            position: relative;
+            flex-shrink: 0;
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s, border-color 0.2s;
+        }
+        .hub-fold-chevron::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            margin: auto;
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid #cbd5e1;
+            border-bottom: 2px solid #cbd5e1;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        .hub-fold.is-open .hub-fold-chevron {
+            transform: rotate(180deg);
+            background: rgba(235, 10, 30, 0.16);
+            border-color: rgba(235, 10, 30, 0.4);
+        }
+        .hub-fold-body {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .hub-fold.is-open .hub-fold-body {
+            grid-template-rows: 1fr;
+        }
+        .hub-fold-body-inner {
+            overflow: hidden;
+            min-height: 0;
+        }
+        .hub-fold-content {
+            padding: 0 18px 18px;
+            opacity: 0;
+            transform: translateY(-6px);
+            transition: opacity 0.28s ease, transform 0.28s ease;
+            pointer-events: none;
+        }
+        .hub-fold.is-open .hub-fold-content {
+            opacity: 1;
+            transform: none;
+            pointer-events: auto;
+            transition-delay: 0.05s;
+        }
+        .hub-fold .hub-section-head { display: none; }
+        .admin-console .hub-section--xfer.hub-fold.is-open {
+            border-color: rgba(235, 10, 30, 0.28);
+        }
+        .hub-fold-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .hub-fold-actions .hub-btn--sm {
+            border-radius: 999px;
+        }
+        #statsFold .hub-stats,
+        #queueStatsFold .hub-stats {
+            margin-bottom: 0;
+        }
+
+        /* —— Global tracking filters —— */
+        .admin-filter-bar {
+            margin-bottom: 14px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(165deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+        }
+        .admin-filter-bar h3 {
+            margin: 0 0 10px;
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .admin-filter-grid {
+            display: grid;
+            grid-template-columns: minmax(160px, 1.1fr) repeat(2, minmax(130px, 1fr)) auto;
+            gap: 10px 12px;
+            align-items: end;
+        }
+        .admin-filter-field label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .admin-filter-field select,
+        .admin-filter-field input[type="date"] {
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(15, 23, 42, 0.85);
+            color: #f1f5f9;
+            font: inherit;
+            font-size: 0.85rem;
+            color-scheme: dark;
+        }
+        .admin-filter-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .admin-filter-meta {
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .admin-filter-meta strong { color: #e2e8f0; }
+
+        /* —— Percentage charts —— */
+        .pct-charts {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+        .pct-chart-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.45);
+        }
+        .pct-chart-card h3 {
+            margin: 0 0 4px;
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .pct-chart-sub {
+            margin: 0 0 12px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+        .pct-chart-layout {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 14px;
+            align-items: center;
+        }
+        .pct-donut-wrap {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto;
+        }
+        .pct-donut-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .pct-donut-center {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-content: center;
+            text-align: center;
+            pointer-events: none;
+        }
+        .pct-donut-center b {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+        }
+        .pct-donut-center span {
+            font-size: 0.72rem;
+            color: #94a3b8;
+            font-weight: 700;
+        }
+        .pct-legend {
+            display: grid;
+            gap: 8px;
+            max-height: 220px;
+            overflow: auto;
+        }
+        .pct-legend-row {
+            display: grid;
+            grid-template-columns: 10px minmax(0, 1fr) auto auto;
+            gap: 8px;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+        .pct-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+        }
+        .pct-legend-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #e2e8f0;
+            font-weight: 700;
+        }
+        .pct-legend-count {
+            color: #94a3b8;
+            font-variant-numeric: tabular-nums;
+        }
+        .pct-legend-pct {
+            color: #fda4af;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            min-width: 3.2rem;
+            text-align: left;
+        }
+        .xfer-dash-count-pct {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+        .xfer-dash-count-pct .pct {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #fda4af;
+        }
+        .admin-track-note {
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            background: rgba(37, 99, 235, 0.08);
+            color: #bfdbfe;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        @media (max-width: 900px) {
+            .admin-filter-grid { grid-template-columns: 1fr 1fr; }
+            .admin-filter-actions { grid-column: 1 / -1; }
+            .pct-charts { grid-template-columns: 1fr; }
+            .pct-chart-layout { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body class="delivery-hub admin-console">
@@ -453,80 +796,259 @@
             </div>
         </header>
 
-        <div class="hub-stats" id="stats"></div>
-        <div class="hub-stats" id="queueStats"></div>
+        <div class="hub-fold-actions">
+            <button type="button" class="hub-btn hub-btn--sm" id="btnExpandAll">فتح الكل</button>
+            <button type="button" class="hub-btn hub-btn--sm" id="btnCollapseAll">طي الكل</button>
+        </div>
 
-        <section class="hub-section" id="optionsManagerSection">
-            <div class="hub-section-head">
-                <h2>إدارة القوائم — Companies & Cities Lists</h2>
-                <span class="hub-hint">إضافة أو حذف الشركات والمدن المستخدمة في المذكرة</span>
-            </div>
-            <div class="options-manage-grid">
-                <div class="options-manage-card">
-                    <h3>شركات النقل</h3>
-                    <div class="options-add-row">
-                        <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
-                        <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
-                    </div>
-                    <p class="hub-status" id="companyOptionsStatus"></p>
-                    <div class="options-list" id="companyOptionsList"></div>
+        <p class="admin-track-note">
+            لوحة متابعة فقط — رفع البيانات الخام يتم من صفحة المنسق. استخدم الفلاتر أدناه حسب تاريخ المذكرة / البروفورما / الفاتورة (مرتبط بالشاسيه من الـ Raw).
+        </p>
+
+        <div class="admin-filter-bar" id="adminFilterBar">
+            <h3>فلاتر التتبع — Tracking Filters</h3>
+            <div class="admin-filter-grid">
+                <div class="admin-filter-field">
+                    <label for="trackDateType">نوع التاريخ</label>
+                    <select id="trackDateType">
+                        <option value="delivery_note">تاريخ مذكرة الترحيل</option>
+                        <option value="proforma">تاريخ البروفورما (Proforma)</option>
+                        <option value="invoice">تاريخ الفاتورة (Invoice)</option>
+                    </select>
                 </div>
-                <div class="options-manage-card">
-                    <h3>المدن / الفروع</h3>
-                    <div class="options-add-row">
-                        <input type="text" id="newCityInput" class="hub-input" placeholder="اسم المدينة أو الفرع…" autocomplete="off">
-                        <button type="button" class="hub-btn hub-btn--primary" id="btnAddCity">إضافة</button>
+                <div class="admin-filter-field">
+                    <label for="trackDateFrom">من</label>
+                    <input type="date" id="trackDateFrom">
+                </div>
+                <div class="admin-filter-field">
+                    <label for="trackDateTo">إلى</label>
+                    <input type="date" id="trackDateTo">
+                </div>
+                <div class="admin-filter-actions">
+                    <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" id="btnTrackApply">تطبيق</button>
+                    <button type="button" class="hub-btn hub-btn--sm" id="btnTrackToday">اليوم</button>
+                    <button type="button" class="hub-btn hub-btn--sm" id="btnTrackClear">مسح الفلتر</button>
+                </div>
+            </div>
+            <p class="admin-filter-meta" id="trackFilterMeta">عرض كل البيانات بدون فلتر تاريخ</p>
+        </div>
+
+        <section class="hub-section hub-fold" id="statsFold" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">ملخص المخزون — Inventory Stats</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">إجمالي المركبات والمنتجات</span>
+                    <span class="hub-fold-count" id="statsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="hub-stats" id="stats"></div>
                     </div>
-                    <p class="hub-status" id="cityOptionsStatus"></p>
-                    <div class="options-list" id="cityOptionsList"></div>
                 </div>
             </div>
         </section>
 
-        <section class="hub-section hub-section--xfer">
-            <div class="hub-section-head">
-                <h2>لوحة النقل — Companies & Cities</h2>
-                <span class="hub-hint">من مسودات الطباعة المحفوظة (شركة النقل والفرع)</span>
-            </div>
-            <div class="xfer-date-filter" id="xferDateFilterBar">
-                <label for="xferDateFilter">تاريخ الترحيل</label>
-                <input type="date" id="xferDateFilter" aria-label="تصفية حسب تاريخ الترحيل">
-                <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" id="btnXferDateToday">اليوم</button>
-                <button type="button" class="hub-btn hub-btn--sm" id="btnXferDateAll">كل التواريخ</button>
-                <span class="xfer-date-label" id="xferDateLabel">عرض كل التواريخ</span>
-            </div>
-            <div class="xfer-dash">
-                <div class="xfer-dash-card">
-                    <h3>أكثر شركات النقل اختياراً</h3>
-                    <p class="xfer-dash-sub">حقل اسم الشركة / Company في المذكرة</p>
-                    <div id="companyDashList" class="xfer-dash-list">
-                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+        <section class="hub-section hub-fold" id="queueStatsFold" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">ملخص القائمة — Queue Stats</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">حالات الترحيل الحية</span>
+                    <span class="hub-fold-count" id="queueStatsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="hub-stats" id="queueStats"></div>
                     </div>
-                    <div class="xfer-dash-top" id="companyDashTop"></div>
                 </div>
-                <div class="xfer-dash-card xfer-dash-card--city">
-                    <h3>أكثر الفروع / المدن تحويلاً</h3>
-                    <p class="xfer-dash-sub">حقل محولة إلى فرع / Branch</p>
-                    <div id="cityDashList" class="xfer-dash-list">
-                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
-                    </div>
-                    <div class="xfer-dash-top" id="cityDashTop"></div>
-                </div>
-                <div class="xfer-dash-card xfer-dash-card--account">
-                    <h3>حساب كل شركة حسب المدن</h3>
-                    <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها المحفوظة — القائمة كاملة</p>
-                    <div id="companyCityBreakdown" class="xfer-account-list">
-                        <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
-                    </div>
-                    <div class="xfer-dash-top" id="companyCityTop"></div>
-                    <div class="xfer-records hidden" id="companyRecordsPanel">
-                        <div class="xfer-records-head">
-                            <div>
-                                <h3 id="companyRecordsTitle">سجلات الشركة</h3>
-                                <p id="companyRecordsMeta"></p>
+            </div>
+        </section>
+
+        <section class="hub-section hub-fold" id="optionsManagerSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">إدارة القوائم — Companies & Cities</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">إضافة أو حذف الشركات والمدن</span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="options-manage-grid">
+                            <div class="options-manage-card">
+                                <h3>شركات النقل</h3>
+                                <div class="options-add-row">
+                                    <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
+                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
+                                </div>
+                                <p class="hub-status" id="companyOptionsStatus"></p>
+                                <div class="options-list" id="companyOptionsList"></div>
                             </div>
-                            <button type="button" class="hub-btn hub-btn--sm" id="btnClearCompanyFilter">إظهار الكل</button>
+                            <div class="options-manage-card">
+                                <h3>المدن / الفروع</h3>
+                                <div class="options-add-row">
+                                    <input type="text" id="newCityInput" class="hub-input" placeholder="اسم المدينة أو الفرع…" autocomplete="off">
+                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCity">إضافة</button>
+                                </div>
+                                <p class="hub-status" id="cityOptionsStatus"></p>
+                                <div class="options-list" id="cityOptionsList"></div>
+                            </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hub-section hub-section--xfer hub-fold" id="xferDashSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">لوحة النقل — Companies & Cities</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">من مسودات الطباعة المحفوظة</span>
+                    <span class="hub-fold-count" id="xferFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="pct-charts">
+                            <div class="pct-chart-card">
+                                <h3>نسبة كل شركة من الإجمالي</h3>
+                                <p class="pct-chart-sub">حسب المذكرات ضمن الفلتر الحالي</p>
+                                <div class="pct-chart-layout">
+                                    <div class="pct-donut-wrap" id="companyPctDonut"></div>
+                                    <div class="pct-legend" id="companyPctLegend"></div>
+                                </div>
+                            </div>
+                            <div class="pct-chart-card">
+                                <h3>نسبة الفروع / المدن</h3>
+                                <p class="pct-chart-sub">توزيع التحويل حسب الفرع</p>
+                                <div class="pct-chart-layout">
+                                    <div class="pct-donut-wrap" id="cityPctDonut"></div>
+                                    <div class="pct-legend" id="cityPctLegend"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="xfer-date-filter" id="xferDateFilterBar" style="display:none">
+                            <label for="xferDateFilter">تاريخ الترحيل</label>
+                            <input type="date" id="xferDateFilter" aria-label="تصفية حسب تاريخ الترحيل">
+                            <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" id="btnXferDateToday">اليوم</button>
+                            <button type="button" class="hub-btn hub-btn--sm" id="btnXferDateAll">كل التواريخ</button>
+                            <span class="xfer-date-label" id="xferDateLabel">عرض كل التواريخ</span>
+                        </div>
+                        <div class="xfer-dash">
+                            <div class="xfer-dash-card">
+                                <h3>أكثر شركات النقل اختياراً</h3>
+                                <p class="xfer-dash-sub">حقل اسم الشركة / Company في المذكرة</p>
+                                <div id="companyDashList" class="xfer-dash-list">
+                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                </div>
+                                <div class="xfer-dash-top" id="companyDashTop"></div>
+                            </div>
+                            <div class="xfer-dash-card xfer-dash-card--city">
+                                <h3>أكثر الفروع / المدن تحويلاً</h3>
+                                <p class="xfer-dash-sub">حقل محولة إلى فرع / Branch</p>
+                                <div id="cityDashList" class="xfer-dash-list">
+                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                </div>
+                                <div class="xfer-dash-top" id="cityDashTop"></div>
+                            </div>
+                            <div class="xfer-dash-card xfer-dash-card--account">
+                                <h3>حساب كل شركة حسب المدن</h3>
+                                <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها المحفوظة — القائمة كاملة</p>
+                                <div id="companyCityBreakdown" class="xfer-account-list">
+                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                </div>
+                                <div class="xfer-dash-top" id="companyCityTop"></div>
+                                <div class="xfer-records hidden" id="companyRecordsPanel">
+                                    <div class="xfer-records-head">
+                                        <div>
+                                            <h3 id="companyRecordsTitle">سجلات الشركة</h3>
+                                            <p id="companyRecordsMeta"></p>
+                                        </div>
+                                        <button type="button" class="hub-btn hub-btn--sm" id="btnClearCompanyFilter">إظهار الكل</button>
+                                    </div>
+                                    <div class="hub-table-wrap">
+                                        <table class="hub-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>التاريخ</th>
+                                                    <th>الشاسيه</th>
+                                                    <th>Product</th>
+                                                    <th>المسؤول</th>
+                                                    <th>مندوب الشركة</th>
+                                                    <th>الفرع</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="companyRecordsBody">
+                                                <tr><td colspan="7" class="hub-empty">اختر شركة</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hub-section hub-fold" id="queueSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">قائمة المنسق — Coordinator Queue</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">تحديث فوري — Live sync</span>
+                    <span class="hub-fold-count" id="queueFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <p class="hub-meta" style="margin-bottom:12px">متاح · مع الفاضل/ياسين/البراء · تم الترحيل</p>
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>الشاسيه</th>
+                                        <th>Product</th>
+                                        <th>GT</th>
+                                        <th>Location</th>
+                                        <th>المسؤول</th>
+                                        <th>التصنيف</th>
+                                        <th>الحالة</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="queueBody">
+                                    <tr><td colspan="8" class="hub-empty">لا توجد شاسيه في القائمة</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hub-section hub-fold" id="draftsSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">مسودات الطباعة — Print Drafts</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">تصدير PDF لأي مسودة محفوظة</span>
+                    <span class="hub-fold-count" id="draftsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
                         <div class="hub-table-wrap">
                             <table class="hub-table">
                                 <thead>
@@ -536,12 +1058,13 @@
                                         <th>Product</th>
                                         <th>المسؤول</th>
                                         <th>مندوب الشركة</th>
+                                        <th>اسم الشركة</th>
                                         <th>الفرع</th>
                                         <th></th>
                                     </tr>
                                 </thead>
-                                <tbody id="companyRecordsBody">
-                                    <tr><td colspan="7" class="hub-empty">اختر شركة</td></tr>
+                                <tbody id="draftsBody">
+                                    <tr><td colspan="7" class="hub-empty">لا توجد مسودات بعد</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -550,132 +1073,65 @@
             </div>
         </section>
 
-        <section class="hub-section">
-            <div class="hub-section-head">
-                <h2>قائمة المنسق — Coordinator Queue</h2>
-                <span class="hub-hint">تحديث فوري — Live sync</span>
-            </div>
-            <p class="hub-meta" style="margin-bottom:12px">متاح · مع الفاضل/ياسين/البراء · تم الترحيل</p>
-            <div class="hub-table-wrap">
-                <table class="hub-table">
-                    <thead>
-                        <tr>
-                            <th>الشاسيه</th>
-                            <th>Product</th>
-                            <th>GT</th>
-                            <th>Location</th>
-                            <th>المسؤول</th>
-                            <th>التصنيف</th>
-                            <th>الحالة</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="queueBody">
-                        <tr><td colspan="8" class="hub-empty">لا توجد شاسيه في القائمة</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+        <p class="hub-status" id="uploadStatus"></p>
+        <p class="hub-meta" id="uploadMeta" style="display:none"></p>
 
-        <section class="hub-section">
-            <div class="hub-section-head">
-                <h2>مسودات الطباعة — Print Drafts</h2>
-                <span class="hub-hint">تصدير PDF لأي مسودة محفوظة</span>
-            </div>
-            <div class="hub-table-wrap">
-                <table class="hub-table">
-                    <thead>
-                        <tr>
-                            <th>التاريخ</th>
-                            <th>الشاسيه</th>
-                            <th>Product</th>
-                            <th>المسؤول</th>
-                            <th>مندوب الشركة</th>
-                            <th>اسم الشركة</th>
-                            <th>الفرع</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="draftsBody">
-                        <tr><td colspan="7" class="hub-empty">لا توجد مسودات بعد</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="hub-section" id="excelImportSection">
-            <div class="hub-section-head">
-                <h2>رفع / لصق Excel — Import Raw Data</h2>
-                <span class="hub-hint">يدعم Sales Raw أو ملف التصدير (Vehicle Inventory + Print Drafts)</span>
-            </div>
-            <label class="hub-upload" id="uploadZone">
-                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
-                <strong>اسحب ملف Excel أو انقر للاختيار</strong>
-                <p class="hub-meta">Sales Raw Data — أعمدة VIN / Product / Plate</p>
-            </label>
-            <div class="hub-paste-block" style="margin-top:16px">
-                <label class="hub-label" for="excelPaste">أو الصق من Excel (Ctrl+V) — صفوف بأعمدة VIN / Product / Plate / Customer</label>
-                <textarea id="excelPaste" class="hub-textarea" rows="8" placeholder="انسخ الخلايا من Excel ثم الصق هنا&#10;VIN No.	Product	Plate	Customer Name&#10;JTD…	Camry	1234	شركة …"></textarea>
-                <div class="hub-toolbar" style="margin-top:10px;gap:8px;flex-wrap:wrap;display:flex">
-                    <button type="button" class="hub-btn hub-btn--primary" id="btnPasteImport">استيراد البيانات</button>
-                    <button type="button" class="hub-btn" id="btnClearPaste">مسح اللصق</button>
-                    <button type="button" class="hub-btn hub-btn--primary" id="btnGeneratePdfs">توليد مسودات PDF</button>
+        <section class="hub-section hub-fold" id="productsSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">توزيع المنتجات — Products</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-fold-count" id="productsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="hub-chips" id="productsGrid">
+                            <span class="hub-empty">لا توجد بيانات</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <p class="hub-meta" id="uploadMeta">لم يتم رفع ملف بعد</p>
-            <p class="hub-status" id="uploadStatus"></p>
-            <div id="pastePreviewWrap" class="hub-table-wrap" style="margin-top:14px;display:none">
-                <div class="hub-section-head" style="margin-bottom:8px;padding:0">
-                    <h3 style="font-size:0.95rem;margin:0">معاينة البيانات المستوردة</h3>
-                    <span class="hub-hint" id="pastePreviewCount"></span>
+        </section>
+
+        <section class="hub-section hub-fold" id="inventorySection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">سجل المركبات — Vehicle Inventory</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">بحث وعرض الشاسيه</span>
+                    <span class="hub-fold-count" id="inventoryFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="hub-toolbar">
+                            <input type="search" id="searchInput" class="hub-input" placeholder="بحث بالشاسيه، المنتج، اللوحة، العميل…">
+                        </div>
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>صورة</th>
+                                        <th>الشاسية / VIN</th>
+                                        <th>المنتج / Product</th>
+                                        <th>اللوحة</th>
+                                        <th>العميل</th>
+                                        <th>الموقع</th>
+                                        <th>Proforma</th>
+                                        <th>Invoice</th>
+                                        <th>Delivery Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody">
+                                    <tr><td colspan="9" class="hub-empty">لا توجد بيانات — ارفع الملف من صفحة المنسق</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-                <table class="hub-table">
-                    <thead>
-                        <tr>
-                            <th>الشاسية / VIN</th>
-                            <th>المنتج / Product</th>
-                            <th>اللوحة</th>
-                            <th>العميل</th>
-                            <th>الموقع / GT</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pastePreviewBody"></tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="hub-section">
-            <div class="hub-section-head">
-                <h2>توزيع المنتجات — Products</h2>
-            </div>
-            <div class="hub-chips" id="productsGrid">
-                <span class="hub-empty">لا توجد بيانات</span>
-            </div>
-        </section>
-
-        <section class="hub-section">
-            <div class="hub-section-head">
-                <h2>سجل المركبات — Vehicle Inventory</h2>
-            </div>
-            <div class="hub-toolbar">
-                <input type="search" id="searchInput" class="hub-input" placeholder="بحث بالشاسيه، المنتج، اللوحة، العميل…">
-            </div>
-            <div class="hub-table-wrap">
-                <table class="hub-table">
-                    <thead>
-                        <tr>
-                            <th>صورة</th>
-                            <th>الشاسية / VIN</th>
-                            <th>المنتج / Product</th>
-                            <th>اللوحة</th>
-                            <th>العميل</th>
-                            <th>الموقع</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr><td colspan="6" class="hub-empty">لا توجد بيانات — ارفع ملف Excel</td></tr>
-                    </tbody>
-                </table>
             </div>
         </section>
     </div>
@@ -727,6 +1183,60 @@
         });
         document.getElementById('btnAdminLogout').addEventListener('click', lockAdmin);
 
+        function setFoldOpen(section, open) {
+            if (!section) return;
+            section.classList.toggle('is-open', open);
+            const btn = section.querySelector('.hub-fold-toggle');
+            if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function openFold(sectionOrId, { scroll = false } = {}) {
+            const section = typeof sectionOrId === 'string'
+                ? document.getElementById(sectionOrId)
+                : sectionOrId;
+            setFoldOpen(section, true);
+            if (scroll && section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function setFoldCount(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const n = Number(value) || 0;
+            el.textContent = n > 0 ? String(n) : '';
+            el.dataset.empty = n > 0 ? '0' : '1';
+        }
+
+        function updateFoldCounts() {
+            const vehicleCount = allVehicles.length;
+            const queueCount = allQueue.length;
+            const draftCount = allDrafts.length;
+            const productCount = (lastDashboard && lastDashboard.uniqueProducts) || 0;
+            setFoldCount('statsFoldCount', vehicleCount);
+            setFoldCount('queueStatsFoldCount', queueCount);
+            setFoldCount('queueFoldCount', queueCount);
+            setFoldCount('draftsFoldCount', draftCount);
+            setFoldCount('xferFoldCount', draftCount);
+            setFoldCount('inventoryFoldCount', vehicleCount);
+            setFoldCount('productsFoldCount', productCount);
+        }
+
+        document.querySelectorAll('[data-fold]').forEach((section) => {
+            const btn = section.querySelector('.hub-fold-toggle');
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                setFoldOpen(section, !section.classList.contains('is-open'));
+            });
+        });
+
+        document.getElementById('btnExpandAll')?.addEventListener('click', () => {
+            document.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, true));
+        });
+        document.getElementById('btnCollapseAll')?.addEventListener('click', () => {
+            document.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, false));
+        });
+
         function setUploadStatus(msg, type) {
             const el = document.getElementById('uploadStatus');
             el.textContent = msg || '';
@@ -760,7 +1270,10 @@
                 Location: v.location || '',
                 GT: v.gt || '',
                 Model: v.model || '',
-                'Image URL': v.imageUrl || ''
+                'Image URL': v.imageUrl || '',
+                'Proforma Date': v.proformaDate || '',
+                'Invoice Date': v.invoiceDate || '',
+                'Delivery Note Date': v.deliveryNoteDate || ''
             }));
             XLSX.utils.book_append_sheet(
                 wb,
@@ -868,7 +1381,7 @@
         function renderTable(list) {
             const tbody = document.getElementById('tableBody');
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">لا توجد نتائج</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد نتائج</td></tr>';
                 return;
             }
             tbody.innerHTML = list.slice(0, 300).map((v) => {
@@ -882,6 +1395,9 @@
                     <td>${v.plate || '—'}</td>
                     <td>${v.customerName || '—'}</td>
                     <td>${v.location || '—'}</td>
+                    <td>${v.proformaDate || '—'}</td>
+                    <td>${v.invoiceDate || '—'}</td>
+                    <td>${v.deliveryNoteDate || '—'}</td>
                 </tr>`;
             }).join('');
         }
@@ -931,18 +1447,129 @@
             return '';
         }
 
+        function vehicleByVin() {
+            const map = new Map();
+            (allVehicles || []).forEach((v) => {
+                const vin = String(v.vin || '').trim().toUpperCase();
+                if (vin) map.set(vin, v);
+            });
+            return map;
+        }
+
+        function getTrackFilter() {
+            return {
+                type: document.getElementById('trackDateType')?.value || 'delivery_note',
+                from: String(document.getElementById('trackDateFrom')?.value || '').trim(),
+                to: String(document.getElementById('trackDateTo')?.value || '').trim()
+            };
+        }
+
+        function isoInRange(iso, from, to) {
+            if (!iso) return false;
+            if (from && iso < from) return false;
+            if (to && iso > to) return false;
+            return true;
+        }
+
+        function vehicleDateIso(v, type) {
+            if (!v) return '';
+            if (type === 'proforma') return String(v.proformaDate || '').slice(0, 10);
+            if (type === 'invoice') return String(v.invoiceDate || '').slice(0, 10);
+            return String(v.deliveryNoteDate || '').slice(0, 10);
+        }
+
+        function filteredVehicleList() {
+            const { type, from, to } = getTrackFilter();
+            if (!from && !to) return allVehicles || [];
+            if (type === 'delivery_note') {
+                // Prefer draft delivery dates; fall back to raw deliveryNoteDate on vehicle
+                const vins = new Set(
+                    filteredDrafts().map((d) => String(d.vin || '').trim().toUpperCase()).filter(Boolean)
+                );
+                const list = (allVehicles || []).filter((v) => {
+                    const vin = String(v.vin || '').trim().toUpperCase();
+                    if (vins.has(vin)) return true;
+                    const iso = vehicleDateIso(v, 'delivery_note');
+                    return iso && isoInRange(iso, from, to);
+                });
+                return list;
+            }
+            return (allVehicles || []).filter((v) => {
+                const iso = vehicleDateIso(v, type);
+                return iso && isoInRange(iso, from, to);
+            });
+        }
+
         function getXferDateFilter() {
+            // legacy single-day (hidden) — keep for compatibility
             const el = document.getElementById('xferDateFilter');
             return el ? String(el.value || '').trim() : '';
         }
 
         function filteredDrafts() {
-            const date = getXferDateFilter();
-            if (!date) return allDrafts || [];
-            return (allDrafts || []).filter((d) => draftEventIso(d) === date);
+            const { type, from, to } = getTrackFilter();
+            const legacy = getXferDateFilter();
+            let list = allDrafts || [];
+
+            if (legacy) {
+                list = list.filter((d) => draftEventIso(d) === legacy);
+            }
+
+            if (!from && !to) return list;
+
+            if (type === 'delivery_note') {
+                return list.filter((d) => {
+                    const iso = draftEventIso(d);
+                    return iso && isoInRange(iso, from, to);
+                });
+            }
+
+            const byVin = vehicleByVin();
+            return list.filter((d) => {
+                const vin = String(d.vin || '').trim().toUpperCase();
+                const veh = byVin.get(vin);
+                const iso = vehicleDateIso(veh, type);
+                return iso && isoInRange(iso, from, to);
+            });
+        }
+
+        function filteredQueue() {
+            const { type, from, to } = getTrackFilter();
+            if (!from && !to) return allQueue || [];
+            if (type === 'delivery_note') {
+                const vins = new Set(
+                    filteredDrafts().map((d) => String(d.vin || '').trim().toUpperCase()).filter(Boolean)
+                );
+                return (allQueue || []).filter((q) => vins.has(String(q.vin || '').trim().toUpperCase()));
+            }
+            const byVin = vehicleByVin();
+            return (allQueue || []).filter((q) => {
+                const veh = byVin.get(String(q.vin || '').trim().toUpperCase());
+                const iso = vehicleDateIso(veh, type);
+                return iso && isoInRange(iso, from, to);
+            });
+        }
+
+        function updateTrackFilterMeta() {
+            const meta = document.getElementById('trackFilterMeta');
+            if (!meta) return;
+            const { type, from, to } = getTrackFilter();
+            const typeLabel = type === 'proforma'
+                ? 'البروفورما'
+                : type === 'invoice'
+                    ? 'الفاتورة'
+                    : 'مذكرة الترحيل';
+            const drafts = filteredDrafts().length;
+            const vehicles = filteredVehicleList().length;
+            if (!from && !to) {
+                meta.innerHTML = `عرض كل البيانات بدون فلتر تاريخ · <strong>${(allDrafts || []).length}</strong> مسودة · <strong>${(allVehicles || []).length}</strong> مركبة`;
+                return;
+            }
+            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong> · <strong>${drafts}</strong> مسودة · <strong>${vehicles}</strong> مركبة مطابقة`;
         }
 
         function updateXferDateLabel() {
+            updateTrackFilterMeta();
             const label = document.getElementById('xferDateLabel');
             if (!label) return;
             const date = getXferDateFilter();
@@ -958,6 +1585,15 @@
                 if (panel) panel.classList.add('hidden');
             }
             renderTransferDashboard(drafts);
+            renderTable(filteredVehicleList());
+            renderQueueTable(filteredQueue());
+            renderDraftsTable(drafts);
+        }
+
+        function applyTrackFilter() {
+            refreshTransferDashboard();
+            updateFoldCounts();
+            openFold('xferDashSection');
         }
 
         function draftCompanyName(d) {
@@ -1014,8 +1650,9 @@
                     <td>${escapeHtml(d.assignedTo || '—')}</td>
                     <td>${escapeHtml(p.customer_name || '—')}</td>
                     <td>${escapeHtml(p.branch_to || '—')}</td>
-                    <td>${canExport
-                        ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
+                    <td style="white-space:nowrap">${canExport
+                        ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
+                           <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
                         : '<span class="hub-meta">—</span>'}</td>
                 </tr>`;
             }).join('');
@@ -1024,6 +1661,15 @@
                 btn.addEventListener('click', () => {
                     window.open(
                         `Delivery_pdf.html?draft=${encodeURIComponent(btn.dataset.exportPdf)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+            tbody.querySelectorAll('[data-edit-draft]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(btn.dataset.editDraft)}&adminEdit=1`,
                         '_blank',
                         'noopener'
                     );
@@ -1051,17 +1697,22 @@
                 topEl.innerHTML = '';
                 return;
             }
+            const total = rows.reduce((s, r) => s + r.count, 0) || 1;
             const max = rows[0].count || 1;
             listEl.innerHTML = rows.map((row) => {
-                const pct = Math.max(4, Math.round((row.count / max) * 100));
+                const barPct = Math.max(4, Math.round((row.count / max) * 100));
+                const sharePct = Math.round((row.count / total) * 1000) / 10;
                 const safeName = escapeHtml(row.name);
                 const clickAttrs = clickableCompanies
                     ? ` class="xfer-dash-row" data-company="${safeName}" role="button" tabindex="0"`
                     : ' class="xfer-dash-row"';
                 return `<div${clickAttrs}>
                     <div class="xfer-dash-name" title="${safeName}">${safeName}</div>
-                    <div class="xfer-dash-count">${row.count}</div>
-                    <div class="xfer-dash-bar"><span style="--bar-w:${pct}%"></span></div>
+                    <div class="xfer-dash-count-pct">
+                        <div class="xfer-dash-count">${row.count}</div>
+                        <div class="pct">${sharePct}%</div>
+                    </div>
+                    <div class="xfer-dash-bar"><span style="--bar-w:${barPct}%"></span></div>
                 </div>`;
             }).join('');
 
@@ -1079,9 +1730,59 @@
             }
 
             const leader = rows[0];
-            const total = rows.reduce((s, r) => s + r.count, 0);
-            const share = total ? Math.round((leader.count / total) * 100) : 0;
-            topEl.innerHTML = `الأكثر: <strong>${escapeHtml(leader.name)}</strong> — ${leader.count} من ${total} (${share}%) · ${rows.length} ${label}`;
+            const share = Math.round((leader.count / total) * 100);
+            topEl.innerHTML = `الأكثر: <strong>${escapeHtml(leader.name)}</strong> — ${leader.count} من ${total} (<strong>${share}%</strong>) · ${rows.length} ${label}`;
+        }
+
+        const CHART_COLORS = [
+            '#eb0a1e', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6',
+            '#06b6d4', '#f97316', '#ec4899', '#84cc16', '#64748b'
+        ];
+
+        function renderPercentChart(donutEl, legendEl, rows, emptyText) {
+            if (!donutEl || !legendEl) return;
+            if (!rows.length) {
+                donutEl.innerHTML = '';
+                legendEl.innerHTML = `<div class="xfer-dash-empty">${emptyText}</div>`;
+                return;
+            }
+            const total = rows.reduce((s, r) => s + r.count, 0) || 1;
+            const top = rows.slice(0, 8);
+            const otherCount = rows.slice(8).reduce((s, r) => s + r.count, 0);
+            const slices = otherCount
+                ? [...top, { name: 'أخرى', count: otherCount }]
+                : top;
+
+            const r = 54;
+            const c = 2 * Math.PI * r;
+            let offset = 0;
+            const arcs = slices.map((row, i) => {
+                const frac = row.count / total;
+                const len = frac * c;
+                const color = CHART_COLORS[i % CHART_COLORS.length];
+                const arc = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${color}" stroke-width="18"
+                    stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}"
+                    style="transition: stroke-dasharray 0.5s ease"></circle>`;
+                offset += len;
+                return arc;
+            }).join('');
+
+            donutEl.innerHTML = `
+                <svg viewBox="0 0 140 140" aria-hidden="true">${arcs}
+                    <circle cx="70" cy="70" r="38" fill="#0b1220"></circle>
+                </svg>
+                <div class="pct-donut-center"><b>${total}</b><span>إجمالي</span></div>
+            `;
+
+            legendEl.innerHTML = slices.map((row, i) => {
+                const pct = Math.round((row.count / total) * 1000) / 10;
+                return `<div class="pct-legend-row">
+                    <span class="pct-swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>
+                    <span class="pct-legend-name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</span>
+                    <span class="pct-legend-count">${row.count}</span>
+                    <span class="pct-legend-pct">${pct}%</span>
+                </div>`;
+            }).join('');
         }
 
         function aggregateCompanyCities(drafts) {
@@ -1159,10 +1860,22 @@
 
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
-            const dateFiltered = Boolean(getXferDateFilter());
-            const emptyDate = 'لا توجد ترحيلات في هذا التاريخ';
+            const dateFiltered = Boolean(getTrackFilter().from || getTrackFilter().to || getXferDateFilter());
+            const emptyDate = 'لا توجد ترحيلات في هذه الفترة';
             const companies = tallyField(list, (d) => draftCompanyName(d));
             const cities = tallyField(list, (d) => (d.payload || {}).branch_to);
+            renderPercentChart(
+                document.getElementById('companyPctDonut'),
+                document.getElementById('companyPctLegend'),
+                companies,
+                dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة'
+            );
+            renderPercentChart(
+                document.getElementById('cityPctDonut'),
+                document.getElementById('cityPctLegend'),
+                cities,
+                dateFiltered ? emptyDate : 'لا توجد فروع بعد — اطبع مذكرة مع اختيار الفرع'
+            );
             renderRankList(
                 document.getElementById('companyDashList'),
                 document.getElementById('companyDashTop'),
@@ -1189,14 +1902,32 @@
             showCompanyRecords('');
         });
 
-        document.getElementById('xferDateFilter').addEventListener('change', () => {
+        document.getElementById('btnTrackApply')?.addEventListener('click', applyTrackFilter);
+        document.getElementById('btnTrackToday')?.addEventListener('click', () => {
+            const today = getSaudiTodayIso();
+            document.getElementById('trackDateFrom').value = today;
+            document.getElementById('trackDateTo').value = today;
+            applyTrackFilter();
+        });
+        document.getElementById('btnTrackClear')?.addEventListener('click', () => {
+            document.getElementById('trackDateFrom').value = '';
+            document.getElementById('trackDateTo').value = '';
+            document.getElementById('xferDateFilter').value = '';
+            applyTrackFilter();
+        });
+        document.getElementById('trackDateType')?.addEventListener('change', () => {
+            if (getTrackFilter().from || getTrackFilter().to) applyTrackFilter();
+            else updateTrackFilterMeta();
+        });
+
+        document.getElementById('xferDateFilter')?.addEventListener('change', () => {
             refreshTransferDashboard();
         });
-        document.getElementById('btnXferDateToday').addEventListener('click', () => {
+        document.getElementById('btnXferDateToday')?.addEventListener('click', () => {
             document.getElementById('xferDateFilter').value = getSaudiTodayIso();
             refreshTransferDashboard();
         });
-        document.getElementById('btnXferDateAll').addEventListener('click', () => {
+        document.getElementById('btnXferDateAll')?.addEventListener('click', () => {
             document.getElementById('xferDateFilter').value = '';
             refreshTransferDashboard();
         });
@@ -1321,20 +2052,21 @@
             allVehicles = data.vehicles || [];
             lastDashboard = data.dashboard || null;
             renderStats(data.dashboard);
-            renderTable(allVehicles);
             if (queueRes.ok) {
                 allQueue = queueData.queue || [];
                 allDrafts = queueData.drafts || [];
                 renderQueueStats(queueData.stats);
-                renderQueueTable(allQueue);
-                renderDraftsTable(allDrafts);
-                renderTransferDashboard(filteredDrafts());
             } else {
                 allQueue = [];
                 allDrafts = [];
-                renderTransferDashboard(filteredDrafts());
             }
+            renderTable(filteredVehicleList());
+            renderQueueTable(filteredQueue());
+            renderDraftsTable(filteredDrafts());
+            renderTransferDashboard(filteredDrafts());
             loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
+            updateFoldCounts();
+            updateTrackFilterMeta();
         }
 
         function renderDraftsTable(drafts) {
@@ -1355,9 +2087,12 @@
                     <td>${p.customer_name || '—'}</td>
                     <td>${p.company_rep || d.customerName || '—'}</td>
                     <td>${p.branch_to || '—'}</td>
-                    <td>${canExport
-                        ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${d.id}">تصدير PDF</button>`
-                        : '<span class="hub-meta">—</span>'}</td>
+                    <td style="white-space:nowrap">
+                        ${canExport
+                            ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${d.id}">تعديل</button>
+                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${d.id}">تصدير PDF</button>`
+                            : '<span class="hub-meta">—</span>'}
+                    </td>
                 </tr>`;
             }).join('');
             tbody.querySelectorAll('[data-export-pdf]').forEach((btn) => {
@@ -1365,6 +2100,16 @@
                     const id = btn.dataset.exportPdf;
                     window.open(
                         `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+            tbody.querySelectorAll('[data-edit-draft]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.editDraft;
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminEdit=1`,
                         '_blank',
                         'noopener'
                     );
@@ -1434,152 +2179,16 @@
             });
         }
 
-        function renderPastePreview(vehicles) {
-            const wrap = document.getElementById('pastePreviewWrap');
-            const body = document.getElementById('pastePreviewBody');
-            const count = document.getElementById('pastePreviewCount');
-            if (!wrap || !body || !count) return;
-            if (!vehicles || !vehicles.length) {
-                wrap.style.display = 'none';
-                body.innerHTML = '';
-                count.textContent = '';
-                return;
-            }
-            wrap.style.display = '';
-            count.textContent = `${vehicles.length} مركبة`;
-            body.innerHTML = vehicles.slice(0, 100).map((v) => `<tr>
-                <td class="hub-vin">${escapeHtml(v.vin || '—')}</td>
-                <td>${escapeHtml(v.product || v.model || '—')}</td>
-                <td>${escapeHtml(v.plate || '—')}</td>
-                <td>${escapeHtml(v.customerName || '—')}</td>
-                <td>${escapeHtml(v.location || v.gt || '—')}</td>
-            </tr>`).join('');
-            if (vehicles.length > 100) {
-                body.innerHTML += `<tr><td colspan="5" class="hub-meta">… و ${vehicles.length - 100} أخرى في سجل المركبات</td></tr>`;
-            }
-        }
-
-        async function uploadFile(file) {
-            if (!file) return;
-            setUploadStatus('جاري الرفع والمعالجة…');
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const res = await fetch('/api/delivery-inventory/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error || 'فشل الرفع');
-                    setUploadStatus(formatImportStatus(data), 'ok');
-                    renderPastePreview(data.vehicles || []);
-                    await loadDashboard();
-                } catch (err) {
-                    setUploadStatus(err.message, 'err');
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function formatImportStatus(data) {
-            const parts = [`تم استيراد ${data.imported || 0} مركبة`];
-            if (data.draftsImported) parts.push(`${data.draftsImported} مسودة PDF`);
-            if (data.queueImported) parts.push(`${data.queueImported} في قائمة المنسق`);
-            if (data.sheetName) parts.push(data.sheetName);
-            if (data.isExport) parts.push('صيغة تصدير');
-            return parts.join(' · ');
-        }
-
-        async function importPastedExcel() {
-            const text = document.getElementById('excelPaste').value;
-            if (!String(text || '').trim()) {
-                setUploadStatus('الصق بيانات Excel في المربع أولاً', 'err');
-                return;
-            }
-            setUploadStatus('جاري قراءة البيانات الملصقة…');
-            try {
-                const res = await fetch('/api/delivery-inventory/paste', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, filename: 'pasted-excel.tsv' })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
-                setUploadStatus(formatImportStatus(data), 'ok');
-                renderPastePreview(data.vehicles || []);
-                await loadDashboard();
-            } catch (err) {
-                setUploadStatus(err.message, 'err');
-            }
-        }
-
-        async function generatePdfsFromInventory() {
-            if (!allVehicles.length) {
-                setUploadStatus('لا توجد بيانات — الصق أو ارفع Excel أولاً', 'err');
-                return;
-            }
-            if (!confirm(`توليد مسودات PDF من ${allVehicles.length} مركبة؟\n(تجميع حسب العميل، حتى 10 سيارات لكل مذكرة)`)) {
-                return;
-            }
-            setUploadStatus('جاري توليد مسودات PDF…');
-            try {
-                const res = await fetch('/api/delivery-inventory/create-pdf-drafts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل التوليد');
-                setUploadStatus(
-                    `تم إنشاء ${data.created} مسودة PDF — افتح «مسودات الطباعة» واضغط تصدير PDF`,
-                    'ok'
-                );
-                await loadDashboard();
-                const draftsSection = document.querySelector('#draftsBody')?.closest('.hub-section');
-                if (draftsSection) draftsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                if (data.drafts && data.drafts[0]?.id) {
-                    window.open(
-                        `Delivery_pdf.html?draft=${encodeURIComponent(data.drafts[0].id)}&adminExport=1`,
-                        '_blank',
-                        'noopener'
-                    );
-                }
-            } catch (err) {
-                setUploadStatus(err.message, 'err');
-            }
-        }
-
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            uploadFile(e.target.files?.[0]);
-            e.target.value = '';
-        });
-
-        const zone = document.getElementById('uploadZone');
-        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
-        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-        zone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            zone.classList.remove('dragover');
-            uploadFile(e.dataTransfer.files?.[0]);
-        });
-
-        document.getElementById('btnPasteImport').addEventListener('click', importPastedExcel);
-        document.getElementById('btnClearPaste').addEventListener('click', () => {
-            document.getElementById('excelPaste').value = '';
-            renderPastePreview([]);
-            setUploadStatus('');
-        });
-        document.getElementById('btnGeneratePdfs').addEventListener('click', generatePdfsFromInventory);
-        document.getElementById('excelPaste').addEventListener('paste', () => {
-            setTimeout(() => {
-                const text = document.getElementById('excelPaste').value.trim();
-                if (text) setUploadStatus('تم اللصق — اضغط «استيراد البيانات»', 'ok');
-            }, 0);
-        });
-
         document.getElementById('searchInput').addEventListener('input', (e) => {
-            renderTable(filterVehicles(e.target.value));
+            const q = e.target.value;
+            const base = filteredVehicleList();
+            const list = !String(q || '').trim()
+                ? base
+                : base.filter((v) => {
+                    const hay = `${v.vin || ''} ${v.product || ''} ${v.model || ''} ${v.plate || ''} ${v.customerName || ''} ${v.location || ''}`.toUpperCase();
+                    return hay.includes(String(q).trim().toUpperCase());
+                });
+            renderTable(list);
         });
 
         document.getElementById('btnExportExcel').addEventListener('click', exportAllToExcel);
@@ -1595,11 +2204,12 @@
             lastDashboard = data.dashboard || null;
             renderStats(data.dashboard);
             renderTable([]);
-            renderPastePreview([]);
             renderQueueStats({ total: 0, available: 0, claimed: 0 });
             renderQueueTable([]);
             renderDraftsTable([]);
             renderTransferDashboard(filteredDrafts());
+            updateFoldCounts();
+            updateTrackFilterMeta();
             setUploadStatus('تم مسح البيانات', 'ok');
         });
     </script>

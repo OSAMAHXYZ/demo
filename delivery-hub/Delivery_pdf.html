@@ -1423,7 +1423,8 @@
         function doPrintA4() {
             const vin = getClaimedVin();
             const agent = getAgent();
-            const isAdminExport = new URLSearchParams(location.search).get('adminExport') === '1';
+            const isAdminExport = new URLSearchParams(location.search).get('adminExport') === '1'
+                || new URLSearchParams(location.search).get('adminEdit') === '1';
             // Rebuild overlay positions, then clone for print (browser print ignores CSS transform/px quirks)
             buildOverlay();
             updatePreview();
@@ -1849,6 +1850,29 @@
             return params.get('adminExport') === '1' && Boolean(getUrlDraftId());
         }
 
+        function isAdminEditMode() {
+            const params = new URLSearchParams(location.search);
+            return params.get('adminEdit') === '1' && Boolean(getUrlDraftId());
+        }
+
+        async function saveAdminDraftEdit() {
+            const draftId = getUrlDraftId();
+            if (!draftId) return;
+            setStatus('جاري حفظ التعديلات…', 'ok');
+            try {
+                const res = await fetch(`/api/delivery-coordinator/drafts/${encodeURIComponent(draftId)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payload: collectPayload() })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل الحفظ');
+                setStatus('تم حفظ تعديلات المذكرة', 'ok');
+            } catch (err) {
+                setStatus(err.message || 'فشل الحفظ', 'err');
+            }
+        }
+
         function applyDraftPayload(payload) {
             if (!payload || typeof payload !== 'object') return;
             const setVal = (id, value) => {
@@ -1910,6 +1934,31 @@
             return true;
         }
 
+        async function openAdminDraftEdit() {
+            const draftId = getUrlDraftId();
+            const res = await fetch(`/api/delivery-coordinator/drafts/${encodeURIComponent(draftId)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'تعذر تحميل المسودة');
+            const draft = data.draft;
+            if (!draft?.payload) throw new Error('المسودة لا تحتوي على بيانات الطباعة');
+            showView('app');
+            applyDraftPayload(draft.payload);
+            setStatus('وضع تعديل المذكرة — عدّل الحقول ثم احفظ', 'ok');
+            const banner = document.createElement('div');
+            banner.className = 'no-print';
+            banner.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:300;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;padding:10px 14px;border-radius:999px;background:#111827;border:1px solid rgba(255,255,255,.15);box-shadow:0 12px 40px rgba(0,0,0,.35);';
+            banner.innerHTML = `
+                <span style="color:#e2e8f0;font-size:.82rem;font-weight:700">تعديل مسودة · ${draft.vin || draftId}</span>
+                <button type="button" class="btn btn-primary" id="btnAdminSaveDraft" style="padding:8px 16px">حفظ التعديلات</button>
+                <button type="button" class="btn" id="btnAdminEditPrint" style="padding:8px 16px">تصدير PDF</button>
+                <a href="admin-Delivery-pdf.html" class="btn" style="padding:8px 14px;text-decoration:none">العودة للإدارة</a>
+            `;
+            document.body.appendChild(banner);
+            document.getElementById('btnAdminSaveDraft').addEventListener('click', saveAdminDraftEdit);
+            document.getElementById('btnAdminEditPrint').addEventListener('click', doPrintA4);
+            return true;
+        }
+
         async function tryOpenUrlVin() {
             const vin = getUrlVin();
             if (!vin || !getAgent().username) return false;
@@ -1954,6 +2003,19 @@
                     const loginStatus = document.getElementById('loginStatus');
                     if (loginStatus) {
                         loginStatus.textContent = err.message || 'فشل تصدير المسودة';
+                        loginStatus.className = 'ws-toast err';
+                    }
+                }
+                return;
+            }
+            if (isAdminEditMode()) {
+                try {
+                    await openAdminDraftEdit();
+                } catch (err) {
+                    showView('login');
+                    const loginStatus = document.getElementById('loginStatus');
+                    if (loginStatus) {
+                        loginStatus.textContent = err.message || 'فشل فتح التعديل';
                         loginStatus.className = 'ws-toast err';
                     }
                 }
