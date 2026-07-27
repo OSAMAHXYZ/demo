@@ -379,6 +379,38 @@ body.delivery-hub.admin-console .hub-shell,
 .saas-company-list {
   display: grid;
   gap: 10px;
+  max-height: 340px;
+  overflow: auto;
+  padding-inline-end: 4px;
+}
+
+.xfer-trend-card .xfer-trend-chart {
+  min-height: 260px;
+}
+
+.xfer-branches-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.xfer-branches-row > * {
+  min-width: 0;
+}
+
+.xfer-branches-row .saas-company-list {
+  max-height: 360px;
+}
+
+.xfer-dash--single {
+  grid-template-columns: 1fr !important;
+}
+
+@media (max-width: 900px) {
+  .xfer-branches-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .saas-company-card {

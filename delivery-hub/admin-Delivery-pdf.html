@@ -1587,27 +1587,37 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <div class="saas-grid-2" style="margin:0 0 16px">
-                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
-                                <div class="saas-section__head">
-                                    <div>
-                                        <h3>اتجاهات الترحيل</h3>
-                                        <p>عدد المذكرات حسب يوم الطباعة</p>
-                                    </div>
+                        <div class="saas-section saas-card xfer-trend-card" style="margin:0 0 16px;box-shadow:none">
+                            <div class="saas-section__head">
+                                <div>
+                                    <h3>اتجاهات الترحيل</h3>
+                                    <p>عدد المذكرات حسب الأسبوع (من الإثنين إلى الأحد)</p>
                                 </div>
-                                <div id="trendChartEl" style="min-height:280px"></div>
                             </div>
-                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
-                                <div class="saas-section__head">
-                                    <div>
-                                        <h3>أبرز الشركات</h3>
-                                        <p>اضغط شركة لعرض بياناتها فقط</p>
-                                    </div>
+                            <div id="trendChartEl" class="xfer-trend-chart"></div>
+                        </div>
+
+                        <div class="saas-section saas-card" style="margin:0 0 16px;box-shadow:none">
+                            <div class="saas-section__head">
+                                <div>
+                                    <h3>أبرز الشركات</h3>
+                                    <p>اضغط شركة لعرض بياناتها فقط</p>
                                 </div>
-                                <div id="companyDashList" class="saas-company-list xfer-dash-list">
-                                    <div class="saas-empty">لا توجد بيانات بعد</div>
+                            </div>
+                            <div id="companyDashList" class="saas-company-list xfer-dash-list">
+                                <div class="saas-empty">لا توجد بيانات بعد</div>
+                            </div>
+                            <div class="xfer-dash-top" id="companyDashTop" hidden></div>
+                        </div>
+                        <div class="pct-chart-card pct-chart-card--status saas-section" style="margin:0" hidden>
+                            <h3>حالة الترحيل</h3>
+                            <p class="pct-chart-sub">تم الترحيل مقابل المتبقي</p>
+                            <div class="pct-chart-layout">
+                                <div class="pct-donut-wrap" id="statusPctDonut"></div>
+                                <div>
+                                    <div class="pct-legend" id="statusPctLegend"></div>
+                                    <div class="pct-status-strip" id="statusPctStrip"></div>
                                 </div>
-                                <div class="xfer-dash-top" id="companyDashTop" hidden></div>
                             </div>
                         </div>
 
@@ -1648,28 +1658,29 @@
                             </div>
                         </div>
 
-                        <div class="pct-charts saas-grid-2 equal" style="margin:0 0 16px">
-                            <div class="pct-chart-card pct-chart-card--status saas-section" style="margin:0">
-                                <h3>حالة الترحيل</h3>
-                                <p class="pct-chart-sub">الدونات الوحيد — تم الترحيل مقابل المتبقي</p>
-                                <div class="pct-chart-layout">
-                                    <div class="pct-donut-wrap" id="statusPctDonut"></div>
-                                    <div>
-                                        <div class="pct-legend" id="statusPctLegend"></div>
-                                        <div class="pct-status-strip" id="statusPctStrip"></div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="xfer-branches-row" style="margin:0 0 16px">
                             <div class="pct-chart-card saas-section" style="margin:0">
                                 <h3>الفروع / المدن</h3>
                                 <p class="pct-chart-sub">ترتيب أفقي حسب عدد التحويلات</p>
                                 <div id="cityPctDonut" style="min-height:280px"></div>
                                 <div class="pct-legend" id="cityPctLegend" hidden></div>
                             </div>
-                            <div class="pct-chart-card" hidden>
-                                <div class="pct-donut-wrap" id="companyPctDonut"></div>
-                                <div class="pct-legend" id="companyPctLegend"></div>
+                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
+                                <div class="saas-section__head">
+                                    <div>
+                                        <h3>ترتيب الفروع</h3>
+                                        <p>قائمة سريعة للفروع</p>
+                                    </div>
+                                </div>
+                                <div id="cityDashList" class="saas-company-list xfer-dash-list">
+                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                </div>
+                                <div class="xfer-dash-top" id="cityDashTop"></div>
                             </div>
+                        </div>
+                        <div class="pct-chart-card" hidden>
+                            <div class="pct-donut-wrap" id="companyPctDonut"></div>
+                            <div class="pct-legend" id="companyPctLegend"></div>
                         </div>
                         <div class="xfer-date-filter" id="xferDateFilterBar" style="display:none">
                             <label for="xferDateFilter">تاريخ الترحيل</label>
@@ -1678,15 +1689,7 @@
                             <button type="button" class="hub-btn hub-btn--sm" id="btnXferDateAll">كل التواريخ</button>
                             <span class="xfer-date-label" id="xferDateLabel">عرض كل التواريخ</span>
                         </div>
-                        <div class="xfer-dash">
-                            <div class="xfer-dash-card xfer-dash-card--city">
-                                <h3>ترتيب الفروع</h3>
-                                <p class="xfer-dash-sub">قائمة سريعة للفروع</p>
-                                <div id="cityDashList" class="xfer-dash-list">
-                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
-                                </div>
-                                <div class="xfer-dash-top" id="cityDashTop"></div>
-                            </div>
+                        <div class="xfer-dash xfer-dash--single">
                             <div class="xfer-dash-card xfer-dash-card--account">
                                 <h3>حساب كل شركة حسب المدن</h3>
                                 <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها</p>
@@ -2132,16 +2135,56 @@
             apexChartsByEl.set(el, chart);
         }
 
+        function isoAddDays(iso, days) {
+            const dt = parseIsoDateOnly(iso);
+            if (!dt) return '';
+            dt.setUTCDate(dt.getUTCDate() + days);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        /** Monday (UTC) of the week containing the ISO date. */
+        function weekStartMondayIso(iso) {
+            const dt = parseIsoDateOnly(iso);
+            if (!dt) return '';
+            const day = dt.getUTCDay(); // 0 Sun .. 6 Sat
+            const diff = (day + 6) % 7; // days since Monday
+            dt.setUTCDate(dt.getUTCDate() - diff);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        function weekRangeLabel(weekStartIso) {
+            const start = parseIsoDateOnly(weekStartIso);
+            if (!start) return weekStartIso;
+            const end = new Date(start);
+            end.setUTCDate(start.getUTCDate() + 6);
+            const fmt = (d) => `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+            return `${fmt(start)}–${fmt(end)}`;
+        }
+
         function draftsTrendRows(drafts) {
             const map = new Map();
             (drafts || []).forEach((d) => {
                 const iso = draftEventIso(d);
                 if (!iso) return;
-                map.set(iso, (map.get(iso) || 0) + 1);
+                const week = weekStartMondayIso(iso);
+                if (!week) return;
+                map.set(week, (map.get(week) || 0) + 1);
             });
-            return Array.from(map.entries())
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([date, count]) => ({ date, count }));
+            const keys = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
+            if (!keys.length) return [];
+
+            const rows = [];
+            let cur = keys[0];
+            const last = keys[keys.length - 1];
+            while (cur && cur <= last) {
+                rows.push({
+                    weekStart: cur,
+                    date: weekRangeLabel(cur),
+                    count: map.get(cur) || 0
+                });
+                cur = isoAddDays(cur, 7);
+            }
+            return rows;
         }
 
         function renderTrendChart(drafts) {
@@ -2152,23 +2195,68 @@
                 el.innerHTML = '<div class="saas-empty">لا توجد بيانات اتجاه بعد</div>';
                 return;
             }
+            const maxCount = Math.max(...rows.map((r) => r.count), 0);
             renderApex(el, {
-                chart: { type: 'area', height: 280, toolbar: { show: false }, background: 'transparent', fontFamily: 'Inter, sans-serif' },
+                chart: {
+                    type: 'bar',
+                    height: 260,
+                    toolbar: { show: false },
+                    background: 'transparent',
+                    fontFamily: 'Inter, sans-serif'
+                },
                 theme: { mode: 'dark' },
-                stroke: { curve: 'smooth', width: 2.5, colors: ['#3B82F6'] },
-                fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0.02 } },
+                plotOptions: {
+                    bar: {
+                        borderRadius: 8,
+                        columnWidth: rows.length <= 4 ? '42%' : '58%',
+                        dataLabels: { position: 'top' }
+                    }
+                },
                 colors: ['#3B82F6'],
-                dataLabels: { enabled: false },
-                grid: { borderColor: 'rgba(255,255,255,0.06)', strokeDashArray: 3 },
-                series: [{ name: 'مذكرات', data: rows.map((r) => r.count) }],
+                dataLabels: {
+                    enabled: true,
+                    offsetY: -16,
+                    style: { colors: ['#E2E8F0'], fontSize: '11px', fontWeight: 700 },
+                    formatter: (val) => (val ? String(val) : '')
+                },
+                grid: {
+                    borderColor: 'rgba(255,255,255,0.06)',
+                    strokeDashArray: 3,
+                    padding: { top: 12, bottom: 0 }
+                },
+                series: [{ name: 'مذكرات / أسبوع', data: rows.map((r) => r.count) }],
                 xaxis: {
                     categories: rows.map((r) => r.date),
-                    labels: { style: { colors: '#94A3B8', fontSize: '11px' } },
+                    labels: {
+                        style: { colors: '#94A3B8', fontSize: '11px' },
+                        rotate: rows.length > 6 ? -35 : 0,
+                        rotateAlways: rows.length > 6
+                    },
                     axisBorder: { show: false },
-                    axisTicks: { show: false }
+                    axisTicks: { show: false },
+                    title: {
+                        text: 'الأسبوع',
+                        style: { color: '#64748B', fontSize: '11px', fontWeight: 500 }
+                    }
                 },
-                yaxis: { labels: { style: { colors: '#94A3B8', fontSize: '11px' } } },
-                tooltip: { theme: 'dark' }
+                yaxis: {
+                    min: 0,
+                    max: maxCount <= 2 ? 4 : undefined,
+                    forceNiceScale: true,
+                    tickAmount: Math.min(5, Math.max(2, maxCount || 2)),
+                    labels: {
+                        style: { colors: '#94A3B8', fontSize: '11px' },
+                        formatter: (val) => String(Math.round(val))
+                    },
+                    title: {
+                        text: 'عدد المذكرات',
+                        style: { color: '#64748B', fontSize: '11px', fontWeight: 500 }
+                    }
+                },
+                tooltip: {
+                    theme: 'dark',
+                    y: { formatter: (val) => `${val} مذكرة` }
+                }
             });
         }
 
