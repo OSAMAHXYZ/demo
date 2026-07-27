@@ -962,6 +962,50 @@
         .admin-restore-actions input[type="file"] {
             display: none;
         }
+        .company-filter-chip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 12px;
+            margin-bottom: 14px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(235, 10, 30, 0.4);
+            background: linear-gradient(135deg, rgba(235, 10, 30, 0.16), rgba(255,255,255,0.03));
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+            animation: adminRise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .company-filter-chip.hidden { display: none !important; }
+        .company-filter-chip .label {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #fda4af;
+        }
+        .company-filter-chip .name {
+            font-family: 'Changa', 'Tajawal', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #fff;
+        }
+        .company-filter-chip .meta {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-inline-start: auto;
+        }
+        .pct-legend-row.is-clickable {
+            cursor: pointer;
+        }
+        .pct-legend-row.is-clickable:hover {
+            background: rgba(235, 10, 30, 0.12);
+            border-color: rgba(235, 10, 30, 0.35);
+        }
+        .pct-legend-row.is-active,
+        .xfer-dash-row.is-active,
+        .xfer-account-item.is-active {
+            border-color: rgba(235, 10, 30, 0.65) !important;
+            background: rgba(235, 10, 30, 0.14) !important;
+            box-shadow: 0 0 0 1px rgba(235, 10, 30, 0.25);
+        }
         @media (max-width: 900px) {
             .admin-filter-grid { grid-template-columns: 1fr 1fr; }
             .admin-filter-actions { grid-column: 1 / -1; }
@@ -1331,6 +1375,13 @@
                 </div>
             </div>
             <p class="admin-filter-meta" id="trackFilterMeta">عرض كل البيانات بدون فلتر تاريخ</p>
+        </div>
+
+        <div class="company-filter-chip hidden" id="companyFilterChip">
+            <span class="label">عرض شركة فقط</span>
+            <span class="name" id="companyFilterName">—</span>
+            <span class="meta" id="companyFilterMeta"></span>
+            <button type="button" class="hub-btn hub-btn--sm" id="btnClearCompanyScope">إظهار كل الشركات</button>
         </div>
 
         <section class="hub-section hub-fold" id="statsFold" data-fold>
@@ -2052,7 +2103,7 @@
             return el ? String(el.value || '').trim() : '';
         }
 
-        function filteredDrafts() {
+        function dateScopedDrafts() {
             const legacy = getXferDateFilter();
             let list = allDrafts || [];
             if (legacy) {
@@ -2074,28 +2125,48 @@
             return list.filter((d) => vins.has(normVinKey(d.vin)));
         }
 
-        function filteredQueue() {
-            const vins = scopedVinSet();
-            if (!vins) return allQueue || [];
-            if (!vins.size) return [];
-            return (allQueue || []).filter((q) => vins.has(normVinKey(q.vin)));
+        function companyVinSet() {
+            if (!selectedCompany) return null;
+            const set = new Set();
+            dateScopedDrafts().forEach((d) => {
+                if (draftCompanyName(d) !== selectedCompany) return;
+                const vin = normVinKey(d.vin);
+                if (vin) set.add(vin);
+            });
+            return set;
         }
 
-        function filteredVehicleList() {
-            const { type, from, to } = getTrackFilter();
-            if (!from && !to) return allVehicles || [];
+        function filteredDrafts() {
+            let list = dateScopedDrafts();
+            if (selectedCompany) {
+                list = list.filter((d) => draftCompanyName(d) === selectedCompany);
+            }
+            return list;
+        }
 
-            const vins = scopedVinSet() || new Set();
+        function filteredQueue() {
+            let queue;
+            const vins = scopedVinSet();
+            if (!vins) queue = allQueue || [];
+            else if (!vins.size) queue = [];
+            else queue = (allQueue || []).filter((q) => vins.has(normVinKey(q.vin)));
+
+            const companyVins = companyVinSet();
+            if (companyVins) {
+                queue = queue.filter((q) => companyVins.has(normVinKey(q.vin)));
+            }
+            return queue;
+        }
+
+        function vehiclesFromVinSet(vins) {
             const byVin = vehicleByVin();
             const list = [];
-
-            vins.forEach((vin) => {
+            (vins || new Set()).forEach((vin) => {
                 const v = byVin.get(vin);
                 if (v) {
                     list.push(v);
                     return;
                 }
-                // Stub from draft/queue when VIN not in inventory (common after mixed imports)
                 const draft = (allDrafts || []).find((d) => normVinKey(d.vin) === vin);
                 const q = (allQueue || []).find((item) => normVinKey(item.vin) === vin);
                 list.push({
@@ -2112,6 +2183,23 @@
                     deliveryNoteDate: draft ? draftEventIso(draft) : ''
                 });
             });
+            return list;
+        }
+
+        function filteredVehicleList() {
+            const { type, from, to } = getTrackFilter();
+            const companyVins = companyVinSet();
+
+            if (!from && !to) {
+                if (companyVins) return vehiclesFromVinSet(companyVins);
+                return allVehicles || [];
+            }
+
+            let vins = scopedVinSet() || new Set();
+            if (companyVins) {
+                vins = new Set([...vins].filter((vin) => companyVins.has(vin)));
+            }
+            const list = vehiclesFromVinSet(vins);
 
             if (type === 'proforma' || type === 'invoice') {
                 return list.sort((a, b) =>
@@ -2119,6 +2207,25 @@
                 );
             }
             return list;
+        }
+
+        function updateCompanyFilterChip() {
+            const chip = document.getElementById('companyFilterChip');
+            const nameEl = document.getElementById('companyFilterName');
+            const metaEl = document.getElementById('companyFilterMeta');
+            if (!chip) return;
+            if (!selectedCompany) {
+                chip.classList.add('hidden');
+                return;
+            }
+            chip.classList.remove('hidden');
+            if (nameEl) nameEl.textContent = selectedCompany;
+            if (metaEl) {
+                const drafts = filteredDrafts().length;
+                const queue = filteredQueue().length;
+                const delivered = filteredQueue().filter((q) => q.agentStatus === 'delivered').length;
+                metaEl.textContent = `${drafts} مسودة · ${queue} في القائمة · ${delivered} تم الترحيل`;
+            }
         }
 
         function updateTrackFilterHint() {
@@ -2151,14 +2258,19 @@
             const still = queue - delivered;
             const withP = (allVehicles || []).filter((v) => v.proformaDate).length;
             const withI = (allVehicles || []).filter((v) => v.invoiceDate).length;
+            const companyBit = selectedCompany
+                ? ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`
+                : '';
 
             if (!from && !to) {
-                meta.innerHTML = `عرض الكل · <strong>${(allDrafts || []).length}</strong> مسودة · <strong>${(allVehicles || []).length}</strong> مركبة · تواريخ Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                meta.innerHTML = `عرض الكل${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> مسودة · <strong>${vehicles}</strong> مركبة · تواريخ Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                updateCompanyFilterChip();
                 return;
             }
-            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong> · 
+            meta.innerHTML = `فلتر <strong>${typeLabel}</strong> من <strong>${from || '…'}</strong> إلى <strong>${to || '…'}</strong>${companyBit} · 
                 <strong>${vehicles}</strong> سيارة · <strong>${drafts}</strong> مسودة · قائمة <strong>${queue}</strong> 
                 (تم الترحيل <strong>${delivered}</strong> · متبقي <strong>${still}</strong>)`;
+            updateCompanyFilterChip();
         }
 
         function computeQueueStats(queue) {
@@ -2227,7 +2339,7 @@
         function draftsForCompany(company) {
             const key = String(company || '').trim();
             if (!key) return [];
-            return filteredDrafts().filter((d) => draftCompanyName(d) === key);
+            return dateScopedDrafts().filter((d) => draftCompanyName(d) === key);
         }
 
         function highlightSelectedCompany() {
@@ -2236,26 +2348,28 @@
             });
         }
 
-        function showCompanyRecords(company) {
-            selectedCompany = String(company || '').trim();
+        function renderCompanyRecordsPanel(company) {
             const panel = document.getElementById('companyRecordsPanel');
             const title = document.getElementById('companyRecordsTitle');
             const meta = document.getElementById('companyRecordsMeta');
             const tbody = document.getElementById('companyRecordsBody');
+            if (!panel || !tbody) return;
             highlightSelectedCompany();
 
-            if (!selectedCompany) {
+            if (!company) {
                 panel.classList.add('hidden');
                 tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">اختر شركة</td></tr>';
                 return;
             }
 
-            const rows = draftsForCompany(selectedCompany);
+            const rows = draftsForCompany(company);
             panel.classList.remove('hidden');
-            title.textContent = selectedCompany;
-            meta.textContent = rows.length
-                ? `${rows.length} سجل محفوظ من المذكرات المطبوعة`
-                : 'لا توجد سجلات لهذه الشركة';
+            if (title) title.textContent = company;
+            if (meta) {
+                meta.textContent = rows.length
+                    ? `${rows.length} سجل — كل بيانات هذه الشركة ضمن الفلتر`
+                    : 'لا توجد سجلات لهذه الشركة';
+            }
 
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">لا توجد سجلات</td></tr>';
@@ -2298,8 +2412,31 @@
                     );
                 });
             });
+        }
 
-            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        /** Click company name → show only that company's data everywhere. Click again to clear. */
+        function showCompanyRecords(company) {
+            const next = String(company || '').trim();
+            selectedCompany = selectedCompany && selectedCompany === next ? '' : next;
+            updateCompanyFilterChip();
+            refreshTransferDashboard();
+            openFold('xferDashSection');
+            openFold('draftsSection');
+            openFold('queueSection');
+            if (selectedCompany) {
+                renderCompanyRecordsPanel(selectedCompany);
+                const panel = document.getElementById('companyRecordsPanel');
+                if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                renderCompanyRecordsPanel('');
+            }
+        }
+
+        function clearCompanyScope() {
+            selectedCompany = '';
+            updateCompanyFilterChip();
+            refreshTransferDashboard();
+            renderCompanyRecordsPanel('');
         }
 
         function tallyField(drafts, getter) {
@@ -2410,7 +2547,11 @@
                 const pct = Math.round((row.count / total) * 1000) / 10;
                 const color = row.color || CHART_COLORS[i % CHART_COLORS.length];
                 const pctClass = row.pctClass ? ` ${row.pctClass}` : '';
-                return `<div class="pct-legend-row">
+                const clickable = options.clickableCompanies && row.name !== 'أخرى';
+                const active = clickable && selectedCompany === row.name ? ' is-active' : '';
+                const clickClass = clickable ? ' is-clickable' : '';
+                const dataAttr = clickable ? ` data-company="${escapeHtml(row.name)}"` : '';
+                return `<div class="pct-legend-row${clickClass}${active}"${dataAttr} ${clickable ? 'role="button" tabindex="0"' : ''}>
                     <span class="pct-swatch" style="background:${color}"></span>
                     <span class="pct-legend-name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</span>
                     <span class="pct-legend-pct${pctClass}">${pct}%</span>
@@ -2420,6 +2561,19 @@
                     </div>
                 </div>`;
             }).join('');
+
+            if (options.clickableCompanies) {
+                legendEl.querySelectorAll('[data-company]').forEach((el) => {
+                    const open = () => showCompanyRecords(el.dataset.company);
+                    el.addEventListener('click', open);
+                    el.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            open();
+                        }
+                    });
+                });
+            }
 
             if (options.stripEl) {
                 options.stripEl.innerHTML = slices.map((row) => {
@@ -2584,7 +2738,8 @@
             if (!rows.length) {
                 listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText || 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'}</div>`;
                 topEl.innerHTML = '';
-                document.getElementById('companyRecordsPanel').classList.add('hidden');
+                if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
+                else renderCompanyRecordsPanel('');
                 return;
             }
 
@@ -2616,22 +2771,21 @@
 
             const companyCount = rows.length;
             const cityPairs = rows.reduce((sum, row) => sum + row.cities.length, 0);
-            topEl.innerHTML = `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة محفوظة — اضغط شركة لعرض السجلات`;
+            topEl.innerHTML = selectedCompany
+                ? `عرض شركة واحدة فقط — <strong>${escapeHtml(selectedCompany)}</strong> · اضغط نفس الاسم للإلغاء`
+                : `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة — اضغط اسم الشركة لعرض بياناتها فقط`;
 
-            if (selectedCompany && draftsForCompany(selectedCompany).length) {
-                showCompanyRecords(selectedCompany);
-            } else if (selectedCompany) {
-                selectedCompany = '';
-                document.getElementById('companyRecordsPanel').classList.add('hidden');
-            }
+            if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
+            else highlightSelectedCompany();
         }
 
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
+            const navList = dateScopedDrafts();
             const { type } = getTrackFilter();
             const dateFiltered = hasActiveTrackFilter() || Boolean(getXferDateFilter());
             const emptyDate = 'لا توجد بيانات في هذه الفترة حسب الفلتر';
-            let companies = tallyField(list, (d) => draftCompanyName(d));
+            let companies = tallyField(navList, (d) => draftCompanyName(d));
             let cities = tallyField(list, (d) => (d.payload || {}).branch_to);
             const vehicles = filteredVehicleList();
             const products = tallyField(
@@ -2646,33 +2800,47 @@
             const cityTitle = cityCard?.querySelector('h3');
             const citySub = cityCard?.querySelector('.pct-chart-sub');
 
-            // Flexible charts: for Proforma/Invoice scope, prefer product split when no memo companies yet
             let companyRows = companies;
             let cityRows = cities;
+            const usingProductFallback = !companies.length && !selectedCompany;
             if (type === 'proforma' || type === 'invoice') {
-                if (companyTitle) companyTitle.textContent = companies.length
-                    ? 'نسبة شركات النقل ضمن النطاق'
-                    : 'نسبة المنتجات ضمن نطاق التاريخ';
+                if (companyTitle) companyTitle.textContent = selectedCompany
+                    ? `اختر شركة أخرى أو ألغِ التصفية`
+                    : companies.length
+                        ? 'نسبة شركات النقل ضمن النطاق'
+                        : 'نسبة المنتجات ضمن نطاق التاريخ';
                 if (companySub) {
-                    companySub.textContent = companies.length
-                        ? 'من المسودات المرتبطة بسيارات Proforma/Invoice في الفترة'
-                        : 'توزيع المنتجات للسيارات في Sales Raw ضمن الفترة';
+                    companySub.textContent = selectedCompany
+                        ? `حالياً: ${selectedCompany} — اضغط شركة أخرى للتبديل`
+                        : companies.length
+                            ? 'من المسودات المرتبطة بسيارات Proforma/Invoice — اضغط شركة للتصفية'
+                            : 'توزيع المنتجات للسيارات في Sales Raw ضمن الفترة';
                 }
-                if (!companies.length) companyRows = products;
+                if (usingProductFallback) companyRows = products;
                 if (cityTitle) cityTitle.textContent = cities.length
-                    ? 'نسبة الفروع / المدن ضمن النطاق'
+                    ? (selectedCompany ? 'فروع / مدن هذه الشركة' : 'نسبة الفروع / المدن ضمن النطاق')
                     : 'توزيع المنتجات (بديل)';
                 if (citySub) {
                     citySub.textContent = cities.length
-                        ? 'الفروع من المذكرات للسيارات داخل نطاق التاريخ'
+                        ? (selectedCompany
+                            ? 'الفروع من مذكرات الشركة المختارة'
+                            : 'الفروع من المذكرات للسيارات داخل نطاق التاريخ')
                         : 'يظهر عند عدم وجود فروع في المسودات بعد';
                 }
                 if (!cities.length && products.length) cityRows = products;
             } else {
-                if (companyTitle) companyTitle.textContent = 'نسبة كل شركة من الإجمالي';
-                if (companySub) companySub.textContent = 'حسب المذكرات ضمن فلتر تاريخ الترحيل';
-                if (cityTitle) cityTitle.textContent = 'نسبة الفروع / المدن';
-                if (citySub) citySub.textContent = 'توزيع التحويل حسب الفرع ضمن الفترة';
+                if (companyTitle) companyTitle.textContent = selectedCompany
+                    ? 'الشركات — اختر للتبديل'
+                    : 'نسبة كل شركة من الإجمالي';
+                if (companySub) companySub.textContent = selectedCompany
+                    ? `معروض فقط: ${selectedCompany} — اضغط نفس الشركة للإلغاء`
+                    : 'حسب المذكرات ضمن الفلتر — اضغط اسم الشركة لعرض بياناتها فقط';
+                if (cityTitle) cityTitle.textContent = selectedCompany
+                    ? 'فروع / مدن هذه الشركة'
+                    : 'نسبة الفروع / المدن';
+                if (citySub) citySub.textContent = selectedCompany
+                    ? 'توزيع التحويل لفروع الشركة المختارة'
+                    : 'توزيع التحويل حسب الفرع ضمن الفترة';
             }
 
             const statusRows = deliveryStatusRows();
@@ -2684,15 +2852,18 @@
 
             const statusSub = document.querySelector('.pct-chart-card--status .pct-chart-sub');
             if (statusSub) {
-                statusSub.textContent = type === 'delivery_note'
-                    ? 'تم الترحيل مقابل المتبقي للمذكرات/القائمة في فترة تاريخ الترحيل'
-                    : type === 'proforma'
-                        ? 'حالة الترحيل لسيارات تاريخ البروفورما ضمن الفترة'
-                        : 'حالة الترحيل لسيارات تاريخ الفاتورة ضمن الفترة';
+                statusSub.textContent = selectedCompany
+                    ? `حالة الترحيل لشركة ${selectedCompany} فقط`
+                    : type === 'delivery_note'
+                        ? 'تم الترحيل مقابل المتبقي للمذكرات/القائمة في فترة تاريخ الترحيل'
+                        : type === 'proforma'
+                            ? 'حالة الترحيل لسيارات تاريخ البروفورما ضمن الفترة'
+                            : 'حالة الترحيل لسيارات تاريخ الفاتورة ضمن الفترة';
             }
 
             renderDeliveredOfTotalChart();
 
+            const companyClickable = Boolean(companies.length);
             renderPercentChart(
                 document.getElementById('statusPctDonut'),
                 document.getElementById('statusPctLegend'),
@@ -2709,7 +2880,8 @@
                 document.getElementById('companyPctDonut'),
                 document.getElementById('companyPctLegend'),
                 companyRows,
-                dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة'
+                dateFiltered ? emptyDate : 'لا توجد شركات بعد — اطبع مذكرة مع اختيار الشركة',
+                { clickableCompanies: companyClickable }
             );
             renderPercentChart(
                 document.getElementById('cityPctDonut'),
@@ -2733,15 +2905,15 @@
                 cities.length ? 'فرع' : 'منتج'
             );
             renderCompanyCityBreakdown(
-                list,
+                navList,
                 dateFiltered ? emptyDate : 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'
             );
+            updateCompanyFilterChip();
             highlightSelectedCompany();
         }
 
-        document.getElementById('btnClearCompanyFilter').addEventListener('click', () => {
-            showCompanyRecords('');
-        });
+        document.getElementById('btnClearCompanyFilter')?.addEventListener('click', clearCompanyScope);
+        document.getElementById('btnClearCompanyScope')?.addEventListener('click', clearCompanyScope);
 
         document.getElementById('btnTrackApply')?.addEventListener('click', applyTrackFilter);
         document.getElementById('btnTrackToday')?.addEventListener('click', () => {
