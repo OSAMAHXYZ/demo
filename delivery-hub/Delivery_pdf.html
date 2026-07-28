@@ -1705,7 +1705,7 @@
         const CLAIMED_VIN_KEY = 'deliveryClaimedVin';
         const AGENT_PASSWORD = '1234';
         const NORMAL_PREVIEW_IMAGE = '../images/muthakara-tarhil-form.png';
-        const WAREHOUSE_PREVIEW_IMAGE = 'file:///C:/Users/oossa/.cursor/projects/c-Users-oossa-Desktop-demo/assets/c__Users_oossa_AppData_Roaming_Cursor_User_workspaceStorage_60a6b73875a8f0a95ebd0506fdfd0cfa_images_image-8b7701bd-bea1-455f-ae97-26f223f86678.png';
+        const WAREHOUSE_PREVIEW_IMAGE = '/api/delivery-note/check-note-preview';
         let workspaceQueue = [];
         // In-memory only — reload always requires login again
         let agentSession = { username: '', password: '' };
@@ -1778,6 +1778,7 @@
             const previewTitle = document.getElementById('previewTitle');
             const previewImg = document.getElementById('previewFormImage');
             const topFields = document.getElementById('warehouseTopFields');
+            const overlay = document.getElementById('overlayFields');
             if (btn) {
                 btn.textContent = warehousePrintMode
                     ? 'تم اختيار نموذج المستودع - اضغط طباعة'
@@ -1793,6 +1794,7 @@
                 previewImg.src = warehousePrintMode ? WAREHOUSE_PREVIEW_IMAGE : NORMAL_PREVIEW_IMAGE;
                 previewImg.alt = warehousePrintMode ? 'نموذج التسليم في المستودع' : 'مذكرة ترحيل';
             }
+            if (overlay) overlay.style.display = warehousePrintMode ? 'none' : '';
             if (topFields) topFields.hidden = !warehousePrintMode;
         }
 

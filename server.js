@@ -13,6 +13,7 @@ const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
+const DELIVERY_CHECK_PREVIEW_IMAGE = 'C:/Users/oossa/.cursor/projects/c-Users-oossa-Desktop-demo/assets/c__Users_oossa_AppData_Roaming_Cursor_User_workspaceStorage_60a6b73875a8f0a95ebd0506fdfd0cfa_images_image-ee6a53dc-200c-41c5-a150-6e99f8976c17.png';
 const PORT = Number(process.env.PORT) || 3000;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء']);
@@ -1446,6 +1447,13 @@ app.post('/api/delivery-note/generate-check-note', (req, res) => {
     console.error('[generate-check-note]', err);
     res.status(500).json({ error: err.message || 'فشل إنشاء ملف delivery_check_note' });
   }
+});
+
+app.get('/api/delivery-note/check-note-preview', (_req, res) => {
+  if (!fs.existsSync(DELIVERY_CHECK_PREVIEW_IMAGE)) {
+    return res.status(404).json({ error: 'Warehouse preview image not found' });
+  }
+  res.sendFile(DELIVERY_CHECK_PREVIEW_IMAGE);
 });
 
 // Serve React admin dashboard (built assets)
