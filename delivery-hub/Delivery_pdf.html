@@ -1510,6 +1510,10 @@
         function doPrintA4() {
             const isAdminMode = new URLSearchParams(location.search).get('adminExport') === '1'
                 || new URLSearchParams(location.search).get('adminEdit') === '1';
+            if (warehousePrintMode && !isAdminMode) {
+                generateWarehouseCheckNoteAndComplete();
+                return;
+            }
             if (!isAdminMode && !validateListOnlyFields()) return;
             const vin = getClaimedVin();
             const agent = getAgent();
@@ -1563,6 +1567,7 @@
                     }
                 }
                 clearClaimedVin();
+                clearDeliveryForm();
                 openWorkspace();
                 setTimeout(() => {
                     const statusEl = document.getElementById('queueStatus');
@@ -1609,7 +1614,7 @@
 
         form.addEventListener('input', updatePreview);
         form.addEventListener('change', updatePreview);
-        form.addEventListener('reset', () => setTimeout(() => { setTodayDates(); syncCarCount(); setStatus(''); }, 0));
+        form.addEventListener('reset', () => setTimeout(() => { setTodayDates(); syncCarCount(); setWarehousePrintMode(false); setStatus(''); }, 0));
 
         document.getElementById('btnToday').addEventListener('click', setTodayDates);
         document.getElementById('transfer_date').addEventListener('change', syncDayFromTransferDate);
@@ -1629,6 +1634,7 @@
         // In-memory only — reload always requires login again
         let agentSession = { username: '', password: '' };
         let claimedVinSession = '';
+        let warehousePrintMode = false;
 
         async function readJsonResponse(res) {
             const text = await res.text();
@@ -1679,6 +1685,25 @@
 
         function clearClaimedVin() {
             claimedVinSession = '';
+        }
+
+        function clearDeliveryForm() {
+            form.reset();
+            buildOverlay();
+            setTodayDates();
+            syncCarCount();
+            setWarehousePrintMode(false);
+            setStatus('');
+        }
+
+        function setWarehousePrintMode(enabled) {
+            warehousePrintMode = Boolean(enabled);
+            const btn = document.getElementById('btnWarehouseDelivery');
+            if (!btn) return;
+            btn.textContent = warehousePrintMode
+                ? 'تم اختيار نموذج المستودع - اضغط طباعة'
+                : 'في حال استلام العميل من المستودع يرجى الضغط';
+            btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
         }
 
         function showView(which) {
@@ -1914,8 +1939,8 @@
         function openMainWithVin(item) {
             setClaimedVin(item.vin);
             showView('app');
+            clearDeliveryForm();
             prefillClaimedVin(item);
-            setTodayDates();
         }
 
         function openWorkspace() {
@@ -2209,6 +2234,7 @@
         });
 
         document.getElementById('btnBackWorkspace').addEventListener('click', () => {
+            setWarehousePrintMode(false);
             clearClaimedVin();
             openWorkspace();
         });
@@ -2283,8 +2309,9 @@
                 attachments.dispatchEvent(new Event('input', { bubbles: true }));
                 attachments.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            setWarehousePrintMode(true);
             if (typeof updatePreview === 'function') updatePreview();
-            setStatus('تم تعبئة التسليم في المستودع: مستودع الهاتفية · الفرع المستودع', 'ok');
+            setStatus('تم تفعيل نموذج المستودع. عند الضغط على طباعة سيتم استخدام delivery_check_note', 'ok');
         }
 
         async function generateWarehouseCheckNoteAndComplete() {
@@ -2327,8 +2354,11 @@
                     }).catch(() => null);
                 }
 
+                setWarehousePrintMode(false);
                 setStatus('تم إنشاء delivery_check_note وتحديث السيارة إلى تم الترحيل', 'ok');
                 if (vin) clearClaimedVin();
+                clearDeliveryForm();
+                openWorkspace();
             } catch (err) {
                 setStatus(err.message || 'فشل إنشاء delivery_check_note', 'err');
             } finally {
@@ -2505,7 +2535,7 @@
         initSearchableSelect('branch_to');
         initSearchableSelect('company_rep');
         ensureWarehouseCompanyOption();
-        document.getElementById('btnWarehouseDelivery')?.addEventListener('click', generateWarehouseCheckNoteAndComplete);
+        document.getElementById('btnWarehouseDelivery')?.addEventListener('click', applyWarehouseDelivery);
         loadDeliveryOptions().finally(() => initGate());
     </script>
     <script src="delivery-hub-live.js"></script>
