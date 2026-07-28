@@ -295,13 +295,33 @@
         }
 
         @media print {
-            body { background: #fff; padding: 0; }
-            .page-nav, .form-col, .hero, .no-print { display: none !important; }
-            .layout { display: block; max-width: none; }
+            html, body {
+                background: #fff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                min-height: 0 !important;
+                height: auto !important;
+            }
+            .page-nav,
+            .form-col,
+            .hero,
+            .no-print,
+            #gateLogin,
+            #agentWorkspace,
+            #mainApp,
+            .vin-modal,
+            .stock-action-modal {
+                display: none !important;
+            }
+            .layout { display: block; max-width: none; padding: 0; margin: 0; }
             .preview-panel { position: static; width: 100%; }
-            .preview-card { border: none; box-shadow: none; padding: 0; }
+            .preview-card { border: none; box-shadow: none; padding: 0; margin: 0; }
             #printSheet { display: none !important; }
-            #printCopies { display: block; }
+            #printCopies {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
             .print-sheet {
                 width: var(--form-w);
                 height: var(--form-h);
@@ -312,9 +332,19 @@
                 margin: 0;
                 overflow: hidden;
                 page-break-after: avoid;
+                break-inside: avoid;
+                page-break-inside: avoid;
             }
-            .print-copy { page-break-after: always; }
-            .print-copy:last-child { page-break-after: auto; }
+            .print-copy {
+                page-break-after: always;
+                break-after: page;
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            .print-copy:last-child {
+                page-break-after: auto;
+                break-after: auto;
+            }
             .overlay-field { font-size: 17px; font-weight: 700; }
             .overlay-field.overlay-field--header-date { font-size: 15px; font-weight: 700; }
             .overlay-field.overlay-field--chassis {
@@ -905,6 +935,11 @@
             }
             body.print-carbonless .print-sheet {
                 background: transparent;
+            }
+            body.print-carbonless #mainApp,
+            body.print-carbonless #gateLogin,
+            body.print-carbonless #agentWorkspace {
+                display: none !important;
             }
         }
     </style>
@@ -1500,7 +1535,8 @@
                 clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
                 copiesContainer.appendChild(clone);
             }
-            document.body.appendChild(copiesContainer);
+            // First in DOM so print engines don't leave a blank leading page.
+            document.body.insertBefore(copiesContainer, document.body.firstChild);
 
             const finish = async () => {
                 cleanupPrintCopies();
@@ -2251,6 +2287,55 @@
             setStatus('تم تعبئة التسليم في المستودع: مستودع الهاتفية · الفرع المستودع', 'ok');
         }
 
+        async function generateWarehouseCheckNoteAndComplete() {
+            applyWarehouseDelivery();
+            if (!validateListOnlyFields()) return;
+            const vin = getClaimedVin();
+            const payload = collectPayload();
+            setStatus('جاري إنشاء delivery_check_note…', 'ok');
+            const btn = document.getElementById('btnWarehouseDelivery');
+            if (btn) btn.disabled = true;
+            try {
+                const res = await fetch('/api/delivery-note/generate-check-note', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const err = await readJsonResponse(res);
+                    throw new Error(err.error || `Server error ${res.status}`);
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `delivery_check_note_${Date.now()}.docx`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                const agent = getAgent();
+                if (vin && agent.username && agent.password) {
+                    await fetch('/api/delivery-coordinator/complete-print', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: agent.username,
+                            password: agent.password,
+                            vin,
+                            draft: payload
+                        })
+                    }).catch(() => null);
+                }
+
+                setStatus('تم إنشاء delivery_check_note وتحديث السيارة إلى تم الترحيل', 'ok');
+                if (vin) clearClaimedVin();
+            } catch (err) {
+                setStatus(err.message || 'فشل إنشاء delivery_check_note', 'err');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         function isExactSearchableOption(fieldId, value) {
             const v = String(value || '').trim();
             if (!v) return false;
@@ -2420,7 +2505,7 @@
         initSearchableSelect('branch_to');
         initSearchableSelect('company_rep');
         ensureWarehouseCompanyOption();
-        document.getElementById('btnWarehouseDelivery')?.addEventListener('click', applyWarehouseDelivery);
+        document.getElementById('btnWarehouseDelivery')?.addEventListener('click', generateWarehouseCheckNoteAndComplete);
         loadDeliveryOptions().finally(() => initGate());
     </script>
     <script src="delivery-hub-live.js"></script>

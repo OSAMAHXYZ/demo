@@ -1625,7 +1625,7 @@
                             <div class="saas-section__head">
                                 <div>
                                     <h3>زمن التسليم حسب الشركة (Lead Time)</h3>
-                                    <p>الفرق بالأيام بين تاريخ الفاتورة (Invoice) وتاريخ مذكرة الترحيل — اختر شركة لعرض سياراتها</p>
+                                    <p>الفرق بالأيام = Invoice (من Sales Raw) − Delivery Note. الصفوف الفارغة تعني أن تاريخ الفاتورة غير موجود في ملف المخزون لهذا VIN</p>
                                 </div>
                                 <div class="invoice-status-stats" id="invoiceStatusStats" aria-live="polite"></div>
                             </div>
@@ -2434,29 +2434,114 @@
             const companies = new Set();
             const branches = new Set();
             const coordinators = new Set();
-            dateScopedDrafts().forEach((d) => {
+            const statusCounts = { delivered: 0, pending: 0, available: 0 };
+
+            const draftsInRange = dateScopedDrafts();
+            const draftsForBranch = selectedCompany
+                ? draftsInRange.filter((d) => draftCompanyName(d) === selectedCompany)
+                : draftsInRange;
+
+            draftsInRange.forEach((d) => {
                 const c = draftCompanyName(d);
                 if (c) companies.add(c);
+                const who = String(d.assignedTo || '').trim();
+                if (who) coordinators.add(who);
+            });
+
+            draftsForBranch.forEach((d) => {
                 const b = String((d.payload || {}).branch_to || '').trim();
-                if (b) branches.add(b);
-                if (d.assignedTo) coordinators.add(d.assignedTo);
+                if (!b || b === '-' || b.startsWith('- اختر') || b.startsWith('—')) return;
+                branches.add(b);
+                const who = String(d.assignedTo || '').trim();
+                if (who) coordinators.add(who);
             });
-            (managedCompanies || []).forEach((c) => companies.add(c));
-            (managedCities || []).forEach((b) => branches.add(b));
-            (allQueue || []).forEach((q) => {
-                if (q.assignedTo) coordinators.add(q.assignedTo);
-                if (q.location) branches.add(q.location);
+
+            // Queue VINs in the same date scope (accuracy from live entered status)
+            const vins = scopedVinSet();
+            let queueInRange = allQueue || [];
+            if (vins) {
+                queueInRange = vins.size
+                    ? queueInRange.filter((q) => vins.has(normVinKey(q.vin)))
+                    : [];
+            }
+            if (selectedCompany) {
+                const companyVins = companyVinSet();
+                if (companyVins) {
+                    queueInRange = queueInRange.filter((q) => companyVins.has(normVinKey(q.vin)));
+                }
+            }
+
+            queueInRange.forEach((q) => {
+                const loc = String(q.location || '').trim();
+                if (loc) branches.add(loc);
+                const who = String(q.assignedTo || '').trim();
+                if (who) coordinators.add(who);
+                if (q.agentStatus === 'delivered') statusCounts.delivered += 1;
+                else if (q.status === 'available') statusCounts.available += 1;
+                else statusCounts.pending += 1;
             });
+
+            const status = [];
+            if (statusCounts.delivered) status.push({ value: 'delivered', label: 'Delivered' });
+            if (statusCounts.pending) status.push({ value: 'pending', label: 'Pending' });
+            if (statusCounts.available) status.push({ value: 'available', label: 'Available' });
+
             return {
                 company: Array.from(companies).sort((a, b) => a.localeCompare(b, 'ar')),
                 branch: Array.from(branches).sort((a, b) => a.localeCompare(b, 'ar')),
-                status: [
-                    { value: 'delivered', label: 'Delivered' },
-                    { value: 'pending', label: 'Pending' },
-                    { value: 'available', label: 'Available' }
-                ],
+                status,
                 coordinator: Array.from(coordinators).sort((a, b) => a.localeCompare(b, 'ar'))
             };
+        }
+
+        /** Drop filter values that no longer exist in the entered data. */
+        function pruneStaleUiFilters() {
+            const companies = new Set();
+            const draftsInRange = dateScopedDrafts();
+            draftsInRange.forEach((d) => {
+                const c = draftCompanyName(d);
+                if (c) companies.add(c);
+            });
+            if (selectedCompany && !companies.has(selectedCompany)) selectedCompany = '';
+
+            const branches = new Set();
+            const coordinators = new Set();
+            draftsInRange.forEach((d) => {
+                const c = draftCompanyName(d);
+                const who = String(d.assignedTo || '').trim();
+                if (who) coordinators.add(who);
+                if (selectedCompany && c !== selectedCompany) return;
+                const b = String((d.payload || {}).branch_to || '').trim();
+                if (b && b !== '-' && !b.startsWith('- اختر') && !b.startsWith('—')) branches.add(b);
+            });
+
+            const vins = scopedVinSet();
+            let queueInRange = allQueue || [];
+            if (vins) {
+                queueInRange = vins.size
+                    ? queueInRange.filter((q) => vins.has(normVinKey(q.vin)))
+                    : [];
+            }
+            if (selectedCompany) {
+                const companyVins = companyVinSet();
+                if (companyVins) {
+                    queueInRange = queueInRange.filter((q) => companyVins.has(normVinKey(q.vin)));
+                }
+            }
+            const statusPresent = new Set();
+            queueInRange.forEach((q) => {
+                const loc = String(q.location || '').trim();
+                if (loc) branches.add(loc);
+                const who = String(q.assignedTo || '').trim();
+                if (who) coordinators.add(who);
+                if (q.agentStatus === 'delivered') statusPresent.add('delivered');
+                else if (q.status === 'available') statusPresent.add('available');
+                else statusPresent.add('pending');
+            });
+
+            if (uiFilters.branch && !branches.has(uiFilters.branch)) uiFilters.branch = '';
+            if (uiFilters.coordinator && !coordinators.has(uiFilters.coordinator)) uiFilters.coordinator = '';
+            if (uiFilters.status && !statusPresent.has(uiFilters.status)) uiFilters.status = '';
         }
 
         function currentSelectValue(kind) {
@@ -2470,6 +2555,14 @@
         function setSelectValue(kind, value) {
             if (kind === 'company') {
                 selectedCompany = value || '';
+                // Branch list is company-scoped — clear if it no longer applies
+                if (uiFilters.branch) {
+                    const stillValid = dateScopedDrafts().some((d) =>
+                        draftCompanyName(d) === selectedCompany
+                        && String((d.payload || {}).branch_to || '').trim() === uiFilters.branch
+                    );
+                    if (!selectedCompany || !stillValid) uiFilters.branch = '';
+                }
                 return;
             }
             if (kind === 'branch') uiFilters.branch = value || '';
@@ -3075,6 +3168,7 @@
 
         function refreshTransferDashboard() {
             updateXferDateLabel();
+            pruneStaleUiFilters();
             const draftsBase = filteredDrafts();
             const queueBase = filteredQueue();
             if (selectedCompany && !draftsBase.some((d) => draftCompanyName(d) === selectedCompany)) {
@@ -3409,6 +3503,26 @@
             return '—';
         }
 
+        function findVehicleForVin(byVin, vin) {
+            const key = normVinKey(vin);
+            if (!key) return null;
+            if (byVin.has(key)) return byVin.get(key);
+            const compact = key.replace(/[^A-Z0-9]/g, '');
+            if (!compact) return null;
+            for (const [k, v] of byVin.entries()) {
+                if (String(k).replace(/[^A-Z0-9]/g, '') === compact) return v;
+            }
+            return null;
+        }
+
+        function leadTimeMissingLabel(row) {
+            if (row.days != null) return '';
+            if (!row.invoiceDate && !row.deliveryNoteDate) return 'بدون تاريخين';
+            if (!row.invoiceDate) return 'بدون Invoice';
+            if (!row.deliveryNoteDate) return 'بدون Delivery Note';
+            return 'تاريخ غير صالح';
+        }
+
         /** Build VIN lead-time rows for a company (invoice date → delivery note date). */
         function companyLeadTimeRows(company) {
             const key = String(company || '').trim();
@@ -3420,7 +3534,7 @@
                 if (draftCompanyName(d) !== key) return;
                 const vin = normVinKey(d.vin);
                 if (!vin) return;
-                const vehicle = byVin.get(vin);
+                const vehicle = findVehicleForVin(byVin, vin);
                 const noteDate = draftEventIso(d) || String(vehicle?.deliveryNoteDate || '').slice(0, 10);
                 const invoiceDate = String(vehicle?.invoiceDate || '').slice(0, 10);
                 const existing = map.get(vin);
@@ -3438,7 +3552,6 @@
                 }
             });
 
-            // Also include filtered vehicles for this company via draft linkage only
             return Array.from(map.values()).sort((a, b) => {
                 const da = a.days == null ? 9999 : a.days;
                 const db = b.days == null ? 9999 : b.days;
@@ -3540,8 +3653,8 @@
                     </div>
                     <div class="invoice-status-row" style="opacity:0.85">
                         <div class="invoice-status-row__head">
-                            <span>بدون تاريخ كامل</span>
-                            <small>${stats.missing} VIN بدون Invoice أو Delivery Note</small>
+                            <span>بدون Invoice في Sales Raw</span>
+                            <small>${stats.missing} VIN لا يُحسب زمنها (غالباً تاريخ الفاتورة فارغ)</small>
                         </div>
                     </div>
                 `;
@@ -3552,17 +3665,19 @@
                     tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">لا توجد سيارات لهذه الشركة في النطاق</td></tr>';
                 } else {
                     tbody.innerHTML = rows.map((r) => {
+                        const missing = leadTimeMissingLabel(r);
                         const badgeClass = r.bucket === '1' ? 'lead-badge--1'
                             : r.bucket === '2' ? 'lead-badge--2'
                                 : r.bucket === '3plus' ? 'lead-badge--3'
                                     : 'lead-badge--na';
                         const daysText = r.days == null ? '—' : String(r.days);
-                        return `<tr>
+                        const badgeText = missing || leadTimeBucketLabel(r.bucket);
+                        return `<tr title="${escapeHtml(missing || '')}">
                             <td class="hub-vin">${escapeHtml(r.vin)}</td>
                             <td>${escapeHtml(r.invoiceDate || '—')}</td>
                             <td>${escapeHtml(r.deliveryNoteDate || '—')}</td>
                             <td><strong>${escapeHtml(daysText)}</strong></td>
-                            <td><span class="lead-badge ${badgeClass}">${escapeHtml(leadTimeBucketLabel(r.bucket))}</span></td>
+                            <td><span class="lead-badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
                             <td>${escapeHtml(r.product || '—')}</td>
                         </tr>`;
                     }).join('');

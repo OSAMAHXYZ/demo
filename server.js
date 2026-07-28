@@ -12,6 +12,7 @@ const Docxtemplater = require('docxtemplater');
 const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
+const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
 const PORT = Number(process.env.PORT) || 3000;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء']);
@@ -861,11 +862,11 @@ function flattenDeliveryNote(payload) {
   return data;
 }
 
-function generateDocx(payload) {
-  if (!fs.existsSync(TEMPLATE_FILE)) {
-    throw new Error('قالب Word غير موجود (templates/delivery_note_template.docx)');
+function generateDocxWithTemplate(templateFile, payload) {
+  if (!fs.existsSync(templateFile)) {
+    throw new Error(`قالب Word غير موجود (${path.basename(templateFile)})`);
   }
-  const content = fs.readFileSync(TEMPLATE_FILE);
+  const content = fs.readFileSync(templateFile);
   const zip = new PizZip(content);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
@@ -877,6 +878,14 @@ function generateDocx(payload) {
     type: 'nodebuffer',
     compression: 'DEFLATE'
   });
+}
+
+function generateDocx(payload) {
+  return generateDocxWithTemplate(TEMPLATE_FILE, payload);
+}
+
+function generateDeliveryCheckDocx(payload) {
+  return generateDocxWithTemplate(DELIVERY_CHECK_TEMPLATE_FILE, payload);
 }
 
 // ——— HTTP app ———
@@ -1421,6 +1430,21 @@ app.post('/api/delivery-note/generate', (req, res) => {
   } catch (err) {
     console.error('[generate]', err);
     res.status(500).json({ error: err.message || 'فشل إنشاء الملف' });
+  }
+});
+
+app.post('/api/delivery-note/generate-check-note', (req, res) => {
+  try {
+    const buf = generateDeliveryCheckDocx(req.body || {});
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="delivery_check_note_${Date.now()}.docx"`);
+    res.send(buf);
+  } catch (err) {
+    console.error('[generate-check-note]', err);
+    res.status(500).json({ error: err.message || 'فشل إنشاء ملف delivery_check_note' });
   }
 });
 
