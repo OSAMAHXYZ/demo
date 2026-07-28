@@ -1019,7 +1019,7 @@
             background-attachment: fixed;
         }
         .admin-console .hub-shell {
-            width: min(1280px, calc(100% - 24px));
+            width: min(1560px, calc(100% - 24px));
             max-width: none;
             margin-inline: auto;
             padding: 12px 0 64px;
@@ -1481,6 +1481,7 @@
             <span class="meta" id="companyFilterMeta"></span>
         </div>
 
+        <div class="admin-overview-row">
         <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
 
         <section class="saas-hero saas-card" id="heroProgressCard" aria-label="تقدم الترحيل">
@@ -1502,6 +1503,7 @@
             </div>
             <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
         </section>
+        </div>
 
         <section class="hub-section hub-fold" id="statsFold" data-fold hidden>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
@@ -1575,8 +1577,8 @@
             </div>
         </section>
 
-        <section class="hub-section hub-section--xfer hub-fold" id="xferDashSection" data-fold>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+        <section class="hub-section hub-section--xfer hub-fold is-open" id="xferDashSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="true">
                 <span class="hub-fold-title">لوحة النقل — Companies & Cities</span>
                 <span class="hub-fold-meta">
                     <span class="hub-hint">من مسودات الطباعة المحفوظة</span>
@@ -1587,7 +1589,8 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <div class="saas-section saas-card xfer-trend-card" style="margin:0 0 16px;box-shadow:none">
+                        <div class="xfer-dash-mosaic">
+                        <div class="saas-section saas-card xfer-trend-card xfer-mosaic-cell" style="margin:0;box-shadow:none">
                             <div class="saas-section__head">
                                 <div>
                                     <h3>اتجاهات الترحيل</h3>
@@ -1597,19 +1600,41 @@
                             <div id="trendChartEl" class="xfer-trend-chart"></div>
                         </div>
 
-                        <div class="saas-section saas-card" style="margin:0 0 16px;box-shadow:none">
+                        <div class="saas-section saas-card xfer-mosaic-cell" style="margin:0;box-shadow:none">
                             <div class="saas-section__head">
                                 <div>
                                     <h3>أبرز الشركات</h3>
                                     <p>اضغط شركة لعرض بياناتها فقط</p>
                                 </div>
                             </div>
-                            <div id="companyDashList" class="saas-company-list xfer-dash-list">
+                            <div id="companyDashList" class="saas-company-list xfer-dash-list xfer-dash-list--compact">
                                 <div class="saas-empty">لا توجد بيانات بعد</div>
                             </div>
                             <div class="xfer-dash-top" id="companyDashTop" hidden></div>
                         </div>
-                        <div class="pct-chart-card pct-chart-card--status saas-section" style="margin:0" hidden>
+
+                        <div class="xfer-branches-row xfer-mosaic-span-2">
+                            <div class="pct-chart-card saas-section" style="margin:0">
+                                <h3>الفروع / المدن</h3>
+                                <p class="pct-chart-sub">ترتيب أفقي حسب عدد التحويلات</p>
+                                <div id="cityPctDonut" class="xfer-city-chart"></div>
+                                <div class="pct-legend" id="cityPctLegend" hidden></div>
+                            </div>
+                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
+                                <div class="saas-section__head">
+                                    <div>
+                                        <h3>ترتيب الفروع</h3>
+                                        <p>قائمة سريعة للفروع</p>
+                                    </div>
+                                </div>
+                                <div id="cityDashList" class="saas-company-list xfer-dash-list xfer-dash-list--compact">
+                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                </div>
+                                <div class="xfer-dash-top" id="cityDashTop"></div>
+                            </div>
+                        </div>
+
+                        <div class="pct-chart-card pct-chart-card--status saas-section xfer-mosaic-span-2" style="margin:0" hidden>
                             <h3>حالة الترحيل</h3>
                             <p class="pct-chart-sub">تم الترحيل مقابل المتبقي</p>
                             <div class="pct-chart-layout">
@@ -1621,7 +1646,7 @@
                             </div>
                         </div>
 
-                        <div class="saas-section saas-card" id="invoiceStatusCard" style="margin:0 0 16px;box-shadow:none">
+                        <div class="saas-section saas-card xfer-mosaic-span-2" id="invoiceStatusCard" style="margin:0;box-shadow:none">
                             <div class="saas-section__head">
                                 <div>
                                     <h3>زمن التسليم حسب الشركة (Lead Time)</h3>
@@ -1635,48 +1660,32 @@
                                     <option value="">— اختر شركة —</option>
                                 </select>
                             </div>
-                            <div class="invoice-status-layout">
-                                <div id="invoiceStatusChart" style="min-height:260px"></div>
-                                <div class="invoice-status-bars" id="invoiceStatusBars"></div>
-                            </div>
-                            <div class="hub-table-wrap" style="margin-top:16px">
-                                <table class="hub-table saas-table">
-                                    <thead>
-                                        <tr>
-                                            <th>VIN</th>
-                                            <th>Invoice</th>
-                                            <th>Delivery Note</th>
-                                            <th>الأيام</th>
-                                            <th>الفئة</th>
-                                            <th>المنتج</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="leadTimeCarsBody">
-                                        <tr><td colspan="6" class="hub-empty">اختر شركة لعرض السيارات وزمن التسليم</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div class="xfer-branches-row" style="margin:0 0 16px">
-                            <div class="pct-chart-card saas-section" style="margin:0">
-                                <h3>الفروع / المدن</h3>
-                                <p class="pct-chart-sub">ترتيب أفقي حسب عدد التحويلات</p>
-                                <div id="cityPctDonut" style="min-height:280px"></div>
-                                <div class="pct-legend" id="cityPctLegend" hidden></div>
-                            </div>
-                            <div class="saas-section saas-card" style="margin:0;box-shadow:none">
-                                <div class="saas-section__head">
-                                    <div>
-                                        <h3>ترتيب الفروع</h3>
-                                        <p>قائمة سريعة للفروع</p>
+                            <div class="lead-time-grid">
+                                <div class="lead-time-charts">
+                                    <div class="invoice-status-layout invoice-status-layout--compact">
+                                        <div id="invoiceStatusChart" class="invoice-status-chart"></div>
+                                        <div class="invoice-status-bars" id="invoiceStatusBars"></div>
                                     </div>
                                 </div>
-                                <div id="cityDashList" class="saas-company-list xfer-dash-list">
-                                    <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
+                                <div class="hub-table-wrap lead-time-table-wrap">
+                                    <table class="hub-table saas-table">
+                                        <thead>
+                                            <tr>
+                                                <th>VIN</th>
+                                                <th>Invoice</th>
+                                                <th>Delivery Note</th>
+                                                <th>الأيام</th>
+                                                <th>الفئة</th>
+                                                <th>المنتج</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="leadTimeCarsBody">
+                                            <tr><td colspan="6" class="hub-empty">اختر شركة لعرض السيارات وزمن التسليم</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div class="xfer-dash-top" id="cityDashTop"></div>
                             </div>
+                        </div>
                         </div>
                         <div class="pct-chart-card" hidden>
                             <div class="pct-donut-wrap" id="companyPctDonut"></div>
@@ -2199,7 +2208,7 @@
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: 260,
+                    height: 220,
                     toolbar: { show: false },
                     background: 'transparent',
                     fontFamily: 'Inter, sans-serif'
@@ -2270,7 +2279,7 @@
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: Math.max(260, top.length * 36),
+                    height: Math.max(200, top.length * 32),
                     toolbar: { show: false },
                     background: 'transparent',
                     fontFamily: 'Inter, sans-serif'
@@ -3692,7 +3701,7 @@
             renderApex(chartEl, {
                 chart: {
                     type: 'donut',
-                    height: 260,
+                    height: 220,
                     toolbar: { show: false },
                     background: 'transparent',
                     fontFamily: 'Inter, sans-serif'

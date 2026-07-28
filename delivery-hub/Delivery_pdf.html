@@ -184,6 +184,17 @@
             border-color: rgba(37, 99, 235, 0.18);
             background: linear-gradient(180deg, #f8fbff, #ffffff);
         }
+        body.warehouse-form-mode .preview-card {
+            border-color: rgba(37, 99, 235, 0.35);
+            box-shadow: 0 10px 32px rgba(37, 99, 235, 0.12);
+        }
+        body.warehouse-form-mode .preview-card h2 {
+            color: #1d4ed8;
+        }
+        body.warehouse-form-mode .overlay-field {
+            font-size: 12px;
+            font-weight: 700;
+        }
 
         .preview-panel {
             position: sticky;
@@ -1136,11 +1147,28 @@
                 </section>
 
                 <section class="card warehouse-top-fields no-print" id="warehouseTopFields" hidden>
-                    <h2>بيانات نموذج المستودع — Warehouse Check Form</h2>
+                    <h2>بيانات قائمة فحص التسليم — delivery_check_note</h2>
+                    <p class="hint">هذه الحقول تظهر على نموذج المستودع. عبّئها ثم اطبع — الشاسيه من جدول السيارات أدناه.</p>
                     <div class="grid grid-2">
                         <div>
                             <label for="wh_branch_name">اسم الفرع</label>
                             <input id="wh_branch_name" name="wh_branch_name" type="text" placeholder="اسم الفرع">
+                        </div>
+                        <div>
+                            <label for="wh_city_address">المدينة - العنوان</label>
+                            <input id="wh_city_address" name="wh_city_address" type="text" placeholder="المدينة - العنوان">
+                        </div>
+                        <div>
+                            <label for="wh_branch_cr">السجل التجاري للفرع</label>
+                            <input id="wh_branch_cr" name="wh_branch_cr" type="text" placeholder="السجل التجاري">
+                        </div>
+                        <div>
+                            <label for="wh_branch_phone">هاتف الفرع</label>
+                            <input id="wh_branch_phone" name="wh_branch_phone" type="text" placeholder="هاتف الفرع">
+                        </div>
+                        <div>
+                            <label for="wh_center_code">كود المركز</label>
+                            <input id="wh_center_code" name="wh_center_code" type="text" placeholder="كود المركز">
                         </div>
                         <div>
                             <label for="wh_statement_no">رقم التسليم / البيان</label>
@@ -1155,7 +1183,7 @@
                             <input id="wh_user_name" name="wh_user_name" type="text" placeholder="اسم المستخدم">
                         </div>
                         <div>
-                            <label for="wh_user_phone">هاتف</label>
+                            <label for="wh_user_phone">هاتف المالك / المستخدم</label>
                             <input id="wh_user_phone" name="wh_user_phone" type="text" placeholder="05xxxxxxxx">
                         </div>
                         <div>
@@ -1167,16 +1195,8 @@
                             <input id="wh_user_id" name="wh_user_id" type="text" placeholder="رقم الهوية">
                         </div>
                         <div>
-                            <label for="wh_technicians_name">اسم الفنيين</label>
-                            <input id="wh_technicians_name" name="wh_technicians_name" type="text" placeholder="اسم الفنيين">
-                        </div>
-                        <div>
-                            <label for="wh_branch_cr">السجل التجاري للفرع</label>
-                            <input id="wh_branch_cr" name="wh_branch_cr" type="text" placeholder="السجل التجاري">
-                        </div>
-                        <div>
-                            <label for="wh_branch_phone">هاتف الفرع</label>
-                            <input id="wh_branch_phone" name="wh_branch_phone" type="text" placeholder="هاتف الفرع">
+                            <label for="wh_technicians_name">مسؤول التسليم</label>
+                            <input id="wh_technicians_name" name="wh_technicians_name" type="text" placeholder="مسؤول التسليم">
                         </div>
                     </div>
                 </section>
@@ -1260,9 +1280,11 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260728a"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
-        const FIELD_LAYOUT = MUTHAKARA_FIELDS;
+        let FIELD_LAYOUT = MUTHAKARA_FIELDS;
+        let warehousePrintMode = false;
         const carsBody = document.getElementById('carsBody');
         const statusEl = document.getElementById('status');
         const form = document.getElementById('deliveryForm');
@@ -1345,16 +1367,24 @@
             if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
             if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
+            if (tag === 'wh_chassis') left = `${x * 100}%`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
         function buildOverlay() {
-            const [cx, cy, cw, ch] = MEMO_NUMBER_COVER;
-            const coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
+            Object.keys(fieldEls).forEach((k) => { delete fieldEls[k]; });
+            FIELD_LAYOUT = warehousePrintMode
+                ? (typeof CHECK_NOTE_FIELDS !== 'undefined' ? CHECK_NOTE_FIELDS : [])
+                : MUTHAKARA_FIELDS;
+            let coverHtml = '';
+            if (!warehousePrintMode) {
+                const [cx, cy, cw, ch] = MEMO_NUMBER_COVER;
+                coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
+            }
             overlayFields.innerHTML = coverHtml + FIELD_LAYOUT.map(([tag, x, y, w, h, align]) => {
                 const dateCls = /^date_[dmy]$/.test(tag) ? ' overlay-field--header-date' : '';
                 const invoiceCls = tag === 'invoice_number' ? ' overlay-field--invoice' : '';
-                const chassisCls = /_chassis$/.test(tag) ? ' overlay-field--chassis' : '';
+                const chassisCls = /chassis/.test(tag) ? ' overlay-field--chassis' : '';
                 const cls = 'overlay-field align-' + (align || 'end') + dateCls + invoiceCls + chassisCls;
                 return `<div class="${cls}" data-tag="${tag}" style="${overlayPositionStyle(tag, x, y, w, h)}"></div>`;
             }).join('');
@@ -1393,7 +1423,9 @@
                 attachments: fd.get('attachments')?.trim(),
                 warehouse: {
                     branch_name: fd.get('wh_branch_name')?.trim(),
+                    city_address: fd.get('wh_city_address')?.trim(),
                     statement_no: fd.get('wh_statement_no')?.trim(),
+                    center_code: fd.get('wh_center_code')?.trim(),
                     owner_name: fd.get('wh_owner_name')?.trim(),
                     user_name: fd.get('wh_user_name')?.trim(),
                     user_phone: fd.get('wh_user_phone')?.trim(),
@@ -1404,6 +1436,51 @@
                     branch_phone: fd.get('wh_branch_phone')?.trim()
                 },
                 cars
+            };
+        }
+
+        function formatWhPrintDate(iso) {
+            const s = String(iso || '').trim();
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!m) return s;
+            return `${m[3]}.${m[2]}.${m[1]}`;
+        }
+
+        function formatWhPrintTime() {
+            try {
+                return new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Asia/Riyadh',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }).format(new Date());
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function buildCheckNoteOverlayData(body) {
+            const wh = body.warehouse || {};
+            const cars = Array.isArray(body.cars) ? body.cars : [];
+            const chassis = (cars.find((c) => String(c.chassis || '').trim()) || {}).chassis || '';
+            const owner = wh.owner_name || body.customer_name || '';
+            return {
+                wh_branch_name: wh.branch_name || '',
+                wh_city_address: wh.city_address || '',
+                wh_branch_cr: wh.branch_cr || '',
+                wh_branch_phone: wh.branch_phone || '',
+                wh_center_code: wh.center_code || wh.statement_no || '',
+                wh_print_date: formatWhPrintDate(body.doc_date || body.transfer_date),
+                wh_owner_name: owner,
+                wh_user_name: wh.user_name || '',
+                wh_user_phone: wh.user_phone || '',
+                wh_user_email: wh.user_email || '',
+                wh_user_id: wh.user_id || '',
+                wh_print_time: formatWhPrintTime(),
+                wh_chassis: chassis,
+                wh_guest_name: owner,
+                wh_technicians_name: wh.technicians_name || ''
             };
         }
 
@@ -1447,7 +1524,10 @@
         }
 
         function updatePreview() {
-            const data = buildFlatData(collectPayload());
+            const payload = collectPayload();
+            const data = warehousePrintMode
+                ? buildCheckNoteOverlayData(payload)
+                : buildFlatData(payload);
             Object.keys(fieldEls).forEach((tag) => {
                 fieldEls[tag].textContent = data[tag] || '';
             });
@@ -1584,14 +1664,12 @@
         function doPrintA4() {
             const isAdminMode = new URLSearchParams(location.search).get('adminExport') === '1'
                 || new URLSearchParams(location.search).get('adminEdit') === '1';
-            if (warehousePrintMode && !isAdminMode) {
-                generateWarehouseCheckNoteAndComplete();
-                return;
-            }
             if (!isAdminMode && !validateListOnlyFields()) return;
             const vin = getClaimedVin();
             const agent = getAgent();
             const isAdminExport = isAdminMode;
+            const isWarehouse = warehousePrintMode && !isAdminMode;
+
             // Rebuild overlay positions, then clone for print (browser print ignores CSS transform/px quirks)
             buildOverlay();
             updatePreview();
@@ -1604,7 +1682,8 @@
             const printSheet = document.getElementById('printSheet');
             const copiesContainer = document.createElement('div');
             copiesContainer.id = 'printCopies';
-            const copies = 3;
+            // Check-note form: one filled page. Transfer memo: 3 copies.
+            const copies = isWarehouse ? 1 : 3;
             for (let i = 0; i < copies; i++) {
                 const clone = printSheet.cloneNode(true);
                 clone.classList.add('print-copy');
@@ -1620,6 +1699,13 @@
                 cleanupPrintCopies();
                 window.removeEventListener('afterprint', finish);
                 if (isAdminExport) return;
+                if (isWarehouse) {
+                    try {
+                        await downloadWarehouseCheckNoteFile();
+                    } catch (err) {
+                        console.error('check-note download failed', err);
+                    }
+                }
                 if (vin && agent.username && agent.password) {
                     try {
                         const res = await fetch('/api/delivery-coordinator/complete-print', {
@@ -1646,7 +1732,9 @@
                 setTimeout(() => {
                     const statusEl = document.getElementById('queueStatus');
                     if (statusEl) {
-                        statusEl.textContent = 'تم الطباعة — تم الترحيل';
+                        statusEl.textContent = isWarehouse
+                            ? 'تم طباعة قائمة الفحص وتحميل delivery_check_note — تم الترحيل'
+                            : 'تم الطباعة — تم الترحيل';
                         statusEl.className = 'ws-toast ok';
                     }
                 }, 400);
@@ -1658,27 +1746,33 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!validateListOnlyFields()) return;
-            setStatus('جاري إنشاء ملف Word…');
+            const useCheckNote = warehousePrintMode;
+            setStatus(useCheckNote ? 'جاري إنشاء delivery_check_note…' : 'جاري إنشاء ملف Word…');
             const btn = document.getElementById('btnDownload');
             btn.disabled = true;
             try {
-                const res = await fetch('/api/delivery-note/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(collectPayload())
-                });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.error || `Server error ${res.status}`);
+                if (useCheckNote) {
+                    await downloadWarehouseCheckNoteFile();
+                    setStatus('تم تحميل delivery_check_note', 'ok');
+                } else {
+                    const res = await fetch('/api/delivery-note/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(collectPayload())
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error || `Server error ${res.status}`);
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `muthakara_tarhil_${Date.now()}.docx`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setStatus('تم التحميل — افتح الملف في Word واطبعه', 'ok');
                 }
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `muthakara_tarhil_${Date.now()}.docx`;
-                a.click();
-                URL.revokeObjectURL(url);
-                setStatus('تم التحميل — افتح الملف في Word واطبعه', 'ok');
             } catch (err) {
                 setStatus(err.message || 'فشل إنشاء الملف', 'err');
             } finally {
@@ -1705,12 +1799,12 @@
         const CLAIMED_VIN_KEY = 'deliveryClaimedVin';
         const AGENT_PASSWORD = '1234';
         const NORMAL_PREVIEW_IMAGE = '../images/muthakara-tarhil-form.png';
-        const WAREHOUSE_PREVIEW_IMAGE = '/api/delivery-note/check-note-preview';
+        const WAREHOUSE_PREVIEW_IMAGE = '../images/delivery-check-note-form.jpeg';
         let workspaceQueue = [];
         // In-memory only — reload always requires login again
         let agentSession = { username: '', password: '' };
         let claimedVinSession = '';
-        let warehousePrintMode = false;
+        // warehousePrintMode declared near top with FIELD_LAYOUT
 
         async function readJsonResponse(res) {
             const text = await res.text();
@@ -1774,28 +1868,43 @@
 
         function setWarehousePrintMode(enabled) {
             warehousePrintMode = Boolean(enabled);
+            document.body.classList.toggle('warehouse-form-mode', warehousePrintMode);
             const btn = document.getElementById('btnWarehouseDelivery');
             const previewTitle = document.getElementById('previewTitle');
             const previewImg = document.getElementById('previewFormImage');
             const topFields = document.getElementById('warehouseTopFields');
             const overlay = document.getElementById('overlayFields');
+            const printBtn = document.getElementById('btnPrint');
+            const downloadBtn = document.getElementById('btnDownload');
             if (btn) {
                 btn.textContent = warehousePrintMode
-                    ? 'تم اختيار نموذج المستودع - اضغط طباعة'
+                    ? 'تم اختيار نموذج المستودع (delivery_check_note)'
                     : 'في حال استلام العميل من المستودع يرجى الضغط';
                 btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
             }
             if (previewTitle) {
                 previewTitle.textContent = warehousePrintMode
-                    ? 'معاينة نموذج التسليم في المستودع'
+                    ? 'معاينة قائمة فحص التسليم — delivery_check_note'
                     : 'معاينة مذكرة الترحيل';
             }
             if (previewImg) {
                 previewImg.src = warehousePrintMode ? WAREHOUSE_PREVIEW_IMAGE : NORMAL_PREVIEW_IMAGE;
-                previewImg.alt = warehousePrintMode ? 'نموذج التسليم في المستودع' : 'مذكرة ترحيل';
+                previewImg.alt = warehousePrintMode ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل';
             }
-            if (overlay) overlay.style.display = warehousePrintMode ? 'none' : '';
+            if (overlay) overlay.style.display = '';
             if (topFields) topFields.hidden = !warehousePrintMode;
+            if (printBtn) {
+                printBtn.textContent = warehousePrintMode
+                    ? '🖨 طباعة قائمة الفحص + delivery_check_note'
+                    : '🖨 طباعة A4';
+            }
+            if (downloadBtn) {
+                downloadBtn.textContent = warehousePrintMode
+                    ? '⬇ تحميل delivery_check_note'
+                    : '⬇ تحميل Word';
+            }
+            buildOverlay();
+            updatePreview();
         }
 
         function showView(which) {
@@ -2396,6 +2505,7 @@
             const companyInput = document.getElementById('company_rep');
             const branchInput = document.getElementById('branch_to');
             const attachments = document.getElementById('attachments');
+            const agent = getAgent();
             if (companyInput) {
                 companyInput.value = WAREHOUSE_COMPANY;
                 companyInput.classList.remove('is-invalid');
@@ -2415,61 +2525,44 @@
                 attachments.dispatchEvent(new Event('input', { bubbles: true }));
                 attachments.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            const ownerEl = document.getElementById('wh_owner_name');
+            const customerEl = document.getElementById('customer_name');
+            if (ownerEl && !ownerEl.value.trim() && customerEl?.value.trim()) {
+                ownerEl.value = customerEl.value.trim();
+            }
+            const techEl = document.getElementById('wh_technicians_name');
+            if (techEl && !techEl.value.trim() && agent.username) {
+                techEl.value = agent.username;
+            }
             setWarehousePrintMode(true);
-            if (typeof updatePreview === 'function') updatePreview();
-            setStatus('تم تفعيل نموذج المستودع. عند الضغط على طباعة سيتم استخدام delivery_check_note', 'ok');
+            document.getElementById('warehouseTopFields')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setStatus('تم فتح نموذج delivery_check_note — عبّئ البيانات ثم اطبع', 'ok');
+        }
+
+        async function downloadWarehouseCheckNoteFile() {
+            const payload = collectPayload();
+            const res = await fetch('/api/delivery-note/generate-check-note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+                const err = await readJsonResponse(res);
+                throw new Error(err.error || `Server error ${res.status}`);
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `delivery_check_note_${Date.now()}.docx`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         async function generateWarehouseCheckNoteAndComplete() {
             applyWarehouseDelivery();
             if (!validateListOnlyFields()) return;
-            const vin = getClaimedVin();
-            const payload = collectPayload();
-            setStatus('جاري إنشاء delivery_check_note…', 'ok');
-            const btn = document.getElementById('btnWarehouseDelivery');
-            if (btn) btn.disabled = true;
-            try {
-                const res = await fetch('/api/delivery-note/generate-check-note', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (!res.ok) {
-                    const err = await readJsonResponse(res);
-                    throw new Error(err.error || `Server error ${res.status}`);
-                }
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `delivery_check_note_${Date.now()}.docx`;
-                a.click();
-                URL.revokeObjectURL(url);
-
-                const agent = getAgent();
-                if (vin && agent.username && agent.password) {
-                    await fetch('/api/delivery-coordinator/complete-print', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            username: agent.username,
-                            password: agent.password,
-                            vin,
-                            draft: payload
-                        })
-                    }).catch(() => null);
-                }
-
-                setWarehousePrintMode(false);
-                setStatus('تم إنشاء delivery_check_note وتحديث السيارة إلى تم الترحيل', 'ok');
-                if (vin) clearClaimedVin();
-                clearDeliveryForm();
-                openWorkspace();
-            } catch (err) {
-                setStatus(err.message || 'فشل إنشاء delivery_check_note', 'err');
-            } finally {
-                if (btn) btn.disabled = false;
-            }
+            doPrintA4();
         }
 
         function isExactSearchableOption(fieldId, value) {

@@ -13,7 +13,7 @@ const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
-const DELIVERY_CHECK_PREVIEW_IMAGE = 'C:/Users/oossa/.cursor/projects/c-Users-oossa-Desktop-demo/assets/c__Users_oossa_AppData_Roaming_Cursor_User_workspaceStorage_60a6b73875a8f0a95ebd0506fdfd0cfa_images_image-ee6a53dc-200c-41c5-a150-6e99f8976c17.png';
+const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-note-form.jpeg');
 const PORT = Number(process.env.PORT) || 3000;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء']);
