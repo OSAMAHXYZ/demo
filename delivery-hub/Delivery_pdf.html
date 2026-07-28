@@ -42,9 +42,9 @@
         }
         .nav-btn:hover { border-color: var(--tot-primary); }
         .layout {
-            max-width: 920px; margin: 0 auto;
+            max-width: 1380px; margin: 0 auto;
             display: grid; gap: 20px;
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
             align-items: start;
             padding: 0 16px 48px;
         }
@@ -179,17 +179,21 @@
         .status.err { color: #b91c1c; }
         .status.ok { color: #15803d; }
         .hint { font-size: .75rem; color: var(--tot-muted); margin-top: 6px; }
+        .warehouse-top-fields[hidden] { display: none !important; }
+        .warehouse-top-fields {
+            border-color: rgba(37, 99, 235, 0.18);
+            background: linear-gradient(180deg, #f8fbff, #ffffff);
+        }
 
         .preview-panel {
-            /* Hidden on screen — kept full-size off-screen for correct A4 print layout */
-            position: fixed !important;
-            left: -10000px !important;
-            top: 0 !important;
-            width: 420px !important;
-            max-width: 420px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            z-index: -1 !important;
+            position: sticky;
+            top: calc(var(--nav-h) + 16px);
+            width: 100%;
+            max-width: 100%;
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 1;
+            align-self: start;
         }
         .preview-card {
             background: #fff; border: 1px solid var(--tot-line); border-radius: 16px;
@@ -202,6 +206,8 @@
         .print-sheet {
             position: relative;
             width: 100%;
+            max-width: 560px;
+            margin: 0 auto;
             aspect-ratio: 210 / 297;
             background: #fff;
             border: 1px solid #ddd;
@@ -288,6 +294,16 @@
         }
         .preview-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
         .preview-actions .btn { flex: 1; min-width: 120px; padding: 12px 16px; font-size: .85rem; }
+
+        @media (max-width: 1100px) {
+            .preview-panel {
+                position: static;
+                top: auto;
+            }
+            .print-sheet {
+                max-width: 100%;
+            }
+        }
 
         @page carbonless {
             size: var(--form-w) var(--form-h);
@@ -1119,6 +1135,52 @@
                     </div>
                 </section>
 
+                <section class="card warehouse-top-fields no-print" id="warehouseTopFields" hidden>
+                    <h2>بيانات نموذج المستودع — Warehouse Check Form</h2>
+                    <div class="grid grid-2">
+                        <div>
+                            <label for="wh_branch_name">اسم الفرع</label>
+                            <input id="wh_branch_name" name="wh_branch_name" type="text" placeholder="اسم الفرع">
+                        </div>
+                        <div>
+                            <label for="wh_statement_no">رقم التسليم / البيان</label>
+                            <input id="wh_statement_no" name="wh_statement_no" type="text" placeholder="رقم البيان">
+                        </div>
+                        <div>
+                            <label for="wh_owner_name">اسم المالك</label>
+                            <input id="wh_owner_name" name="wh_owner_name" type="text" placeholder="اسم المالك">
+                        </div>
+                        <div>
+                            <label for="wh_user_name">اسم المستخدم</label>
+                            <input id="wh_user_name" name="wh_user_name" type="text" placeholder="اسم المستخدم">
+                        </div>
+                        <div>
+                            <label for="wh_user_phone">هاتف</label>
+                            <input id="wh_user_phone" name="wh_user_phone" type="text" placeholder="05xxxxxxxx">
+                        </div>
+                        <div>
+                            <label for="wh_user_email">بريد إلكتروني</label>
+                            <input id="wh_user_email" name="wh_user_email" type="email" placeholder="name@example.com">
+                        </div>
+                        <div>
+                            <label for="wh_user_id">رقم الهوية</label>
+                            <input id="wh_user_id" name="wh_user_id" type="text" placeholder="رقم الهوية">
+                        </div>
+                        <div>
+                            <label for="wh_technicians_name">اسم الفنيين</label>
+                            <input id="wh_technicians_name" name="wh_technicians_name" type="text" placeholder="اسم الفنيين">
+                        </div>
+                        <div>
+                            <label for="wh_branch_cr">السجل التجاري للفرع</label>
+                            <input id="wh_branch_cr" name="wh_branch_cr" type="text" placeholder="السجل التجاري">
+                        </div>
+                        <div>
+                            <label for="wh_branch_phone">هاتف الفرع</label>
+                            <input id="wh_branch_phone" name="wh_branch_phone" type="text" placeholder="هاتف الفرع">
+                        </div>
+                    </div>
+                </section>
+
                 <section class="card">
                     <h2>جدول السيارات — Vehicles (up to 10)</h2>
                     <p class="hint">انقر على خانة الشاسية لاختيار VIN من البيانات المرفوعة — يُملأ الموديل وعدد السيارات تلقائياً</p>
@@ -1153,9 +1215,9 @@
 
         <aside class="preview-panel">
             <div class="preview-card">
-                <h2 class="no-print">معاينة مذكرة الترحيل</h2>
+                <h2 class="no-print" id="previewTitle">معاينة مذكرة الترحيل</h2>
                 <div class="print-sheet" id="printSheet">
-                    <img src="../images/muthakara-tarhil-form.png" alt="مذكرة ترحيل">
+                    <img id="previewFormImage" src="../images/muthakara-tarhil-form.png" alt="مذكرة ترحيل">
                     <div id="overlayFields" class="overlay-layer"></div>
                 </div>
                 <div class="preview-actions no-print" hidden>
@@ -1186,11 +1248,11 @@
             <h3 id="stockActionTitle">ماذا تريد أن تفعل؟</h3>
             <div class="stock-action-meta" id="stockActionVin"></div>
             <div class="stock-action-product" id="stockActionProduct"></div>
-            <p class="stock-action-sub" id="stockActionSub">اختر إصدار مذكرة الترحيل أو نقل السيارة للمخزون</p>
+            <p class="stock-action-sub" id="stockActionSub">اختر نوع الإجراء لهذه السيارة</p>
             <div class="stock-action-btns">
-                <button type="button" class="sa-issue" id="stockActionIssue">اصدار مذكرة الترحيل</button>
-                <button type="button" class="sa-return" id="stockActionSecondary">نقل للمخزون</button>
-                <button type="button" class="sa-cancel" id="stockActionCancel">إلغاء</button>
+                <button type="button" class="sa-issue" id="stockActionWarehouse">التسليم في المستودع</button>
+                <button type="button" class="sa-return" id="stockActionTransfer">الترحيل</button>
+                <button type="button" class="sa-cancel" id="stockActionBack">الرجوع للقائمة</button>
             </div>
         </div>
     </div>
@@ -1329,6 +1391,18 @@
                 car_count: String(filled || fd.get('car_count')?.trim() || ''),
                 branch_to: fd.get('branch_to')?.trim(),
                 attachments: fd.get('attachments')?.trim(),
+                warehouse: {
+                    branch_name: fd.get('wh_branch_name')?.trim(),
+                    statement_no: fd.get('wh_statement_no')?.trim(),
+                    owner_name: fd.get('wh_owner_name')?.trim(),
+                    user_name: fd.get('wh_user_name')?.trim(),
+                    user_phone: fd.get('wh_user_phone')?.trim(),
+                    user_email: fd.get('wh_user_email')?.trim(),
+                    user_id: fd.get('wh_user_id')?.trim(),
+                    technicians_name: fd.get('wh_technicians_name')?.trim(),
+                    branch_cr: fd.get('wh_branch_cr')?.trim(),
+                    branch_phone: fd.get('wh_branch_phone')?.trim()
+                },
                 cars
             };
         }
@@ -1630,6 +1704,8 @@
         const PASS_KEY = 'deliveryAgentPass';
         const CLAIMED_VIN_KEY = 'deliveryClaimedVin';
         const AGENT_PASSWORD = '1234';
+        const NORMAL_PREVIEW_IMAGE = '../images/muthakara-tarhil-form.png';
+        const WAREHOUSE_PREVIEW_IMAGE = 'file:///C:/Users/oossa/.cursor/projects/c-Users-oossa-Desktop-demo/assets/c__Users_oossa_AppData_Roaming_Cursor_User_workspaceStorage_60a6b73875a8f0a95ebd0506fdfd0cfa_images_image-8b7701bd-bea1-455f-ae97-26f223f86678.png';
         let workspaceQueue = [];
         // In-memory only — reload always requires login again
         let agentSession = { username: '', password: '' };
@@ -1699,11 +1775,25 @@
         function setWarehousePrintMode(enabled) {
             warehousePrintMode = Boolean(enabled);
             const btn = document.getElementById('btnWarehouseDelivery');
-            if (!btn) return;
-            btn.textContent = warehousePrintMode
-                ? 'تم اختيار نموذج المستودع - اضغط طباعة'
-                : 'في حال استلام العميل من المستودع يرجى الضغط';
-            btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
+            const previewTitle = document.getElementById('previewTitle');
+            const previewImg = document.getElementById('previewFormImage');
+            const topFields = document.getElementById('warehouseTopFields');
+            if (btn) {
+                btn.textContent = warehousePrintMode
+                    ? 'تم اختيار نموذج المستودع - اضغط طباعة'
+                    : 'في حال استلام العميل من المستودع يرجى الضغط';
+                btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
+            }
+            if (previewTitle) {
+                previewTitle.textContent = warehousePrintMode
+                    ? 'معاينة نموذج التسليم في المستودع'
+                    : 'معاينة مذكرة الترحيل';
+            }
+            if (previewImg) {
+                previewImg.src = warehousePrintMode ? WAREHOUSE_PREVIEW_IMAGE : NORMAL_PREVIEW_IMAGE;
+                previewImg.alt = warehousePrintMode ? 'نموذج التسليم في المستودع' : 'مذكرة ترحيل';
+            }
+            if (topFields) topFields.hidden = !warehousePrintMode;
         }
 
         function showView(which) {
@@ -1888,13 +1978,10 @@
             document.getElementById('stockActionVin').textContent = stockActionVin;
             document.getElementById('stockActionProduct').textContent = item.product || item.model || '—';
             const sub = document.getElementById('stockActionSub');
-            const secondary = document.getElementById('stockActionSecondary');
-            if (stockActionMode === 'available') {
-                sub.textContent = 'اختر إصدار مذكرة الترحيل أو نقل السيارة للمخزون';
-                secondary.textContent = 'نقل للمخزون';
-            } else {
-                sub.textContent = 'اصدار مذكرة للطباعة، أو أعد السيارة للقائمة المتاحة';
-                secondary.textContent = 'إرجاع السيارة للقائمة المتاحة';
+            if (sub) {
+                sub.textContent = stockActionMode === 'available'
+                    ? 'اختر: التسليم في المستودع أو الترحيل أو الرجوع للقائمة'
+                    : 'اختر نوع المذكرة لهذه السيارة أو ارجع للقائمة';
             }
             document.getElementById('stockActionModal').classList.add('open');
         }
@@ -2014,6 +2101,17 @@
                 setVal('branch_to', payload.branch_to);
             }
             setVal('attachments', payload.attachments);
+            const wh = payload.warehouse || {};
+            setVal('wh_branch_name', wh.branch_name);
+            setVal('wh_statement_no', wh.statement_no);
+            setVal('wh_owner_name', wh.owner_name);
+            setVal('wh_user_name', wh.user_name);
+            setVal('wh_user_phone', wh.user_phone);
+            setVal('wh_user_email', wh.user_email);
+            setVal('wh_user_id', wh.user_id);
+            setVal('wh_technicians_name', wh.technicians_name);
+            setVal('wh_branch_cr', wh.branch_cr);
+            setVal('wh_branch_phone', wh.branch_phone);
             const cars = Array.isArray(payload.cars) ? payload.cars : [];
             cars.forEach((row, i) => {
                 if (i > 9) return;
@@ -2192,7 +2290,7 @@
 
         document.getElementById('availableVinSearch').addEventListener('input', filterAvailableFleetByVin);
 
-        document.getElementById('stockActionIssue').addEventListener('click', async () => {
+        document.getElementById('stockActionWarehouse').addEventListener('click', async () => {
             const vin = stockActionVin;
             const mode = stockActionMode;
             closeStockAction();
@@ -2201,22 +2299,28 @@
                 const item = await claimWithStatus(vin, 'in_stock', { quiet: true });
                 if (!item) return;
                 startDeliveryNote(vin);
+                applyWarehouseDelivery();
                 return;
             }
             startDeliveryNote(vin);
+            applyWarehouseDelivery();
         });
-        document.getElementById('stockActionSecondary').addEventListener('click', async () => {
+
+        document.getElementById('stockActionTransfer').addEventListener('click', async () => {
             const vin = stockActionVin;
             const mode = stockActionMode;
             closeStockAction();
             if (!vin) return;
+            setWarehousePrintMode(false);
             if (mode === 'available') {
-                await claimWithStatus(vin, 'in_stock');
+                const item = await claimWithStatus(vin, 'in_stock', { quiet: true });
+                if (!item) return;
+                startDeliveryNote(vin);
                 return;
             }
-            await returnToQueue(vin, { skipConfirm: true });
+            startDeliveryNote(vin);
         });
-        document.getElementById('stockActionCancel').addEventListener('click', closeStockAction);
+        document.getElementById('stockActionBack').addEventListener('click', closeStockAction);
         document.getElementById('stockActionModal').addEventListener('click', (e) => {
             if (e.target.id === 'stockActionModal') closeStockAction();
         });
