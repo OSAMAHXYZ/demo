@@ -1790,7 +1790,13 @@
 
         form.addEventListener('input', updatePreview);
         form.addEventListener('change', updatePreview);
-        form.addEventListener('reset', () => setTimeout(() => { setTodayDates(); syncCarCount(); setWarehousePrintMode(false); setStatus(''); }, 0));
+        let _skipResetWarehouse = false;
+        form.addEventListener('reset', () => setTimeout(() => {
+            setTodayDates(); syncCarCount();
+            if (!_skipResetWarehouse) setWarehousePrintMode(false);
+            _skipResetWarehouse = false;
+            setStatus('');
+        }, 0));
 
         document.getElementById('btnToday').addEventListener('click', setTodayDates);
         document.getElementById('transfer_date').addEventListener('change', syncDayFromTransferDate);
@@ -2508,6 +2514,7 @@
         }
 
         function applyWarehouseDelivery() {
+            _skipResetWarehouse = true;
             ensureWarehouseCompanyOption();
             ensureWarehouseBranchOption();
             const companyInput = document.getElementById('company_rep');
