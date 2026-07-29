@@ -266,6 +266,10 @@
             z-index: 1;
             box-sizing: border-box;
         }
+        .overlay-cover--wh {
+            border: none;
+            background: #fff;
+        }
         .overlay-field.align-end {
             align-items: flex-end;
             justify-content: flex-start;
@@ -1377,7 +1381,11 @@
                 ? (typeof CHECK_NOTE_FIELDS !== 'undefined' ? CHECK_NOTE_FIELDS : [])
                 : MUTHAKARA_FIELDS;
             let coverHtml = '';
-            if (!warehousePrintMode) {
+            if (warehousePrintMode && typeof CHECK_NOTE_COVERS !== 'undefined') {
+                coverHtml = CHECK_NOTE_COVERS.map(([cx, cy, cw, ch]) =>
+                    `<div class="overlay-cover overlay-cover--wh" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`
+                ).join('');
+            } else if (!warehousePrintMode) {
                 const [cx, cy, cw, ch] = MEMO_NUMBER_COVER;
                 coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
             }
