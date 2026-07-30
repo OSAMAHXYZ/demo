@@ -1,9 +1,10 @@
 /**
  * Field positions for قائمة فحص السيارات وقت التسليم / delivery_check_note
  * [tag, x, y, w, h, align?] — fractions of page width/height
+ * Preview background is a blank empty form (no sample data).
  */
 const CHECK_NOTE_FIELDS = [
-  // Right column — branch block (labels on right, values on left)
+  // Right column — branch block
   ['wh_branch_name', 0.30, 0.078, 0.28, 0.016, 'end'],
   ['wh_city_address', 0.30, 0.094, 0.28, 0.016, 'end'],
   ['wh_branch_cr', 0.30, 0.110, 0.28, 0.016, 'end'],
@@ -27,26 +28,13 @@ const CHECK_NOTE_FIELDS = [
   ['wh_technicians_name', 0.08, 0.870, 0.30, 0.020, 'end']
 ];
 
-// White cover boxes to hide pre-printed sample data on the check-note image
-// [x, y, w, h] as fractions of page width/height
-const CHECK_NOTE_COVERS = [
-  // Right col values — branch info
-  [0.29, 0.074, 0.30, 0.108],
-  // Left col values — owner/user info
-  [0.07, 0.074, 0.28, 0.108],
-  // Date + time line
-  [0.07, 0.154, 0.52, 0.020],
-  // VIN / chassis
-  [0.09, 0.184, 0.44, 0.022],
-  // Guest name at bottom
-  [0.44, 0.866, 0.38, 0.024],
-  // Delivery officer name at bottom
-  [0.07, 0.866, 0.32, 0.024]
-];
+// Blank form image — no white covers needed
+const CHECK_NOTE_COVERS = [];
 
 if (typeof window !== 'undefined') {
   window.CHECK_NOTE_FIELDS = CHECK_NOTE_FIELDS;
+  window.CHECK_NOTE_COVERS = CHECK_NOTE_COVERS;
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CHECK_NOTE_FIELDS };
+  module.exports = { CHECK_NOTE_FIELDS, CHECK_NOTE_COVERS };
 }
