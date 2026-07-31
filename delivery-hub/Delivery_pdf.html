@@ -195,6 +195,15 @@
             font-size: 12px;
             font-weight: 700;
         }
+        body.warehouse-form-mode .memo-only-section,
+        body.warehouse-form-mode .warehouse-delivery-actions {
+            display: none !important;
+        }
+        body.warehouse-form-mode .hero h1::after {
+            content: ' — قائمة فحص المستودع';
+            font-size: 0.7em;
+            color: #1d4ed8;
+        }
 
         .preview-panel {
             position: sticky;
@@ -1072,7 +1081,7 @@
 
         <div class="form-col">
             <form id="deliveryForm">
-                <section class="card">
+                <section class="card memo-only-section">
                     <h2>بيانات المذكرة — Header</h2>
                     <div class="grid grid-4">
                         <div>
@@ -1094,7 +1103,7 @@
                     </div>
                 </section>
 
-                <section class="card">
+                <section class="card memo-only-section">
                     <h2>بيانات العميل والنقل — Customer &amp; Transport</h2>
                     <div class="grid grid-2">
                         <div>
@@ -1152,32 +1161,8 @@
 
                 <section class="card warehouse-top-fields no-print" id="warehouseTopFields" hidden>
                     <h2>بيانات قائمة فحص التسليم — اسامة12</h2>
-                    <p class="hint">هذه الحقول تظهر على نموذج المستودع (PDF). عبّئها ثم اطبع — الشاسيه من جدول السيارات أدناه.</p>
+                    <p class="hint">عبّئ هذه الحقول فقط — تظهر على نموذج المستودع. الشاسيه من الجدول أدناه.</p>
                     <div class="grid grid-2">
-                        <div>
-                            <label for="wh_branch_name">اسم الفرع</label>
-                            <input id="wh_branch_name" name="wh_branch_name" type="text" placeholder="اسم الفرع">
-                        </div>
-                        <div>
-                            <label for="wh_city_address">المدينة - العنوان</label>
-                            <input id="wh_city_address" name="wh_city_address" type="text" placeholder="المدينة - العنوان">
-                        </div>
-                        <div>
-                            <label for="wh_branch_cr">السجل التجاري للفرع</label>
-                            <input id="wh_branch_cr" name="wh_branch_cr" type="text" placeholder="السجل التجاري">
-                        </div>
-                        <div>
-                            <label for="wh_branch_phone">هاتف الفرع</label>
-                            <input id="wh_branch_phone" name="wh_branch_phone" type="text" placeholder="هاتف الفرع">
-                        </div>
-                        <div>
-                            <label for="wh_center_code">كود المركز</label>
-                            <input id="wh_center_code" name="wh_center_code" type="text" placeholder="كود المركز">
-                        </div>
-                        <div>
-                            <label for="wh_statement_no">رقم التسليم / البيان</label>
-                            <input id="wh_statement_no" name="wh_statement_no" type="text" placeholder="رقم البيان">
-                        </div>
                         <div>
                             <label for="wh_owner_name">اسم المالك</label>
                             <input id="wh_owner_name" name="wh_owner_name" type="text" placeholder="اسم المالك">
@@ -1187,22 +1172,31 @@
                             <input id="wh_user_name" name="wh_user_name" type="text" placeholder="اسم المستخدم">
                         </div>
                         <div>
-                            <label for="wh_user_phone">هاتف المالك / المستخدم</label>
+                            <label for="wh_user_phone">هاتف</label>
                             <input id="wh_user_phone" name="wh_user_phone" type="text" placeholder="05xxxxxxxx">
-                        </div>
-                        <div>
-                            <label for="wh_user_email">بريد إلكتروني</label>
-                            <input id="wh_user_email" name="wh_user_email" type="email" placeholder="name@example.com">
                         </div>
                         <div>
                             <label for="wh_user_id">رقم الهوية</label>
                             <input id="wh_user_id" name="wh_user_id" type="text" placeholder="رقم الهوية">
                         </div>
                         <div>
-                            <label for="wh_technicians_name">مسؤول التسليم</label>
-                            <input id="wh_technicians_name" name="wh_technicians_name" type="text" placeholder="مسؤول التسليم">
+                            <label for="wh_print_date">تاريخ طباعة المستند</label>
+                            <input id="wh_print_date" name="wh_print_date" type="date">
+                        </div>
+                        <div>
+                            <label for="wh_print_time">وقت طباعة المستند</label>
+                            <input id="wh_print_time" name="wh_print_time" type="time" step="1">
                         </div>
                     </div>
+                    <!-- Keep hidden for payload compatibility -->
+                    <input type="hidden" id="wh_branch_name" name="wh_branch_name" value="">
+                    <input type="hidden" id="wh_city_address" name="wh_city_address" value="">
+                    <input type="hidden" id="wh_branch_cr" name="wh_branch_cr" value="">
+                    <input type="hidden" id="wh_branch_phone" name="wh_branch_phone" value="">
+                    <input type="hidden" id="wh_center_code" name="wh_center_code" value="">
+                    <input type="hidden" id="wh_statement_no" name="wh_statement_no" value="">
+                    <input type="hidden" id="wh_user_email" name="wh_user_email" value="">
+                    <input type="hidden" id="wh_technicians_name" name="wh_technicians_name" value="">
                 </section>
 
                 <section class="card">
@@ -1441,7 +1435,9 @@
                     user_id: fd.get('wh_user_id')?.trim(),
                     technicians_name: fd.get('wh_technicians_name')?.trim(),
                     branch_cr: fd.get('wh_branch_cr')?.trim(),
-                    branch_phone: fd.get('wh_branch_phone')?.trim()
+                    branch_phone: fd.get('wh_branch_phone')?.trim(),
+                    print_date: fd.get('wh_print_date')?.trim(),
+                    print_time: fd.get('wh_print_time')?.trim()
                 },
                 cars
             };
@@ -1454,7 +1450,15 @@
             return `${m[3]}.${m[2]}.${m[1]}`;
         }
 
-        function formatWhPrintTime() {
+        function formatWhPrintTime(value) {
+            const raw = String(value || '').trim();
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(raw)) {
+                const parts = raw.split(':');
+                const hh = String(parts[0]).padStart(2, '0');
+                const mm = String(parts[1]).padStart(2, '0');
+                const ss = String(parts[2] || '00').padStart(2, '0');
+                return `${hh}:${mm}:${ss}`;
+            }
             try {
                 return new Intl.DateTimeFormat('en-GB', {
                     timeZone: 'Asia/Riyadh',
@@ -1473,19 +1477,20 @@
             const cars = Array.isArray(body.cars) ? body.cars : [];
             const chassis = (cars.find((c) => String(c.chassis || '').trim()) || {}).chassis || '';
             const owner = wh.owner_name || body.customer_name || '';
+            const printIso = wh.print_date || body.doc_date || body.transfer_date || '';
             return {
                 wh_branch_name: wh.branch_name || '',
                 wh_city_address: wh.city_address || '',
                 wh_branch_cr: wh.branch_cr || '',
                 wh_branch_phone: wh.branch_phone || '',
                 wh_center_code: wh.center_code || wh.statement_no || '',
-                wh_print_date: formatWhPrintDate(body.doc_date || body.transfer_date),
+                wh_print_date: formatWhPrintDate(printIso),
                 wh_owner_name: owner,
                 wh_user_name: wh.user_name || '',
                 wh_user_phone: wh.user_phone || '',
                 wh_user_email: wh.user_email || '',
                 wh_user_id: wh.user_id || '',
-                wh_print_time: formatWhPrintTime(),
+                wh_print_time: formatWhPrintTime(wh.print_time),
                 wh_chassis: chassis,
                 wh_guest_name: owner,
                 wh_technicians_name: wh.technicians_name || ''
@@ -2520,6 +2525,8 @@
             const companyInput = document.getElementById('company_rep');
             const branchInput = document.getElementById('branch_to');
             const attachments = document.getElementById('attachments');
+            const invoiceInput = document.getElementById('invoice_number');
+            const customerInput = document.getElementById('customer_name');
             const agent = getAgent();
             if (companyInput) {
                 companyInput.value = WAREHOUSE_COMPANY;
@@ -2540,10 +2547,22 @@
                 attachments.dispatchEvent(new Event('input', { bubbles: true }));
                 attachments.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            if (invoiceInput && !invoiceInput.value.trim()) {
+                invoiceInput.value = 'WH';
+            }
+            const printDateEl = document.getElementById('wh_print_date');
+            const printTimeEl = document.getElementById('wh_print_time');
+            const docDate = document.getElementById('doc_date')?.value || getSaudiTodayIso();
+            if (printDateEl && !printDateEl.value) printDateEl.value = docDate;
+            if (printTimeEl && !printTimeEl.value) {
+                printTimeEl.value = formatWhPrintTime().slice(0, 8);
+            }
             const ownerEl = document.getElementById('wh_owner_name');
-            const customerEl = document.getElementById('customer_name');
-            if (ownerEl && !ownerEl.value.trim() && customerEl?.value.trim()) {
-                ownerEl.value = customerEl.value.trim();
+            if (ownerEl && !ownerEl.value.trim() && customerInput?.value.trim()) {
+                ownerEl.value = customerInput.value.trim();
+            }
+            if (customerInput && !customerInput.value.trim() && ownerEl?.value.trim()) {
+                customerInput.value = ownerEl.value.trim();
             }
             const techEl = document.getElementById('wh_technicians_name');
             if (techEl && !techEl.value.trim() && agent.username) {
@@ -2551,7 +2570,7 @@
             }
             setWarehousePrintMode(true);
             document.getElementById('warehouseTopFields')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setStatus('تم فتح نموذج قائمة الفحص (اسامة12) — عبّئ البيانات ثم اطبع', 'ok');
+            setStatus('عبّئ: المالك · المستخدم · الهاتف · الهوية · تاريخ ووقت الطباعة', 'ok');
         }
 
         async function downloadWarehouseCheckNoteFile() {
@@ -2617,6 +2636,7 @@
         }
 
         function validateListOnlyFields() {
+            if (warehousePrintMode) return true;
             const companyOk = enforceListOnlyValue('company_rep', { clearIfInvalid: false });
             const branchOk = enforceListOnlyValue('branch_to', { clearIfInvalid: false });
             if (!companyOk || !branchOk) {
