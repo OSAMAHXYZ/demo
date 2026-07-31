@@ -1366,6 +1366,7 @@
             if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
             if (tag === 'wh_chassis') left = `${x * 100}%`;
+            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 100px)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
