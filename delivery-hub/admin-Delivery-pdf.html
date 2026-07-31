@@ -1344,9 +1344,9 @@
                         type="search"
                         class="ft-input"
                         id="ftSearchInput"
-                        placeholder="Search by VIN, Company, Branch..."
+                        placeholder="Search VIN from system inventory…"
                         autocomplete="off"
-                        aria-label="Search by VIN, Company, Branch"
+                        aria-label="Search by VIN"
                     >
                     <button type="button" class="ft-search__clear" id="ftSearchClear" aria-label="Clear search">×</button>
                 </div>
@@ -2353,24 +2353,103 @@
         function filterVehicles(q) {
             const s = String(q || '').trim().toLowerCase();
             if (!s) return allVehicles;
-            return allVehicles.filter((v) => {
-                const hay = [v.vin, v.product, v.model, v.plate, v.customerName, v.location].join(' ').toLowerCase();
-                return hay.includes(s);
+            return allVehicles.filter((v) => rowMatchesSearch(v, s));
+        }
+
+        function normSearchVin(value) {
+            return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        function draftChassisList(row) {
+            const p = row?.payload || {};
+            const cars = Array.isArray(p.cars) ? p.cars : [];
+            const list = cars.map((c) => c?.chassis || c?.vin || '').filter(Boolean);
+            if (row?.vin) list.unshift(row.vin);
+            return list;
+        }
+
+        function rowMatchesSearch(row, qRaw) {
+            const q = String(qRaw || '').trim().toLowerCase();
+            if (!q) return true;
+            const qVin = normSearchVin(q);
+            if (qVin.length >= 3) {
+                const vins = [
+                    row?.vin,
+                    ...draftChassisList(row)
+                ].map(normSearchVin).filter(Boolean);
+                if (vins.some((vin) => vin.includes(qVin))) return true;
+            }
+            const p = row?.payload || {};
+            const hay = [
+                row?.vin, row?.product, row?.model, row?.plate, row?.customerName,
+                row?.location, row?.assignedTo, row?.gt, row?.status, row?.agentStatus,
+                p.company_rep, p.customer_name, p.branch_to, p.attachments,
+                ...draftChassisList(row)
+            ].join(' ').toLowerCase();
+            return hay.includes(q);
+        }
+
+        function searchSystemVehicles(q) {
+            const query = String(q || '').trim();
+            if (!query) return filteredVehicleList();
+            const byVin = new Map();
+            const push = (v) => {
+                const key = normVinKey(v?.vin);
+                if (!key || byVin.has(key)) return;
+                byVin.set(key, v);
+            };
+            (allVehicles || []).forEach((v) => {
+                if (rowMatchesSearch(v, query)) push(v);
             });
+            (allQueue || []).forEach((qItem) => {
+                if (!rowMatchesSearch(qItem, query)) return;
+                const existing = byVin.get(normVinKey(qItem.vin));
+                if (existing) return;
+                const inv = (allVehicles || []).find((v) => normVinKey(v.vin) === normVinKey(qItem.vin));
+                push(inv || {
+                    vin: qItem.vin,
+                    product: qItem.product || qItem.model || '',
+                    model: qItem.model || '',
+                    plate: qItem.plate || '',
+                    customerName: qItem.customerName || '',
+                    location: qItem.location || '',
+                    gt: qItem.gt || '',
+                    imageUrl: qItem.imageUrl || '',
+                    proformaDate: '',
+                    invoiceDate: '',
+                    deliveryNoteDate: ''
+                });
+            });
+            (allDrafts || []).forEach((d) => {
+                if (!rowMatchesSearch(d, query)) return;
+                draftChassisList(d).forEach((chassis) => {
+                    const key = normVinKey(chassis);
+                    if (!key || byVin.has(key)) return;
+                    if (query && !normSearchVin(chassis).includes(normSearchVin(query)) && !rowMatchesSearch(d, query)) return;
+                    const inv = (allVehicles || []).find((v) => normVinKey(v.vin) === key);
+                    push(inv || {
+                        vin: chassis,
+                        product: d.product || d.model || '',
+                        model: d.model || '',
+                        plate: d.plate || '',
+                        customerName: draftCompanyName(d) || d.customerName || '',
+                        location: (d.payload || {}).branch_to || d.location || '',
+                        gt: d.gt || '',
+                        imageUrl: '',
+                        proformaDate: '',
+                        invoiceDate: '',
+                        deliveryNoteDate: draftEventIso(d)
+                    });
+                });
+            });
+            return [...byVin.values()];
         }
 
         function applyDisplayFilters(list, kind) {
             let out = list || [];
-            const q = String(uiFilters.search || '').trim().toLowerCase();
+            const q = String(uiFilters.search || '').trim();
             if (q) {
-                out = out.filter((row) => {
-                    const p = row.payload || {};
-                    const hay = [
-                        row.vin, row.product, row.model, row.plate, row.customerName,
-                        row.location, row.assignedTo, p.company_rep, p.customer_name, p.branch_to
-                    ].join(' ').toLowerCase();
-                    return hay.includes(q);
-                });
+                out = out.filter((row) => rowMatchesSearch(row, q));
             }
             if (uiFilters.branch) {
                 out = out.filter((row) => {
@@ -3118,8 +3197,10 @@
                     ? 'الفاتورة (Raw)'
                     : 'مذكرة الترحيل (مسودات)';
             const drafts = filteredDrafts().length;
-            const vehiclesAll = filteredVehicleList().length;
-            const vehiclesShown = applyDisplayFilters(filteredVehicleList(), 'vehicle').length;
+            const searchQ = String(uiFilters.search || '').trim();
+            const vehiclesBase = searchQ ? searchSystemVehicles(searchQ) : filteredVehicleList();
+            const vehiclesAll = vehiclesBase.length;
+            const vehiclesShown = applyDisplayFilters(vehiclesBase, 'vehicle').length;
             const queue = filteredQueue().length;
             const delivered = filteredQueue().filter((q) => q.agentStatus === 'delivered').length;
             const still = queue - delivered;
@@ -3128,15 +3209,18 @@
             const companyBit = selectedCompany
                 ? ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`
                 : '';
+            const searchBit = searchQ
+                ? ` · VIN search <strong>${escapeHtml(searchQ)}</strong>`
+                : '';
             const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
 
             if (!from && !to) {
-                meta.innerHTML = `${showing}${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> drafts · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                meta.innerHTML = `${showing}${searchBit}${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> drafts · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 updateCompanyFilterChip();
                 renderFilterChips();
                 return;
             }
-            meta.innerHTML = `${showing}${companyBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
+            meta.innerHTML = `${showing}${searchBit}${companyBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
                 <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> 
                 (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
             updateCompanyFilterChip();
@@ -3185,27 +3269,47 @@
                 const panel = document.getElementById('companyRecordsPanel');
                 if (panel) panel.classList.add('hidden');
             }
-            const drafts = applyDisplayFilters(filteredDrafts(), 'draft');
-            const queue = applyDisplayFilters(filteredQueue(), 'queue');
-            const vehicles = applyDisplayFilters(filteredVehicleList(), 'vehicle');
-            renderTransferDashboard(filteredDrafts());
+            const searchQ = String(uiFilters.search || '').trim();
+            const drafts = applyDisplayFilters(
+                searchQ ? (allDrafts || []).filter((d) => rowMatchesSearch(d, searchQ)) : filteredDrafts(),
+                'draft'
+            );
+            const queue = applyDisplayFilters(
+                searchQ ? (allQueue || []).filter((q) => rowMatchesSearch(q, searchQ)) : filteredQueue(),
+                'queue'
+            );
+            const vehicles = searchQ
+                ? applyDisplayFilters(searchSystemVehicles(searchQ), 'vehicle')
+                : applyDisplayFilters(filteredVehicleList(), 'vehicle');
+            renderTransferDashboard(searchQ ? drafts : filteredDrafts());
             renderTable(vehicles);
             renderQueueTable(queue);
             renderDraftsTable(drafts);
             renderQueueStats(computeQueueStats(queue));
             setFoldCount('queueStatsFoldCount', queue.length);
             setFoldCount('draftsFoldCount', drafts.length);
-            setFoldCount('xferFoldCount', filteredDrafts().length);
+            setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
             setFoldCount('inventoryFoldCount', vehicles.length);
+            if (searchQ) {
+                openFold('inventorySection');
+                openFold('queueSection');
+                openFold('draftsSection');
+            }
             renderAllFtSelects();
             renderFilterChips();
             syncDateControlsFromNatives();
+            updateTrackFilterMeta();
         }
 
         function applyTrackFilter() {
             refreshTransferDashboard();
             openFold('xferDashSection');
             openFold('queueStatsFold');
+            if (String(uiFilters.search || '').trim()) {
+                openFold('inventorySection', { scroll: true });
+                openFold('queueSection');
+                openFold('draftsSection');
+            }
         }
 
         function draftCompanyName(d) {
@@ -4350,15 +4454,11 @@
         }
 
         document.getElementById('searchInput').addEventListener('input', (e) => {
-            const q = e.target.value;
-            const base = filteredVehicleList();
-            const list = !String(q || '').trim()
-                ? base
-                : base.filter((v) => {
-                    const hay = `${v.vin || ''} ${v.product || ''} ${v.model || ''} ${v.plate || ''} ${v.customerName || ''} ${v.location || ''}`.toUpperCase();
-                    return hay.includes(String(q).trim().toUpperCase());
-                });
-            renderTable(list);
+            uiFilters.search = e.target.value || '';
+            const ft = document.getElementById('ftSearchInput');
+            if (ft) ft.value = e.target.value;
+            document.getElementById('ftSearchClear')?.classList.toggle('is-visible', Boolean(uiFilters.search));
+            refreshTransferDashboard();
         });
 
         function setRestoreStatus(msg, type) {

@@ -1,35 +1,41 @@
 /**
- * Field positions for قائمة فحص السيارات وقت التسليم / delivery_check_note
+ * Field positions for قائمة فحص السيارات وقت التسليم (اسامة12.pdf)
  * [tag, x, y, w, h, align?] — fractions of page width/height
- * Preview background is a blank empty form (no sample data).
  */
 const CHECK_NOTE_FIELDS = [
-  // Right column — branch block
-  ['wh_branch_name', 0.30, 0.078, 0.28, 0.016, 'end'],
-  ['wh_city_address', 0.30, 0.094, 0.28, 0.016, 'end'],
-  ['wh_branch_cr', 0.30, 0.110, 0.28, 0.016, 'end'],
-  ['wh_branch_phone', 0.30, 0.126, 0.28, 0.016, 'end'],
-  ['wh_center_code', 0.30, 0.142, 0.28, 0.016, 'end'],
-  ['wh_print_date', 0.30, 0.158, 0.28, 0.016, 'end'],
+  // Right column — branch block values (under Arabic labels)
+  ['wh_branch_name', 0.42, 0.105, 0.28, 0.016, 'end'],
+  ['wh_city_address', 0.42, 0.122, 0.28, 0.016, 'end'],
+  ['wh_branch_cr', 0.42, 0.139, 0.28, 0.016, 'end'],
+  ['wh_branch_phone', 0.42, 0.156, 0.28, 0.016, 'end'],
+  ['wh_center_code', 0.42, 0.173, 0.18, 0.016, 'end'],
 
-  // Left column — owner / user block
-  ['wh_owner_name', 0.08, 0.078, 0.28, 0.016, 'end'],
-  ['wh_user_name', 0.08, 0.094, 0.28, 0.016, 'end'],
-  ['wh_user_phone', 0.08, 0.110, 0.28, 0.016, 'end'],
-  ['wh_user_email', 0.08, 0.126, 0.28, 0.016, 'end'],
-  ['wh_user_id', 0.08, 0.142, 0.28, 0.016, 'end'],
-  ['wh_print_time', 0.08, 0.158, 0.28, 0.016, 'end'],
+  // Left / middle — owner block
+  ['wh_owner_name', 0.08, 0.105, 0.28, 0.016, 'end'],
+  ['wh_user_name', 0.08, 0.122, 0.28, 0.016, 'end'],
+  ['wh_user_phone', 0.08, 0.139, 0.28, 0.016, 'end'],
+  ['wh_user_email', 0.08, 0.156, 0.28, 0.016, 'end'],
+  ['wh_user_id', 0.08, 0.173, 0.28, 0.016, 'end'],
+
+  // Print date / time row
+  ['wh_print_date', 0.42, 0.195, 0.22, 0.016, 'end'],
+  ['wh_print_time', 0.12, 0.195, 0.22, 0.016, 'end'],
 
   // Chassis row
-  ['wh_chassis', 0.10, 0.188, 0.42, 0.018, 'center'],
+  ['wh_chassis', 0.12, 0.228, 0.42, 0.018, 'center'],
 
   // Bottom signatures
-  ['wh_guest_name', 0.45, 0.870, 0.36, 0.020, 'end'],
-  ['wh_technicians_name', 0.08, 0.870, 0.30, 0.020, 'end']
+  ['wh_guest_name', 0.48, 0.875, 0.36, 0.020, 'end'],
+  ['wh_technicians_name', 0.08, 0.875, 0.30, 0.020, 'end']
 ];
 
-// Blank form image — no white covers needed
-const CHECK_NOTE_COVERS = [];
+// White covers over pre-printed sample branch text on اسامة12.pdf
+const CHECK_NOTE_COVERS = [
+  // Branch value column (Telesales North / CR / phone / ext)
+  [0.40, 0.100, 0.32, 0.090],
+  // Print date / time sample if any
+  [0.10, 0.190, 0.55, 0.022]
+];
 
 if (typeof window !== 'undefined') {
   window.CHECK_NOTE_FIELDS = CHECK_NOTE_FIELDS;

@@ -13,6 +13,7 @@ const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
+const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
 const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-note-form.png');
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -889,6 +890,13 @@ function generateDeliveryCheckDocx(payload) {
   return generateDocxWithTemplate(DELIVERY_CHECK_TEMPLATE_FILE, payload);
 }
 
+function getDeliveryCheckPdfBuffer() {
+  if (!fs.existsSync(DELIVERY_CHECK_PDF_FILE)) {
+    throw new Error('ملف delivery_check_note.pdf غير موجود');
+  }
+  return fs.readFileSync(DELIVERY_CHECK_PDF_FILE);
+}
+
 // ——— HTTP app ———
 const app = express();
 app.use(express.json({ limit: '40mb' }));
@@ -1436,6 +1444,13 @@ app.post('/api/delivery-note/generate', (req, res) => {
 
 app.post('/api/delivery-note/generate-check-note', (req, res) => {
   try {
+    // Prefer the PDF form (اسامة12) when available; fall back to Word template.
+    if (fs.existsSync(DELIVERY_CHECK_PDF_FILE)) {
+      const buf = getDeliveryCheckPdfBuffer();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="delivery_check_note_${Date.now()}.pdf"`);
+      return res.send(buf);
+    }
     const buf = generateDeliveryCheckDocx(req.body || {});
     res.setHeader(
       'Content-Type',

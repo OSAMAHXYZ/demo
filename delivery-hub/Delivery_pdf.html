@@ -1151,8 +1151,8 @@
                 </section>
 
                 <section class="card warehouse-top-fields no-print" id="warehouseTopFields" hidden>
-                    <h2>بيانات قائمة فحص التسليم — delivery_check_note</h2>
-                    <p class="hint">هذه الحقول تظهر على نموذج المستودع. عبّئها ثم اطبع — الشاسيه من جدول السيارات أدناه.</p>
+                    <h2>بيانات قائمة فحص التسليم — اسامة12</h2>
+                    <p class="hint">هذه الحقول تظهر على نموذج المستودع (PDF). عبّئها ثم اطبع — الشاسيه من جدول السيارات أدناه.</p>
                     <div class="grid grid-2">
                         <div>
                             <label for="wh_branch_name">اسم الفرع</label>
@@ -1284,7 +1284,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260730blank"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260730osama12"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1813,7 +1813,7 @@
         const CLAIMED_VIN_KEY = 'deliveryClaimedVin';
         const AGENT_PASSWORD = '1234';
         const NORMAL_PREVIEW_IMAGE = '../images/muthakara-tarhil-form.png';
-        const WAREHOUSE_PREVIEW_IMAGE = '../images/delivery-check-note-form.png?v=20260730blank';
+        const WAREHOUSE_PREVIEW_IMAGE = '../images/delivery-check-note-form.png?v=20260730osama12';
         let workspaceQueue = [];
         // In-memory only — reload always requires login again
         let agentSession = { username: '', password: '' };
@@ -1892,13 +1892,13 @@
             const downloadBtn = document.getElementById('btnDownload');
             if (btn) {
                 btn.textContent = warehousePrintMode
-                    ? 'تم اختيار نموذج المستودع (delivery_check_note)'
+                    ? 'تم اختيار نموذج المستودع (اسامة12 / قائمة الفحص)'
                     : 'في حال استلام العميل من المستودع يرجى الضغط';
                 btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
             }
             if (previewTitle) {
                 previewTitle.textContent = warehousePrintMode
-                    ? 'معاينة قائمة فحص التسليم — delivery_check_note'
+                    ? 'معاينة قائمة فحص التسليم — اسامة12'
                     : 'معاينة مذكرة الترحيل';
             }
             if (previewImg) {
@@ -1909,12 +1909,12 @@
             if (topFields) topFields.hidden = !warehousePrintMode;
             if (printBtn) {
                 printBtn.textContent = warehousePrintMode
-                    ? '🖨 طباعة قائمة الفحص + delivery_check_note'
+                    ? '🖨 طباعة قائمة الفحص + PDF'
                     : '🖨 طباعة A4';
             }
             if (downloadBtn) {
                 downloadBtn.textContent = warehousePrintMode
-                    ? '⬇ تحميل delivery_check_note'
+                    ? '⬇ تحميل PDF الفحص'
                     : '⬇ تحميل Word';
             }
             buildOverlay();
@@ -2551,7 +2551,7 @@
             }
             setWarehousePrintMode(true);
             document.getElementById('warehouseTopFields')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setStatus('تم فتح نموذج delivery_check_note — عبّئ البيانات ثم اطبع', 'ok');
+            setStatus('تم فتح نموذج قائمة الفحص (اسامة12) — عبّئ البيانات ثم اطبع', 'ok');
         }
 
         async function downloadWarehouseCheckNoteFile() {
@@ -2569,7 +2569,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `delivery_check_note_${Date.now()}.docx`;
+            a.download = `delivery_check_note_${Date.now()}.pdf`;
             a.click();
             URL.revokeObjectURL(url);
         }
