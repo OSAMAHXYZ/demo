@@ -29,13 +29,8 @@ const CHECK_NOTE_FIELDS = [
   ['wh_technicians_name', 0.08, 0.875, 0.30, 0.020, 'end']
 ];
 
-// White covers over pre-printed sample branch text on اسامة12.pdf
-const CHECK_NOTE_COVERS = [
-  // Branch value column (Telesales North / CR / phone / ext)
-  [0.40, 0.100, 0.32, 0.090],
-  // Print date / time sample if any
-  [0.10, 0.190, 0.55, 0.022]
-];
+// No white covers — show the PDF form as-is
+const CHECK_NOTE_COVERS = [];
 
 if (typeof window !== 'undefined') {
   window.CHECK_NOTE_FIELDS = CHECK_NOTE_FIELDS;
