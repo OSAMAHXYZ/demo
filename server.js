@@ -500,9 +500,15 @@ function rowToVehicle(row) {
 }
 
 /** Admin export workbook (Vehicle Inventory / Print Drafts / Coordinator Queue). */
-function isDeliveryExportWorkbook(wb) {
+function isDeliveryExportWorkbook(wb, filename) {
   const names = (wb.SheetNames || []).map((n) => normalizeHeader(n));
-  return names.some((n) => n.includes('vehicle inventory') || n === 'print drafts' || n.includes('print draft'));
+  const fileHint = normalizeHeader(filename || '');
+  if (fileHint.includes('delivery export') || fileHint.includes('admin export')) return true;
+  return names.some((n) =>
+    n.includes('vehicle inventory')
+    || n.includes('print draft')
+    || n.includes('coordinator queue')
+  );
 }
 
 function parseVehiclesFromRows(rows) {
@@ -667,12 +673,12 @@ function parseSalesFromWorkbook(wb, filename) {
     rawRows: rows.slice(0, 5000),
     drafts: [],
     queue: [],
-    isExport: isDeliveryExportWorkbook(wb)
+    isExport: isDeliveryExportWorkbook(wb, filename)
   };
 
   if (result.isExport) {
-    const draftsSheet = findSheetName(wb, ['print drafts', 'print draft', 'drafts']);
-    const queueSheet = findSheetName(wb, ['coordinator queue', 'queue']);
+    const draftsSheet = findSheetName(wb, ['print drafts', 'print draft', 'drafts', 'مسودات الطباعة', 'مسودات']);
+    const queueSheet = findSheetName(wb, ['coordinator queue', 'queue', 'قائمة الشاسيه', 'القائمة']);
     if (draftsSheet) result.drafts = parsePrintDraftsFromRows(sheetRows(wb, draftsSheet));
     if (queueSheet) result.queue = parseQueueFromRows(sheetRows(wb, queueSheet));
   } else {
@@ -706,7 +712,7 @@ function parseSalesText(text, filename) {
   return parseSalesFromWorkbook(wb, filename || 'pasted-excel.tsv');
 }
 
-function applyParsedInventory(parsed) {
+function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = false } = {}) {
   store.vehicles = parsed.vehicles;
   store.raw = {
     filename: parsed.filename,
@@ -720,11 +726,11 @@ function applyParsedInventory(parsed) {
     uploadedAt: new Date().toISOString()
   };
 
-  if (Array.isArray(parsed.drafts) && parsed.drafts.length) {
-    store.drafts = parsed.drafts.slice(0, MAX_DRAFTS);
+  if (replaceDrafts || (Array.isArray(parsed.drafts) && parsed.drafts.length)) {
+    store.drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, MAX_DRAFTS) : [];
   }
-  if (Array.isArray(parsed.queue) && parsed.queue.length) {
-    store.queue = dedupeQueue(parsed.queue);
+  if (replaceQueue || (Array.isArray(parsed.queue) && parsed.queue.length)) {
+    store.queue = Array.isArray(parsed.queue) ? dedupeQueue(parsed.queue) : [];
   }
 
   return refreshQueueFromVehicles();
@@ -924,7 +930,7 @@ function getDeliveryCheckPdfBuffer() {
 
 // ——— HTTP app ———
 const app = express();
-app.use(express.json({ limit: '40mb' }));
+app.use(express.json({ limit: '80mb' }));
 
 app.post('/api/delivery-coordinator/auth', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
@@ -1028,15 +1034,18 @@ app.post('/api/delivery-inventory/restore-export', (req, res) => {
     if (!fileData) return res.status(400).json({ error: 'ملف التصدير مطلوب' });
     const buffer = parseDataUrl(fileData);
     const parsed = parseSalesWorkbook(buffer, filename || 'delivery_export.xlsx');
-    if (!parsed.isExport) {
+    const fileLooksExport = /delivery[_\s-]?export/i.test(String(filename || ''));
+    const fullArchive = Boolean(parsed.isExport || fileLooksExport);
+
+    if (!fullArchive) {
       return res.status(400).json({
-        error: 'هذا ليس ملف تصدير اللوحة. استخدم delivery_export_….xlsx (أوراق Vehicle Inventory / Print Drafts). لرفع Sales Raw استخدم صفحة المنسق.'
+        error: 'هذا ليس ملف تصدير اللوحة. استخدم delivery_export_….xlsx (أوراق Vehicle Inventory / Print Drafts / Coordinator Queue). لرفع Sales Raw استخدم صفحة المنسق.'
       });
     }
     if (!parsed.vehicles.length && !(parsed.drafts || []).length) {
       return res.status(400).json({ error: 'الملف لا يحتوي على مركبات أو مسودات' });
     }
-    const refresh = applyParsedInventory(parsed);
+    const refresh = applyParsedInventory(parsed, { replaceDrafts: true, replaceQueue: true });
     persistAndBroadcast();
     res.json({
       ok: true,

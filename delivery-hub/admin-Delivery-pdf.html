@@ -1331,12 +1331,12 @@
                 </div>
             </div>
             <div class="admin-restore-actions">
-                <input type="file" id="restoreExportInput" accept=".xlsx,.xls" hidden>
-                <label class="hub-btn hub-btn--primary" for="restoreExportInput" id="btnRestoreExport" style="cursor:pointer;margin:0">استيراد أرشيف delivery_export</label>
+                <input type="file" id="restoreExportInput" accept=".xlsx,.xls" aria-hidden="true" tabindex="-1">
+                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">استيراد أرشيف delivery_export</button>
                 <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
                 <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
             </div>
-            <p class="hub-status" id="restoreExportStatus"></p>
+            <p class="hub-status" id="restoreExportStatus" style="min-height:1.4em"></p>
         </div>
 
         <div class="ft-shell" id="adminFilterBar">
@@ -4479,20 +4479,33 @@
         }
 
         async function restoreExportFile(file) {
-            if (!file) return;
-            if (!confirm('استيراد هذا الأرشيف سيستبدل المخزون / القائمة / المسودات الحالية. متابعة؟')) {
+            if (!file) {
+                setRestoreStatus('اختر ملف Excel أولاً', 'err');
                 return;
             }
-            setRestoreStatus('جاري استيراد الأرشيف…');
+            setRestoreStatus(`تم اختيار: ${file.name} — أكّد للمتابعة…`);
+            if (!confirm(`استيراد "${file.name}" سيستبدل المخزون / القائمة / المسودات الحالية. متابعة؟`)) {
+                setRestoreStatus('تم إلغاء الاستيراد');
+                return;
+            }
+            setRestoreStatus('جاري قراءة الملف ورفع الأرشيف…');
             const reader = new FileReader();
+            reader.onerror = () => setRestoreStatus('فشل قراءة الملف من الجهاز', 'err');
             reader.onload = async () => {
                 try {
+                    if (!reader.result) throw new Error('الملف فارغ أو لم يُقرأ');
                     const res = await fetch('/api/delivery-inventory/restore-export', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ fileData: reader.result, filename: file.name })
                     });
-                    const data = await res.json();
+                    const text = await res.text();
+                    let data = {};
+                    try { data = text ? JSON.parse(text) : {}; } catch (_) {
+                        throw new Error(res.status === 413
+                            ? 'الملف كبير جداً للخادم'
+                            : `فشل الاستيراد (HTTP ${res.status})`);
+                    }
                     if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
                     const meta = document.getElementById('restoreExportMeta');
                     if (meta) {
@@ -4506,15 +4519,22 @@
                     if (data.draftsImported) openFold('draftsSection', { scroll: true });
                     else openFold('inventorySection', { scroll: true });
                 } catch (err) {
-                    setRestoreStatus(err.message, 'err');
+                    setRestoreStatus(err.message || 'فشل الاستيراد', 'err');
                 }
             };
             reader.readAsDataURL(file);
         }
 
+        document.getElementById('btnRestoreExport')?.addEventListener('click', () => {
+            const input = document.getElementById('restoreExportInput');
+            if (!input) return setRestoreStatus('حقل الملف غير موجود — حدّث الصفحة', 'err');
+            input.value = '';
+            input.click();
+        });
         document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
-            restoreExportFile(e.target.files?.[0]);
-            e.target.value = '';
+            const file = e.target.files?.[0];
+            if (file) restoreExportFile(file);
+            else setRestoreStatus('لم يتم اختيار ملف', 'err');
         });
 
         document.getElementById('btnExportExcel')?.addEventListener('click', exportAllToExcel);
