@@ -1365,9 +1365,14 @@
             if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
             if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
-            if (tag === 'wh_chassis') left = `${x * 100}%`;
-            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 30px)`;
-            if (tag === 'wh_print_time') top = `calc(${y * 100}% + 30px)`;
+            if (tag === 'wh_chassis') {
+                left = `${x * 100}%`;
+                top = `calc(${y * 100}% + 20px)`;
+            }
+            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 35px)`;
+            if (tag === 'wh_print_time') top = `calc(${y * 100}% + 35px)`;
+            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 20px)`;
+            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 16px)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
