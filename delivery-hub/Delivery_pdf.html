@@ -1367,13 +1367,13 @@
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
             if (tag === 'wh_chassis') {
                 left = `${x * 100}%`;
-                top = `calc(${y * 100}% + 20px)`;
+                top = `calc(${y * 100}% + 40px)`;
             }
             if (tag === 'wh_print_date') top = `calc(${y * 100}% + 38px)`;
             if (tag === 'wh_print_time') top = `calc(${y * 100}% + 38px)`;
-            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 15px)`;
-            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 5px)`;
-            if (tag === 'wh_user_phone') top = `calc(${y * 100}% + 20px)`;
+            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 30px)`;
+            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 10px)`;
+            if (tag === 'wh_user_phone') top = `calc(${y * 100}% + 40px)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
