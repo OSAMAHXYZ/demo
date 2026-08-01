@@ -1369,10 +1369,11 @@
                 left = `${x * 100}%`;
                 top = `calc(${y * 100}% + 20px)`;
             }
-            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 35px)`;
-            if (tag === 'wh_print_time') top = `calc(${y * 100}% + 35px)`;
-            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 20px)`;
-            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 16px)`;
+            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 38px)`;
+            if (tag === 'wh_print_time') top = `calc(${y * 100}% + 38px)`;
+            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 15px)`;
+            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 5px)`;
+            if (tag === 'wh_user_phone') top = `calc(${y * 100}% + 20px)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
