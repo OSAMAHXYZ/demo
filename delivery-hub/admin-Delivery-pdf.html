@@ -1390,50 +1390,12 @@
                     </div>
                 </div>
 
-                <div class="ft-control" id="ftBranchControl" data-ft-select="branch">
-                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"></path>
-                            <circle cx="12" cy="10" r="2.5"></circle>
-                        </svg>
-                        <span class="ft-control__value is-placeholder" data-ft-label>Branch</span>
-                    </button>
-                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
-                    <div class="ft-panel" role="listbox">
-                        <div class="ft-panel__search"><input type="search" placeholder="Search branch…" data-ft-q></div>
-                        <div data-ft-options></div>
-                    </div>
-                </div>
-
-                <div class="ft-control" id="ftStatusControl" data-ft-select="status">
-                    <button type="button" class="ft-control__trigger" aria-haspopup="listbox" aria-expanded="false">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M3 7h13l5 5v5a2 2 0 0 1-2 2H3z"></path>
-                            <circle cx="7.5" cy="16.5" r="1.5"></circle>
-                            <circle cx="16.5" cy="16.5" r="1.5"></circle>
-                        </svg>
-                        <span class="ft-control__value is-placeholder" data-ft-label>Status</span>
-                    </button>
-                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
-                    <div class="ft-panel" role="listbox">
-                        <div data-ft-options></div>
-                    </div>
-                </div>
-
                 <div class="ft-actions">
                     <div class="ft-more" id="ftMoreWrap">
                         <button type="button" class="ft-btn ft-btn--more" id="ftMoreBtn" aria-expanded="false">
                             More Filters
                         </button>
                         <div class="ft-more__panel" id="ftMorePanel">
-                            <div>
-                                <div class="ft-more__label">Date type</div>
-                                <select class="ft-native" id="ftDateTypeUi">
-                                    <option value="delivery_note">Delivery note</option>
-                                    <option value="proforma">Proforma</option>
-                                    <option value="invoice">Invoice</option>
-                                </select>
-                            </div>
                             <div>
                                 <div class="ft-more__label">Coordinator</div>
                                 <div class="ft-control" id="ftCoordinatorControl" data-ft-select="coordinator" style="min-width:0">
@@ -1464,12 +1426,13 @@
 
             <div class="ft-hidden-natives" aria-hidden="true">
                 <select id="trackDateType">
-                    <option value="delivery_note">Delivery note</option>
-                    <option value="proforma">Proforma</option>
-                    <option value="invoice">Invoice</option>
+                    <option value="delivery_note" selected>Delivery note</option>
                 </select>
                 <input type="date" id="trackDateFrom">
                 <input type="date" id="trackDateTo">
+                <select id="ftDateTypeUi" hidden>
+                    <option value="delivery_note" selected>Delivery note</option>
+                </select>
                 <button type="button" id="btnTrackToday" hidden>Today</button>
                 <button type="button" id="btnClearCompanyScope" hidden>Clear company</button>
             </div>
@@ -2007,6 +1970,7 @@
                 Product: v.product || v.model || '',
                 Plate: v.plate || '',
                 Customer: v.customerName || '',
+                'Contact No.': v.phone || '',
                 Location: v.location || '',
                 GT: v.gt || '',
                 Model: v.model || '',
@@ -2032,7 +1996,7 @@
                 'Agent Status': item.agentStatus || '',
                 Classification: item.status === 'available'
                     ? 'متاح'
-                    : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'),
+                    : (item.statusLabel || (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز')),
                 Plate: item.plate || '',
                 Customer: item.customerName || '',
                 'Added At': item.addedAt || '',
@@ -2104,6 +2068,7 @@
             const host = document.getElementById('premiumKpiGrid');
             if (!host) return;
             const progress = deliveredOfTotalStats();
+            const warehouse = warehouseDeliveredStats();
             const drafts = filteredDrafts();
             const vehicles = filteredVehicleList();
             const companies = new Set(drafts.map(draftCompanyName).filter(Boolean)).size;
@@ -2113,10 +2078,12 @@
             const cards = [
                 { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#3B82F6', icon: '🚗' },
                 { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#22C55E', icon: '✓' },
+                { label: 'تم التسليم في المستودع', value: warehouse.count, trend: `${warehouse.pct}% من الإجمالي`, accent: '#0EA5E9', icon: '🏭' },
                 { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ / غير مرحّل', accent: '#F59E0B', icon: '⏳' },
                 { label: 'الشركات', value: companies, trend: 'من المذكرات المصفّاة', accent: '#3B82F6', icon: '🏢' },
                 { label: 'الفروع', value: branches, trend: 'وجهات التحويل', accent: '#64748B', icon: '📍' },
-                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#22C55E', icon: '%' }
+                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#22C55E', icon: '%' },
+                { label: 'نسبة التسليم في المستودع', value: `${warehouse.pct}%`, trend: `${warehouse.count} من ${warehouse.total}`, accent: '#0EA5E9', icon: '%' }
             ];
             host.innerHTML = cards.map((c) => `
                 <article class="saas-kpi saas-card">
@@ -2451,22 +2418,6 @@
             if (q) {
                 out = out.filter((row) => rowMatchesSearch(row, q));
             }
-            if (uiFilters.branch) {
-                out = out.filter((row) => {
-                    if (kind === 'draft') return String((row.payload || {}).branch_to || '') === uiFilters.branch;
-                    return String(row.location || '') === uiFilters.branch;
-                });
-            }
-            if (uiFilters.status && kind === 'queue') {
-                out = out.filter((qItem) => {
-                    if (uiFilters.status === 'delivered') return qItem.agentStatus === 'delivered';
-                    if (uiFilters.status === 'available') return qItem.status === 'available';
-                    if (uiFilters.status === 'pending') {
-                        return qItem.status !== 'available' && qItem.agentStatus !== 'delivered';
-                    }
-                    return true;
-                });
-            }
             if (uiFilters.coordinator) {
                 out = out.filter((row) => String(row.assignedTo || '') === uiFilters.coordinator);
             }
@@ -2476,20 +2427,22 @@
         function syncDateControlsFromNatives() {
             const from = document.getElementById('trackDateFrom')?.value || '';
             const to = document.getElementById('trackDateTo')?.value || '';
-            const type = document.getElementById('trackDateType')?.value || 'delivery_note';
             const fromUi = document.getElementById('ftDateFromUi');
             const toUi = document.getElementById('ftDateToUi');
+            const typeEl = document.getElementById('trackDateType');
             const typeUi = document.getElementById('ftDateTypeUi');
             const label = document.getElementById('ftDateLabel');
+            if (typeEl) typeEl.value = 'delivery_note';
+            if (typeUi) typeUi.value = 'delivery_note';
             if (fromUi) fromUi.value = from;
             if (toUi) toUi.value = to;
-            if (typeUi) typeUi.value = type;
+            applyDeliveryNoteDateBounds();
             if (label) {
                 if (from || to) {
-                    label.textContent = `${from || '…'} → ${to || '…'}`;
+                    label.textContent = `Delivery note ${from || '…'} → ${to || '…'}`;
                     label.classList.remove('is-placeholder');
                 } else {
-                    label.textContent = 'Date Range';
+                    label.textContent = 'Delivery note date';
                     label.classList.add('is-placeholder');
                 }
             }
@@ -2498,13 +2451,12 @@
         function pushDatesToNatives() {
             const fromUi = document.getElementById('ftDateFromUi')?.value || '';
             const toUi = document.getElementById('ftDateToUi')?.value || '';
-            const typeUi = document.getElementById('ftDateTypeUi')?.value || 'delivery_note';
             const fromEl = document.getElementById('trackDateFrom');
             const toEl = document.getElementById('trackDateTo');
             const typeEl = document.getElementById('trackDateType');
             if (fromEl) fromEl.value = fromUi;
             if (toEl) toEl.value = toUi;
-            if (typeEl) typeEl.value = typeUi;
+            if (typeEl) typeEl.value = 'delivery_note';
             syncDateControlsFromNatives();
         }
 
@@ -2520,14 +2472,9 @@
 
         function collectSelectOptions() {
             const companies = new Set();
-            const branches = new Set();
             const coordinators = new Set();
-            const statusCounts = { delivered: 0, pending: 0, available: 0 };
 
             const draftsInRange = dateScopedDrafts();
-            const draftsForBranch = selectedCompany
-                ? draftsInRange.filter((d) => draftCompanyName(d) === selectedCompany)
-                : draftsInRange;
 
             draftsInRange.forEach((d) => {
                 const c = draftCompanyName(d);
@@ -2536,15 +2483,6 @@
                 if (who) coordinators.add(who);
             });
 
-            draftsForBranch.forEach((d) => {
-                const b = String((d.payload || {}).branch_to || '').trim();
-                if (!b || b === '-' || b.startsWith('- اختر') || b.startsWith('—')) return;
-                branches.add(b);
-                const who = String(d.assignedTo || '').trim();
-                if (who) coordinators.add(who);
-            });
-
-            // Queue VINs in the same date scope (accuracy from live entered status)
             const vins = scopedVinSet();
             let queueInRange = allQueue || [];
             if (vins) {
@@ -2560,24 +2498,12 @@
             }
 
             queueInRange.forEach((q) => {
-                const loc = String(q.location || '').trim();
-                if (loc) branches.add(loc);
                 const who = String(q.assignedTo || '').trim();
                 if (who) coordinators.add(who);
-                if (q.agentStatus === 'delivered') statusCounts.delivered += 1;
-                else if (q.status === 'available') statusCounts.available += 1;
-                else statusCounts.pending += 1;
             });
-
-            const status = [];
-            if (statusCounts.delivered) status.push({ value: 'delivered', label: 'Delivered' });
-            if (statusCounts.pending) status.push({ value: 'pending', label: 'Pending' });
-            if (statusCounts.available) status.push({ value: 'available', label: 'Available' });
 
             return {
                 company: Array.from(companies).sort((a, b) => a.localeCompare(b, 'ar')),
-                branch: Array.from(branches).sort((a, b) => a.localeCompare(b, 'ar')),
-                status,
                 coordinator: Array.from(coordinators).sort((a, b) => a.localeCompare(b, 'ar'))
             };
         }
@@ -2592,15 +2518,10 @@
             });
             if (selectedCompany && !companies.has(selectedCompany)) selectedCompany = '';
 
-            const branches = new Set();
             const coordinators = new Set();
             draftsInRange.forEach((d) => {
-                const c = draftCompanyName(d);
                 const who = String(d.assignedTo || '').trim();
                 if (who) coordinators.add(who);
-                if (selectedCompany && c !== selectedCompany) return;
-                const b = String((d.payload || {}).branch_to || '').trim();
-                if (b && b !== '-' && !b.startsWith('- اختر') && !b.startsWith('—')) branches.add(b);
             });
 
             const vins = scopedVinSet();
@@ -2616,26 +2537,18 @@
                     queueInRange = queueInRange.filter((q) => companyVins.has(normVinKey(q.vin)));
                 }
             }
-            const statusPresent = new Set();
             queueInRange.forEach((q) => {
-                const loc = String(q.location || '').trim();
-                if (loc) branches.add(loc);
                 const who = String(q.assignedTo || '').trim();
                 if (who) coordinators.add(who);
-                if (q.agentStatus === 'delivered') statusPresent.add('delivered');
-                else if (q.status === 'available') statusPresent.add('available');
-                else statusPresent.add('pending');
             });
 
-            if (uiFilters.branch && !branches.has(uiFilters.branch)) uiFilters.branch = '';
+            uiFilters.branch = '';
+            uiFilters.status = '';
             if (uiFilters.coordinator && !coordinators.has(uiFilters.coordinator)) uiFilters.coordinator = '';
-            if (uiFilters.status && !statusPresent.has(uiFilters.status)) uiFilters.status = '';
         }
 
         function currentSelectValue(kind) {
             if (kind === 'company') return selectedCompany || '';
-            if (kind === 'branch') return uiFilters.branch || '';
-            if (kind === 'status') return uiFilters.status || '';
             if (kind === 'coordinator') return uiFilters.coordinator || '';
             return '';
         }
@@ -2643,18 +2556,8 @@
         function setSelectValue(kind, value) {
             if (kind === 'company') {
                 selectedCompany = value || '';
-                // Branch list is company-scoped — clear if it no longer applies
-                if (uiFilters.branch) {
-                    const stillValid = dateScopedDrafts().some((d) =>
-                        draftCompanyName(d) === selectedCompany
-                        && String((d.payload || {}).branch_to || '').trim() === uiFilters.branch
-                    );
-                    if (!selectedCompany || !stillValid) uiFilters.branch = '';
-                }
                 return;
             }
-            if (kind === 'branch') uiFilters.branch = value || '';
-            if (kind === 'status') uiFilters.status = value || '';
             if (kind === 'coordinator') uiFilters.coordinator = value || '';
         }
 
@@ -2668,21 +2571,11 @@
             const all = collectSelectOptions();
             let items = all[kind] || [];
             const q = String(qInput?.value || '').trim().toLowerCase();
-            if (kind === 'status') {
-                if (q) items = items.filter((it) => it.label.toLowerCase().includes(q) || it.value.includes(q));
-            } else if (q) {
-                items = items.filter((name) => String(name).toLowerCase().includes(q));
-            }
+            if (q) items = items.filter((name) => String(name).toLowerCase().includes(q));
             const current = currentSelectValue(kind);
-            const placeholder = kind === 'company' ? 'Company'
-                : kind === 'branch' ? 'Branch'
-                    : kind === 'status' ? 'Status'
-                        : 'Coordinator';
+            const placeholder = kind === 'company' ? 'Company' : 'Coordinator';
             if (current) {
-                const pretty = kind === 'status'
-                    ? (all.status.find((s) => s.value === current)?.label || current)
-                    : current;
-                labelEl.textContent = pretty;
+                labelEl.textContent = current;
                 labelEl.classList.remove('is-placeholder');
             } else {
                 labelEl.textContent = placeholder;
@@ -2690,9 +2583,7 @@
             }
 
             const clearRow = `<button type="button" class="ft-option" data-value="">All ${placeholder}</button>`;
-            const rows = kind === 'status'
-                ? items.map((it) => `<button type="button" class="ft-option${it.value === current ? ' is-active' : ''}" data-value="${escapeHtml(it.value)}">${escapeHtml(it.label)}</button>`).join('')
-                : items.map((name) => `<button type="button" class="ft-option${name === current ? ' is-active' : ''}" data-value="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('');
+            const rows = items.map((name) => `<button type="button" class="ft-option${name === current ? ' is-active' : ''}" data-value="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('');
             optionsHost.innerHTML = clearRow + (rows || '<div class="saas-empty" style="padding:12px">No options</div>');
             optionsHost.querySelectorAll('.ft-option').forEach((btn) => {
                 btn.addEventListener('click', () => {
@@ -2717,28 +2608,17 @@
             const host = document.getElementById('filterChipsBar');
             if (!host) return;
             const chips = [];
-            const { type, from, to } = getTrackFilter();
+            const { from, to } = getTrackFilter();
             if (from || to) {
                 chips.push({
                     key: 'date',
-                    label: `${from || '…'} → ${to || '…'}`,
+                    label: `DN ${from || '…'} → ${to || '…'}`,
                     clear: () => {
                         document.getElementById('trackDateFrom').value = '';
                         document.getElementById('trackDateTo').value = '';
                         document.getElementById('ftDateFromUi').value = '';
                         document.getElementById('ftDateToUi').value = '';
                         syncDateControlsFromNatives();
-                        applyTrackFilter();
-                    }
-                });
-            }
-            if (type && type !== 'delivery_note') {
-                chips.push({
-                    key: 'type',
-                    label: type === 'proforma' ? 'Proforma' : 'Invoice',
-                    clear: () => {
-                        document.getElementById('trackDateType').value = 'delivery_note';
-                        document.getElementById('ftDateTypeUi').value = 'delivery_note';
                         applyTrackFilter();
                     }
                 });
@@ -2751,29 +2631,6 @@
                         selectedCompany = '';
                         renderAllFtSelects();
                         applyTrackFilter();
-                    }
-                });
-            }
-            if (uiFilters.branch) {
-                chips.push({
-                    key: 'branch',
-                    label: uiFilters.branch,
-                    clear: () => {
-                        uiFilters.branch = '';
-                        renderAllFtSelects();
-                        refreshTransferDashboard();
-                    }
-                });
-            }
-            if (uiFilters.status) {
-                const map = { delivered: 'Delivered', pending: 'Pending', available: 'Available' };
-                chips.push({
-                    key: 'status',
-                    label: map[uiFilters.status] || uiFilters.status,
-                    clear: () => {
-                        uiFilters.status = '';
-                        renderAllFtSelects();
-                        refreshTransferDashboard();
                     }
                 });
             }
@@ -2987,7 +2844,7 @@
 
         function getTrackFilter() {
             return {
-                type: document.getElementById('trackDateType')?.value || 'delivery_note',
+                type: 'delivery_note',
                 from: String(document.getElementById('trackDateFrom')?.value || '').trim(),
                 to: String(document.getElementById('trackDateTo')?.value || '').trim()
             };
@@ -3007,6 +2864,28 @@
             return String(v.deliveryNoteDate || '').slice(0, 10);
         }
 
+        function deliveryNoteDateBounds() {
+            let min = '';
+            let max = '';
+            (allVehicles || []).forEach((v) => {
+                const iso = String(v.deliveryNoteDate || '').slice(0, 10);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+                if (!min || iso < min) min = iso;
+                if (!max || iso > max) max = iso;
+            });
+            return { min, max };
+        }
+
+        function applyDeliveryNoteDateBounds() {
+            const { min, max } = deliveryNoteDateBounds();
+            ['ftDateFromUi', 'ftDateToUi', 'trackDateFrom', 'trackDateTo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (min) el.min = min; else el.removeAttribute('min');
+                if (max) el.max = max; else el.removeAttribute('max');
+            });
+        }
+
         function hasActiveTrackFilter() {
             const { from, to } = getTrackFilter();
             return Boolean(from || to);
@@ -3019,23 +2898,13 @@
          * Returns null when no date range is set (show all).
          */
         function scopedVinSet() {
-            const { type, from, to } = getTrackFilter();
+            const { from, to } = getTrackFilter();
             if (!from && !to) return null;
 
-            if (type === 'delivery_note') {
-                const set = new Set();
-                (allDrafts || []).forEach((d) => {
-                    const iso = draftEventIso(d);
-                    if (!iso || !isoInRange(iso, from, to)) return;
-                    const vin = normVinKey(d.vin);
-                    if (vin) set.add(vin);
-                });
-                return set;
-            }
-
+            // Always filter by Delivery Note Date from raw inventory
             const set = new Set();
             (allVehicles || []).forEach((v) => {
-                const iso = vehicleDateIso(v, type);
+                const iso = vehicleDateIso(v, 'delivery_note');
                 if (!iso || !isoInRange(iso, from, to)) return;
                 const vin = normVinKey(v.vin);
                 if (vin) set.add(vin);
@@ -3055,30 +2924,19 @@
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
 
-            const { type, from, to } = getTrackFilter();
+            const { from, to } = getTrackFilter();
             if (!from && !to) return list;
-
-            if (type === 'delivery_note') {
-                return list.filter((d) => {
-                    const iso = draftEventIso(d);
-                    return iso && isoInRange(iso, from, to);
-                });
-            }
 
             const vins = scopedVinSet();
             if (!vins || !vins.size) return [];
-            return list.filter((d) => vins.has(normVinKey(d.vin)));
-        }
-
-        function companyVinSet() {
-            if (!selectedCompany) return null;
-            const set = new Set();
-            dateScopedDrafts().forEach((d) => {
-                if (draftCompanyName(d) !== selectedCompany) return;
-                const vin = normVinKey(d.vin);
-                if (vin) set.add(vin);
+            return list.filter((d) => {
+                if (vins.has(normVinKey(d.vin))) return true;
+                const extra = [
+                    ...(Array.isArray(d.vins) ? d.vins : []),
+                    ...((d.payload && d.payload.vins) || [])
+                ];
+                return extra.some((v) => vins.has(normVinKey(v)));
             });
-            return set;
         }
 
         function filteredDrafts() {
@@ -3260,6 +3118,7 @@
         }
 
         function refreshTransferDashboard() {
+            applyDeliveryNoteDateBounds();
             updateXferDateLabel();
             pruneStaleUiFilters();
             const draftsBase = filteredDrafts();
@@ -3913,6 +3772,60 @@
             return { delivered, total, pct, remaining: Math.max(0, total - delivered) };
         }
 
+        function isWarehouseAdminDraft(d) {
+            const p = (d && d.payload) || {};
+            if (p.warehouse_group || p.deliveryMode === 'warehouse') return true;
+            if (String(p.branch_to || '').trim() === 'المستودع') return true;
+            if (String(p.company_rep || '').includes('مستودع')) return true;
+            const wh = p.warehouse || {};
+            return Boolean(wh.owner_name || wh.user_name || wh.user_phone || wh.user_id || wh.print_date);
+        }
+
+        function isWarehouseQueueItem(q) {
+            if (!q || q.agentStatus !== 'delivered') return false;
+            if (q.deliveryMode === 'warehouse') return true;
+            return String(q.statusLabel || '').includes('المستودع');
+        }
+
+        /** Warehouse delivery count + % of current scope total. */
+        function warehouseDeliveredStats() {
+            const progress = deliveredOfTotalStats();
+            const queue = filteredQueue();
+            const vins = new Set();
+
+            queue.filter(isWarehouseQueueItem).forEach((q) => {
+                const vin = normVinKey(q.vin);
+                if (vin) vins.add(vin);
+            });
+
+            filteredDrafts().filter(isWarehouseAdminDraft).forEach((d) => {
+                const list = [
+                    ...(Array.isArray(d.vins) ? d.vins : []),
+                    d.vin,
+                    ...((d.payload && d.payload.vins) || []),
+                    ...((d.payload && d.payload.cars) || []).map((c) => c && (c.chassis || c.vin))
+                ];
+                list.forEach((v) => {
+                    const vin = normVinKey(v);
+                    if (vin) vins.add(vin);
+                });
+            });
+
+            // Scope to current vehicle/queue filter when applicable
+            const scopeVehicles = filteredVehicleList();
+            if (scopeVehicles.length && (getTrackFilter().type === 'proforma' || getTrackFilter().type === 'invoice')) {
+                const scope = new Set(scopeVehicles.map((v) => normVinKey(v.vin)));
+                [...vins].forEach((vin) => {
+                    if (!scope.has(vin)) vins.delete(vin);
+                });
+            }
+
+            const count = vins.size;
+            const total = progress.total || 0;
+            const pct = total ? Math.round((count / total) * 1000) / 10 : 0;
+            return { count, total, pct, delivered: progress.delivered };
+        }
+
         function renderDeliveredOfTotalChart() {
             const stats = deliveredOfTotalStats();
             const doneEl = document.getElementById('deliveredTotalDone');
@@ -4186,6 +4099,10 @@
             if (typeUi) typeUi.value = 'delivery_note';
             selectedCompany = '';
             uiFilters = { search: '', branch: '', status: '', coordinator: '' };
+            const typeEl = document.getElementById('trackDateType');
+            if (typeEl) typeEl.value = 'delivery_note';
+            if (typeUi) typeUi.value = 'delivery_note';
+            applyDeliveryNoteDateBounds();
             const ftSearch = document.getElementById('ftSearchInput');
             const legacySearch = document.getElementById('searchInput');
             if (ftSearch) ftSearch.value = '';
@@ -4429,7 +4346,7 @@
                     <td>${item.location || '—'}</td>
                     <td>${item.assignedTo || '—'}</td>
                     <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
-                    <td>${avail ? 'متاح' : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز')}</td>
+                    <td>${avail ? 'متاح' : (item.statusLabel || (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'))}</td>
                     <td>${avail || item.agentStatus === 'delivered' ? '' : `<button type="button" class="hub-btn hub-btn--sm" data-release="${item.vin}">إتاحة</button>`}</td>
                 </tr>`;
             }).join('');

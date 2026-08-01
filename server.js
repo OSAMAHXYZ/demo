@@ -156,11 +156,27 @@ function vehicleIndex() {
 
 function statusLabelFor(item) {
   if (item.status === 'available') return 'متاح';
-  if (item.agentStatus === 'delivered') return 'تم الترحيل';
+  if (item.agentStatus === 'delivered') {
+    return item.deliveryMode === 'warehouse'
+      ? 'تم التسليم في المستودع'
+      : 'تم الترحيل';
+  }
   if (item.agentStatus === 'out_of_delivery') return 'Out for delivery';
   if (item.agentStatus === 'ready_for_delivery') return 'Ready';
   if (item.agentStatus === 'in_stock') return item.assignedTo ? `مع ${item.assignedTo}` : 'In Stock';
   return 'محجوز';
+}
+
+function isWarehouseDraftPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  if (payload.warehouse_group) return true;
+  if (String(payload.branch_to || '').trim() === 'المستودع') return true;
+  if (String(payload.company_rep || '').includes('مستودع')) return true;
+  const wh = payload.warehouse || {};
+  return Boolean(
+    wh.owner_name || wh.user_name || wh.user_id || wh.user_phone
+    || wh.print_date || wh.print_time
+  );
 }
 
 function enrichQueueItem(item) {
@@ -176,6 +192,7 @@ function enrichQueueItem(item) {
     plate: item.plate || veh?.plate || '',
     imageUrl: item.imageUrl || veh?.imageUrl || '',
     customerName: item.customerName || veh?.customerName || '',
+    phone: item.phone || veh?.phone || '',
     statusLabel: statusLabelFor(item)
   };
   return enriched;
@@ -289,7 +306,8 @@ function enrichFromVehicle(item, veh) {
       location: '',
       plate: item.plate || '',
       imageUrl: item.imageUrl || '',
-      customerName: item.customerName || ''
+      customerName: item.customerName || '',
+      phone: item.phone || ''
     };
   }
   return {
@@ -300,7 +318,8 @@ function enrichFromVehicle(item, veh) {
     location: veh.location || '',
     plate: veh.plate || item.plate || '',
     imageUrl: veh.imageUrl || item.imageUrl || '',
-    customerName: veh.customerName || item.customerName || ''
+    customerName: veh.customerName || item.customerName || '',
+    phone: veh.phone || item.phone || ''
   };
 }
 
@@ -445,6 +464,11 @@ function rowToVehicle(row) {
   ]);
   const plate = pickExactishCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
   const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
+  const phone = pickCol(row, [
+    'contact no', 'contact no.', 'contact number', 'contact',
+    'phone', 'phone no', 'phone number', 'mobile', 'mobile no', 'mobile number',
+    'tel', 'telephone', 'هاتف', 'جوال', 'رقم الجوال', 'رقم الهاتف'
+  ]);
   const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
   const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
   const proformaDate = normalizeExcelDate(pickCol(row, [
@@ -466,6 +490,7 @@ function rowToVehicle(row) {
     location,
     plate: plate === '#' ? '' : plate,
     customerName,
+    phone: phone === '#' ? '' : phone,
     imageUrl,
     suffix,
     proformaDate,
@@ -1064,6 +1089,7 @@ app.post('/api/delivery-inventory/merge-dates', (req, res) => {
         invoiceDate: src.invoiceDate || v.invoiceDate || '',
         deliveryNoteDate: src.deliveryNoteDate || v.deliveryNoteDate || '',
         customerName: v.customerName || src.customerName || '',
+        phone: src.phone || v.phone || '',
         product: v.product || src.product || '',
         model: v.model || src.model || '',
         gt: v.gt || src.gt || '',
@@ -1188,7 +1214,7 @@ app.get('/api/delivery-inventory/vehicles', (req, res) => {
     const vin = normVin(v.vin);
     if (!vin || exclude.has(vin)) return false;
     if (!search) return true;
-    const hay = `${vin} ${v.product || ''} ${v.plate || ''} ${v.gt || ''} ${v.location || ''}`.toUpperCase();
+    const hay = `${vin} ${v.product || ''} ${v.plate || ''} ${v.gt || ''} ${v.location || ''} ${v.phone || ''} ${v.customerName || ''}`.toUpperCase();
     return hay.includes(search);
   });
   list = list.slice(0, limit);
@@ -1205,6 +1231,27 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
     store.queue = deduped;
     saveStore();
   }
+
+  // Backfill warehouse delivery label from warehouse drafts
+  const warehouseVins = new Set();
+  for (const d of store.drafts || []) {
+    if (!isWarehouseDraftPayload(d.payload || {})) continue;
+    const list = [
+      ...(Array.isArray(d.vins) ? d.vins : []),
+      d.vin,
+      ...((d.payload && d.payload.vins) || [])
+    ];
+    list.forEach((v) => {
+      const n = normVin(v);
+      if (n) warehouseVins.add(n);
+    });
+  }
+  for (const item of store.queue) {
+    if (item.agentStatus === 'delivered' && !item.deliveryMode && warehouseVins.has(normVin(item.vin))) {
+      item.deliveryMode = 'warehouse';
+    }
+  }
+
   let queue = store.queue.map(enrichQueueItem);
 
   if (!admin && username) {
@@ -1352,6 +1399,7 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   )];
   if (!vins.length) return res.status(400).json({ error: 'الشاسيه مطلوب' });
 
+  const warehouseDelivery = isWarehouseDraftPayload(draftPayload);
   const byVehicle = vehicleIndex();
   const deliveredItems = [];
   for (const vin of vins) {
@@ -1362,6 +1410,7 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
         vin,
         status: 'claimed',
         agentStatus: 'delivered',
+        deliveryMode: warehouseDelivery ? 'warehouse' : '',
         assignedTo: auth.username,
         assignedAt: new Date().toISOString(),
         addedAt: new Date().toISOString()
@@ -1375,13 +1424,13 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
       }
       item.status = 'claimed';
       item.agentStatus = 'delivered';
+      item.deliveryMode = warehouseDelivery ? 'warehouse' : (item.deliveryMode || '');
       item.assignedTo = auth.username;
     }
     deliveredItems.push(enrichQueueItem(item));
   }
 
   const primary = deliveredItems[0];
-  const isWarehouseGroup = vins.length > 1 || !!(draftPayload?.warehouse && typeof draftPayload.warehouse === 'object');
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
@@ -1397,7 +1446,8 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     location: primary.location || '',
     payload: {
       ...draftPayload,
-      warehouse_group: isWarehouseGroup,
+      warehouse_group: warehouseDelivery,
+      deliveryMode: warehouseDelivery ? 'warehouse' : '',
       vins
     }
   };

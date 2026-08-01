@@ -333,7 +333,7 @@
             overflow: visible;
             text-overflow: clip;
         }
-        .preview-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .preview-actions { display: none !important; }
         .preview-actions .btn { flex: 1; min-width: 120px; padding: 12px 16px; font-size: .85rem; }
 
         @media (max-width: 1100px) {
@@ -1166,18 +1166,12 @@
                         <div class="grid" style="grid-column: 1 / -1">
                             <label for="attachments">المرفقات / Attachments</label>
                             <textarea id="attachments" name="attachments" rows="2"></textarea>
-                            <div class="warehouse-delivery-actions no-print">
-                                <button type="button" class="btn btn-warehouse" id="btnWarehouseDelivery">
-                                    في حال استلام العميل من المستودع يرجى الضغط
-                                </button>
-                                <p class="searchable-select-hint">يضع الشركة: مستودع الهاتفية · الفرع: المستودع · والمرفقات: تم الاستلام من قبل صاحب المركبة</p>
-                            </div>
                         </div>
                     </div>
                 </section>
 
                 <section class="card warehouse-top-fields no-print" id="warehouseTopFields" hidden>
-                    <h2>بيانات قائمة فحص التسليم — اسامة12</h2>
+                    <h2>بيانات قائمة فحص التسليم</h2>
                     <p class="hint">عبّئ هذه الحقول فقط — تظهر على نموذج المستودع. الشاسيه من الجدول أدناه.</p>
                     <div class="grid grid-2">
                         <div>
@@ -1460,6 +1454,7 @@
                     print_date: fd.get('wh_print_date')?.trim(),
                     print_time: fd.get('wh_print_time')?.trim()
                 },
+                phone: fd.get('wh_user_phone')?.trim(),
                 cars
             };
         }
@@ -1662,7 +1657,9 @@
                     ? `<img src="${v.imageUrl}" alt="" onerror="this.style.display='none'">`
                     : '<div class="vin-meta" style="height:72px;display:flex;align-items:center;justify-content:center">🚗</div>';
                 const meta = [v.plate, v.suffix].filter(Boolean).join(' · ');
-                return `<button type="button" class="vin-card" data-vin="${v.vin}" data-product="${(v.product || v.model || '').replace(/"/g, '&quot;')}" data-plate="${(v.plate || '').replace(/"/g, '&quot;')}">
+                const phoneAttr = String(v.phone || '').replace(/"/g, '&quot;');
+                const customerAttr = String(v.customerName || '').replace(/"/g, '&quot;');
+                return `<button type="button" class="vin-card" data-vin="${v.vin}" data-product="${(v.product || v.model || '').replace(/"/g, '&quot;')}" data-plate="${(v.plate || '').replace(/"/g, '&quot;')}" data-phone="${phoneAttr}" data-customer="${customerAttr}">
                     ${img}
                     <div class="vin-no">${v.vin}</div>
                     <div class="vin-product">${v.product || v.model || '—'}</div>
@@ -1672,6 +1669,29 @@
             vinGrid.querySelectorAll('.vin-card').forEach((btn) => {
                 btn.addEventListener('click', () => selectVinVehicle(btn));
             });
+        }
+
+        function setWarehousePhoneFromRaw(phone) {
+            const el = document.getElementById('wh_user_phone');
+            if (!el) return;
+            const p = String(phone || '').trim();
+            if (!p || p === '#') return;
+            el.value = p;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            updatePreview();
+        }
+
+        async function lookupVehiclePhone(vin) {
+            const key = String(vin || '').trim().toUpperCase();
+            if (!key) return '';
+            try {
+                const res = await fetch(`/api/delivery-inventory/vehicles?search=${encodeURIComponent(key)}&limit=20`);
+                const data = await res.json();
+                const hit = (data.vehicles || []).find((v) => String(v.vin || '').trim().toUpperCase() === key);
+                return String(hit?.phone || '').trim();
+            } catch (_) {
+                return '';
+            }
         }
 
         async function loadVinOptions(search) {
@@ -1705,6 +1725,9 @@
             const product = btn.dataset.product || '';
             form.querySelector(`[name="car_chassis_${activeVinRow}"]`).value = vin;
             form.querySelector(`[name="car_model_${activeVinRow}"]`).value = product;
+            if (warehousePrintMode || activeVinRow === 0) {
+                setWarehousePhoneFromRaw(btn.dataset.phone || '');
+            }
             closeVinPicker();
             syncCarCount();
         }
@@ -1793,7 +1816,7 @@
                                 const statusEl = document.getElementById('queueStatus');
                                 if (statusEl) {
                                     statusEl.textContent = isWarehouse
-                                        ? `تم الترحيل لـ ${n} سيارة معاً — قائمة الفحص`
+                                        ? `تم التسليم في المستودع لـ ${n} سيارة`
                                         : (n > 1 ? `تم الترحيل لـ ${n} سيارة` : 'تم الطباعة — تم الترحيل');
                                     statusEl.className = 'ws-toast ok';
                                 }
@@ -1943,22 +1966,15 @@
         function setWarehousePrintMode(enabled) {
             warehousePrintMode = Boolean(enabled);
             document.body.classList.toggle('warehouse-form-mode', warehousePrintMode);
-            const btn = document.getElementById('btnWarehouseDelivery');
             const previewTitle = document.getElementById('previewTitle');
             const previewImg = document.getElementById('previewFormImage');
             const topFields = document.getElementById('warehouseTopFields');
             const overlay = document.getElementById('overlayFields');
             const printBtn = document.getElementById('btnPrint');
             const downloadBtn = document.getElementById('btnDownload');
-            if (btn) {
-                btn.textContent = warehousePrintMode
-                    ? 'تم اختيار نموذج المستودع (اسامة12 / قائمة الفحص)'
-                    : 'في حال استلام العميل من المستودع يرجى الضغط';
-                btn.setAttribute('aria-pressed', warehousePrintMode ? 'true' : 'false');
-            }
             if (previewTitle) {
                 previewTitle.textContent = warehousePrintMode
-                    ? 'معاينة قائمة فحص التسليم — اسامة12'
+                    ? 'معاينة قائمة فحص التسليم'
                     : 'معاينة مذكرة الترحيل';
             }
             if (previewImg) {
@@ -2204,6 +2220,7 @@
             const model = form.querySelector('[name="car_model_0"]');
             if (chassis) chassis.value = item.vin;
             if (model) model.value = item.product || item.model || '';
+            setWarehousePhoneFromRaw(item.phone || '');
             syncCarCount();
             updatePreview();
         }
@@ -2672,9 +2689,18 @@
             if (techEl && !techEl.value.trim() && agent.username) {
                 techEl.value = agent.username;
             }
+            const phoneEl = document.getElementById('wh_user_phone');
+            if (phoneEl && !phoneEl.value.trim()) {
+                const vin = getClaimedVin() || getFormChassisList()[0] || '';
+                if (vin) {
+                    lookupVehiclePhone(vin).then((phone) => {
+                        if (phone) setWarehousePhoneFromRaw(phone);
+                    });
+                }
+            }
             setWarehousePrintMode(true);
             document.getElementById('warehouseTopFields')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setStatus('عبّئ: المالك · المستخدم · الهاتف · الهوية · تاريخ ووقت الطباعة', 'ok');
+            setStatus('عبّئ: المالك · المستخدم · الهوية · تاريخ ووقت الطباعة — الهاتف من البيانات الخام', 'ok');
         }
 
         async function downloadWarehouseCheckNoteFile() {
@@ -2873,7 +2899,6 @@
         initSearchableSelect('branch_to');
         initSearchableSelect('company_rep');
         ensureWarehouseCompanyOption();
-        document.getElementById('btnWarehouseDelivery')?.addEventListener('click', applyWarehouseDelivery);
         loadDeliveryOptions().finally(() => initGate());
     </script>
     <script src="delivery-hub-live.js"></script>

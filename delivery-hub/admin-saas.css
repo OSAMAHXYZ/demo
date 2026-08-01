@@ -436,7 +436,7 @@ body.delivery-hub.admin-console .hub-shell,
 
 .admin-overview-row .saas-kpi-grid {
   margin: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
 }
 
@@ -505,7 +505,7 @@ body.delivery-hub.admin-console .hub-shell,
     grid-template-columns: 1fr;
   }
   .admin-overview-row .saas-kpi-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .lead-time-grid {
     grid-template-columns: 1fr;
