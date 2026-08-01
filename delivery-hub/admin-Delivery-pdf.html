@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802b">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -934,11 +934,20 @@
             font-weight: 600;
         }
         .admin-restore-box {
+            position: relative;
+            z-index: 90;
             margin-bottom: 14px;
             padding: 14px 16px;
             border-radius: 18px;
             border: 1px dashed rgba(235, 10, 30, 0.35);
             background: linear-gradient(165deg, rgba(235, 10, 30, 0.08), rgba(255,255,255,0.02));
+            pointer-events: auto;
+        }
+        .admin-restore-box .hub-btn {
+            position: relative;
+            z-index: 1;
+            pointer-events: auto;
+            cursor: pointer;
         }
         .admin-restore-box h3 {
             margin: 0 0 6px;
@@ -1318,21 +1327,16 @@
             <div class="saas-section__head">
                 <div>
                     <h3>الإعدادات والأرشيف</h3>
-                    <p>استعادة تصدير قديم أو دمج تواريخ Proforma/Invoice من Sales Raw</p>
+                    <p>استعادة تصدير قديم · تحديث Sales Raw من صفحة المنسق</p>
                 </div>
             </div>
             <div class="admin-restore-actions">
-                <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
-                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">استيراد أرشيف delivery_export</button>
+                <input type="file" id="restoreExportInput" accept=".xlsx,.xls" hidden>
+                <label class="hub-btn hub-btn--primary" for="restoreExportInput" id="btnRestoreExport" style="cursor:pointer;margin:0">استيراد أرشيف delivery_export</label>
                 <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
+                <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
             </div>
             <p class="hub-status" id="restoreExportStatus"></p>
-            <div class="admin-restore-actions" style="margin-top:10px">
-                <input type="file" id="mergeDatesInput" accept=".xlsx,.xls">
-                <button type="button" class="hub-btn" id="btnMergeDates">تحديث تواريخ Proforma/Invoice من Sales Raw</button>
-                <span class="hub-meta" id="mergeDatesMeta">بدون مسح المسودات أو القائمة</span>
-            </div>
-            <p class="hub-status" id="mergeDatesStatus"></p>
         </div>
 
         <div class="ft-shell" id="adminFilterBar">
@@ -4508,55 +4512,8 @@
             reader.readAsDataURL(file);
         }
 
-        document.getElementById('btnRestoreExport')?.addEventListener('click', () => {
-            document.getElementById('restoreExportInput')?.click();
-        });
         document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
             restoreExportFile(e.target.files?.[0]);
-            e.target.value = '';
-        });
-
-        async function mergeDatesFromSalesRaw(file) {
-            if (!file) return;
-            const status = document.getElementById('mergeDatesStatus');
-            const setMerge = (msg, type) => {
-                if (!status) return;
-                status.textContent = msg || '';
-                status.className = 'hub-status' + (type ? ` ${type}` : '');
-            };
-            setMerge('جاري دمج تواريخ Proforma/Invoice…');
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const res = await fetch('/api/delivery-inventory/merge-dates', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error || 'فشل الدمج');
-                    const meta = document.getElementById('mergeDatesMeta');
-                    if (meta) {
-                        meta.textContent = `حدّث ${data.updated || 0} · أضاف ${data.added || 0} · Proforma ${data.withProforma || 0} · Invoice ${data.withInvoice || 0}`;
-                    }
-                    setMerge(
-                        `تم دمج التواريخ: Proforma ${data.withProforma || 0} · Invoice ${data.withInvoice || 0}`,
-                        'ok'
-                    );
-                    await loadDashboard();
-                    applyTrackFilter();
-                } catch (err) {
-                    setMerge(err.message, 'err');
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-
-        document.getElementById('btnMergeDates')?.addEventListener('click', () => {
-            document.getElementById('mergeDatesInput')?.click();
-        });
-        document.getElementById('mergeDatesInput')?.addEventListener('change', (e) => {
-            mergeDatesFromSalesRaw(e.target.files?.[0]);
             e.target.value = '';
         });
 
