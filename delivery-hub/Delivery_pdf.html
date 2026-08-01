@@ -205,6 +205,12 @@
                 margin-top: 5.3mm;
                 height: calc(var(--form-h) - 5.3mm);
             }
+            /* Force VIN near the chassis label on the right in print preview */
+            body.warehouse-form-mode .overlay-field[data-tag="wh_chassis"],
+            body.warehouse-form-mode .overlay-field[data-tag^="wh_chassis_"] {
+                left: 58% !important;
+                width: 24% !important;
+            }
         }
         body.warehouse-form-mode .memo-only-section,
         body.warehouse-form-mode .warehouse-delivery-actions {
@@ -1289,7 +1295,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260801vin70"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260801vin58pct"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1374,8 +1380,8 @@
             let left = `${x * 100}%`;
             let top = `${y * 100}%`;
             if (/^wh_chassis/.test(tag)) {
-                // Warehouse VIN: +60px prior + 70px more ≈ 34.4mm
-                left = `calc(${x * 100}% + 34.4mm)`;
+                // Absolute % — mm accumulation was hard to see / deploy; place VIN near label
+                left = `${x * 100}%`;
             } else if (/_chassis$/.test(tag)) {
                 left = `calc(${x * 100}% + 15.9mm)`;
             }

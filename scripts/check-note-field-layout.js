@@ -14,12 +14,12 @@ const CHECK_NOTE_FIELDS = [
   ['wh_print_time', 0.05, 0.228, 0.30, 0.014, 'end'],
   ['wh_print_date', 0.50, 0.228, 0.22, 0.014, 'end'],
 
-  // Chassis — left-aligned short box; +60px applied in overlayPositionStyle via mm
-  ['wh_chassis', 0.22, 0.263, 0.38, 0.015, 'start'],
-  ['wh_chassis_2', 0.22, 0.279, 0.38, 0.014, 'start'],
-  ['wh_chassis_3', 0.22, 0.293, 0.38, 0.014, 'start'],
-  ['wh_chassis_4', 0.22, 0.307, 0.38, 0.014, 'start'],
-  ['wh_chassis_5', 0.22, 0.321, 0.38, 0.014, 'start']
+  // Chassis — start near label on the right (~+200px from page center)
+  ['wh_chassis', 0.58, 0.263, 0.24, 0.015, 'start'],
+  ['wh_chassis_2', 0.58, 0.279, 0.24, 0.014, 'start'],
+  ['wh_chassis_3', 0.58, 0.293, 0.24, 0.014, 'start'],
+  ['wh_chassis_4', 0.58, 0.307, 0.24, 0.014, 'start'],
+  ['wh_chassis_5', 0.58, 0.321, 0.24, 0.014, 'start']
 ];
 
 const CHECK_NOTE_COVERS = [];
