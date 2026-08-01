@@ -10,16 +10,16 @@ const CHECK_NOTE_FIELDS = [
   ['wh_user_phone', 0.05, 0.170, 0.33, 0.014, 'end'],
   ['wh_user_id', 0.05, 0.188, 0.33, 0.014, 'end'],
 
-  // Bottom row of header box (وقت / تاريخ طباعة المستند) — +20px (~0.018 of A4)
-  ['wh_print_time', 0.05, 0.224, 0.30, 0.014, 'end'],
-  ['wh_print_date', 0.50, 0.224, 0.22, 0.014, 'end'],
+  // Bottom row of header box (وقت / تاريخ طباعة المستند) — +4px more (~0.004 of A4)
+  ['wh_print_time', 0.05, 0.228, 0.30, 0.014, 'end'],
+  ['wh_print_date', 0.50, 0.228, 0.22, 0.014, 'end'],
 
-  // Chassis line(s) under the header box — +30px (~0.027 of A4)
-  ['wh_chassis', 0.18, 0.263, 0.55, 0.015, 'center'],
-  ['wh_chassis_2', 0.18, 0.279, 0.55, 0.014, 'center'],
-  ['wh_chassis_3', 0.18, 0.293, 0.55, 0.014, 'center'],
-  ['wh_chassis_4', 0.18, 0.307, 0.55, 0.014, 'center'],
-  ['wh_chassis_5', 0.18, 0.321, 0.55, 0.014, 'center']
+  // Chassis line(s) — +60px right (~0.076 of A4 width)
+  ['wh_chassis', 0.256, 0.263, 0.55, 0.015, 'center'],
+  ['wh_chassis_2', 0.256, 0.279, 0.55, 0.014, 'center'],
+  ['wh_chassis_3', 0.256, 0.293, 0.55, 0.014, 'center'],
+  ['wh_chassis_4', 0.256, 0.307, 0.55, 0.014, 'center'],
+  ['wh_chassis_5', 0.256, 0.321, 0.55, 0.014, 'center']
 ];
 
 const CHECK_NOTE_COVERS = [];
