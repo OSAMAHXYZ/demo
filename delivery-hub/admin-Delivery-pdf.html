@@ -967,9 +967,39 @@
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
+            position: relative;
+            z-index: 2;
         }
         .admin-restore-actions input[type="file"] {
-            display: none;
+            /* Keep pickable: display:none blocks button-triggered clicks in Chrome */
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+            opacity: 0;
+        }
+        .restore-file-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin: 0;
+        }
+        .restore-file-btn input[type="file"] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            clip: auto;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
         }
         .company-filter-chip {
             display: flex;
@@ -1331,8 +1361,10 @@
                 </div>
             </div>
             <div class="admin-restore-actions">
-                <input type="file" id="restoreExportInput" accept=".xlsx,.xls" aria-hidden="true" tabindex="-1">
-                <button type="button" class="hub-btn hub-btn--primary" id="btnRestoreExport">استيراد أرشيف delivery_export</button>
+                <label class="hub-btn hub-btn--primary restore-file-btn" id="btnRestoreExport">
+                    <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
+                    استيراد أرشيف delivery_export
+                </label>
                 <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
                 <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
             </div>
@@ -1919,6 +1951,75 @@
             if (e.key === 'Enter') tryAdminLogin();
         });
         document.getElementById('btnAdminLogout').addEventListener('click', lockAdmin);
+
+        function setRestoreStatus(msg, type) {
+            const el = document.getElementById('restoreExportStatus');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.className = 'hub-status' + (type ? ` ${type}` : '');
+        }
+
+        function syncRestoreMetaFromDashboard() {
+            const meta = document.getElementById('restoreExportMeta');
+            if (!meta) return;
+            const name = String((lastDashboard && lastDashboard.filename) || '').trim();
+            if (!name) return;
+            meta.textContent = `${name} · ${allVehicles.length} مركبة · ${allDrafts.length} مسودة · ${allQueue.length} قائمة`;
+        }
+
+        async function restoreExportFile(file) {
+            if (!file) {
+                setRestoreStatus('اختر ملف Excel أولاً', 'err');
+                return;
+            }
+            setRestoreStatus(`تم اختيار: ${file.name}`);
+            if (!confirm('استيراد هذا الأرشيف سيستبدل المخزون / القائمة / المسودات الحالية. متابعة؟')) {
+                setRestoreStatus('تم إلغاء الاستيراد');
+                return;
+            }
+            setRestoreStatus('جاري استيراد الأرشيف…');
+            try {
+                const readerResult = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onerror = () => reject(new Error('فشل قراءة الملف من الجهاز'));
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+                const res = await fetch('/api/delivery-inventory/restore-export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileData: readerResult, filename: file.name })
+                });
+                const text = await res.text();
+                let data = {};
+                try { data = text ? JSON.parse(text) : {}; } catch (_) {
+                    throw new Error(res.status === 413
+                        ? 'الملف كبير جداً للخادم'
+                        : `فشل الاستيراد (HTTP ${res.status})`);
+                }
+                if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
+                const meta = document.getElementById('restoreExportMeta');
+                if (meta) {
+                    meta.textContent = `${file.name} · ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة`;
+                }
+                setRestoreStatus(
+                    `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} في القائمة`,
+                    'ok'
+                );
+                await loadDashboard();
+                if (data.draftsImported) openFold('draftsSection', { scroll: true });
+                else openFold('inventorySection', { scroll: true });
+            } catch (err) {
+                setRestoreStatus(err.message || 'فشل الاستيراد', 'err');
+            }
+        }
+
+        // Native file input sits on top of the blue label — no programmatic .click() needed.
+        document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (file) restoreExportFile(file);
+            e.target.value = '';
+        });
 
         function setFoldOpen(section, open) {
             if (!section) return;
@@ -4294,6 +4395,7 @@
             loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
             updateFoldCounts();
             refreshTransferDashboard();
+            syncRestoreMetaFromDashboard();
         }
 
         function bindDraftActionButtons(tbody) {
@@ -4469,72 +4571,6 @@
             if (ft) ft.value = e.target.value;
             document.getElementById('ftSearchClear')?.classList.toggle('is-visible', Boolean(uiFilters.search));
             refreshTransferDashboard();
-        });
-
-        function setRestoreStatus(msg, type) {
-            const el = document.getElementById('restoreExportStatus');
-            if (!el) return;
-            el.textContent = msg || '';
-            el.className = 'hub-status' + (type ? ` ${type}` : '');
-        }
-
-        async function restoreExportFile(file) {
-            if (!file) {
-                setRestoreStatus('اختر ملف Excel أولاً', 'err');
-                return;
-            }
-            setRestoreStatus(`تم اختيار: ${file.name} — أكّد للمتابعة…`);
-            if (!confirm(`استيراد "${file.name}" سيستبدل المخزون / القائمة / المسودات الحالية. متابعة؟`)) {
-                setRestoreStatus('تم إلغاء الاستيراد');
-                return;
-            }
-            setRestoreStatus('جاري قراءة الملف ورفع الأرشيف…');
-            const reader = new FileReader();
-            reader.onerror = () => setRestoreStatus('فشل قراءة الملف من الجهاز', 'err');
-            reader.onload = async () => {
-                try {
-                    if (!reader.result) throw new Error('الملف فارغ أو لم يُقرأ');
-                    const res = await fetch('/api/delivery-inventory/restore-export', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fileData: reader.result, filename: file.name })
-                    });
-                    const text = await res.text();
-                    let data = {};
-                    try { data = text ? JSON.parse(text) : {}; } catch (_) {
-                        throw new Error(res.status === 413
-                            ? 'الملف كبير جداً للخادم'
-                            : `فشل الاستيراد (HTTP ${res.status})`);
-                    }
-                    if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
-                    const meta = document.getElementById('restoreExportMeta');
-                    if (meta) {
-                        meta.textContent = `${file.name} · ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة`;
-                    }
-                    setRestoreStatus(
-                        `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} في القائمة`,
-                        'ok'
-                    );
-                    await loadDashboard();
-                    if (data.draftsImported) openFold('draftsSection', { scroll: true });
-                    else openFold('inventorySection', { scroll: true });
-                } catch (err) {
-                    setRestoreStatus(err.message || 'فشل الاستيراد', 'err');
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-
-        document.getElementById('btnRestoreExport')?.addEventListener('click', () => {
-            const input = document.getElementById('restoreExportInput');
-            if (!input) return setRestoreStatus('حقل الملف غير موجود — حدّث الصفحة', 'err');
-            input.value = '';
-            input.click();
-        });
-        document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
-            const file = e.target.files?.[0];
-            if (file) restoreExportFile(file);
-            else setRestoreStatus('لم يتم اختيار ملف', 'err');
         });
 
         document.getElementById('btnExportExcel')?.addEventListener('click', exportAllToExcel);
