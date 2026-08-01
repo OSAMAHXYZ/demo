@@ -14,12 +14,12 @@ const CHECK_NOTE_FIELDS = [
   ['wh_print_time', 0.05, 0.228, 0.30, 0.014, 'end'],
   ['wh_print_date', 0.50, 0.228, 0.22, 0.014, 'end'],
 
-  // Chassis — +100px right from 58% (~0.126 of A4 width)
-  ['wh_chassis', 0.71, 0.263, 0.20, 0.015, 'start'],
-  ['wh_chassis_2', 0.71, 0.279, 0.20, 0.014, 'start'],
-  ['wh_chassis_3', 0.71, 0.293, 0.20, 0.014, 'start'],
-  ['wh_chassis_4', 0.71, 0.307, 0.20, 0.014, 'start'],
-  ['wh_chassis_5', 0.71, 0.321, 0.20, 0.014, 'start']
+  // Chassis — +100px right; +20px down
+  ['wh_chassis', 0.71, 0.281, 0.20, 0.015, 'start'],
+  ['wh_chassis_2', 0.71, 0.297, 0.20, 0.014, 'start'],
+  ['wh_chassis_3', 0.71, 0.311, 0.20, 0.014, 'start'],
+  ['wh_chassis_4', 0.71, 0.325, 0.20, 0.014, 'start'],
+  ['wh_chassis_5', 0.71, 0.339, 0.20, 0.014, 'start']
 ];
 
 const CHECK_NOTE_COVERS = [];
