@@ -194,6 +194,12 @@
         body.warehouse-form-mode .overlay-field {
             font-size: 12px;
             font-weight: 700;
+            align-items: center;
+        }
+        @media print {
+            body.warehouse-form-mode .overlay-field {
+                font-size: 13px;
+            }
         }
         body.warehouse-form-mode .memo-only-section,
         body.warehouse-form-mode .warehouse-delivery-actions {
@@ -1278,7 +1284,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260731align2"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260801printfix"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1362,18 +1368,9 @@
             // VIN +60px ≈ 15.9mm, model +15px ≈ 4mm, plate +40px ≈ 10.6mm
             let left = `${x * 100}%`;
             let top = `${y * 100}%`;
-            if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
+            if (/_chassis$/.test(tag) && tag !== 'wh_chassis') left = `calc(${x * 100}% + 15.9mm)`;
             if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
-            if (tag === 'wh_chassis') {
-                left = `${x * 100}%`;
-                top = `calc(${y * 100}% + 40px)`;
-            }
-            if (tag === 'wh_print_date') top = `calc(${y * 100}% + 38px)`;
-            if (tag === 'wh_print_time') top = `calc(${y * 100}% + 38px)`;
-            if (tag === 'wh_user_id') top = `calc(${y * 100}% + 30px)`;
-            if (tag === 'wh_owner_name' || tag === 'wh_user_name') top = `calc(${y * 100}% + 10px)`;
-            if (tag === 'wh_user_phone') top = `calc(${y * 100}% + 40px)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
         }
 
