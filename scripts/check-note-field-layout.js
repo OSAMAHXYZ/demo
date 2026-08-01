@@ -5,21 +5,21 @@
  */
 const CHECK_NOTE_FIELDS = [
   // Left-of-center values (next to إسم المالك / المستخدم / هاتف / رقم الهوية)
-  ['wh_owner_name', 0.05, 0.118, 0.33, 0.014, 'end'],
-  ['wh_user_name', 0.05, 0.136, 0.33, 0.014, 'end'],
-  ['wh_user_phone', 0.05, 0.170, 0.33, 0.014, 'end'],
-  ['wh_user_id', 0.05, 0.188, 0.33, 0.014, 'end'],
+  ['wh_owner_name', 0.05, 0.127, 0.33, 0.014, 'end'],   // +10px down
+  ['wh_user_name', 0.05, 0.145, 0.33, 0.014, 'end'],    // +10px down
+  ['wh_user_phone', 0.05, 0.183, 0.33, 0.014, 'end'],   // +15px down
+  ['wh_user_id', 0.05, 0.215, 0.33, 0.014, 'end'],      // +30px down
 
   // Bottom row of header box (وقت / تاريخ طباعة المستند) — +4px more (~0.004 of A4)
   ['wh_print_time', 0.05, 0.228, 0.30, 0.014, 'end'],
   ['wh_print_date', 0.50, 0.228, 0.22, 0.014, 'end'],
 
-  // Chassis — start near label on the right (~+200px from page center)
-  ['wh_chassis', 0.58, 0.263, 0.24, 0.015, 'start'],
-  ['wh_chassis_2', 0.58, 0.279, 0.24, 0.014, 'start'],
-  ['wh_chassis_3', 0.58, 0.293, 0.24, 0.014, 'start'],
-  ['wh_chassis_4', 0.58, 0.307, 0.24, 0.014, 'start'],
-  ['wh_chassis_5', 0.58, 0.321, 0.24, 0.014, 'start']
+  // Chassis — +100px right from 58% (~0.126 of A4 width)
+  ['wh_chassis', 0.71, 0.263, 0.20, 0.015, 'start'],
+  ['wh_chassis_2', 0.71, 0.279, 0.20, 0.014, 'start'],
+  ['wh_chassis_3', 0.71, 0.293, 0.20, 0.014, 'start'],
+  ['wh_chassis_4', 0.71, 0.307, 0.20, 0.014, 'start'],
+  ['wh_chassis_5', 0.71, 0.321, 0.20, 0.014, 'start']
 ];
 
 const CHECK_NOTE_COVERS = [];
