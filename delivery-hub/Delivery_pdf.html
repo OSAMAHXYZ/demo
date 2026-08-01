@@ -1284,7 +1284,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260801printfix"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260801multivin"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1477,10 +1477,32 @@
             }
         }
 
+        function getFormChassisList() {
+            const cars = collectPayload().cars || [];
+            const list = [];
+            const seen = new Set();
+            cars.forEach((c) => {
+                const vin = String(c?.chassis || '').trim().toUpperCase();
+                if (!vin || seen.has(vin)) return;
+                seen.add(vin);
+                list.push(vin);
+            });
+            const claimed = getClaimedVin();
+            if (claimed && !seen.has(claimed)) list.unshift(claimed);
+            return list;
+        }
+
         function buildCheckNoteOverlayData(body) {
             const wh = body.warehouse || {};
             const cars = Array.isArray(body.cars) ? body.cars : [];
-            const chassis = (cars.find((c) => String(c.chassis || '').trim()) || {}).chassis || '';
+            const vins = [];
+            const seen = new Set();
+            cars.forEach((c) => {
+                const vin = String(c?.chassis || '').trim().toUpperCase();
+                if (!vin || seen.has(vin)) return;
+                seen.add(vin);
+                vins.push(vin);
+            });
             const owner = wh.owner_name || body.customer_name || '';
             const printIso = wh.print_date || body.doc_date || body.transfer_date || '';
             return {
@@ -1496,7 +1518,11 @@
                 wh_user_email: wh.user_email || '',
                 wh_user_id: wh.user_id || '',
                 wh_print_time: formatWhPrintTime(wh.print_time),
-                wh_chassis: chassis,
+                wh_chassis: vins[0] || '',
+                wh_chassis_2: vins[1] || '',
+                wh_chassis_3: vins[2] || '',
+                wh_chassis_4: vins[3] || '',
+                wh_chassis_5: vins[4] || (vins.length > 5 ? `+${vins.length - 4} أخرى` : ''),
                 wh_guest_name: owner,
                 wh_technicians_name: wh.technicians_name || ''
             };
@@ -1687,6 +1713,8 @@
             const agent = getAgent();
             const isAdminExport = isAdminMode;
             const isWarehouse = warehousePrintMode && !isAdminMode;
+            const tableVins = getFormChassisList();
+            const groupVins = tableVins.length ? tableVins : (vin ? [vin] : []);
 
             // Rebuild overlay positions, then clone for print (browser print ignores CSS transform/px quirks)
             buildOverlay();
@@ -1724,7 +1752,8 @@
                         console.error('check-note download failed', err);
                     }
                 }
-                if (vin && agent.username && agent.password) {
+                const vinsToComplete = groupVins.length ? groupVins : (vin ? [vin] : []);
+                if (vinsToComplete.length && agent.username && agent.password) {
                     try {
                         const res = await fetch('/api/delivery-coordinator/complete-print', {
                             method: 'POST',
@@ -1732,13 +1761,27 @@
                             body: JSON.stringify({
                                 username: agent.username,
                                 password: agent.password,
-                                vin,
+                                vin: vinsToComplete[0],
+                                vins: vinsToComplete,
                                 draft: collectPayload()
                             })
                         });
                         if (!res.ok) {
                             const err = await res.json().catch(() => ({}));
                             console.error('complete-print failed', err.error || res.status);
+                            setStatus(err.error || 'فشل تحديث حالة الترحيل', 'err');
+                        } else {
+                            const data = await res.json().catch(() => ({}));
+                            const n = data.deliveredCount || vinsToComplete.length;
+                            setTimeout(() => {
+                                const statusEl = document.getElementById('queueStatus');
+                                if (statusEl) {
+                                    statusEl.textContent = isWarehouse
+                                        ? `تم الترحيل لـ ${n} سيارة معاً — قائمة الفحص`
+                                        : (n > 1 ? `تم الترحيل لـ ${n} سيارة` : 'تم الطباعة — تم الترحيل');
+                                    statusEl.className = 'ws-toast ok';
+                                }
+                            }, 400);
                         }
                     } catch (err) {
                         console.error('complete-print failed', err);
@@ -1747,15 +1790,6 @@
                 clearClaimedVin();
                 clearDeliveryForm();
                 openWorkspace();
-                setTimeout(() => {
-                    const statusEl = document.getElementById('queueStatus');
-                    if (statusEl) {
-                        statusEl.textContent = isWarehouse
-                            ? 'تم طباعة قائمة الفحص وتحميل delivery_check_note — تم الترحيل'
-                            : 'تم الطباعة — تم الترحيل';
-                        statusEl.className = 'ws-toast ok';
-                    }
-                }, 400);
             };
             window.addEventListener('afterprint', finish);
             window.print();

@@ -1339,37 +1339,80 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
   if (!auth.ok) return res.status(401).json({ error: auth.error });
 
-  const vin = normVin(req.body?.vin);
   const draftPayload = req.body?.draft || {};
-  const item = findQueueItem(vin);
-  if (!item) return res.status(404).json({ error: 'الشاسيه غير موجود' });
-  if (item.assignedTo && item.assignedTo !== auth.username) {
-    return res.status(403).json({ error: 'غير مسموح — الشاسيه مع موظف آخر' });
+  const primaryVin = normVin(req.body?.vin);
+  const fromBody = Array.isArray(req.body?.vins) ? req.body.vins : [];
+  const fromCars = Array.isArray(draftPayload?.cars)
+    ? draftPayload.cars.map((c) => c?.chassis || c?.vin || '')
+    : [];
+  const vins = [...new Set(
+    [primaryVin, ...fromBody, ...fromCars]
+      .map((v) => normVin(v))
+      .filter(Boolean)
+  )];
+  if (!vins.length) return res.status(400).json({ error: 'الشاسيه مطلوب' });
+
+  const byVehicle = vehicleIndex();
+  const deliveredItems = [];
+  for (const vin of vins) {
+    let item = findQueueItem(vin);
+    if (!item) {
+      const veh = byVehicle.get(vin);
+      item = enrichFromVehicle({
+        vin,
+        status: 'claimed',
+        agentStatus: 'delivered',
+        assignedTo: auth.username,
+        assignedAt: new Date().toISOString(),
+        addedAt: new Date().toISOString()
+      }, veh || {});
+      store.queue.push(item);
+    } else {
+      if (item.assignedTo && item.assignedTo !== auth.username && item.agentStatus !== 'delivered') {
+        return res.status(403).json({
+          error: `غير مسموح — الشاسيه ${vin} مع موظف آخر (${item.assignedTo})`
+        });
+      }
+      item.status = 'claimed';
+      item.agentStatus = 'delivered';
+      item.assignedTo = auth.username;
+    }
+    deliveredItems.push(enrichQueueItem(item));
   }
 
-  item.status = 'claimed';
-  item.agentStatus = 'delivered';
-  item.assignedTo = auth.username;
-
+  const primary = deliveredItems[0];
+  const isWarehouseGroup = vins.length > 1 || !!(draftPayload?.warehouse && typeof draftPayload.warehouse === 'object');
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
     printedAt: new Date().toISOString(),
-    vin,
-    product: item.product || '',
-    model: item.model || item.product || '',
+    vin: primary.vin,
+    vins,
+    product: primary.product || '',
+    model: primary.model || primary.product || '',
     assignedTo: auth.username,
-    customerName: draftPayload.company_rep || item.customerName || '',
-    plate: item.plate || '',
-    gt: item.gt || '',
-    location: item.location || '',
-    payload: draftPayload
+    customerName: draftPayload.company_rep || draftPayload?.warehouse?.owner_name || primary.customerName || '',
+    plate: primary.plate || '',
+    gt: primary.gt || '',
+    location: primary.location || '',
+    payload: {
+      ...draftPayload,
+      warehouse_group: isWarehouseGroup,
+      vins
+    }
   };
   store.drafts.unshift(draft);
   if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
 
   persistAndBroadcast();
-  res.json({ ok: true, draftId: id, item: enrichQueueItem(item) });
+  res.json({
+    ok: true,
+    draftId: id,
+    vins,
+    deliveredCount: deliveredItems.length,
+    item: primary,
+    items: deliveredItems
+  });
 });
 
 app.get('/api/delivery-coordinator/drafts/:draftId', (req, res) => {

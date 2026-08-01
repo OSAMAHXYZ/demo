@@ -14,8 +14,12 @@ const CHECK_NOTE_FIELDS = [
   ['wh_print_time', 0.05, 0.206, 0.30, 0.014, 'end'],
   ['wh_print_date', 0.50, 0.206, 0.22, 0.014, 'end'],
 
-  // Chassis line under the header box
-  ['wh_chassis', 0.22, 0.238, 0.42, 0.016, 'center']
+  // Chassis line(s) under the header box — up to 5 VINs for group delivery
+  ['wh_chassis', 0.18, 0.236, 0.55, 0.015, 'center'],
+  ['wh_chassis_2', 0.18, 0.252, 0.55, 0.014, 'center'],
+  ['wh_chassis_3', 0.18, 0.266, 0.55, 0.014, 'center'],
+  ['wh_chassis_4', 0.18, 0.280, 0.55, 0.014, 'center'],
+  ['wh_chassis_5', 0.18, 0.294, 0.55, 0.014, 'center']
 ];
 
 const CHECK_NOTE_COVERS = [];
