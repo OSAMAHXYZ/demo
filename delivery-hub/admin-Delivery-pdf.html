@@ -3070,6 +3070,26 @@
             });
         }
 
+        /** VINs belonging to the selected company (from date-scoped drafts). null = no company filter. */
+        function companyVinSet() {
+            if (!selectedCompany) return null;
+            const set = new Set();
+            dateScopedDrafts().forEach((d) => {
+                if (draftCompanyName(d) !== selectedCompany) return;
+                const list = [
+                    ...(Array.isArray(d.vins) ? d.vins : []),
+                    d.vin,
+                    ...((d.payload && d.payload.vins) || []),
+                    ...((d.payload && d.payload.cars) || []).map((c) => c && (c.chassis || c.vin))
+                ];
+                list.forEach((v) => {
+                    const vin = normVinKey(v);
+                    if (vin) set.add(vin);
+                });
+            });
+            return set;
+        }
+
         function filteredDrafts() {
             let list = dateScopedDrafts();
             if (selectedCompany) {
