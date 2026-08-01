@@ -1351,29 +1351,16 @@
                     <button type="button" class="ft-search__clear" id="ftSearchClear" aria-label="Clear search">×</button>
                 </div>
 
-                <div class="ft-control ft-control--date" id="ftDateControl">
-                    <button type="button" class="ft-control__trigger" id="ftDateTrigger" aria-haspopup="dialog" aria-expanded="false">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <rect x="3" y="5" width="18" height="16" rx="2"></rect>
-                            <path d="M3 10h18M8 3v4M16 3v4"></path>
-                        </svg>
-                        <span class="ft-control__value is-placeholder" id="ftDateLabel">Date Range</span>
-                    </button>
-                    <span class="ft-control__chevron" aria-hidden="true">▾</span>
-                    <div class="ft-panel ft-date-panel" id="ftDatePanel" role="dialog" aria-label="Date range">
-                        <div class="ft-date-field">
-                            <span>From</span>
-                            <input type="date" id="ftDateFromUi" lang="en">
-                        </div>
-                        <div class="ft-date-field">
-                            <span>To</span>
-                            <input type="date" id="ftDateToUi" lang="en">
-                        </div>
-                        <div class="ft-date-actions">
-                            <button type="button" class="ft-btn ft-btn--ghost" id="ftDateToday" style="height:40px;flex:1">Today</button>
-                            <button type="button" class="ft-btn ft-btn--primary" id="ftDateDone" style="height:40px;flex:1">Done</button>
-                        </div>
-                    </div>
+                <div class="ft-date-inline" id="ftDateControl" aria-label="Delivery note date range">
+                    <label class="ft-date-inline__field">
+                        <span>Start date</span>
+                        <input type="date" id="ftDateFromUi" lang="en" aria-label="Start date">
+                    </label>
+                    <label class="ft-date-inline__field">
+                        <span>End date</span>
+                        <input type="date" id="ftDateToUi" lang="en" aria-label="End date">
+                    </label>
+                    <button type="button" class="ft-btn ft-btn--ghost" id="ftDateToday" title="Today">Today</button>
                 </div>
 
                 <div class="ft-control" id="ftCompanyControl" data-ft-select="company">
@@ -1396,6 +1383,13 @@
                             More Filters
                         </button>
                         <div class="ft-more__panel" id="ftMorePanel">
+                            <div>
+                                <div class="ft-more__label">Date type</div>
+                                <select class="ft-native" id="ftDateTypeUi">
+                                    <option value="delivery_note" selected>Delivery note date</option>
+                                    <option value="invoice">Invoice date</option>
+                                </select>
+                            </div>
                             <div>
                                 <div class="ft-more__label">Coordinator</div>
                                 <div class="ft-control" id="ftCoordinatorControl" data-ft-select="coordinator" style="min-width:0">
@@ -1427,12 +1421,10 @@
             <div class="ft-hidden-natives" aria-hidden="true">
                 <select id="trackDateType">
                     <option value="delivery_note" selected>Delivery note</option>
+                    <option value="invoice">Invoice</option>
                 </select>
                 <input type="date" id="trackDateFrom">
                 <input type="date" id="trackDateTo">
-                <select id="ftDateTypeUi" hidden>
-                    <option value="delivery_note" selected>Delivery note</option>
-                </select>
                 <button type="button" id="btnTrackToday" hidden>Today</button>
                 <button type="button" id="btnClearCompanyScope" hidden>Clear company</button>
             </div>
@@ -1776,6 +1768,42 @@
             </div>
         </section>
 
+        <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">التسليم في المستودع — Warehouse Delivery</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">قوائم فحص المستودع — تصدير PDF</span>
+                    <span class="hub-fold-count" id="warehouseDraftsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>الشاسيه</th>
+                                        <th>Product</th>
+                                        <th>المسؤول</th>
+                                        <th>المالك</th>
+                                        <th>الهاتف</th>
+                                        <th>العدد</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="warehouseDraftsBody">
+                                    <tr><td colspan="8" class="hub-empty">لا توجد قوائم فحص مستودع بعد</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <p class="hub-status" id="uploadStatus"></p>
         <p class="hub-meta" id="uploadMeta" style="display:none"></p>
 
@@ -1920,6 +1948,7 @@
             setFoldCount('queueStatsFoldCount', queueCount);
             setFoldCount('queueFoldCount', queueCount);
             setFoldCount('draftsFoldCount', draftCount);
+            setFoldCount('warehouseDraftsFoldCount', (allDrafts || []).filter(isWarehouseAdminDraft).length);
             setFoldCount('xferFoldCount', draftCount);
             setFoldCount('inventoryFoldCount', vehicleCount);
             setFoldCount('productsFoldCount', productCount);
@@ -2427,36 +2456,25 @@
         function syncDateControlsFromNatives() {
             const from = document.getElementById('trackDateFrom')?.value || '';
             const to = document.getElementById('trackDateTo')?.value || '';
+            const type = document.getElementById('trackDateType')?.value || 'delivery_note';
             const fromUi = document.getElementById('ftDateFromUi');
             const toUi = document.getElementById('ftDateToUi');
-            const typeEl = document.getElementById('trackDateType');
             const typeUi = document.getElementById('ftDateTypeUi');
-            const label = document.getElementById('ftDateLabel');
-            if (typeEl) typeEl.value = 'delivery_note';
-            if (typeUi) typeUi.value = 'delivery_note';
             if (fromUi) fromUi.value = from;
             if (toUi) toUi.value = to;
-            applyDeliveryNoteDateBounds();
-            if (label) {
-                if (from || to) {
-                    label.textContent = `Delivery note ${from || '…'} → ${to || '…'}`;
-                    label.classList.remove('is-placeholder');
-                } else {
-                    label.textContent = 'Delivery note date';
-                    label.classList.add('is-placeholder');
-                }
-            }
+            if (typeUi) typeUi.value = type === 'invoice' ? 'invoice' : 'delivery_note';
         }
 
         function pushDatesToNatives() {
             const fromUi = document.getElementById('ftDateFromUi')?.value || '';
             const toUi = document.getElementById('ftDateToUi')?.value || '';
+            const typeUi = document.getElementById('ftDateTypeUi')?.value || 'delivery_note';
             const fromEl = document.getElementById('trackDateFrom');
             const toEl = document.getElementById('trackDateTo');
             const typeEl = document.getElementById('trackDateType');
             if (fromEl) fromEl.value = fromUi;
             if (toEl) toEl.value = toUi;
-            if (typeEl) typeEl.value = 'delivery_note';
+            if (typeEl) typeEl.value = typeUi === 'invoice' ? 'invoice' : 'delivery_note';
             syncDateControlsFromNatives();
         }
 
@@ -2608,17 +2626,28 @@
             const host = document.getElementById('filterChipsBar');
             if (!host) return;
             const chips = [];
-            const { from, to } = getTrackFilter();
+            const { type, from, to } = getTrackFilter();
             if (from || to) {
                 chips.push({
                     key: 'date',
-                    label: `DN ${from || '…'} → ${to || '…'}`,
+                    label: `${type === 'invoice' ? 'Invoice' : 'DN'} ${from || '…'} → ${to || '…'}`,
                     clear: () => {
                         document.getElementById('trackDateFrom').value = '';
                         document.getElementById('trackDateTo').value = '';
                         document.getElementById('ftDateFromUi').value = '';
                         document.getElementById('ftDateToUi').value = '';
                         syncDateControlsFromNatives();
+                        applyTrackFilter();
+                    }
+                });
+            }
+            if (type === 'invoice') {
+                chips.push({
+                    key: 'type',
+                    label: 'Invoice date',
+                    clear: () => {
+                        document.getElementById('trackDateType').value = 'delivery_note';
+                        document.getElementById('ftDateTypeUi').value = 'delivery_note';
                         applyTrackFilter();
                     }
                 });
@@ -2710,34 +2739,23 @@
             });
 
             const dateControl = document.getElementById('ftDateControl');
-            document.getElementById('ftDateTrigger')?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const willOpen = !dateControl.classList.contains('is-open');
-                closeAllFtPanels(willOpen ? dateControl : null);
-                dateControl.classList.toggle('is-open', willOpen);
-                document.getElementById('ftDateTrigger').setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-            });
-            document.getElementById('ftDatePanel')?.addEventListener('click', (e) => e.stopPropagation());
-            document.getElementById('ftDateDone')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+            const syncAndApplyDates = () => {
                 pushDatesToNatives();
-                dateControl?.classList.remove('is-open');
-                document.getElementById('ftDateTrigger')?.setAttribute('aria-expanded', 'false');
-                closeAllFtPanels();
+                renderFilterChips();
                 applyTrackFilter();
-            });
+            };
+            document.getElementById('ftDateFromUi')?.addEventListener('change', syncAndApplyDates);
+            document.getElementById('ftDateToUi')?.addEventListener('change', syncAndApplyDates);
+            document.getElementById('ftDateFromUi')?.addEventListener('click', (e) => e.stopPropagation());
+            document.getElementById('ftDateToUi')?.addEventListener('click', (e) => e.stopPropagation());
+            dateControl?.addEventListener('click', (e) => e.stopPropagation());
             document.getElementById('ftDateToday')?.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 const today = getSaudiTodayIso();
                 document.getElementById('ftDateFromUi').value = today;
                 document.getElementById('ftDateToUi').value = today;
-                pushDatesToNatives();
-                dateControl?.classList.remove('is-open');
-                document.getElementById('ftDateTrigger')?.setAttribute('aria-expanded', 'false');
-                closeAllFtPanels();
-                applyTrackFilter();
+                syncAndApplyDates();
             });
 
             document.getElementById('ftMoreBtn')?.addEventListener('click', (e) => {
@@ -2751,8 +2769,11 @@
             });
             document.getElementById('ftMorePanel')?.addEventListener('click', (e) => e.stopPropagation());
             document.getElementById('ftDateTypeUi')?.addEventListener('change', () => {
-                document.getElementById('trackDateType').value = document.getElementById('ftDateTypeUi').value;
-                updateTrackFilterHint();
+                const typeUi = document.getElementById('ftDateTypeUi')?.value || 'delivery_note';
+                document.getElementById('trackDateType').value = typeUi === 'invoice' ? 'invoice' : 'delivery_note';
+                pushDatesToNatives();
+                renderFilterChips();
+                applyTrackFilter();
             });
 
             const search = document.getElementById('ftSearchInput');
@@ -2843,8 +2864,11 @@
         }
 
         function getTrackFilter() {
+            const rawType = document.getElementById('trackDateType')?.value
+                || document.getElementById('ftDateTypeUi')?.value
+                || 'delivery_note';
             return {
-                type: 'delivery_note',
+                type: rawType === 'invoice' ? 'invoice' : 'delivery_note',
                 from: String(document.getElementById('trackDateFrom')?.value || '').trim(),
                 to: String(document.getElementById('trackDateTo')?.value || '').trim()
             };
@@ -2877,12 +2901,12 @@
         }
 
         function applyDeliveryNoteDateBounds() {
-            const { min, max } = deliveryNoteDateBounds();
+            // Keep date pickers unrestricted so Start/End remain selectable.
             ['ftDateFromUi', 'ftDateToUi', 'trackDateFrom', 'trackDateTo'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (!el) return;
-                if (min) el.min = min; else el.removeAttribute('min');
-                if (max) el.max = max; else el.removeAttribute('max');
+                el.removeAttribute('min');
+                el.removeAttribute('max');
             });
         }
 
@@ -2892,19 +2916,19 @@
         }
 
         /**
-         * VIN universe for the current date filter.
-         * - delivery_note → VINs from saved drafts whose note/print date is in range
-         * - proforma/invoice → VINs from raw inventory whose Proforma/Invoice date is in range
+         * VIN universe for the current date filter (from raw inventory dates).
+         * - delivery_note (default) → Delivery Note Date
+         * - invoice → Invoice Date
          * Returns null when no date range is set (show all).
          */
         function scopedVinSet() {
-            const { from, to } = getTrackFilter();
+            const { type, from, to } = getTrackFilter();
             if (!from && !to) return null;
 
-            // Always filter by Delivery Note Date from raw inventory
+            const dateType = type === 'invoice' ? 'invoice' : 'delivery_note';
             const set = new Set();
             (allVehicles || []).forEach((v) => {
-                const iso = vehicleDateIso(v, 'delivery_note');
+                const iso = vehicleDateIso(v, dateType);
                 if (!iso || !isoInRange(iso, from, to)) return;
                 const vin = normVinKey(v.vin);
                 if (vin) set.add(vin);
@@ -3143,16 +3167,21 @@
             renderTransferDashboard(searchQ ? drafts : filteredDrafts());
             renderTable(vehicles);
             renderQueueTable(queue);
-            renderDraftsTable(drafts);
+            const warehouseDrafts = drafts.filter(isWarehouseAdminDraft);
+            const memoDrafts = drafts.filter((d) => !isWarehouseAdminDraft(d));
+            renderDraftsTable(memoDrafts);
+            renderWarehouseDraftsTable(warehouseDrafts);
             renderQueueStats(computeQueueStats(queue));
             setFoldCount('queueStatsFoldCount', queue.length);
-            setFoldCount('draftsFoldCount', drafts.length);
+            setFoldCount('draftsFoldCount', memoDrafts.length);
+            setFoldCount('warehouseDraftsFoldCount', warehouseDrafts.length);
             setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
             setFoldCount('inventoryFoldCount', vehicles.length);
             if (searchQ) {
                 openFold('inventorySection');
                 openFold('queueSection');
                 openFold('draftsSection');
+                openFold('warehouseDraftsSection');
             }
             renderAllFtSelects();
             renderFilterChips();
@@ -3168,6 +3197,7 @@
                 openFold('inventorySection', { scroll: true });
                 openFold('queueSection');
                 openFold('draftsSection');
+                openFold('warehouseDraftsSection');
             }
         }
 
@@ -4260,8 +4290,33 @@
             refreshTransferDashboard();
         }
 
+        function bindDraftActionButtons(tbody) {
+            if (!tbody) return;
+            tbody.querySelectorAll('[data-export-pdf]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.exportPdf;
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminExport=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+            tbody.querySelectorAll('[data-edit-draft]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.editDraft;
+                    window.open(
+                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminEdit=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+        }
+
         function renderDraftsTable(drafts) {
             const tbody = document.getElementById('draftsBody');
+            if (!tbody) return;
             if (!drafts.length) {
                 tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد مسودات بعد</td></tr>';
                 return;
@@ -4286,26 +4341,58 @@
                     </td>
                 </tr>`;
             }).join('');
-            tbody.querySelectorAll('[data-export-pdf]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const id = btn.dataset.exportPdf;
-                    window.open(
-                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminExport=1`,
-                        '_blank',
-                        'noopener'
-                    );
-                });
-            });
-            tbody.querySelectorAll('[data-edit-draft]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const id = btn.dataset.editDraft;
-                    window.open(
-                        `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminEdit=1`,
-                        '_blank',
-                        'noopener'
-                    );
-                });
-            });
+            bindDraftActionButtons(tbody);
+        }
+
+        function draftVinList(d) {
+            const seen = new Set();
+            const list = [];
+            const push = (v) => {
+                const vin = normVinKey(v);
+                if (!vin || seen.has(vin)) return;
+                seen.add(vin);
+                list.push(vin);
+            };
+            (Array.isArray(d.vins) ? d.vins : []).forEach(push);
+            push(d.vin);
+            (((d.payload || {}).vins) || []).forEach(push);
+            (((d.payload || {}).cars) || []).forEach((c) => push(c && (c.chassis || c.vin)));
+            return list;
+        }
+
+        function renderWarehouseDraftsTable(drafts) {
+            const tbody = document.getElementById('warehouseDraftsBody');
+            if (!tbody) return;
+            if (!drafts.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد قوائم فحص مستودع بعد</td></tr>';
+                return;
+            }
+            tbody.innerHTML = drafts.slice(0, 100).map((d) => {
+                const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
+                const p = d.payload || {};
+                const wh = p.warehouse || {};
+                const vins = draftVinList(d);
+                const canExport = Boolean(d.id && d.payload);
+                const vinLabel = vins.length
+                    ? vins.map((v) => escapeHtml(v)).join('<br>')
+                    : '—';
+                return `<tr>
+                    <td>${when}</td>
+                    <td class="hub-vin">${vinLabel}</td>
+                    <td>${escapeHtml(d.product || d.model || '—')}</td>
+                    <td>${escapeHtml(d.assignedTo || '—')}</td>
+                    <td>${escapeHtml(wh.owner_name || p.customer_name || '—')}</td>
+                    <td>${escapeHtml(wh.user_phone || p.phone || '—')}</td>
+                    <td>${vins.length || 1}</td>
+                    <td style="white-space:nowrap">
+                        ${canExport
+                            ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
+                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
+                            : '<span class="hub-meta">—</span>'}
+                    </td>
+                </tr>`;
+            }).join('');
+            bindDraftActionButtons(tbody);
         }
 
         function renderQueueStats(stats) {
@@ -4487,6 +4574,7 @@
             renderQueueStats({ total: 0, available: 0, claimed: 0 });
             renderQueueTable([]);
             renderDraftsTable([]);
+            renderWarehouseDraftsTable([]);
             renderTransferDashboard(filteredDrafts());
             updateFoldCounts();
             updateTrackFilterMeta();
