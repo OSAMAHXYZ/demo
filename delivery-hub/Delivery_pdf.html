@@ -200,6 +200,11 @@
             body.warehouse-form-mode .overlay-field {
                 font-size: 13px;
             }
+            /* Shift form + overlays down ~20px so content clears the page top */
+            body.warehouse-form-mode .print-sheet {
+                margin-top: 5.3mm;
+                height: calc(var(--form-h) - 5.3mm);
+            }
         }
         body.warehouse-form-mode .memo-only-section,
         body.warehouse-form-mode .warehouse-delivery-actions {
@@ -1712,7 +1717,7 @@
             const vin = getClaimedVin();
             const agent = getAgent();
             const isAdminExport = isAdminMode;
-            const isWarehouse = warehousePrintMode && !isAdminMode;
+            const isWarehouse = warehousePrintMode;
             const tableVins = getFormChassisList();
             const groupVins = tableVins.length ? tableVins : (vin ? [vin] : []);
 
@@ -2245,6 +2250,35 @@
             }
         }
 
+        function isWarehouseDraftPayload(payload) {
+            if (!payload || typeof payload !== 'object') return false;
+            if (payload.warehouse_group) return true;
+            if (String(payload.branch_to || '').trim() === 'المستودع') return true;
+            const company = String(payload.company_rep || '').trim();
+            if (company.includes('مستودع')) return true;
+            const wh = payload.warehouse || {};
+            return Boolean(
+                wh.owner_name || wh.user_name || wh.user_id || wh.user_phone
+                || wh.print_date || wh.print_time
+            );
+        }
+
+        function waitForPreviewImage() {
+            const img = document.getElementById('previewFormImage');
+            if (!img) return Promise.resolve();
+            if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+            return new Promise((resolve) => {
+                const done = () => {
+                    img.removeEventListener('load', done);
+                    img.removeEventListener('error', done);
+                    resolve();
+                };
+                img.addEventListener('load', done);
+                img.addEventListener('error', done);
+                setTimeout(done, 2500);
+            });
+        }
+
         function applyDraftPayload(payload) {
             if (!payload || typeof payload !== 'object') return;
             const params = new URLSearchParams(location.search);
@@ -2272,8 +2306,10 @@
             setVal('attachments', payload.attachments);
             const wh = payload.warehouse || {};
             setVal('wh_branch_name', wh.branch_name);
+            setVal('wh_city_address', wh.city_address);
             setVal('wh_statement_no', wh.statement_no);
-            setVal('wh_owner_name', wh.owner_name);
+            setVal('wh_center_code', wh.center_code || wh.statement_no);
+            setVal('wh_owner_name', wh.owner_name || payload.customer_name);
             setVal('wh_user_name', wh.user_name);
             setVal('wh_user_phone', wh.user_phone);
             setVal('wh_user_email', wh.user_email);
@@ -2281,6 +2317,8 @@
             setVal('wh_technicians_name', wh.technicians_name);
             setVal('wh_branch_cr', wh.branch_cr);
             setVal('wh_branch_phone', wh.branch_phone);
+            setVal('wh_print_date', wh.print_date || payload.doc_date || payload.transfer_date);
+            setVal('wh_print_time', wh.print_time);
             const cars = Array.isArray(payload.cars) ? payload.cars : [];
             cars.forEach((row, i) => {
                 if (i > 9) return;
@@ -2305,19 +2343,29 @@
             const draft = data.draft;
             if (!draft?.payload) throw new Error('المسودة لا تحتوي على بيانات الطباعة');
             showView('app');
+            const isWh = isWarehouseDraftPayload(draft.payload);
+            setWarehousePrintMode(isWh);
             applyDraftPayload(draft.payload);
-            setStatus('وضع تصدير PDF للإدارة — اطبع واختر «حفظ كـ PDF»', 'ok');
+            buildOverlay();
+            updatePreview();
+            const vinsLabel = Array.isArray(draft.vins) && draft.vins.length > 1
+                ? draft.vins.join(' · ')
+                : (draft.vin || draftId);
+            setStatus(isWh
+                ? 'تصدير قائمة فحص المستودع — اطبع واختر «حفظ كـ PDF»'
+                : 'وضع تصدير PDF للإدارة — اطبع واختر «حفظ كـ PDF»', 'ok');
             const banner = document.createElement('div');
             banner.className = 'no-print';
             banner.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:300;display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:999px;background:#111827;border:1px solid rgba(255,255,255,.15);box-shadow:0 12px 40px rgba(0,0,0,.35);';
             banner.innerHTML = `
-                <span style="color:#e2e8f0;font-size:.82rem;font-weight:700">تصدير مسودة · ${draft.vin || draftId}</span>
+                <span style="color:#e2e8f0;font-size:.82rem;font-weight:700">تصدير مسودة · ${vinsLabel}</span>
                 <button type="button" class="btn btn-primary" id="btnAdminExportPdf" style="padding:8px 16px">تصدير PDF</button>
                 <a href="admin-Delivery-pdf.html" class="btn" style="padding:8px 14px;text-decoration:none">العودة للإدارة</a>
             `;
             document.body.appendChild(banner);
             document.getElementById('btnAdminExportPdf').addEventListener('click', doPrintA4);
-            setTimeout(() => doPrintA4(), 450);
+            await waitForPreviewImage();
+            setTimeout(() => doPrintA4(), 250);
             return true;
         }
 
@@ -2329,8 +2377,14 @@
             const draft = data.draft;
             if (!draft?.payload) throw new Error('المسودة لا تحتوي على بيانات الطباعة');
             showView('app');
+            const isWh = isWarehouseDraftPayload(draft.payload);
+            setWarehousePrintMode(isWh);
             applyDraftPayload(draft.payload);
-            setStatus('وضع تعديل المذكرة — عدّل الحقول ثم احفظ', 'ok');
+            buildOverlay();
+            updatePreview();
+            setStatus(isWh
+                ? 'تعديل قائمة فحص المستودع — عدّل ثم احفظ أو صدّر PDF'
+                : 'وضع تعديل المذكرة — عدّل الحقول ثم احفظ', 'ok');
             const banner = document.createElement('div');
             banner.className = 'no-print';
             banner.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:300;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;padding:10px 14px;border-radius:999px;background:#111827;border:1px solid rgba(255,255,255,.15);box-shadow:0 12px 40px rgba(0,0,0,.35);';
