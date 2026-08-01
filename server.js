@@ -1583,7 +1583,14 @@ if (fs.existsSync(adminDist)) {
 app.use(express.static(ROOT, {
   extensions: ['html'],
   setHeaders(res, filePath) {
-    if (/\.(html|js|css)$/i.test(filePath)) {
+    // HTML must never stick in the browser — admin filter UI changes were invisible under cache.
+    if (/\.html?$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return;
+    }
+    if (/\.(js|css)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'no-cache');
     }
   }
