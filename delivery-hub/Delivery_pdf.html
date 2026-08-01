@@ -1289,7 +1289,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260801vinright"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260801vinmm60"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1373,7 +1373,12 @@
             // VIN +60px ≈ 15.9mm, model +15px ≈ 4mm, plate +40px ≈ 10.6mm
             let left = `${x * 100}%`;
             let top = `${y * 100}%`;
-            if (/_chassis$/.test(tag) && tag !== 'wh_chassis') left = `calc(${x * 100}% + 15.9mm)`;
+            if (/^wh_chassis/.test(tag)) {
+                // Warehouse VIN: keep base % and add +60px so print actually shifts right
+                left = `calc(${x * 100}% + 15.9mm)`;
+            } else if (/_chassis$/.test(tag)) {
+                left = `calc(${x * 100}% + 15.9mm)`;
+            }
             if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
             if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
             return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
