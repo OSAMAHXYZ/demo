@@ -1289,7 +1289,7 @@
     <script src="../scripts/muthakara-branch-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-customer-options.js?v=20260722b"></script>
     <script src="../scripts/muthakara-field-layout.js?v=20260722b"></script>
-    <script src="../scripts/check-note-field-layout.js?v=20260801vinmm60"></script>
+    <script src="../scripts/check-note-field-layout.js?v=20260801vin70"></script>
     <script>
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
@@ -1374,8 +1374,8 @@
             let left = `${x * 100}%`;
             let top = `${y * 100}%`;
             if (/^wh_chassis/.test(tag)) {
-                // Warehouse VIN: keep base % and add +60px so print actually shifts right
-                left = `calc(${x * 100}% + 15.9mm)`;
+                // Warehouse VIN: +60px prior + 70px more ≈ 34.4mm
+                left = `calc(${x * 100}% + 34.4mm)`;
             } else if (/_chassis$/.test(tag)) {
                 left = `calc(${x * 100}% + 15.9mm)`;
             }
