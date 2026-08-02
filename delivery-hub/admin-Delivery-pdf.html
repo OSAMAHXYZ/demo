@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802f">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802f">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802g">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802g">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1795,11 +1795,11 @@
             </div>
         </section>
 
-        <section class="hub-section hub-fold" id="draftsSection" data-fold>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">مسودات الطباعة — Print Drafts</span>
+        <section class="hub-section hub-fold is-open" id="draftsSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="true">
+                <span class="hub-fold-title">جميع ملفات PDF — All Car PDFs</span>
                 <span class="hub-fold-meta">
-                    <span class="hub-hint">كل المذكرات المولّدة — نفس PDF لكل السيارات فيها</span>
+                    <span class="hub-hint">تصفح · بحث · ترتيب · صفحات</span>
                     <span class="hub-fold-count" id="draftsFoldCount" data-empty="1"></span>
                     <span class="hub-fold-chevron" aria-hidden="true"></span>
                 </span>
@@ -1807,17 +1807,43 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <div class="hub-table-wrap">
-                            <table class="hub-table">
+                        <div class="pdf-browser-toolbar" id="pdfBrowserToolbar">
+                            <div class="pdf-browser-search">
+                                <input type="search" id="pdfBrowserSearch" class="hub-input" placeholder="بحث: VIN · شركة · مسؤول · فرع…" autocomplete="off" aria-label="بحث في ملفات PDF">
+                            </div>
+                            <select id="pdfBrowserType" class="ft-native" aria-label="نوع المذكرة">
+                                <option value="all">كل الأنواع</option>
+                                <option value="memo">مذكرة ترحيل</option>
+                                <option value="warehouse">مستودع</option>
+                            </select>
+                            <select id="pdfBrowserSort" class="ft-native" aria-label="ترتيب">
+                                <option value="date_desc">الأحدث أولاً</option>
+                                <option value="date_asc">الأقدم أولاً</option>
+                                <option value="cars_desc">أكثر سيارات</option>
+                                <option value="cars_asc">أقل سيارات</option>
+                                <option value="company_asc">الشركة أ→ي</option>
+                                <option value="company_desc">الشركة ي→أ</option>
+                                <option value="vin_asc">VIN A→Z</option>
+                            </select>
+                            <select id="pdfBrowserPageSize" class="ft-native" aria-label="عدد الصفوف">
+                                <option value="10">10 / صفحة</option>
+                                <option value="20" selected>20 / صفحة</option>
+                                <option value="50">50 / صفحة</option>
+                                <option value="100">100 / صفحة</option>
+                            </select>
+                        </div>
+                        <p class="pdf-browser-meta hub-meta" id="pdfBrowserMeta">لا توجد ملفات بعد</p>
+                        <div class="hub-table-wrap pdf-browser-table-wrap">
+                            <table class="hub-table" id="pdfBrowserTable">
                                 <thead>
                                     <tr>
                                         <th>التاريخ</th>
+                                        <th>النوع</th>
                                         <th>الشاسيه</th>
                                         <th>العدد</th>
                                         <th>Product</th>
                                         <th>المسؤول</th>
-                                        <th>مندوب الشركة</th>
-                                        <th>اسم الشركة</th>
+                                        <th>الشركة</th>
                                         <th>الفرع</th>
                                         <th></th>
                                     </tr>
@@ -1827,12 +1853,18 @@
                                 </tbody>
                             </table>
                         </div>
+                        <div class="pdf-browser-pager" id="pdfBrowserPager" hidden>
+                            <button type="button" class="hub-btn hub-btn--sm" id="pdfBrowserPrev">السابق</button>
+                            <span class="hub-meta" id="pdfBrowserPageLabel">صفحة 1</span>
+                            <button type="button" class="hub-btn hub-btn--sm" id="pdfBrowserNext">التالي</button>
+                        </div>
+                        <tbody id="warehouseDraftsBody" hidden aria-hidden="true"></tbody>
                     </div>
                 </div>
             </div>
         </section>
 
-        <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold>
+        <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold hidden>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">التسليم في المستودع — Warehouse Delivery</span>
                 <span class="hub-fold-meta">
@@ -1844,25 +1876,7 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <div class="hub-table-wrap">
-                            <table class="hub-table">
-                                <thead>
-                                    <tr>
-                                        <th>التاريخ</th>
-                                        <th>الشاسيه</th>
-                                        <th>Product</th>
-                                        <th>المسؤول</th>
-                                        <th>المالك</th>
-                                        <th>الهاتف</th>
-                                        <th>العدد</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="warehouseDraftsBody">
-                                    <tr><td colspan="8" class="hub-empty">لا توجد قوائم فحص مستودع بعد</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                        <p class="hub-meta">استخدم قسم «جميع ملفات PDF» أعلاه مع فلتر المستودع.</p>
                     </div>
                 </div>
             </div>
@@ -3402,11 +3416,11 @@
             renderQueueTable(queue);
             const warehouseDrafts = drafts.filter(isWarehouseAdminDraft);
             const memoDrafts = drafts.filter((d) => !isWarehouseAdminDraft(d));
-            renderDraftsTable(memoDrafts);
+            renderAllPdfsBrowser(drafts);
             renderWarehouseDraftsTable(warehouseDrafts);
             renderQueueStats(computeQueueStats(queue));
             setFoldCount('queueStatsFoldCount', queue.length);
-            setFoldCount('draftsFoldCount', memoDrafts.length);
+            setFoldCount('draftsFoldCount', drafts.length);
             setFoldCount('warehouseDraftsFoldCount', warehouseDrafts.length);
             setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
             setFoldCount('inventoryFoldCount', vehicles.length);
@@ -4547,34 +4561,136 @@
             });
         }
 
-        function renderDraftsTable(drafts) {
+        const pdfBrowserState = {
+            page: 1,
+            pageSize: 20,
+            sort: 'date_desc',
+            type: 'all',
+            q: '',
+            source: []
+        };
+
+        function draftCompanyLabel(d) {
+            const p = (d && d.payload) || {};
+            return String(p.company_rep || d.customerName || p.warehouse?.owner_name || '').trim();
+        }
+
+        function draftBranchLabel(d) {
+            const p = (d && d.payload) || {};
+            return String(p.branch_to || '').trim();
+        }
+
+        function draftSearchBlob(d) {
+            const vins = draftVinList(d).join(' ');
+            const p = (d && d.payload) || {};
+            return [
+                vins,
+                d.product,
+                d.model,
+                d.assignedTo,
+                draftCompanyLabel(d),
+                draftBranchLabel(d),
+                p.customer_name,
+                p.warehouse?.owner_name,
+                p.warehouse?.user_phone,
+                d.id
+            ].map((x) => String(x || '')).join(' ').toUpperCase();
+        }
+
+        function filterSortPdfs(list) {
+            let rows = Array.isArray(list) ? list.slice() : [];
+            if (pdfBrowserState.type === 'memo') {
+                rows = rows.filter((d) => !isWarehouseAdminDraft(d));
+            } else if (pdfBrowserState.type === 'warehouse') {
+                rows = rows.filter(isWarehouseAdminDraft);
+            }
+            const q = String(pdfBrowserState.q || '').trim().toUpperCase();
+            if (q) {
+                rows = rows.filter((d) => draftSearchBlob(d).includes(q));
+            }
+            const sort = pdfBrowserState.sort || 'date_desc';
+            rows.sort((a, b) => {
+                const vinsA = draftVinList(a);
+                const vinsB = draftVinList(b);
+                if (sort === 'date_asc' || sort === 'date_desc') {
+                    const ta = a.printedAt ? new Date(a.printedAt).getTime() : 0;
+                    const tb = b.printedAt ? new Date(b.printedAt).getTime() : 0;
+                    return sort === 'date_asc' ? ta - tb : tb - ta;
+                }
+                if (sort === 'cars_asc' || sort === 'cars_desc') {
+                    const ca = vinsA.length || 1;
+                    const cb = vinsB.length || 1;
+                    return sort === 'cars_asc' ? ca - cb : cb - ca;
+                }
+                if (sort === 'company_asc' || sort === 'company_desc') {
+                    const cmp = draftCompanyLabel(a).localeCompare(draftCompanyLabel(b), 'ar');
+                    return sort === 'company_asc' ? cmp : -cmp;
+                }
+                if (sort === 'vin_asc') {
+                    return String(vinsA[0] || a.vin || '').localeCompare(String(vinsB[0] || b.vin || ''), 'en');
+                }
+                return 0;
+            });
+            return rows;
+        }
+
+        function renderAllPdfsBrowser(drafts) {
+            pdfBrowserState.source = Array.isArray(drafts) ? drafts.slice() : [];
+            const rows = filterSortPdfs(pdfBrowserState.source);
+            const pageSize = Math.max(5, Number(pdfBrowserState.pageSize) || 20);
+            const total = rows.length;
+            const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
+            if (pdfBrowserState.page > pages) pdfBrowserState.page = pages;
+            if (pdfBrowserState.page < 1) pdfBrowserState.page = 1;
+            const start = (pdfBrowserState.page - 1) * pageSize;
+            const pageRows = rows.slice(start, start + pageSize);
+
+            const meta = document.getElementById('pdfBrowserMeta');
+            if (meta) {
+                meta.textContent = total
+                    ? `عرض ${start + 1}–${Math.min(start + pageSize, total)} من ${total} ملف PDF`
+                    : 'لا توجد ملفات PDF مطابقة';
+            }
+            const pager = document.getElementById('pdfBrowserPager');
+            const pageLabel = document.getElementById('pdfBrowserPageLabel');
+            if (pager) pager.hidden = total <= pageSize;
+            if (pageLabel) pageLabel.textContent = `صفحة ${pdfBrowserState.page} من ${pages}`;
+            const prev = document.getElementById('pdfBrowserPrev');
+            const next = document.getElementById('pdfBrowserNext');
+            if (prev) prev.disabled = pdfBrowserState.page <= 1;
+            if (next) next.disabled = pdfBrowserState.page >= pages;
+
             const tbody = document.getElementById('draftsBody');
             if (!tbody) return;
-            if (!drafts.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد مسودات بعد</td></tr>';
+            if (!pageRows.length) {
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد مسودات PDF — اطبع مذكرة أو استورد أرشيف</td></tr>';
                 return;
             }
-            tbody.innerHTML = drafts.map((d) => {
+            tbody.innerHTML = pageRows.map((d) => {
                 const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
                 const p = d.payload || {};
                 const vins = draftVinList(d);
+                const isWh = isWarehouseAdminDraft(d);
                 const canExport = Boolean(d.id && d.payload);
                 const vinLabel = vins.length
-                    ? vins.map((v) => escapeHtml(v)).join('<br>')
+                    ? vins.map((v) => `<span class="pdf-vin-chip">${escapeHtml(v)}</span>`).join('')
                     : escapeHtml(d.vin || '—');
+                const typeBadge = isWh
+                    ? '<span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
+                    : '<span class="pdf-type-badge pdf-type-badge--memo">مذكرة</span>';
                 return `<tr>
                     <td>${when}</td>
-                    <td class="hub-vin">${vinLabel}</td>
-                    <td>${vins.length || 1}</td>
+                    <td>${typeBadge}</td>
+                    <td class="hub-vin pdf-vin-cell">${vinLabel}</td>
+                    <td><strong>${vins.length || 1}</strong></td>
                     <td>${escapeHtml(d.product || d.model || '—')}</td>
                     <td>${escapeHtml(d.assignedTo || '—')}</td>
-                    <td>${escapeHtml(p.customer_name || '—')}</td>
-                    <td>${escapeHtml(p.company_rep || d.customerName || '—')}</td>
-                    <td>${escapeHtml(p.branch_to || '—')}</td>
+                    <td>${escapeHtml(draftCompanyLabel(d) || '—')}</td>
+                    <td>${escapeHtml(draftBranchLabel(d) || (isWh ? 'المستودع' : '—'))}</td>
                     <td style="white-space:nowrap">
                         ${canExport
                             ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
-                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
+                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">PDF</button>`
                             : '<span class="hub-meta">—</span>'}
                     </td>
                 </tr>`;
@@ -4582,39 +4698,51 @@
             bindDraftActionButtons(tbody);
         }
 
-        function renderWarehouseDraftsTable(drafts) {
-            const tbody = document.getElementById('warehouseDraftsBody');
-            if (!tbody) return;
-            if (!drafts.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد قوائم فحص مستودع بعد</td></tr>';
-                return;
-            }
-            tbody.innerHTML = drafts.map((d) => {
-                const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
-                const p = d.payload || {};
-                const wh = p.warehouse || {};
-                const vins = draftVinList(d);
-                const canExport = Boolean(d.id && d.payload);
-                const vinLabel = vins.length
-                    ? vins.map((v) => escapeHtml(v)).join('<br>')
-                    : '—';
-                return `<tr>
-                    <td>${when}</td>
-                    <td class="hub-vin">${vinLabel}</td>
-                    <td>${escapeHtml(d.product || d.model || '—')}</td>
-                    <td>${escapeHtml(d.assignedTo || '—')}</td>
-                    <td>${escapeHtml(wh.owner_name || p.customer_name || '—')}</td>
-                    <td>${escapeHtml(wh.user_phone || p.phone || '—')}</td>
-                    <td>${vins.length || 1}</td>
-                    <td style="white-space:nowrap">
-                        ${canExport
-                            ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
-                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
-                            : '<span class="hub-meta">—</span>'}
-                    </td>
-                </tr>`;
-            }).join('');
-            bindDraftActionButtons(tbody);
+        function renderDraftsTable(drafts) {
+            renderAllPdfsBrowser(drafts);
+        }
+
+        function renderWarehouseDraftsTable() {
+            // Merged into All PDFs browser (type filter = warehouse).
+        }
+
+        function initPdfBrowserControls() {
+            const search = document.getElementById('pdfBrowserSearch');
+            const type = document.getElementById('pdfBrowserType');
+            const sort = document.getElementById('pdfBrowserSort');
+            const pageSize = document.getElementById('pdfBrowserPageSize');
+            let timer = null;
+            search?.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    pdfBrowserState.q = search.value || '';
+                    pdfBrowserState.page = 1;
+                    renderAllPdfsBrowser(pdfBrowserState.source);
+                }, 180);
+            });
+            type?.addEventListener('change', () => {
+                pdfBrowserState.type = type.value || 'all';
+                pdfBrowserState.page = 1;
+                renderAllPdfsBrowser(pdfBrowserState.source);
+            });
+            sort?.addEventListener('change', () => {
+                pdfBrowserState.sort = sort.value || 'date_desc';
+                pdfBrowserState.page = 1;
+                renderAllPdfsBrowser(pdfBrowserState.source);
+            });
+            pageSize?.addEventListener('change', () => {
+                pdfBrowserState.pageSize = Number(pageSize.value) || 20;
+                pdfBrowserState.page = 1;
+                renderAllPdfsBrowser(pdfBrowserState.source);
+            });
+            document.getElementById('pdfBrowserPrev')?.addEventListener('click', () => {
+                pdfBrowserState.page -= 1;
+                renderAllPdfsBrowser(pdfBrowserState.source);
+            });
+            document.getElementById('pdfBrowserNext')?.addEventListener('click', () => {
+                pdfBrowserState.page += 1;
+                renderAllPdfsBrowser(pdfBrowserState.source);
+            });
         }
 
         function renderQueueStats(stats) {
@@ -4711,6 +4839,7 @@
         });
 
         initPremiumFilterToolbar();
+        initPdfBrowserControls();
     </script>
     <script src="delivery-hub-live.js"></script>
 </body>

@@ -1665,3 +1665,75 @@ body.admin-console .admin-filter-bar.saas-filters {
     width: min(300px, calc(100vw - 48px));
   }
 }
+
+/* PDF browser — all car PDFs with filter/sort/pages */
+.pdf-browser-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) repeat(3, minmax(110px, 0.7fr));
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.pdf-browser-search .hub-input {
+  width: 100%;
+}
+.pdf-browser-meta {
+  margin: 0 0 10px;
+}
+.pdf-browser-table-wrap {
+  max-height: min(520px, 58vh);
+  overflow: auto;
+}
+.pdf-browser-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.pdf-browser-pager .hub-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pdf-vin-cell {
+  max-width: 280px;
+}
+.pdf-vin-chip {
+  display: inline-block;
+  direction: ltr;
+  margin: 2px 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #bfdbfe;
+}
+.pdf-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pdf-type-badge--memo {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.28);
+}
+.pdf-type-badge--wh {
+  background: rgba(14, 165, 233, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+}
+@media (max-width: 900px) {
+  .pdf-browser-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pdf-browser-search {
+    grid-column: 1 / -1;
+  }
+}
