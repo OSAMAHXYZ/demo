@@ -170,9 +170,27 @@ function statusLabelFor(item) {
 function isWarehouseDraftPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
   if (payload.deliveryMode === 'warehouse' || payload.warehouse_group === true) return true;
-  if (String(payload.branch_to || '').trim() === 'المستودع') return true;
-  if (String(payload.company_rep || '').includes('مستودع')) return true;
+  const branch = String(payload.branch_to || '').trim();
+  if (branch === 'المستودع' || branch === 'في المستودع') return true;
+  const company = String(payload.company_rep || '').trim();
+  if (company.includes('مستودع')) return true;
   // Do not treat leftover owner/print fields alone as warehouse — memo forms share those inputs.
+  return false;
+}
+
+function isWarehouseExportRow(row) {
+  const deliveryType = String(pickCol(row, [
+    'delivery type', 'delivery mode', 'نوع التسليم', 'section', 'القسم'
+  ]) || '').trim().toLowerCase();
+  if (deliveryType === 'warehouse' || deliveryType.includes('مستودع') || deliveryType.includes('warehouse')) {
+    return true;
+  }
+  const companyName = String(pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']) || '').trim();
+  if (companyName === 'مستودع الهاتفية' || companyName.includes('مستودع')) return true;
+  const branchTo = String(pickCol(row, ['branch to', 'branch', 'الفرع', 'إلى فرع']) || '').trim();
+  if (branchTo === 'المستودع' || branchTo === 'في المستودع') return true;
+  const classification = String(pickCol(row, ['classification', 'status label']) || '');
+  if (classification.includes('المستودع')) return true;
   return false;
 }
 
@@ -584,6 +602,7 @@ function parseVehiclesFromRows(rows) {
 function buildDraftPayloadFromExportRow(row, veh) {
   const today = new Date().toISOString().slice(0, 10);
   // Export maps: Company Name ← payload.company_rep, Company Rep ← payload.customer_name
+  // Warehouse exports use Company Name = مستودع الهاتفية, Branch To = في المستودع
   const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']);
   const companyRep = pickCol(row, ['company rep', 'rep', 'مندوب الشركة', 'المندوب']);
   const branchTo = pickCol(row, ['branch to', 'branch', 'الفرع', 'إلى فرع']);
@@ -594,6 +613,7 @@ function buildDraftPayloadFromExportRow(row, veh) {
   const docDate = printedAt && /^\d{4}-\d{2}-\d{2}/.test(printedAt)
     ? printedAt.slice(0, 10)
     : today;
+  const isWh = isWarehouseExportRow(row);
 
   const cars = Array.from({ length: 10 }, () => emptyCarSlot());
   cars[0] = {
@@ -603,22 +623,33 @@ function buildDraftPayloadFromExportRow(row, veh) {
     remarks: pickCol(row, ['remarks', 'notes', 'ملاحظات']) || ''
   };
 
-  return {
+  const payload = {
     doc_date: docDate,
     invoice_number: '',
     dep_hour: '',
     dep_minute: '',
-    customer_name: companyRep,
-    company_rep: companyName,
+    customer_name: companyRep || '',
+    company_rep: isWh ? 'مستودع الهاتفية' : companyName,
     transfer_date: docDate,
     corresponding_date: docDate,
     day_name: arabicWeekdayName(docDate),
     trailer_number: '',
     car_count: vin ? '1' : '',
-    branch_to: branchTo,
+    branch_to: isWh ? 'المستودع' : branchTo,
     attachments: '',
     cars
   };
+
+  if (isWh) {
+    payload.deliveryMode = 'warehouse';
+    payload.warehouse_group = true;
+    payload.warehouse = {
+      owner_name: companyRep || companyName || '',
+      user_phone: pickCol(row, ['phone', 'هاتف']) || ''
+    };
+  }
+
+  return payload;
 }
 
 function parsePrintDraftsFromRows(rows) {
@@ -660,10 +691,14 @@ function parseQueueFromRows(rows) {
     const status = pickCol(row, ['status']) || 'available';
     const agentStatus = pickCol(row, ['agent status']) || '';
     const assignedTo = pickCol(row, ['assigned to']) || '';
+    const deliveryModeRaw = String(pickCol(row, ['delivery mode', 'delivery type']) || '').trim().toLowerCase();
+    const isWh = deliveryModeRaw === 'warehouse'
+      || isWarehouseExportRow(row);
     queue.push({
       vin,
       status: status === 'claimed' || assignedTo ? 'claimed' : 'available',
       agentStatus,
+      deliveryMode: isWh ? 'warehouse' : (deliveryModeRaw === 'memo' ? '' : ''),
       assignedTo,
       addedAt: pickCol(row, ['added at']) || new Date().toISOString(),
       assignedAt: pickCol(row, ['assigned at']) || '',
