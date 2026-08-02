@@ -333,6 +333,36 @@
             color: #93c5fd;
             font-variant-numeric: tabular-nums;
         }
+        .xfer-section-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: #94a3b8;
+            margin: 4px 2px 2px;
+        }
+        .xfer-warehouse-block {
+            display: grid;
+            gap: 8px;
+            padding-bottom: 10px;
+            margin-bottom: 4px;
+            border-bottom: 1px dashed rgba(14, 165, 233, 0.28);
+        }
+        .xfer-account-item--warehouse {
+            background: rgba(14, 165, 233, 0.08);
+            border-color: rgba(14, 165, 233, 0.35);
+        }
+        .xfer-account-item--warehouse:hover {
+            border-color: rgba(14, 165, 233, 0.65);
+            background: rgba(14, 165, 233, 0.14);
+        }
+        .xfer-account-item--warehouse.is-active {
+            border-color: rgba(14, 165, 233, 0.85);
+            background: rgba(14, 165, 233, 0.2);
+            box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+        }
+        .xfer-account-item--warehouse .xfer-account-total {
+            color: #7dd3fc;
+        }
         .xfer-records {
             margin-top: 14px;
             padding: 14px;
@@ -1715,7 +1745,7 @@
                         <div class="xfer-dash xfer-dash--single">
                             <div class="xfer-dash-card xfer-dash-card--account">
                                 <h3>حساب كل شركة حسب المدن</h3>
-                                <p class="xfer-dash-sub">اضغط على أي شركة لعرض كل سجلاتها</p>
+                                <p class="xfer-dash-sub">التسليم في المستودع يظهر تحت «في المستودع» كـ مستودع الهاتفية — اضغط أي صف لعرض سجلاته</p>
                                 <div id="companyCityBreakdown" class="xfer-account-list">
                                     <div class="xfer-dash-empty">لا توجد بيانات بعد — اطبع مذكرة أولاً</div>
                                 </div>
@@ -1952,6 +1982,8 @@
         let allQueue = [];
         let allDrafts = [];
         let lastDashboard = null;
+        /** Warehouse deliveries show under this label — not as a transport company. */
+        const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
 
         function unlockAdmin() {
             adminAuthed = true;
@@ -2247,9 +2279,14 @@
             const warehouse = warehouseDeliveredStats();
             const drafts = filteredDrafts();
             const vehicles = filteredVehicleList();
-            const companies = new Set(drafts.map(draftCompanyName).filter(Boolean)).size;
+            const companies = new Set(
+                drafts.filter((d) => !isWarehouseAdminDraft(d)).map(draftCompanyName).filter(Boolean)
+            ).size;
             const branches = new Set(
-                drafts.map((d) => String((d.payload || {}).branch_to || '').trim()).filter((n) => n && n !== '-')
+                drafts
+                    .filter((d) => !isWarehouseAdminDraft(d))
+                    .map((d) => String((d.payload || {}).branch_to || '').trim())
+                    .filter((n) => n && n !== '-' && n !== 'المستودع')
             ).size;
             const cards = [
                 { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#3B82F6', icon: '🚗' },
@@ -2685,12 +2722,18 @@
 
             const draftsInRange = dateScopedDrafts();
 
+            let hasWarehouse = false;
             draftsInRange.forEach((d) => {
+                if (isWarehouseAdminDraft(d)) {
+                    hasWarehouse = true;
+                    return;
+                }
                 const c = draftCompanyName(d);
                 if (c) companies.add(c);
                 const who = String(d.assignedTo || '').trim();
                 if (who) coordinators.add(who);
             });
+            if (hasWarehouse) companies.add(WAREHOUSE_SPECIAL_NAME);
 
             const vins = scopedVinSet();
             let queueInRange = allQueue || [];
@@ -2721,10 +2764,16 @@
         function pruneStaleUiFilters() {
             const companies = new Set();
             const draftsInRange = dateScopedDrafts();
+            let hasWarehouse = false;
             draftsInRange.forEach((d) => {
+                if (isWarehouseAdminDraft(d)) {
+                    hasWarehouse = true;
+                    return;
+                }
                 const c = draftCompanyName(d);
                 if (c) companies.add(c);
             });
+            if (hasWarehouse) companies.add(WAREHOUSE_SPECIAL_NAME);
             if (selectedCompany && !companies.has(selectedCompany)) selectedCompany = '';
 
             const coordinators = new Set();
@@ -3195,7 +3244,7 @@
             if (!selectedCompany) return null;
             const set = new Set();
             dateScopedDrafts().forEach((d) => {
-                if (draftCompanyName(d) !== selectedCompany) return;
+                if (!draftMatchesCompanyKey(d, selectedCompany)) return;
                 const list = [
                     ...(Array.isArray(d.vins) ? d.vins : []),
                     d.vin,
@@ -3213,7 +3262,7 @@
         function filteredDrafts() {
             let list = dateScopedDrafts();
             if (selectedCompany) {
-                list = list.filter((d) => draftCompanyName(d) === selectedCompany);
+                list = list.filter((d) => draftMatchesCompanyKey(d, selectedCompany));
             }
             return list;
         }
@@ -3336,7 +3385,9 @@
             const withP = (allVehicles || []).filter((v) => v.proformaDate).length;
             const withI = (allVehicles || []).filter((v) => v.invoiceDate).length;
             const companyBit = selectedCompany
-                ? ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`
+                ? (isWarehouseAccountKey(selectedCompany)
+                    ? ` · <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> (في المستودع)`
+                    : ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`)
                 : '';
             const searchBit = searchQ
                 ? ` · VIN search <strong>${escapeHtml(searchQ)}</strong>`
@@ -3394,7 +3445,7 @@
             pruneStaleUiFilters();
             const draftsBase = filteredDrafts();
             const queueBase = filteredQueue();
-            if (selectedCompany && !draftsBase.some((d) => draftCompanyName(d) === selectedCompany)) {
+            if (selectedCompany && !draftsBase.some((d) => draftMatchesCompanyKey(d, selectedCompany))) {
                 selectedCompany = '';
                 const panel = document.getElementById('companyRecordsPanel');
                 if (panel) panel.classList.add('hidden');
@@ -3453,10 +3504,23 @@
             return String(p.company_rep || p.customer_name || d.customerName || '').trim();
         }
 
+        function isWarehouseAccountKey(key) {
+            return String(key || '').trim() === WAREHOUSE_SPECIAL_NAME;
+        }
+
+        /** Match drafts for company filter — warehouse deliveries use مستودع الهاتفية, not owner name. */
+        function draftMatchesCompanyKey(d, key) {
+            const k = String(key || '').trim();
+            if (!k) return true;
+            if (isWarehouseAccountKey(k)) return isWarehouseAdminDraft(d);
+            if (isWarehouseAdminDraft(d)) return false;
+            return draftCompanyName(d) === k;
+        }
+
         function draftsForCompany(company) {
             const key = String(company || '').trim();
             if (!key) return [];
-            return dateScopedDrafts().filter((d) => draftCompanyName(d) === key);
+            return dateScopedDrafts().filter((d) => draftMatchesCompanyKey(d, key));
         }
 
         function highlightSelectedCompany() {
@@ -3481,10 +3545,16 @@
 
             const rows = draftsForCompany(company);
             panel.classList.remove('hidden');
-            if (title) title.textContent = company;
+            if (title) {
+                title.textContent = isWarehouseAccountKey(company)
+                    ? `في المستودع — ${WAREHOUSE_SPECIAL_NAME}`
+                    : company;
+            }
             if (meta) {
                 meta.textContent = rows.length
-                    ? `${rows.length} سجل — كل بيانات هذه الشركة ضمن الفلتر`
+                    ? (isWarehouseAccountKey(company)
+                        ? `${rows.length} سجل تسليم في المستودع ضمن الفلتر`
+                        : `${rows.length} سجل — كل بيانات هذه الشركة ضمن الفلتر`)
                     : 'لا توجد سجلات لهذه الشركة';
             }
 
@@ -3791,7 +3861,7 @@
             const map = new Map();
 
             dateScopedDrafts().forEach((d) => {
-                if (draftCompanyName(d) !== key) return;
+                if (!draftMatchesCompanyKey(d, key)) return;
                 const vin = normVinKey(d.vin);
                 if (!vin) return;
                 const vehicle = findVehicleForVin(byVin, vin);
@@ -3837,7 +3907,14 @@
         function populateLeadTimeCompanySelect() {
             const sel = document.getElementById('leadTimeCompanySelect');
             if (!sel) return;
-            const names = tallyField(dateScopedDrafts(), (d) => draftCompanyName(d)).map((r) => r.name);
+            const names = tallyField(
+                dateScopedDrafts().filter((d) => !isWarehouseAdminDraft(d)),
+                (d) => draftCompanyName(d)
+            ).map((r) => r.name);
+            if (dateScopedDrafts().some(isWarehouseAdminDraft)) {
+                names.push(WAREHOUSE_SPECIAL_NAME);
+                names.sort((a, b) => a.localeCompare(b, 'ar'));
+            }
             const current = selectedCompany || sel.value || '';
             sel.innerHTML = '<option value="">— اختر شركة —</option>' + names.map((name) =>
                 `<option value="${escapeHtml(name)}"${name === current ? ' selected' : ''}>${escapeHtml(name)}</option>`
@@ -4158,11 +4235,18 @@
 
         function aggregateCompanyCities(drafts) {
             const companies = new Map();
+            let warehouseTotal = 0;
+
             drafts.forEach((d) => {
+                if (isWarehouseAdminDraft(d)) {
+                    warehouseTotal += draftCarWeight(d);
+                    return;
+                }
                 const p = d.payload || {};
                 const company = draftCompanyName(d);
                 const city = String(p.branch_to || '').trim();
                 if (!company || !city || company === '-' || city === '-' || company.startsWith('—') || city.startsWith('—')) return;
+                if (city === 'المستودع') return;
                 if (!companies.has(company)) companies.set(company, { total: 0, cities: new Map() });
                 const entry = companies.get(company);
                 const weight = draftCarWeight(d);
@@ -4170,7 +4254,7 @@
                 entry.cities.set(city, (entry.cities.get(city) || 0) + weight);
             });
 
-            return Array.from(companies.entries())
+            const rows = Array.from(companies.entries())
                 .map(([company, info]) => ({
                     company,
                     total: info.total,
@@ -4179,13 +4263,20 @@
                         .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, 'ar'))
                 }))
                 .sort((a, b) => b.total - a.total || a.company.localeCompare(b.company, 'ar'));
+
+            return {
+                rows,
+                warehouse: warehouseTotal > 0
+                    ? { company: WAREHOUSE_SPECIAL_NAME, total: warehouseTotal }
+                    : null
+            };
         }
 
         function renderCompanyCityBreakdown(drafts, emptyText) {
             const listEl = document.getElementById('companyCityBreakdown');
             const topEl = document.getElementById('companyCityTop');
-            const rows = aggregateCompanyCities(drafts);
-            if (!rows.length) {
+            const { rows, warehouse } = aggregateCompanyCities(drafts);
+            if (!rows.length && !warehouse) {
                 listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText || 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'}</div>`;
                 topEl.innerHTML = '';
                 if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
@@ -4193,20 +4284,40 @@
                 return;
             }
 
-            listEl.innerHTML = rows.map((row) => {
-                const safeCompany = escapeHtml(row.company);
-                const citiesHtml = row.cities.map((cityRow) => {
-                    const safeCity = escapeHtml(cityRow.city);
-                    return `<span class="xfer-account-chip">${safeCity} <b>${cityRow.count}</b></span>`;
-                }).join('');
-                return `<div class="xfer-account-item" data-company="${safeCompany}" role="button" tabindex="0">
-                    <div class="xfer-account-head">
-                        <div class="xfer-account-name" title="${safeCompany}">${safeCompany}</div>
-                        <div class="xfer-account-total">${row.total} سيارة</div>
+            const parts = [];
+            if (warehouse) {
+                const safeWh = escapeHtml(warehouse.company);
+                parts.push(`<div class="xfer-warehouse-block">
+                    <div class="xfer-section-label">في المستودع</div>
+                    <div class="xfer-account-item xfer-account-item--warehouse" data-company="${safeWh}" role="button" tabindex="0">
+                        <div class="xfer-account-head">
+                            <div class="xfer-account-name" title="${safeWh}">${safeWh}</div>
+                            <div class="xfer-account-total">${warehouse.total} سيارة</div>
+                        </div>
+                        <div class="xfer-account-cities">
+                            <span class="xfer-account-chip">التسليم في المستودع <b>${warehouse.total}</b></span>
+                        </div>
                     </div>
-                    <div class="xfer-account-cities">${citiesHtml || '<span class="xfer-dash-empty">لا توجد مدن</span>'}</div>
-                </div>`;
-            }).join('');
+                </div>`);
+            }
+            if (rows.length) {
+                parts.push(`<div class="xfer-section-label">شركات النقل</div>`);
+                parts.push(rows.map((row) => {
+                    const safeCompany = escapeHtml(row.company);
+                    const citiesHtml = row.cities.map((cityRow) => {
+                        const safeCity = escapeHtml(cityRow.city);
+                        return `<span class="xfer-account-chip">${safeCity} <b>${cityRow.count}</b></span>`;
+                    }).join('');
+                    return `<div class="xfer-account-item" data-company="${safeCompany}" role="button" tabindex="0">
+                        <div class="xfer-account-head">
+                            <div class="xfer-account-name" title="${safeCompany}">${safeCompany}</div>
+                            <div class="xfer-account-total">${row.total} سيارة</div>
+                        </div>
+                        <div class="xfer-account-cities">${citiesHtml || '<span class="xfer-dash-empty">لا توجد مدن</span>'}</div>
+                    </div>`;
+                }).join(''));
+            }
+            listEl.innerHTML = parts.join('');
 
             listEl.querySelectorAll('[data-company]').forEach((el) => {
                 const open = () => showCompanyRecords(el.dataset.company);
@@ -4221,9 +4332,12 @@
 
             const companyCount = rows.length;
             const cityPairs = rows.reduce((sum, row) => sum + row.cities.length, 0);
+            const whBit = warehouse ? ` · <strong>${warehouse.total}</strong> في المستودع` : '';
             topEl.innerHTML = selectedCompany
-                ? `عرض شركة واحدة فقط — <strong>${escapeHtml(selectedCompany)}</strong> · اضغط نفس الاسم للإلغاء`
-                : `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة — اضغط اسم الشركة لعرض بياناتها فقط`;
+                ? (isWarehouseAccountKey(selectedCompany)
+                    ? `عرض <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> فقط — اضغط نفس الصف للإلغاء`
+                    : `عرض شركة واحدة فقط — <strong>${escapeHtml(selectedCompany)}</strong> · اضغط نفس الاسم للإلغاء`)
+                : `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة${whBit} — اضغط اسم الشركة لعرض بياناتها فقط`;
 
             if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
             else highlightSelectedCompany();
@@ -4232,11 +4346,13 @@
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
             const navList = dateScopedDrafts();
+            const memoNav = navList.filter((d) => !isWarehouseAdminDraft(d));
+            const memoList = list.filter((d) => !isWarehouseAdminDraft(d));
             const { type } = getTrackFilter();
             const dateFiltered = hasActiveTrackFilter() || Boolean(getXferDateFilter());
             const emptyDate = 'لا توجد بيانات في هذه الفترة حسب الفلتر';
-            let companies = tallyField(navList, (d) => draftCompanyName(d));
-            let cities = tallyField(list, (d) => (d.payload || {}).branch_to);
+            let companies = tallyField(memoNav, (d) => draftCompanyName(d));
+            let cities = tallyField(memoList, (d) => (d.payload || {}).branch_to);
             const vehicles = filteredVehicleList();
             const products = tallyField(
                 vehicles.map((v) => ({ _name: v.product || v.model || '' })),
