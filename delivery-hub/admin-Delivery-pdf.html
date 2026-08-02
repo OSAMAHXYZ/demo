@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802g">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802g">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802h">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802h">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -3565,12 +3565,23 @@
             else renderCompanyRecordsPanel('');
         });
 
-        function tallyField(drafts, getter) {
+        /** How many cars (VINs) a draft/PDF contributes to counters. */
+        function draftCarWeight(d) {
+            const n = draftVinList(d).length;
+            return n > 0 ? n : 1;
+        }
+
+        /**
+         * Tally drafts by a field. By default each PDF counts by number of VINs
+         * (5 cars on one PDF → +5 for that company/branch).
+         */
+        function tallyField(drafts, getter, { byCars = true } = {}) {
             const map = new Map();
             drafts.forEach((d) => {
                 const raw = String(getter(d) || '').trim();
                 if (!raw || raw === '-' || raw.startsWith('- اختر') || raw.startsWith('—')) return;
-                map.set(raw, (map.get(raw) || 0) + 1);
+                const weight = byCars ? draftCarWeight(d) : 1;
+                map.set(raw, (map.get(raw) || 0) + weight);
             });
             return Array.from(map.entries())
                 .map(([name, count]) => ({ name, count }))
@@ -3597,7 +3608,7 @@
                             <span>${sharePct}%</span>
                         </div>
                         <div class="saas-company-card__name" title="${safeName}">${safeName}</div>
-                        <div class="saas-company-card__meta">${row.count} مذكرة</div>
+                        <div class="saas-company-card__meta">${row.count} سيارة</div>
                         <div class="saas-company-card__bar"><span style="width:${Math.min(100, sharePct)}%"></span></div>
                     </button>`;
                 }).join('');
@@ -4154,8 +4165,9 @@
                 if (!company || !city || company === '-' || city === '-' || company.startsWith('—') || city.startsWith('—')) return;
                 if (!companies.has(company)) companies.set(company, { total: 0, cities: new Map() });
                 const entry = companies.get(company);
-                entry.total++;
-                entry.cities.set(city, (entry.cities.get(city) || 0) + 1);
+                const weight = draftCarWeight(d);
+                entry.total += weight;
+                entry.cities.set(city, (entry.cities.get(city) || 0) + weight);
             });
 
             return Array.from(companies.entries())
@@ -4190,7 +4202,7 @@
                 return `<div class="xfer-account-item" data-company="${safeCompany}" role="button" tabindex="0">
                     <div class="xfer-account-head">
                         <div class="xfer-account-name" title="${safeCompany}">${safeCompany}</div>
-                        <div class="xfer-account-total">${row.total} حركة</div>
+                        <div class="xfer-account-total">${row.total} سيارة</div>
                     </div>
                     <div class="xfer-account-cities">${citiesHtml || '<span class="xfer-dash-empty">لا توجد مدن</span>'}</div>
                 </div>`;
