@@ -169,14 +169,11 @@ function statusLabelFor(item) {
 
 function isWarehouseDraftPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
-  if (payload.warehouse_group) return true;
+  if (payload.deliveryMode === 'warehouse' || payload.warehouse_group === true) return true;
   if (String(payload.branch_to || '').trim() === 'المستودع') return true;
   if (String(payload.company_rep || '').includes('مستودع')) return true;
-  const wh = payload.warehouse || {};
-  return Boolean(
-    wh.owner_name || wh.user_name || wh.user_id || wh.user_phone
-    || wh.print_date || wh.print_time
-  );
+  // Do not treat leftover owner/print fields alone as warehouse — memo forms share those inputs.
+  return false;
 }
 
 /** Collect unique VINs from draft payload cars / vins arrays (+ optional extras). */
@@ -229,7 +226,8 @@ function markVinsDelivered(vins, { assignedTo = 'admin', warehouseDelivery = fal
       }
       item.status = 'claimed';
       item.agentStatus = 'delivered';
-      item.deliveryMode = warehouseDelivery ? 'warehouse' : (item.deliveryMode || '');
+      // Explicitly clear warehouse mode for memo deliveries so label is تم الترحيل
+      item.deliveryMode = warehouseDelivery ? 'warehouse' : '';
       if (assignedTo) item.assignedTo = assignedTo;
     }
     deliveredItems.push(enrichQueueItem(item));
@@ -1559,10 +1557,23 @@ app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   }
   draft.updatedAt = new Date().toISOString();
 
-  const warehouseDelivery = isWarehouseDraftPayload(draft.payload);
+  // Prefer explicit mode from admin editor (memo vs warehouse UI).
+  let warehouseDelivery = false;
+  if (body.deliveryMode === 'warehouse' || body.warehouseDelivery === true) {
+    warehouseDelivery = true;
+  } else if (body.deliveryMode === 'memo' || body.deliveryMode === '' || body.warehouseDelivery === false) {
+    warehouseDelivery = false;
+  } else {
+    warehouseDelivery = isWarehouseDraftPayload(draft.payload);
+  }
+
+  if (!draft.payload || typeof draft.payload !== 'object') draft.payload = {};
   if (warehouseDelivery) {
     draft.payload.warehouse_group = true;
     draft.payload.deliveryMode = 'warehouse';
+  } else {
+    draft.payload.warehouse_group = false;
+    draft.payload.deliveryMode = '';
   }
 
   let deliveredCount = 0;
@@ -1584,6 +1595,8 @@ app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
     draft,
     vins,
     deliveredCount,
+    deliveryMode: warehouseDelivery ? 'warehouse' : 'memo',
+    statusLabel: warehouseDelivery ? 'تم التسليم في المستودع' : 'تم الترحيل',
     items: deliveredItems
   });
 });

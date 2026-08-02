@@ -3968,11 +3968,10 @@
 
         function isWarehouseAdminDraft(d) {
             const p = (d && d.payload) || {};
-            if (p.warehouse_group || p.deliveryMode === 'warehouse') return true;
+            if (p.deliveryMode === 'warehouse' || p.warehouse_group === true) return true;
             if (String(p.branch_to || '').trim() === 'المستودع') return true;
             if (String(p.company_rep || '').includes('مستودع')) return true;
-            const wh = p.warehouse || {};
-            return Boolean(wh.owner_name || wh.user_name || wh.user_phone || wh.user_id || wh.print_date);
+            return false;
         }
 
         function isWarehouseQueueItem(q) {
