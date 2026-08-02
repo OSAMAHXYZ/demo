@@ -157,6 +157,7 @@ function vehicleIndex() {
 function statusLabelFor(item) {
   if (item.status === 'available') return 'متاح';
   if (item.agentStatus === 'delivered') {
+    if (item.showroomDisplay || item.deliveryMode === 'showroom') return 'عرض الصالة';
     return item.deliveryMode === 'warehouse'
       ? 'تم التسليم في المستودع'
       : 'تم الترحيل';
@@ -167,13 +168,24 @@ function statusLabelFor(item) {
   return 'محجوز';
 }
 
+const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
+const SHOWROOM_AGENT = 'ياسين';
+
+function isShowroomDraftPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  if (payload.showroom_display === true || payload.showroom_group === true) return true;
+  if (payload.deliveryMode === 'showroom') return true;
+  return false;
+}
+
 function isWarehouseDraftPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
+  if (isShowroomDraftPayload(payload)) return false;
   if (payload.deliveryMode === 'warehouse' || payload.warehouse_group === true) return true;
   const branch = String(payload.branch_to || '').trim();
   if (branch === 'المستودع' || branch === 'في المستودع') return true;
   const company = String(payload.company_rep || '').trim();
-  if (company.includes('مستودع')) return true;
+  if (company.includes('مستودع') && company !== SHOWROOM_SPECIAL_NAME) return true;
   // Do not treat leftover owner/print fields alone as warehouse — memo forms share those inputs.
   return false;
 }
@@ -182,11 +194,13 @@ function isWarehouseExportRow(row) {
   const deliveryType = String(pickCol(row, [
     'delivery type', 'delivery mode', 'نوع التسليم', 'section', 'القسم'
   ]) || '').trim().toLowerCase();
+  if (deliveryType === 'showroom' || deliveryType.includes('عرض')) return false;
   if (deliveryType === 'warehouse' || deliveryType.includes('مستودع') || deliveryType.includes('warehouse')) {
     return true;
   }
   const companyName = String(pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']) || '').trim();
-  if (companyName === 'مستودع الهاتفية' || companyName.includes('مستودع')) return true;
+  if (companyName === 'سيارات عرض الصالة') return false;
+  if (companyName === 'مستودع الهاتفية' || (companyName.includes('مستودع') && !companyName.includes('عرض'))) return true;
   const branchTo = String(pickCol(row, ['branch to', 'branch', 'الفرع', 'إلى فرع']) || '').trim();
   if (branchTo === 'المستودع' || branchTo === 'في المستودع') return true;
   const classification = String(pickCol(row, ['classification', 'status label']) || '');
@@ -212,12 +226,19 @@ function collectDraftVins(draftPayload, extra = []) {
  * Mark VINs as delivered on the coordinator queue (creates queue rows if missing).
  * Shared by agent complete-print and admin draft edit.
  */
-function markVinsDelivered(vins, { assignedTo = 'admin', warehouseDelivery = false, forceAssign = true } = {}) {
+function markVinsDelivered(vins, {
+  assignedTo = 'admin',
+  warehouseDelivery = false,
+  showroomDisplay = false,
+  forceAssign = true,
+  carMetaByVin = null
+} = {}) {
   const byVehicle = vehicleIndex();
   const deliveredItems = [];
   const blocked = [];
 
   for (const vin of vins) {
+    const meta = (carMetaByVin && carMetaByVin.get(vin)) || {};
     let item = findQueueItem(vin);
     if (!item) {
       const veh = byVehicle.get(vin);
@@ -225,10 +246,14 @@ function markVinsDelivered(vins, { assignedTo = 'admin', warehouseDelivery = fal
         vin,
         status: 'claimed',
         agentStatus: 'delivered',
-        deliveryMode: warehouseDelivery ? 'warehouse' : '',
+        deliveryMode: showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
+        showroomDisplay: Boolean(showroomDisplay),
         assignedTo: assignedTo || 'admin',
         assignedAt: new Date().toISOString(),
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
+        product: meta.product || '',
+        model: meta.model || meta.product || '',
+        plate: meta.plate || ''
       }, veh || {});
       store.queue.push(item);
     } else {
@@ -244,9 +269,12 @@ function markVinsDelivered(vins, { assignedTo = 'admin', warehouseDelivery = fal
       }
       item.status = 'claimed';
       item.agentStatus = 'delivered';
-      // Explicitly clear warehouse mode for memo deliveries so label is تم الترحيل
-      item.deliveryMode = warehouseDelivery ? 'warehouse' : '';
+      item.deliveryMode = showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : '');
+      item.showroomDisplay = Boolean(showroomDisplay);
       if (assignedTo) item.assignedTo = assignedTo;
+      if (meta.product && !item.product) item.product = meta.product;
+      if (meta.model && !item.model) item.model = meta.model;
+      if (meta.plate && !item.plate) item.plate = meta.plate;
     }
     deliveredItems.push(enrichQueueItem(item));
   }
@@ -599,10 +627,21 @@ function parseVehiclesFromRows(rows) {
   return found;
 }
 
+function isShowroomExportRow(row) {
+  const deliveryType = String(pickCol(row, [
+    'delivery type', 'delivery mode', 'نوع التسليم', 'section', 'القسم', 'flag'
+  ]) || '').trim().toLowerCase();
+  if (deliveryType === 'showroom' || deliveryType.includes('عرض')) return true;
+  const companyName = String(pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']) || '').trim();
+  if (companyName === 'سيارات عرض الصالة') return true;
+  return false;
+}
+
 function buildDraftPayloadFromExportRow(row, veh) {
   const today = new Date().toISOString().slice(0, 10);
   // Export maps: Company Name ← payload.company_rep, Company Rep ← payload.customer_name
   // Warehouse exports use Company Name = مستودع الهاتفية, Branch To = في المستودع
+  // Showroom exports use Company Name = سيارات عرض الصالة
   const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']);
   const companyRep = pickCol(row, ['company rep', 'rep', 'مندوب الشركة', 'المندوب']);
   const branchTo = pickCol(row, ['branch to', 'branch', 'الفرع', 'إلى فرع']);
@@ -613,7 +652,8 @@ function buildDraftPayloadFromExportRow(row, veh) {
   const docDate = printedAt && /^\d{4}-\d{2}-\d{2}/.test(printedAt)
     ? printedAt.slice(0, 10)
     : today;
-  const isWh = isWarehouseExportRow(row);
+  const isSh = isShowroomExportRow(row);
+  const isWh = !isSh && isWarehouseExportRow(row);
 
   const cars = Array.from({ length: 10 }, () => emptyCarSlot());
   cars[0] = {
@@ -629,7 +669,7 @@ function buildDraftPayloadFromExportRow(row, veh) {
     dep_hour: '',
     dep_minute: '',
     customer_name: companyRep || '',
-    company_rep: isWh ? 'مستودع الهاتفية' : companyName,
+    company_rep: isSh ? (companyRep || companyName) : (isWh ? 'مستودع الهاتفية' : companyName),
     transfer_date: docDate,
     corresponding_date: docDate,
     day_name: arabicWeekdayName(docDate),
@@ -640,7 +680,13 @@ function buildDraftPayloadFromExportRow(row, veh) {
     cars
   };
 
-  if (isWh) {
+  if (isSh) {
+    payload.deliveryMode = 'showroom';
+    payload.showroom_display = true;
+    payload.showroom_group = true;
+    payload.showroom_label = SHOWROOM_SPECIAL_NAME;
+    payload.typed_company = companyRep || companyName || '';
+  } else if (isWh) {
     payload.deliveryMode = 'warehouse';
     payload.warehouse_group = true;
     payload.warehouse = {
@@ -670,11 +716,12 @@ function parsePrintDraftsFromRows(rows) {
       vin,
       product,
       model: product,
-      assignedTo,
+      assignedTo: isShowroomDraftPayload(payload) ? (assignedTo || SHOWROOM_AGENT) : assignedTo,
       customerName: companyName || pickCol(row, ['company rep', 'customer']) || '',
       plate: pickCol(row, ['plate']) || '',
       gt: pickCol(row, ['gt']) || '',
       location: pickCol(row, ['location']) || '',
+      showroomDisplay: isShowroomDraftPayload(payload),
       payload
     });
   }
@@ -1493,11 +1540,31 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   const vins = collectDraftVins(draftPayload, [primaryVin, ...fromBody]);
   if (!vins.length) return res.status(400).json({ error: 'الشاسيه مطلوب' });
 
-  const warehouseDelivery = isWarehouseDraftPayload(draftPayload);
+  const showroomDisplay = Boolean(
+    req.body?.showroomDisplay
+    || isShowroomDraftPayload(draftPayload)
+    || auth.username === SHOWROOM_AGENT
+  );
+  const warehouseDelivery = !showroomDisplay && isWarehouseDraftPayload(draftPayload);
+
+  const carMetaByVin = new Map();
+  (Array.isArray(draftPayload.cars) ? draftPayload.cars : []).forEach((c) => {
+    const vin = normVin(c?.chassis || c?.vin);
+    if (!vin) return;
+    carMetaByVin.set(vin, {
+      product: String(c.model || '').trim(),
+      model: String(c.model || '').trim(),
+      plate: String(c.plate || '').trim()
+    });
+  });
+
   const { deliveredItems, blocked } = markVinsDelivered(vins, {
     assignedTo: auth.username,
     warehouseDelivery,
-    forceAssign: false
+    showroomDisplay,
+    // Showroom agent enters VINs manually — allow create/claim even if not on queue
+    forceAssign: showroomDisplay ? true : false,
+    carMetaByVin
   });
   if (blocked.length) {
     const b = blocked[0];
@@ -1510,23 +1577,31 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   }
 
   const primary = deliveredItems[0];
+  const typedCompany = String(draftPayload.company_rep || '').trim();
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
     printedAt: new Date().toISOString(),
     vin: primary.vin,
     vins,
-    product: primary.product || '',
+    product: primary.product || carMetaByVin.get(primary.vin)?.product || '',
     model: primary.model || primary.product || '',
     assignedTo: auth.username,
-    customerName: draftPayload.company_rep || draftPayload?.warehouse?.owner_name || primary.customerName || '',
+    customerName: showroomDisplay
+      ? (typedCompany || SHOWROOM_SPECIAL_NAME)
+      : (typedCompany || draftPayload?.warehouse?.owner_name || primary.customerName || ''),
     plate: primary.plate || '',
     gt: primary.gt || '',
     location: primary.location || '',
+    showroomDisplay: Boolean(showroomDisplay),
     payload: {
       ...draftPayload,
       warehouse_group: warehouseDelivery,
-      deliveryMode: warehouseDelivery ? 'warehouse' : '',
+      deliveryMode: showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
+      showroom_display: Boolean(showroomDisplay),
+      showroom_group: Boolean(showroomDisplay),
+      showroom_label: showroomDisplay ? SHOWROOM_SPECIAL_NAME : undefined,
+      typed_company: showroomDisplay ? typedCompany : undefined,
       vins
     }
   };
@@ -1539,6 +1614,10 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     draftId: id,
     vins,
     deliveredCount: deliveredItems.length,
+    showroomDisplay: Boolean(showroomDisplay),
+    statusLabel: showroomDisplay
+      ? 'عرض الصالة'
+      : (warehouseDelivery ? 'تم التسليم في المستودع' : 'تم الترحيل'),
     item: primary,
     items: deliveredItems
   });

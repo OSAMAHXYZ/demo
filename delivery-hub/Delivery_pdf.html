@@ -1300,6 +1300,9 @@
         const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
         let FIELD_LAYOUT = MUTHAKARA_FIELDS;
         let warehousePrintMode = false;
+        const SHOWROOM_AGENT = 'ياسين';
+        const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
+        let showroomMode = false;
         const carsBody = document.getElementById('carsBody');
         const statusEl = document.getElementById('status');
         const form = document.getElementById('deliveryForm');
@@ -1350,15 +1353,165 @@
             carsBody.innerHTML = AR_NUMS.map((n, i) => `
                 <tr>
                     <td class="row-no">${n}</td>
-                    <td><input name="car_model_${i}" data-field="model" data-row="${i}" aria-label="Model row ${i + 1}"></td>
-                    <td><input name="car_chassis_${i}" data-field="chassis" data-row="${i}" class="chassis-pick" readonly placeholder="انقر للاختيار" aria-label="Chassis row ${i + 1}"></td>
+                    <td><input name="car_model_${i}" data-field="model" data-row="${i}" aria-label="Model row ${i + 1}" placeholder="${showroomMode ? 'اكتب الموديل' : ''}"></td>
+                    <td><input name="car_chassis_${i}" data-field="chassis" data-row="${i}" class="chassis-pick" ${showroomMode ? '' : 'readonly'} placeholder="${showroomMode ? 'اكتب رقم الشاسيه' : 'انقر للاختيار'}" aria-label="Chassis row ${i + 1}"></td>
                     <td><input name="car_plate_${i}" data-field="plate" data-row="${i}" aria-label="Plate row ${i + 1}"></td>
                     <td><input name="car_remarks_${i}" data-field="remarks" data-row="${i}" aria-label="Remarks row ${i + 1}"></td>
                 </tr>
             `).join('');
             carsBody.querySelectorAll('.chassis-pick').forEach((el) => {
-                el.addEventListener('click', () => openVinPicker(parseInt(el.dataset.row, 10)));
+                if (showroomMode) {
+                    el.addEventListener('input', () => {
+                        syncCarCount();
+                        updatePreview();
+                    });
+                    el.addEventListener('change', () => {
+                        syncCarCount();
+                        updatePreview();
+                    });
+                } else {
+                    el.addEventListener('click', () => openVinPicker(parseInt(el.dataset.row, 10)));
+                }
             });
+            if (showroomMode) {
+                carsBody.querySelectorAll('[data-field="model"]').forEach((el) => {
+                    el.addEventListener('input', updatePreview);
+                });
+            }
+        }
+
+        function isShowroomAgent(agent = getAgent()) {
+            return String(agent?.username || '').trim() === SHOWROOM_AGENT;
+        }
+
+        function applyShowroomUi(enabled) {
+            showroomMode = Boolean(enabled);
+            document.body.classList.toggle('showroom-agent-mode', showroomMode);
+            const hint = document.querySelector('#carsTable')?.closest('.card')?.querySelector('.hint');
+            if (hint) {
+                hint.textContent = showroomMode
+                    ? 'اكتب الشاسيه والموديل يدوياً — سيارات عرض الصالة'
+                    : 'انقر على خانة الشاسية لاختيار VIN من البيانات المرفوعة — يُملأ الموديل وعدد السيارات تلقائياً';
+            }
+            const heroP = document.querySelector('.hero p');
+            if (heroP) {
+                heroP.textContent = showroomMode
+                    ? 'سيارات عرض الصالة — عبّئ المذكرة يدوياً ثم احفظ'
+                    : 'املأ البيانات — شاهد المعاينة — اطبع على ورق A4';
+            }
+            const printBtn = document.getElementById('btnPrint');
+            const printBtn2 = document.getElementById('btnPrint2');
+            const printHint = document.querySelector('.actions + .hint.no-print');
+            const backBtn = document.getElementById('btnBackWorkspace');
+            if (printBtn) {
+                printBtn.textContent = showroomMode ? '💾 حفظ' : '🖨 طباعة A4';
+            }
+            if (printBtn2) {
+                printBtn2.textContent = showroomMode ? '💾 حفظ' : '🖨 طباعة A4';
+            }
+            if (printHint) {
+                printHint.textContent = showroomMode
+                    ? 'بعد الحفظ تُسجَّل السيارات تحت «سيارات عرض الصالة» في لوحة الإدارة مع تمييز خاص.'
+                    : 'للطباعة: اختر حجم الورق A4، هوامش = صفر. بعد الطباعة تُحفظ المسودة ويُوسم الشاسيه «تم الترحيل» في لوحة الإدارة.';
+            }
+            if (backBtn) {
+                backBtn.textContent = showroomMode ? 'مذكرة جديدة' : '← لوحة السيارات';
+            }
+            // Allow free typing for company/branch in showroom mode
+            ['company_rep', 'branch_to'].forEach((id) => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                if (showroomMode) {
+                    input.removeAttribute('data-list-only');
+                    input.placeholder = id === 'company_rep' ? 'اكتب اسم الشركة…' : 'اكتب الفرع / المدينة…';
+                    const wrapHint = input.closest('div')?.parentElement?.querySelector('.searchable-select-hint');
+                    if (wrapHint) wrapHint.hidden = true;
+                } else {
+                    input.setAttribute('data-list-only', '1');
+                    input.placeholder = id === 'company_rep' ? 'اختر الشركة من القائمة…' : 'اختر الفرع من القائمة…';
+                    const wrapHint = input.closest('div')?.parentElement?.querySelector('.searchable-select-hint');
+                    if (wrapHint) wrapHint.hidden = false;
+                }
+            });
+            buildCarRows();
+            setWarehousePrintMode(false);
+            if (showroomMode) {
+                if (printBtn) printBtn.textContent = '💾 حفظ';
+                if (printBtn2) printBtn2.textContent = '💾 حفظ';
+            }
+        }
+
+        function openShowroomForm() {
+            applyShowroomUi(true);
+            clearClaimedVin();
+            showView('app');
+            clearDeliveryForm();
+            applyShowroomUi(true);
+            setStatus('ياسين — سيارات عرض الصالة: اكتب البيانات يدوياً ثم اضغط حفظ', 'ok');
+        }
+
+        async function doShowroomSave() {
+            const agent = getAgent();
+            if (!isShowroomAgent(agent)) return false;
+            if (!agent.username || !agent.password) {
+                setStatus('يجب تسجيل الدخول أولاً', 'err');
+                return false;
+            }
+            // Company/branch required but free-text OK
+            const company = String(document.getElementById('company_rep')?.value || '').trim();
+            const branch = String(document.getElementById('branch_to')?.value || '').trim();
+            if (!company || !branch) {
+                setStatus('أدخل اسم الشركة والفرع', 'err');
+                document.getElementById(!company ? 'company_rep' : 'branch_to')?.focus();
+                return false;
+            }
+            const vins = getFormChassisList();
+            if (!vins.length) {
+                setStatus('أدخل رقم شاسيه واحد على الأقل', 'err');
+                form.querySelector('[name="car_chassis_0"]')?.focus();
+                return false;
+            }
+            const payload = collectPayload();
+            payload.showroom_display = true;
+            payload.showroom_group = true;
+            payload.deliveryMode = 'showroom';
+            payload.showroom_label = SHOWROOM_SPECIAL_NAME;
+            setStatus('جاري الحفظ…', 'ok');
+            const printBtn = document.getElementById('btnPrint');
+            const printBtn2 = document.getElementById('btnPrint2');
+            if (printBtn) printBtn.disabled = true;
+            if (printBtn2) printBtn2.disabled = true;
+            try {
+                const res = await fetch('/api/delivery-coordinator/complete-print', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: agent.username,
+                        password: agent.password,
+                        vin: vins[0],
+                        vins,
+                        showroomDisplay: true,
+                        draft: payload
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'فشل الحفظ');
+                const n = data.deliveredCount || vins.length;
+                setStatus(
+                    `تم الحفظ · ${n} سيارة تحت «${SHOWROOM_SPECIAL_NAME}»${data.draftId ? ` · ${data.draftId}` : ''}`,
+                    'ok'
+                );
+                clearClaimedVin();
+                clearDeliveryForm();
+                applyShowroomUi(true);
+                return true;
+            } catch (err) {
+                setStatus(err.message || 'فشل الحفظ', 'err');
+                return false;
+            } finally {
+                if (printBtn) printBtn.disabled = false;
+                if (printBtn2) printBtn2.disabled = false;
+            }
         }
 
         function countFilledChassis() {
@@ -1711,6 +1864,10 @@
         }
 
         function openVinPicker(rowIndex) {
+            if (showroomMode || isShowroomAgent()) {
+                setStatus('اكتب رقم الشاسيه يدوياً — وضع عرض الصالة', 'ok');
+                return;
+            }
             activeVinRow = rowIndex;
             vinModal.classList.add('open');
             vinSearch.value = '';
@@ -1758,6 +1915,10 @@
         });
 
         function doPrintA4() {
+            if (showroomMode || isShowroomAgent()) {
+                doShowroomSave();
+                return;
+            }
             const isAdminMode = new URLSearchParams(location.search).get('adminExport') === '1'
                 || new URLSearchParams(location.search).get('adminEdit') === '1';
             if (!isAdminMode && !validateListOnlyFields()) return;
@@ -1997,9 +2158,13 @@
             if (overlay) overlay.style.display = '';
             if (topFields) topFields.hidden = !warehousePrintMode;
             if (printBtn) {
-                printBtn.textContent = warehousePrintMode
-                    ? '🖨 طباعة قائمة الفحص + PDF'
-                    : '🖨 طباعة A4';
+                if (showroomMode) {
+                    printBtn.textContent = '💾 حفظ';
+                } else {
+                    printBtn.textContent = warehousePrintMode
+                        ? '🖨 طباعة قائمة الفحص + PDF'
+                        : '🖨 طباعة A4';
+                }
             }
             if (downloadBtn) {
                 downloadBtn.textContent = warehousePrintMode
@@ -2248,6 +2413,11 @@
         }
 
         function openWorkspace() {
+            if (isShowroomAgent()) {
+                openShowroomForm();
+                return;
+            }
+            applyShowroomUi(false);
             showView('workspace');
             loadWorkspace().catch((err) => {
                 document.getElementById('queueStatus').textContent = err.message;
@@ -2591,6 +2761,10 @@
 
                 setAgent(username, password);
                 statusEl.textContent = '';
+                if (isShowroomAgent()) {
+                    openShowroomForm();
+                    return;
+                }
                 if (getUrlVin() && await tryOpenUrlVin()) return;
                 openWorkspace();
             } catch (err) {
@@ -2664,7 +2838,12 @@
         });
 
         document.getElementById('btnBackWorkspace').addEventListener('click', () => {
+            if (isShowroomAgent()) {
+                openShowroomForm();
+                return;
+            }
             setWarehousePrintMode(false);
+            applyShowroomUi(false);
             clearClaimedVin();
             openWorkspace();
         });
@@ -2841,7 +3020,7 @@
         }
 
         function validateListOnlyFields() {
-            if (warehousePrintMode) return true;
+            if (warehousePrintMode || showroomMode || isShowroomAgent()) return true;
             const companyOk = enforceListOnlyValue('company_rep', { clearIfInvalid: false });
             const branchOk = enforceListOnlyValue('branch_to', { clearIfInvalid: false });
             if (!companyOk || !branchOk) {
@@ -2948,6 +3127,10 @@
                 setTimeout(() => {
                     closeMenu();
                     const v = String(input.value || '').trim();
+                    if (showroomMode || isShowroomAgent()) {
+                        setSearchableValidity(input, Boolean(v), v ? '' : 'مطلوب');
+                        return;
+                    }
                     if (!v) {
                         setSearchableValidity(input, false, 'مطلوب — اختر من القائمة');
                         return;

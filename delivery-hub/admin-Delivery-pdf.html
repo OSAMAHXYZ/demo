@@ -8,7 +8,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802h">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802h">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802i">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1845,6 +1845,7 @@
                                 <option value="all">كل الأنواع</option>
                                 <option value="memo">مذكرة ترحيل</option>
                                 <option value="warehouse">مستودع</option>
+                                <option value="showroom">عرض الصالة</option>
                             </select>
                             <select id="pdfBrowserSort" class="ft-native" aria-label="ترتيب">
                                 <option value="date_desc">الأحدث أولاً</option>
@@ -1984,6 +1985,9 @@
         let lastDashboard = null;
         /** Warehouse deliveries show under this label — not as a transport company. */
         const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
+        /** Showroom cars (ياسين) — flagged separately in admin. */
+        const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
+        const SHOWROOM_AGENT = 'ياسين';
 
         function unlockAdmin() {
             adminAuthed = true;
@@ -2226,6 +2230,7 @@
             const draftRows = allDrafts.map((d) => {
                 const p = d.payload || {};
                 const isWh = isWarehouseAdminDraft(d);
+                const isSh = isShowroomAdminDraft(d);
                 const vinList = [
                     ...(Array.isArray(d.vins) ? d.vins : []),
                     d.vin,
@@ -2242,10 +2247,15 @@
                     'Car Count': uniqueVins.length || 1,
                     Product: d.product || d.model || '',
                     'Assigned To': d.assignedTo || '',
-                    Section: isWh ? 'في المستودع' : 'شركات النقل',
-                    'Delivery Type': isWh ? 'warehouse' : 'memo',
-                    'Company Name': isWh ? WAREHOUSE_SPECIAL_NAME : (p.company_rep || ''),
-                    'Company Rep': isWh ? ownerName : (p.customer_name || d.customerName || ''),
+                    Section: isSh ? 'سيارات عرض الصالة' : (isWh ? 'في المستودع' : 'شركات النقل'),
+                    'Delivery Type': isSh ? 'showroom' : (isWh ? 'warehouse' : 'memo'),
+                    Flag: isSh ? 'عرض الصالة' : (isWh ? 'مستودع' : ''),
+                    'Company Name': isSh
+                        ? SHOWROOM_SPECIAL_NAME
+                        : (isWh ? WAREHOUSE_SPECIAL_NAME : (p.company_rep || '')),
+                    'Company Rep': isSh
+                        ? (p.typed_company || p.company_rep || p.customer_name || '')
+                        : (isWh ? ownerName : (p.customer_name || d.customerName || '')),
                     'Branch To': isWh ? 'في المستودع' : (p.branch_to || ''),
                     'Branch From': p.branch_from || '',
                     Plate: p.plate || d.plate || '',
@@ -2262,9 +2272,17 @@
                 'Print Drafts'
             );
 
-            // Mirror admin «حساب كل شركة حسب المدن» — warehouse as مستودع الهاتفية
-            const { rows: companyCityAgg, warehouse: whAgg } = aggregateCompanyCities(allDrafts);
+            // Mirror admin «حساب كل شركة حسب المدن» — warehouse + showroom specials
+            const { rows: companyCityAgg, warehouse: whAgg, showroom: shAgg } = aggregateCompanyCities(allDrafts);
             const companyCityRows = [];
+            if (shAgg) {
+                companyCityRows.push({
+                    Section: 'سيارات عرض الصالة',
+                    Company: SHOWROOM_SPECIAL_NAME,
+                    City: 'عرض الصالة',
+                    Cars: shAgg.total
+                });
+            }
             if (whAgg) {
                 companyCityRows.push({
                     Section: 'في المستودع',
@@ -2336,11 +2354,14 @@
             const drafts = filteredDrafts();
             const vehicles = filteredVehicleList();
             const companies = new Set(
-                drafts.filter((d) => !isWarehouseAdminDraft(d)).map(draftCompanyName).filter(Boolean)
+                drafts
+                    .filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d))
+                    .map(draftCompanyName)
+                    .filter(Boolean)
             ).size;
             const branches = new Set(
                 drafts
-                    .filter((d) => !isWarehouseAdminDraft(d))
+                    .filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d))
                     .map((d) => String((d.payload || {}).branch_to || '').trim())
                     .filter((n) => n && n !== '-' && n !== 'المستودع')
             ).size;
@@ -2779,7 +2800,12 @@
             const draftsInRange = dateScopedDrafts();
 
             let hasWarehouse = false;
+            let hasShowroom = false;
             draftsInRange.forEach((d) => {
+                if (isShowroomAdminDraft(d)) {
+                    hasShowroom = true;
+                    return;
+                }
                 if (isWarehouseAdminDraft(d)) {
                     hasWarehouse = true;
                     return;
@@ -2790,6 +2816,7 @@
                 if (who) coordinators.add(who);
             });
             if (hasWarehouse) companies.add(WAREHOUSE_SPECIAL_NAME);
+            if (hasShowroom) companies.add(SHOWROOM_SPECIAL_NAME);
 
             const vins = scopedVinSet();
             let queueInRange = allQueue || [];
@@ -2821,7 +2848,12 @@
             const companies = new Set();
             const draftsInRange = dateScopedDrafts();
             let hasWarehouse = false;
+            let hasShowroom = false;
             draftsInRange.forEach((d) => {
+                if (isShowroomAdminDraft(d)) {
+                    hasShowroom = true;
+                    return;
+                }
                 if (isWarehouseAdminDraft(d)) {
                     hasWarehouse = true;
                     return;
@@ -2830,6 +2862,7 @@
                 if (c) companies.add(c);
             });
             if (hasWarehouse) companies.add(WAREHOUSE_SPECIAL_NAME);
+            if (hasShowroom) companies.add(SHOWROOM_SPECIAL_NAME);
             if (selectedCompany && !companies.has(selectedCompany)) selectedCompany = '';
 
             const coordinators = new Set();
@@ -3441,9 +3474,11 @@
             const withP = (allVehicles || []).filter((v) => v.proformaDate).length;
             const withI = (allVehicles || []).filter((v) => v.invoiceDate).length;
             const companyBit = selectedCompany
-                ? (isWarehouseAccountKey(selectedCompany)
-                    ? ` · <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> (في المستودع)`
-                    : ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`)
+                ? (isShowroomAccountKey(selectedCompany)
+                    ? ` · <strong>${escapeHtml(SHOWROOM_SPECIAL_NAME)}</strong> (عرض الصالة)`
+                    : isWarehouseAccountKey(selectedCompany)
+                        ? ` · <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> (في المستودع)`
+                        : ` · شركة <strong>${escapeHtml(selectedCompany)}</strong>`)
                 : '';
             const searchBit = searchQ
                 ? ` · VIN search <strong>${escapeHtml(searchQ)}</strong>`
@@ -3564,12 +3599,17 @@
             return String(key || '').trim() === WAREHOUSE_SPECIAL_NAME;
         }
 
-        /** Match drafts for company filter — warehouse deliveries use مستودع الهاتفية, not owner name. */
+        function isShowroomAccountKey(key) {
+            return String(key || '').trim() === SHOWROOM_SPECIAL_NAME;
+        }
+
+        /** Match drafts for company filter — warehouse / showroom use special labels. */
         function draftMatchesCompanyKey(d, key) {
             const k = String(key || '').trim();
             if (!k) return true;
+            if (isShowroomAccountKey(k)) return isShowroomAdminDraft(d);
             if (isWarehouseAccountKey(k)) return isWarehouseAdminDraft(d);
-            if (isWarehouseAdminDraft(d)) return false;
+            if (isShowroomAdminDraft(d) || isWarehouseAdminDraft(d)) return false;
             return draftCompanyName(d) === k;
         }
 
@@ -3602,15 +3642,19 @@
             const rows = draftsForCompany(company);
             panel.classList.remove('hidden');
             if (title) {
-                title.textContent = isWarehouseAccountKey(company)
-                    ? `في المستودع — ${WAREHOUSE_SPECIAL_NAME}`
-                    : company;
+                title.textContent = isShowroomAccountKey(company)
+                    ? `سيارات عرض الصالة — ${SHOWROOM_SPECIAL_NAME}`
+                    : isWarehouseAccountKey(company)
+                        ? `في المستودع — ${WAREHOUSE_SPECIAL_NAME}`
+                        : company;
             }
             if (meta) {
                 meta.textContent = rows.length
-                    ? (isWarehouseAccountKey(company)
-                        ? `${rows.length} سجل تسليم في المستودع ضمن الفلتر`
-                        : `${rows.length} سجل — كل بيانات هذه الشركة ضمن الفلتر`)
+                    ? (isShowroomAccountKey(company)
+                        ? `${rows.length} سجل عرض صالة (ياسين) ضمن الفلتر`
+                        : isWarehouseAccountKey(company)
+                            ? `${rows.length} سجل تسليم في المستودع ضمن الفلتر`
+                            : `${rows.length} سجل — كل بيانات هذه الشركة ضمن الفلتر`)
                     : 'لا توجد سجلات لهذه الشركة';
             }
 
@@ -3623,12 +3667,18 @@
                 const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
                 const p = d.payload || {};
                 const canExport = Boolean(d.id && d.payload);
+                const isSh = isShowroomAdminDraft(d);
+                const flag = isSh
+                    ? ' <span class="pdf-type-badge pdf-type-badge--showroom">عرض الصالة</span>'
+                    : (isWarehouseAdminDraft(d)
+                        ? ' <span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
+                        : '');
                 return `<tr>
-                    <td>${escapeHtml(when)}</td>
+                    <td>${escapeHtml(when)}${flag}</td>
                     <td class="hub-vin">${escapeHtml(d.vin || '—')}</td>
                     <td>${escapeHtml(d.product || d.model || '—')}</td>
                     <td>${escapeHtml(d.assignedTo || '—')}</td>
-                    <td>${escapeHtml(p.customer_name || '—')}</td>
+                    <td>${escapeHtml(p.typed_company || p.customer_name || p.company_rep || '—')}</td>
                     <td>${escapeHtml(p.branch_to || '—')}</td>
                     <td style="white-space:nowrap">${canExport
                         ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
@@ -3964,13 +4014,12 @@
             const sel = document.getElementById('leadTimeCompanySelect');
             if (!sel) return;
             const names = tallyField(
-                dateScopedDrafts().filter((d) => !isWarehouseAdminDraft(d)),
+                dateScopedDrafts().filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d)),
                 (d) => draftCompanyName(d)
             ).map((r) => r.name);
-            if (dateScopedDrafts().some(isWarehouseAdminDraft)) {
-                names.push(WAREHOUSE_SPECIAL_NAME);
-                names.sort((a, b) => a.localeCompare(b, 'ar'));
-            }
+            if (dateScopedDrafts().some(isWarehouseAdminDraft)) names.push(WAREHOUSE_SPECIAL_NAME);
+            if (dateScopedDrafts().some(isShowroomAdminDraft)) names.push(SHOWROOM_SPECIAL_NAME);
+            names.sort((a, b) => a.localeCompare(b, 'ar'));
             const current = selectedCompany || sel.value || '';
             sel.innerHTML = '<option value="">— اختر شركة —</option>' + names.map((name) =>
                 `<option value="${escapeHtml(name)}"${name === current ? ' selected' : ''}>${escapeHtml(name)}</option>`
@@ -4193,7 +4242,18 @@
             return { delivered, total, pct, remaining: Math.max(0, total - delivered) };
         }
 
+        function isShowroomAdminDraft(d) {
+            if (!d) return false;
+            if (d.showroomDisplay === true) return true;
+            const p = d.payload || {};
+            if (p.showroom_display === true || p.showroom_group === true) return true;
+            if (p.deliveryMode === 'showroom') return true;
+            if (String(d.assignedTo || '').trim() === SHOWROOM_AGENT && p.showroom_label) return true;
+            return false;
+        }
+
         function isWarehouseAdminDraft(d) {
+            if (isShowroomAdminDraft(d)) return false;
             const p = (d && d.payload) || {};
             if (p.deliveryMode === 'warehouse' || p.warehouse_group === true) return true;
             const branch = String(p.branch_to || '').trim();
@@ -4293,8 +4353,13 @@
         function aggregateCompanyCities(drafts) {
             const companies = new Map();
             let warehouseTotal = 0;
+            let showroomTotal = 0;
 
             drafts.forEach((d) => {
+                if (isShowroomAdminDraft(d)) {
+                    showroomTotal += draftCarWeight(d);
+                    return;
+                }
                 if (isWarehouseAdminDraft(d)) {
                     warehouseTotal += draftCarWeight(d);
                     return;
@@ -4325,6 +4390,9 @@
                 rows,
                 warehouse: warehouseTotal > 0
                     ? { company: WAREHOUSE_SPECIAL_NAME, total: warehouseTotal }
+                    : null,
+                showroom: showroomTotal > 0
+                    ? { company: SHOWROOM_SPECIAL_NAME, total: showroomTotal }
                     : null
             };
         }
@@ -4332,8 +4400,8 @@
         function renderCompanyCityBreakdown(drafts, emptyText) {
             const listEl = document.getElementById('companyCityBreakdown');
             const topEl = document.getElementById('companyCityTop');
-            const { rows, warehouse } = aggregateCompanyCities(drafts);
-            if (!rows.length && !warehouse) {
+            const { rows, warehouse, showroom } = aggregateCompanyCities(drafts);
+            if (!rows.length && !warehouse && !showroom) {
                 listEl.innerHTML = `<div class="xfer-dash-empty">${emptyText || 'لا توجد بيانات شركات/مدن بعد — اطبع مذكرة أولاً'}</div>`;
                 topEl.innerHTML = '';
                 if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
@@ -4342,6 +4410,21 @@
             }
 
             const parts = [];
+            if (showroom) {
+                const safeSh = escapeHtml(showroom.company);
+                parts.push(`<div class="xfer-warehouse-block">
+                    <div class="xfer-section-label">سيارات عرض الصالة</div>
+                    <div class="xfer-account-item xfer-account-item--showroom" data-company="${safeSh}" role="button" tabindex="0">
+                        <div class="xfer-account-head">
+                            <div class="xfer-account-name" title="${safeSh}">${safeSh} <span class="pdf-type-badge pdf-type-badge--showroom">عرض</span></div>
+                            <div class="xfer-account-total">${showroom.total} سيارة</div>
+                        </div>
+                        <div class="xfer-account-cities">
+                            <span class="xfer-account-chip">ياسين — إدخال يدوي <b>${showroom.total}</b></span>
+                        </div>
+                    </div>
+                </div>`);
+            }
             if (warehouse) {
                 const safeWh = escapeHtml(warehouse.company);
                 parts.push(`<div class="xfer-warehouse-block">
@@ -4390,11 +4473,14 @@
             const companyCount = rows.length;
             const cityPairs = rows.reduce((sum, row) => sum + row.cities.length, 0);
             const whBit = warehouse ? ` · <strong>${warehouse.total}</strong> في المستودع` : '';
+            const shBit = showroom ? ` · <strong>${showroom.total}</strong> عرض صالة` : '';
             topEl.innerHTML = selectedCompany
-                ? (isWarehouseAccountKey(selectedCompany)
-                    ? `عرض <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> فقط — اضغط نفس الصف للإلغاء`
-                    : `عرض شركة واحدة فقط — <strong>${escapeHtml(selectedCompany)}</strong> · اضغط نفس الاسم للإلغاء`)
-                : `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة${whBit} — اضغط اسم الشركة لعرض بياناتها فقط`;
+                ? (isShowroomAccountKey(selectedCompany)
+                    ? `عرض <strong>${escapeHtml(SHOWROOM_SPECIAL_NAME)}</strong> فقط — اضغط نفس الصف للإلغاء`
+                    : isWarehouseAccountKey(selectedCompany)
+                        ? `عرض <strong>${escapeHtml(WAREHOUSE_SPECIAL_NAME)}</strong> فقط — اضغط نفس الصف للإلغاء`
+                        : `عرض شركة واحدة فقط — <strong>${escapeHtml(selectedCompany)}</strong> · اضغط نفس الاسم للإلغاء`)
+                : `إجمالي <strong>${companyCount}</strong> شركة مع <strong>${cityPairs}</strong> علاقة شركة/مدينة${whBit}${shBit} — اضغط اسم الشركة لعرض بياناتها فقط`;
 
             if (selectedCompany) renderCompanyRecordsPanel(selectedCompany);
             else highlightSelectedCompany();
@@ -4403,8 +4489,8 @@
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
             const navList = dateScopedDrafts();
-            const memoNav = navList.filter((d) => !isWarehouseAdminDraft(d));
-            const memoList = list.filter((d) => !isWarehouseAdminDraft(d));
+            const memoNav = navList.filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d));
+            const memoList = list.filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d));
             const { type } = getTrackFilter();
             const dateFiltered = hasActiveTrackFilter() || Boolean(getXferDateFilter());
             const emptyDate = 'لا توجد بيانات في هذه الفترة حسب الفلتر';
@@ -4785,9 +4871,11 @@
         function filterSortPdfs(list) {
             let rows = Array.isArray(list) ? list.slice() : [];
             if (pdfBrowserState.type === 'memo') {
-                rows = rows.filter((d) => !isWarehouseAdminDraft(d));
+                rows = rows.filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d));
             } else if (pdfBrowserState.type === 'warehouse') {
                 rows = rows.filter(isWarehouseAdminDraft);
+            } else if (pdfBrowserState.type === 'showroom') {
+                rows = rows.filter(isShowroomAdminDraft);
             }
             const q = String(pdfBrowserState.q || '').trim().toUpperCase();
             if (q) {
@@ -4856,13 +4944,16 @@
                 const p = d.payload || {};
                 const vins = draftVinList(d);
                 const isWh = isWarehouseAdminDraft(d);
+                const isSh = isShowroomAdminDraft(d);
                 const canExport = Boolean(d.id && d.payload);
                 const vinLabel = vins.length
                     ? vins.map((v) => `<span class="pdf-vin-chip">${escapeHtml(v)}</span>`).join('')
                     : escapeHtml(d.vin || '—');
-                const typeBadge = isWh
-                    ? '<span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
-                    : '<span class="pdf-type-badge pdf-type-badge--memo">مذكرة</span>';
+                const typeBadge = isSh
+                    ? '<span class="pdf-type-badge pdf-type-badge--showroom">عرض الصالة</span>'
+                    : isWh
+                        ? '<span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
+                        : '<span class="pdf-type-badge pdf-type-badge--memo">مذكرة</span>';
                 return `<tr>
                     <td>${when}</td>
                     <td>${typeBadge}</td>
@@ -4870,7 +4961,11 @@
                     <td><strong>${vins.length || 1}</strong></td>
                     <td>${escapeHtml(d.product || d.model || '—')}</td>
                     <td>${escapeHtml(d.assignedTo || '—')}</td>
-                    <td>${escapeHtml(draftCompanyLabel(d) || '—')}</td>
+                    <td>${escapeHtml(
+                        isSh
+                            ? (SHOWROOM_SPECIAL_NAME + (p.typed_company || p.company_rep ? ` · ${p.typed_company || p.company_rep}` : ''))
+                            : (draftCompanyLabel(d) || '—')
+                    )}</td>
                     <td>${escapeHtml(draftBranchLabel(d) || (isWh ? 'المستودع' : '—'))}</td>
                     <td style="white-space:nowrap">
                         ${canExport
