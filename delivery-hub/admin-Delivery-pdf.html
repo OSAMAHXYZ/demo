@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802e">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802e">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802f">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802f">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1353,13 +1353,19 @@
             </div>
         </header>
 
-        <div class="admin-restore-box saas-card saas-section" id="adminRestoreBox" style="margin-top:14px">
-            <div class="saas-section__head">
-                <div>
-                    <h3>الإعدادات والأرشيف</h3>
-                    <p>استعادة تصدير قديم · تحديث Sales Raw من صفحة المنسق</p>
+        <div class="admin-restore-box saas-card saas-section hub-fold" id="adminRestoreBox" data-fold style="margin-top:10px">
+            <button type="button" class="hub-fold-toggle" aria-expanded="false" style="width:100%;background:transparent;border:0;padding:0;text-align:inherit;cursor:pointer">
+                <div class="saas-section__head" style="margin:0;width:100%">
+                    <div>
+                        <h3>الإعدادات والأرشيف</h3>
+                        <p>استعادة تصدير قديم · تحديث Sales Raw من صفحة المنسق</p>
+                    </div>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
                 </div>
-            </div>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
             <div class="admin-restore-actions">
                 <label class="hub-btn hub-btn--primary restore-file-btn" id="btnRestoreExport">
                     <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
@@ -1369,6 +1375,9 @@
                 <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
             </div>
             <p class="hub-status" id="restoreExportStatus" style="min-height:1.4em"></p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="ft-shell" id="adminFilterBar">
@@ -1627,9 +1636,9 @@
                             </div>
                         </div>
 
-                        <div class="pct-chart-card pct-chart-card--status saas-section xfer-mosaic-span-2" style="margin:0" hidden>
+                        <div class="pct-chart-card pct-chart-card--status saas-section xfer-mosaic-span-2" style="margin:0">
                             <h3>حالة الترحيل</h3>
-                            <p class="pct-chart-sub">تم الترحيل مقابل المتبقي</p>
+                            <p class="pct-chart-sub">تم الترحيل مقابل المتبقي — كل البيانات عند عدم اختيار تاريخ</p>
                             <div class="pct-chart-layout">
                                 <div class="pct-donut-wrap" id="statusPctDonut"></div>
                                 <div>
@@ -1639,7 +1648,20 @@
                             </div>
                         </div>
 
-                        <div class="saas-section saas-card xfer-mosaic-span-2" id="invoiceStatusCard" style="margin:0;box-shadow:none">
+                        </div>
+
+                        <section class="hub-section hub-fold" id="xferDetailsFold" data-fold style="margin:12px 0 0;border:0;box-shadow:none;background:transparent">
+                            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                                <span class="hub-fold-title">تفاصيل إضافية — Lead time &amp; الشركات</span>
+                                <span class="hub-fold-meta">
+                                    <span class="hub-hint">زمن التسليم وحساب الشركات حسب المدن</span>
+                                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                                </span>
+                            </button>
+                            <div class="hub-fold-body">
+                                <div class="hub-fold-body-inner">
+                                    <div class="hub-fold-content" style="display:grid;gap:14px">
+                        <div class="saas-section saas-card" id="invoiceStatusCard" style="margin:0;box-shadow:none">
                             <div class="saas-section__head">
                                 <div>
                                     <h3>زمن التسليم حسب الشركة (Lead Time)</h3>
@@ -1678,7 +1700,6 @@
                                     </table>
                                 </div>
                             </div>
-                        </div>
                         </div>
                         <div class="pct-chart-card" hidden>
                             <div class="pct-donut-wrap" id="companyPctDonut"></div>
@@ -1728,6 +1749,10 @@
                                 </div>
                             </div>
                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -2312,64 +2337,76 @@
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: 220,
+                    height: 180,
                     toolbar: { show: false },
                     background: 'transparent',
-                    fontFamily: 'Inter, sans-serif'
+                    fontFamily: 'Inter, Tajawal, sans-serif',
+                    animations: {
+                        enabled: true,
+                        speed: 450,
+                        dynamicAnimation: { enabled: true, speed: 280 }
+                    }
                 },
                 theme: { mode: 'dark' },
                 plotOptions: {
                     bar: {
-                        borderRadius: 8,
-                        columnWidth: rows.length <= 4 ? '42%' : '58%',
+                        borderRadius: 7,
+                        columnWidth: rows.length <= 4 ? '38%' : '55%',
+                        distributed: false,
                         dataLabels: { position: 'top' }
+                    }
+                },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shade: 'dark',
+                        type: 'vertical',
+                        shadeIntensity: 0.35,
+                        gradientToColors: ['#60A5FA'],
+                        inverseColors: false,
+                        opacityFrom: 1,
+                        opacityTo: 0.75,
+                        stops: [0, 100]
                     }
                 },
                 colors: ['#3B82F6'],
                 dataLabels: {
                     enabled: true,
-                    offsetY: -16,
+                    offsetY: -14,
                     style: { colors: ['#E2E8F0'], fontSize: '11px', fontWeight: 700 },
                     formatter: (val) => (val ? String(val) : '')
                 },
                 grid: {
                     borderColor: 'rgba(255,255,255,0.06)',
                     strokeDashArray: 3,
-                    padding: { top: 12, bottom: 0 }
+                    padding: { top: 8, bottom: 0, left: 4, right: 4 }
                 },
                 series: [{ name: 'مذكرات / أسبوع', data: rows.map((r) => r.count) }],
                 xaxis: {
                     categories: rows.map((r) => r.date),
                     labels: {
-                        style: { colors: '#94A3B8', fontSize: '11px' },
-                        rotate: rows.length > 6 ? -35 : 0,
+                        style: { colors: '#94A3B8', fontSize: '10px' },
+                        rotate: rows.length > 6 ? -30 : 0,
                         rotateAlways: rows.length > 6
                     },
                     axisBorder: { show: false },
-                    axisTicks: { show: false },
-                    title: {
-                        text: 'الأسبوع',
-                        style: { color: '#64748B', fontSize: '11px', fontWeight: 500 }
-                    }
+                    axisTicks: { show: false }
                 },
                 yaxis: {
                     min: 0,
                     max: maxCount <= 2 ? 4 : undefined,
                     forceNiceScale: true,
-                    tickAmount: Math.min(5, Math.max(2, maxCount || 2)),
+                    tickAmount: Math.min(4, Math.max(2, maxCount || 2)),
                     labels: {
-                        style: { colors: '#94A3B8', fontSize: '11px' },
+                        style: { colors: '#94A3B8', fontSize: '10px' },
                         formatter: (val) => String(Math.round(val))
-                    },
-                    title: {
-                        text: 'عدد المذكرات',
-                        style: { color: '#64748B', fontSize: '11px', fontWeight: 500 }
                     }
                 },
                 tooltip: {
                     theme: 'dark',
                     y: { formatter: (val) => `${val} مذكرة` }
-                }
+                },
+                legend: { show: false }
             });
         }
 
@@ -2383,23 +2420,55 @@
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: Math.max(200, top.length * 32),
+                    height: Math.max(170, top.length * 28),
                     toolbar: { show: false },
                     background: 'transparent',
-                    fontFamily: 'Inter, sans-serif'
+                    fontFamily: 'Inter, Tajawal, sans-serif',
+                    animations: { enabled: true, speed: 400 }
                 },
                 theme: { mode: 'dark' },
-                plotOptions: { bar: { horizontal: true, borderRadius: 8, barHeight: '62%' } },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                        borderRadius: 6,
+                        barHeight: '68%',
+                        dataLabels: { position: 'top' }
+                    }
+                },
                 colors: [color || '#3B82F6'],
-                dataLabels: { enabled: false },
-                grid: { borderColor: 'rgba(255,255,255,0.06)' },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shade: 'dark',
+                        type: 'horizontal',
+                        shadeIntensity: 0.25,
+                        opacityFrom: 0.95,
+                        opacityTo: 0.7,
+                        stops: [0, 100]
+                    }
+                },
+                dataLabels: {
+                    enabled: true,
+                    offsetX: 6,
+                    style: { colors: ['#E2E8F0'], fontSize: '11px', fontWeight: 700 }
+                },
+                grid: {
+                    borderColor: 'rgba(255,255,255,0.06)',
+                    strokeDashArray: 3,
+                    xaxis: { lines: { show: true } },
+                    yaxis: { lines: { show: false } },
+                    padding: { left: 8, right: 16 }
+                },
                 series: [{ name: 'العدد', data: top.map((r) => r.count) }],
                 xaxis: {
                     categories: top.map((r) => r.name),
                     labels: { style: { colors: '#94A3B8', fontSize: '11px' } }
                 },
-                yaxis: { labels: { style: { colors: '#F8FAFC', fontSize: '12px' } } },
-                tooltip: { theme: 'dark' }
+                yaxis: {
+                    labels: { style: { colors: '#CBD5E1', fontSize: '11px' } }
+                },
+                tooltip: { theme: 'dark' },
+                legend: { show: false }
             });
         }
 
@@ -3261,7 +3330,7 @@
             const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
 
             if (!from && !to) {
-                meta.innerHTML = `${showing}${searchBit}${companyBit} · <strong>${(selectedCompany ? drafts : (allDrafts || []).length)}</strong> drafts · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                meta.innerHTML = `Showing <strong>all</strong> · <strong>${(allVehicles || []).length}</strong> vehicles · <strong>${(allDrafts || []).length}</strong> drafts · queue <strong>${(allQueue || []).length}</strong> (delivered <strong>${(allQueue || []).filter((q) => q.agentStatus === 'delivered').length}</strong>)${searchBit}${companyBit} · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 updateCompanyFilterChip();
                 renderFilterChips();
                 return;
