@@ -19,7 +19,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء']);
 const AGENT_PASSWORD = process.env.DELIVERY_AGENT_PASSWORD || '1234';
-const MAX_DRAFTS = 500;
+const MAX_DRAFTS = 2000;
 
 const {
   MUTHAKARA_BRANCH_OPTIONS: DEFAULT_CITIES
@@ -177,6 +177,65 @@ function isWarehouseDraftPayload(payload) {
     wh.owner_name || wh.user_name || wh.user_id || wh.user_phone
     || wh.print_date || wh.print_time
   );
+}
+
+/** Collect unique VINs from draft payload cars / vins arrays (+ optional extras). */
+function collectDraftVins(draftPayload, extra = []) {
+  const fromCars = Array.isArray(draftPayload?.cars)
+    ? draftPayload.cars.map((c) => c?.chassis || c?.vin || '')
+    : [];
+  const fromPayloadVins = Array.isArray(draftPayload?.vins) ? draftPayload.vins : [];
+  const fromExtra = Array.isArray(extra) ? extra : [extra];
+  return [...new Set(
+    [...fromExtra, ...fromPayloadVins, ...fromCars]
+      .map((v) => normVin(v))
+      .filter(Boolean)
+  )];
+}
+
+/**
+ * Mark VINs as delivered on the coordinator queue (creates queue rows if missing).
+ * Shared by agent complete-print and admin draft edit.
+ */
+function markVinsDelivered(vins, { assignedTo = 'admin', warehouseDelivery = false, forceAssign = true } = {}) {
+  const byVehicle = vehicleIndex();
+  const deliveredItems = [];
+  const blocked = [];
+
+  for (const vin of vins) {
+    let item = findQueueItem(vin);
+    if (!item) {
+      const veh = byVehicle.get(vin);
+      item = enrichFromVehicle({
+        vin,
+        status: 'claimed',
+        agentStatus: 'delivered',
+        deliveryMode: warehouseDelivery ? 'warehouse' : '',
+        assignedTo: assignedTo || 'admin',
+        assignedAt: new Date().toISOString(),
+        addedAt: new Date().toISOString()
+      }, veh || {});
+      store.queue.push(item);
+    } else {
+      if (
+        !forceAssign
+        && item.assignedTo
+        && assignedTo
+        && item.assignedTo !== assignedTo
+        && item.agentStatus !== 'delivered'
+      ) {
+        blocked.push({ vin, assignedTo: item.assignedTo });
+        continue;
+      }
+      item.status = 'claimed';
+      item.agentStatus = 'delivered';
+      item.deliveryMode = warehouseDelivery ? 'warehouse' : (item.deliveryMode || '');
+      if (assignedTo) item.assignedTo = assignedTo;
+    }
+    deliveredItems.push(enrichQueueItem(item));
+  }
+
+  return { deliveredItems, blocked };
 }
 
 function enrichQueueItem(item) {
@@ -1398,45 +1457,23 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   const draftPayload = req.body?.draft || {};
   const primaryVin = normVin(req.body?.vin);
   const fromBody = Array.isArray(req.body?.vins) ? req.body.vins : [];
-  const fromCars = Array.isArray(draftPayload?.cars)
-    ? draftPayload.cars.map((c) => c?.chassis || c?.vin || '')
-    : [];
-  const vins = [...new Set(
-    [primaryVin, ...fromBody, ...fromCars]
-      .map((v) => normVin(v))
-      .filter(Boolean)
-  )];
+  const vins = collectDraftVins(draftPayload, [primaryVin, ...fromBody]);
   if (!vins.length) return res.status(400).json({ error: 'الشاسيه مطلوب' });
 
   const warehouseDelivery = isWarehouseDraftPayload(draftPayload);
-  const byVehicle = vehicleIndex();
-  const deliveredItems = [];
-  for (const vin of vins) {
-    let item = findQueueItem(vin);
-    if (!item) {
-      const veh = byVehicle.get(vin);
-      item = enrichFromVehicle({
-        vin,
-        status: 'claimed',
-        agentStatus: 'delivered',
-        deliveryMode: warehouseDelivery ? 'warehouse' : '',
-        assignedTo: auth.username,
-        assignedAt: new Date().toISOString(),
-        addedAt: new Date().toISOString()
-      }, veh || {});
-      store.queue.push(item);
-    } else {
-      if (item.assignedTo && item.assignedTo !== auth.username && item.agentStatus !== 'delivered') {
-        return res.status(403).json({
-          error: `غير مسموح — الشاسيه ${vin} مع موظف آخر (${item.assignedTo})`
-        });
-      }
-      item.status = 'claimed';
-      item.agentStatus = 'delivered';
-      item.deliveryMode = warehouseDelivery ? 'warehouse' : (item.deliveryMode || '');
-      item.assignedTo = auth.username;
-    }
-    deliveredItems.push(enrichQueueItem(item));
+  const { deliveredItems, blocked } = markVinsDelivered(vins, {
+    assignedTo: auth.username,
+    warehouseDelivery,
+    forceAssign: false
+  });
+  if (blocked.length) {
+    const b = blocked[0];
+    return res.status(403).json({
+      error: `غير مسموح — الشاسيه ${b.vin} مع موظف آخر (${b.assignedTo})`
+    });
+  }
+  if (!deliveredItems.length) {
+    return res.status(400).json({ error: 'لم يتم ترحيل أي شاسيه' });
   }
 
   const primary = deliveredItems[0];
@@ -1481,7 +1518,7 @@ app.get('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   res.json({ draft });
 });
 
-/** Admin edit: update delivery-note draft payload / meta. */
+/** Admin edit: update delivery-note draft payload / meta; sync all cars as delivered. */
 app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   const id = String(req.params.draftId || '').trim();
   const idx = store.drafts.findIndex((d) => d.id === id);
@@ -1489,21 +1526,30 @@ app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
 
   const body = req.body || {};
   const draft = { ...store.drafts[idx] };
+  const markDelivered = body.markDelivered !== false;
 
   if (body.payload && typeof body.payload === 'object') {
     draft.payload = { ...(draft.payload || {}), ...body.payload };
     if (Array.isArray(body.payload.cars)) {
       draft.payload.cars = body.payload.cars;
     }
-    const firstCar = (draft.payload.cars || []).find((c) => c && c.chassis);
-    if (firstCar?.chassis) draft.vin = normVin(firstCar.chassis) || draft.vin;
-    if (firstCar?.model) {
-      draft.product = firstCar.model;
-      draft.model = firstCar.model;
-    }
-    if (firstCar?.plate != null) draft.plate = firstCar.plate;
-    if (draft.payload.company_rep) draft.customerName = draft.payload.company_rep;
   }
+
+  const vins = collectDraftVins(draft.payload, [draft.vin, ...(Array.isArray(draft.vins) ? draft.vins : [])]);
+  draft.vins = vins;
+  if (!draft.payload || typeof draft.payload !== 'object') draft.payload = {};
+  draft.payload.vins = vins;
+
+  const firstCar = (draft.payload.cars || []).find((c) => c && (c.chassis || c.vin));
+  if (firstCar?.chassis || firstCar?.vin) {
+    draft.vin = normVin(firstCar.chassis || firstCar.vin) || draft.vin;
+  }
+  if (firstCar?.model) {
+    draft.product = firstCar.model;
+    draft.model = firstCar.model;
+  }
+  if (firstCar?.plate != null) draft.plate = firstCar.plate;
+  if (draft.payload.company_rep) draft.customerName = draft.payload.company_rep;
 
   if (body.assignedTo != null) draft.assignedTo = String(body.assignedTo);
   if (body.customerName != null) draft.customerName = String(body.customerName);
@@ -1513,9 +1559,33 @@ app.patch('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   }
   draft.updatedAt = new Date().toISOString();
 
+  const warehouseDelivery = isWarehouseDraftPayload(draft.payload);
+  if (warehouseDelivery) {
+    draft.payload.warehouse_group = true;
+    draft.payload.deliveryMode = 'warehouse';
+  }
+
+  let deliveredCount = 0;
+  let deliveredItems = [];
+  if (markDelivered && vins.length) {
+    const result = markVinsDelivered(vins, {
+      assignedTo: draft.assignedTo || 'admin',
+      warehouseDelivery,
+      forceAssign: true
+    });
+    deliveredItems = result.deliveredItems;
+    deliveredCount = deliveredItems.length;
+  }
+
   store.drafts[idx] = draft;
   persistAndBroadcast();
-  res.json({ ok: true, draft });
+  res.json({
+    ok: true,
+    draft,
+    vins,
+    deliveredCount,
+    items: deliveredItems
+  });
 });
 
 app.delete('/api/delivery-coordinator/drafts/:draftId', (req, res) => {

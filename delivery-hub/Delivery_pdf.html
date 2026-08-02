@@ -2265,14 +2265,21 @@
             if (!draftId) return;
             setStatus('جاري حفظ التعديلات…', 'ok');
             try {
+                const payload = collectPayload();
                 const res = await fetch(`/api/delivery-coordinator/drafts/${encodeURIComponent(draftId)}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ payload: collectPayload() })
+                    body: JSON.stringify({ payload, markDelivered: true })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'فشل الحفظ');
-                setStatus('تم حفظ تعديلات المذكرة', 'ok');
+                const n = data.deliveredCount || (data.vins || []).length || 0;
+                setStatus(
+                    n
+                        ? `تم الحفظ · ${n} شاسيه على نفس المذكرة كـ تم الترحيل`
+                        : 'تم حفظ تعديلات المذكرة',
+                    'ok'
+                );
             } catch (err) {
                 setStatus(err.message || 'فشل الحفظ', 'err');
             }
@@ -2411,20 +2418,30 @@
             buildOverlay();
             updatePreview();
             setStatus(isWh
-                ? 'تعديل قائمة فحص المستودع — عدّل ثم احفظ أو صدّر PDF'
-                : 'وضع تعديل المذكرة — عدّل الحقول ثم احفظ', 'ok');
+                ? 'تعديل قائمة فحص المستودع — أضف شاسيه ثم احفظ (تُسجَّل تم الترحيل على نفس PDF)'
+                : 'تعديل المذكرة — أضف سيارات ثم احفظ؛ كل شاسيه تُصبح تم الترحيل على نفس المذكرة', 'ok');
             const banner = document.createElement('div');
             banner.className = 'no-print';
             banner.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:300;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;padding:10px 14px;border-radius:999px;background:#111827;border:1px solid rgba(255,255,255,.15);box-shadow:0 12px 40px rgba(0,0,0,.35);';
+            const vinsOnDraft = [
+                ...(Array.isArray(draft.vins) ? draft.vins : []),
+                draft.vin,
+                ...((draft.payload && draft.payload.vins) || []),
+                ...((draft.payload && draft.payload.cars) || []).map((c) => c && (c.chassis || c.vin))
+            ].filter(Boolean);
+            const uniqueVins = [...new Set(vinsOnDraft.map((v) => String(v).trim().toUpperCase()).filter(Boolean))];
             banner.innerHTML = `
-                <span style="color:#e2e8f0;font-size:.82rem;font-weight:700">تعديل مسودة · ${draft.vin || draftId}</span>
-                <button type="button" class="btn btn-primary" id="btnAdminSaveDraft" style="padding:8px 16px">حفظ التعديلات</button>
+                <span style="color:#e2e8f0;font-size:.82rem;font-weight:700">تعديل مسودة · ${uniqueVins.length} شاسيه · ${uniqueVins[0] || draftId}</span>
+                <button type="button" class="btn btn-primary" id="btnAdminSaveDraft" style="padding:8px 16px">حفظ + تم الترحيل</button>
                 <button type="button" class="btn" id="btnAdminEditPrint" style="padding:8px 16px">تصدير PDF</button>
                 <a href="admin-Delivery-pdf.html" class="btn" style="padding:8px 14px;text-decoration:none">العودة للإدارة</a>
             `;
             document.body.appendChild(banner);
             document.getElementById('btnAdminSaveDraft').addEventListener('click', saveAdminDraftEdit);
-            document.getElementById('btnAdminEditPrint').addEventListener('click', doPrintA4);
+            document.getElementById('btnAdminEditPrint').addEventListener('click', async () => {
+                await saveAdminDraftEdit();
+                doPrintA4();
+            });
             return true;
         }
 

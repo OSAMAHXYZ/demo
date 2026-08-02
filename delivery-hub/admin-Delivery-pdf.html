@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802d">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802d">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802e">
+    <link rel="stylesheet" href="admin-saas.css?v=20260802e">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1424,7 +1424,7 @@
                             <div>
                                 <div class="ft-more__label">Date type</div>
                                 <select class="ft-native" id="ftDateTypeUi">
-                                    <option value="delivery_note" selected>Delivery note date</option>
+                                    <option value="delivery_note" selected>Delivery note issue date</option>
                                     <option value="invoice">Invoice date</option>
                                 </select>
                             </div>
@@ -1774,7 +1774,7 @@
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">مسودات الطباعة — Print Drafts</span>
                 <span class="hub-fold-meta">
-                    <span class="hub-hint">تصدير PDF لأي مسودة محفوظة</span>
+                    <span class="hub-hint">كل المذكرات المولّدة — نفس PDF لكل السيارات فيها</span>
                     <span class="hub-fold-count" id="draftsFoldCount" data-empty="1"></span>
                     <span class="hub-fold-chevron" aria-hidden="true"></span>
                 </span>
@@ -1788,6 +1788,7 @@
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>الشاسيه</th>
+                                        <th>العدد</th>
                                         <th>Product</th>
                                         <th>المسؤول</th>
                                         <th>مندوب الشركة</th>
@@ -1797,7 +1798,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="draftsBody">
-                                    <tr><td colspan="7" class="hub-empty">لا توجد مسودات بعد</td></tr>
+                                    <tr><td colspan="9" class="hub-empty">لا توجد مسودات بعد</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -3023,22 +3024,37 @@
         }
 
         /**
-         * VIN universe for the current date filter (from raw inventory dates).
-         * - delivery_note (default) → Delivery Note Date
-         * - invoice → Invoice Date
+         * VIN universe for the current date filter.
+         * - delivery_note → vehicle Delivery Note Date + VINs on drafts issued (printed) in range
+         * - invoice → vehicle Invoice Date in range
          * Returns null when no date range is set (show all).
          */
         function scopedVinSet() {
             const { type, from, to } = getTrackFilter();
             if (!from && !to) return null;
 
-            const dateType = type === 'invoice' ? 'invoice' : 'delivery_note';
             const set = new Set();
+            if (type === 'invoice') {
+                (allVehicles || []).forEach((v) => {
+                    const iso = vehicleDateIso(v, 'invoice');
+                    if (!iso || !isoInRange(iso, from, to)) return;
+                    const vin = normVinKey(v.vin);
+                    if (vin) set.add(vin);
+                });
+                return set;
+            }
+
+            // Delivery note issue date: inventory DN date + printed draft dates
             (allVehicles || []).forEach((v) => {
-                const iso = vehicleDateIso(v, dateType);
+                const iso = vehicleDateIso(v, 'delivery_note');
                 if (!iso || !isoInRange(iso, from, to)) return;
                 const vin = normVinKey(v.vin);
                 if (vin) set.add(vin);
+            });
+            (allDrafts || []).forEach((d) => {
+                const iso = draftEventIso(d);
+                if (!iso || !isoInRange(iso, from, to)) return;
+                draftVinList(d).forEach((vin) => set.add(vin));
             });
             return set;
         }
@@ -3048,6 +3064,22 @@
             return el ? String(el.value || '').trim() : '';
         }
 
+        function draftVinList(d) {
+            const seen = new Set();
+            const list = [];
+            const push = (v) => {
+                const vin = normVinKey(v);
+                if (!vin || seen.has(vin)) return;
+                seen.add(vin);
+                list.push(vin);
+            };
+            (Array.isArray(d.vins) ? d.vins : []).forEach(push);
+            push(d.vin);
+            (((d.payload || {}).vins) || []).forEach(push);
+            (((d.payload || {}).cars) || []).forEach((c) => push(c && (c.chassis || c.vin)));
+            return list;
+        }
+
         function dateScopedDrafts() {
             const legacy = getXferDateFilter();
             let list = allDrafts || [];
@@ -3055,19 +3087,24 @@
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
 
-            const { from, to } = getTrackFilter();
+            const { type, from, to } = getTrackFilter();
             if (!from && !to) return list;
 
+            if (type === 'delivery_note') {
+                // Keep drafts issued in the selected range (same PDF for all its cars)
+                return list.filter((d) => {
+                    const iso = draftEventIso(d);
+                    if (iso && isoInRange(iso, from, to)) return true;
+                    const vins = scopedVinSet();
+                    if (!vins || !vins.size) return false;
+                    return draftVinList(d).some((vin) => vins.has(vin));
+                });
+            }
+
+            // Invoice: drafts that include any car invoiced in range
             const vins = scopedVinSet();
             if (!vins || !vins.size) return [];
-            return list.filter((d) => {
-                if (vins.has(normVinKey(d.vin))) return true;
-                const extra = [
-                    ...(Array.isArray(d.vins) ? d.vins : []),
-                    ...((d.payload && d.payload.vins) || [])
-                ];
-                return extra.some((v) => vins.has(normVinKey(v)));
-            });
+            return list.filter((d) => draftVinList(d).some((vin) => vins.has(vin)));
         }
 
         /** VINs belonging to the selected company (from date-scoped drafts). null = no company filter. */
@@ -4446,46 +4483,35 @@
             const tbody = document.getElementById('draftsBody');
             if (!tbody) return;
             if (!drafts.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد مسودات بعد</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد مسودات بعد</td></tr>';
                 return;
             }
-            tbody.innerHTML = drafts.slice(0, 100).map((d) => {
+            tbody.innerHTML = drafts.map((d) => {
                 const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
                 const p = d.payload || {};
+                const vins = draftVinList(d);
                 const canExport = Boolean(d.id && d.payload);
+                const vinLabel = vins.length
+                    ? vins.map((v) => escapeHtml(v)).join('<br>')
+                    : escapeHtml(d.vin || '—');
                 return `<tr>
                     <td>${when}</td>
-                    <td class="hub-vin">${d.vin || '—'}</td>
-                    <td>${d.product || d.model || '—'}</td>
-                    <td>${d.assignedTo || '—'}</td>
-                    <td>${p.customer_name || '—'}</td>
-                    <td>${p.company_rep || d.customerName || '—'}</td>
-                    <td>${p.branch_to || '—'}</td>
+                    <td class="hub-vin">${vinLabel}</td>
+                    <td>${vins.length || 1}</td>
+                    <td>${escapeHtml(d.product || d.model || '—')}</td>
+                    <td>${escapeHtml(d.assignedTo || '—')}</td>
+                    <td>${escapeHtml(p.customer_name || '—')}</td>
+                    <td>${escapeHtml(p.company_rep || d.customerName || '—')}</td>
+                    <td>${escapeHtml(p.branch_to || '—')}</td>
                     <td style="white-space:nowrap">
                         ${canExport
-                            ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${d.id}">تعديل</button>
-                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${d.id}">تصدير PDF</button>`
+                            ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
+                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">تصدير PDF</button>`
                             : '<span class="hub-meta">—</span>'}
                     </td>
                 </tr>`;
             }).join('');
             bindDraftActionButtons(tbody);
-        }
-
-        function draftVinList(d) {
-            const seen = new Set();
-            const list = [];
-            const push = (v) => {
-                const vin = normVinKey(v);
-                if (!vin || seen.has(vin)) return;
-                seen.add(vin);
-                list.push(vin);
-            };
-            (Array.isArray(d.vins) ? d.vins : []).forEach(push);
-            push(d.vin);
-            (((d.payload || {}).vins) || []).forEach(push);
-            (((d.payload || {}).cars) || []).forEach((c) => push(c && (c.chassis || c.vin)));
-            return list;
         }
 
         function renderWarehouseDraftsTable(drafts) {
@@ -4495,7 +4521,7 @@
                 tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد قوائم فحص مستودع بعد</td></tr>';
                 return;
             }
-            tbody.innerHTML = drafts.slice(0, 100).map((d) => {
+            tbody.innerHTML = drafts.map((d) => {
                 const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
                 const p = d.payload || {};
                 const wh = p.warehouse || {};
