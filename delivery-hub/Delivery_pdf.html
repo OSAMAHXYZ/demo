@@ -909,6 +909,11 @@
             transition: transform .15s ease, filter .15s ease;
         }
         .stock-action-btns button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+        .stock-action-btns .sa-stock {
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: #fff;
+            box-shadow: 0 8px 24px rgba(14, 165, 233, 0.35);
+        }
         .stock-action-btns .sa-issue {
             background: linear-gradient(135deg, #eb0a1e, #c8102e);
             color: #fff;
@@ -2187,9 +2192,11 @@
             document.getElementById('stockActionVin').textContent = stockActionVin;
             document.getElementById('stockActionProduct').textContent = item.product || item.model || '—';
             const sub = document.getElementById('stockActionSub');
+            const keepBtn = document.getElementById('stockActionKeep');
+            if (keepBtn) keepBtn.hidden = stockActionMode !== 'available';
             if (sub) {
                 sub.textContent = stockActionMode === 'available'
-                    ? 'اختر: التسليم في المستودع أو الترحيل أو الرجوع للقائمة'
+                    ? 'اختر: متاحة لدي (مخزونك) أو التسليم في المستودع أو الترحيل أو الرجوع للقائمة'
                     : 'اختر نوع المذكرة لهذه السيارة أو ارجع للقائمة';
             }
             document.getElementById('stockActionModal').classList.add('open');
@@ -2593,6 +2600,21 @@
         });
 
         document.getElementById('availableVinSearch').addEventListener('input', filterAvailableFleetByVin);
+
+        document.getElementById('stockActionKeep').addEventListener('click', async () => {
+            const vin = stockActionVin;
+            closeStockAction();
+            if (!vin) return;
+            const item = await claimWithStatus(vin, 'in_stock');
+            if (!item) return;
+            const statusEl = document.getElementById('queueStatus');
+            if (statusEl) {
+                statusEl.textContent = `تمت إضافة ${vin} إلى مخزونك (متاحة لدي)`;
+                statusEl.className = 'ws-toast ok';
+            }
+            // Stay on workspace — car appears under مخزوني / current stock
+            openWorkspace();
+        });
 
         document.getElementById('stockActionWarehouse').addEventListener('click', async () => {
             const vin = stockActionVin;
