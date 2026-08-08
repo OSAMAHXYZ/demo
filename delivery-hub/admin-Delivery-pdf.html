@@ -1800,7 +1800,7 @@
             <div class="hub-fold-body">
                 <div class="hub-fold-body-inner">
                     <div class="hub-fold-content">
-                        <p class="hub-meta" style="margin-bottom:12px">متاح · مع الفاضل/ياسين/البراء · تم الترحيل</p>
+                        <p class="hub-meta" style="margin-bottom:12px">Waiting for delivery · مع الفاضل/ياسين/البراء · تم الترحيل</p>
                         <div class="hub-table-wrap">
                             <table class="hub-table">
                                 <thead>
@@ -2210,11 +2210,9 @@
                     'Status Label': item.statusLabel || '',
                     'Agent Status': item.agentStatus || '',
                     'Delivery Mode': isWh ? 'warehouse' : (item.agentStatus === 'delivered' ? 'memo' : ''),
-                    Classification: item.status === 'available'
-                        ? 'متاح'
-                        : (isWh
-                            ? 'تم التسليم في المستودع'
-                            : (item.statusLabel || (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'))),
+                    Classification: item.agentStatus === 'delivered'
+                        ? (isWh ? 'تم التسليم في المستودع' : (item.statusLabel || 'تم الترحيل'))
+                        : (item.statusLabel || 'Waiting for delivery'),
                     Plate: item.plate || '',
                     Customer: item.customerName || '',
                     'Added At': item.addedAt || '',
@@ -4202,7 +4200,7 @@
                     stripClass: 'pct-status-pill--done'
                 },
                 {
-                    name: 'لم يُرحّل بعد',
+                    name: 'Waiting for delivery',
                     count: still,
                     color: '#f59e0b',
                     pctClass: 'is-amber',
@@ -5029,7 +5027,7 @@
             const s = stats || {};
             document.getElementById('queueStats').innerHTML = `
                 <div class="hub-stat"><span>قائمة المنسق</span><b>${s.total || 0}</b></div>
-                <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${s.available || 0}</b></div>
+                <div class="hub-stat hub-stat--avail"><span>Waiting for delivery</span><b>${s.available || 0}</b></div>
                 <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${s.in_stock || 0}</b></div>
                 <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${s.ready_for_delivery || 0}</b></div>
                 <div class="hub-stat hub-stat--primary"><span>Out</span><b>${s.out_of_delivery || 0}</b></div>
@@ -5055,7 +5053,9 @@
             }
             tbody.innerHTML = queue.map((item) => {
                 const avail = item.status === 'available';
-                const label = avail ? 'متاح' : (item.statusLabel || 'محجوز');
+                const delivered = item.agentStatus === 'delivered';
+                const label = item.statusLabel
+                    || (delivered ? 'تم الترحيل' : 'Waiting for delivery');
                 return `<tr class="${avail ? 'row-available' : ''}" data-vin="${item.vin}" data-available="${avail ? '1' : '0'}">
                     <td class="hub-vin">${item.vin}</td>
                     <td>${item.product || '—'}</td>
@@ -5063,8 +5063,8 @@
                     <td>${item.location || '—'}</td>
                     <td>${item.assignedTo || '—'}</td>
                     <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
-                    <td>${avail ? 'متاح' : (item.statusLabel || (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'))}</td>
-                    <td>${avail || item.agentStatus === 'delivered' ? '' : `<button type="button" class="hub-btn hub-btn--sm" data-release="${item.vin}">إتاحة</button>`}</td>
+                    <td>${label}</td>
+                    <td>${avail || delivered ? '' : `<button type="button" class="hub-btn hub-btn--sm" data-release="${item.vin}">إتاحة</button>`}</td>
                 </tr>`;
             }).join('');
             tbody.querySelectorAll('tr.row-available').forEach((row) => {

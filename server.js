@@ -155,17 +155,26 @@ function vehicleIndex() {
 }
 
 function statusLabelFor(item) {
-  if (item.status === 'available') return 'متاح';
   if (item.agentStatus === 'delivered') {
     if (item.showroomDisplay || item.deliveryMode === 'showroom') return 'عرض الصالة';
     return item.deliveryMode === 'warehouse'
       ? 'تم التسليم في المستودع'
       : 'تم الترحيل';
   }
+  // Added by coordinator — waiting until agent creates the delivery note
+  if (item.status === 'available' || !item.agentStatus) {
+    return 'Waiting for delivery';
+  }
   if (item.agentStatus === 'out_of_delivery') return 'Out for delivery';
   if (item.agentStatus === 'ready_for_delivery') return 'Ready';
-  if (item.agentStatus === 'in_stock') return item.assignedTo ? `مع ${item.assignedTo}` : 'In Stock';
-  return 'محجوز';
+  if (item.agentStatus === 'in_stock') {
+    return item.assignedTo
+      ? `Waiting for delivery · مع ${item.assignedTo}`
+      : 'Waiting for delivery';
+  }
+  return item.assignedTo
+    ? `Waiting for delivery · مع ${item.assignedTo}`
+    : 'Waiting for delivery';
 }
 
 const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
@@ -1524,12 +1533,25 @@ app.post('/api/delivery-coordinator/assign-meta', (req, res) => {
   const plannedDeliveryMode = normalizePlannedDeliveryMode(
     req.body?.plannedDeliveryMode || req.body?.deliveryMode || req.body?.deliveryType
   );
+  if (!plannedDeliveryMode) {
+    return res.status(400).json({ error: 'اختر نوع التسليم: ترحيل أو مستودع' });
+  }
+
+  ensureOptions();
   let deliveryCompany = String(req.body?.company || req.body?.deliveryCompany || req.body?.company_rep || '').trim();
   if (plannedDeliveryMode === 'warehouse') {
     deliveryCompany = deliveryCompany || 'مستودع الهاتفية';
+  } else if (!deliveryCompany) {
+    return res.status(400).json({ error: 'اختر شركة التوصيل' });
   }
-  if (!plannedDeliveryMode && !deliveryCompany) {
-    return res.status(400).json({ error: 'أرسل الشركة أو نوع التسليم' });
+
+  if (deliveryCompany && plannedDeliveryMode === 'memo') {
+    const exists = (store.options.companies || []).some(
+      (x) => String(x).toLowerCase() === deliveryCompany.toLowerCase()
+    );
+    if (!exists) {
+      store.options.companies = uniqueSorted([...(store.options.companies || []), deliveryCompany]);
+    }
   }
 
   const updated = [];
@@ -1542,16 +1564,14 @@ app.post('/api/delivery-coordinator/assign-meta', (req, res) => {
       missing.push(vin);
       continue;
     }
-    if (plannedDeliveryMode) item.plannedDeliveryMode = plannedDeliveryMode;
-    if (deliveryCompany) {
-      item.deliveryCompany = deliveryCompany;
-      item.company = deliveryCompany;
-    }
+    item.plannedDeliveryMode = plannedDeliveryMode;
+    item.deliveryCompany = deliveryCompany;
+    item.company = deliveryCompany;
     updated.push(enrichQueueItem(item));
   }
   if (!updated.length) return res.status(404).json({ error: 'لم يتم تحديث أي شاسيه', missing });
   persistAndBroadcast();
-  res.json({ ok: true, updated, missing });
+  res.json({ ok: true, updated, missing, deliveryCompany, plannedDeliveryMode });
 });
 
 app.post('/api/delivery-coordinator/claim', (req, res) => {
