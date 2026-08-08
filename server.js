@@ -282,6 +282,13 @@ function markVinsDelivered(vins, {
   return { deliveredItems, blocked };
 }
 
+function normalizePlannedDeliveryMode(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'warehouse' || v === 'مستودع' || v === 'wh') return 'warehouse';
+  if (v === 'memo' || v === 'delivery' || v === 'ترحيل' || v === 'transfer') return 'memo';
+  return '';
+}
+
 function enrichQueueItem(item) {
   const vin = normVin(item.vin);
   const veh = vehicleIndex().get(vin);
@@ -296,6 +303,11 @@ function enrichQueueItem(item) {
     imageUrl: item.imageUrl || veh?.imageUrl || '',
     customerName: item.customerName || veh?.customerName || '',
     phone: item.phone || veh?.phone || '',
+    deliveryCompany: item.deliveryCompany || item.company || '',
+    company: item.deliveryCompany || item.company || '',
+    plannedDeliveryMode: normalizePlannedDeliveryMode(item.plannedDeliveryMode || item.deliveryType || '')
+      || (item.deliveryMode === 'warehouse' && item.agentStatus !== 'delivered' ? 'warehouse' : '')
+      || '',
     statusLabel: statusLabelFor(item)
   };
   return enriched;
@@ -1426,6 +1438,31 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   }
 
   const vins = Array.isArray(req.body?.vins) ? req.body.vins : [];
+  const plannedDeliveryMode = normalizePlannedDeliveryMode(
+    req.body?.plannedDeliveryMode || req.body?.deliveryMode || req.body?.deliveryType
+  );
+  if (!plannedDeliveryMode) {
+    return res.status(400).json({ error: 'اختر نوع التسليم: ترحيل أو مستودع' });
+  }
+
+  ensureOptions();
+  let deliveryCompany = String(req.body?.company || req.body?.deliveryCompany || req.body?.company_rep || '').trim();
+  if (plannedDeliveryMode === 'warehouse') {
+    deliveryCompany = deliveryCompany || 'مستودع الهاتفية';
+  } else if (!deliveryCompany) {
+    return res.status(400).json({ error: 'اختر شركة التوصيل للشاسيه' });
+  }
+
+  // Keep company in options list if new
+  if (deliveryCompany && plannedDeliveryMode === 'memo') {
+    const exists = (store.options.companies || []).some(
+      (x) => String(x).toLowerCase() === deliveryCompany.toLowerCase()
+    );
+    if (!exists) {
+      store.options.companies = uniqueSorted([...(store.options.companies || []), deliveryCompany]);
+    }
+  }
+
   store.queue = dedupeQueue(store.queue);
   const existing = new Set(store.queue.map((q) => normVin(q.vin)));
   const byVin = vehicleIndex();
@@ -1460,7 +1497,10 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       agentStatus: '',
       assignedTo: '',
       addedAt: now,
-      assignedAt: ''
+      assignedAt: '',
+      deliveryCompany,
+      plannedDeliveryMode,
+      company: deliveryCompany
     };
     store.queue.push(enrichFromVehicle(base, veh));
     existing.add(vin);
@@ -1472,8 +1512,46 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
     added,
     skipped,
     notInInventory: missingVins.length,
-    missingVins
+    missingVins,
+    deliveryCompany,
+    plannedDeliveryMode
   });
+});
+
+/** Update company / planned delivery mode for available (or any) queue VINs. */
+app.post('/api/delivery-coordinator/assign-meta', (req, res) => {
+  const vins = Array.isArray(req.body?.vins) ? req.body.vins : [req.body?.vin];
+  const plannedDeliveryMode = normalizePlannedDeliveryMode(
+    req.body?.plannedDeliveryMode || req.body?.deliveryMode || req.body?.deliveryType
+  );
+  let deliveryCompany = String(req.body?.company || req.body?.deliveryCompany || req.body?.company_rep || '').trim();
+  if (plannedDeliveryMode === 'warehouse') {
+    deliveryCompany = deliveryCompany || 'مستودع الهاتفية';
+  }
+  if (!plannedDeliveryMode && !deliveryCompany) {
+    return res.status(400).json({ error: 'أرسل الشركة أو نوع التسليم' });
+  }
+
+  const updated = [];
+  const missing = [];
+  for (const raw of vins) {
+    const vin = normVin(raw);
+    if (!vin) continue;
+    const item = findQueueItem(vin);
+    if (!item) {
+      missing.push(vin);
+      continue;
+    }
+    if (plannedDeliveryMode) item.plannedDeliveryMode = plannedDeliveryMode;
+    if (deliveryCompany) {
+      item.deliveryCompany = deliveryCompany;
+      item.company = deliveryCompany;
+    }
+    updated.push(enrichQueueItem(item));
+  }
+  if (!updated.length) return res.status(404).json({ error: 'لم يتم تحديث أي شاسيه', missing });
+  persistAndBroadcast();
+  res.json({ ok: true, updated, missing });
 });
 
 app.post('/api/delivery-coordinator/claim', (req, res) => {

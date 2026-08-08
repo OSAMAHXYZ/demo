@@ -703,6 +703,54 @@
         }
         .fleet-card.fleet-card--hidden { display: none !important; }
         .fleet-search-empty.hidden { display: none !important; }
+        .fleet-company-group {
+            margin-bottom: 18px;
+            padding: 14px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,.08);
+            background: rgba(15, 23, 42, 0.35);
+        }
+        .fleet-company-group.fleet-company-group--hidden { display: none !important; }
+        .fleet-company-group--warehouse {
+            border-color: rgba(14, 165, 233, 0.28);
+            background: rgba(14, 165, 233, 0.06);
+        }
+        .fleet-company-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .fleet-company-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .fleet-company-count {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        .fleet-company-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            margin-inline-start: 8px;
+        }
+        .fleet-company-badge--wh {
+            background: rgba(14, 165, 233, 0.14);
+            color: #7dd3fc;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+        }
+        .fleet-company-badge--memo {
+            background: rgba(34, 197, 94, 0.12);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.28);
+        }
         .fleet-grid {
             display: grid; gap: 14px;
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -1053,7 +1101,7 @@
             <section class="ws-section">
                 <div class="ws-section-head">
                     <h2>السيارات المتاحة</h2>
-                    <span class="hint">انقر على السيارة — اختر مذكرة الترحيل أو المخزون</span>
+                    <span class="hint">مجمّعة حسب الشركة من المنسق — انقر الشاسيه لفتح المذكرة</span>
                 </div>
                 <div class="fleet-search-wrap">
                     <input
@@ -2186,7 +2234,9 @@
             const badgeClass = kind === 'avail' ? 'fc-badge--avail'
                 : kind === 'ready' ? 'fc-badge--ready'
                 : kind === 'stock' ? 'fc-badge--stock' : 'fc-badge--stock';
-            const badgeText = kind === 'avail' ? 'متاح'
+            const planned = String(item.plannedDeliveryMode || '').toLowerCase();
+            const badgeText = kind === 'avail'
+                ? (planned === 'warehouse' ? 'مستودع' : (planned === 'memo' ? 'ترحيل' : 'متاح'))
                 : item.statusLabel || ('مع ' + (item.assignedTo || ''));
             const extraClass = (kind === 'ready' || kind === 'stock')
                 ? ' fleet-card--ready fleet-card--actionable'
@@ -2194,15 +2244,36 @@
             const img = item.imageUrl
                 ? `<img src="${item.imageUrl}" alt="" onerror="this.style.display='none'">`
                 : '';
-            return `<div class="fleet-card${extraClass}" data-vin="${item.vin}" data-kind="${kind}">
+            const company = item.deliveryCompany || item.company || '';
+            return `<div class="fleet-card${extraClass}" data-vin="${item.vin}" data-kind="${kind}" data-company="${String(company).replace(/"/g, '&quot;')}" data-planned="${planned}">
                 <div class="fc-media">${img}</div>
                 <div class="fc-body">
                     <div class="fc-vin">${item.vin}</div>
                     <div class="fc-product">${item.product || item.model || '—'}</div>
-                    <div class="fc-meta">GT: ${item.gt || '—'} · ${item.location || '—'}</div>
+                    <div class="fc-meta">${company ? company + ' · ' : ''}GT: ${item.gt || '—'} · ${item.location || '—'}</div>
                     <span class="fc-badge ${badgeClass}">${badgeText}</span>
                 </div>
             </div>`;
+        }
+
+        function groupAvailableByCompany(available) {
+            const groups = new Map();
+            (available || []).forEach((item) => {
+                const planned = String(item.plannedDeliveryMode || '').toLowerCase();
+                const isWh = planned === 'warehouse';
+                const company = isWh
+                    ? 'المستودع'
+                    : (String(item.deliveryCompany || item.company || '').trim() || 'بدون شركة');
+                const key = `${isWh ? 'wh' : 'memo'}::${company}`;
+                if (!groups.has(key)) {
+                    groups.set(key, { company, isWh, items: [] });
+                }
+                groups.get(key).items.push(item);
+            });
+            return Array.from(groups.values()).sort((a, b) => {
+                if (a.isWh !== b.isWh) return a.isWh ? -1 : 1;
+                return a.company.localeCompare(b.company, 'ar');
+            });
         }
 
         function filterAvailableFleetByVin() {
@@ -2225,9 +2296,16 @@
                 const vin = String(card.dataset.vin || card.querySelector('.fc-vin')?.textContent || '')
                     .toUpperCase()
                     .replace(/\s+/g, '');
-                const match = !q || vin.includes(q);
+                const company = String(card.dataset.company || '').toUpperCase().replace(/\s+/g, '');
+                const match = !q || vin.includes(q) || company.includes(q);
                 card.classList.toggle('fleet-card--hidden', !match);
                 if (match) visible += 1;
+            });
+
+            availEl.querySelectorAll('.fleet-company-group').forEach((group) => {
+                const anyVisible = Array.from(group.querySelectorAll('.fleet-card'))
+                    .some((c) => !c.classList.contains('fleet-card--hidden'));
+                group.classList.toggle('fleet-company-group--hidden', !anyVisible);
             });
 
             if (countEl) {
@@ -2258,12 +2336,27 @@
             `;
 
             const availEl = document.getElementById('availableFleet');
-            availEl.innerHTML = available.length
-                ? available.map((item) => fleetCardHtml(item, 'avail')).join('')
-                : '<div class="ws-empty"><strong>لا توجد سيارات متاحة</strong>انتظر المنسق لإضافة شاسيه جديدة</div>';
-            availEl.querySelectorAll('.fleet-card').forEach((card) => {
-                card.addEventListener('click', () => openCarAction(card.dataset.vin, 'available'));
-            });
+            if (!available.length) {
+                availEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات متاحة</strong>انتظر المنسق لإضافة شاسيه جديدة</div>';
+            } else {
+                const groups = groupAvailableByCompany(available);
+                availEl.innerHTML = groups.map((g) => {
+                    const badge = g.isWh
+                        ? '<span class="fleet-company-badge fleet-company-badge--wh">مستودع</span>'
+                        : '<span class="fleet-company-badge fleet-company-badge--memo">ترحيل</span>';
+                    const cards = g.items.map((item) => fleetCardHtml(item, 'avail')).join('');
+                    return `<div class="fleet-company-group${g.isWh ? ' fleet-company-group--warehouse' : ''}" data-company-group="${String(g.company).replace(/"/g, '&quot;')}">
+                        <div class="fleet-company-head">
+                            <div class="fleet-company-name">${g.company}${badge}</div>
+                            <div class="fleet-company-count">${g.items.length} سيارة</div>
+                        </div>
+                        <div class="fleet-grid">${cards}</div>
+                    </div>`;
+                }).join('');
+                availEl.querySelectorAll('.fleet-card').forEach((card) => {
+                    card.addEventListener('click', () => openCarAction(card.dataset.vin, 'available'));
+                });
+            }
             filterAvailableFleetByVin();
 
             const dockEl = document.getElementById('stockDockList');
@@ -2341,10 +2434,39 @@
             }
         }
 
-        async function startDeliveryNote(vin) {
+        async function startDeliveryNote(vin, { forceMode = '' } = {}) {
             const item = workspaceQueue.find((q) => q.vin === vin)
                 || { vin };
             openMainWithVin(item);
+            const mode = String(forceMode || item.plannedDeliveryMode || '').toLowerCase();
+            if (mode === 'warehouse') {
+                applyWarehouseDelivery();
+                return;
+            }
+            setWarehousePrintMode(false);
+            const company = String(item.deliveryCompany || item.company || '').trim();
+            if (company && company !== 'المستودع') {
+                ensureSearchableOptionAllow(company);
+                const companyEl = document.getElementById('company_rep');
+                if (companyEl) {
+                    companyEl.value = company;
+                    companyEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    companyEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            updatePreview();
+        }
+
+        /** Allow coordinator-assigned company even if not yet in local options list. */
+        function ensureSearchableOptionAllow(company) {
+            const name = String(company || '').trim();
+            if (!name) return;
+            if (!Array.isArray(searchableSelectOptions.company_rep)) {
+                searchableSelectOptions.company_rep = [];
+            }
+            if (!searchableSelectOptions.company_rep.some((x) => String(x).trim() === name)) {
+                searchableSelectOptions.company_rep.push(name);
+            }
         }
 
         let stockActionVin = '';
@@ -2355,14 +2477,58 @@
             stockActionVin = String(vin || '').trim().toUpperCase();
             stockActionMode = mode === 'stock' ? 'stock' : 'available';
             document.getElementById('stockActionVin').textContent = stockActionVin;
-            document.getElementById('stockActionProduct').textContent = item.product || item.model || '—';
+            const company = item.deliveryCompany || item.company || '';
+            const planned = String(item.plannedDeliveryMode || '').toLowerCase();
+            document.getElementById('stockActionProduct').textContent = [
+                item.product || item.model || '—',
+                company ? `· ${company}` : '',
+                planned === 'warehouse' ? '· مستودع' : (planned === 'memo' ? '· ترحيل' : '')
+            ].filter(Boolean).join(' ');
             const sub = document.getElementById('stockActionSub');
             const keepBtn = document.getElementById('stockActionKeep');
+            const whBtn = document.getElementById('stockActionWarehouse');
+            const transferBtn = document.getElementById('stockActionTransfer');
             if (keepBtn) keepBtn.hidden = stockActionMode !== 'available';
-            if (sub) {
-                sub.textContent = stockActionMode === 'available'
-                    ? 'اختر: متاحة لدي (مخزونك) أو التسليم في المستودع أو الترحيل أو الرجوع للقائمة'
-                    : 'اختر نوع المذكرة لهذه السيارة أو ارجع للقائمة';
+
+            // Coordinator already chose type → show one primary action
+            if (planned === 'warehouse') {
+                if (whBtn) {
+                    whBtn.hidden = false;
+                    whBtn.textContent = 'فتح نموذج المستودع';
+                }
+                if (transferBtn) transferBtn.hidden = true;
+                if (sub) {
+                    sub.textContent = stockActionMode === 'available'
+                        ? 'المنسق حدّد مستودع — افتح النموذج أو أضف لمخزونك'
+                        : 'المنسق حدّد مستودع — افتح نموذج المستودع';
+                }
+            } else if (planned === 'memo') {
+                if (transferBtn) {
+                    transferBtn.hidden = false;
+                    transferBtn.textContent = company ? `فتح مذكرة · ${company}` : 'فتح مذكرة الترحيل';
+                }
+                if (whBtn) whBtn.hidden = true;
+                if (sub) {
+                    sub.textContent = stockActionMode === 'available'
+                        ? (company
+                            ? `المنسق حدّد شركة «${company}» — افتح المذكرة (الشركة مُعبأة) أو أضف لمخزونك`
+                            : 'افتح مذكرة الترحيل أو أضف لمخزونك')
+                        : 'افتح مذكرة الترحيل لهذه السيارة';
+                }
+            } else {
+                if (whBtn) {
+                    whBtn.hidden = false;
+                    whBtn.textContent = 'التسليم في المستودع';
+                }
+                if (transferBtn) {
+                    transferBtn.hidden = false;
+                    transferBtn.textContent = 'الترحيل';
+                }
+                if (sub) {
+                    sub.textContent = stockActionMode === 'available'
+                        ? 'اختر: متاحة لدي (مخزونك) أو التسليم في المستودع أو الترحيل أو الرجوع للقائمة'
+                        : 'اختر نوع المذكرة لهذه السيارة أو ارجع للقائمة';
+                }
             }
             document.getElementById('stockActionModal').classList.add('open');
         }
@@ -2370,6 +2536,16 @@
         function closeStockAction() {
             stockActionVin = '';
             stockActionMode = 'available';
+            const whBtn = document.getElementById('stockActionWarehouse');
+            const transferBtn = document.getElementById('stockActionTransfer');
+            if (whBtn) {
+                whBtn.hidden = false;
+                whBtn.textContent = 'التسليم في المستودع';
+            }
+            if (transferBtn) {
+                transferBtn.hidden = false;
+                transferBtn.textContent = 'الترحيل';
+            }
             document.getElementById('stockActionModal').classList.remove('open');
         }
 
@@ -2410,6 +2586,7 @@
             showView('app');
             clearDeliveryForm();
             prefillClaimedVin(item);
+            // company / warehouse applied by startDeliveryNote → applyCoordinatorPlan
         }
 
         function openWorkspace() {
@@ -2798,12 +2975,10 @@
             if (mode === 'available') {
                 const item = await claimWithStatus(vin, 'in_stock', { quiet: true });
                 if (!item) return;
-                startDeliveryNote(vin);
-                applyWarehouseDelivery();
+                startDeliveryNote(vin, { forceMode: 'warehouse' });
                 return;
             }
-            startDeliveryNote(vin);
-            applyWarehouseDelivery();
+            startDeliveryNote(vin, { forceMode: 'warehouse' });
         });
 
         document.getElementById('stockActionTransfer').addEventListener('click', async () => {
@@ -2811,14 +2986,13 @@
             const mode = stockActionMode;
             closeStockAction();
             if (!vin) return;
-            setWarehousePrintMode(false);
             if (mode === 'available') {
                 const item = await claimWithStatus(vin, 'in_stock', { quiet: true });
                 if (!item) return;
-                startDeliveryNote(vin);
+                startDeliveryNote(vin, { forceMode: 'memo' });
                 return;
             }
-            startDeliveryNote(vin);
+            startDeliveryNote(vin, { forceMode: 'memo' });
         });
         document.getElementById('stockActionBack').addEventListener('click', closeStockAction);
         document.getElementById('stockActionModal').addEventListener('click', (e) => {
