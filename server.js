@@ -246,6 +246,8 @@ function attachDeliveryNoteMeta(draft, extras = {}) {
   const deliveryNoteNumber = existingNum || allocateDeliveryNoteNumber();
   const deliveryNoteDate = normalizeIsoDateOnly(
     extras.deliveryNoteDate
+      || draft.printedAt
+      || extras.printedAt
       || draft.deliveryNoteDate
       || draft.payload.deliveryNoteDate
       || draft.payload.doc_date
@@ -316,11 +318,27 @@ function migrateDeliveryNoteFields() {
   }
 
   syncNextDeliveryNoteSeq();
+  let dirty = optionsDirty;
+
+  // Prefer printedAt for deliveryNoteDate so monthly filters don't mis-bucket old notes
+  for (const d of store.drafts || []) {
+    if (!d.printedAt) continue;
+    const fromPrint = normalizeIsoDateOnly(d.printedAt, d.printedAt);
+    if (!fromPrint) continue;
+    const current = String(d.deliveryNoteDate || (d.payload && d.payload.deliveryNoteDate) || '').trim().slice(0, 10);
+    if (current !== fromPrint) {
+      d.deliveryNoteDate = fromPrint;
+      if (!d.payload || typeof d.payload !== 'object') d.payload = {};
+      d.payload.deliveryNoteDate = fromPrint;
+      dirty = true;
+    }
+  }
+
   const missing = store.drafts.filter(
     (d) => !String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '').trim()
       || !String(d.deliveryNoteDate || (d.payload && d.payload.deliveryNoteDate) || '').trim()
   );
-  if (!missing.length && !optionsDirty) return false;
+  if (!missing.length && !dirty) return false;
 
   missing
     .slice()

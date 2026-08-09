@@ -3412,8 +3412,7 @@
         }
 
         function draftEventIso(d) {
-            const dn = String(d?.deliveryNoteDate || (d?.payload && d.payload.deliveryNoteDate) || '').trim();
-            if (/^\d{4}-\d{2}-\d{2}/.test(dn)) return dn.slice(0, 10);
+            // Prefer print/creation time for monthly grouping (never dump older months into "today")
             if (d && d.printedAt) {
                 const dt = new Date(d.printedAt);
                 if (!Number.isNaN(dt.getTime())) {
@@ -3425,6 +3424,8 @@
                     }).format(dt);
                 }
             }
+            const dn = String(d?.deliveryNoteDate || (d?.payload && d.payload.deliveryNoteDate) || '').trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(dn)) return dn.slice(0, 10);
             const p = (d && d.payload) || {};
             const fallback = String(p.transfer_date || p.doc_date || '').trim();
             if (/^\d{4}-\d{2}-\d{2}/.test(fallback)) return fallback.slice(0, 10);
@@ -3453,8 +3454,16 @@
             return `${names[mi] || m} ${y}`;
         }
 
-        /** Admin month filter: YYYY-MM | all | (default current) */
+        /** Admin month filter: YYYY-MM | all — default = current month only */
         let adminMonthFilter = currentMonthKey();
+
+        function matchesAdminMonth(d) {
+            if (!adminMonthFilter || adminMonthFilter === 'all') return true;
+            const mk = draftMonthKey(d);
+            // Undated notes stay hidden until they have a real date — never leak into current month
+            if (!mk) return false;
+            return mk === adminMonthFilter;
+        }
 
         function draftVehicleStatus(d) {
             const raw = d?.vehicleStatus || (d?.payload && d.payload.vehicleStatus) || '';
@@ -3593,10 +3602,7 @@
 
         function dateScopedDrafts() {
             const legacy = getXferDateFilter();
-            let list = allDrafts || [];
-            if (adminMonthFilter && adminMonthFilter !== 'all') {
-                list = list.filter((d) => draftMonthKey(d) === adminMonthFilter);
-            }
+            let list = (allDrafts || []).filter(matchesAdminMonth);
             if (legacy) {
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
@@ -3605,12 +3611,10 @@
             if (!from && !to) return list;
 
             if (type === 'delivery_note') {
+                // Stay inside the selected month — do not re-include other months via VIN scope
                 return list.filter((d) => {
                     const iso = draftEventIso(d);
-                    if (iso && isoInRange(iso, from, to)) return true;
-                    const vins = scopedVinSet();
-                    if (!vins || !vins.size) return false;
-                    return draftVinList(d).some((vin) => vins.has(vin));
+                    return Boolean(iso && isoInRange(iso, from, to));
                 });
             }
 
@@ -3836,7 +3840,7 @@
                 if (panel) panel.classList.add('hidden');
             }
             const searchQ = String(uiFilters.search || '').trim();
-            const monthOk = (d) => !adminMonthFilter || adminMonthFilter === 'all' || draftMonthKey(d) === adminMonthFilter;
+            const monthOk = (d) => matchesAdminMonth(d);
             const drafts = applyDisplayFilters(
                 searchQ
                     ? (allDrafts || []).filter((d) => monthOk(d) && rowMatchesSearch(d, searchQ))
@@ -3916,20 +3920,21 @@
             months.add(currentMonthKey());
             months.add(lastMonthKey());
             const sorted = [...months].sort().reverse();
-            const prev = adminMonthFilter;
+            let prev = adminMonthFilter || currentMonthKey();
+            // Never default to another month — stay on current unless user picked one
+            if (!prev) prev = currentMonthKey();
             sel.innerHTML = [
                 `<option value="${currentMonthKey()}">الشهر الحالي — ${monthLabelAr(currentMonthKey())}</option>`,
                 `<option value="${lastMonthKey()}">الشهر الماضي — ${monthLabelAr(lastMonthKey())}</option>`,
-                '<option value="all">كل الأشهر / All Months</option>',
                 ...sorted
                     .filter((m) => m !== currentMonthKey() && m !== lastMonthKey())
-                    .map((m) => `<option value="${m}">${monthLabelAr(m)}</option>`)
+                    .map((m) => `<option value="${m}">${monthLabelAr(m)}</option>`),
+                '<option value="all">كل الأشهر / All Months</option>'
             ].join('');
             if (![...sel.options].some((o) => o.value === prev)) {
-                adminMonthFilter = currentMonthKey();
-            } else {
-                adminMonthFilter = prev;
+                prev = currentMonthKey();
             }
+            adminMonthFilter = prev;
             sel.value = adminMonthFilter;
         }
 
