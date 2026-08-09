@@ -58,12 +58,20 @@ const emptyStore = () => ({
   vehicles: [],
   queue: [],
   drafts: [],
+  manualVehicles: [],
   options: defaultOptions(),
   meta: {
     filename: '',
     sheetName: '',
-    uploadedAt: null
+    uploadedAt: null,
+    nextDeliveryNoteSeq: 1
   }
+});
+
+/** Fixed delivery branch per agent (no manual selection). */
+const AGENT_AUTO_BRANCH = Object.freeze({
+  الفاضل: 'جدة',
+  البراء: 'الرياض'
 });
 
 let store = emptyStore();
@@ -98,6 +106,7 @@ function loadStore() {
       vehicles: Array.isArray(parsed.vehicles) ? parsed.vehicles : [],
       queue: Array.isArray(parsed.queue) ? parsed.queue : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+      manualVehicles: Array.isArray(parsed.manualVehicles) ? parsed.manualVehicles : [],
       options: parsed.options && typeof parsed.options === 'object'
         ? {
             companies: Array.isArray(parsed.options.companies) ? parsed.options.companies : [],
@@ -107,10 +116,18 @@ function loadStore() {
       meta: {
         filename: parsed.meta?.filename || parsed.filename || '',
         sheetName: parsed.meta?.sheetName || parsed.sheetName || '',
-        uploadedAt: parsed.meta?.uploadedAt || parsed.uploadedAt || null
+        uploadedAt: parsed.meta?.uploadedAt || parsed.uploadedAt || null,
+        nextDeliveryNoteSeq: Number(parsed.meta?.nextDeliveryNoteSeq) || 1
       }
     };
     ensureOptions();
+    if (migrateDeliveryNoteFields()) {
+      try {
+        saveStore();
+      } catch (e) {
+        console.error('[delivery] migrate save failed:', e.message);
+      }
+    }
   } catch (err) {
     console.error('[delivery] failed to load store:', err.message);
     store = emptyStore();
@@ -139,6 +156,242 @@ function broadcastHubUpdate() {
 function persistAndBroadcast() {
   saveStore();
   broadcastHubUpdate();
+}
+
+function todayIsoRiyadh() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+function agentAutoBranch(username) {
+  return AGENT_AUTO_BRANCH[String(username || '').trim()] || '';
+}
+
+function formatDeliveryNoteNumber(seq) {
+  return `DN-${String(Math.max(1, Number(seq) || 1)).padStart(6, '0')}`;
+}
+
+function normalizeVehicleStatus(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'display' || v === 'عرض' || v === 'showroom') return 'display';
+  if (v === 'delivery' || v === 'تسليم' || v === 'memo' || v === 'delivered') return 'delivery';
+  return '';
+}
+
+function normalizeIsoDateOnly(raw, fallback) {
+  const s = String(raw || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (fallback) {
+    const f = String(fallback).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0, 10);
+    const dt = new Date(f);
+    if (!Number.isNaN(dt.getTime())) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Riyadh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(dt);
+    }
+  }
+  return todayIsoRiyadh();
+}
+
+/** Scan drafts and bump next seq so new DN numbers never collide. */
+function syncNextDeliveryNoteSeq() {
+  if (!store.meta || typeof store.meta !== 'object') store.meta = {};
+  let next = Number(store.meta.nextDeliveryNoteSeq) || 1;
+  if (next < 1) next = 1;
+  for (const d of store.drafts || []) {
+    const n = String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '').trim();
+    const m = n.match(/^DN-(\d+)$/i);
+    if (m) next = Math.max(next, Number(m[1]) + 1);
+  }
+  store.meta.nextDeliveryNoteSeq = next;
+  return next;
+}
+
+function allocateDeliveryNoteNumber() {
+  syncNextDeliveryNoteSeq();
+  const used = new Set();
+  for (const d of store.drafts || []) {
+    const n = String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '').trim();
+    if (n) used.add(n);
+  }
+  let seq = Number(store.meta.nextDeliveryNoteSeq) || 1;
+  let num;
+  do {
+    num = formatDeliveryNoteNumber(seq);
+    seq += 1;
+  } while (used.has(num));
+  store.meta.nextDeliveryNoteSeq = seq;
+  return num;
+}
+
+/**
+ * Attach unique deliveryNoteNumber + normalized deliveryNoteDate (and optional
+ * manual-entry fields) onto a draft. Does not use VIN as the note identity.
+ */
+function attachDeliveryNoteMeta(draft, extras = {}) {
+  if (!draft || typeof draft !== 'object') return draft;
+  if (!draft.payload || typeof draft.payload !== 'object') draft.payload = {};
+
+  const existingNum = String(
+    draft.deliveryNoteNumber || draft.payload.deliveryNoteNumber || extras.deliveryNoteNumber || ''
+  ).trim();
+  const deliveryNoteNumber = existingNum || allocateDeliveryNoteNumber();
+  const deliveryNoteDate = normalizeIsoDateOnly(
+    extras.deliveryNoteDate
+      || draft.deliveryNoteDate
+      || draft.payload.deliveryNoteDate
+      || draft.payload.doc_date
+      || draft.payload.transfer_date,
+    draft.printedAt || extras.printedAt
+  );
+
+  draft.deliveryNoteNumber = deliveryNoteNumber;
+  draft.deliveryNoteDate = deliveryNoteDate;
+  draft.payload.deliveryNoteNumber = deliveryNoteNumber;
+  draft.payload.deliveryNoteDate = deliveryNoteDate;
+
+  const branchEntry = extras.branchEntryDate != null
+    ? extras.branchEntryDate
+    : (draft.branchEntryDate != null ? draft.branchEntryDate : draft.payload.branchEntryDate);
+  if (branchEntry != null && String(branchEntry).trim()) {
+    draft.branchEntryDate = normalizeIsoDateOnly(branchEntry, deliveryNoteDate);
+    draft.payload.branchEntryDate = draft.branchEntryDate;
+  }
+
+  const status = normalizeVehicleStatus(
+    extras.vehicleStatus != null
+      ? extras.vehicleStatus
+      : (draft.vehicleStatus != null ? draft.vehicleStatus : draft.payload.vehicleStatus)
+  );
+  if (status) {
+    draft.vehicleStatus = status;
+    draft.payload.vehicleStatus = status;
+  }
+
+  const entryAgent = extras.entryAgent != null
+    ? extras.entryAgent
+    : (draft.entryAgent != null ? draft.entryAgent : draft.assignedTo);
+  if (entryAgent != null && String(entryAgent).trim()) {
+    draft.entryAgent = String(entryAgent).trim();
+    draft.payload.entryAgent = draft.entryAgent;
+  }
+
+  const manual = extras.manualEntry != null
+    ? Boolean(extras.manualEntry)
+    : (draft.manualEntry === true || draft.payload.manualEntry === true);
+  if (manual) {
+    draft.manualEntry = true;
+    draft.payload.manualEntry = true;
+  }
+
+  return draft;
+}
+
+/** Backfill DN numbers/dates for existing drafts (one-time on load). */
+function migrateDeliveryNoteFields() {
+  if (!Array.isArray(store.drafts)) store.drafts = [];
+  if (!Array.isArray(store.manualVehicles)) store.manualVehicles = [];
+  if (!store.meta || typeof store.meta !== 'object') store.meta = {};
+
+  // Ensure auto-branch cities exist in options
+  const cities = store.options?.cities || [];
+  const needCities = ['جدة', 'الرياض', 'جده'];
+  let optionsDirty = false;
+  for (const c of needCities) {
+    if (!cities.some((x) => normalizeOptionName(x) === c)) {
+      cities.push(c);
+      optionsDirty = true;
+    }
+  }
+  if (optionsDirty) {
+    store.options.cities = uniqueSorted(cities);
+  }
+
+  syncNextDeliveryNoteSeq();
+  const missing = store.drafts.filter(
+    (d) => !String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '').trim()
+      || !String(d.deliveryNoteDate || (d.payload && d.payload.deliveryNoteDate) || '').trim()
+  );
+  if (!missing.length && !optionsDirty) return false;
+
+  missing
+    .slice()
+    .sort((a, b) => {
+      const ta = a.printedAt ? new Date(a.printedAt).getTime() : 0;
+      const tb = b.printedAt ? new Date(b.printedAt).getTime() : 0;
+      return ta - tb;
+    })
+    .forEach((d) => attachDeliveryNoteMeta(d));
+
+  return true;
+}
+
+function draftMonthKey(draft) {
+  const iso = String(
+    draft?.deliveryNoteDate
+      || (draft?.payload && draft.payload.deliveryNoteDate)
+      || ''
+  ).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso.slice(0, 7);
+  if (draft?.printedAt) {
+    const dt = new Date(draft.printedAt);
+    if (!Number.isNaN(dt.getTime())) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Riyadh',
+        year: 'numeric',
+        month: '2-digit'
+      }).format(dt);
+    }
+  }
+  return '';
+}
+
+function computeDeliveryNoteStats(drafts) {
+  const list = Array.isArray(drafts) ? drafts : [];
+  const vinSet = new Set();
+  const stats = {
+    deliveryNotes: list.length,
+    uniqueVins: 0,
+    display: 0,
+    delivery: 0,
+    warehouse: 0,
+    memo: 0,
+    showroom: 0,
+    byMonth: {}
+  };
+  for (const d of list) {
+    collectDraftVins(d.payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]).forEach((v) => vinSet.add(v));
+    const status = normalizeVehicleStatus(d.vehicleStatus || (d.payload && d.payload.vehicleStatus));
+    const isSh = Boolean(d.showroomDisplay) || isShowroomDraftPayload(d.payload) || status === 'display';
+    const isWh = !isSh && isWarehouseDraftPayload(d.payload);
+
+    if (status === 'display' || (isSh && status !== 'delivery')) stats.display += 1;
+    else stats.delivery += 1;
+
+    if (isSh) stats.showroom += 1;
+    else if (isWh) stats.warehouse += 1;
+    else stats.memo += 1;
+
+    const mk = draftMonthKey(d);
+    if (mk) stats.byMonth[mk] = (stats.byMonth[mk] || 0) + 1;
+  }
+  stats.uniqueVins = vinSet.size;
+
+  const now = todayIsoRiyadh();
+  const thisMonth = now.slice(0, 7);
+  const [y, m] = thisMonth.split('-').map(Number);
+  const last = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+  stats.thisMonth = stats.byMonth[thisMonth] || 0;
+  stats.lastMonth = stats.byMonth[last] || 0;
+  return stats;
 }
 
 function normVin(v) {
@@ -184,6 +437,7 @@ function isShowroomDraftPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
   if (payload.showroom_display === true || payload.showroom_group === true) return true;
   if (payload.deliveryMode === 'showroom') return true;
+  if (normalizeVehicleStatus(payload.vehicleStatus) === 'display') return true;
   return false;
 }
 
@@ -883,11 +1137,13 @@ function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = fa
   store.meta = {
     filename: parsed.filename,
     sheetName: parsed.sheetName,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: new Date().toISOString(),
+    nextDeliveryNoteSeq: Number(store.meta?.nextDeliveryNoteSeq) || 1
   };
 
   if (replaceDrafts || (Array.isArray(parsed.drafts) && parsed.drafts.length)) {
     store.drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, MAX_DRAFTS) : [];
+    migrateDeliveryNoteFields();
   }
   if (replaceQueue || (Array.isArray(parsed.queue) && parsed.queue.length)) {
     store.queue = Array.isArray(parsed.queue) ? dedupeQueue(parsed.queue) : [];
@@ -958,6 +1214,7 @@ function createPdfDraftsFromVehicles(vehicles, { assignedTo = 'admin' } = {}) {
         id,
         printedAt: new Date().toISOString(),
         vin: normVin(chunk[0].vin),
+        vins: chunk.map((c) => normVin(c.vin)).filter(Boolean),
         product: chunk[0].product || '',
         model: chunk[0].model || chunk[0].product || '',
         assignedTo,
@@ -967,10 +1224,15 @@ function createPdfDraftsFromVehicles(vehicles, { assignedTo = 'admin' } = {}) {
         location: chunk[0].location || '',
         payload
       };
+      attachDeliveryNoteMeta(draft, {
+        entryAgent: assignedTo,
+        vehicleStatus: 'delivery'
+      });
       store.drafts.unshift(draft);
       created.push({
         id: draft.id,
         vin: draft.vin,
+        deliveryNoteNumber: draft.deliveryNoteNumber,
         carCount: chunk.length,
         company: company || '—'
       });
@@ -1434,6 +1696,8 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
       queue,
       stats: computeStats(),
       drafts: store.drafts,
+      deliveryNoteStats: computeDeliveryNoteStats(store.drafts || []),
+      manualVehicles: store.manualVehicles || [],
       rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
     });
   }
@@ -1676,6 +1940,12 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
 
   const primary = deliveredItems[0];
   const typedCompany = String(draftPayload.company_rep || '').trim();
+  const autoBranch = agentAutoBranch(auth.username);
+  if (autoBranch && !warehouseDelivery) {
+    draftPayload.branch_to = autoBranch;
+  }
+  const vehicleStatus = normalizeVehicleStatus(draftPayload.vehicleStatus)
+    || (showroomDisplay ? 'display' : 'delivery');
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
@@ -1694,15 +1964,25 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     showroomDisplay: Boolean(showroomDisplay),
     payload: {
       ...draftPayload,
+      branch_to: warehouseDelivery
+        ? (draftPayload.branch_to || 'المستودع')
+        : (autoBranch || draftPayload.branch_to || ''),
       warehouse_group: warehouseDelivery,
       deliveryMode: showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
       showroom_display: Boolean(showroomDisplay),
       showroom_group: Boolean(showroomDisplay),
       showroom_label: showroomDisplay ? SHOWROOM_SPECIAL_NAME : undefined,
       typed_company: showroomDisplay ? typedCompany : undefined,
+      vehicleStatus,
       vins
     }
   };
+  attachDeliveryNoteMeta(draft, {
+    entryAgent: auth.username,
+    vehicleStatus,
+    branchEntryDate: draftPayload.branchEntryDate || '',
+    manualEntry: Boolean(draftPayload.manualEntry)
+  });
   store.drafts.unshift(draft);
   if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
 
@@ -1710,6 +1990,8 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   res.json({
     ok: true,
     draftId: id,
+    deliveryNoteNumber: draft.deliveryNoteNumber,
+    deliveryNoteDate: draft.deliveryNoteDate,
     vins,
     deliveredCount: deliveredItems.length,
     showroomDisplay: Boolean(showroomDisplay),
@@ -1822,6 +2104,203 @@ app.delete('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   }
   persistAndBroadcast();
   res.json({ ok: true, draftsTotal: store.drafts.length });
+});
+
+/** Manual vehicle entry (ياسين) — creates a new delivery note; duplicate VIN allowed. */
+app.post('/api/delivery-manual/vehicles', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  if (auth.username !== SHOWROOM_AGENT) {
+    return res.status(403).json({ error: 'الإدخال اليدوي متاح لياسين فقط' });
+  }
+
+  const vehicle = String(req.body?.vehicle || req.body?.product || '').trim();
+  const vin = normVin(req.body?.vin);
+  const model = String(req.body?.model || vehicle || '').trim();
+  const plate = String(req.body?.plate || '').trim();
+  const branch = String(req.body?.branch || req.body?.branch_to || '').trim();
+  const branchEntryDate = normalizeIsoDateOnly(req.body?.branchEntryDate, todayIsoRiyadh());
+  const vehicleStatus = normalizeVehicleStatus(req.body?.vehicleStatus);
+
+  if (!vehicle) return res.status(400).json({ error: 'Vehicle / Product مطلوب' });
+  if (!vin) return res.status(400).json({ error: 'VIN / Chassis مطلوب' });
+  if (!branch) return res.status(400).json({ error: 'Branch مطلوب' });
+  if (!branchEntryDate) return res.status(400).json({ error: 'Entry Date مطلوب' });
+  if (!vehicleStatus) {
+    return res.status(400).json({ error: 'Status مطلوب (display|delivery)' });
+  }
+
+  // Ensure branch is available in city options (do not block on list mismatch)
+  ensureOptions();
+  if (!store.options.cities.some((c) => normalizeOptionName(c) === branch)) {
+    store.options.cities = uniqueSorted([...store.options.cities, branch]);
+  }
+
+  const isDisplay = vehicleStatus === 'display';
+  const today = todayIsoRiyadh();
+  const dayName = arabicWeekdayName(today);
+  const carRows = [{ model: model || vehicle, chassis: vin, plate, remarks: '' }];
+  while (carRows.length < 10) carRows.push(emptyCarSlot());
+
+  const draftPayload = {
+    doc_date: today,
+    deliveryNoteDate: today,
+    branchEntryDate,
+    vehicleStatus,
+    manualEntry: true,
+    entryAgent: auth.username,
+    invoice_number: '',
+    dep_hour: '',
+    dep_minute: '',
+    customer_name: auth.username,
+    company_rep: isDisplay ? SHOWROOM_SPECIAL_NAME : (String(req.body?.company || '').trim() || ''),
+    transfer_date: today,
+    corresponding_date: today,
+    day_name: dayName,
+    trailer_number: '',
+    car_count: '1',
+    branch_to: branch,
+    attachments: '',
+    cars: carRows,
+    vins: [vin],
+    showroom_display: isDisplay,
+    showroom_group: isDisplay,
+    deliveryMode: isDisplay ? 'showroom' : 'memo',
+    showroom_label: isDisplay ? SHOWROOM_SPECIAL_NAME : undefined
+  };
+
+  const carMetaByVin = new Map([[vin, { product: vehicle, model: model || vehicle, plate }]]);
+  const { deliveredItems, blocked } = markVinsDelivered([vin], {
+    assignedTo: auth.username,
+    warehouseDelivery: false,
+    showroomDisplay: isDisplay,
+    forceAssign: true,
+    carMetaByVin
+  });
+  if (blocked.length) {
+    return res.status(403).json({
+      error: `غير مسموح — الشاسيه مع موظف آخر (${blocked[0].assignedTo})`
+    });
+  }
+
+  // Historical vehicle entry (append — never overwrite prior VIN records)
+  if (!Array.isArray(store.manualVehicles)) store.manualVehicles = [];
+  const vehicleRecord = {
+    id: `man_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    vin,
+    product: vehicle,
+    model: model || vehicle,
+    plate,
+    branch,
+    branchEntryDate,
+    vehicleStatus,
+    manualEntry: true,
+    entryAgent: auth.username,
+    createdAt: new Date().toISOString()
+  };
+  store.manualVehicles.unshift(vehicleRecord);
+
+  const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const draft = {
+    id,
+    printedAt: new Date().toISOString(),
+    vin,
+    vins: [vin],
+    product: vehicle,
+    model: model || vehicle,
+    plate,
+    assignedTo: auth.username,
+    customerName: isDisplay ? SHOWROOM_SPECIAL_NAME : (draftPayload.company_rep || ''),
+    showroomDisplay: isDisplay,
+    manualEntry: true,
+    branchEntryDate,
+    vehicleStatus,
+    entryAgent: auth.username,
+    payload: draftPayload
+  };
+  attachDeliveryNoteMeta(draft, {
+    entryAgent: auth.username,
+    vehicleStatus,
+    branchEntryDate,
+    manualEntry: true,
+    deliveryNoteDate: today
+  });
+  vehicleRecord.deliveryNoteNumber = draft.deliveryNoteNumber;
+  vehicleRecord.draftId = draft.id;
+
+  store.drafts.unshift(draft);
+  if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
+
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    vehicle: vehicleRecord,
+    draftId: draft.id,
+    deliveryNoteNumber: draft.deliveryNoteNumber,
+    deliveryNoteDate: draft.deliveryNoteDate,
+    vehicleStatus,
+    branch,
+    branchEntryDate,
+    item: deliveredItems[0] || null,
+    draft
+  });
+});
+
+app.get('/api/delivery-manual/vehicles', (req, res) => {
+  const list = Array.isArray(store.manualVehicles) ? store.manualVehicles : [];
+  const vin = normVin(req.query.vin);
+  const filtered = vin ? list.filter((v) => normVin(v.vin) === vin) : list;
+  res.json({ vehicles: filtered, total: filtered.length });
+});
+
+app.get('/api/delivery-notes', (req, res) => {
+  const month = String(req.query.month || '').trim(); // YYYY-MM or "all"
+  const vin = normVin(req.query.vin);
+  let drafts = (store.drafts || []).slice();
+  if (vin) {
+    drafts = drafts.filter((d) => collectDraftVins(d.payload, [d.vin, ...(d.vins || [])]).includes(vin));
+  }
+  if (month && month !== 'all') {
+    drafts = drafts.filter((d) => draftMonthKey(d) === month);
+  }
+  const stats = computeDeliveryNoteStats(drafts);
+  const allStats = computeDeliveryNoteStats(store.drafts || []);
+  res.json({
+    drafts,
+    stats,
+    allStats,
+    months: Object.keys(allStats.byMonth || {}).sort().reverse()
+  });
+});
+
+app.get('/api/delivery-notes/vin/:vin', (req, res) => {
+  const vin = normVin(req.params.vin);
+  if (!vin) return res.status(400).json({ error: 'VIN مطلوب' });
+  const drafts = (store.drafts || []).filter((d) =>
+    collectDraftVins(d.payload, [d.vin, ...(d.vins || [])]).includes(vin)
+  );
+  drafts.sort((a, b) => {
+    const ta = a.printedAt ? new Date(a.printedAt).getTime() : 0;
+    const tb = b.printedAt ? new Date(b.printedAt).getTime() : 0;
+    return ta - tb;
+  });
+  res.json({
+    vin,
+    count: drafts.length,
+    drafts,
+    product: drafts[0]?.product || drafts[0]?.model || ''
+  });
+});
+
+app.get('/api/delivery-notes/:deliveryNoteNumber', (req, res) => {
+  const num = String(req.params.deliveryNoteNumber || '').trim();
+  if (!num) return res.status(400).json({ error: 'deliveryNoteNumber مطلوب' });
+  const draft = (store.drafts || []).find((d) =>
+    String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '') === num
+    || String(d.id || '') === num
+  );
+  if (!draft) return res.status(404).json({ error: 'مذكرة التسليم غير موجودة' });
+  res.json({ draft });
 });
 
 app.post('/api/delivery-note/generate', (req, res) => {

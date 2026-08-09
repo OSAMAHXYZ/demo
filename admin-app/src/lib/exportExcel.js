@@ -143,6 +143,11 @@ export function exportAllToExcel({ vehicles, queue, drafts, dashboard }) {
     const ownerName =
       p.warehouse?.owner_name || p.customer_name || p.company_rep || d.customerName || ''
     return {
+      'Delivery Note Number': d.deliveryNoteNumber || p.deliveryNoteNumber || '',
+      'Delivery Note Date': d.deliveryNoteDate || p.deliveryNoteDate || '',
+      'Branch Entry Date': d.branchEntryDate || p.branchEntryDate || '',
+      'Vehicle Status': d.vehicleStatus || p.vehicleStatus || '',
+      Agent: d.entryAgent || d.assignedTo || '',
       'Draft ID': d.id || '',
       'Printed At': d.printedAt || '',
       'Chassis / VIN': uniqueVins[0] || d.vin || '',

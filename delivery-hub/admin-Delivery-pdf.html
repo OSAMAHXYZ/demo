@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260802h">
-    <link rel="stylesheet" href="admin-saas.css?v=20260802i">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260809dn">
+    <link rel="stylesheet" href="admin-saas.css?v=20260809dn">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1302,6 +1302,213 @@
                 transform 0.2s ease;
         }
 
+        /* —— Delivery Management (DN) panel —— */
+        .dn-mgmt {
+            margin: 16px 0 20px;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            background:
+                linear-gradient(135deg, rgba(235, 10, 30, 0.12), transparent 42%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%),
+                #111827;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+        }
+        .dn-mgmt__head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 14px 20px;
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .dn-mgmt__eyebrow {
+            margin: 0 0 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #fca5a5;
+        }
+        .dn-mgmt__title {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #f8fafc;
+        }
+        .dn-mgmt__sub {
+            margin: 4px 0 0;
+            font-size: 0.82rem;
+            color: #94a3b8;
+        }
+        .dn-mgmt__month {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: min(240px, 100%);
+        }
+        .dn-mgmt__month span {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+        .dn-mgmt__month select {
+            width: 100%;
+            min-height: 42px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: #0f172a;
+            color: #f8fafc;
+            font: inherit;
+            font-weight: 600;
+        }
+        .dn-mgmt__month select:focus {
+            outline: none;
+            border-color: rgba(235, 10, 30, 0.55);
+            box-shadow: 0 0 0 3px rgba(235, 10, 30, 0.15);
+        }
+        .dn-mgmt__stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+            gap: 10px;
+            padding: 16px 20px 18px;
+        }
+        .dn-stat {
+            position: relative;
+            padding: 14px 12px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(15, 23, 42, 0.72);
+            overflow: hidden;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .dn-stat:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.16);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        }
+        .dn-stat::before {
+            content: '';
+            position: absolute;
+            inset-inline-start: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--dn-accent, #64748b);
+        }
+        .dn-stat span {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .dn-stat b {
+            display: block;
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+        }
+        .dn-stat--notes { --dn-accent: #EB0A1E; }
+        .dn-stat--vins { --dn-accent: #3b82f6; }
+        .dn-stat--display { --dn-accent: #a855f7; }
+        .dn-stat--delivery { --dn-accent: #22c55e; }
+        .dn-stat--wh { --dn-accent: #0ea5e9; }
+        .dn-stat--memo { --dn-accent: #f59e0b; }
+        .dn-stat--showroom { --dn-accent: #f472b6; }
+        .dn-stat--month { --dn-accent: #94a3b8; }
+
+        .dn-vin-card {
+            margin-bottom: 12px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), #0f172a;
+        }
+        .dn-vin-card__head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 8px 12px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .dn-vin-card__vin {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 800;
+            font-size: 0.95rem;
+            color: #e2e8f0;
+            letter-spacing: 0.02em;
+        }
+        .dn-vin-card__meta { color: #94a3b8; font-size: 0.82rem; }
+        .dn-vin-card__count {
+            margin-inline-start: auto;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            background: rgba(235, 10, 30, 0.15);
+            color: #fecaca;
+            border: 1px solid rgba(235, 10, 30, 0.28);
+        }
+        .dn-vin-note {
+            display: grid;
+            grid-template-columns: minmax(90px, auto) 1fr auto;
+            gap: 8px 12px;
+            align-items: center;
+            padding: 10px 12px;
+            margin: 6px 0;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(15, 23, 42, 0.55);
+            border-inline-start: 3px solid rgba(59, 130, 246, 0.55);
+        }
+        .dn-vin-note--display { border-inline-start-color: rgba(168, 85, 247, 0.7); }
+        .dn-vin-note__dn {
+            font-weight: 800;
+            font-size: 0.85rem;
+            color: #93c5fd;
+            font-variant-numeric: tabular-nums;
+        }
+        .dn-vin-note__info {
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 10px;
+        }
+        .dn-vin-note__info em {
+            font-style: normal;
+            color: #64748b;
+        }
+        .pdf-vin-chip[data-vin-history] {
+            cursor: pointer;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            background: rgba(59, 130, 246, 0.12);
+            color: #bfdbfe;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .pdf-vin-chip[data-vin-history]:hover {
+            background: rgba(59, 130, 246, 0.22);
+            border-color: rgba(59, 130, 246, 0.55);
+        }
+
+        @media (max-width: 700px) {
+            .dn-vin-note {
+                grid-template-columns: 1fr;
+            }
+            .dn-vin-card__count { margin-inline-start: 0; }
+        }
+
         .admin-gate-card {
             animation: adminRise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
             backdrop-filter: blur(16px);
@@ -1494,6 +1701,42 @@
             <div class="ft-chips" id="filterChipsBar" aria-label="Active filters"></div>
             <p class="ft-meta admin-filter-meta" id="trackFilterMeta">Showing all records</p>
             <p class="hub-meta" id="trackFilterHint" hidden></p>
+
+            <section class="dn-mgmt" id="dnMonthBar" aria-label="Delivery Management">
+                <div class="dn-mgmt__head">
+                    <div>
+                        <p class="dn-mgmt__eyebrow">Delivery Management</p>
+                        <h2 class="dn-mgmt__title">إدارة مذكرات التسليم</h2>
+                        <p class="dn-mgmt__sub">إحصاءات المذكرات حسب الشهر — العدّ بعدد المذكرات وليس بعدد الشاسيه الفريد</p>
+                    </div>
+                    <label class="dn-mgmt__month">
+                        <span>Month / الشهر</span>
+                        <select id="dnMonthFilter" aria-label="Month filter"></select>
+                    </label>
+                </div>
+                <div class="dn-mgmt__stats" id="dnStatsBar"></div>
+            </section>
+
+            <section class="hub-section hub-fold" id="vinHistorySection" data-fold>
+                <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                    <span class="hub-fold-title">سجل VIN المكرر — Duplicate VIN History</span>
+                    <span class="hub-fold-meta">
+                        <span class="hub-hint">عدة مذكرات لنفس الشاسيه</span>
+                        <span class="hub-fold-count" id="vinHistoryFoldCount" data-empty="1"></span>
+                        <span class="hub-fold-chevron" aria-hidden="true"></span>
+                    </span>
+                </button>
+                <div class="hub-fold-body">
+                    <div class="hub-fold-body-inner">
+                        <div class="hub-fold-content">
+                            <div class="pdf-browser-search" style="margin-bottom:12px;max-width:360px">
+                                <input type="search" id="vinHistorySearch" class="hub-input" placeholder="بحث VIN لعرض السجل الكامل…" autocomplete="off">
+                            </div>
+                            <div id="vinHistoryPanel" class="hub-meta">لا توجد بيانات</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <div class="ft-hidden-natives" aria-hidden="true">
                 <select id="trackDateType">
@@ -1846,6 +2089,8 @@
                                 <option value="memo">مذكرة ترحيل</option>
                                 <option value="warehouse">مستودع</option>
                                 <option value="showroom">عرض الصالة</option>
+                                <option value="display">عرض (Display)</option>
+                                <option value="delivery">تسليم (Delivery)</option>
                             </select>
                             <select id="pdfBrowserSort" class="ft-native" aria-label="ترتيب">
                                 <option value="date_desc">الأحدث أولاً</option>
@@ -1868,8 +2113,10 @@
                             <table class="hub-table" id="pdfBrowserTable">
                                 <thead>
                                     <tr>
+                                        <th>DN #</th>
                                         <th>التاريخ</th>
                                         <th>النوع</th>
+                                        <th>الحالة</th>
                                         <th>الشاسيه</th>
                                         <th>العدد</th>
                                         <th>Product</th>
@@ -2238,6 +2485,11 @@
                 const uniqueVins = [...new Set(vinList)];
                 const ownerName = p.warehouse?.owner_name || p.customer_name || p.company_rep || d.customerName || '';
                 return {
+                    'Delivery Note Number': draftDeliveryNoteNumber(d) || '',
+                    'Delivery Note Date': draftEventIso(d) || '',
+                    'Branch Entry Date': d.branchEntryDate || p.branchEntryDate || '',
+                    'Vehicle Status': draftVehicleStatus(d),
+                    Agent: d.entryAgent || d.assignedTo || '',
                     'Draft ID': d.id || '',
                     'Printed At': d.printedAt || '',
                     'Chassis / VIN': uniqueVins[0] || d.vin || '',
@@ -3160,6 +3412,8 @@
         }
 
         function draftEventIso(d) {
+            const dn = String(d?.deliveryNoteDate || (d?.payload && d.payload.deliveryNoteDate) || '').trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(dn)) return dn.slice(0, 10);
             if (d && d.printedAt) {
                 const dt = new Date(d.printedAt);
                 if (!Number.isNaN(dt.getTime())) {
@@ -3175,6 +3429,44 @@
             const fallback = String(p.transfer_date || p.doc_date || '').trim();
             if (/^\d{4}-\d{2}-\d{2}/.test(fallback)) return fallback.slice(0, 10);
             return '';
+        }
+
+        function draftMonthKey(d) {
+            const iso = draftEventIso(d);
+            return iso ? iso.slice(0, 7) : '';
+        }
+
+        function currentMonthKey() {
+            return getSaudiTodayIso().slice(0, 7);
+        }
+
+        function lastMonthKey() {
+            const [y, m] = currentMonthKey().split('-').map(Number);
+            return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+        }
+
+        function monthLabelAr(ym) {
+            if (!ym || ym === 'all') return 'كل الأشهر';
+            const [y, m] = String(ym).split('-');
+            const names = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+            const mi = Number(m);
+            return `${names[mi] || m} ${y}`;
+        }
+
+        /** Admin month filter: YYYY-MM | all | (default current) */
+        let adminMonthFilter = currentMonthKey();
+
+        function draftVehicleStatus(d) {
+            const raw = d?.vehicleStatus || (d?.payload && d.payload.vehicleStatus) || '';
+            const v = String(raw).trim().toLowerCase();
+            if (v === 'display' || v === 'عرض') return 'display';
+            if (v === 'delivery' || v === 'تسليم') return 'delivery';
+            if (typeof isShowroomAdminDraft === 'function' && isShowroomAdminDraft(d)) return 'display';
+            return 'delivery';
+        }
+
+        function draftDeliveryNoteNumber(d) {
+            return String(d?.deliveryNoteNumber || (d?.payload && d.payload.deliveryNoteNumber) || '').trim();
         }
 
         function normVinKey(vin) {
@@ -3302,6 +3594,9 @@
         function dateScopedDrafts() {
             const legacy = getXferDateFilter();
             let list = allDrafts || [];
+            if (adminMonthFilter && adminMonthFilter !== 'all') {
+                list = list.filter((d) => draftMonthKey(d) === adminMonthFilter);
+            }
             if (legacy) {
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
@@ -3310,7 +3605,6 @@
             if (!from && !to) return list;
 
             if (type === 'delivery_note') {
-                // Keep drafts issued in the selected range (same PDF for all its cars)
                 return list.filter((d) => {
                     const iso = draftEventIso(d);
                     if (iso && isoInRange(iso, from, to)) return true;
@@ -3320,7 +3614,6 @@
                 });
             }
 
-            // Invoice: drafts that include any car invoiced in range
             const vins = scopedVinSet();
             if (!vins || !vins.size) return [];
             return list.filter((d) => draftVinList(d).some((vin) => vins.has(vin)));
@@ -3532,6 +3825,9 @@
             applyDeliveryNoteDateBounds();
             updateXferDateLabel();
             pruneStaleUiFilters();
+            populateDnMonthFilter();
+            renderDnStatsBar();
+            renderVinHistoryPanel();
             const draftsBase = filteredDrafts();
             const queueBase = filteredQueue();
             if (selectedCompany && !draftsBase.some((d) => draftMatchesCompanyKey(d, selectedCompany))) {
@@ -3540,8 +3836,11 @@
                 if (panel) panel.classList.add('hidden');
             }
             const searchQ = String(uiFilters.search || '').trim();
+            const monthOk = (d) => !adminMonthFilter || adminMonthFilter === 'all' || draftMonthKey(d) === adminMonthFilter;
             const drafts = applyDisplayFilters(
-                searchQ ? (allDrafts || []).filter((d) => rowMatchesSearch(d, searchQ)) : filteredDrafts(),
+                searchQ
+                    ? (allDrafts || []).filter((d) => monthOk(d) && rowMatchesSearch(d, searchQ))
+                    : filteredDrafts(),
                 'draft'
             );
             const queue = applyDisplayFilters(
@@ -3574,6 +3873,164 @@
             renderFilterChips();
             syncDateControlsFromNatives();
             updateTrackFilterMeta();
+        }
+
+        function computeClientDnStats(drafts) {
+            const list = Array.isArray(drafts) ? drafts : [];
+            const vinSet = new Set();
+            const stats = {
+                deliveryNotes: list.length,
+                uniqueVins: 0,
+                display: 0,
+                delivery: 0,
+                warehouse: 0,
+                memo: 0,
+                showroom: 0
+            };
+            list.forEach((d) => {
+                draftVinList(d).forEach((v) => vinSet.add(v));
+                const st = draftVehicleStatus(d);
+                const isSh = isShowroomAdminDraft(d) || st === 'display';
+                const isWh = !isSh && isWarehouseAdminDraft(d);
+                if (st === 'display' || (isSh && st !== 'delivery')) stats.display += 1;
+                else stats.delivery += 1;
+                if (isSh) stats.showroom += 1;
+                else if (isWh) stats.warehouse += 1;
+                else stats.memo += 1;
+            });
+            stats.uniqueVins = vinSet.size;
+            const all = allDrafts || [];
+            stats.thisMonth = all.filter((d) => draftMonthKey(d) === currentMonthKey()).length;
+            stats.lastMonth = all.filter((d) => draftMonthKey(d) === lastMonthKey()).length;
+            return stats;
+        }
+
+        function populateDnMonthFilter() {
+            const sel = document.getElementById('dnMonthFilter');
+            if (!sel) return;
+            const months = new Set();
+            (allDrafts || []).forEach((d) => {
+                const mk = draftMonthKey(d);
+                if (mk) months.add(mk);
+            });
+            months.add(currentMonthKey());
+            months.add(lastMonthKey());
+            const sorted = [...months].sort().reverse();
+            const prev = adminMonthFilter;
+            sel.innerHTML = [
+                `<option value="${currentMonthKey()}">الشهر الحالي — ${monthLabelAr(currentMonthKey())}</option>`,
+                `<option value="${lastMonthKey()}">الشهر الماضي — ${monthLabelAr(lastMonthKey())}</option>`,
+                '<option value="all">كل الأشهر / All Months</option>',
+                ...sorted
+                    .filter((m) => m !== currentMonthKey() && m !== lastMonthKey())
+                    .map((m) => `<option value="${m}">${monthLabelAr(m)}</option>`)
+            ].join('');
+            if (![...sel.options].some((o) => o.value === prev)) {
+                adminMonthFilter = currentMonthKey();
+            } else {
+                adminMonthFilter = prev;
+            }
+            sel.value = adminMonthFilter;
+        }
+
+        function renderDnStatsBar() {
+            const host = document.getElementById('dnStatsBar');
+            if (!host) return;
+            const s = computeClientDnStats(filteredDrafts());
+            const cards = [
+                { cls: 'dn-stat--notes', label: 'Delivery Notes', value: s.deliveryNotes },
+                { cls: 'dn-stat--vins', label: 'Unique VINs', value: s.uniqueVins },
+                { cls: 'dn-stat--display', label: 'Display', value: s.display },
+                { cls: 'dn-stat--delivery', label: 'Delivery', value: s.delivery },
+                { cls: 'dn-stat--wh', label: 'Warehouse', value: s.warehouse },
+                { cls: 'dn-stat--memo', label: 'Memo', value: s.memo },
+                { cls: 'dn-stat--showroom', label: 'Showroom', value: s.showroom },
+                { cls: 'dn-stat--month', label: 'This Month', value: s.thisMonth },
+                { cls: 'dn-stat--month', label: 'Last Month', value: s.lastMonth }
+            ];
+            host.innerHTML = cards.map((c) => `
+                <article class="dn-stat ${c.cls}">
+                    <span>${c.label}</span>
+                    <b>${c.value}</b>
+                </article>
+            `).join('');
+        }
+
+        function renderVinHistoryPanel() {
+            const panel = document.getElementById('vinHistoryPanel');
+            if (!panel) return;
+            const q = String(document.getElementById('vinHistorySearch')?.value || '').trim().toUpperCase();
+            const byVin = new Map();
+            filteredDrafts().forEach((d) => {
+                draftVinList(d).forEach((vin) => {
+                    if (!byVin.has(vin)) byVin.set(vin, []);
+                    byVin.get(vin).push(d);
+                });
+            });
+            let entries;
+            if (q) {
+                entries = [...byVin.entries()].filter(([vin]) => vin.includes(q));
+            } else {
+                entries = [...byVin.entries()].filter(([, drafts]) => drafts.length > 1);
+            }
+            entries.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+            setFoldCount('vinHistoryFoldCount', entries.length);
+            if (!entries.length) {
+                panel.innerHTML = q
+                    ? '<p class="hub-empty">لا توجد مذكرات لهذا VIN في الشهر المحدد</p>'
+                    : '<p class="hub-empty">لا توجد شاسيه بمذكرات متعددة في هذا الشهر</p>';
+                return;
+            }
+            panel.innerHTML = entries.slice(0, 80).map(([vin, drafts]) => {
+                const sorted = drafts.slice().sort((a, b) => {
+                    const ta = a.printedAt ? new Date(a.printedAt).getTime() : 0;
+                    const tb = b.printedAt ? new Date(b.printedAt).getTime() : 0;
+                    return ta - tb;
+                });
+                const product = sorted[0]?.product || sorted[0]?.model || '—';
+                const rows = sorted.map((d) => {
+                    const dn = draftDeliveryNoteNumber(d) || d.id || '—';
+                    const isDisplay = draftVehicleStatus(d) === 'display';
+                    const st = isDisplay ? 'عرض' : 'تسليم';
+                    const br = draftBranchLabel(d) || '—';
+                    const dt = draftEventIso(d) || '—';
+                    return `<div class="dn-vin-note${isDisplay ? ' dn-vin-note--display' : ''}">
+                        <div class="dn-vin-note__dn">${escapeHtml(dn)}</div>
+                        <div class="dn-vin-note__info">
+                            <span>${escapeHtml(dt)}</span>
+                            <em>·</em>
+                            <span>${escapeHtml(st)}</span>
+                            <em>·</em>
+                            <span>${escapeHtml(br)}</span>
+                        </div>
+                        ${d.id
+                            ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">PDF</button>`
+                            : '<span></span>'}
+                    </div>`;
+                }).join('');
+                return `<article class="dn-vin-card">
+                    <div class="dn-vin-card__head">
+                        <span class="dn-vin-card__vin">${escapeHtml(vin)}</span>
+                        <span class="dn-vin-card__meta">${escapeHtml(product)}</span>
+                        <span class="dn-vin-card__count">${sorted.length} مذكرات</span>
+                    </div>
+                    ${rows}
+                </article>`;
+            }).join('');
+            bindDraftActionButtons(panel);
+        }
+
+        function initDnMonthFilter() {
+            const sel = document.getElementById('dnMonthFilter');
+            sel?.addEventListener('change', () => {
+                adminMonthFilter = sel.value || currentMonthKey();
+                refreshTransferDashboard();
+            });
+            let t = null;
+            document.getElementById('vinHistorySearch')?.addEventListener('input', () => {
+                clearTimeout(t);
+                t = setTimeout(() => renderVinHistoryPanel(), 160);
+            });
         }
 
         function applyTrackFilter() {
@@ -4246,6 +4703,7 @@
             const p = d.payload || {};
             if (p.showroom_display === true || p.showroom_group === true) return true;
             if (p.deliveryMode === 'showroom') return true;
+            if (String(d.vehicleStatus || p.vehicleStatus || '').toLowerCase() === 'display') return true;
             if (String(d.assignedTo || '').trim() === SHOWROOM_AGENT && p.showroom_label) return true;
             return false;
         }
@@ -4874,10 +5332,17 @@
                 rows = rows.filter(isWarehouseAdminDraft);
             } else if (pdfBrowserState.type === 'showroom') {
                 rows = rows.filter(isShowroomAdminDraft);
+            } else if (pdfBrowserState.type === 'display') {
+                rows = rows.filter((d) => draftVehicleStatus(d) === 'display');
+            } else if (pdfBrowserState.type === 'delivery') {
+                rows = rows.filter((d) => draftVehicleStatus(d) === 'delivery');
             }
             const q = String(pdfBrowserState.q || '').trim().toUpperCase();
             if (q) {
-                rows = rows.filter((d) => draftSearchBlob(d).includes(q));
+                rows = rows.filter((d) => {
+                    const blob = `${draftSearchBlob(d)} ${draftDeliveryNoteNumber(d)}`;
+                    return blob.includes(q);
+                });
             }
             const sort = pdfBrowserState.sort || 'date_desc';
             rows.sort((a, b) => {
@@ -4934,27 +5399,34 @@
             const tbody = document.getElementById('draftsBody');
             if (!tbody) return;
             if (!pageRows.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد مسودات PDF — اطبع مذكرة أو استورد أرشيف</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="hub-empty">لا توجد مسودات PDF — اطبع مذكرة أو استورد أرشيف</td></tr>';
                 return;
             }
             tbody.innerHTML = pageRows.map((d) => {
-                const when = d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—';
+                const when = draftEventIso(d) || (d.printedAt ? new Date(d.printedAt).toLocaleString('ar-SA') : '—');
                 const p = d.payload || {};
                 const vins = draftVinList(d);
                 const isWh = isWarehouseAdminDraft(d);
                 const isSh = isShowroomAdminDraft(d);
+                const vStatus = draftVehicleStatus(d);
+                const dn = draftDeliveryNoteNumber(d) || '—';
                 const canExport = Boolean(d.id && d.payload);
                 const vinLabel = vins.length
-                    ? vins.map((v) => `<span class="pdf-vin-chip">${escapeHtml(v)}</span>`).join('')
+                    ? vins.map((v) => `<button type="button" class="pdf-vin-chip" data-vin-history="${escapeHtml(v)}" title="عرض سجل VIN">${escapeHtml(v)}</button>`).join('')
                     : escapeHtml(d.vin || '—');
                 const typeBadge = isSh
                     ? '<span class="pdf-type-badge pdf-type-badge--showroom">عرض الصالة</span>'
                     : isWh
                         ? '<span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
                         : '<span class="pdf-type-badge pdf-type-badge--memo">مذكرة</span>';
+                const statusBadge = vStatus === 'display'
+                    ? '<span class="pdf-type-badge pdf-type-badge--showroom">عرض</span>'
+                    : '<span class="pdf-type-badge pdf-type-badge--memo">تسليم</span>';
                 return `<tr>
-                    <td>${when}</td>
+                    <td><strong>${escapeHtml(dn)}</strong></td>
+                    <td>${escapeHtml(when)}</td>
                     <td>${typeBadge}</td>
+                    <td>${statusBadge}</td>
                     <td class="hub-vin pdf-vin-cell">${vinLabel}</td>
                     <td><strong>${vins.length || 1}</strong></td>
                     <td>${escapeHtml(d.product || d.model || '—')}</td>
@@ -4974,6 +5446,16 @@
                 </tr>`;
             }).join('');
             bindDraftActionButtons(tbody);
+            tbody.querySelectorAll('[data-vin-history]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const vin = btn.getAttribute('data-vin-history');
+                    const search = document.getElementById('vinHistorySearch');
+                    if (search) search.value = vin || '';
+                    openFold('vinHistorySection');
+                    renderVinHistoryPanel();
+                    document.getElementById('vinHistorySection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
         }
 
         function renderDraftsTable(drafts) {
@@ -5120,6 +5602,7 @@
 
         initPremiumFilterToolbar();
         initPdfBrowserControls();
+        initDnMonthFilter();
     </script>
     <script src="delivery-hub-live.js"></script>
 </body>

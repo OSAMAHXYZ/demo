@@ -1048,9 +1048,44 @@
             }
             body.print-carbonless #mainApp,
             body.print-carbonless #gateLogin,
-            body.print-carbonless #agentWorkspace {
+            body.print-carbonless #agentWorkspace,
+            body.print-carbonless #manualEntryApp {
                 display: none !important;
             }
+        }
+
+        /* Yassin manual vehicle entry */
+        #manualEntryApp { max-width: 560px; margin: 0 auto; padding: 0 8px 40px; }
+        #manualEntryApp.hidden { display: none !important; }
+        .manual-card {
+            background: #fff; border: 1px solid var(--tot-line); border-radius: 16px;
+            padding: 24px; box-shadow: 0 4px 16px rgba(0,0,0,.04);
+        }
+        .manual-card h1 { font-size: 1.35rem; font-weight: 800; margin-bottom: 6px; text-align: center; }
+        .manual-card .manual-sub { color: var(--tot-muted); text-align: center; margin-bottom: 20px; font-size: .9rem; }
+        .manual-card .field { margin-bottom: 14px; }
+        .manual-status-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
+        .manual-status-row label {
+            display: inline-flex; align-items: center; gap: 8px; margin: 0;
+            padding: 10px 16px; border: 1px solid var(--tot-line); border-radius: 12px;
+            cursor: pointer; font-weight: 700; color: var(--tot-ink); font-size: .9rem;
+        }
+        .manual-status-row input { width: auto; }
+        .manual-status-row label:has(input:checked) {
+            border-color: var(--tot-primary); background: rgba(235,10,30,.06);
+        }
+        .manual-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+        .manual-success {
+            margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+            background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
+            font-weight: 600; display: none;
+        }
+        .manual-success.show { display: block; }
+        .branch-locked-hint {
+            font-size: .75rem; color: var(--tot-muted); margin-top: 4px;
+        }
+        input.branch-auto-locked {
+            background: #f3f4f6 !important; cursor: not-allowed;
         }
     </style>
 </head>
@@ -1132,6 +1167,70 @@
                 </div>
             </div>
         </aside>
+    </div>
+
+    <div id="manualEntryApp" class="hidden">
+        <nav class="page-nav no-print">
+            <a href="../simple-app.html" class="page-nav-brand">
+                <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+                <span>إضافة مركبة — ياسين</span>
+            </a>
+            <div style="display:flex;gap:8px;align-items:center">
+                <strong id="manualLoggedAs" style="font-size:.85rem"></strong>
+                <button type="button" class="nav-btn" id="btnManualLogout">خروج</button>
+            </div>
+        </nav>
+        <div class="manual-card">
+            <h1>إضافة مركبة جديدة</h1>
+            <p class="manual-sub">إدخال يدوي — يُنشئ مذكرة تسليم برقم فريد (يُسمح بتكرار الشاسيه)</p>
+            <form id="manualVehicleForm" autocomplete="off">
+                <div class="field">
+                    <label for="manual_vehicle">Vehicle / Product</label>
+                    <input id="manual_vehicle" name="vehicle" type="text" required placeholder="مثلاً Camry">
+                </div>
+                <div class="field">
+                    <label for="manual_vin">VIN / Chassis Number</label>
+                    <input id="manual_vin" name="vin" type="text" required placeholder="رقم الشاسيه" spellcheck="false">
+                </div>
+                <div class="field">
+                    <label for="manual_model">Model</label>
+                    <input id="manual_model" name="model" type="text" placeholder="الموديل (اختياري)">
+                </div>
+                <div class="field">
+                    <label for="manual_plate">Plate Number</label>
+                    <input id="manual_plate" name="plate" type="text" placeholder="إن وُجد">
+                </div>
+                <div class="field">
+                    <label for="manual_branch">Branch</label>
+                    <div class="searchable-select">
+                        <input id="manual_branch" name="branch" type="text" required autocomplete="off" placeholder="اختر الفرع…" spellcheck="false" data-list-only="1">
+                        <div class="searchable-select-menu" id="manual_branch_menu" role="listbox"></div>
+                    </div>
+                    <p class="searchable-select-hint">اختر من قائمة الفروع</p>
+                </div>
+                <div class="field">
+                    <label for="manual_entry_date">Entry Date — تاريخ دخول الفرع</label>
+                    <input id="manual_entry_date" name="branchEntryDate" type="date" required>
+                </div>
+                <div class="field">
+                    <label>Status — الحالة</label>
+                    <div class="manual-status-row">
+                        <label><input type="radio" name="vehicleStatus" value="display" required> عرض</label>
+                        <label><input type="radio" name="vehicleStatus" value="delivery"> تسليم</label>
+                    </div>
+                </div>
+                <div class="manual-actions">
+                    <button type="submit" class="btn btn-primary" id="btnManualSubmit">Generate Delivery Note</button>
+                </div>
+            </form>
+            <div class="manual-success" id="manualSuccess"></div>
+            <div class="manual-actions" id="manualAfterActions" hidden>
+                <button type="button" class="btn btn-primary" id="btnManualPrint">طباعة / Print</button>
+                <button type="button" class="btn" id="btnManualView">عرض المذكرة / View</button>
+                <button type="button" class="btn" id="btnManualAnother">مركبة أخرى</button>
+            </div>
+            <p class="ws-toast" id="manualFormStatus" style="margin-top:12px"></p>
+        </div>
     </div>
 
     <div id="mainApp" class="hidden">
@@ -1350,7 +1449,13 @@
         let warehousePrintMode = false;
         const SHOWROOM_AGENT = 'ياسين';
         const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
+        const AGENT_AUTO_BRANCH = Object.freeze({
+            الفاضل: 'جدة',
+            البراء: 'الرياض'
+        });
         let showroomMode = false;
+        let lastManualDraftId = '';
+        let lastManualDnNumber = '';
         const carsBody = document.getElementById('carsBody');
         const statusEl = document.getElementById('status');
         const form = document.getElementById('deliveryForm');
@@ -1489,77 +1594,145 @@
             }
         }
 
-        function openShowroomForm() {
-            applyShowroomUi(true);
-            clearClaimedVin();
-            showView('app');
-            clearDeliveryForm();
-            applyShowroomUi(true);
-            setStatus('ياسين — سيارات عرض الصالة: اكتب البيانات يدوياً ثم اضغط حفظ', 'ok');
+        function agentAutoBranchName(agent = getAgent()) {
+            return AGENT_AUTO_BRANCH[String(agent?.username || '').trim()] || '';
         }
 
-        async function doShowroomSave() {
+        function applyAgentAutoBranch() {
+            const branch = agentAutoBranchName();
+            const input = document.getElementById('branch_to');
+            if (!input) return;
+            const hintId = 'branchAutoHint';
+            let hint = document.getElementById(hintId);
+            if (!branch) {
+                input.readOnly = false;
+                input.classList.remove('branch-auto-locked');
+                if (hint) hint.remove();
+                return;
+            }
+            if (typeof searchableSelectOptions !== 'undefined' && Array.isArray(searchableSelectOptions.branch_to)) {
+                if (!searchableSelectOptions.branch_to.some((x) => String(x).trim() === branch)) {
+                    searchableSelectOptions.branch_to.push(branch);
+                }
+            }
+            input.value = branch;
+            input.readOnly = true;
+            input.classList.add('branch-auto-locked');
+            input.classList.remove('is-invalid');
+            input.setCustomValidity('');
+            if (!hint) {
+                hint = document.createElement('p');
+                hint.id = hintId;
+                hint.className = 'branch-locked-hint no-print';
+                input.closest('div')?.parentElement?.appendChild(hint);
+            }
+            hint.textContent = `الفرع تلقائي لهذا المستخدم: ${branch}`;
+            updatePreview();
+        }
+
+        function openShowroomForm() {
+            // Legacy name — Yassin now uses dedicated manual entry page
+            openManualEntry();
+        }
+
+        function openManualEntry() {
+            applyShowroomUi(false);
+            clearClaimedVin();
+            showView('manual');
             const agent = getAgent();
-            if (!isShowroomAgent(agent)) return false;
-            if (!agent.username || !agent.password) {
-                setStatus('يجب تسجيل الدخول أولاً', 'err');
-                return false;
+            const as = document.getElementById('manualLoggedAs');
+            if (as) as.textContent = agent?.username || '';
+            const formEl = document.getElementById('manualVehicleForm');
+            formEl?.reset();
+            const today = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Riyadh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+            const entry = document.getElementById('manual_entry_date');
+            if (entry) entry.value = today;
+            lastManualDraftId = '';
+            lastManualDnNumber = '';
+            const success = document.getElementById('manualSuccess');
+            if (success) {
+                success.classList.remove('show');
+                success.textContent = '';
             }
-            // Company/branch required but free-text OK
-            const company = String(document.getElementById('company_rep')?.value || '').trim();
-            const branch = String(document.getElementById('branch_to')?.value || '').trim();
-            if (!company || !branch) {
-                setStatus('أدخل اسم الشركة والفرع', 'err');
-                document.getElementById(!company ? 'company_rep' : 'branch_to')?.focus();
-                return false;
+            document.getElementById('manualAfterActions').hidden = true;
+            const st = document.getElementById('manualFormStatus');
+            if (st) {
+                st.textContent = '';
+                st.className = 'ws-toast';
             }
-            const vins = getFormChassisList();
-            if (!vins.length) {
-                setStatus('أدخل رقم شاسيه واحد على الأقل', 'err');
-                form.querySelector('[name="car_chassis_0"]')?.focus();
-                return false;
+        }
+
+        async function submitManualVehicle(ev) {
+            if (ev) ev.preventDefault();
+            const agent = getAgent();
+            const statusEl = document.getElementById('manualFormStatus');
+            const setManualStatus = (msg, type) => {
+                if (!statusEl) return;
+                statusEl.textContent = msg || '';
+                statusEl.className = 'ws-toast' + (type ? ` ${type}` : '');
+            };
+            if (!isShowroomAgent(agent) || !agent.password) {
+                setManualStatus('يجب تسجيل الدخول كياسين', 'err');
+                return;
             }
-            const payload = collectPayload();
-            payload.showroom_display = true;
-            payload.showroom_group = true;
-            payload.deliveryMode = 'showroom';
-            payload.showroom_label = SHOWROOM_SPECIAL_NAME;
-            setStatus('جاري الحفظ…', 'ok');
-            const printBtn = document.getElementById('btnPrint');
-            const printBtn2 = document.getElementById('btnPrint2');
-            if (printBtn) printBtn.disabled = true;
-            if (printBtn2) printBtn2.disabled = true;
+            const vehicle = String(document.getElementById('manual_vehicle')?.value || '').trim();
+            const vin = String(document.getElementById('manual_vin')?.value || '').trim().toUpperCase().replace(/\s+/g, '');
+            const model = String(document.getElementById('manual_model')?.value || '').trim();
+            const plate = String(document.getElementById('manual_plate')?.value || '').trim();
+            const branch = String(document.getElementById('manual_branch')?.value || '').trim();
+            const branchEntryDate = String(document.getElementById('manual_entry_date')?.value || '').trim();
+            const statusInput = document.querySelector('input[name="vehicleStatus"]:checked');
+            const vehicleStatus = statusInput ? statusInput.value : '';
+            if (!vehicle || !vin || !branch || !branchEntryDate || !vehicleStatus) {
+                setManualStatus('أكمل الحقول المطلوبة: Vehicle، VIN، Branch، Entry Date، Status', 'err');
+                return;
+            }
+            const btn = document.getElementById('btnManualSubmit');
+            if (btn) btn.disabled = true;
+            setManualStatus('جاري إنشاء مذكرة التسليم…', 'ok');
             try {
-                const res = await fetch('/api/delivery-coordinator/complete-print', {
+                const res = await fetch('/api/delivery-manual/vehicles', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         username: agent.username,
                         password: agent.password,
-                        vin: vins[0],
-                        vins,
-                        showroomDisplay: true,
-                        draft: payload
+                        vehicle,
+                        vin,
+                        model,
+                        plate,
+                        branch,
+                        branchEntryDate,
+                        vehicleStatus
                     })
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(data.error || 'فشل الحفظ');
-                const n = data.deliveredCount || vins.length;
-                setStatus(
-                    `تم الحفظ · ${n} سيارة تحت «${SHOWROOM_SPECIAL_NAME}»${data.draftId ? ` · ${data.draftId}` : ''}`,
-                    'ok'
-                );
-                clearClaimedVin();
-                clearDeliveryForm();
-                applyShowroomUi(true);
-                return true;
+                lastManualDraftId = data.draftId || '';
+                lastManualDnNumber = data.deliveryNoteNumber || '';
+                const success = document.getElementById('manualSuccess');
+                if (success) {
+                    success.textContent = `Vehicle created successfully · Delivery Note: ${lastManualDnNumber || data.draftId}`;
+                    success.classList.add('show');
+                }
+                document.getElementById('manualAfterActions').hidden = false;
+                setManualStatus('تم الحفظ بنجاح', 'ok');
             } catch (err) {
-                setStatus(err.message || 'فشل الحفظ', 'err');
-                return false;
+                setManualStatus(err.message || 'فشل الحفظ', 'err');
             } finally {
-                if (printBtn) printBtn.disabled = false;
-                if (printBtn2) printBtn2.disabled = false;
+                if (btn) btn.disabled = false;
             }
+        }
+
+        async function doShowroomSave() {
+            // Kept for any legacy hooks — redirect to manual entry
+            openManualEntry();
+            return false;
         }
 
         function countFilledChassis() {
@@ -1631,6 +1804,7 @@
                 remarks: fd.get(`car_remarks_${i}`)?.trim() || ''
             }));
             const filled = countFilledChassis();
+            const autoBranch = agentAutoBranchName();
             return {
                 doc_date: fd.get('doc_date'),
                 invoice_number: fd.get('invoice_number')?.trim(),
@@ -1643,7 +1817,9 @@
                 day_name: fd.get('day_name')?.trim(),
                 trailer_number: fd.get('trailer_number')?.trim(),
                 car_count: String(filled || fd.get('car_count')?.trim() || ''),
-                branch_to: fd.get('branch_to')?.trim(),
+                branch_to: warehousePrintMode
+                    ? (fd.get('branch_to')?.trim() || '')
+                    : (autoBranch || fd.get('branch_to')?.trim()),
                 attachments: fd.get('attachments')?.trim(),
                 warehouse: {
                     branch_name: fd.get('wh_branch_name')?.trim(),
@@ -2183,6 +2359,7 @@
             syncCarCount();
             setWarehousePrintMode(false);
             setStatus('');
+            applyAgentAutoBranch();
         }
 
         function setWarehousePrintMode(enabled) {
@@ -2228,6 +2405,8 @@
             document.getElementById('gateLogin').classList.toggle('hidden', which !== 'login');
             document.getElementById('agentWorkspace').classList.toggle('hidden', which !== 'workspace');
             document.getElementById('mainApp').classList.toggle('hidden', which !== 'app');
+            const manual = document.getElementById('manualEntryApp');
+            if (manual) manual.classList.toggle('hidden', which !== 'manual');
         }
 
         function fleetCardHtml(item, kind) {
@@ -2454,6 +2633,7 @@
                     companyEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             }
+            applyAgentAutoBranch();
             updatePreview();
         }
 
@@ -2586,12 +2766,13 @@
             showView('app');
             clearDeliveryForm();
             prefillClaimedVin(item);
+            applyAgentAutoBranch();
             // company / warehouse applied by startDeliveryNote → applyCoordinatorPlan
         }
 
         function openWorkspace() {
             if (isShowroomAgent()) {
-                openShowroomForm();
+                openManualEntry();
                 return;
             }
             applyShowroomUi(false);
@@ -3011,9 +3192,34 @@
             document.getElementById('loginPass').value = '';
         });
 
+        document.getElementById('btnManualLogout')?.addEventListener('click', () => {
+            clearAgent();
+            showView('login');
+            document.getElementById('loginPass').value = '';
+        });
+
+        document.getElementById('manualVehicleForm')?.addEventListener('submit', submitManualVehicle);
+        document.getElementById('btnManualAnother')?.addEventListener('click', () => openManualEntry());
+        document.getElementById('btnManualView')?.addEventListener('click', () => {
+            if (!lastManualDraftId) return;
+            window.open(
+                `Delivery_pdf.html?draft=${encodeURIComponent(lastManualDraftId)}&adminExport=1`,
+                '_blank',
+                'noopener'
+            );
+        });
+        document.getElementById('btnManualPrint')?.addEventListener('click', () => {
+            if (!lastManualDraftId) return;
+            window.open(
+                `Delivery_pdf.html?draft=${encodeURIComponent(lastManualDraftId)}&adminExport=1&autoprint=1`,
+                '_blank',
+                'noopener'
+            );
+        });
+
         document.getElementById('btnBackWorkspace').addEventListener('click', () => {
             if (isShowroomAgent()) {
-                openShowroomForm();
+                openManualEntry();
                 return;
             }
             setWarehousePrintMode(false);
@@ -3027,7 +3233,8 @@
 
         const searchableSelectOptions = {
             branch_to: [...MUTHAKARA_BRANCH_OPTIONS],
-            company_rep: [...MUTHAKARA_CUSTOMER_OPTIONS]
+            company_rep: [...MUTHAKARA_CUSTOMER_OPTIONS],
+            manual_branch: [...MUTHAKARA_BRANCH_OPTIONS]
         };
 
         async function loadDeliveryOptions() {
@@ -3037,11 +3244,20 @@
                 if (!res.ok) return;
                 if (Array.isArray(data.cities) && data.cities.length) {
                     searchableSelectOptions.branch_to = [...data.cities];
+                    searchableSelectOptions.manual_branch = [...data.cities];
                 }
                 if (Array.isArray(data.companies) && data.companies.length) {
                     searchableSelectOptions.company_rep = [...data.companies];
                 }
                 ensureWarehouseCompanyOption();
+                ['جدة', 'الرياض'].forEach((b) => {
+                    if (!searchableSelectOptions.branch_to.some((x) => String(x).trim() === b)) {
+                        searchableSelectOptions.branch_to.push(b);
+                    }
+                    if (!searchableSelectOptions.manual_branch.some((x) => String(x).trim() === b)) {
+                        searchableSelectOptions.manual_branch.push(b);
+                    }
+                });
             } catch (_) {
                 /* keep static defaults */
             }
@@ -3085,6 +3301,8 @@
                 companyInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
             if (branchInput) {
+                branchInput.readOnly = false;
+                branchInput.classList.remove('branch-auto-locked');
                 branchInput.value = WAREHOUSE_BRANCH;
                 branchInput.classList.remove('is-invalid');
                 branchInput.setCustomValidity('');
@@ -3178,6 +3396,10 @@
         function enforceListOnlyValue(fieldId, { clearIfInvalid = true } = {}) {
             const input = document.getElementById(fieldId);
             if (!input) return false;
+            if (fieldId === 'branch_to' && input.classList.contains('branch-auto-locked') && input.value.trim()) {
+                setSearchableValidity(input, true, '');
+                return true;
+            }
             const v = String(input.value || '').trim();
             if (!v) {
                 setSearchableValidity(input, false, 'مطلوب — اختر من القائمة');
@@ -3330,6 +3552,7 @@
 
         initSearchableSelect('branch_to');
         initSearchableSelect('company_rep');
+        initSearchableSelect('manual_branch');
         ensureWarehouseCompanyOption();
         loadDeliveryOptions().finally(() => initGate());
     </script>
