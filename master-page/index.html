@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Master Page — Vehicle Delivery Inspection Checklist viewer (DOCX, PDF, PNG)" />
-  <title>Master Page — قائمة فحص التسليم</title>
+  <meta name="description" content="Master Page — standalone document viewer for DOCX, PDF, and PNG" />
+  <title>Master Page</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -19,7 +19,7 @@
         <div class="brand-mark" aria-hidden="true">MP</div>
         <div>
           <h1>Master Page</h1>
-          <p>قائمة فحص السيارات وقت التسليم</p>
+          <p>عارض ملفات مستقل · Standalone viewer</p>
         </div>
       </div>
 
@@ -28,29 +28,29 @@
         <button type="button" class="nav-btn is-active" data-section="A">
           <span class="nav-badge">A</span>
           <span class="nav-meta">
-            <strong>قالب Word</strong>
-            <span>delivery_check_note.docx</span>
+            <strong>ملف Word</strong>
+            <span>section-a.docx</span>
           </span>
         </button>
         <button type="button" class="nav-btn" data-section="B">
           <span class="nav-badge">B</span>
           <span class="nav-meta">
-            <strong>قالب PDF</strong>
-            <span>delivery_check_note.pdf</span>
+            <strong>ملف PDF</strong>
+            <span>section-b.pdf</span>
           </span>
         </button>
         <button type="button" class="nav-btn" data-section="C">
           <span class="nav-badge">C</span>
           <span class="nav-meta">
-            <strong>صورة المعاينة</strong>
-            <span>delivery-check-note-form.png</span>
+            <strong>صورة PNG</strong>
+            <span>section-c.png</span>
           </span>
         </button>
       </nav>
 
       <div class="sidebar-foot">
-        الملفات مخزّنة في<br />
-        <code>master-page/assets/</code><br />
+        تطبيق مستقل بالكامل<br />
+        الملفات في <code>assets/</code><br />
         اختصارات: 1 / 2 / 3
       </div>
     </aside>
@@ -60,13 +60,13 @@
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <button type="button" class="menu-toggle" id="menu-toggle" aria-label="فتح القائمة">☰</button>
           <div class="topbar-title">
-            <h2 id="top-title">القسم أ — قالب Word</h2>
-            <p id="top-sub">Section A · delivery_check_note.docx</p>
+            <h2 id="top-title">القسم أ — مستند Word</h2>
+            <p id="top-sub">Section A · section-a.docx</p>
           </div>
         </div>
         <div class="topbar-actions">
           <button type="button" class="btn" id="reload-btn">إعادة تحميل</button>
-          <a class="btn btn-primary" id="download-btn" href="assets/delivery_check_note.docx" download>تحميل الملف</a>
+          <a class="btn btn-primary" id="download-btn" href="assets/section-a.docx" download>تحميل الملف</a>
         </div>
       </header>
 
@@ -74,8 +74,8 @@
         <section class="overview" aria-label="ملخص الملفات الثلاثة">
           <article class="stat-card is-active" data-section="A" tabindex="0">
             <span class="stat-kicker">Upload File 1 · Section A</span>
-            <h3>Word Template</h3>
-            <p>DOCX قابل للتحرير — صورة مضمّنة من المسح الضوئي.</p>
+            <h3>Word Document</h3>
+            <p>معاينة محتوى DOCX المضمّن مع بيانات الملف.</p>
             <div class="chip-row">
               <span class="chip">DOCX</span>
               <span class="chip">Loading…</span>
@@ -83,8 +83,8 @@
           </article>
           <article class="stat-card" data-section="B" tabindex="0">
             <span class="stat-kicker">Upload File 2 · Section B</span>
-            <h3>PDF Template</h3>
-            <p>القالب الأساسي للطباعة والتنزيل من الـ API.</p>
+            <h3>PDF Document</h3>
+            <p>عرض PDF داخل الصفحة مع إمكانية التحميل.</p>
             <div class="chip-row">
               <span class="chip">PDF</span>
               <span class="chip">Loading…</span>
@@ -92,8 +92,8 @@
           </article>
           <article class="stat-card" data-section="C" tabindex="0">
             <span class="stat-kicker">Upload File 3 · Section C</span>
-            <h3>Preview Image</h3>
-            <p>PNG عالي الدقة لمعاينة الواجهة وتراكب الحقول.</p>
+            <h3>PNG Image</h3>
+            <p>عرض الصورة وهيكل الحقول المستخرج منها.</p>
             <div class="chip-row">
               <span class="chip">PNG</span>
               <span class="chip">Loading…</span>
@@ -101,27 +101,26 @@
           </article>
         </section>
 
-        <section class="relation-card" aria-label="علاقة الملفات">
-          <h4>كيف ترتبط الملفات؟</h4>
+        <section class="relation-card" aria-label="عن التطبيق">
+          <h4>تطبيق مستقل</h4>
           <div class="relation-flow">
-            <span class="node">A · DOCX template</span>
-            <span class="arrow">→</span>
-            <span class="node">B · PDF print template</span>
-            <span class="arrow">→</span>
-            <span class="node">C · PNG screen preview</span>
+            <span class="node">A · DOCX</span>
+            <span class="arrow">·</span>
+            <span class="node">B · PDF</span>
+            <span class="arrow">·</span>
+            <span class="node">C · PNG</span>
           </div>
           <p style="margin:12px 0 0;color:var(--text-muted);font-size:0.85rem">
-            الثلاثة تمثّل نفس نموذج <strong>قائمة فحص السيارات وقت التسليم</strong>
-            (Toyota / عبداللطيف جميل). الـ Hub يفضّل PDF للتحميل، وDOCX كبديل، وPNG للمعاينة الحية.
+            Master Page عارض ملفات ثابت مستقل — لا يعتمد على أي نظام آخر ولا يتصل بأي API.
+            ضع ملفاتك في <code>assets/</code> وافتح المجلد عبر أي خادم ثابت.
           </p>
         </section>
 
-        <!-- Section A -->
         <section class="panel is-visible" id="panel-A" aria-labelledby="heading-A">
           <div class="panel-head">
             <div>
-              <h3 id="heading-A">Section A — delivery_check_note.docx</h3>
-              <p>قالب Word ناتج عن تحويل مسح ضوئي (Canon → Adobe → SolidFramework). المحتوى عبارة عن صورة JPEG مضمّنة داخل المستند.</p>
+              <h3 id="heading-A">Section A — section-a.docx</h3>
+              <p>مستند Word ناتج عن تحويل مسح ضوئي. المحتوى صورة JPEG مضمّنة داخل الملف.</p>
             </div>
           </div>
           <div class="grid-2">
@@ -141,12 +140,11 @@
           </div>
         </section>
 
-        <!-- Section B -->
         <section class="panel" id="panel-B" aria-labelledby="heading-B">
           <div class="panel-head">
             <div>
-              <h3 id="heading-B">Section B — delivery_check_note.pdf</h3>
-              <p>ملف PDF من صفحة واحدة — القالب الأساسي المستخدم عند إنشاء قائمة الفحص من الخادم.</p>
+              <h3 id="heading-B">Section B — section-b.pdf</h3>
+              <p>ملف PDF من صفحة واحدة — يُعرض مباشرة في المتصفح.</p>
             </div>
           </div>
           <div class="grid-2">
@@ -166,12 +164,11 @@
           </div>
         </section>
 
-        <!-- Section C -->
         <section class="panel" id="panel-C" aria-labelledby="heading-C">
           <div class="panel-head">
             <div>
-              <h3 id="heading-C">Section C — delivery-check-note-form.png</h3>
-              <p>صورة المعاينة عالية الدقة مع هيكل الحقول المستخرج بالكامل للحفاظ على كل معلومات النموذج.</p>
+              <h3 id="heading-C">Section C — section-c.png</h3>
+              <p>صورة عالية الدقة مع هيكل الحقول المستخرج للحفاظ على كل معلومات النموذج.</p>
             </div>
           </div>
           <div class="grid-form">

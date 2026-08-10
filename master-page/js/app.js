@@ -1,6 +1,6 @@
 /**
- * Master Page — Vehicle Delivery Check Note Viewer
- * Loads and renders the three related check-note files (DOCX / PDF / PNG).
+ * Master Page — standalone multi-format document viewer
+ * Independent static app. Not part of any other project or API.
  */
 (function () {
   "use strict";
@@ -8,15 +8,15 @@
   const FILES = {
     A: {
       id: "A",
-      title: "Section A — Word Template",
-      titleAr: "القسم أ — قالب Word",
-      path: "assets/delivery_check_note.docx",
-      previewImage: "assets/docx-embedded-preview.jpeg",
+      title: "Section A — Word Document",
+      titleAr: "القسم أ — مستند Word",
+      path: "assets/section-a.docx",
+      previewImage: "assets/section-a-preview.jpeg",
       format: "docx",
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      role: "Editable Word template used by the Delivery Hub API as DOCX fallback.",
-      roleAr: "قالب Word قابل للتحرير — يُستخدم كبديل عند عدم توفر PDF.",
-      source: "delivery_check_note.docx",
+      role: "Uploaded Word document (image-based page inside DOCX).",
+      roleAr: "ملف Word مرفوع — الصفحة عبارة عن صورة مضمّنة.",
+      source: "section-a.docx",
       meta: {
         type: "Microsoft Word (.docx)",
         pages: "1 (image-based)",
@@ -25,48 +25,44 @@
         producer: "Adobe PSL 1.4e for Canon",
         created: "2026-07-28",
         application: "Microsoft Office Word",
-        note: "Document contains one embedded JPEG scan; no extractable paragraph text.",
+        note: "Contains one embedded JPEG; no extractable paragraph text.",
       },
     },
     B: {
       id: "B",
-      title: "Section B — PDF Template",
-      titleAr: "القسم ب — قالب PDF",
-      path: "assets/delivery_check_note.pdf",
+      title: "Section B — PDF Document",
+      titleAr: "القسم ب — مستند PDF",
+      path: "assets/section-b.pdf",
       format: "pdf",
       mime: "application/pdf",
-      role: "Primary printable PDF template for warehouse delivery check notes.",
-      roleAr: "القالب الأساسي للطباعة — قائمة فحص التسليم للمستودع.",
-      source: "delivery_check_note.pdf",
+      role: "Uploaded PDF document for on-page preview and download.",
+      roleAr: "ملف PDF مرفوع للمعاينة والتحميل داخل الصفحة.",
+      source: "section-b.pdf",
       meta: {
         type: "PDF 1.6",
         pages: "1",
-        encoding: "Image-based page (scanned form)",
-        usage: "POST /api/delivery-note/generate-check-note",
-        note: "Preferred download format when the PDF file is present on the server.",
+        encoding: "Image-based page",
+        note: "Rendered with the browser’s built-in PDF viewer.",
       },
     },
     C: {
       id: "C",
-      title: "Section C — Preview Image",
-      titleAr: "القسم ج — صورة المعاينة",
-      path: "assets/delivery-check-note-form.png",
+      title: "Section C — Image",
+      titleAr: "القسم ج — صورة",
+      path: "assets/section-c.png",
       format: "png",
       mime: "image/png",
-      role: "On-screen preview used by agents to overlay fillable fields before print/PDF.",
-      roleAr: "صورة المعاينة في واجهة الموظف لوضع الحقول فوق النموذج.",
-      source: "images/delivery-check-note-form.png",
+      role: "Uploaded PNG image plus a structured field layout extracted from it.",
+      roleAr: "صورة PNG مرفوعة مع هيكل الحقول المستخرج منها.",
+      source: "section-c.png",
       meta: {
         type: "PNG image",
-        usage: "GET /api/delivery-note/check-note-preview + agent warehouse mode",
-        fieldsFile: "scripts/check-note-field-layout.js",
-        title: "قائمة فحص السيارات وقت التسليم",
-        note: "High-resolution visual of the same checklist form.",
+        note: "High-resolution scan/export of the same form document.",
       },
     },
   };
 
-  /** Structured checklist content preserved from the form analysis */
+  /** Structured content preserved from File 3 (document fields only) */
   const FORM_STRUCTURE = {
     title: "قائمة فحص السيارات وقت التسليم",
     titleEn: "Vehicle Delivery Inspection Checklist",
@@ -190,7 +186,6 @@
         signal: controller.signal,
       });
       if (!res.ok) {
-        // Some static hosts reject HEAD — fall back to GET range / GET
         const getRes = await fetch(file.path, { method: "GET", cache: "no-cache", signal: controller.signal });
         if (!getRes.ok) throw new Error(`HTTP ${getRes.status}`);
         const blob = await getRes.blob();
@@ -245,14 +240,13 @@
   }
 
   function renderError(el, message) {
-    el.innerHTML = `<div class="error error-box"><strong>تعذر التحميل</strong><p>${escapeHtml(message)}</p><p>تأكد من وجود الملف في مجلد <code>master-page/assets/</code></p></div>`;
+    el.innerHTML = `<div class="error error-box"><strong>تعذر التحميل</strong><p>${escapeHtml(message)}</p><p>Place the file under <code>master-page/assets/</code> and open this folder via any static HTTP server.</p></div>`;
   }
 
   function renderDocxPreview(container, file) {
     container.innerHTML = `
       <img src="${escapeHtml(file.previewImage)}" alt="Embedded preview from ${escapeHtml(file.source)}"
-        loading="lazy"
-        onerror="this.closest('.preview-frame').dataset.failed='1'" />
+        loading="lazy" />
     `;
     const img = container.querySelector("img");
     img.addEventListener("error", () => {
@@ -431,7 +425,6 @@
     bindEvents();
     renderStructuredForm($("#structured-form"));
     setActiveSection("A");
-    // Prefetch other sections in the background
     ensureSectionLoaded("B");
     ensureSectionLoaded("C");
   }

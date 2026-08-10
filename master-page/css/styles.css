@@ -1,17 +1,17 @@
-/* Master Page — Vehicle Delivery Check Note Viewer */
+/* Master Page — standalone document viewer (independent app) */
 :root {
-  --bg: #0f1419;
-  --bg-elevated: #171d25;
-  --bg-panel: #1c2430;
-  --bg-hover: #243041;
+  --bg: #0e1218;
+  --bg-elevated: #151b24;
+  --bg-panel: #1a2230;
+  --bg-hover: #243044;
   --line: rgba(148, 163, 184, 0.16);
   --line-strong: rgba(148, 163, 184, 0.28);
   --text: #e8eef6;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
-  --accent: #eb0a1e;
-  --accent-soft: rgba(235, 10, 30, 0.14);
-  --accent-border: rgba(235, 10, 30, 0.4);
+  --accent: #0d9488;
+  --accent-soft: rgba(13, 148, 136, 0.16);
+  --accent-border: rgba(13, 148, 136, 0.45);
   --ok: #22c55e;
   --ok-soft: rgba(34, 197, 94, 0.12);
   --warn: #f59e0b;
@@ -44,7 +44,7 @@ body {
   font-family: var(--font);
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 90% -10%, rgba(235, 10, 30, 0.12), transparent 55%),
+    radial-gradient(1200px 600px at 90% -10%, rgba(13, 148, 136, 0.14), transparent 55%),
     radial-gradient(900px 500px at -10% 30%, rgba(56, 189, 248, 0.06), transparent 50%),
     linear-gradient(180deg, #121820 0%, var(--bg) 40%, #0c1015 100%);
   line-height: 1.55;
@@ -94,13 +94,13 @@ a {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(145deg, #ff2a3d, #a00816);
+  background: linear-gradient(145deg, #14b8a6, #0f766e);
   display: grid;
   place-items: center;
   font-weight: 800;
   font-size: 0.78rem;
   letter-spacing: 0.02em;
-  box-shadow: 0 8px 20px rgba(235, 10, 30, 0.35);
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35);
 }
 
 .brand h1 {
@@ -308,7 +308,7 @@ a {
 }
 
 .btn-primary:hover {
-  background: #c9081a;
+  background: #0f766e;
   border-color: transparent;
 }
 
@@ -759,11 +759,11 @@ a {
 }
 
 .error-box {
-  background: rgba(235, 10, 30, 0.1);
+  background: rgba(13, 148, 136, 0.1);
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-sm);
   padding: 14px 16px;
-  color: #fecaca;
+  color: #99f6e4;
   font-size: 0.88rem;
 }
 

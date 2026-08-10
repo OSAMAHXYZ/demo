@@ -1,60 +1,43 @@
-# Master Page
+# Master Page (standalone)
 
-Responsive dashboard that displays the three **Vehicle Delivery Inspection Checklist** files (قائمة فحص السيارات وقت التسليم).
+Independent static web app. **Not part of Delivery Hub** and not wired to any backend API.
 
-## Folder structure
+## Structure
 
 ```
-demo/
-├── master-page.html          ← shortcut entry (redirects here)
-└── master-page/
-    ├── index.html            ← Master Page UI
-    ├── css/
-    │   └── styles.css
-    ├── js/
-    │   └── app.js
-    └── assets/
-        ├── delivery_check_note.docx      ← Section A (Upload File 1)
-        ├── delivery_check_note.pdf       ← Section B (Upload File 2)
-        ├── delivery-check-note-form.png  ← Section C (Upload File 3)
-        └── docx-embedded-preview.jpeg    ← extracted DOCX preview image
+master-page.html              ← entry redirect into this folder
+master-page/
+├── index.html
+├── css/styles.css
+├── js/app.js
+└── assets/
+    ├── section-a.docx            ← Section A
+    ├── section-a-preview.jpeg    ← DOCX embedded preview
+    ├── section-b.pdf             ← Section B
+    └── section-c.png             ← Section C
 ```
 
-## Where to store uploaded files
+## Store uploaded files here
 
-| Section | Original location in repo | Place a copy in |
-|---------|---------------------------|-----------------|
-| **A** | `delivery_check_note.docx` | `master-page/assets/delivery_check_note.docx` |
-| **B** | `delivery_check_note.pdf` | `master-page/assets/delivery_check_note.pdf` |
-| **C** | `images/delivery-check-note-form.png` | `master-page/assets/delivery-check-note-form.png` |
+| Section | Put file at |
+|---------|-------------|
+| A | `master-page/assets/section-a.docx` |
+| B | `master-page/assets/section-b.pdf` |
+| C | `master-page/assets/section-c.png` |
 
-Optional: if the DOCX is image-based, also keep `docx-embedded-preview.jpeg` in `assets/` (JPEG extracted from `word/media/` inside the DOCX).
+Optional preview for image-based DOCX: `section-a-preview.jpeg`
 
-## How to open
-
-1. Serve the project root (or `master-page/`) over HTTP — required for PDF embed + `fetch` metadata.
-2. Open either:
-   - `http://localhost:<port>/master-page.html`
-   - `http://localhost:<port>/master-page/`
-
-With the existing Delivery Hub server:
+## Run (any static server)
 
 ```bash
-node server.js
+# from master-page/
+npx --yes serve .
 ```
 
-Then visit `/master-page.html`.
+Or open `/master-page/` / `/master-page.html` from any local static host.
 
-## Libraries required
+No Node app, no Delivery Hub server, and no shared libraries are required.
 
-**None.** Pure HTML5 + CSS3 + Vanilla JavaScript.
+## Libraries
 
-Optional (CDN only for fonts):
-
-- [IBM Plex Sans Arabic](https://fonts.google.com/specimen/IBM+Plex+Sans+Arabic) + IBM Plex Mono via Google Fonts
-
-## File roles
-
-1. **DOCX** — editable Word template / API fallback  
-2. **PDF** — preferred printable template (`generate-check-note`)  
-3. **PNG** — agent on-screen preview + field overlay
+None (vanilla HTML / CSS / JS). Fonts optional via Google Fonts CDN.
