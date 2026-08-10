@@ -83,24 +83,13 @@
 
     .slot {
       background: var(--surface);
-      border: 1.5px dashed var(--line-strong);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 20px;
-      min-height: 240px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
       box-shadow: var(--shadow);
-      transition: border-color 0.2s, background 0.2s;
-    }
-    .slot.is-drag {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .slot.has-file {
-      border-style: solid;
-      border-color: #86efac;
-      background: #f0fdf4;
     }
     .slot-kicker {
       font-size: 0.72rem;
@@ -113,11 +102,81 @@
       margin: 0;
       font-size: 1.05rem;
     }
-    .slot .hint {
+    .slot .desc {
       margin: 0;
-      flex: 1;
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
+    }
+
+    /* Dedicated drop / select area per file */
+    .dropzone {
+      flex: 1;
+      min-height: 180px;
+      border: 2px dashed var(--line-strong);
+      border-radius: 14px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 20px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .dropzone:hover,
+    .dropzone:focus-visible {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      outline: none;
+    }
+    .dropzone.is-drag {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 2px rgba(15, 76, 129, 0.2);
+    }
+    .slot.has-file .dropzone {
+      border-style: solid;
+      border-color: #86efac;
+      background: var(--ok-bg);
+    }
+    .drop-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 1.4rem;
+      color: var(--accent);
+      pointer-events: none;
+    }
+    .slot.has-file .drop-icon {
+      border-color: #86efac;
+      color: var(--ok);
+    }
+    .drop-title {
+      margin: 0;
+      font-weight: 700;
+      font-size: 0.95rem;
+      pointer-events: none;
+    }
+    .drop-sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      pointer-events: none;
+    }
+    .drop-or {
+      margin: 2px 0;
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      pointer-events: none;
     }
     .slot .meta {
       margin: 0;
@@ -125,6 +184,7 @@
       font-size: 0.75rem;
       color: var(--ink);
       word-break: break-all;
+      min-height: 2.4em;
     }
     .slot input[type="file"] { display: none; }
     .actions {
@@ -386,25 +446,51 @@
             <article class="slot${has ? " has-file" : ""}" data-id="${d.id}">
               <span class="slot-kicker">${escapeHtml(d.id)}</span>
               <h2>${escapeHtml(d.title)}</h2>
-              <p class="hint">${escapeHtml(d.hint)}</p>
+              <p class="desc">${escapeHtml(d.hint)}</p>
+
+              <div
+                class="dropzone"
+                data-drop="${d.id}"
+                role="button"
+                tabindex="0"
+                aria-label="Drag and drop or select ${escapeHtml(d.title)}"
+              >
+                <div class="drop-icon" aria-hidden="true">${has ? "✓" : "📄"}</div>
+                <p class="drop-title">${has ? "File ready" : "Drag & drop Excel here"}</p>
+                <p class="drop-or">or</p>
+                <p class="drop-sub">${has ? "Drop a new file to replace" : "Click to select from your computer"}</p>
+              </div>
+
               <p class="meta">${
                 has
                   ? escapeHtml(slot.file.name) + " · " + formatBytes(slot.file.size) + " · " + detectKind(slot.file).toUpperCase()
-                  : "No file placed"
+                  : "No file selected yet"
               }</p>
+
               <div class="actions">
-                <button type="button" class="btn btn-primary" data-choose="${d.id}">Choose file</button>
+                <button type="button" class="btn btn-primary" data-choose="${d.id}">Select file</button>
                 <button type="button" class="btn" data-remove="${d.id}" ${has ? "" : "disabled"}>Remove</button>
               </div>
-              <input type="file" id="input-${d.id}" accept="${ACCEPT}" aria-label="${escapeHtml(d.title)}" />
+              <input type="file" id="input-${d.id}" accept="${ACCEPT}" aria-label="Select ${escapeHtml(d.title)}" />
             </article>`;
         }).join("");
 
         DEFINITIONS.forEach((d) => {
           const card = root.querySelector('[data-id="' + d.id + '"]');
+          const zone = card.querySelector('[data-drop="' + d.id + '"]');
           const input = document.getElementById("input-" + d.id);
 
-          card.querySelector('[data-choose="' + d.id + '"]').addEventListener("click", () => input.click());
+          const openPicker = () => input.click();
+
+          card.querySelector('[data-choose="' + d.id + '"]').addEventListener("click", openPicker);
+          zone.addEventListener("click", openPicker);
+          zone.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openPicker();
+            }
+          });
+
           card.querySelector('[data-remove="' + d.id + '"]').addEventListener("click", () => {
             state[d.id] = { file: null, workbook: null };
             $("#summary").classList.remove("is-visible");
@@ -419,14 +505,22 @@
             input.value = "";
           });
 
-          card.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            card.classList.add("is-drag");
+          // Drag & drop on the dedicated zone
+          ["dragenter", "dragover"].forEach((evt) => {
+            zone.addEventListener(evt, (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              zone.classList.add("is-drag");
+            });
           });
-          card.addEventListener("dragleave", () => card.classList.remove("is-drag"));
-          card.addEventListener("drop", (e) => {
+          zone.addEventListener("dragleave", (e) => {
             e.preventDefault();
-            card.classList.remove("is-drag");
+            zone.classList.remove("is-drag");
+          });
+          zone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.remove("is-drag");
             const file = e.dataTransfer.files && e.dataTransfer.files[0];
             if (file) placeFile(d.id, file);
           });
