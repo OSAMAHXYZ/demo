@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Standalone Excel intake — Backorder, TRL Stock, Central Stock" />
+  <meta name="description" content="Standalone stock matcher — Backorder × TRL Stock × Central Stock (master_sheet logic)" />
   <title>Stock Excel Intake</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,6 +20,8 @@
       --accent-soft: rgba(15, 76, 129, 0.08);
       --ok: #15803d;
       --ok-bg: #dcfce7;
+      --warn: #b45309;
+      --warn-bg: #ffedd5;
       --err: #b91c1c;
       --err-bg: #fee2e2;
       --radius: 16px;
@@ -27,301 +29,147 @@
       --mono: "JetBrains Mono", ui-monospace, monospace;
       --shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
     }
-
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
       font-family: var(--font);
       color: var(--ink);
-      background:
-        radial-gradient(800px 400px at 100% 0%, rgba(15, 76, 129, 0.08), transparent 55%),
-        var(--bg);
+      background: radial-gradient(800px 400px at 100% 0%, rgba(15, 76, 129, 0.08), transparent 55%), var(--bg);
       line-height: 1.5;
     }
-
-    .wrap {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 32px 20px 48px;
-    }
-
-    header {
-      margin-bottom: 28px;
-    }
-    header h1 {
-      margin: 0 0 8px;
-      font-size: clamp(1.4rem, 2.5vw, 1.85rem);
-      letter-spacing: -0.02em;
-    }
-    header p {
-      margin: 0;
-      color: var(--muted);
-      max-width: 54ch;
-    }
-
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 20px 48px; }
+    header { margin-bottom: 28px; }
+    header h1 { margin: 0 0 8px; font-size: clamp(1.4rem, 2.5vw, 1.85rem); letter-spacing: -0.02em; }
+    header p { margin: 0; color: var(--muted); max-width: 62ch; }
     .badge {
-      display: inline-block;
-      margin-bottom: 10px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      color: var(--accent);
-      background: var(--accent-soft);
-      border: 1px solid rgba(15, 76, 129, 0.18);
-      padding: 5px 10px;
-      border-radius: 999px;
+      display: inline-block; margin-bottom: 10px; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
+      background: var(--accent-soft); border: 1px solid rgba(15, 76, 129, 0.18);
+      padding: 5px 10px; border-radius: 999px;
     }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
     .slot {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      box-shadow: var(--shadow);
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow);
     }
-    .slot-kicker {
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
-    .slot h2 {
-      margin: 0;
-      font-size: 1.05rem;
-    }
-    .slot .desc {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.88rem;
-    }
-
-    /* Dedicated drop / select area per file */
+    .slot-kicker { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+    .slot h2 { margin: 0; font-size: 1.05rem; }
+    .slot .desc { margin: 0; color: var(--muted); font-size: 0.88rem; }
     .dropzone {
-      flex: 1;
-      min-height: 180px;
-      border: 2px dashed var(--line-strong);
-      border-radius: 14px;
-      background: #f8fafc;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 20px 14px;
-      text-align: center;
-      cursor: pointer;
+      flex: 1; min-height: 170px; border: 2px dashed var(--line-strong); border-radius: 14px;
+      background: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; padding: 20px 14px; text-align: center; cursor: pointer;
       transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
     }
-    .dropzone:hover,
-    .dropzone:focus-visible {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      outline: none;
-    }
-    .dropzone.is-drag {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      box-shadow: inset 0 0 0 2px rgba(15, 76, 129, 0.2);
-    }
-    .slot.has-file .dropzone {
-      border-style: solid;
-      border-color: #86efac;
-      background: var(--ok-bg);
-    }
+    .dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); background: var(--accent-soft); outline: none; }
+    .dropzone.is-drag { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 2px rgba(15, 76, 129, 0.2); }
+    .slot.has-file .dropzone { border-style: solid; border-color: #86efac; background: var(--ok-bg); }
     .drop-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      background: #fff;
-      border: 1px solid var(--line);
-      display: grid;
-      place-items: center;
-      font-size: 1.4rem;
-      color: var(--accent);
-      pointer-events: none;
+      width: 48px; height: 48px; border-radius: 12px; background: #fff; border: 1px solid var(--line);
+      display: grid; place-items: center; font-size: 1.4rem; color: var(--accent); pointer-events: none;
     }
-    .slot.has-file .drop-icon {
-      border-color: #86efac;
-      color: var(--ok);
-    }
-    .drop-title {
-      margin: 0;
-      font-weight: 700;
-      font-size: 0.95rem;
-      pointer-events: none;
-    }
-    .drop-sub {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.82rem;
-      pointer-events: none;
-    }
-    .drop-or {
-      margin: 2px 0;
-      color: var(--muted);
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      pointer-events: none;
-    }
-    .slot .meta {
-      margin: 0;
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--ink);
-      word-break: break-all;
-      min-height: 2.4em;
-    }
+    .slot.has-file .drop-icon { border-color: #86efac; color: var(--ok); }
+    .drop-title { margin: 0; font-weight: 700; font-size: 0.95rem; pointer-events: none; }
+    .drop-sub, .drop-or { margin: 0; color: var(--muted); font-size: 0.82rem; pointer-events: none; }
+    .drop-or { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .slot .meta { margin: 0; font-family: var(--mono); font-size: 0.75rem; word-break: break-all; min-height: 2.4em; }
     .slot input[type="file"] { display: none; }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .btn {
-      appearance: none;
-      border: 1px solid var(--line-strong);
-      background: var(--surface);
-      color: var(--ink);
-      border-radius: 10px;
-      padding: 9px 14px;
-      font: inherit;
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
+      appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+      border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
     }
     .btn:hover:not(:disabled) { background: #f8fafc; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn-primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: #0c3d68; }
-
     .bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      box-shadow: var(--shadow);
-      margin-bottom: 16px;
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 14px 16px; box-shadow: var(--shadow); margin-bottom: 16px;
     }
-    .status {
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: var(--muted);
-    }
+    .status { font-size: 0.88rem; font-weight: 600; color: var(--muted); }
     .status.ready { color: var(--ok); }
     .status.error { color: var(--err); }
-
     .panel {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 18px;
-      box-shadow: var(--shadow);
-      display: none;
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; box-shadow: var(--shadow); display: none; margin-top: 16px;
     }
     .panel.is-visible { display: block; }
-    .panel h3 {
-      margin: 0 0 12px;
-      font-size: 1rem;
+    .panel h3 { margin: 0 0 12px; font-size: 1.05rem; }
+    .panel .muted { margin: 0 0 14px; color: var(--muted); font-size: 0.88rem; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .kpi { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .kpi .label { margin: 0; font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi .value { margin: 4px 0 0; font-size: 1.25rem; font-weight: 700; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .toolbar input[type="search"], .toolbar select {
+      font: inherit; font-size: 0.85rem; border: 1px solid var(--line-strong);
+      border-radius: 8px; padding: 8px 10px; background: #fff; min-width: 160px;
     }
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+    .table-scroll { overflow: auto; max-height: min(520px, 65vh); border: 1px solid var(--line); border-radius: 12px; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    table.data th, table.data td {
+      padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left;
+      white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
     }
-    .card {
-      background: #f8fafc;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 14px;
+    table.data th { position: sticky; top: 0; background: #f1f5f9; z-index: 1; font-weight: 700; cursor: pointer; }
+    table.data tbody tr:hover { background: #f8fafc; }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+      background: #e2e8f0; color: #334155;
     }
-    .card h4 { margin: 0 0 6px; font-size: 0.92rem; }
-    .card p { margin: 0; color: var(--muted); font-size: 0.85rem; }
-    .card ul {
-      margin: 8px 0 0;
-      padding-inline-start: 18px;
-      font-size: 0.84rem;
-      color: var(--ink);
-    }
-
+    .pill.no { background: #fee2e2; color: #991b1b; }
+    .pill.bo { background: #ffedd5; color: #9a3412; }
+    .pill.stock { background: #dbeafe; color: #1e40af; }
+    .pill.ok { background: #dcfce7; color: #166534; }
     .error {
-      display: none;
-      margin-top: 12px;
-      padding: 12px 14px;
-      border-radius: 10px;
-      background: var(--err-bg);
-      color: var(--err);
-      border: 1px solid #fecaca;
-      font-size: 0.9rem;
+      display: none; margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+      background: var(--err-bg); color: var(--err); border: 1px solid #fecaca; font-size: 0.9rem;
     }
     .error.is-visible { display: block; }
-
     .loading {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      margin-top: 12px;
-      color: #0369a1;
-      font-size: 0.9rem;
-      font-weight: 600;
+      display: none; align-items: center; gap: 10px; margin-top: 12px;
+      color: #0369a1; font-size: 0.9rem; font-weight: 600;
     }
     .loading.is-visible { display: flex; }
     .spinner {
-      width: 18px;
-      height: 18px;
-      border: 2.5px solid rgba(3, 105, 161, 0.25);
-      border-top-color: #0369a1;
-      border-radius: 50%;
-      animation: spin 0.75s linear infinite;
+      width: 18px; height: 18px; border: 2.5px solid rgba(3, 105, 161, 0.25);
+      border-top-color: #0369a1; border-radius: 50%; animation: spin 0.75s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    footer {
-      margin-top: 28px;
-      color: var(--muted);
-      font-size: 0.8rem;
+    footer { margin-top: 28px; color: var(--muted); font-size: 0.8rem; }
+    .logic-note {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px;
+      padding: 12px 14px; font-size: 0.84rem; color: #78350f; margin-bottom: 16px;
     }
-
-    @media (max-width: 900px) {
-      .grid, .summary-grid { grid-template-columns: 1fr; }
+    .logic-note code { font-family: var(--mono); font-size: 0.8em; }
+    @media (max-width: 960px) {
+      .grid, .kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .grid, .kpi-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <span class="badge">Standalone · not linked to other apps</span>
+      <span class="badge">Standalone · master_sheet logic</span>
       <h1>Place stock Excel files</h1>
       <p>
-        Upload exactly three workbooks: <strong>Backorder</strong>,
-        <strong>TRL Stock</strong>, and <strong>Central Stock</strong>.
-        Files stay in this browser only.
+        Upload <strong>Backorder</strong>, <strong>TRL Stock</strong>, and <strong>Central Stock</strong>.
+        The page applies the matching rules from <code>master_sheet.xlsx</code> (daily matching + quantity status + central control flags).
       </p>
     </header>
+
+    <div class="logic-note">
+      Match key: <code>Product + ALJ Suffix + Model Year + Exterior Color Code + Interior Color Code</code>.
+      Daily matching assigns TRL VINs 1:1 to backorders. Quantity Status compares BO count vs TRL count per key
+      (<code>NO STOCK</code>, <code>BO &gt; STOCK</code>, <code>STOCK &gt; BO</code>, <code>BALANCED</code>).
+      Central stock is flagged for BO match and whether the VIN exists in TRL stock.
+    </div>
 
     <div class="grid" id="slots"></div>
 
@@ -329,7 +177,7 @@
       <div class="status" id="status">Waiting for 3 Excel files</div>
       <div class="actions">
         <button type="button" class="btn" id="clear-btn" disabled>Clear all</button>
-        <button type="button" class="btn btn-primary" id="load-btn" disabled>Load files</button>
+        <button type="button" class="btn btn-primary" id="load-btn" disabled>Run matching</button>
       </div>
     </div>
 
@@ -339,12 +187,41 @@
     </div>
     <div class="error" id="error" role="alert"></div>
 
-    <section class="panel" id="summary" aria-labelledby="summary-heading">
-      <h3 id="summary-heading">Loaded files</h3>
-      <div class="summary-grid" id="summary-grid"></div>
+    <section class="panel" id="results" aria-labelledby="results-heading">
+      <h3 id="results-heading">Matching results</h3>
+      <p class="muted" id="results-meta"></p>
+      <div class="kpi-grid" id="kpis"></div>
+
+      <h3>Daily stock matching</h3>
+      <p class="muted">Backorder lines with optional TRL stock assignment (same structure as master_sheet “Daily stock matching”).</p>
+      <div class="toolbar">
+        <input type="search" id="daily-search" placeholder="Search daily matching…" />
+        <select id="daily-filter" aria-label="Filter quantity status">
+          <option value="">All Quantity Status</option>
+          <option>NO STOCK</option>
+          <option>BO &gt; STOCK</option>
+          <option>STOCK &gt; BO</option>
+          <option>BALANCED</option>
+        </select>
+        <button type="button" class="btn" id="dl-daily">Download CSV</button>
+      </div>
+      <div class="table-scroll" id="daily-table"></div>
+
+      <h3 style="margin-top:22px">Central stock control</h3>
+      <p class="muted">Each central VIN with BO Match / RTL Stock matched flags (master_sheet “fullControl” logic).</p>
+      <div class="toolbar">
+        <input type="search" id="central-search" placeholder="Search central control…" />
+        <select id="central-filter" aria-label="Filter BO match">
+          <option value="">All BO Match</option>
+          <option>Matched</option>
+          <option>No BO</option>
+        </select>
+        <button type="button" class="btn" id="dl-central">Download CSV</button>
+      </div>
+      <div class="table-scroll" id="central-table"></div>
     </section>
 
-    <footer>Self-contained page · Backorder · TRL Stock · Central Stock</footer>
+    <footer>Self-contained page · Logic extracted from master_sheet.xlsx · Files stay in this browser</footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -353,30 +230,55 @@
       "use strict";
 
       const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+      const MAX_RENDER = 2500;
 
       const DEFINITIONS = [
-        {
-          id: "backorder",
-          title: "Backorder Excel",
-          hint: "Place the backorder workbook here (.xlsx, .xls, or .csv).",
-        },
-        {
-          id: "trl",
-          title: "TRL Stock Excel",
-          hint: "Place the TRL stock workbook here (.xlsx, .xls, or .csv).",
-        },
-        {
-          id: "central",
-          title: "Central Stock Excel",
-          hint: "Place the central stock workbook here (.xlsx, .xls, or .csv).",
-        },
+        { id: "backorder", title: "Backorder Excel", hint: "BO / fleet backorder export (Product, Suffix, Year, colors, BO number…)." },
+        { id: "trl", title: "TRL Stock Excel", hint: "Available retail / TRL stock (VIN-level rows with color codes)." },
+        { id: "central", title: "Central Stock Excel", hint: "Central / NDC stock export (full Stock sheet style)." },
       ];
 
-      /** @type {Record<string, { file: File|null, workbook: object|null }>} */
+      const HEADER_ALIASES = {
+        product: ["product", "model", "vehicle"],
+        suffix: ["alj suffix", "alj_suffix", "suffix", "tmc suffix"],
+        year: ["model year", "year", "my"],
+        ext: ["exterior color  1", "exterior color 1", "exterior color", "ext color", "ext color 1", "exterior color code"],
+        int: ["interior color 1", "interior color", "inter color 1", "interior color code"],
+        vin: ["vin", "vehicle identification number", "stock.vehicle identification number", "stock.vin"],
+        boNumber: ["back order number", "backorder number", "bo number"],
+        salesman: ["salesman name", "salesman"],
+        orderDate: ["order date"],
+        confirm: ["confirm flag", "confirm"],
+        custGroup: ["cust group"],
+        dpr: ["dpr"],
+        paid: ["المبلغ المدفوع", "paid", "amount"],
+        grade: ["grade (vc)", "grade"],
+        item: ["item"],
+        searchArea: ["vehicle search area", "stock.vehicle search area"],
+        sharing: ["sharing levels", "sharing level", "stock.sharing levels", "stock.sharing level"],
+        modelCode: ["model code", "supplier model code", "stock.model code"],
+        usage: ["usage", "usage description", "stock.usage", "vehicle usage descr."],
+        age: ["age", "allocation ageing", "stock.age", "ndc gr age"],
+        location: ["location", "current location", "stock.location", "gt location"],
+        primaryDesc: ["primary status desc", "primary status description", "stock.primary status desc"],
+        secondaryDesc: ["secondary status desc", "secondary status descripiton", "secondary status description", "stock.secondary status desc"],
+        allocatedLocation: ["allocated location"],
+        currentLocation: ["current location"],
+        secondaryStatus: ["secondary status"],
+        storageLocation: ["storage location"],
+        transmission: ["transmission"],
+        brand: ["brand"],
+      };
+
       const state = {
-        backorder: { file: null, workbook: null },
-        trl: { file: null, workbook: null },
-        central: { file: null, workbook: null },
+        backorder: { file: null, rows: [] },
+        trl: { file: null, rows: [] },
+        central: { file: null, rows: [] },
+        dict: { exterior: [], interior: [] },
+        daily: [],
+        control: [],
+        dailySort: { col: null, dir: 1 },
+        controlSort: { col: null, dir: 1 },
       };
 
       const $ = (sel) => document.querySelector(sel);
@@ -386,15 +288,12 @@
         if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
         return (n / (1024 * 1024)).toFixed(2) + " MB";
       }
-
       function escapeHtml(s) {
-        return String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       }
-
+      function normHeader(h) {
+        return String(h || "").trim().toLowerCase().replace(/\s+/g, " ");
+      }
       function detectKind(file) {
         const name = (file.name || "").toLowerCase();
         const type = (file.type || "").toLowerCase();
@@ -403,38 +302,314 @@
         if (name.endsWith(".xlsx") || type.includes("sheet") || type.includes("excel")) return "xlsx";
         return null;
       }
-
       function setStatus(text, cls) {
         const el = $("#status");
         el.textContent = text;
         el.className = "status" + (cls ? " " + cls : "");
       }
-
       function setError(msg) {
         const el = $("#error");
         el.textContent = msg || "";
         el.classList.toggle("is-visible", !!msg);
       }
-
       function setLoading(on, text) {
         const el = $("#loading");
         el.classList.toggle("is-visible", on);
         if (text) $("#loading-text").textContent = text;
       }
-
       function allReady() {
         return DEFINITIONS.every((d) => state[d.id].file);
       }
-
       function updateButtons() {
         const any = DEFINITIONS.some((d) => state[d.id].file);
         $("#clear-btn").disabled = !any;
         $("#load-btn").disabled = !allReady();
-        if (allReady()) setStatus("All 3 files placed — ready to load", "ready");
+        if (allReady()) setStatus("All 3 files placed — ready to run matching", "ready");
         else if (any) {
           const missing = DEFINITIONS.filter((d) => !state[d.id].file).map((d) => d.title);
           setStatus("Still need: " + missing.join(", "));
         } else setStatus("Waiting for 3 Excel files");
+      }
+
+      function pickField(row, aliases) {
+        const map = {};
+        Object.keys(row).forEach((k) => {
+          map[normHeader(k)] = k;
+        });
+        for (const alias of aliases) {
+          if (map[alias] != null) return row[map[alias]];
+          // fuzzy contains
+          const found = Object.keys(map).find((k) => k === alias || k.includes(alias));
+          if (found) return row[map[found]];
+        }
+        return "";
+      }
+
+      function buildFieldGetter(sampleRow) {
+        const keys = Object.keys(sampleRow || {});
+        const normKeys = keys.map((k) => ({ raw: k, n: normHeader(k) }));
+        const cache = {};
+        return function get(row, aliasKey) {
+          if (!cache[aliasKey]) {
+            const aliases = HEADER_ALIASES[aliasKey] || [aliasKey];
+            let found = null;
+            for (const alias of aliases) {
+              found = normKeys.find((k) => k.n === alias);
+              if (found) break;
+            }
+            if (!found) {
+              for (const alias of aliases) {
+                found = normKeys.find((k) => k.n.includes(alias));
+                if (found) break;
+              }
+            }
+            cache[aliasKey] = found ? found.raw : null;
+          }
+          return cache[aliasKey] ? row[cache[aliasKey]] : "";
+        };
+      }
+
+      function normalizeName(s) {
+        return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      }
+
+      function extractExtCode(value, dict) {
+        const s = String(value || "").trim();
+        if (!s) return "";
+        if (/^[A-Z0-9]{2,4}$/i.test(s)) return s.toUpperCase();
+        const parts = s.split(/\s+/);
+        const last = parts[parts.length - 1];
+        if (/^[A-Z0-9]{2,4}$/i.test(last)) return last.toUpperCase();
+        const compact = normalizeName(s);
+        const hit = (dict.exterior || []).find((d) => normalizeName(d.n) === compact || normalizeName(d.n).includes(compact) || compact.includes(normalizeName(d.n)));
+        if (hit) return String(hit.c).toUpperCase();
+        // fallback: meaningful color word used in master fullControl (e.g. NEUTRAL BLACK → BLACK)
+        if (/black/i.test(s) && !/\d/.test(last)) return "BLACK";
+        return last.toUpperCase();
+      }
+
+      function extractIntCode(value, dict) {
+        const s = String(value || "").trim();
+        if (!s) return "";
+        if (/^\d{1,3}$/.test(s)) return s;
+        const m = s.match(/(\d{1,3})\s*$/);
+        if (m) return m[1];
+        const compact = normalizeName(s);
+        const hit = (dict.interior || []).find((d) => normalizeName(d.n) === compact || normalizeName(d.n).includes(compact));
+        if (hit) return String(hit.c);
+        return s.toUpperCase();
+      }
+
+      function matchKey(product, suffix, year, ext, intc) {
+        return [product, suffix, year, ext, intc]
+          .map((v) => String(v ?? "").trim().toUpperCase())
+          .join("|");
+      }
+
+      function quantityStatus(boCount, stockCount) {
+        if (stockCount <= 0) return "NO STOCK";
+        if (boCount > stockCount) return "BO > STOCK";
+        if (stockCount > boCount) return "STOCK > BO";
+        return "BALANCED";
+      }
+
+      function statusPill(status) {
+        const s = String(status || "");
+        let cls = "pill";
+        if (s === "NO STOCK") cls += " no";
+        else if (s === "BO > STOCK") cls += " bo";
+        else if (s === "STOCK > BO") cls += " stock";
+        else if (s === "BALANCED") cls += " ok";
+        return `<span class="${cls}">${escapeHtml(s)}</span>`;
+      }
+
+      async function loadDictionaries() {
+        try {
+          const res = await fetch("test-color-dictionaries.json", { cache: "no-cache" });
+          if (res.ok) {
+            state.dict = await res.json();
+            return;
+          }
+        } catch (_) {
+          /* optional */
+        }
+        state.dict = { exterior: [], interior: [] };
+      }
+
+      async function readWorkbook(file) {
+        const kind = detectKind(file);
+        const buffer = await file.arrayBuffer();
+        if (kind === "csv") {
+          const text = new TextDecoder("utf-8").decode(buffer);
+          return XLSX.read(text, { type: "string", cellDates: true });
+        }
+        return XLSX.read(buffer, { type: "array", cellDates: true });
+      }
+
+      function workbookToRows(wb) {
+        const name = wb.SheetNames[0];
+        return XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "", raw: false });
+      }
+
+      /** Core logic extracted from master_sheet.xlsx */
+      function runMasterLogic(boRows, trlRows, centralRows) {
+        const getBo = buildFieldGetter(boRows[0] || {});
+        const getTrl = buildFieldGetter(trlRows[0] || {});
+        const getCen = buildFieldGetter(centralRows[0] || {});
+
+        const normalizedBo = boRows.map((r, idx) => {
+          const product = getBo(r, "product");
+          const suffix = getBo(r, "suffix");
+          const year = getBo(r, "year");
+          const ext = extractExtCode(getBo(r, "ext"), state.dict);
+          const intc = extractIntCode(getBo(r, "int"), state.dict);
+          return {
+            idx,
+            product,
+            suffix,
+            year,
+            ext,
+            int: intc,
+            key: matchKey(product, suffix, year, ext, intc),
+            salesman: getBo(r, "salesman"),
+            boNumber: getBo(r, "boNumber"),
+            orderDate: getBo(r, "orderDate"),
+            confirm: getBo(r, "confirm"),
+            custGroup: getBo(r, "custGroup"),
+            dpr: getBo(r, "dpr"),
+            paid: getBo(r, "paid"),
+            grade: getBo(r, "grade"),
+            item: getBo(r, "item"),
+            raw: r,
+          };
+        });
+
+        const normalizedTrl = trlRows.map((r, idx) => {
+          const product = getTrl(r, "product");
+          const suffix = getTrl(r, "suffix");
+          const year = getTrl(r, "year");
+          const ext = extractExtCode(getTrl(r, "ext"), state.dict);
+          const intc = extractIntCode(getTrl(r, "int"), state.dict);
+          const vin = String(getTrl(r, "vin") || "").trim();
+          return {
+            idx,
+            product,
+            suffix,
+            year,
+            ext,
+            int: intc,
+            key: matchKey(product, suffix, year, ext, intc),
+            vin,
+            searchArea: getTrl(r, "searchArea"),
+            sharing: getTrl(r, "sharing"),
+            modelCode: getTrl(r, "modelCode"),
+            usage: getTrl(r, "usage"),
+            age: getTrl(r, "age"),
+            location: getTrl(r, "location"),
+            primaryDesc: getTrl(r, "primaryDesc"),
+            secondaryDesc: getTrl(r, "secondaryDesc"),
+            used: false,
+            raw: r,
+          };
+        });
+
+        const trlByKey = new Map();
+        normalizedTrl.forEach((r) => {
+          if (!trlByKey.has(r.key)) trlByKey.set(r.key, []);
+          trlByKey.get(r.key).push(r);
+        });
+
+        const boByKeyCounts = new Map();
+        normalizedBo.forEach((r) => boByKeyCounts.set(r.key, (boByKeyCounts.get(r.key) || 0) + 1));
+        const trlByKeyCounts = new Map();
+        normalizedTrl.forEach((r) => trlByKeyCounts.set(r.key, (trlByKeyCounts.get(r.key) || 0) + 1));
+
+        const statusByKey = new Map();
+        const allKeys = new Set([...boByKeyCounts.keys(), ...trlByKeyCounts.keys()]);
+        allKeys.forEach((k) => {
+          statusByKey.set(k, quantityStatus(boByKeyCounts.get(k) || 0, trlByKeyCounts.get(k) || 0));
+        });
+
+        // Daily matching: assign TRL VIN 1:1 onto BO rows
+        const daily = normalizedBo.map((bo) => {
+          const pool = trlByKey.get(bo.key) || [];
+          const stock = pool.find((s) => !s.used && s.vin);
+          if (stock) stock.used = true;
+          return {
+            Product: bo.product,
+            "Alj Suffix": bo.suffix,
+            "Model Year": bo.year,
+            "Exterior Color  1": bo.ext,
+            "Interior Color 1": bo.int,
+            "Salesman Name": bo.salesman,
+            "Back Order Number": bo.boNumber,
+            "Order Date": bo.orderDate,
+            "Confirm Flag": bo.confirm,
+            "Cust Group": bo.custGroup,
+            DPR: bo.dpr,
+            "المبلغ المدفوع": bo.paid,
+            "Grade (VC)": bo.grade,
+            Item: bo.item,
+            "Stock.Vehicle Search Area": stock ? stock.searchArea : "",
+            "Stock.Sharing Levels": stock ? stock.sharing : "",
+            "Stock.Model Code": stock ? stock.modelCode : "",
+            "Stock.Vehicle Identification Number": stock ? stock.vin : "",
+            "Stock.Usage": stock ? stock.usage : "",
+            "Stock.Age": stock ? stock.age : "",
+            "Stock.Location": stock ? stock.location : "",
+            "Stock.Primary Status Desc": stock ? stock.primaryDesc : "",
+            "Stock.Secondary Status Desc": stock ? stock.secondaryDesc : "",
+            "Quantity Status": statusByKey.get(bo.key) || "NO STOCK",
+          };
+        });
+
+        // Central fullControl-style flags
+        const trlVinSet = new Set(normalizedTrl.map((r) => r.vin).filter(Boolean));
+        const boByKeyList = new Map();
+        normalizedBo.forEach((r) => {
+          if (!boByKeyList.has(r.key)) boByKeyList.set(r.key, []);
+          boByKeyList.get(r.key).push(r);
+        });
+
+        const control = centralRows.map((r) => {
+          const product = getCen(r, "product");
+          const suffix = getCen(r, "suffix");
+          const year = getCen(r, "year");
+          const extName = getCen(r, "ext");
+          const intName = getCen(r, "int");
+          const ext = extractExtCode(extName, state.dict);
+          const intc = extractIntCode(intName, state.dict);
+          const vin = String(getCen(r, "vin") || "").trim();
+          const key = matchKey(product, suffix, year, ext, intc);
+          const bos = boByKeyList.get(key) || [];
+          const boHit = bos[0] || null;
+          return {
+            VIN: vin,
+            Product: product,
+            "Alj Suffix": suffix,
+            "Model Year": year,
+            "Exterior Color": extName,
+            "Interior Color": intName,
+            "Exterior Color Code": ext,
+            "Interior Color Code": intc,
+            "Current Location": getCen(r, "currentLocation") || getCen(r, "location"),
+            "Secondary Status": getCen(r, "secondaryStatus"),
+            "Storage Location": getCen(r, "storageLocation"),
+            "Sharing Level": getCen(r, "sharing"),
+            "Salesman Name": boHit ? boHit.salesman : "",
+            "Back Order Number": boHit ? boHit.boNumber : "",
+            "Order Date": boHit ? boHit.orderDate : "",
+            "Confirm Flag": boHit ? boHit.confirm : "",
+            "Cust Group": boHit ? boHit.custGroup : "",
+            DPR: boHit ? boHit.dpr : "",
+            "المبلغ المدفوع": boHit ? boHit.paid : "",
+            "Grade (VC)": boHit ? boHit.grade : "",
+            "BO Match": boHit ? "Matched" : "No BO",
+            "RTL Stock matched": vin && trlVinSet.has(vin) ? "In Stock" : "Not in RTL Stock",
+          };
+        });
+
+        return { daily, control, statusByKey, boByKeyCounts, trlByKeyCounts };
       }
 
       function renderSlots() {
@@ -447,26 +622,18 @@
               <span class="slot-kicker">${escapeHtml(d.id)}</span>
               <h2>${escapeHtml(d.title)}</h2>
               <p class="desc">${escapeHtml(d.hint)}</p>
-
-              <div
-                class="dropzone"
-                data-drop="${d.id}"
-                role="button"
-                tabindex="0"
-                aria-label="Drag and drop or select ${escapeHtml(d.title)}"
-              >
+              <div class="dropzone" data-drop="${d.id}" role="button" tabindex="0"
+                   aria-label="Drag and drop or select ${escapeHtml(d.title)}">
                 <div class="drop-icon" aria-hidden="true">${has ? "✓" : "📄"}</div>
                 <p class="drop-title">${has ? "File ready" : "Drag & drop Excel here"}</p>
                 <p class="drop-or">or</p>
                 <p class="drop-sub">${has ? "Drop a new file to replace" : "Click to select from your computer"}</p>
               </div>
-
               <p class="meta">${
                 has
                   ? escapeHtml(slot.file.name) + " · " + formatBytes(slot.file.size) + " · " + detectKind(slot.file).toUpperCase()
                   : "No file selected yet"
               }</p>
-
               <div class="actions">
                 <button type="button" class="btn btn-primary" data-choose="${d.id}">Select file</button>
                 <button type="button" class="btn" data-remove="${d.id}" ${has ? "" : "disabled"}>Remove</button>
@@ -479,9 +646,7 @@
           const card = root.querySelector('[data-id="' + d.id + '"]');
           const zone = card.querySelector('[data-drop="' + d.id + '"]');
           const input = document.getElementById("input-" + d.id);
-
           const openPicker = () => input.click();
-
           card.querySelector('[data-choose="' + d.id + '"]').addEventListener("click", openPicker);
           zone.addEventListener("click", openPicker);
           zone.addEventListener("keydown", (e) => {
@@ -490,22 +655,18 @@
               openPicker();
             }
           });
-
           card.querySelector('[data-remove="' + d.id + '"]').addEventListener("click", () => {
-            state[d.id] = { file: null, workbook: null };
-            $("#summary").classList.remove("is-visible");
+            state[d.id] = { file: null, rows: [] };
+            $("#results").classList.remove("is-visible");
             setError("");
             renderSlots();
             updateButtons();
           });
-
           input.addEventListener("change", () => {
             const file = input.files && input.files[0];
             if (file) placeFile(d.id, file);
             input.value = "";
           });
-
-          // Drag & drop on the dedicated zone
           ["dragenter", "dragover"].forEach((evt) => {
             zone.addEventListener(evt, (e) => {
               e.preventDefault();
@@ -534,74 +695,170 @@
           return;
         }
         setError("");
-        state[id] = { file: file, workbook: null };
-        $("#summary").classList.remove("is-visible");
+        state[id] = { file: file, rows: [] };
+        $("#results").classList.remove("is-visible");
         renderSlots();
         updateButtons();
       }
 
-      async function readWorkbook(file) {
-        const kind = detectKind(file);
-        const buffer = await file.arrayBuffer();
-        if (kind === "csv") {
-          const text = new TextDecoder("utf-8").decode(buffer);
-          return XLSX.read(text, { type: "string", cellDates: true });
-        }
-        return XLSX.read(buffer, { type: "array", cellDates: true });
+      function renderKpis(result) {
+        const qs = { "NO STOCK": 0, "BO > STOCK": 0, "STOCK > BO": 0, BALANCED: 0 };
+        result.daily.forEach((r) => {
+          qs[r["Quantity Status"]] = (qs[r["Quantity Status"]] || 0) + 1;
+        });
+        const matched = result.control.filter((r) => r["BO Match"] === "Matched").length;
+        const inRtl = result.control.filter((r) => r["RTL Stock matched"] === "In Stock").length;
+        const cards = [
+          { label: "Backorders", value: result.daily.length },
+          { label: "TRL stock rows", value: state.trl.rows.length },
+          { label: "Central stock", value: result.control.length },
+          { label: "NO STOCK", value: qs["NO STOCK"] || 0 },
+          { label: "BO > STOCK", value: qs["BO > STOCK"] || 0 },
+          { label: "STOCK > BO", value: qs["STOCK > BO"] || 0 },
+          { label: "BALANCED", value: qs.BALANCED || 0 },
+          { label: "Central BO matched", value: matched + " / RTL " + inRtl },
+        ];
+        $("#kpis").innerHTML = cards
+          .map(
+            (c) => `<article class="kpi"><p class="label">${escapeHtml(c.label)}</p><p class="value">${escapeHtml(String(c.value))}</p></article>`
+          )
+          .join("");
       }
 
-      function summarizeWorkbook(wb) {
-        return wb.SheetNames.map((name) => {
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false });
-          const dataRows = Math.max(0, rows.length - 1);
-          const cols = rows[0] ? rows[0].length : 0;
-          return { name: name, rows: dataRows, cols: cols };
+      function sortRows(rows, sortState) {
+        if (!sortState.col) return rows;
+        const col = sortState.col;
+        const dir = sortState.dir;
+        return rows.slice().sort((a, b) => {
+          const av = a[col];
+          const bv = b[col];
+          const an = Number(av);
+          const bn = Number(bv);
+          if (!Number.isNaN(an) && !Number.isNaN(bn) && String(av).trim() !== "" && String(bv).trim() !== "") {
+            return (an - bn) * dir;
+          }
+          return String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true, sensitivity: "base" }) * dir;
         });
       }
 
-      async function loadFiles() {
+      function renderTable(containerId, rows, sortState, specialStatusCol) {
+        const el = $(containerId);
+        if (!rows.length) {
+          el.innerHTML = '<div style="padding:20px;color:#64748b">No rows.</div>';
+          return;
+        }
+        const headers = Object.keys(rows[0]);
+        const shown = rows.slice(0, MAX_RENDER);
+        el.innerHTML = `
+          <table class="data">
+            <thead><tr>${headers
+              .map((h) => {
+                const ind = sortState.col === h ? (sortState.dir === 1 ? " ▲" : " ▼") : "";
+                return `<th data-col="${escapeHtml(h)}">${escapeHtml(h)}${ind}</th>`;
+              })
+              .join("")}</tr></thead>
+            <tbody>
+              ${shown
+                .map((row) => {
+                  return `<tr>${headers
+                    .map((h) => {
+                      const v = row[h];
+                      if (h === specialStatusCol) return `<td>${statusPill(v)}</td>`;
+                      return `<td title="${escapeHtml(v)}">${escapeHtml(v)}</td>`;
+                    })
+                    .join("")}</tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>
+          <p style="margin:8px 10px;font-size:0.78rem;color:#64748b">Showing ${shown.length.toLocaleString()} of ${rows.length.toLocaleString()} rows</p>`;
+        el.querySelectorAll("th[data-col]").forEach((th) => {
+          th.addEventListener("click", () => {
+            const col = th.getAttribute("data-col");
+            if (sortState.col === col) sortState.dir *= -1;
+            else {
+              sortState.col = col;
+              sortState.dir = 1;
+            }
+            if (containerId === "#daily-table") renderDaily();
+            else renderCentral();
+          });
+        });
+      }
+
+      function filteredDaily() {
+        const q = ($("#daily-search").value || "").trim().toLowerCase();
+        const f = $("#daily-filter").value;
+        let rows = state.daily;
+        if (f) rows = rows.filter((r) => r["Quantity Status"] === f);
+        if (q) {
+          rows = rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(q)));
+        }
+        return sortRows(rows, state.dailySort);
+      }
+
+      function filteredCentral() {
+        const q = ($("#central-search").value || "").trim().toLowerCase();
+        const f = $("#central-filter").value;
+        let rows = state.control;
+        if (f) rows = rows.filter((r) => r["BO Match"] === f);
+        if (q) {
+          rows = rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(q)));
+        }
+        return sortRows(rows, state.controlSort);
+      }
+
+      function renderDaily() {
+        renderTable("#daily-table", filteredDaily(), state.dailySort, "Quantity Status");
+      }
+      function renderCentral() {
+        renderTable("#central-table", filteredCentral(), state.controlSort, "BO Match");
+      }
+
+      function downloadCsv(rows, filename) {
+        if (!rows.length) return;
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const csv = XLSX.utils.sheet_to_csv(ws);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
+      async function runMatching() {
         if (typeof XLSX === "undefined") {
           setError("SheetJS failed to load. Open this page over HTTP and check CDN access.");
           setStatus("Error", "error");
           return;
         }
         if (!allReady()) return;
-
         setError("");
-        setLoading(true, "Reading Excel files…");
+        setLoading(true, "Loading color dictionaries…");
         $("#load-btn").disabled = true;
-
         try {
-          const cards = [];
+          await loadDictionaries();
           for (const d of DEFINITIONS) {
             setLoading(true, "Reading " + d.title + "…");
             await new Promise((r) => setTimeout(r, 10));
             const wb = await readWorkbook(state[d.id].file);
-            state[d.id].workbook = wb;
-            const sheets = summarizeWorkbook(wb);
-            cards.push(`
-              <article class="card">
-                <h4>${escapeHtml(d.title)}</h4>
-                <p>${escapeHtml(state[d.id].file.name)} · ${formatBytes(state[d.id].file.size)}</p>
-                <ul>
-                  ${sheets
-                    .map(
-                      (s) =>
-                        "<li>Sheet “" +
-                        escapeHtml(s.name) +
-                        "”: " +
-                        s.rows +
-                        " data rows × " +
-                        s.cols +
-                        " columns</li>"
-                    )
-                    .join("")}
-                </ul>
-              </article>`);
+            state[d.id].rows = workbookToRows(wb);
+            if (!state[d.id].rows.length) throw new Error(d.title + " has no data rows.");
           }
-          $("#summary-grid").innerHTML = cards.join("");
-          $("#summary").classList.add("is-visible");
-          setStatus("Files loaded successfully", "ready");
+          setLoading(true, "Running master_sheet matching logic…");
+          await new Promise((r) => setTimeout(r, 10));
+          const result = runMasterLogic(state.backorder.rows, state.trl.rows, state.central.rows);
+          state.daily = result.daily;
+          state.control = result.control;
+          $("#results-meta").textContent =
+            state.backorder.file.name + " × " + state.trl.file.name + " × " + state.central.file.name;
+          renderKpis(result);
+          renderDaily();
+          renderCentral();
+          $("#results").classList.add("is-visible");
+          setStatus("Matching complete", "ready");
+          $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
         } catch (err) {
           console.error(err);
           setError(err.message || String(err));
@@ -614,19 +871,31 @@
 
       function clearAll() {
         DEFINITIONS.forEach((d) => {
-          state[d.id] = { file: null, workbook: null };
+          state[d.id] = { file: null, rows: [] };
         });
-        $("#summary").classList.remove("is-visible");
+        state.daily = [];
+        state.control = [];
+        $("#results").classList.remove("is-visible");
         setError("");
         renderSlots();
         updateButtons();
       }
 
-      $("#clear-btn").addEventListener("click", clearAll);
-      $("#load-btn").addEventListener("click", loadFiles);
+      function bindUi() {
+        $("#clear-btn").addEventListener("click", clearAll);
+        $("#load-btn").addEventListener("click", runMatching);
+        $("#daily-search").addEventListener("input", renderDaily);
+        $("#daily-filter").addEventListener("change", renderDaily);
+        $("#central-search").addEventListener("input", renderCentral);
+        $("#central-filter").addEventListener("change", renderCentral);
+        $("#dl-daily").addEventListener("click", () => downloadCsv(filteredDaily(), "daily_stock_matching.csv"));
+        $("#dl-central").addEventListener("click", () => downloadCsv(filteredCentral(), "central_stock_control.csv"));
+      }
 
+      loadDictionaries();
       renderSlots();
       updateButtons();
+      bindUi();
     })();
   </script>
 </body>
