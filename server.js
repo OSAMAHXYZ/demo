@@ -426,8 +426,14 @@ function vehicleIndex() {
 }
 
 function statusLabelFor(item) {
+  const vStatus = normalizeVehicleStatus(item.vehicleStatus);
+  if (item.agentStatus === 'display' || vStatus === 'display') {
+    if (item.agentStatus !== 'delivered') return 'عرض';
+  }
   if (item.agentStatus === 'delivered') {
-    if (item.showroomDisplay || item.deliveryMode === 'showroom') return 'عرض الصالة';
+    if (vStatus === 'display' || item.showroomDisplay || item.deliveryMode === 'showroom') {
+      return 'عرض الصالة';
+    }
     return item.deliveryMode === 'warehouse'
       ? 'تم التسليم في المستودع'
       : 'تم الترحيل';
@@ -446,6 +452,79 @@ function statusLabelFor(item) {
   return item.assignedTo
     ? `Waiting for delivery · مع ${item.assignedTo}`
     : 'Waiting for delivery';
+}
+
+function vehicleStatusPaperLabel(status) {
+  const s = normalizeVehicleStatus(status);
+  if (s === 'display') return 'عرض';
+  if (s === 'delivery') return 'تسليم';
+  return '';
+}
+
+/** Month key YYYY-MM from ISO timestamp (Asia/Riyadh). */
+function isoToMonthKey(iso) {
+  if (!iso) return '';
+  const s = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7);
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit'
+  }).format(dt);
+}
+
+/**
+ * Coordinator hides تم الترحيل from previous months once the calendar
+ * rolls (from the 1st of the new month onward). Current-month deliveries stay.
+ */
+function isPriorMonthDelivered(item) {
+  if (!item || item.agentStatus !== 'delivered') return false;
+  if (normalizeVehicleStatus(item.vehicleStatus) === 'display') return false;
+  if (item.showroomDisplay || item.deliveryMode === 'showroom') return false;
+  const current = todayIsoRiyadh().slice(0, 7);
+  const deliveredMonth = isoToMonthKey(item.deliveredAt || item.assignedAt || item.addedAt);
+  if (!deliveredMonth) return false;
+  return deliveredMonth < current;
+}
+
+const NOTES_ARCHIVE_DIR = path.join(ROOT, 'delivery-notes-archive');
+
+function ensureNotesArchiveDir() {
+  if (!fs.existsSync(NOTES_ARCHIVE_DIR)) {
+    fs.mkdirSync(NOTES_ARCHIVE_DIR, { recursive: true });
+  }
+}
+
+/** Persist delivery note as DOCX archive (printable document kept forever). */
+function archiveDeliveryNoteFile(draft) {
+  if (!draft || typeof draft !== 'object') return null;
+  try {
+    ensureNotesArchiveDir();
+    const num = String(draft.deliveryNoteNumber || draft.id || `draft_${Date.now()}`).replace(/[^\w.-]+/g, '_');
+    const payload = { ...(draft.payload || {}) };
+    if (draft.deliveryNoteNumber) payload.deliveryNoteNumber = draft.deliveryNoteNumber;
+    if (draft.vehicleStatus) {
+      payload.vehicleStatus = draft.vehicleStatus;
+      payload.attachments = [
+        String(payload.attachments || '').trim(),
+        `الحالة / Status: ${vehicleStatusPaperLabel(draft.vehicleStatus)}`
+      ].filter(Boolean).join('\n');
+    }
+    const buf = generateDocx(payload);
+    const filename = `${num}.docx`;
+    const abs = path.join(NOTES_ARCHIVE_DIR, filename);
+    fs.writeFileSync(abs, buf);
+    draft.archiveFile = filename;
+    draft.archivePath = `delivery-notes-archive/${filename}`;
+    draft.archiveSavedAt = new Date().toISOString();
+    draft.pdfSaved = true; // archived printable document (DOCX) for admin
+    return draft.archivePath;
+  } catch (err) {
+    console.error('[archive-note]', err.message);
+    return null;
+  }
 }
 
 const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
@@ -506,17 +585,23 @@ function collectDraftVins(draftPayload, extra = []) {
 /**
  * Mark VINs as delivered on the coordinator queue (creates queue rows if missing).
  * Shared by agent complete-print and admin draft edit.
+ * display status → stays pickable by agents for a later delivery note.
  */
 function markVinsDelivered(vins, {
   assignedTo = 'admin',
   warehouseDelivery = false,
   showroomDisplay = false,
+  vehicleStatus = '',
   forceAssign = true,
   carMetaByVin = null
 } = {}) {
   const byVehicle = vehicleIndex();
   const deliveredItems = [];
   const blocked = [];
+  const status = normalizeVehicleStatus(vehicleStatus)
+    || (showroomDisplay ? 'display' : 'delivery');
+  const isDisplay = status === 'display' || showroomDisplay;
+  const nowIso = new Date().toISOString();
 
   for (const vin of vins) {
     const meta = (carMetaByVin && carMetaByVin.get(vin)) || {};
@@ -525,16 +610,20 @@ function markVinsDelivered(vins, {
       const veh = byVehicle.get(vin);
       item = enrichFromVehicle({
         vin,
-        status: 'claimed',
-        agentStatus: 'delivered',
-        deliveryMode: showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
-        showroomDisplay: Boolean(showroomDisplay),
-        assignedTo: assignedTo || 'admin',
-        assignedAt: new Date().toISOString(),
-        addedAt: new Date().toISOString(),
+        // Display cars stay available so agents can pick them for a new delivery note
+        status: isDisplay ? 'available' : 'claimed',
+        agentStatus: isDisplay ? 'display' : 'delivered',
+        deliveryMode: isDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
+        showroomDisplay: Boolean(isDisplay),
+        vehicleStatus: status,
+        assignedTo: isDisplay ? '' : (assignedTo || 'admin'),
+        assignedAt: nowIso,
+        deliveredAt: isDisplay ? '' : nowIso,
+        addedAt: nowIso,
         product: meta.product || '',
         model: meta.model || meta.product || '',
-        plate: meta.plate || ''
+        plate: meta.plate || '',
+        entryAgent: assignedTo || ''
       }, veh || {});
       store.queue.push(item);
     } else {
@@ -544,18 +633,33 @@ function markVinsDelivered(vins, {
         && assignedTo
         && item.assignedTo !== assignedTo
         && item.agentStatus !== 'delivered'
+        && item.agentStatus !== 'display'
       ) {
         blocked.push({ vin, assignedTo: item.assignedTo });
         continue;
       }
-      item.status = 'claimed';
-      item.agentStatus = 'delivered';
-      item.deliveryMode = showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : '');
-      item.showroomDisplay = Boolean(showroomDisplay);
-      if (assignedTo) item.assignedTo = assignedTo;
+      if (isDisplay) {
+        item.status = 'available';
+        item.agentStatus = 'display';
+        item.deliveryMode = 'showroom';
+        item.showroomDisplay = true;
+        item.vehicleStatus = 'display';
+        item.assignedTo = '';
+        item.deliveredAt = '';
+      } else {
+        item.status = 'claimed';
+        item.agentStatus = 'delivered';
+        item.deliveryMode = warehouseDelivery ? 'warehouse' : '';
+        item.showroomDisplay = false;
+        item.vehicleStatus = 'delivery';
+        if (assignedTo) item.assignedTo = assignedTo;
+        item.deliveredAt = nowIso;
+      }
+      item.assignedAt = nowIso;
       if (meta.product && !item.product) item.product = meta.product;
       if (meta.model && !item.model) item.model = meta.model;
       if (meta.plate && !item.plate) item.plate = meta.plate;
+      if (assignedTo) item.entryAgent = assignedTo;
     }
     deliveredItems.push(enrichQueueItem(item));
   }
@@ -1246,6 +1350,7 @@ function createPdfDraftsFromVehicles(vehicles, { assignedTo = 'admin' } = {}) {
         entryAgent: assignedTo,
         vehicleStatus: 'delivery'
       });
+      archiveDeliveryNoteFile(draft);
       store.drafts.unshift(draft);
       created.push({
         id: draft.id,
@@ -1703,10 +1808,21 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
 
   let queue = store.queue.map(enrichQueueItem);
 
+  // Agents also see display-status cars (from ياسين) to convert into a delivery note
   if (!admin && username) {
     queue = queue.filter(
-      (q) => q.status === 'available' || q.assignedTo === username
+      (q) => q.status === 'available'
+        || q.assignedTo === username
+        || q.agentStatus === 'display'
+        || normalizeVehicleStatus(q.vehicleStatus) === 'display'
     );
+  }
+
+  // Coordinator page: hide تم الترحيل from prior months (from the 1st of each new month).
+  // Admin dashboard keeps full history (do not pass coordinator=1).
+  const forCoordinator = String(req.query.coordinator || '') === '1';
+  if (forCoordinator) {
+    queue = queue.filter((q) => !isPriorMonthDelivered(q));
   }
 
   if (admin) {
@@ -1920,12 +2036,30 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   const vins = collectDraftVins(draftPayload, [primaryVin, ...fromBody]);
   if (!vins.length) return res.status(400).json({ error: 'الشاسيه مطلوب' });
 
-  const showroomDisplay = Boolean(
+  let showroomDisplay = Boolean(
     req.body?.showroomDisplay
     || isShowroomDraftPayload(draftPayload)
-    || auth.username === SHOWROOM_AGENT
   );
+  // ياسين default remains showroom unless payload sets delivery status
+  if (auth.username === SHOWROOM_AGENT) {
+    const vs = normalizeVehicleStatus(draftPayload.vehicleStatus || req.body?.vehicleStatus);
+    if (vs === 'delivery') showroomDisplay = false;
+    else if (vs === 'display' || !vs) showroomDisplay = true;
+  }
   const warehouseDelivery = !showroomDisplay && isWarehouseDraftPayload(draftPayload);
+  const vehicleStatus = normalizeVehicleStatus(draftPayload.vehicleStatus || req.body?.vehicleStatus)
+    || (showroomDisplay ? 'display' : 'delivery');
+
+  const statusPaper = vehicleStatusPaperLabel(vehicleStatus);
+  if (statusPaper) {
+    const tag = `الحالة / Status: ${statusPaper}`;
+    const prev = String(draftPayload.attachments || '').trim();
+    if (!prev.includes(tag)) {
+      draftPayload.attachments = [prev, tag].filter(Boolean).join('\n');
+    }
+    draftPayload.vehicleStatus = vehicleStatus;
+    draftPayload.vehicle_status_label = statusPaper;
+  }
 
   const carMetaByVin = new Map();
   (Array.isArray(draftPayload.cars) ? draftPayload.cars : []).forEach((c) => {
@@ -1938,12 +2072,18 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     });
   });
 
+  const convertingDisplay = vins.some((vin) => {
+    const item = findQueueItem(vin);
+    return item && (item.agentStatus === 'display' || normalizeVehicleStatus(item.vehicleStatus) === 'display');
+  });
+
   const { deliveredItems, blocked } = markVinsDelivered(vins, {
     assignedTo: auth.username,
     warehouseDelivery,
     showroomDisplay,
-    // Showroom agent enters VINs manually — allow create/claim even if not on queue
-    forceAssign: showroomDisplay ? true : false,
+    vehicleStatus,
+    // Allow agents to convert display cars into a new delivery note
+    forceAssign: showroomDisplay || convertingDisplay || auth.username === SHOWROOM_AGENT,
     carMetaByVin
   });
   if (blocked.length) {
@@ -1962,8 +2102,6 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
   if (autoBranch && !warehouseDelivery) {
     draftPayload.branch_to = autoBranch;
   }
-  const vehicleStatus = normalizeVehicleStatus(draftPayload.vehicleStatus)
-    || (showroomDisplay ? 'display' : 'delivery');
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
@@ -1980,6 +2118,7 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     gt: primary.gt || '',
     location: primary.location || '',
     showroomDisplay: Boolean(showroomDisplay),
+    vehicleStatus,
     payload: {
       ...draftPayload,
       branch_to: warehouseDelivery
@@ -2001,6 +2140,7 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     branchEntryDate: draftPayload.branchEntryDate || '',
     manualEntry: Boolean(draftPayload.manualEntry)
   });
+  archiveDeliveryNoteFile(draft);
   store.drafts.unshift(draft);
   if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
 
@@ -2010,11 +2150,14 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     draftId: id,
     deliveryNoteNumber: draft.deliveryNoteNumber,
     deliveryNoteDate: draft.deliveryNoteDate,
+    archivePath: draft.archivePath || null,
+    pdfSaved: Boolean(draft.pdfSaved),
     vins,
     deliveredCount: deliveredItems.length,
     showroomDisplay: Boolean(showroomDisplay),
+    vehicleStatus,
     statusLabel: showroomDisplay
-      ? 'عرض الصالة'
+      ? 'عرض'
       : (warehouseDelivery ? 'تم التسليم في المستودع' : 'تم الترحيل'),
     item: primary,
     items: deliveredItems
@@ -2157,7 +2300,8 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
   const isDisplay = vehicleStatus === 'display';
   const today = todayIsoRiyadh();
   const dayName = arabicWeekdayName(today);
-  const carRows = [{ model: model || vehicle, chassis: vin, plate, remarks: '' }];
+  const statusPaper = vehicleStatusPaperLabel(vehicleStatus);
+  const carRows = [{ model: model || vehicle, chassis: vin, plate, remarks: statusPaper ? `الحالة: ${statusPaper}` : '' }];
   while (carRows.length < 10) carRows.push(emptyCarSlot());
 
   const draftPayload = {
@@ -2165,6 +2309,7 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     deliveryNoteDate: today,
     branchEntryDate,
     vehicleStatus,
+    vehicle_status_label: statusPaper,
     manualEntry: true,
     entryAgent: auth.username,
     invoice_number: '',
@@ -2178,7 +2323,7 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     trailer_number: '',
     car_count: '1',
     branch_to: branch,
-    attachments: '',
+    attachments: statusPaper ? `الحالة / Status: ${statusPaper}` : '',
     cars: carRows,
     vins: [vin],
     showroom_display: isDisplay,
@@ -2192,6 +2337,7 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     assignedTo: auth.username,
     warehouseDelivery: false,
     showroomDisplay: isDisplay,
+    vehicleStatus,
     forceAssign: true,
     carMetaByVin
   });
@@ -2243,8 +2389,10 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     manualEntry: true,
     deliveryNoteDate: today
   });
+  archiveDeliveryNoteFile(draft);
   vehicleRecord.deliveryNoteNumber = draft.deliveryNoteNumber;
   vehicleRecord.draftId = draft.id;
+  vehicleRecord.archivePath = draft.archivePath || '';
 
   store.drafts.unshift(draft);
   if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
@@ -2256,7 +2404,10 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     draftId: draft.id,
     deliveryNoteNumber: draft.deliveryNoteNumber,
     deliveryNoteDate: draft.deliveryNoteDate,
+    archivePath: draft.archivePath || null,
+    pdfSaved: Boolean(draft.pdfSaved),
     vehicleStatus,
+    statusLabel: isDisplay ? 'عرض' : 'تم الترحيل',
     branch,
     branchEntryDate,
     item: deliveredItems[0] || null,
@@ -2291,6 +2442,21 @@ app.get('/api/delivery-notes', (req, res) => {
   });
 });
 
+/** Ensure all drafts have archived files (admin backfill). */
+app.post('/api/delivery-notes/archive-missing', (_req, res) => {
+  let saved = 0;
+  let failed = 0;
+  for (const d of store.drafts || []) {
+    const hasFile = d.archiveFile
+      && fs.existsSync(path.join(NOTES_ARCHIVE_DIR, path.basename(d.archiveFile)));
+    if (hasFile) continue;
+    if (archiveDeliveryNoteFile(d)) saved += 1;
+    else failed += 1;
+  }
+  persistAndBroadcast();
+  res.json({ ok: true, saved, failed, total: (store.drafts || []).length });
+});
+
 app.get('/api/delivery-notes/vin/:vin', (req, res) => {
   const vin = normVin(req.params.vin);
   if (!vin) return res.status(400).json({ error: 'VIN مطلوب' });
@@ -2319,6 +2485,40 @@ app.get('/api/delivery-notes/:deliveryNoteNumber', (req, res) => {
   );
   if (!draft) return res.status(404).json({ error: 'مذكرة التسليم غير موجودة' });
   res.json({ draft });
+});
+
+/** Download archived delivery-note document (DOCX printable archive). */
+app.get('/api/delivery-notes/:deliveryNoteNumber/file', (req, res) => {
+  const num = String(req.params.deliveryNoteNumber || '').trim();
+  const draft = (store.drafts || []).find((d) =>
+    String(d.deliveryNoteNumber || (d.payload && d.payload.deliveryNoteNumber) || '') === num
+    || String(d.id || '') === num
+  );
+  if (!draft) return res.status(404).json({ error: 'مذكرة التسليم غير موجودة' });
+
+  let abs = '';
+  if (draft.archiveFile) {
+    abs = path.join(NOTES_ARCHIVE_DIR, path.basename(draft.archiveFile));
+  }
+  if (!abs || !fs.existsSync(abs)) {
+    archiveDeliveryNoteFile(draft);
+    saveStore();
+    abs = draft.archiveFile
+      ? path.join(NOTES_ARCHIVE_DIR, path.basename(draft.archiveFile))
+      : '';
+  }
+  if (!abs || !fs.existsSync(abs)) {
+    return res.status(404).json({ error: 'ملف المذكرة غير محفوظ بعد' });
+  }
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${path.basename(abs)}"`
+  );
+  res.sendFile(abs);
 });
 
 app.post('/api/delivery-note/generate', (req, res) => {

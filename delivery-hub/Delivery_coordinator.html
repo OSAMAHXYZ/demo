@@ -92,7 +92,7 @@
         <section class="hub-section">
             <div class="hub-section-head">
                 <h2>٣ — قائمة الشاسيه المرسلة — Submitted Queue</h2>
-                <span class="hub-hint">تحديث فوري — Live sync</span>
+                <span class="hub-hint">تم الترحيل من الأشهر السابقة يُخفى تلقائياً من يوم 1 لكل شهر · الإدارة تحتفظ بالأرشيف حسب الشهر</span>
             </div>
             <div class="hub-table-wrap">
                 <table class="hub-table">
@@ -102,13 +102,14 @@
                             <th>Product</th>
                             <th>الشركة</th>
                             <th>النوع</th>
+                            <th>حالة المذكرة</th>
                             <th>المسؤول</th>
                             <th>التصنيف</th>
                             <th>الحالة</th>
                         </tr>
                     </thead>
                     <tbody id="queueBody">
-                        <tr><td colspan="7" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>
+                        <tr><td colspan="8" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -362,7 +363,7 @@
         function renderQueue(queue) {
             const tbody = document.getElementById('queueBody');
             if (!rawUploaded) {
-                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>';
                 return;
             }
             const seen = new Set();
@@ -374,7 +375,7 @@
                 unique.push(item);
             });
             if (!unique.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="hub-empty">لا توجد شاسيه بعد — الصق أرقام الشاسيه أعلاه</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد شاسيه بعد — الصق أرقام الشاسيه أعلاه</td></tr>';
                 return;
             }
             tbody.innerHTML = unique.map((item) => {
@@ -383,25 +384,35 @@
                 const mode = String(item.plannedDeliveryMode || '').toLowerCase();
                 const isWh = mode === 'warehouse' || item.deliveryMode === 'warehouse';
                 const company = item.deliveryCompany || item.company || '—';
+                const vStatus = String(item.vehicleStatus || '').toLowerCase();
+                const noteStatus = vStatus === 'display' || item.agentStatus === 'display'
+                    ? '<span class="hub-badge hub-badge--memo-plan">عرض</span>'
+                    : (item.agentStatus === 'delivered'
+                        ? '<span class="hub-badge hub-badge--delivered">تسليم</span>'
+                        : '—');
                 const typeBadge = isWh
                     ? '<span class="hub-badge hub-badge--wh">مستودع</span>'
                     : (mode === 'memo'
                         ? '<span class="hub-badge hub-badge--memo-plan">ترحيل</span>'
                         : '—');
+                const rowState = item.agentStatus === 'delivered'
+                    ? 'تم الترحيل'
+                    : (item.agentStatus === 'display' ? 'عرض — متاح للمذكرة' : (avail ? 'Waiting for delivery' : 'محجوز'));
                 return `<tr>
                     <td class="hub-vin">${item.vin}</td>
                     <td>${item.product || '—'}</td>
                     <td>${company}</td>
                     <td>${typeBadge}</td>
+                    <td>${noteStatus}</td>
                     <td>${item.assignedTo || '—'}</td>
                     <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
-                    <td>${avail ? 'Waiting for delivery' : (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز')}</td>
+                    <td>${rowState}</td>
                 </tr>`;
             }).join('');
         }
 
         async function loadQueue() {
-            const res = await fetch('/api/delivery-coordinator/queue?admin=1');
+            const res = await fetch('/api/delivery-coordinator/queue?admin=1&coordinator=1');
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'فشل التحميل');
             currentQueue = data.queue || [];

@@ -5263,6 +5263,8 @@
                 allQueue = [];
                 allDrafts = [];
             }
+            // Backfill archived delivery-note files for admin (non-blocking)
+            fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
             loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
             updateFoldCounts();
             refreshTransferDashboard();
@@ -5286,6 +5288,17 @@
                     const id = btn.dataset.editDraft;
                     window.open(
                         `Delivery_pdf.html?draft=${encodeURIComponent(id)}&adminEdit=1`,
+                        '_blank',
+                        'noopener'
+                    );
+                });
+            });
+            tbody.querySelectorAll('[data-archive-dn]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const num = btn.dataset.archiveDn;
+                    if (!num) return;
+                    window.open(
+                        `/api/delivery-notes/${encodeURIComponent(num)}/file`,
                         '_blank',
                         'noopener'
                     );
@@ -5445,7 +5458,10 @@
                     <td style="white-space:nowrap">
                         ${canExport
                             ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
-                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">PDF</button>`
+                               <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">PDF</button>
+                               ${dn && dn !== '—'
+                                    ? `<button type="button" class="hub-btn hub-btn--sm" data-archive-dn="${escapeHtml(dn)}" title="تحميل الملف المحفوظ">ملف</button>`
+                                    : ''}`
                             : '<span class="hub-meta">—</span>'}
                     </td>
                 </tr>`;

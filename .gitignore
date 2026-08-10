@@ -14,6 +14,10 @@ desktop.ini
 .env
 .env.*
 
+# Saved delivery-note archives (generated at runtime)
+delivery-notes-archive/*.docx
+!delivery-notes-archive/.gitkeep
+
 # Node
 node_modules/
 

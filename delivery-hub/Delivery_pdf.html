@@ -1154,6 +1154,14 @@
                 <p class="ws-empty fleet-search-empty hidden" id="availableVinSearchEmpty">لا توجد نتائج مطابقة للبحث</p>
                 <p class="ws-toast" id="queueStatus"></p>
             </section>
+
+            <section class="ws-section" id="displayFleetSection">
+                <div class="ws-section-head">
+                    <h2>سيارات العرض — Display</h2>
+                    <span class="hint">من ياسين · اختر لإصدار مذكرة تسليم جديدة (يُسمح بتكرار الشاسيه)</span>
+                </div>
+                <div class="fleet-grid" id="displayFleet"></div>
+            </section>
         </div>
 
         <aside class="stock-dock" id="stockDock">
@@ -1717,7 +1725,8 @@
                 lastManualDnNumber = data.deliveryNoteNumber || '';
                 const success = document.getElementById('manualSuccess');
                 if (success) {
-                    success.textContent = `Vehicle created successfully · Delivery Note: ${lastManualDnNumber || data.draftId}`;
+                    const stLabel = vehicleStatus === 'display' ? 'عرض' : 'تسليم';
+                    success.textContent = `Vehicle created successfully · Delivery Note: ${lastManualDnNumber || data.draftId} · الحالة: ${stLabel}${data.pdfSaved ? ' · ملف محفوظ' : ''}`;
                     success.classList.add('show');
                 }
                 document.getElementById('manualAfterActions').hidden = false;
@@ -1838,6 +1847,7 @@
                     print_time: fd.get('wh_print_time')?.trim()
                 },
                 phone: fd.get('wh_user_phone')?.trim(),
+                vehicleStatus: window.__forceVehicleStatus || undefined,
                 cars
             };
         }
@@ -2502,16 +2512,20 @@
             workspaceQueue = queue || [];
             document.getElementById('loggedAs').textContent = agent.username;
 
+            const isDisplayItem = (q) => q.agentStatus === 'display'
+                || String(q.vehicleStatus || '').toLowerCase() === 'display';
+
             const mine = workspaceQueue.filter((q) => q.assignedTo === agent.username);
-            const available = workspaceQueue.filter((q) => q.status === 'available');
+            const displayCars = workspaceQueue.filter(isDisplayItem);
+            const available = workspaceQueue.filter((q) => q.status === 'available' && !isDisplayItem(q));
             const stock = mine.filter((q) => q.agentStatus === 'in_stock');
             const delivered = mine.filter((q) => q.agentStatus === 'delivered');
 
             document.getElementById('wsStats').innerHTML = `
                 <div class="ws-stat ws-stat--avail"><span>متاح</span><b>${available.length}</b></div>
                 <div class="ws-stat ws-stat--stock"><span>مخزوني</span><b>${stock.length}</b></div>
+                <div class="ws-stat"><span>عرض</span><b>${displayCars.length}</b></div>
                 <div class="ws-stat ws-stat--avail"><span>تم الترحيل</span><b>${delivered.length}</b></div>
-                <div class="ws-stat"><span>إجمالي سياراتي</span><b>${mine.length}</b></div>
             `;
 
             const availEl = document.getElementById('availableFleet');
@@ -2537,6 +2551,21 @@
                 });
             }
             filterAvailableFleetByVin();
+
+            const displayEl = document.getElementById('displayFleet');
+            if (displayEl) {
+                if (!displayCars.length) {
+                    displayEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات عرض</strong>عندما يضيف ياسين بحالة «عرض» تظهر هنا</div>';
+                } else {
+                    displayEl.innerHTML = displayCars.map((item) => fleetCardHtml(item, 'avail')).join('');
+                    displayEl.querySelectorAll('.fleet-card').forEach((card) => {
+                        card.addEventListener('click', () => {
+                            // Convert display → new delivery note
+                            startDeliveryNote(card.dataset.vin, { forceMode: 'memo', fromDisplay: true });
+                        });
+                    });
+                }
+            }
 
             const dockEl = document.getElementById('stockDockList');
             if (!stock.length) {
@@ -2613,7 +2642,7 @@
             }
         }
 
-        async function startDeliveryNote(vin, { forceMode = '' } = {}) {
+        async function startDeliveryNote(vin, { forceMode = '', fromDisplay = false } = {}) {
             const item = workspaceQueue.find((q) => q.vin === vin)
                 || { vin };
             openMainWithVin(item);
@@ -2624,7 +2653,7 @@
             }
             setWarehousePrintMode(false);
             const company = String(item.deliveryCompany || item.company || '').trim();
-            if (company && company !== 'المستودع') {
+            if (company && company !== 'المستودع' && company !== 'سيارات عرض الصالة') {
                 ensureSearchableOptionAllow(company);
                 const companyEl = document.getElementById('company_rep');
                 if (companyEl) {
@@ -2634,6 +2663,21 @@
                 }
             }
             applyAgentAutoBranch();
+            // Display → new delivery note: stamp status on form for paper + save
+            if (fromDisplay || item.agentStatus === 'display'
+                || String(item.vehicleStatus || '').toLowerCase() === 'display') {
+                const att = document.getElementById('attachments');
+                if (att) {
+                    const tag = 'الحالة / Status: تسليم';
+                    if (!String(att.value || '').includes(tag)) {
+                        att.value = [String(att.value || '').trim(), tag].filter(Boolean).join('\n');
+                    }
+                }
+                window.__forceVehicleStatus = 'delivery';
+                setStatus('سيارة عرض — أصدر مذكرة تسليم جديدة ثم اطبع', 'ok');
+            } else {
+                window.__forceVehicleStatus = '';
+            }
             updatePreview();
         }
 
