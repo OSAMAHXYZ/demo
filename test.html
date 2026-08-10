@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Standalone Excel intake — Backorder, TRL Stock, Central Stock" />
+  <title>Stock Excel Intake</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --surface: #fff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --line-strong: #cbd5e1;
+      --accent: #0f4c81;
+      --accent-soft: rgba(15, 76, 129, 0.08);
+      --ok: #15803d;
+      --ok-bg: #dcfce7;
+      --err: #b91c1c;
+      --err-bg: #fee2e2;
+      --radius: 16px;
+      --font: "DM Sans", "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--ink);
+      background:
+        radial-gradient(800px 400px at 100% 0%, rgba(15, 76, 129, 0.08), transparent 55%),
+        var(--bg);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 54ch;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 10px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid rgba(15, 76, 129, 0.18);
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .slot {
+      background: var(--surface);
+      border: 1.5px dashed var(--line-strong);
+      border-radius: var(--radius);
+      padding: 20px;
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: var(--shadow);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .slot.is-drag {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .slot.has-file {
+      border-style: solid;
+      border-color: #86efac;
+      background: #f0fdf4;
+    }
+    .slot-kicker {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .slot h2 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+    .slot .hint {
+      margin: 0;
+      flex: 1;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .slot .meta {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--ink);
+      word-break: break-all;
+    }
+    .slot input[type="file"] { display: none; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { background: #f8fafc; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: #0c3d68; }
+
+    .bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    .status {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .status.ready { color: var(--ok); }
+    .status.error { color: var(--err); }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .panel.is-visible { display: block; }
+    .panel h3 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .card {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .card h4 { margin: 0 0 6px; font-size: 0.92rem; }
+    .card p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .card ul {
+      margin: 8px 0 0;
+      padding-inline-start: 18px;
+      font-size: 0.84rem;
+      color: var(--ink);
+    }
+
+    .error {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--err-bg);
+      color: var(--err);
+      border: 1px solid #fecaca;
+      font-size: 0.9rem;
+    }
+    .error.is-visible { display: block; }
+
+    .loading {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      color: #0369a1;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .loading.is-visible { display: flex; }
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(3, 105, 161, 0.25);
+      border-top-color: #0369a1;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid, .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="badge">Standalone · not linked to other apps</span>
+      <h1>Place stock Excel files</h1>
+      <p>
+        Upload exactly three workbooks: <strong>Backorder</strong>,
+        <strong>TRL Stock</strong>, and <strong>Central Stock</strong>.
+        Files stay in this browser only.
+      </p>
+    </header>
+
+    <div class="grid" id="slots"></div>
+
+    <div class="bar">
+      <div class="status" id="status">Waiting for 3 Excel files</div>
+      <div class="actions">
+        <button type="button" class="btn" id="clear-btn" disabled>Clear all</button>
+        <button type="button" class="btn btn-primary" id="load-btn" disabled>Load files</button>
+      </div>
+    </div>
+
+    <div class="loading" id="loading" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <span id="loading-text">Reading Excel files…</span>
+    </div>
+    <div class="error" id="error" role="alert"></div>
+
+    <section class="panel" id="summary" aria-labelledby="summary-heading">
+      <h3 id="summary-heading">Loaded files</h3>
+      <div class="summary-grid" id="summary-grid"></div>
+    </section>
+
+    <footer>Self-contained page · Backorder · TRL Stock · Central Stock</footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+
+      const DEFINITIONS = [
+        {
+          id: "backorder",
+          title: "Backorder Excel",
+          hint: "Place the backorder workbook here (.xlsx, .xls, or .csv).",
+        },
+        {
+          id: "trl",
+          title: "TRL Stock Excel",
+          hint: "Place the TRL stock workbook here (.xlsx, .xls, or .csv).",
+        },
+        {
+          id: "central",
+          title: "Central Stock Excel",
+          hint: "Place the central stock workbook here (.xlsx, .xls, or .csv).",
+        },
+      ];
+
+      /** @type {Record<string, { file: File|null, workbook: object|null }>} */
+      const state = {
+        backorder: { file: null, workbook: null },
+        trl: { file: null, workbook: null },
+        central: { file: null, workbook: null },
+      };
+
+      const $ = (sel) => document.querySelector(sel);
+
+      function formatBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+        return (n / (1024 * 1024)).toFixed(2) + " MB";
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function detectKind(file) {
+        const name = (file.name || "").toLowerCase();
+        const type = (file.type || "").toLowerCase();
+        if (name.endsWith(".csv") || type.includes("csv")) return "csv";
+        if (name.endsWith(".xls") && !name.endsWith(".xlsx")) return "xls";
+        if (name.endsWith(".xlsx") || type.includes("sheet") || type.includes("excel")) return "xlsx";
+        return null;
+      }
+
+      function setStatus(text, cls) {
+        const el = $("#status");
+        el.textContent = text;
+        el.className = "status" + (cls ? " " + cls : "");
+      }
+
+      function setError(msg) {
+        const el = $("#error");
+        el.textContent = msg || "";
+        el.classList.toggle("is-visible", !!msg);
+      }
+
+      function setLoading(on, text) {
+        const el = $("#loading");
+        el.classList.toggle("is-visible", on);
+        if (text) $("#loading-text").textContent = text;
+      }
+
+      function allReady() {
+        return DEFINITIONS.every((d) => state[d.id].file);
+      }
+
+      function updateButtons() {
+        const any = DEFINITIONS.some((d) => state[d.id].file);
+        $("#clear-btn").disabled = !any;
+        $("#load-btn").disabled = !allReady();
+        if (allReady()) setStatus("All 3 files placed — ready to load", "ready");
+        else if (any) {
+          const missing = DEFINITIONS.filter((d) => !state[d.id].file).map((d) => d.title);
+          setStatus("Still need: " + missing.join(", "));
+        } else setStatus("Waiting for 3 Excel files");
+      }
+
+      function renderSlots() {
+        const root = $("#slots");
+        root.innerHTML = DEFINITIONS.map((d) => {
+          const slot = state[d.id];
+          const has = !!slot.file;
+          return `
+            <article class="slot${has ? " has-file" : ""}" data-id="${d.id}">
+              <span class="slot-kicker">${escapeHtml(d.id)}</span>
+              <h2>${escapeHtml(d.title)}</h2>
+              <p class="hint">${escapeHtml(d.hint)}</p>
+              <p class="meta">${
+                has
+                  ? escapeHtml(slot.file.name) + " · " + formatBytes(slot.file.size) + " · " + detectKind(slot.file).toUpperCase()
+                  : "No file placed"
+              }</p>
+              <div class="actions">
+                <button type="button" class="btn btn-primary" data-choose="${d.id}">Choose file</button>
+                <button type="button" class="btn" data-remove="${d.id}" ${has ? "" : "disabled"}>Remove</button>
+              </div>
+              <input type="file" id="input-${d.id}" accept="${ACCEPT}" aria-label="${escapeHtml(d.title)}" />
+            </article>`;
+        }).join("");
+
+        DEFINITIONS.forEach((d) => {
+          const card = root.querySelector('[data-id="' + d.id + '"]');
+          const input = document.getElementById("input-" + d.id);
+
+          card.querySelector('[data-choose="' + d.id + '"]').addEventListener("click", () => input.click());
+          card.querySelector('[data-remove="' + d.id + '"]').addEventListener("click", () => {
+            state[d.id] = { file: null, workbook: null };
+            $("#summary").classList.remove("is-visible");
+            setError("");
+            renderSlots();
+            updateButtons();
+          });
+
+          input.addEventListener("change", () => {
+            const file = input.files && input.files[0];
+            if (file) placeFile(d.id, file);
+            input.value = "";
+          });
+
+          card.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            card.classList.add("is-drag");
+          });
+          card.addEventListener("dragleave", () => card.classList.remove("is-drag"));
+          card.addEventListener("drop", (e) => {
+            e.preventDefault();
+            card.classList.remove("is-drag");
+            const file = e.dataTransfer.files && e.dataTransfer.files[0];
+            if (file) placeFile(d.id, file);
+          });
+        });
+      }
+
+      function placeFile(id, file) {
+        if (!detectKind(file)) {
+          setError('Unsupported file “‘ + file.name + '”. Use .xlsx, .xls, or .csv.');
+          setStatus("Error", "error");
+          return;
+        }
+        setError("");
+        state[id] = { file: file, workbook: null };
+        $("#summary").classList.remove("is-visible");
+        renderSlots();
+        updateButtons();
+      }
+
+      async function readWorkbook(file) {
+        const kind = detectKind(file);
+        const buffer = await file.arrayBuffer();
+        if (kind === "csv") {
+          const text = new TextDecoder("utf-8").decode(buffer);
+          return XLSX.read(text, { type: "string", cellDates: true });
+        }
+        return XLSX.read(buffer, { type: "array", cellDates: true });
+      }
+
+      function summarizeWorkbook(wb) {
+        return wb.SheetNames.map((name) => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false });
+          const dataRows = Math.max(0, rows.length - 1);
+          const cols = rows[0] ? rows[0].length : 0;
+          return { name: name, rows: dataRows, cols: cols };
+        });
+      }
+
+      async function loadFiles() {
+        if (typeof XLSX === "undefined") {
+          setError("SheetJS failed to load. Open this page over HTTP and check CDN access.");
+          setStatus("Error", "error");
+          return;
+        }
+        if (!allReady()) return;
+
+        setError("");
+        setLoading(true, "Reading Excel files…");
+        $("#load-btn").disabled = true;
+
+        try {
+          const cards = [];
+          for (const d of DEFINITIONS) {
+            setLoading(true, "Reading " + d.title + "…");
+            await new Promise((r) => setTimeout(r, 10));
+            const wb = await readWorkbook(state[d.id].file);
+            state[d.id].workbook = wb;
+            const sheets = summarizeWorkbook(wb);
+            cards.push(`
+              <article class="card">
+                <h4>${escapeHtml(d.title)}</h4>
+                <p>${escapeHtml(state[d.id].file.name)} · ${formatBytes(state[d.id].file.size)}</p>
+                <ul>
+                  ${sheets
+                    .map(
+                      (s) =>
+                        "<li>Sheet “" +
+                        escapeHtml(s.name) +
+                        "”: " +
+                        s.rows +
+                        " data rows × " +
+                        s.cols +
+                        " columns</li>"
+                    )
+                    .join("")}
+                </ul>
+              </article>`);
+          }
+          $("#summary-grid").innerHTML = cards.join("");
+          $("#summary").classList.add("is-visible");
+          setStatus("Files loaded successfully", "ready");
+        } catch (err) {
+          console.error(err);
+          setError(err.message || String(err));
+          setStatus("Error", "error");
+        } finally {
+          setLoading(false);
+          updateButtons();
+        }
+      }
+
+      function clearAll() {
+        DEFINITIONS.forEach((d) => {
+          state[d.id] = { file: null, workbook: null };
+        });
+        $("#summary").classList.remove("is-visible");
+        setError("");
+        renderSlots();
+        updateButtons();
+      }
+
+      $("#clear-btn").addEventListener("click", clearAll);
+      $("#load-btn").addEventListener("click", loadFiles);
+
+      renderSlots();
+      updateButtons();
+    })();
+  </script>
+</body>
+</html>
