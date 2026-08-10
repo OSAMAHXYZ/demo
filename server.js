@@ -478,13 +478,35 @@ function isoToMonthKey(iso) {
 /**
  * Coordinator hides تم الترحيل from previous months once the calendar
  * rolls (from the 1st of the new month onward). Current-month deliveries stay.
+ * Display / showroom cars are never month-archived this way.
  */
+function queueItemDeliveredMonth(item) {
+  if (!item) return '';
+  const direct = isoToMonthKey(item.deliveredAt || item.assignedAt || item.addedAt);
+  if (direct) return direct;
+  // Fall back to newest delivery-note draft for this VIN
+  const vin = normVin(item.vin);
+  if (!vin) return '';
+  let best = '';
+  for (const d of store.drafts || []) {
+    const vins = collectDraftVins(d.payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    if (!vins.includes(vin)) continue;
+    if (normalizeVehicleStatus(d.vehicleStatus || d.payload?.vehicleStatus) === 'display') continue;
+    if (d.showroomDisplay || isShowroomDraftPayload(d.payload)) continue;
+    const mk = draftMonthKey(d) || isoToMonthKey(d.printedAt || d.deliveryNoteDate);
+    if (mk && mk > best) best = mk;
+  }
+  return best;
+}
+
 function isPriorMonthDelivered(item) {
   if (!item || item.agentStatus !== 'delivered') return false;
   if (normalizeVehicleStatus(item.vehicleStatus) === 'display') return false;
   if (item.showroomDisplay || item.deliveryMode === 'showroom') return false;
   const current = todayIsoRiyadh().slice(0, 7);
-  const deliveredMonth = isoToMonthKey(item.deliveredAt || item.assignedAt || item.addedAt);
+  const deliveredMonth = queueItemDeliveredMonth(item);
+  // Undated delivered cars: treat as prior once we are past day 1 of a month
+  // only if they have no current-month signal — keep visible in current month if unknown
   if (!deliveredMonth) return false;
   return deliveredMonth < current;
 }
@@ -677,6 +699,8 @@ function normalizePlannedDeliveryMode(raw) {
 function enrichQueueItem(item) {
   const vin = normVin(item.vin);
   const veh = vehicleIndex().get(vin);
+  const deliveredMonth = queueItemDeliveredMonth(item);
+  const archivedFromCoordinator = isPriorMonthDelivered(item);
   const enriched = {
     ...item,
     vin,
@@ -693,6 +717,9 @@ function enrichQueueItem(item) {
     plannedDeliveryMode: normalizePlannedDeliveryMode(item.plannedDeliveryMode || item.deliveryType || '')
       || (item.deliveryMode === 'warehouse' && item.agentStatus !== 'delivered' ? 'warehouse' : '')
       || '',
+    vehicleStatus: normalizeVehicleStatus(item.vehicleStatus) || item.vehicleStatus || '',
+    deliveredMonth,
+    archivedFromCoordinator,
     statusLabel: statusLabelFor(item)
   };
   return enriched;

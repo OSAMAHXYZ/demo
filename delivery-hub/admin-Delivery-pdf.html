@@ -1502,6 +1502,61 @@
             border-color: rgba(59, 130, 246, 0.55);
         }
 
+        .last-months-folders {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .last-months-folder {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 14px 14px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent), #0f172a;
+            cursor: pointer;
+            text-align: start;
+            color: inherit;
+            font: inherit;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .last-months-folder:hover,
+        .last-months-folder.is-active {
+            transform: translateY(-2px);
+            border-color: rgba(235, 10, 30, 0.45);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        }
+        .last-months-folder__name {
+            font-weight: 800;
+            font-size: 0.95rem;
+            color: #f8fafc;
+        }
+        .last-months-folder__meta {
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .last-months-folder__count {
+            margin-top: 4px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #fecaca;
+        }
+        .last-months-detail {
+            margin-top: 8px;
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(15, 23, 42, 0.55);
+        }
+        .last-months-detail h3 {
+            margin: 0 0 10px;
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #e2e8f0;
+        }
+
         @media (max-width: 700px) {
             .dn-vin-note {
                 grid-template-columns: 1fr;
@@ -1733,6 +1788,28 @@
                                 <input type="search" id="vinHistorySearch" class="hub-input" placeholder="بحث VIN لعرض السجل الكامل…" autocomplete="off">
                             </div>
                             <div id="vinHistoryPanel" class="hub-meta">لا توجد بيانات</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="hub-section hub-fold" id="lastMonthsSection" data-fold>
+                <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                    <span class="hub-fold-title">الأشهر السابقة — Last Months Archive</span>
+                    <span class="hub-fold-meta">
+                        <span class="hub-hint">تم الترحيل المخفي من المنسق منذ يوم 1 لكل شهر</span>
+                        <span class="hub-fold-count" id="lastMonthsFoldCount" data-empty="1"></span>
+                        <span class="hub-fold-chevron" aria-hidden="true"></span>
+                    </span>
+                </button>
+                <div class="hub-fold-body">
+                    <div class="hub-fold-body-inner">
+                        <div class="hub-fold-content">
+                            <p class="hub-meta" style="margin-bottom:12px">
+                                من يوم <strong>1</strong> لكل شهر، سيارات <strong>تم الترحيل</strong> من الأشهر السابقة تُخفى من المنسق وتُحفظ هنا حسب الشهر.
+                            </p>
+                            <div id="lastMonthsFolders" class="last-months-folders"></div>
+                            <div id="lastMonthsDetail" class="last-months-detail" hidden></div>
                         </div>
                     </div>
                 </div>
@@ -3832,6 +3909,7 @@
             populateDnMonthFilter();
             renderDnStatsBar();
             renderVinHistoryPanel();
+            renderLastMonthsFolders();
             const draftsBase = filteredDrafts();
             const queueBase = filteredQueue();
             if (selectedCompany && !draftsBase.some((d) => draftMatchesCompanyKey(d, selectedCompany))) {
@@ -4023,6 +4101,124 @@
                 </article>`;
             }).join('');
             bindDraftActionButtons(panel);
+        }
+
+        /** Archive folders for months before the current calendar month (coordinator-hidden delivered). */
+        function renderLastMonthsFolders() {
+            const host = document.getElementById('lastMonthsFolders');
+            const detail = document.getElementById('lastMonthsDetail');
+            if (!host) return;
+            const current = currentMonthKey();
+            const byMonth = new Map();
+
+            (allDrafts || []).forEach((d) => {
+                if (draftVehicleStatus(d) === 'display' || isShowroomAdminDraft(d)) return;
+                const mk = draftMonthKey(d);
+                if (!mk || mk >= current) return;
+                if (!byMonth.has(mk)) byMonth.set(mk, { notes: 0, vins: new Set() });
+                const bucket = byMonth.get(mk);
+                bucket.notes += 1;
+                draftVinList(d).forEach((v) => bucket.vins.add(v));
+            });
+
+            (allQueue || []).forEach((q) => {
+                if (q.agentStatus !== 'delivered') return;
+                if (String(q.vehicleStatus || '').toLowerCase() === 'display') return;
+                if (q.showroomDisplay || q.deliveryMode === 'showroom') return;
+                const mk = q.deliveredMonth || String(q.deliveredAt || q.assignedAt || '').slice(0, 7);
+                if (!mk || mk >= current) return;
+                if (!byMonth.has(mk)) byMonth.set(mk, { notes: 0, vins: new Set() });
+                const vin = normVinKey(q.vin);
+                if (vin) byMonth.get(mk).vins.add(vin);
+            });
+
+            const months = [...byMonth.keys()].sort().reverse();
+            setFoldCount('lastMonthsFoldCount', months.length);
+            if (!months.length) {
+                host.innerHTML = '<p class="hub-empty">لا توجد أشهر سابقة مؤرشفة بعد — تظهر هنا من يوم 1 لكل شهر جديد</p>';
+                if (detail) {
+                    detail.hidden = true;
+                    detail.innerHTML = '';
+                }
+                return;
+            }
+
+            host.innerHTML = months.map((mk) => {
+                const b = byMonth.get(mk);
+                const active = adminMonthFilter === mk ? ' is-active' : '';
+                return `<button type="button" class="last-months-folder${active}" data-month-folder="${mk}">
+                    <span class="last-months-folder__name">📁 ${monthLabelAr(mk)}</span>
+                    <span class="last-months-folder__meta">${mk}</span>
+                    <span class="last-months-folder__count">${b.notes} مذكرة · ${b.vins.size} شاسيه</span>
+                </button>`;
+            }).join('');
+
+            host.querySelectorAll('[data-month-folder]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const mk = btn.getAttribute('data-month-folder');
+                    adminMonthFilter = mk;
+                    const sel = document.getElementById('dnMonthFilter');
+                    if (sel) {
+                        if (![...sel.options].some((o) => o.value === mk)) {
+                            const opt = document.createElement('option');
+                            opt.value = mk;
+                            opt.textContent = monthLabelAr(mk);
+                            sel.appendChild(opt);
+                        }
+                        sel.value = mk;
+                    }
+                    refreshTransferDashboard();
+                    openFold('draftsSection');
+                    openFold('lastMonthsSection');
+                    renderLastMonthsDetail(mk);
+                    document.getElementById('draftsSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
+
+            if (adminMonthFilter && adminMonthFilter !== 'all' && adminMonthFilter < current) {
+                renderLastMonthsDetail(adminMonthFilter);
+            } else if (detail) {
+                detail.hidden = true;
+            }
+        }
+
+        function renderLastMonthsDetail(monthKey) {
+            const detail = document.getElementById('lastMonthsDetail');
+            if (!detail || !monthKey) return;
+            const drafts = (allDrafts || []).filter((d) => draftMonthKey(d) === monthKey
+                && draftVehicleStatus(d) !== 'display'
+                && !isShowroomAdminDraft(d));
+            const queue = (allQueue || []).filter((q) => {
+                if (q.agentStatus !== 'delivered') return false;
+                if (String(q.vehicleStatus || '').toLowerCase() === 'display') return false;
+                const mk = q.deliveredMonth || String(q.deliveredAt || q.assignedAt || '').slice(0, 7);
+                return mk === monthKey;
+            });
+            detail.hidden = false;
+            const rows = drafts.slice(0, 40).map((d) => {
+                const dn = draftDeliveryNoteNumber(d) || d.id || '—';
+                const vins = draftVinList(d).join(', ') || d.vin || '—';
+                return `<tr>
+                    <td><strong>${escapeHtml(dn)}</strong></td>
+                    <td class="hub-vin">${escapeHtml(vins)}</td>
+                    <td>${escapeHtml(draftEventIso(d) || '—')}</td>
+                    <td>${escapeHtml(d.assignedTo || '—')}</td>
+                    <td>${d.id ? `<button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-export-pdf="${escapeHtml(d.id)}">PDF</button>` : '—'}
+                        ${dn !== '—' ? `<button type="button" class="hub-btn hub-btn--sm" data-archive-dn="${escapeHtml(dn)}">ملف</button>` : ''}
+                    </td>
+                </tr>`;
+            }).join('');
+            detail.innerHTML = `
+                <h3>أرشيف ${escapeHtml(monthLabelAr(monthKey))} · ${drafts.length} مذكرة · ${queue.length} شاسيه مرحّلة</h3>
+                <p class="hub-meta" style="margin-bottom:10px">مخفي عن المنسق · ظاهر في فلتر الشهر أعلاه وفي جميع ملفات PDF</p>
+                <div class="hub-table-wrap">
+                    <table class="hub-table">
+                        <thead><tr><th>DN #</th><th>VIN</th><th>التاريخ</th><th>المسؤول</th><th></th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="5" class="hub-empty">لا مذكرات</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `;
+            bindDraftActionButtons(detail);
         }
 
         function initDnMonthFilter() {
