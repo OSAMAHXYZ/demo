@@ -17,7 +17,7 @@
       id: "backorder",
       n: 1,
       title: "Backorder",
-      blurb: "BO + fleet BO — first sheet only",
+      blurb: "BO + Fleet sheets combined",
       kicker: "BO+ fleetBO",
     },
     {
@@ -49,7 +49,7 @@
     salesman: ["salesman name", "salesman"],
     orderDate: ["order date"],
     confirm: ["confirm flag", "confirm"],
-    custGroup: ["cust group"],
+    custGroup: ["cust group", "sales type", "customer group"],
     dpr: ["dpr"],
     paid: ["المبلغ المدفوع", "paid", "amount"],
     grade: ["grade (vc)", "grade"],
@@ -104,12 +104,14 @@
     allStock: [],
     daily: [],
     fullControl: [],
+    boOrders: [],
   };
 
   const ui = {
     1: { search: "", sortCol: null, sortDir: 1 },
     2: { search: "", filter: "", sortCol: null, sortDir: 1 },
     3: { search: "", boFilter: "", rtlFilter: "", sortCol: null, sortDir: 1 },
+    bo: { search: "", carsFilter: "", sortCol: "Cars", sortDir: -1, expanded: new Set() },
   };
 
   let colors = null;
@@ -303,14 +305,12 @@
   ];
 
   /**
-   * Read the first sheet, but detect the real header row.
-   * ALJ exports often put a blank/title row above headers (Region / Product / VIN…),
-   * which otherwise becomes __EMPTY_* columns and kills all matching.
+   * Parse one sheet with real header-row detection.
+   * ALJ exports often put a blank/title row above headers.
    */
-  function firstSheetRows(workbook) {
-    const name = workbook.SheetNames[0];
-    if (!name) return [];
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+  function sheetRows(workbook, sheetName) {
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
       header: 1,
       defval: "",
       blankrows: false,
@@ -354,7 +354,6 @@
     for (let r = headerIdx + 1; r < matrix.length; r += 1) {
       const line = matrix[r] || [];
       if (line.every((c) => cellToString(c).trim() === "")) continue;
-      // Skip repeated header / title rows mixed into the body
       const asText = line.map((c) => normHeader(c));
       const looksLikeHeader =
         HEADER_MARKERS.filter((m) => asText.some((c) => c === m || c.includes(m)))
@@ -368,6 +367,52 @@
       rows.push(obj);
     }
     return rows;
+  }
+
+  /** Always first sheet (RTL / Central). */
+  function firstSheetRows(workbook) {
+    const name = workbook.SheetNames[0];
+    if (!name) return [];
+    return sheetRows(workbook, name);
+  }
+
+  /**
+   * Backorder = first sheet + any Fleet sheet(s), like Power Query BO+ fleetBO.
+   * Ensures Cust Group is filled from Sales Type when Cust Group is missing.
+   */
+  function backorderRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+
+    const first = names[0];
+    const fleetNames = names.filter(
+      (n, i) => i > 0 && /fleet/i.test(n) && !/summary/i.test(n)
+    );
+
+    const sheetsToRead = [first, ...fleetNames.filter((n) => n !== first)];
+    const combined = [];
+    sheetsToRead.forEach((sn) => {
+      sheetRows(workbook, sn).forEach((row) => combined.push(row));
+    });
+
+    // Normalize: retail BO has Sales Type; fleet has Cust Group.
+    combined.forEach((row) => {
+      const keys = Object.keys(row);
+      const custKey = keys.find((k) => normHeader(k) === "cust group");
+      const salesKey = keys.find((k) => normHeader(k) === "sales type");
+      if (custKey && cellToString(row[custKey]).trim()) return;
+      if (salesKey && cellToString(row[salesKey]).trim()) {
+        if (custKey) row[custKey] = row[salesKey];
+        else row["Cust Group"] = row[salesKey];
+      }
+    });
+
+    return combined;
+  }
+
+  function rowsForSlot(slotId, workbook) {
+    if (slotId === "backorder") return backorderRows(workbook);
+    return firstSheetRows(workbook);
   }
 
   /** Exterior for daily match: code → pad3; name → dictionary code → pad3. */
@@ -880,6 +925,236 @@
     return `<span class="${cls}">${escapeHtml(s)}</span>`;
   }
 
+  /**
+   * Group BO+Fleet rows by Back Order Number — one order, many cars.
+   */
+  function groupBackOrders(boRows) {
+    const getBo = buildFieldGetter(boRows[0] || {});
+    const map = new Map();
+
+    boRows.forEach((r, idx) => {
+      const boNumber = cellToString(getBo(r, "boNumber")).trim() || `(no number · ${idx + 1})`;
+      if (!map.has(boNumber)) {
+        map.set(boNumber, {
+          "Back Order Number": boNumber,
+          "Salesman Name": cellToString(getBo(r, "salesman")),
+          "Order Date": cellToString(getBo(r, "orderDate")),
+          "Confirm Flag": cellToString(getBo(r, "confirm")),
+          "Cust Group": cellToString(getBo(r, "custGroup")),
+          Cars: 0,
+          cars: [],
+          orderTs: parseOrderDate(getBo(r, "orderDate")),
+        });
+      }
+      const group = map.get(boNumber);
+      group.Cars += 1;
+      if (!group["Salesman Name"]) group["Salesman Name"] = cellToString(getBo(r, "salesman"));
+      if (!group["Order Date"]) {
+        group["Order Date"] = cellToString(getBo(r, "orderDate"));
+        group.orderTs = parseOrderDate(getBo(r, "orderDate"));
+      }
+      if (!group["Confirm Flag"]) group["Confirm Flag"] = cellToString(getBo(r, "confirm"));
+      if (!group["Cust Group"]) group["Cust Group"] = cellToString(getBo(r, "custGroup"));
+
+      group.cars.push({
+        Product: upperTrim(getBo(r, "product")),
+        "Alj Suffix": upperTrim(getBo(r, "suffix")),
+        "Model Year": cellToString(getBo(r, "year")),
+        "Exterior Color": cellToString(getBo(r, "extBo")),
+        "Interior Color": cellToString(getBo(r, "intBo")),
+        Item: cellToString(getBo(r, "item")),
+        "المبلغ المدفوع": cellToString(getBo(r, "paid")),
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.Cars - a.Cars || a.orderTs - b.orderTs);
+  }
+
+  function getFilteredBoOrders() {
+    const state = ui.bo;
+    let rows = results.boOrders.slice();
+    const q = (state.search || "").trim().toLowerCase();
+    if (state.carsFilter === "multi") rows = rows.filter((r) => r.Cars > 1);
+    if (state.carsFilter === "single") rows = rows.filter((r) => r.Cars === 1);
+    if (q) {
+      rows = rows.filter((row) => {
+        const top = [
+          row["Back Order Number"],
+          row["Salesman Name"],
+          row["Cust Group"],
+          row["Confirm Flag"],
+          row["Order Date"],
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (top.includes(q)) return true;
+        return row.cars.some((c) =>
+          Object.values(c).some((v) => cellToString(v).toLowerCase().includes(q))
+        );
+      });
+    }
+    if (state.sortCol) {
+      const col = state.sortCol;
+      const dir = state.sortDir;
+      rows.sort((a, b) => {
+        const av = a[col];
+        const bv = b[col];
+        if (col === "Cars") return (Number(av) - Number(bv)) * dir;
+        return (
+          cellToString(av).localeCompare(cellToString(bv), undefined, {
+            sensitivity: "base",
+            numeric: true,
+          }) * dir
+        );
+      });
+    }
+    return rows;
+  }
+
+  function renderBoOrders() {
+    const wrap = $("#bo-orders-wrap");
+    const foot = $("#bo-orders-foot");
+    if (!wrap || !foot) return;
+
+    const filtered = getFilteredBoOrders();
+    const shown = filtered.slice(0, MAX_TABLE_RENDER);
+    const state = ui.bo;
+    const headers = [
+      "Back Order Number",
+      "Cars",
+      "Salesman Name",
+      "Order Date",
+      "Confirm Flag",
+      "Cust Group",
+    ];
+
+    if (!results.boOrders.length) {
+      wrap.innerHTML = `<div class="empty-state">No back orders loaded.</div>`;
+      foot.textContent = "";
+      return;
+    }
+
+    const head = headers
+      .map((h) => {
+        const ind = state.sortCol === h ? (state.sortDir === 1 ? "▲" : "▼") : "";
+        return `<th scope="col" tabindex="0" data-bo-sort="${escapeHtml(h)}">${escapeHtml(h)}<span class="sort-ind">${ind}</span></th>`;
+      })
+      .join("");
+
+    const body = shown
+      .map((row) => {
+        const id = cellToString(row["Back Order Number"]);
+        const open = state.expanded.has(id);
+        const carsCls = row.Cars > 1 ? "cars-multi" : "cars-one";
+        const main = `
+          <tr class="bo-order-row${open ? " is-open" : ""}" data-bo-id="${escapeHtml(id)}" tabindex="0" role="button" aria-expanded="${open ? "true" : "false"}">
+            <td>
+              <span class="bo-expand" aria-hidden="true">${open ? "▼" : "▶"}</span>
+              <strong>${escapeHtml(id)}</strong>
+            </td>
+            <td><span class="cars-badge ${carsCls}">${formatNumber(row.Cars)}</span></td>
+            <td title="${escapeHtml(row["Salesman Name"])}">${escapeHtml(row["Salesman Name"]) || "—"}</td>
+            <td>${escapeHtml(row["Order Date"]) || "—"}</td>
+            <td>${escapeHtml(row["Confirm Flag"]) || "—"}</td>
+            <td>${escapeHtml(row["Cust Group"]) || "—"}</td>
+          </tr>`;
+
+        if (!open) return main;
+
+        const carHeaders = [
+          "Product",
+          "Alj Suffix",
+          "Model Year",
+          "Exterior Color",
+          "Interior Color",
+          "Item",
+          "المبلغ المدفوع",
+        ];
+        const carRows = row.cars
+          .map(
+            (c, i) => `
+            <tr class="bo-car-row">
+              <td class="bo-car-idx">${i + 1}</td>
+              ${carHeaders
+                .map((h) => {
+                  const t = cellToString(c[h]);
+                  return `<td class="${t ? "" : "empty-cell"}" title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
+                })
+                .join("")}
+            </tr>`
+          )
+          .join("");
+
+        const detail = `
+          <tr class="bo-detail-row">
+            <td colspan="${headers.length}">
+              <div class="bo-detail">
+                <p class="bo-detail-title">${formatNumber(row.Cars)} car${row.Cars === 1 ? "" : "s"} under order <code>${escapeHtml(id)}</code></p>
+                <table class="data-table bo-cars-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      ${carHeaders.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}
+                    </tr>
+                  </thead>
+                  <tbody>${carRows}</tbody>
+                </table>
+              </div>
+            </td>
+          </tr>`;
+        return main + detail;
+      })
+      .join("");
+
+    wrap.innerHTML = `
+      <table class="data-table bo-orders-table" aria-label="Back orders grouped by number">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body || `<tr><td colspan="${headers.length}">No orders match the current filters.</td></tr>`}</tbody>
+      </table>`;
+
+    const multi = results.boOrders.filter((r) => r.Cars > 1).length;
+    foot.textContent =
+      `Showing ${formatNumber(shown.length)} of ${formatNumber(filtered.length)} orders` +
+      ` · ${formatNumber(results.boOrders.length)} unique orders` +
+      ` · ${formatNumber(slots.backorder.rows.length)} cars total` +
+      ` · ${formatNumber(multi)} orders with multiple cars`;
+
+    $$("th[data-bo-sort]", wrap).forEach((th) => {
+      const activate = () => {
+        const col = th.getAttribute("data-bo-sort");
+        if (state.sortCol === col) state.sortDir *= -1;
+        else {
+          state.sortCol = col;
+          state.sortDir = col === "Cars" ? -1 : 1;
+        }
+        renderBoOrders();
+      };
+      th.addEventListener("click", activate);
+      th.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activate();
+        }
+      });
+    });
+
+    $$(".bo-order-row", wrap).forEach((tr) => {
+      const toggle = () => {
+        const id = tr.getAttribute("data-bo-id");
+        if (state.expanded.has(id)) state.expanded.delete(id);
+        else state.expanded.add(id);
+        renderBoOrders();
+      };
+      tr.addEventListener("click", toggle);
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    });
+  }
+
   function getSectionRows(sectionNum) {
     if (sectionNum === 1) return results.allStock;
     if (sectionNum === 2) return results.daily;
@@ -1028,15 +1303,21 @@
 
     const matched = rows.filter((r) => r["BO Match"] === "Matched").length;
     const rtl = rows.filter((r) => r["RTL Stock matched"] === "In Stock").length;
+    const multi = results.boOrders.filter((r) => r.Cars > 1).length;
     renderKpis("#s3-kpis", [
       { label: "Unique VINs", value: formatNumber(rows.length), sub: "central stock" },
       { label: "BO Matched", value: formatNumber(matched), sub: "spec join hit" },
       { label: "No BO", value: formatNumber(rows.length - matched), sub: "unmatched" },
       { label: "In RTL Stock", value: formatNumber(rtl), sub: "VIN present in retail" },
-      { label: "Backorders", value: formatNumber(slots.backorder.rows.length), sub: "source rows" },
+      {
+        label: "BO orders",
+        value: formatNumber(results.boOrders.length),
+        sub: `${formatNumber(slots.backorder.rows.length)} cars · ${formatNumber(multi)} multi`,
+      },
       { label: "RTL rows", value: formatNumber(slots.rtl.rows.length), sub: "source rows" },
     ]);
 
+    renderBoOrders();
     renderTable(3);
   }
 
@@ -1072,8 +1353,14 @@
         setLoading(true, `Reading ${d.title}: ${slots[d.id].name}…`);
         await new Promise((r) => setTimeout(r, 15));
         const wb = await readFileToWorkbook(slots[d.id].file);
-        const rows = firstSheetRows(wb);
-        if (!rows.length) throw new Error(`${d.title} (“${slots[d.id].name}”) first sheet has no data rows.`);
+        const rows = rowsForSlot(d.id, wb);
+        if (!rows.length) {
+          throw new Error(
+            d.id === "backorder"
+              ? `${d.title} (“${slots[d.id].name}”) has no data in the first or Fleet sheet.`
+              : `${d.title} (“${slots[d.id].name}”) first sheet has no data rows.`
+          );
+        }
         slots[d.id].rows = rows;
       }
 
@@ -1082,18 +1369,28 @@
       results.allStock = [];
       results.daily = [];
       results.fullControl = runFullControl(slots.backorder.rows, slots.rtl.rows, slots.central.rows);
+      results.boOrders = groupBackOrders(slots.backorder.rows);
 
       ui[3].search = "";
       ui[3].sortCol = null;
       ui[3].sortDir = 1;
       ui[3].boFilter = "";
       ui[3].rtlFilter = "";
+      ui.bo.search = "";
+      ui.bo.carsFilter = "";
+      ui.bo.sortCol = "Cars";
+      ui.bo.sortDir = -1;
+      ui.bo.expanded = new Set();
       const search = $("#s3-search");
       const boFilter = $("#s3-bo-filter");
       const rtlFilter = $("#s3-rtl-filter");
+      const boSearch = $("#bo-search");
+      const boCars = $("#bo-cars-filter");
       if (search) search.value = "";
       if (boFilter) boFilter.value = "";
       if (rtlFilter) rtlFilter.value = "";
+      if (boSearch) boSearch.value = "";
+      if (boCars) boCars.value = "";
 
       renderSection(3);
 
@@ -1118,6 +1415,8 @@
     results.allStock = [];
     results.daily = [];
     results.fullControl = [];
+    results.boOrders = [];
+    ui.bo.expanded = new Set();
     const section3 = $("#section-3");
     if (section3) section3.hidden = true;
     $("#page-sub").textContent = "Upload Backorder, RTL Stock, and Central Stock";
@@ -1168,6 +1467,24 @@
     const s3Dl = $("#s3-download");
     if (s3Dl) {
       s3Dl.addEventListener("click", () => downloadCsv(getFilteredRows(3), "full_control.csv"));
+    }
+
+    const boSearch = $("#bo-search");
+    if (boSearch) {
+      boSearch.addEventListener(
+        "input",
+        debounce((e) => {
+          ui.bo.search = e.target.value;
+          renderBoOrders();
+        }, 150)
+      );
+    }
+    const boCars = $("#bo-cars-filter");
+    if (boCars) {
+      boCars.addEventListener("change", (e) => {
+        ui.bo.carsFilter = e.target.value;
+        renderBoOrders();
+      });
     }
   }
 

@@ -38,7 +38,8 @@
           <div>
             <h2 id="upload-heading">Upload files</h2>
             <p>
-              <code>.xlsx</code> / <code>.xls</code> / <code>.csv</code> · first sheet each · headers detected automatically
+              <code>.xlsx</code> / <code>.xls</code> / <code>.csv</code> ·
+              Backorder = first sheet + Fleet · RTL &amp; Central = first sheet
             </p>
           </div>
           <div id="global-status" class="status-pill" role="status" aria-live="polite">Waiting for files</div>
@@ -62,9 +63,31 @@
           </div>
         </div>
         <div class="kpi-grid kpi-grid-flex" id="s3-kpis"></div>
+
+        <article class="card table-card" id="bo-orders-card">
+          <div class="card-head table-toolbar">
+            <h3>Back orders</h3>
+            <div class="toolbar-controls">
+              <label class="sr-only" for="bo-search">Search back orders</label>
+              <input id="bo-search" type="search" placeholder="Search order #, salesman…" autocomplete="off" />
+              <label class="field-inline compact">
+                <span>Cars</span>
+                <select id="bo-cars-filter">
+                  <option value="">All</option>
+                  <option value="multi">Multiple cars</option>
+                  <option value="single">Single car</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <p class="bo-hint muted">Same Back Order Number is one order — click a row to see cars under it.</p>
+          <div class="table-scroll" id="bo-orders-wrap"></div>
+          <p class="table-foot" id="bo-orders-foot"></p>
+        </article>
+
         <article class="card table-card">
           <div class="card-head table-toolbar">
-            <h3>Results</h3>
+            <h3>Full control results</h3>
             <div class="toolbar-controls">
               <label class="sr-only" for="s3-search">Search table</label>
               <input id="s3-search" type="search" placeholder="Search…" autocomplete="off" />
