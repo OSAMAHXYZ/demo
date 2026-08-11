@@ -3,193 +3,100 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Upload Backorder, RTL Stock, and Central Stock — All Stock Matched, Daily Stock Matched, Full Control" />
-  <title>Excel Dashboard — Stock Matching</title>
+  <meta name="description" content="Upload Backorder, RTL Stock, and Central Stock — Full Control validation" />
+  <title>Excel Dashboard — Full Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body class="layout-focus">
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <div class="app">
-    <aside class="sidebar" id="sidebar" aria-label="Primary">
-      <div class="brand">
+  <div class="app app-focus">
+    <header class="topbar topbar-focus">
+      <div class="brand brand-inline">
         <div class="brand-mark" aria-hidden="true">XL</div>
         <div>
           <p class="brand-name">Excel Dashboard</p>
-          <p class="brand-tag">BO · RTL · Central matching</p>
+          <p class="brand-tag">Full control</p>
         </div>
       </div>
-
-      <nav class="nav" aria-label="Sections">
-        <a class="nav-link is-active" href="#upload" data-nav="upload">Upload</a>
-        <a class="nav-link" href="#section-1" data-nav="section-1">All stock matched</a>
-        <a class="nav-link" href="#section-2" data-nav="section-2">Daily stock matched</a>
-        <a class="nav-link" href="#section-3" data-nav="section-3">Full control</a>
-      </nav>
-
-      <div class="sidebar-note">
-        Backorder → first sheet.<br />
-        RTL + Central → first sheet each.<br />
-        Color dictionaries from Master Excel.
+      <div class="topbar-text">
+        <h1 id="page-title">Full Control</h1>
+        <p id="page-sub">Upload Backorder, RTL Stock, and Central Stock</p>
       </div>
-    </aside>
+      <div class="topbar-actions">
+        <button type="button" class="btn" id="clear-btn" disabled>Clear all</button>
+        <button type="button" class="btn btn-primary" id="analyze-btn" disabled>Run matching</button>
+      </div>
+    </header>
 
-    <div class="shell">
-      <header class="topbar">
-        <button type="button" class="icon-btn" id="menu-btn" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
-        <div class="topbar-text">
-          <h1 id="page-title">Stock Matching Dashboard</h1>
-          <p id="page-sub">Upload Backorder, RTL Stock, and Central Stock to run the three match processes</p>
+    <main id="main" class="main main-focus">
+      <section class="panel panel-upload" id="upload" aria-labelledby="upload-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="upload-heading">Upload files</h2>
+            <p>
+              <code>.xlsx</code> / <code>.xls</code> / <code>.csv</code> · first sheet each · headers detected automatically
+            </p>
+          </div>
+          <div id="global-status" class="status-pill" role="status" aria-live="polite">Waiting for files</div>
         </div>
-        <div class="topbar-actions">
-          <button type="button" class="btn" id="clear-btn" disabled>Clear all</button>
-          <button type="button" class="btn btn-primary" id="analyze-btn" disabled>Run matching</button>
+
+        <div class="upload-grid" id="upload-grid"></div>
+
+        <div id="load-banner" class="load-banner" hidden>
+          <div class="spinner" aria-hidden="true"></div>
+          <p id="load-text">Reading workbooks…</p>
         </div>
-      </header>
+        <div id="error-banner" class="error-banner" role="alert" hidden></div>
+      </section>
 
-      <main id="main" class="main">
-        <section class="panel" id="upload" aria-labelledby="upload-heading">
-          <div class="panel-head">
-            <div>
-              <h2 id="upload-heading">Upload three Excel files</h2>
-              <p>
-                Supported: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>.
-                Backorder uses the <strong>first sheet</strong>. RTL Stock and Central Stock also use the first sheet.
-              </p>
-            </div>
-            <div id="global-status" class="status-pill" role="status" aria-live="polite">Waiting for files</div>
+      <section class="panel section-block" id="section-3" aria-labelledby="s3-heading" hidden>
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Central inventory</p>
+            <h2 id="s3-heading">Full control</h2>
+            <p id="s3-meta" class="muted">Unique central VINs with BO match + RTL Stock matched.</p>
           </div>
-
-          <div class="upload-grid" id="upload-grid"></div>
-
-          <div id="load-banner" class="load-banner" hidden>
-            <div class="spinner" aria-hidden="true"></div>
-            <p id="load-text">Reading workbooks…</p>
-          </div>
-          <div id="error-banner" class="error-banner" role="alert" hidden></div>
-        </section>
-
-        <section class="panel section-block" id="summary" hidden>
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Run summary</p>
-              <h2>Matching overview</h2>
-              <p id="summary-meta" class="muted"></p>
-            </div>
-          </div>
-          <div class="kpi-grid" id="summary-kpis"></div>
-        </section>
-
-        <!-- 1 · All stock matched -->
-        <section class="panel section-block" id="section-1" aria-labelledby="s1-heading" hidden>
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Section 1 · FIFO · Color dictionaries</p>
-              <h2 id="s1-heading">All stock matched</h2>
-              <p id="s1-meta" class="muted">BO ↔ Central stock on Product + Alj Suffix + Exterior/Interior codes (dictionary contains-match). Matched rows only.</p>
+        </div>
+        <div class="kpi-grid kpi-grid-flex" id="s3-kpis"></div>
+        <article class="card table-card">
+          <div class="card-head table-toolbar">
+            <h3>Results</h3>
+            <div class="toolbar-controls">
+              <label class="sr-only" for="s3-search">Search table</label>
+              <input id="s3-search" type="search" placeholder="Search…" autocomplete="off" />
+              <label class="field-inline compact">
+                <span>BO Match</span>
+                <select id="s3-bo-filter">
+                  <option value="">All</option>
+                  <option>Matched</option>
+                  <option>No BO</option>
+                </select>
+              </label>
+              <label class="field-inline compact">
+                <span>RTL</span>
+                <select id="s3-rtl-filter">
+                  <option value="">All</option>
+                  <option>In Stock</option>
+                  <option>Not in RTL Stock</option>
+                </select>
+              </label>
+              <button type="button" class="btn" id="s3-download">Download CSV</button>
             </div>
           </div>
-          <div class="kpi-grid" id="s1-kpis"></div>
-          <article class="card table-card">
-            <div class="card-head table-toolbar">
-              <h3>Matched rows</h3>
-              <div class="toolbar-controls">
-                <label class="sr-only" for="s1-search">Search table</label>
-                <input id="s1-search" type="search" placeholder="Search…" autocomplete="off" />
-                <button type="button" class="btn" id="s1-download">Download CSV</button>
-              </div>
-            </div>
-            <div class="table-scroll" id="s1-table-wrap"></div>
-            <p class="table-foot" id="s1-table-foot"></p>
-          </article>
-        </section>
+          <div class="table-scroll" id="s3-table-wrap"></div>
+          <p class="table-foot" id="s3-table-foot"></p>
+        </article>
+      </section>
+    </main>
 
-        <!-- 2 · Daily stock matched -->
-        <section class="panel section-block" id="section-2" aria-labelledby="s2-heading" hidden>
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Section 2 · FIFO · Retail stock</p>
-              <h2 id="s2-heading">Daily stock matched</h2>
-              <p id="s2-meta" class="muted">BO ↔ RTL stock on Product + Alj Suffix + Model Year + Exterior/Interior (padded). Includes quantity status.</p>
-            </div>
-          </div>
-          <div class="kpi-grid" id="s2-kpis"></div>
-          <article class="card table-card">
-            <div class="card-head table-toolbar">
-              <h3>Daily matching</h3>
-              <div class="toolbar-controls">
-                <label class="sr-only" for="s2-search">Search table</label>
-                <input id="s2-search" type="search" placeholder="Search…" autocomplete="off" />
-                <label class="field-inline compact">
-                  <span>Quantity</span>
-                  <select id="s2-filter">
-                    <option value="">All</option>
-                    <option>NO STOCK</option>
-                    <option>BO &gt; STOCK</option>
-                    <option>STOCK &gt; BO</option>
-                    <option>BALANCED</option>
-                  </select>
-                </label>
-                <button type="button" class="btn" id="s2-download">Download CSV</button>
-              </div>
-            </div>
-            <div class="table-scroll" id="s2-table-wrap"></div>
-            <p class="table-foot" id="s2-table-foot"></p>
-          </article>
-        </section>
-
-        <!-- 3 · Full control -->
-        <section class="panel section-block" id="section-3" aria-labelledby="s3-heading" hidden>
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Section 3 · Central inventory control</p>
-              <h2 id="s3-heading">Full control</h2>
-              <p id="s3-meta" class="muted">Unique central VINs with BO match fields + RTL Stock matched (In Stock / Not in RTL Stock).</p>
-            </div>
-          </div>
-          <div class="kpi-grid" id="s3-kpis"></div>
-          <article class="card table-card">
-            <div class="card-head table-toolbar">
-              <h3>Full control validation</h3>
-              <div class="toolbar-controls">
-                <label class="sr-only" for="s3-search">Search table</label>
-                <input id="s3-search" type="search" placeholder="Search…" autocomplete="off" />
-                <label class="field-inline compact">
-                  <span>BO Match</span>
-                  <select id="s3-bo-filter">
-                    <option value="">All</option>
-                    <option>Matched</option>
-                    <option>No BO</option>
-                  </select>
-                </label>
-                <label class="field-inline compact">
-                  <span>RTL</span>
-                  <select id="s3-rtl-filter">
-                    <option value="">All</option>
-                    <option>In Stock</option>
-                    <option>Not in RTL Stock</option>
-                  </select>
-                </label>
-                <button type="button" class="btn" id="s3-download">Download CSV</button>
-              </div>
-            </div>
-            <div class="table-scroll" id="s3-table-wrap"></div>
-            <p class="table-foot" id="s3-table-foot"></p>
-          </article>
-        </section>
-      </main>
-
-      <footer class="footer">
-        <p>Excel Dashboard · Client-side only · Your files never leave this browser</p>
-        <p>Power Query logic · Master Excel color dictionaries · SheetJS</p>
-      </footer>
-    </div>
+    <footer class="footer footer-focus">
+      <p>Client-side only · files stay in your browser</p>
+    </footer>
   </div>
-
-  <div class="overlay" id="overlay" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="../master-excel/master-excel.js"></script>

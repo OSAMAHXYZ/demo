@@ -131,9 +131,10 @@
 
   function showError(msg) {
     const el = $("#error-banner");
-    el.hidden = !msg;
-    el.textContent = msg || "";
-    if (msg) setStatus("Error", "error");
+    const text = (msg || "").trim();
+    el.hidden = !text;
+    el.textContent = text;
+    if (text) setStatus("Error", "error");
   }
 
   function setLoading(on, text) {
@@ -1018,70 +1019,28 @@
   }
 
   function renderSummary() {
-    const section = $("#summary");
-    section.hidden = false;
-    $("#summary-meta").textContent = `${slots.backorder.name} · ${slots.rtl.name} · ${slots.central.name}`;
-
-    const qs = { "NO STOCK": 0, "BO > STOCK": 0, "STOCK > BO": 0, BALANCED: 0 };
-    results.daily.forEach((r) => {
-      const s = r["Quantity Status"];
-      if (s in qs) qs[s] += 1;
-    });
-    const matched = results.fullControl.filter((r) => r["BO Match"] === "Matched").length;
-    const rtlIn = results.fullControl.filter((r) => r["RTL Stock matched"] === "In Stock").length;
-
-    renderKpis("#summary-kpis", [
-      { label: "Backorders", value: formatNumber(slots.backorder.rows.length), sub: "first sheet rows" },
-      { label: "RTL stock", value: formatNumber(slots.rtl.rows.length), sub: "first sheet rows" },
-      { label: "Central stock", value: formatNumber(slots.central.rows.length), sub: "first sheet rows" },
-      { label: "All stock matched", value: formatNumber(results.allStock.length), sub: "FIFO VIN links" },
-      { label: "Daily balanced", value: formatNumber(qs.BALANCED), sub: "quantity status" },
-      { label: "Full control BO", value: `${formatNumber(matched)} / ${formatNumber(results.fullControl.length)}`, sub: "matched VINs" },
-      { label: "RTL In Stock", value: formatNumber(rtlIn), sub: "central VINs in retail" },
-      {
-        label: "Color dictionaries",
-        value: `${formatNumber(exteriorMaster.length)} / ${formatNumber(interiorMaster.length)}`,
-        sub: "exterior / interior codes",
-      },
-    ]);
+    /* Summary panel removed — Full Control KPIs only. */
   }
 
   function renderSection(sectionNum) {
-    const section = $(`#section-${sectionNum}`);
-    const rows = getSectionRows(sectionNum);
+    if (sectionNum !== 3) return;
+    const section = $("#section-3");
+    if (!section) return;
+    const rows = getSectionRows(3);
     section.hidden = false;
 
-    if (sectionNum === 1) {
-      renderKpis("#s1-kpis", [
-        { label: "Matched rows", value: formatNumber(rows.length), sub: "Stock.VIN present" },
-        { label: "Unique products", value: formatNumber(new Set(rows.map((r) => r.Product)).size), sub: "in matches" },
-        { label: "Unique VINs", value: formatNumber(new Set(rows.map((r) => r["Stock.VIN"])).size), sub: "allocated" },
-        { label: "BO source", value: formatNumber(slots.backorder.rows.length), sub: "orders considered" },
-      ]);
-    } else if (sectionNum === 2) {
-      const qs = { "NO STOCK": 0, "BO > STOCK": 0, "STOCK > BO": 0, BALANCED: 0 };
-      rows.forEach((r) => {
-        const s = r["Quantity Status"];
-        if (s in qs) qs[s] += 1;
-      });
-      renderKpis("#s2-kpis", [
-        { label: "BO rows", value: formatNumber(rows.length), sub: "daily output" },
-        { label: "BALANCED", value: formatNumber(qs.BALANCED), sub: "equal counts" },
-        { label: "BO > STOCK", value: formatNumber(qs["BO > STOCK"]), sub: "shortage" },
-        { label: "NO STOCK", value: formatNumber(qs["NO STOCK"]), sub: "no retail match pool" },
-      ]);
-    } else {
-      const matched = rows.filter((r) => r["BO Match"] === "Matched").length;
-      const rtl = rows.filter((r) => r["RTL Stock matched"] === "In Stock").length;
-      renderKpis("#s3-kpis", [
-        { label: "Unique VINs", value: formatNumber(rows.length), sub: "central stock" },
-        { label: "BO Matched", value: formatNumber(matched), sub: "spec join hit" },
-        { label: "No BO", value: formatNumber(rows.length - matched), sub: "unmatched" },
-        { label: "In RTL Stock", value: formatNumber(rtl), sub: "VIN present in retail" },
-      ]);
-    }
+    const matched = rows.filter((r) => r["BO Match"] === "Matched").length;
+    const rtl = rows.filter((r) => r["RTL Stock matched"] === "In Stock").length;
+    renderKpis("#s3-kpis", [
+      { label: "Unique VINs", value: formatNumber(rows.length), sub: "central stock" },
+      { label: "BO Matched", value: formatNumber(matched), sub: "spec join hit" },
+      { label: "No BO", value: formatNumber(rows.length - matched), sub: "unmatched" },
+      { label: "In RTL Stock", value: formatNumber(rtl), sub: "VIN present in retail" },
+      { label: "Backorders", value: formatNumber(slots.backorder.rows.length), sub: "source rows" },
+      { label: "RTL rows", value: formatNumber(slots.rtl.rows.length), sub: "source rows" },
+    ]);
 
-    renderTable(sectionNum);
+    renderTable(3);
   }
 
   function downloadCsv(rows, filename) {
@@ -1121,39 +1080,30 @@
         slots[d.id].rows = rows;
       }
 
-      setLoading(true, "Running All stock matched…");
-      await new Promise((r) => setTimeout(r, 10));
-      results.allStock = runAllStockMatched(slots.backorder.rows, slots.central.rows);
-
-      setLoading(true, "Running Daily stock matched…");
-      await new Promise((r) => setTimeout(r, 10));
-      results.daily = runDailyStockMatched(slots.backorder.rows, slots.rtl.rows);
-
       setLoading(true, "Running Full control…");
       await new Promise((r) => setTimeout(r, 10));
+      results.allStock = [];
+      results.daily = [];
       results.fullControl = runFullControl(slots.backorder.rows, slots.rtl.rows, slots.central.rows);
 
-      [1, 2, 3].forEach((n) => {
-        ui[n].search = "";
-        ui[n].sortCol = null;
-        ui[n].sortDir = 1;
-        $(`#s${n}-search`).value = "";
-      });
-      ui[2].filter = "";
+      ui[3].search = "";
+      ui[3].sortCol = null;
+      ui[3].sortDir = 1;
       ui[3].boFilter = "";
       ui[3].rtlFilter = "";
-      $("#s2-filter").value = "";
-      $("#s3-bo-filter").value = "";
-      $("#s3-rtl-filter").value = "";
+      const search = $("#s3-search");
+      const boFilter = $("#s3-bo-filter");
+      const rtlFilter = $("#s3-rtl-filter");
+      if (search) search.value = "";
+      if (boFilter) boFilter.value = "";
+      if (rtlFilter) rtlFilter.value = "";
 
-      renderSummary();
-      renderSection(1);
-      renderSection(2);
       renderSection(3);
 
       setStatus("Matching complete", "ready");
       $("#page-sub").textContent = `${slots.backorder.name} · ${slots.rtl.name} · ${slots.central.name}`;
-      document.getElementById("section-1").scrollIntoView({ behavior: "smooth", block: "start" });
+      const resultsEl = document.getElementById("section-3");
+      if (resultsEl) resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err) {
       console.error(err);
       showError(err.message || String(err));
@@ -1171,13 +1121,11 @@
     results.allStock = [];
     results.daily = [];
     results.fullControl = [];
-    $("#summary").hidden = true;
-    $("#section-1").hidden = true;
-    $("#section-2").hidden = true;
-    $("#section-3").hidden = true;
-    $("#page-sub").textContent =
-      "Upload Backorder, RTL Stock, and Central Stock to run the three match processes";
+    const section3 = $("#section-3");
+    if (section3) section3.hidden = true;
+    $("#page-sub").textContent = "Upload Backorder, RTL Stock, and Central Stock";
     showError("");
+    setLoading(false);
     renderUploadSlots();
     updateActionButtons();
     bindUploadCardEvents();
@@ -1196,91 +1144,42 @@
       };
     };
 
-    $("#s1-search").addEventListener(
-      "input",
-      debounce((e) => {
-        ui[1].search = e.target.value;
-        renderTable(1);
-      }, 150)
-    );
-    $("#s2-search").addEventListener(
-      "input",
-      debounce((e) => {
-        ui[2].search = e.target.value;
-        renderTable(2);
-      }, 150)
-    );
-    $("#s2-filter").addEventListener("change", (e) => {
-      ui[2].filter = e.target.value;
-      renderTable(2);
-    });
-    $("#s3-search").addEventListener(
-      "input",
-      debounce((e) => {
-        ui[3].search = e.target.value;
+    const s3Search = $("#s3-search");
+    if (s3Search) {
+      s3Search.addEventListener(
+        "input",
+        debounce((e) => {
+          ui[3].search = e.target.value;
+          renderTable(3);
+        }, 150)
+      );
+    }
+    const s3Bo = $("#s3-bo-filter");
+    if (s3Bo) {
+      s3Bo.addEventListener("change", (e) => {
+        ui[3].boFilter = e.target.value;
         renderTable(3);
-      }, 150)
-    );
-    $("#s3-bo-filter").addEventListener("change", (e) => {
-      ui[3].boFilter = e.target.value;
-      renderTable(3);
-    });
-    $("#s3-rtl-filter").addEventListener("change", (e) => {
-      ui[3].rtlFilter = e.target.value;
-      renderTable(3);
-    });
-
-    $("#s1-download").addEventListener("click", () =>
-      downloadCsv(getFilteredRows(1), "all_stock_matched.csv")
-    );
-    $("#s2-download").addEventListener("click", () =>
-      downloadCsv(getFilteredRows(2), "daily_stock_matched.csv")
-    );
-    $("#s3-download").addEventListener("click", () =>
-      downloadCsv(getFilteredRows(3), "full_control.csv")
-    );
-
-    const links = $$(".nav-link");
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const id = entry.target.id;
-          links.forEach((l) => l.classList.toggle("is-active", l.getAttribute("href") === `#${id}`));
-        });
-      },
-      { rootMargin: "-40% 0px -50% 0px", threshold: 0.01 }
-    );
-    ["upload", "section-1", "section-2", "section-3"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-
-    const menuBtn = $("#menu-btn");
-    const overlay = $("#overlay");
-    menuBtn.addEventListener("click", () => {
-      const open = document.body.classList.toggle("nav-open");
-      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
-      overlay.hidden = !open;
-    });
-    overlay.addEventListener("click", () => {
-      document.body.classList.remove("nav-open");
-      menuBtn.setAttribute("aria-expanded", "false");
-      overlay.hidden = true;
-    });
-    links.forEach((l) =>
-      l.addEventListener("click", () => {
-        document.body.classList.remove("nav-open");
-        menuBtn.setAttribute("aria-expanded", "false");
-        overlay.hidden = true;
-      })
-    );
+      });
+    }
+    const s3Rtl = $("#s3-rtl-filter");
+    if (s3Rtl) {
+      s3Rtl.addEventListener("change", (e) => {
+        ui[3].rtlFilter = e.target.value;
+        renderTable(3);
+      });
+    }
+    const s3Dl = $("#s3-download");
+    if (s3Dl) {
+      s3Dl.addEventListener("click", () => downloadCsv(getFilteredRows(3), "full_control.csv"));
+    }
   }
 
   function init() {
     if (typeof XLSX === "undefined") {
       showError("SheetJS library did not load. Open this page over HTTPS/HTTP (not file://) or check CDN access.");
     }
+    showError("");
+    setLoading(false);
     renderUploadSlots();
     updateActionButtons();
     bindUploadCardEvents();
