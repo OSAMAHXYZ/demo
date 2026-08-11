@@ -171,7 +171,61 @@
       Central stock is flagged for BO match and whether the VIN exists in TRL stock.
     </div>
 
-    <div class="grid" id="slots"></div>
+    <div class="grid" id="slots">
+      <article class="slot" data-id="backorder">
+        <span class="slot-kicker">backorder</span>
+        <h2>Backorder Excel</h2>
+        <p class="desc">BO / fleet backorder export (Product, Suffix, Year, colors, BO number…).</p>
+        <div class="dropzone" data-drop="backorder" role="button" tabindex="0" aria-label="Drag and drop or select Backorder Excel">
+          <div class="drop-icon" aria-hidden="true">📄</div>
+          <p class="drop-title">Drag &amp; drop Excel here</p>
+          <p class="drop-or">or</p>
+          <p class="drop-sub">Click to select from your computer</p>
+        </div>
+        <p class="meta">No file selected yet</p>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" data-choose="backorder">Select file</button>
+          <button type="button" class="btn" data-remove="backorder" disabled>Remove</button>
+        </div>
+        <input type="file" id="input-backorder" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" aria-label="Select Backorder Excel" />
+      </article>
+
+      <article class="slot" data-id="trl">
+        <span class="slot-kicker">trl</span>
+        <h2>TRL Stock Excel</h2>
+        <p class="desc">Available retail / TRL stock (VIN-level rows with color codes).</p>
+        <div class="dropzone" data-drop="trl" role="button" tabindex="0" aria-label="Drag and drop or select TRL Stock Excel">
+          <div class="drop-icon" aria-hidden="true">📄</div>
+          <p class="drop-title">Drag &amp; drop Excel here</p>
+          <p class="drop-or">or</p>
+          <p class="drop-sub">Click to select from your computer</p>
+        </div>
+        <p class="meta">No file selected yet</p>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" data-choose="trl">Select file</button>
+          <button type="button" class="btn" data-remove="trl" disabled>Remove</button>
+        </div>
+        <input type="file" id="input-trl" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" aria-label="Select TRL Stock Excel" />
+      </article>
+
+      <article class="slot" data-id="central">
+        <span class="slot-kicker">central</span>
+        <h2>Central Stock Excel</h2>
+        <p class="desc">Central / NDC stock export (full Stock sheet style).</p>
+        <div class="dropzone" data-drop="central" role="button" tabindex="0" aria-label="Drag and drop or select Central Stock Excel">
+          <div class="drop-icon" aria-hidden="true">📄</div>
+          <p class="drop-title">Drag &amp; drop Excel here</p>
+          <p class="drop-or">or</p>
+          <p class="drop-sub">Click to select from your computer</p>
+        </div>
+        <p class="meta">No file selected yet</p>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" data-choose="central">Select file</button>
+          <button type="button" class="btn" data-remove="central" disabled>Remove</button>
+        </div>
+        <input type="file" id="input-central" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" aria-label="Select Central Stock Excel" />
+      </article>
+    </div>
 
     <div class="bar">
       <div class="status" id="status">Waiting for 3 Excel files</div>
@@ -690,7 +744,7 @@
 
       function placeFile(id, file) {
         if (!detectKind(file)) {
-          setError('Unsupported file “‘ + file.name + '”. Use .xlsx, .xls, or .csv.');
+          setError('Unsupported file "' + file.name + '". Use .xlsx, .xls, or .csv.');
           setStatus("Error", "error");
           return;
         }
@@ -892,10 +946,21 @@
         $("#dl-central").addEventListener("click", () => downloadCsv(filteredCentral(), "central_stock_control.csv"));
       }
 
-      loadDictionaries();
-      renderSlots();
-      updateButtons();
-      bindUi();
+      function init() {
+        try {
+          loadDictionaries();
+          renderSlots();
+          updateButtons();
+          bindUi();
+        } catch (err) {
+          console.error(err);
+          setError("Page failed to initialize: " + (err.message || String(err)));
+          setStatus("Error", "error");
+        }
+      }
+
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+      else init();
     })();
   </script>
 </body>
