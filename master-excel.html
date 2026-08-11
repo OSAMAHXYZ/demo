@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Master Excel — Exterior and Interior color dictionaries from master_sheet.xlsx" />
+  <title>Master Excel — Color Dictionaries</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --surface: #fff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #0f4c81;
+      --accent-soft: rgba(15, 76, 129, 0.08);
+      --radius: 16px;
+      --font: "DM Sans", "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--ink);
+      background: radial-gradient(800px 400px at 100% 0%, rgba(15, 76, 129, 0.08), transparent 55%), var(--bg);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+    .badge {
+      display: inline-block; margin-bottom: 10px; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
+      background: var(--accent-soft); border: 1px solid rgba(15, 76, 129, 0.18);
+      padding: 5px 10px; border-radius: 999px;
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(1.4rem, 2.5vw, 1.85rem); letter-spacing: -0.02em; }
+    .lead { margin: 0 0 22px; color: var(--muted); max-width: 62ch; }
+    .lead code { font-family: var(--mono); font-size: 0.85em; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+    }
+    .card-head {
+      padding: 14px 16px; border-bottom: 1px solid var(--line); background: #fbfcfe;
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+    }
+    .card-head h2 { margin: 0; font-size: 1rem; }
+    .count {
+      font-size: 0.75rem; font-weight: 700; color: var(--accent);
+      background: var(--accent-soft); padding: 4px 8px; border-radius: 999px;
+    }
+    .toolbar { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .toolbar input {
+      width: 100%; font: inherit; font-size: 0.9rem; border: 1px solid #cbd5e1;
+      border-radius: 10px; padding: 10px 12px; background: #fff;
+    }
+    .table-wrap { overflow: auto; max-height: min(560px, 70vh); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th, td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { position: sticky; top: 0; background: #f1f5f9; font-weight: 700; }
+    td.code { font-family: var(--mono); font-weight: 600; color: var(--accent); width: 90px; }
+    tr:hover td { background: #f8fafc; }
+    .resolver {
+      margin-top: 18px; background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px;
+    }
+    .resolver h3 { margin: 0 0 10px; font-size: 1rem; }
+    .resolver-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+    input[type="text"] {
+      font: inherit; font-size: 0.9rem; font-weight: 500; color: var(--ink);
+      border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px;
+    }
+    .out {
+      margin-top: 8px; font-family: var(--mono); font-size: 0.82rem;
+      background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+      min-height: 44px;
+    }
+    footer { margin-top: 24px; color: var(--muted); font-size: 0.8rem; }
+    @media (max-width: 800px) {
+      .grid, .resolver-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="badge">Sibling of master-page.html · from master_sheet.xlsx</span>
+    <h1>Master Excel</h1>
+    <p class="lead">
+      Exterior and interior colors defined from
+      <code>ExteriorColorDictionary</code> and <code>InteriorColorDictionary</code>
+      as separate classes in <code>master-excel/master-excel.js</code>.
+    </p>
+
+    <div class="grid">
+      <section class="card" aria-labelledby="ext-title">
+        <div class="card-head">
+          <h2 id="ext-title">ExteriorColorDictionary</h2>
+          <span class="count" id="ext-count">0</span>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="ext-search" placeholder="Search exterior code or name…" aria-label="Search exterior colors" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ColorCode</th><th>ColorName</th></tr></thead>
+            <tbody id="ext-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="int-title">
+        <div class="card-head">
+          <h2 id="int-title">InteriorColorDictionary</h2>
+          <span class="count" id="int-count">0</span>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="int-search" placeholder="Search interior code or name…" aria-label="Search interior colors" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ColorCode</th><th>ColorName</th></tr></thead>
+            <tbody id="int-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="resolver" aria-labelledby="resolve-title">
+      <h3 id="resolve-title">Resolve color values (class API)</h3>
+      <div class="resolver-grid">
+        <div>
+          <label>
+            Exterior value
+            <input type="text" id="ext-input" placeholder="e.g. Platinum White Pearl MC 089" />
+          </label>
+          <div class="out" id="ext-out">code → name</div>
+        </div>
+        <div>
+          <label>
+            Interior value
+            <input type="text" id="int-input" placeholder="e.g. Black 20" />
+          </label>
+          <div class="out" id="int-out">code → name</div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Classes: <code>ExteriorColor</code>, <code>InteriorColor</code>,
+      <code>ExteriorColorDictionary</code>, <code>InteriorColorDictionary</code>,
+      <code>MasterExcelColors</code>
+    </footer>
+  </div>
+
+  <script src="master-excel/master-excel.js"></script>
+  <script>
+    (function () {
+      const colors = new MasterExcel.MasterExcelColors();
+      const extBody = document.getElementById("ext-body");
+      const intBody = document.getElementById("int-body");
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function renderTable(tbody, entries, query) {
+        const q = String(query || "").trim().toLowerCase();
+        const rows = !q
+          ? entries
+          : entries.filter(
+              (e) =>
+                e.code.toLowerCase().includes(q) ||
+                e.name.toLowerCase().includes(q)
+            );
+        tbody.innerHTML = rows
+          .map(
+            (e) =>
+              `<tr><td class="code">${escapeHtml(e.code)}</td><td>${escapeHtml(e.name)}</td></tr>`
+          )
+          .join("");
+      }
+
+      document.getElementById("ext-count").textContent = colors.exterior.size + " colors";
+      document.getElementById("int-count").textContent = colors.interior.size + " colors";
+
+      const extAll = colors.exterior.all();
+      const intAll = colors.interior.all();
+      renderTable(extBody, extAll, "");
+      renderTable(intBody, intAll, "");
+
+      document.getElementById("ext-search").addEventListener("input", (e) => {
+        renderTable(extBody, extAll, e.target.value);
+      });
+      document.getElementById("int-search").addEventListener("input", (e) => {
+        renderTable(intBody, intAll, e.target.value);
+      });
+
+      function updateExt() {
+        const v = document.getElementById("ext-input").value;
+        const code = colors.resolveExteriorCode(v);
+        const name = colors.resolveExteriorName(v);
+        document.getElementById("ext-out").textContent = code
+          ? code + " → " + name
+          : "—";
+      }
+      function updateInt() {
+        const v = document.getElementById("int-input").value;
+        const code = colors.resolveInteriorCode(v);
+        const name = colors.resolveInteriorName(v);
+        document.getElementById("int-out").textContent = code
+          ? code + " → " + name
+          : "—";
+      }
+      document.getElementById("ext-input").addEventListener("input", updateExt);
+      document.getElementById("int-input").addEventListener("input", updateInt);
+    })();
+  </script>
+</body>
+</html>
