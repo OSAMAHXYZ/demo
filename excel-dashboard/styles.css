@@ -562,6 +562,20 @@ table.data-table td.empty-cell { color: var(--muted); font-style: italic; }
   color: var(--muted);
 }
 
+.status-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #e2e8f0;
+  color: #334155;
+}
+.status-chip.is-ok { background: var(--ok-bg); color: var(--ok); }
+.status-chip.is-warn { background: var(--warn-bg); color: var(--warn); }
+.status-chip.is-info { background: #e0f2fe; color: #0369a1; }
+.status-chip.is-muted { background: #f1f5f9; color: #64748b; }
+
 @media (max-width: 1100px) {
   .upload-grid,
   .kpi-grid,

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Excel Dashboard — upload three Excel files and explore them in a live business dashboard" />
-  <title>Excel Dashboard</title>
+  <meta name="description" content="Upload Backorder, RTL Stock, and Central Stock — All Stock Matched, Daily Stock Matched, Full Control" />
+  <title>Excel Dashboard — Stock Matching</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
@@ -19,21 +19,21 @@
         <div class="brand-mark" aria-hidden="true">XL</div>
         <div>
           <p class="brand-name">Excel Dashboard</p>
-          <p class="brand-tag">3-file live analyzer</p>
+          <p class="brand-tag">BO · RTL · Central matching</p>
         </div>
       </div>
 
       <nav class="nav" aria-label="Sections">
         <a class="nav-link is-active" href="#upload" data-nav="upload">Upload</a>
-        <a class="nav-link" href="#section-1" data-nav="section-1">File 1 · Main</a>
-        <a class="nav-link" href="#section-2" data-nav="section-2">File 2</a>
-        <a class="nav-link" href="#section-3" data-nav="section-3">File 3</a>
-        <a class="nav-link" href="#relations" data-nav="relations">Relationships</a>
+        <a class="nav-link" href="#section-1" data-nav="section-1">All stock matched</a>
+        <a class="nav-link" href="#section-2" data-nav="section-2">Daily stock matched</a>
+        <a class="nav-link" href="#section-3" data-nav="section-3">Full control</a>
       </nav>
 
       <div class="sidebar-note">
-        Data stays in your browser.<br />
-        Nothing is uploaded to a server.
+        Backorder → first sheet.<br />
+        RTL + Central → first sheet each.<br />
+        Color dictionaries from Master Excel.
       </div>
     </aside>
 
@@ -41,29 +41,29 @@
       <header class="topbar">
         <button type="button" class="icon-btn" id="menu-btn" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
         <div class="topbar-text">
-          <h1 id="page-title">Excel Business Dashboard</h1>
-          <p id="page-sub">Upload three Excel files to populate KPIs, charts, and tables</p>
+          <h1 id="page-title">Stock Matching Dashboard</h1>
+          <p id="page-sub">Upload Backorder, RTL Stock, and Central Stock to run the three match processes</p>
         </div>
         <div class="topbar-actions">
           <button type="button" class="btn" id="clear-btn" disabled>Clear all</button>
-          <button type="button" class="btn btn-primary" id="analyze-btn" disabled>Analyze files</button>
+          <button type="button" class="btn btn-primary" id="analyze-btn" disabled>Run matching</button>
         </div>
       </header>
 
       <main id="main" class="main">
-        <!-- Upload -->
         <section class="panel" id="upload" aria-labelledby="upload-heading">
           <div class="panel-head">
             <div>
               <h2 id="upload-heading">Upload three Excel files</h2>
-              <p>Supported: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>. File 1 drives the main dashboard; Files 2 and 3 fill sections below.</p>
+              <p>
+                Supported: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>.
+                Backorder uses the <strong>first sheet</strong>. RTL Stock and Central Stock also use the first sheet.
+              </p>
             </div>
             <div id="global-status" class="status-pill" role="status" aria-live="polite">Waiting for files</div>
           </div>
 
-          <div class="upload-grid" id="upload-grid">
-            <!-- filled by script -->
-          </div>
+          <div class="upload-grid" id="upload-grid"></div>
 
           <div id="load-banner" class="load-banner" hidden>
             <div class="spinner" aria-hidden="true"></div>
@@ -72,42 +72,34 @@
           <div id="error-banner" class="error-banner" role="alert" hidden></div>
         </section>
 
-        <!-- File 1 Main Dashboard -->
+        <section class="panel section-block" id="summary" hidden>
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Run summary</p>
+              <h2>Matching overview</h2>
+              <p id="summary-meta" class="muted"></p>
+            </div>
+          </div>
+          <div class="kpi-grid" id="summary-kpis"></div>
+        </section>
+
+        <!-- 1 · All stock matched -->
         <section class="panel section-block" id="section-1" aria-labelledby="s1-heading" hidden>
           <div class="panel-head">
             <div>
-              <p class="eyebrow">File 1 · Main Dashboard</p>
-              <h2 id="s1-heading">Main Dashboard</h2>
-              <p id="s1-meta" class="muted"></p>
+              <p class="eyebrow">Section 1 · FIFO · Color dictionaries</p>
+              <h2 id="s1-heading">All stock matched</h2>
+              <p id="s1-meta" class="muted">BO ↔ Central stock on Product + Alj Suffix + Exterior/Interior codes (dictionary contains-match). Matched rows only.</p>
             </div>
-            <label class="field-inline">
-              <span>Sheet</span>
-              <select id="s1-sheet" aria-label="File 1 sheet"></select>
-            </label>
           </div>
           <div class="kpi-grid" id="s1-kpis"></div>
-          <div class="charts-grid">
-            <article class="card">
-              <div class="card-head"><h3>Distribution</h3></div>
-              <div class="chart-wrap"><canvas id="s1-chart-cat" aria-label="Category chart"></canvas></div>
-            </article>
-            <article class="card">
-              <div class="card-head"><h3>Numeric trend / totals</h3></div>
-              <div class="chart-wrap"><canvas id="s1-chart-num" aria-label="Numeric chart"></canvas></div>
-            </article>
-          </div>
           <article class="card table-card">
             <div class="card-head table-toolbar">
-              <h3>Data table</h3>
+              <h3>Matched rows</h3>
               <div class="toolbar-controls">
                 <label class="sr-only" for="s1-search">Search table</label>
                 <input id="s1-search" type="search" placeholder="Search…" autocomplete="off" />
-                <label class="field-inline compact">
-                  <span>Filter column</span>
-                  <select id="s1-filter-col"></select>
-                </label>
-                <label class="sr-only" for="s1-filter-val">Filter value</label>
-                <input id="s1-filter-val" type="search" placeholder="Filter value…" autocomplete="off" />
+                <button type="button" class="btn" id="s1-download">Download CSV</button>
               </div>
             </div>
             <div class="table-scroll" id="s1-table-wrap"></div>
@@ -115,32 +107,33 @@
           </article>
         </section>
 
-        <!-- File 2 -->
+        <!-- 2 · Daily stock matched -->
         <section class="panel section-block" id="section-2" aria-labelledby="s2-heading" hidden>
           <div class="panel-head">
             <div>
-              <p class="eyebrow">File 2 · Second Section</p>
-              <h2 id="s2-heading">Second Section</h2>
-              <p id="s2-meta" class="muted"></p>
+              <p class="eyebrow">Section 2 · FIFO · Retail stock</p>
+              <h2 id="s2-heading">Daily stock matched</h2>
+              <p id="s2-meta" class="muted">BO ↔ RTL stock on Product + Alj Suffix + Model Year + Exterior/Interior (padded). Includes quantity status.</p>
             </div>
-            <label class="field-inline">
-              <span>Sheet</span>
-              <select id="s2-sheet" aria-label="File 2 sheet"></select>
-            </label>
           </div>
           <div class="kpi-grid" id="s2-kpis"></div>
-          <div class="charts-grid single">
-            <article class="card">
-              <div class="card-head"><h3>Breakdown</h3></div>
-              <div class="chart-wrap"><canvas id="s2-chart" aria-label="File 2 chart"></canvas></div>
-            </article>
-          </div>
           <article class="card table-card">
             <div class="card-head table-toolbar">
-              <h3>Data table</h3>
+              <h3>Daily matching</h3>
               <div class="toolbar-controls">
                 <label class="sr-only" for="s2-search">Search table</label>
                 <input id="s2-search" type="search" placeholder="Search…" autocomplete="off" />
+                <label class="field-inline compact">
+                  <span>Quantity</span>
+                  <select id="s2-filter">
+                    <option value="">All</option>
+                    <option>NO STOCK</option>
+                    <option>BO &gt; STOCK</option>
+                    <option>STOCK &gt; BO</option>
+                    <option>BALANCED</option>
+                  </select>
+                </label>
+                <button type="button" class="btn" id="s2-download">Download CSV</button>
               </div>
             </div>
             <div class="table-scroll" id="s2-table-wrap"></div>
@@ -148,65 +141,58 @@
           </article>
         </section>
 
-        <!-- File 3 -->
+        <!-- 3 · Full control -->
         <section class="panel section-block" id="section-3" aria-labelledby="s3-heading" hidden>
           <div class="panel-head">
             <div>
-              <p class="eyebrow">File 3 · Third Section</p>
-              <h2 id="s3-heading">Third Section</h2>
-              <p id="s3-meta" class="muted"></p>
+              <p class="eyebrow">Section 3 · Central inventory control</p>
+              <h2 id="s3-heading">Full control</h2>
+              <p id="s3-meta" class="muted">Unique central VINs with BO match fields + RTL Stock matched (In Stock / Not in RTL Stock).</p>
             </div>
-            <label class="field-inline">
-              <span>Sheet</span>
-              <select id="s3-sheet" aria-label="File 3 sheet"></select>
-            </label>
           </div>
           <div class="kpi-grid" id="s3-kpis"></div>
-          <div class="charts-grid single">
-            <article class="card">
-              <div class="card-head"><h3>Breakdown</h3></div>
-              <div class="chart-wrap"><canvas id="s3-chart" aria-label="File 3 chart"></canvas></div>
-            </article>
-          </div>
           <article class="card table-card">
             <div class="card-head table-toolbar">
-              <h3>Data table</h3>
+              <h3>Full control validation</h3>
               <div class="toolbar-controls">
                 <label class="sr-only" for="s3-search">Search table</label>
                 <input id="s3-search" type="search" placeholder="Search…" autocomplete="off" />
+                <label class="field-inline compact">
+                  <span>BO Match</span>
+                  <select id="s3-bo-filter">
+                    <option value="">All</option>
+                    <option>Matched</option>
+                    <option>No BO</option>
+                  </select>
+                </label>
+                <label class="field-inline compact">
+                  <span>RTL</span>
+                  <select id="s3-rtl-filter">
+                    <option value="">All</option>
+                    <option>In Stock</option>
+                    <option>Not in RTL Stock</option>
+                  </select>
+                </label>
+                <button type="button" class="btn" id="s3-download">Download CSV</button>
               </div>
             </div>
             <div class="table-scroll" id="s3-table-wrap"></div>
             <p class="table-foot" id="s3-table-foot"></p>
           </article>
         </section>
-
-        <!-- Relationships -->
-        <section class="panel section-block" id="relations" aria-labelledby="rel-heading" hidden>
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Cross-file analysis</p>
-              <h2 id="rel-heading">How the files relate</h2>
-              <p class="muted">Detected from shared column names and overlapping values — based only on your uploads.</p>
-            </div>
-          </div>
-          <div id="relations-body" class="relations-body"></div>
-        </section>
       </main>
 
       <footer class="footer">
         <p>Excel Dashboard · Client-side only · Your files never leave this browser</p>
-        <p>Built with HTML, CSS, JavaScript · SheetJS + Chart.js</p>
+        <p>Power Query logic · Master Excel color dictionaries · SheetJS</p>
       </footer>
     </div>
   </div>
 
   <div class="overlay" id="overlay" hidden></div>
 
-  <!-- SheetJS for Excel / CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- Chart.js for visualizations -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="../master-excel/master-excel.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
