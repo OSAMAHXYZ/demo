@@ -289,15 +289,111 @@
     return XLSX.read(buffer, { type: "array", cellDates: true });
   }
 
-  /** Always first sheet (as requested for Backorder / RTL / Central). */
+  const HEADER_MARKERS = [
+    "product",
+    "vin",
+    "vehicle identification number",
+    "alj suffix",
+    "exterior color",
+    "interior color",
+    "model year",
+    "back order number",
+    "salesman name",
+  ];
+
+  /**
+   * Read the first sheet, but detect the real header row.
+   * ALJ exports often put a blank/title row above headers (Region / Product / VIN…),
+   * which otherwise becomes __EMPTY_* columns and kills all matching.
+   */
   function firstSheetRows(workbook) {
     const name = workbook.SheetNames[0];
     if (!name) return [];
-    return XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+      header: 1,
       defval: "",
+      blankrows: false,
       raw: true,
       cellDates: true,
     });
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = HEADER_MARKERS.filter((m) =>
+        cells.some((c) => c === m || c.includes(m))
+      ).length;
+      if (hits > bestHits) {
+        bestHits = hits;
+        headerIdx = i;
+      }
+      if (hits >= 3) break;
+    }
+
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => {
+      const label = cellToString(h).trim();
+      return label || `Column ${i + 1}`;
+    });
+    const seen = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seen[h]) {
+        seen[h] = 1;
+        return h;
+      }
+      seen[h] += 1;
+      return `${h} (${seen[h]})`;
+    });
+
+    const rows = [];
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      // Skip repeated header / title rows mixed into the body
+      const asText = line.map((c) => normHeader(c));
+      const looksLikeHeader =
+        HEADER_MARKERS.filter((m) => asText.some((c) => c === m || c.includes(m)))
+          .length >= 3;
+      if (looksLikeHeader) continue;
+
+      const obj = {};
+      uniqueHeaders.forEach((h, i) => {
+        obj[h] = line[i] != null ? line[i] : "";
+      });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  /** Exterior for daily match: code → pad3; name → dictionary code → pad3. */
+  function dailyExteriorCode(value) {
+    const raw = cellToString(value).trim();
+    if (!raw) return "";
+    if (/^[A-Z0-9]{2,4}$/i.test(raw)) return padExterior3(raw);
+    if (colors) {
+      const code = colors.resolveExteriorCode(raw);
+      if (code) return padExterior3(code);
+    }
+    const contained = firstContainedCode(raw, exteriorMaster);
+    if (contained) return padExterior3(contained);
+    return padExterior3(raw);
+  }
+
+  /** Interior for daily match: numeric code or dictionary name. */
+  function dailyInteriorCode(value) {
+    const raw = cellToString(value).trim();
+    if (!raw) return "";
+    if (/^\d{1,3}$/.test(raw)) return upperTrim(raw);
+    if (colors) {
+      const code = colors.resolveInteriorCode(raw);
+      if (code) return upperTrim(code);
+    }
+    const contained = firstContainedCode(raw, interiorMaster);
+    return contained || upperTrim(raw);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -493,8 +589,8 @@
       const product = upperTrim(getBo(r, "product"));
       const suffix = upperTrim(getBo(r, "suffix"));
       const year = String(getBo(r, "year") ?? "");
-      const ext = padExterior3(getBo(r, "extBo"));
-      const intc = upperTrim(getBo(r, "intBo"));
+      const ext = dailyExteriorCode(getBo(r, "extBo"));
+      const intc = dailyInteriorCode(getBo(r, "intBo"));
       return {
         idx,
         product,
@@ -521,8 +617,8 @@
       const product = upperTrim(getRtl(r, "product"));
       const suffix = upperTrim(getRtl(r, "suffix"));
       const year = String(getRtl(r, "year") ?? "");
-      const ext = padExterior3(getRtl(r, "extStock"));
-      const intc = upperTrim(getRtl(r, "intStock"));
+      const ext = dailyExteriorCode(getRtl(r, "extStock"));
+      const intc = dailyInteriorCode(getRtl(r, "intStock"));
       const vin = cellToString(getRtl(r, "vin")).trim();
       return {
         idx,
