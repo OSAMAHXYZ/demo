@@ -24,3 +24,7 @@ node_modules/
 # Runtime inventory (persisted on server)
 delivery-inventory-data.json
 delivery-inventory-data.json.*.tmp
+
+# Nested calculator git metadata backup
+toyota-internal-lease-calculator-main/.git.bak-nested/
+
