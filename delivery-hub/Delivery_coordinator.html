@@ -18,6 +18,7 @@
                 </div>
             </div>
             <div class="hub-actions">
+                <a href="warehouse-entry.html" class="hub-btn">إدخال المستودع</a>
                 <a href="admin-Delivery-pdf.html" class="hub-btn">لوحة الإدارة</a>
                 <a href="Delivery_pdf.html" class="hub-btn">مذكرة الترحيل</a>
             </div>
@@ -87,6 +88,21 @@
                 </div>
                 <pre id="missingVinList" style="margin:0;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;color:#fecaca;line-height:1.6"></pre>
             </div>
+            <div id="warehouseHitBox" class="hub-section" style="display:none;margin-top:12px;padding:14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.28)">
+                <div class="hub-section-head" style="margin-bottom:8px">
+                    <h2 style="font-size:0.88rem;color:#bbf7d0">موجودة في ساحة المستودع</h2>
+                    <span class="hub-hint" id="warehouseHitCount"></span>
+                </div>
+                <pre id="warehouseHitList" style="margin:0;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;color:#bbf7d0;line-height:1.6"></pre>
+            </div>
+        </section>
+
+        <section class="hub-section" id="yardAlertSection" style="display:none">
+            <div class="hub-section-head">
+                <h2>تنبيه الساحة — VINs في المستودع</h2>
+                <span class="hub-hint" id="yardAlertHint">شاسيه موجودة في القائمة وفي ساحة A/B</span>
+            </div>
+            <div id="yardAlertList" class="hub-meta"></div>
         </section>
 
         <section class="hub-section">
@@ -102,6 +118,7 @@
                             <th>Product</th>
                             <th>الشركة</th>
                             <th>النوع</th>
+                            <th>الساحة</th>
                             <th>حالة المذكرة</th>
                             <th>المسؤول</th>
                             <th>التصنيف</th>
@@ -109,7 +126,7 @@
                         </tr>
                     </thead>
                     <tbody id="queueBody">
-                        <tr><td colspan="8" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>
+                        <tr><td colspan="9" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -159,6 +176,14 @@
             background: rgba(14, 165, 233, 0.14);
             color: #7dd3fc;
             border: 1px solid rgba(14, 165, 233, 0.3);
+        }
+        .hub-badge--yard {
+            background: rgba(34, 197, 94, 0.15);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            font-family: ui-monospace, Consolas, monospace;
+            direction: ltr;
+            display: inline-block;
         }
         .hub-badge--memo-plan {
             background: rgba(34, 197, 94, 0.12);
@@ -363,7 +388,7 @@
         function renderQueue(queue) {
             const tbody = document.getElementById('queueBody');
             if (!rawUploaded) {
-                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">ارفع البيانات الخام أولاً ثم أضف أرقام الشاسيه</td></tr>';
                 return;
             }
             const seen = new Set();
@@ -375,7 +400,7 @@
                 unique.push(item);
             });
             if (!unique.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد شاسيه بعد — الصق أرقام الشاسيه أعلاه</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد شاسيه بعد — الصق أرقام الشاسيه أعلاه</td></tr>';
                 return;
             }
             tbody.innerHTML = unique.map((item) => {
@@ -395,20 +420,48 @@
                     : (mode === 'memo'
                         ? '<span class="hub-badge hub-badge--memo-plan">ترحيل</span>'
                         : '—');
+                const yardBadge = item.warehouseInStock && item.warehouseSlot
+                    ? `<span class="hub-badge hub-badge--yard">${item.warehouseSlot}</span>`
+                    : '—';
                 const rowState = item.agentStatus === 'delivered'
                     ? 'تم الترحيل'
                     : (item.agentStatus === 'display' ? 'عرض — متاح للمذكرة' : (avail ? 'Waiting for delivery' : 'محجوز'));
-                return `<tr>
+                const rowClass = item.warehouseInStock ? ' style="background:rgba(34,197,94,0.06)"' : '';
+                return `<tr${rowClass}>
                     <td class="hub-vin">${item.vin}</td>
                     <td>${item.product || '—'}</td>
                     <td>${company}</td>
                     <td>${typeBadge}</td>
+                    <td>${yardBadge}</td>
                     <td>${noteStatus}</td>
                     <td>${item.assignedTo || '—'}</td>
                     <td><span class="hub-badge ${queueBadgeClass(item)}">${label}</span></td>
                     <td>${rowState}</td>
                 </tr>`;
             }).join('');
+
+            renderYardAlert(unique);
+        }
+
+        function renderYardAlert(queue) {
+            const section = document.getElementById('yardAlertSection');
+            const list = document.getElementById('yardAlertList');
+            const hint = document.getElementById('yardAlertHint');
+            const hits = (queue || []).filter((q) => q.warehouseInStock && q.warehouseSlot);
+            if (!hits.length) {
+                section.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+            section.style.display = '';
+            hint.textContent = `${hits.length} شاسيه في الساحة وموجودة في القائمة`;
+            list.innerHTML = hits.map((h) =>
+                `<div style="margin:6px 0;padding:8px 10px;border-radius:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25)">
+                    <b style="direction:ltr;display:inline-block">${h.vin}</b>
+                    — في المخزون · الموقف <b class="hub-badge hub-badge--yard">${h.warehouseSlot}</b>
+                    ${h.product ? ` · ${h.product}` : ''}
+                </div>`
+            ).join('');
         }
 
         async function loadQueue() {
@@ -491,6 +544,8 @@
                 if (queueDuplicates) parts.push(`${queueDuplicates} موجودة مسبقاً`);
                 if (missing.length) parts.push(`${missing.length} غير موجودة في Excel`);
                 else if (data.skipped) parts.push(`${data.skipped} تم تخطيها`);
+                const whHits = Array.isArray(data.alreadyInWarehouse) ? data.alreadyInWarehouse : [];
+                if (whHits.length) parts.push(`${whHits.length} موجودة في الساحة`);
                 setStatus(
                     'vinStatus',
                     parts.join(' · ') || 'لم تتم إضافة شاسيه',
@@ -507,6 +562,18 @@
                     missingBox.style.display = 'none';
                     missingList.textContent = '';
                     missingCount.textContent = '';
+                }
+                const whBox = document.getElementById('warehouseHitBox');
+                const whList = document.getElementById('warehouseHitList');
+                const whCount = document.getElementById('warehouseHitCount');
+                if (whHits.length) {
+                    whBox.style.display = '';
+                    whCount.textContent = `${whHits.length} رقم`;
+                    whList.textContent = whHits.map((h) => `${h.vin} → ${h.slot}`).join('\n');
+                } else {
+                    whBox.style.display = 'none';
+                    whList.textContent = '';
+                    whCount.textContent = '';
                 }
                 await loadQueue();
             } catch (err) {

@@ -17,8 +17,17 @@ const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
 const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-note-form.png');
 const PORT = Number(process.env.PORT) || 3000;
 
-const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء']);
+const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse']);
 const AGENT_PASSWORD = process.env.DELIVERY_AGENT_PASSWORD || '1234';
+const USER_ROLES = Object.freeze({
+  ياسين: 'showroom',
+  الفاضل: 'agent',
+  البراء: 'agent',
+  مستودع: 'warehouse',
+  warehouse: 'warehouse'
+});
+const WAREHOUSE_ZONES = Object.freeze(['A', 'B']);
+const WAREHOUSE_SLOTS_PER_ZONE = 60;
 const MAX_DRAFTS = 2000;
 
 const {
@@ -59,6 +68,7 @@ const emptyStore = () => ({
   queue: [],
   drafts: [],
   manualVehicles: [],
+  warehouseStock: [],
   options: defaultOptions(),
   meta: {
     filename: '',
@@ -107,6 +117,7 @@ function loadStore() {
       queue: Array.isArray(parsed.queue) ? parsed.queue : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
       manualVehicles: Array.isArray(parsed.manualVehicles) ? parsed.manualVehicles : [],
+      warehouseStock: Array.isArray(parsed.warehouseStock) ? parsed.warehouseStock : [],
       options: parsed.options && typeof parsed.options === 'object'
         ? {
             companies: Array.isArray(parsed.options.companies) ? parsed.options.companies : [],
@@ -438,6 +449,10 @@ function statusLabelFor(item) {
       ? 'تم التسليم في المستودع'
       : 'تم الترحيل';
   }
+  const wh = findWarehouseInStock(item.vin);
+  if (wh) {
+    return `في المستودع · ${wh.slot}`;
+  }
   // Added by coordinator — waiting until agent creates the delivery note
   if (item.status === 'available' || !item.agentStatus) {
     return 'Waiting for delivery';
@@ -452,6 +467,64 @@ function statusLabelFor(item) {
   return item.assignedTo
     ? `Waiting for delivery · مع ${item.assignedTo}`
     : 'Waiting for delivery';
+}
+
+function ensureWarehouseStock() {
+  if (!Array.isArray(store.warehouseStock)) store.warehouseStock = [];
+}
+
+function findWarehouseInStock(vin) {
+  ensureWarehouseStock();
+  const key = normVin(vin);
+  if (!key) return null;
+  return store.warehouseStock.find((e) => normVin(e.vin) === key && e.status === 'in') || null;
+}
+
+function warehouseOccupancy() {
+  ensureWarehouseStock();
+  const used = new Set(
+    store.warehouseStock.filter((e) => e.status === 'in').map((e) => String(e.slot || '').toUpperCase())
+  );
+  const zones = {};
+  for (const zone of WAREHOUSE_ZONES) {
+    const slots = [];
+    for (let i = 1; i <= WAREHOUSE_SLOTS_PER_ZONE; i += 1) {
+      const slot = `${zone}-${i}`;
+      slots.push({ slot, free: !used.has(slot) });
+    }
+    zones[zone] = {
+      total: WAREHOUSE_SLOTS_PER_ZONE,
+      used: slots.filter((s) => !s.free).length,
+      free: slots.filter((s) => s.free).length,
+      nextSlot: (slots.find((s) => s.free) || {}).slot || null,
+      slots
+    };
+  }
+  return zones;
+}
+
+function nextFreeSlot(zone) {
+  const z = String(zone || '').trim().toUpperCase();
+  if (!WAREHOUSE_ZONES.includes(z)) return null;
+  const occ = warehouseOccupancy();
+  return occ[z]?.nextSlot || null;
+}
+
+function enrichWarehouseEntry(entry) {
+  const vin = normVin(entry.vin);
+  const veh = vehicleIndex().get(vin);
+  const queueItem = findQueueItem(vin);
+  return {
+    ...entry,
+    vin,
+    product: entry.product || veh?.product || veh?.model || queueItem?.product || '',
+    plate: entry.plate || veh?.plate || queueItem?.plate || '',
+    inCoordinatorQueue: Boolean(queueItem),
+    coordinatorAssignee: queueItem?.assignedTo || '',
+    plannedDeliveryMode: queueItem
+      ? normalizePlannedDeliveryMode(queueItem.plannedDeliveryMode || queueItem.deliveryType || '')
+      : ''
+  };
 }
 
 function vehicleStatusPaperLabel(status) {
@@ -701,6 +774,7 @@ function enrichQueueItem(item) {
   const veh = vehicleIndex().get(vin);
   const deliveredMonth = queueItemDeliveredMonth(item);
   const archivedFromCoordinator = isPriorMonthDelivered(item);
+  const wh = findWarehouseInStock(vin);
   const enriched = {
     ...item,
     vin,
@@ -720,6 +794,10 @@ function enrichQueueItem(item) {
     vehicleStatus: normalizeVehicleStatus(item.vehicleStatus) || item.vehicleStatus || '',
     deliveredMonth,
     archivedFromCoordinator,
+    warehouseInStock: Boolean(wh),
+    warehouseSlot: wh?.slot || '',
+    warehouseZone: wh?.zone || '',
+    warehouseStockedInAt: wh?.stockedInAt || '',
     statusLabel: statusLabelFor(item)
   };
   return enriched;
@@ -774,7 +852,8 @@ function authenticateAgent(username, password) {
   const user = String(username || '').trim();
   if (!AGENTS.has(user)) return { ok: false, error: 'اسم المستخدم غير معروف' };
   if (String(password || '') !== AGENT_PASSWORD) return { ok: false, error: 'كلمة المرور غير صحيحة' };
-  return { ok: true, username: user };
+  const role = USER_ROLES[user] || 'agent';
+  return { ok: true, username: user, role };
 }
 
 function findQueueItem(vin) {
@@ -1507,7 +1586,122 @@ app.use(express.json({ limit: '80mb' }));
 app.post('/api/delivery-coordinator/auth', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
   if (!auth.ok) return res.status(401).json({ error: auth.error });
-  return res.json({ ok: true, username: auth.username });
+  return res.json({ ok: true, username: auth.username, role: auth.role });
+});
+
+app.get('/api/warehouse/stock', (_req, res) => {
+  ensureWarehouseStock();
+  const inStock = store.warehouseStock
+    .filter((e) => e.status === 'in')
+    .map(enrichWarehouseEntry)
+    .sort((a, b) => String(a.slot).localeCompare(String(b.slot), 'en'));
+  res.json({
+    stock: inStock,
+    history: store.warehouseStock.slice(-200).map(enrichWarehouseEntry),
+    zones: warehouseOccupancy(),
+    zoneNames: WAREHOUSE_ZONES
+  });
+});
+
+app.post('/api/warehouse/stock-in', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  if (auth.role !== 'warehouse') {
+    return res.status(403).json({ error: 'هذا الحساب غير مخصص لإدخال المستودع' });
+  }
+
+  const vin = normVin(req.body?.vin);
+  if (!vin || vin.length < 8) {
+    return res.status(400).json({ error: 'رقم الشاسيه غير صالح — راجع القراءة وصحّحها' });
+  }
+
+  let zone = String(req.body?.zone || '').trim().toUpperCase();
+  if (!WAREHOUSE_ZONES.includes(zone)) {
+    return res.status(400).json({ error: 'اختر المنطقة A أو B' });
+  }
+
+  let slot = String(req.body?.slot || '').trim().toUpperCase();
+  if (slot) {
+    const m = slot.match(/^([AB])-?(\d{1,3})$/i);
+    if (!m) return res.status(400).json({ error: 'مكان الوقوف غير صالح — مثال: A-1' });
+    zone = m[1].toUpperCase();
+    slot = `${zone}-${Number(m[2])}`;
+    if (Number(m[2]) < 1 || Number(m[2]) > WAREHOUSE_SLOTS_PER_ZONE) {
+      return res.status(400).json({ error: `رقم الموقف يجب أن يكون بين 1 و ${WAREHOUSE_SLOTS_PER_ZONE}` });
+    }
+  } else {
+    slot = nextFreeSlot(zone);
+    if (!slot) return res.status(409).json({ error: `المنطقة ${zone} ممتلئة` });
+  }
+
+  ensureWarehouseStock();
+  const existing = findWarehouseInStock(vin);
+  if (existing) {
+    return res.status(409).json({
+      error: `هذا الشاسيه موجود مسبقاً في ${existing.slot}`,
+      entry: enrichWarehouseEntry(existing)
+    });
+  }
+
+  const slotTaken = store.warehouseStock.find(
+    (e) => e.status === 'in' && String(e.slot).toUpperCase() === slot
+  );
+  if (slotTaken) {
+    return res.status(409).json({
+      error: `الموقف ${slot} مشغول بالشاسيه ${slotTaken.vin}`
+    });
+  }
+
+  const veh = vehicleIndex().get(vin);
+  const queueItem = findQueueItem(vin);
+  const now = new Date().toISOString();
+  const entry = {
+    id: `wh_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    vin,
+    zone,
+    slot,
+    status: 'in',
+    stockedInAt: now,
+    stockedOutAt: '',
+    stockedInBy: auth.username,
+    stockedOutBy: '',
+    product: veh?.product || veh?.model || queueItem?.product || String(req.body?.product || '').trim(),
+    plate: veh?.plate || queueItem?.plate || String(req.body?.plate || '').trim()
+  };
+  store.warehouseStock.push(entry);
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    entry: enrichWarehouseEntry(entry),
+    inCoordinatorQueue: Boolean(queueItem),
+    zones: warehouseOccupancy()
+  });
+});
+
+app.post('/api/warehouse/stock-out', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  if (auth.role !== 'warehouse') {
+    return res.status(403).json({ error: 'هذا الحساب غير مخصص لإدخال المستودع' });
+  }
+
+  const vin = normVin(req.body?.vin);
+  if (!vin) return res.status(400).json({ error: 'رقم الشاسيه مطلوب' });
+
+  const entry = findWarehouseInStock(vin);
+  if (!entry) {
+    return res.status(404).json({ error: 'هذا الشاسيه غير موجود في ساحة المستودع' });
+  }
+
+  entry.status = 'out';
+  entry.stockedOutAt = new Date().toISOString();
+  entry.stockedOutBy = auth.username;
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    entry: enrichWarehouseEntry(entry),
+    zones: warehouseOccupancy()
+  });
 });
 
 app.get('/api/delivery-options', (_req, res) => {
@@ -1853,13 +2047,25 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
   }
 
   if (admin) {
+    ensureWarehouseStock();
     return res.json({
       queue,
       stats: computeStats(),
       drafts: store.drafts,
       deliveryNoteStats: computeDeliveryNoteStats(store.drafts || []),
       manualVehicles: store.manualVehicles || [],
+      warehouseStock: store.warehouseStock.filter((e) => e.status === 'in').map(enrichWarehouseEntry),
+      warehouseZones: warehouseOccupancy(),
       rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
+    });
+  }
+
+  if (forCoordinator) {
+    ensureWarehouseStock();
+    return res.json({
+      queue,
+      warehouseStock: store.warehouseStock.filter((e) => e.status === 'in').map(enrichWarehouseEntry),
+      warehouseZones: warehouseOccupancy()
     });
   }
 
@@ -1903,6 +2109,7 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   let added = 0;
   let skipped = 0;
   const missingVins = [];
+  const alreadyInWarehouse = [];
   const seenBatch = new Set();
   const now = new Date().toISOString();
 
@@ -1923,6 +2130,11 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       missingVins.push(vin);
       skipped += 1;
       continue;
+    }
+
+    const wh = findWarehouseInStock(vin);
+    if (wh) {
+      alreadyInWarehouse.push({ vin, slot: wh.slot, zone: wh.zone });
     }
 
     const base = {
@@ -1947,6 +2159,7 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
     skipped,
     notInInventory: missingVins.length,
     missingVins,
+    alreadyInWarehouse,
     deliveryCompany,
     plannedDeliveryMode
   });
