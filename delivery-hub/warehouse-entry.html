@@ -451,6 +451,8 @@
                 <div class="scanner-actions">
                     <button type="button" class="hub-btn hub-btn--primary" id="btnStartCam">تشغيل الكاميرا</button>
                     <button type="button" class="hub-btn" id="btnStopCam">إيقاف</button>
+                    <label class="hub-btn" for="vinPhotoInput" style="cursor:pointer">التقاط / رفع صورة الملصق</label>
+                    <input type="file" id="vinPhotoInput" accept="image/*" capture="environment" hidden>
                 </div>
                 <p class="hub-status" id="scanStatus" style="margin-top:10px"></p>
 
@@ -516,7 +518,8 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+    <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
     <script src="delivery-hub-live.js?v=20260802b"></script>
     <script>
     (() => {
@@ -527,8 +530,10 @@
         let lastEntry = null;
         let mediaStream = null;
         let detectTimer = null;
-        let html5Scanner = null;
+        let zxingControls = null;
+        let zxingReader = null;
         let lastScanAt = 0;
+        let lastHintAt = 0;
 
         const $ = (id) => document.getElementById(id);
 
@@ -548,16 +553,14 @@
             return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         }
 
-        /** Toyota windshield: top barcode = full 17 VIN; bottom barcode = short serial — ignore short. */
+        /** Toyota windshield: top barcode = full 17 VIN; bottom = short serial. */
         function extractFullVin(raw) {
             const cleaned = normVin(raw);
             if (!cleaned) return '';
-            // Prefer standard VIN charset (no I/O/Q)
             const strict = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
             if (strict) return strict[0];
             const loose = cleaned.match(/[A-Z0-9]{17}/);
             if (loose) return loose[0];
-            // Exact 17 after clean
             if (cleaned.length === 17) return cleaned;
             return '';
         }
@@ -565,15 +568,14 @@
         function pickBestVinFromCodes(codes) {
             const list = (codes || [])
                 .map((c) => {
-                    const raw = typeof c === 'string' ? c : (c.rawValue || c.decodedText || '');
+                    const raw = typeof c === 'string' ? c : (c.rawValue || c.decodedText || c.text || '');
                     const vin = extractFullVin(raw);
                     const box = c.boundingBox || {};
                     const y = Number(box.y ?? c.cornerPoints?.[0]?.y ?? 1e9);
-                    return { vin, y, raw };
+                    return { vin, y, raw: normVin(raw) };
                 })
                 .filter((c) => c.vin && c.vin.length === 17);
             if (!list.length) return '';
-            // First barcode on sticker is the upper one
             list.sort((a, b) => a.y - b.y);
             return list[0].vin;
         }
@@ -771,110 +773,225 @@
 
         function onDetectedVin(vin) {
             const now = Date.now();
-            if (now - lastScanAt < 1800) return;
+            if (now - lastScanAt < 1600) return;
             if (!vin || vin.length !== 17) return;
             lastScanAt = now;
             $('vinInput').value = vin;
             $('vinInput').focus();
             setStatus('scanStatus', `تم قراءة الباركود الأول: ${vin}`, 'ok');
-            if (navigator.vibrate) navigator.vibrate(40);
+            if (navigator.vibrate) navigator.vibrate(50);
         }
 
-        function onDetectedCode(raw) {
-            const vin = extractFullVin(raw);
-            if (!vin) {
-                // Ignore bottom short barcode (e.g. 193TK049841)
+        function handleRawScan(raw, source) {
+            const cleaned = normVin(raw);
+            if (!cleaned) return;
+            const vin = extractFullVin(cleaned);
+            if (vin) {
+                onDetectedVin(vin);
                 return;
             }
-            onDetectedVin(vin);
+            // Feedback when the short bottom barcode is hit
+            const now = Date.now();
+            if (now - lastHintAt < 1200) return;
+            lastHintAt = now;
+            if (cleaned.length >= 6 && cleaned.length < 17) {
+                setStatus(
+                    'scanStatus',
+                    `قُرئ الباركود القصير (${cleaned}) — ارفع الكاميرا للباركود الأعلى تحت رقم الشاسيه الكامل`,
+                    'err'
+                );
+            } else {
+                setStatus('scanStatus', `قراءة غير مكتملة (${cleaned.slice(0, 24)}) — ثبّت الكاميرا على الباركود الأول`, 'err');
+            }
         }
 
-        async function startNativeDetector() {
+        function getZXing() {
+            return window.ZXingBrowser || window.ZXing || null;
+        }
+
+        function buildZXingHints(ZXingNS) {
+            const hints = new Map();
+            try {
+                const formats = [
+                    ZXingNS.BarcodeFormat.CODE_128,
+                    ZXingNS.BarcodeFormat.CODE_39,
+                    ZXingNS.BarcodeFormat.CODABAR,
+                    ZXingNS.BarcodeFormat.ITF,
+                    ZXingNS.BarcodeFormat.EAN_13,
+                    ZXingNS.BarcodeFormat.EAN_8,
+                    ZXingNS.BarcodeFormat.UPC_A,
+                    ZXingNS.BarcodeFormat.UPC_E
+                ];
+                hints.set(ZXingNS.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXingNS.DecodeHintType.TRY_HARDER, true);
+            } catch {
+                /* optional */
+            }
+            return hints;
+        }
+
+        async function openCameraStream() {
             const video = $('scannerVideo');
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: false,
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    focusMode: { ideal: 'continuous' }
+            const constraintsList = [
+                {
+                    audio: false,
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                },
+                {
+                    audio: false,
+                    video: { facingMode: 'environment' }
+                },
+                {
+                    audio: false,
+                    video: true
                 }
-            });
+            ];
+            let lastErr = null;
+            for (const constraints of constraintsList) {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+            if (!mediaStream) throw lastErr || new Error('تعذر فتح الكاميرا');
             video.srcObject = mediaStream;
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('autoplay', 'true');
+            video.muted = true;
             await video.play();
             $('scannerVideo').style.display = '';
             $('qrReader').style.display = 'none';
             $('scannerOverlay').style.display = '';
+            return video;
+        }
 
-            if (!('BarcodeDetector' in window)) {
-                return false;
+        function startBarcodeDetectorLoop(video) {
+            if (!('BarcodeDetector' in window)) return;
+            let detector;
+            try {
+                detector = new BarcodeDetector({
+                    formats: ['code_128', 'code_39', 'codabar', 'itf', 'ean_13', 'ean_8']
+                });
+            } catch {
+                try {
+                    detector = new BarcodeDetector();
+                } catch {
+                    return;
+                }
             }
-            // Linear barcodes on Toyota VIN stickers (top = full VIN)
-            const detector = new BarcodeDetector({
-                formats: ['code_128', 'code_39', 'codabar', 'itf']
-            });
             const tick = async () => {
                 if (!mediaStream) return;
                 try {
-                    const codes = await detector.detect(video);
-                    const vin = pickBestVinFromCodes(codes);
-                    if (vin) onDetectedVin(vin);
+                    if (video.readyState >= 2) {
+                        const codes = await detector.detect(video);
+                        if (codes && codes.length) {
+                            const vin = pickBestVinFromCodes(codes);
+                            if (vin) {
+                                onDetectedVin(vin);
+                            } else {
+                                const first = codes[0]?.rawValue || '';
+                                if (first) handleRawScan(first, 'native');
+                            }
+                        }
+                    }
                 } catch { /* ignore frame errors */ }
-                detectTimer = setTimeout(tick, 280);
+                detectTimer = setTimeout(tick, 250);
             };
             tick();
-            return true;
         }
 
-        async function startHtml5Qr() {
-            if (!window.Html5Qrcode) throw new Error('مكتبة المسح غير متوفرة');
-            $('scannerVideo').style.display = 'none';
-            $('scannerOverlay').style.display = 'none';
-            $('qrReader').style.display = 'block';
-            html5Scanner = new Html5Qrcode('qrReader');
-            const formats = window.Html5QrcodeSupportedFormats
-                ? [
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.CODABAR,
-                    Html5QrcodeSupportedFormats.ITF
-                ]
-                : undefined;
-            await html5Scanner.start(
-                { facingMode: 'environment' },
-                {
-                    fps: 10,
-                    // Wide band matches the first (top) linear VIN barcode
-                    qrbox: (viewW, viewH) => ({
-                        width: Math.floor(viewW * 0.92),
-                        height: Math.floor(Math.min(140, viewH * 0.28))
-                    }),
-                    aspectRatio: 1.777,
-                    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-                    ...(formats ? { formatsToSupport: formats } : {})
-                },
-                (decoded) => onDetectedCode(decoded),
-                () => {}
-            );
-        }
+        async function startZxingOnVideo(video) {
+            const ZXingBrowser = window.ZXingBrowser;
+            const ZXingLib = window.ZXing;
+            if (!ZXingBrowser || !ZXingBrowser.BrowserMultiFormatReader) {
+                throw new Error('مكتبة ZXing غير محمّلة — حدّث الصفحة');
+            }
+            const hints = ZXingLib ? buildZXingHints(ZXingLib) : undefined;
+            zxingReader = hints
+                ? new ZXingBrowser.BrowserMultiFormatReader(hints, 200)
+                : new ZXingBrowser.BrowserMultiFormatReader(undefined, 200);
+
+            // Continuous decode from the live video element
+            if (typeof zxingReader.decodeFromVideoElementContinuously === 'function') {
+                await zxingReader.decodeFromVideoElementContinuously(video, (result) => {
+                    if (result) handleRawScan(result.getText(), 'zxing');
+                });
+                zxingControls = {
+                    stop: () => {
+                        try {
+                            if (typeof zxingReader.stopContinuousDecode === 'function') {
+                                zxingReader.stopContinuousDecode();
+                            }
+                            zxingReader.reset();
+                        } catch { /* ignore */ }
+                    }
+                };
+                return;
+            }
+
+            if (typeof zxingReader.decodeFromStream === 'function') {
+                zxingControls = await zxingReader.decodeFromStream(
+                    mediaStream,
+                    video,
+                    (result) => {
+                        if (result) handleRawScan(result.getText(), 'zxing');
+                    }
+                );
+                return;
+            }
+
+            if (typeof zxingReader.decodeFromVideoDevice === 'function') {
+                zxingControls = await zxingReader.decodeFromVideoDevice(
+                    undefined,
+                    video,
+                    (result) => {
+                        if (result) handleRawScan(result.getText(), 'zxing');
+                    }
+                );
+                return;
+            }
+
+            throw new Error('لا تتوفر طريقة مسح مستمرة في هذا المتصفح');
 
         async function startCamera() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                setStatus('scanStatus', 'هذا المتصفح لا يدعم الكاميرا — اكتب الشاسيه يدوياً', 'err');
+                return;
+            }
             setStatus('scanStatus', 'جاري فتح الكاميرا…');
             try {
-                stopCamera(false);
+                await stopCamera(false);
+                const video = await openCameraStream();
+                let zxingOk = false;
                 try {
-                    const ok = await startNativeDetector();
-                    if (ok) {
-                        setStatus('scanStatus', 'وجّه الإطار الأحمر على الباركود الأول (الأعلى تحت رقم الشاسيه)', 'ok');
-                        return;
-                    }
-                } catch {
-                    /* fall through */
+                    await startZxingOnVideo(video);
+                    zxingOk = true;
+                } catch (err) {
+                    console.warn('ZXing start failed', err);
                 }
-                await startHtml5Qr();
-                setStatus('scanStatus', 'وجّه الكاميرا على الباركود الأول فقط — رقم الشاسيه 17 حرفاً', 'ok');
+                startBarcodeDetectorLoop(video);
+                if (zxingOk || ('BarcodeDetector' in window)) {
+                    setStatus(
+                        'scanStatus',
+                        'الكاميرا جاهزة — وجّه الإطار الأحمر على الباركود الأول (الأعلى) أفقياً وثبّت الصورة',
+                        'ok'
+                    );
+                } else {
+                    setStatus('scanStatus', 'الكاميرا تعمل لكن الماسح غير متوفر — اكتب الشاسيه يدوياً', 'err');
+                }
             } catch (err) {
-                setStatus('scanStatus', err.message || 'تعذر فتح الكاميرا — اكتب الشاسيه يدوياً', 'err');
+                const msg = String(err && err.message || err || '');
+                if (/NotAllowed|Permission|denied/i.test(msg)) {
+                    setStatus('scanStatus', 'ارفض/اسمح بالكاميرا من إعدادات المتصفح ثم أعد المحاولة', 'err');
+                } else {
+                    setStatus('scanStatus', msg || 'تعذر فتح الكاميرا — اكتب الشاسيه يدوياً', 'err');
+                }
             }
         }
 
@@ -883,6 +1000,17 @@
                 clearTimeout(detectTimer);
                 detectTimer = null;
             }
+            if (zxingControls && typeof zxingControls.stop === 'function') {
+                try { zxingControls.stop(); } catch { /* ignore */ }
+            }
+            zxingControls = null;
+            if (zxingReader) {
+                try {
+                    if (typeof zxingReader.reset === 'function') zxingReader.reset();
+                    if (typeof zxingReader.stopContinuousDecode === 'function') zxingReader.stopContinuousDecode();
+                } catch { /* ignore */ }
+            }
+            zxingReader = null;
             if (mediaStream) {
                 mediaStream.getTracks().forEach((t) => t.stop());
                 mediaStream = null;
@@ -891,11 +1019,6 @@
             if (video) {
                 video.srcObject = null;
                 video.style.display = '';
-            }
-            if (html5Scanner) {
-                try { await html5Scanner.stop(); } catch { /* ignore */ }
-                try { html5Scanner.clear(); } catch { /* ignore */ }
-                html5Scanner = null;
             }
             $('qrReader').style.display = 'none';
             $('scannerOverlay').style.display = '';
@@ -912,6 +1035,51 @@
         $('btnStockIn').addEventListener('click', stockIn);
         $('btnStockOut').addEventListener('click', stockOut);
         $('btnPrintSlip').addEventListener('click', () => printSlip(lastEntry));
+
+        $('vinPhotoInput').addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            setStatus('scanStatus', 'جاري قراءة الصورة…');
+            try {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = url;
+                });
+                const ZXingLib = window.ZXing;
+                const ZXingBrowser = window.ZXingBrowser;
+                let text = '';
+                if (ZXingBrowser && ZXingBrowser.BrowserMultiFormatReader) {
+                    const hints = ZXingLib ? buildZXingHints(ZXingLib) : undefined;
+                    const reader = hints
+                        ? new ZXingBrowser.BrowserMultiFormatReader(hints)
+                        : new ZXingBrowser.BrowserMultiFormatReader();
+                    const result = await reader.decodeFromImageElement(img);
+                    text = result && result.getText ? result.getText() : '';
+                } else if (ZXingLib && ZXingLib.BrowserMultiFormatReader) {
+                    const reader = new ZXingLib.BrowserMultiFormatReader(buildZXingHints(ZXingLib));
+                    const result = await reader.decodeFromImageElement(img);
+                    text = result && result.getText ? result.getText() : '';
+                } else if ('BarcodeDetector' in window) {
+                    const detector = new BarcodeDetector({
+                        formats: ['code_128', 'code_39', 'codabar', 'itf']
+                    });
+                    const codes = await detector.detect(img);
+                    text = pickBestVinFromCodes(codes) || (codes[0] && codes[0].rawValue) || '';
+                }
+                URL.revokeObjectURL(url);
+                if (!text) throw new Error('لم يُقرأ باركود — صوّر الباركود الأول أفقياً وبوضوح');
+                handleRawScan(text, 'photo');
+                if (!extractFullVin(text)) {
+                    /* handleRawScan already set short-barcode hint */
+                }
+            } catch (err) {
+                setStatus('scanStatus', err.message || 'فشل قراءة الصورة', 'err');
+            }
+        });
 
         document.querySelectorAll('input[name="zone"]').forEach((el) => {
             el.addEventListener('change', () => {
