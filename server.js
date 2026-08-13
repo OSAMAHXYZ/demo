@@ -849,9 +849,15 @@ function buildDashboard() {
 }
 
 function authenticateAgent(username, password) {
-  const user = String(username || '').trim();
+  let user = String(username || '').trim();
+  const lower = user.toLowerCase();
+  if (lower === 'warehouse' || lower === 'wh') user = 'warehouse';
+  if (user === 'مستودع' || lower === 'mustawda') user = 'مستودع';
   if (!AGENTS.has(user)) return { ok: false, error: 'اسم المستخدم غير معروف' };
-  if (String(password || '') !== AGENT_PASSWORD) return { ok: false, error: 'كلمة المرور غير صحيحة' };
+  const pass = String(password || '').trim();
+  if (pass !== String(AGENT_PASSWORD).trim()) {
+    return { ok: false, error: 'كلمة المرور غير صحيحة' };
+  }
   const role = USER_ROLES[user] || 'agent';
   return { ok: true, username: user, role };
 }

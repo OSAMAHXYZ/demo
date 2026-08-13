@@ -409,17 +409,17 @@
                 <div>
                     <label for="loginUser">اسم المستخدم</label>
                     <select id="loginUser" required>
-                        <option value="">— اختر الاسم —</option>
+                        <option value="warehouse" selected>مستودع / warehouse</option>
                         <option value="مستودع">مستودع</option>
-                        <option value="warehouse">warehouse</option>
                     </select>
                 </div>
                 <div>
                     <label for="loginPass">كلمة المرور</label>
-                    <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password">
+                    <input id="loginPass" type="password" placeholder="1234" autocomplete="current-password">
                 </div>
                 <button type="button" class="btn-login" id="btnLogin">دخول</button>
                 <p class="hub-status" id="loginStatus"></p>
+                <p class="sub" style="margin:8px 0 0;font-size:.75rem">استخدم مستودع / warehouse — كلمة المرور الافتراضية 1234</p>
             </div>
         </div>
     </div>
@@ -518,12 +518,11 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
-    <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
     <script src="delivery-hub-live.js?v=20260802b"></script>
     <script>
     (() => {
         const PASS_KEY = 'wh_entry_pass';
+        const LOCAL_FALLBACK_PASSWORD = '1234';
         let sessionUser = '';
         let sessionPass = '';
         let zonesData = {};
@@ -534,6 +533,7 @@
         let zxingReader = null;
         let lastScanAt = 0;
         let lastHintAt = 0;
+        let zxingLoadPromise = null;
 
         const $ = (id) => document.getElementById(id);
 
@@ -542,6 +542,39 @@
             if (!el) return;
             el.textContent = msg || '';
             el.className = 'hub-status' + (kind ? ` ${kind}` : '');
+        }
+
+        function isWarehouseUsername(name) {
+            const u = String(name || '').trim();
+            const lower = u.toLowerCase();
+            return u === 'مستودع' || lower === 'warehouse' || lower === 'wh';
+        }
+
+        function loadZxingLibs() {
+            if (window.ZXingBrowser && window.ZXing) return Promise.resolve();
+            if (zxingLoadPromise) return zxingLoadPromise;
+            const loadScript = (src) => new Promise((resolve, reject) => {
+                const existing = document.querySelector(`script[src="${src}"]`);
+                if (existing) {
+                    existing.addEventListener('load', () => resolve());
+                    existing.addEventListener('error', () => reject(new Error('فشل تحميل مكتبة المسح')));
+                    if (window.ZXingBrowser || window.ZXing) resolve();
+                    return;
+                }
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = true;
+                s.onload = () => resolve();
+                s.onerror = () => reject(new Error('فشل تحميل مكتبة المسح من الإنترنت'));
+                document.head.appendChild(s);
+            });
+            zxingLoadPromise = loadScript('https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js')
+                .then(() => loadScript('https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js'))
+                .catch((err) => {
+                    zxingLoadPromise = null;
+                    throw err;
+                });
+            return zxingLoadPromise;
         }
 
         function selectedZone() {
@@ -586,20 +619,54 @@
 
         async function login() {
             const username = $('loginUser').value.trim();
-            const password = $('loginPass').value;
+            const password = String($('loginPass').value || '').trim();
             setStatus('loginStatus', 'جاري التحقق…');
+            if (!username) {
+                setStatus('loginStatus', 'اختر اسم المستخدم', 'err');
+                return;
+            }
+            if (!password) {
+                setStatus('loginStatus', 'أدخل كلمة المرور', 'err');
+                return;
+            }
             try {
-                const res = await fetch('/api/delivery-coordinator/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل الدخول');
-                if (data.role !== 'warehouse') {
-                    throw new Error('هذا الحساب ليس مستخدم إدخال المستودع');
+                let authedUser = '';
+                let role = '';
+                let apiOk = false;
+                try {
+                    const res = await fetch('/api/delivery-coordinator/auth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    let data = {};
+                    try { data = await res.json(); } catch { data = {}; }
+                    if (res.ok) {
+                        apiOk = true;
+                        authedUser = data.username || username;
+                        role = data.role || '';
+                    } else if (res.status === 401 || res.status === 403) {
+                        apiOk = true;
+                        throw new Error(data.error || 'فشل الدخول');
+                    }
+                } catch (err) {
+                    if (apiOk) throw err;
+                    // API unreachable — local fallback for warehouse page only
+                    if (password !== LOCAL_FALLBACK_PASSWORD) {
+                        throw new Error('تعذر الاتصال بالخادم · أو كلمة المرور غير صحيحة');
+                    }
+                    if (!isWarehouseUsername(username)) {
+                        throw new Error('استخدم حساب مستودع / warehouse');
+                    }
+                    authedUser = username;
+                    role = 'warehouse';
                 }
-                sessionUser = data.username;
+
+                if (!isWarehouseUsername(authedUser) && role !== 'warehouse') {
+                    throw new Error('هذا الحساب ليس مستخدم إدخال المستودع — افتح صفحة مذكرة الترحيل للحسابات الأخرى');
+                }
+
+                sessionUser = authedUser;
                 sessionPass = password;
                 sessionStorage.setItem(PASS_KEY, password);
                 $('gateLogin').classList.add('hidden');
@@ -610,7 +677,7 @@
                     DeliveryHubLive.start(refreshStock);
                 }
             } catch (err) {
-                setStatus('loginStatus', err.message, 'err');
+                setStatus('loginStatus', err.message || 'فشل الدخول', 'err');
             }
         }
 
@@ -961,11 +1028,17 @@
 
         async function startCamera() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                setStatus('scanStatus', 'هذا المتصفح لا يدعم الكاميرا — اكتب الشاسيه يدوياً', 'err');
+                setStatus('scanStatus', 'هذا المتصفح لا يدعم الكاميرا — اكتب الشاسيه يدوياً أو التقط صورة', 'err');
                 return;
             }
             setStatus('scanStatus', 'جاري فتح الكاميرا…');
             try {
+                try {
+                    await loadZxingLibs();
+                } catch (libErr) {
+                    console.warn(libErr);
+                    setStatus('scanStatus', 'تعذر تحميل مكتبة المسح — سنحاول بالكاميرا الأصلية أو صورة الملصق', 'err');
+                }
                 await stopCamera(false);
                 const video = await openCameraStream();
                 let zxingOk = false;
@@ -983,7 +1056,7 @@
                         'ok'
                     );
                 } else {
-                    setStatus('scanStatus', 'الكاميرا تعمل لكن الماسح غير متوفر — اكتب الشاسيه يدوياً', 'err');
+                    setStatus('scanStatus', 'الكاميرا تعمل — إن لم يُقرأ الباركود استخدم «التقاط صورة الملصق»', 'err');
                 }
             } catch (err) {
                 const msg = String(err && err.message || err || '');
@@ -1042,6 +1115,7 @@
             if (!file) return;
             setStatus('scanStatus', 'جاري قراءة الصورة…');
             try {
+                try { await loadZxingLibs(); } catch { /* optional */ }
                 const url = URL.createObjectURL(file);
                 const img = new Image();
                 await new Promise((resolve, reject) => {
