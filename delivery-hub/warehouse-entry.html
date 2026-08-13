@@ -138,11 +138,26 @@
         #qrReader { min-height: 240px; }
         .scanner-overlay {
             position: absolute;
-            inset: 12% 10%;
-            border: 2px solid rgba(235,10,30,.75);
-            border-radius: 12px;
+            inset: 28% 6%;
+            height: 22%;
+            border: 2px solid rgba(235,10,30,.85);
+            border-radius: 10px;
             pointer-events: none;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+            box-shadow: 0 0 0 9999px rgba(0,0,0,.4);
+        }
+        .scanner-overlay::after {
+            content: 'الباركود الأول (الأعلى) — VIN 17';
+            position: absolute;
+            left: 50%;
+            top: -28px;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: .72rem;
+            font-weight: 700;
+            color: #fecaca;
+            background: rgba(15,23,42,.85);
+            padding: 4px 10px;
+            border-radius: 999px;
         }
         .scanner-actions {
             display: flex;
@@ -443,7 +458,7 @@
                     <label for="vinInput">رقم الشاسيه (راجع وصحّح بعد المسح)</label>
                     <input id="vinInput" class="vin-input" type="text" autocomplete="off" spellcheck="false"
                            placeholder="اكتب أو امسح VIN" maxlength="32">
-                    <p class="hint">بعد المسح راجع الأحرف بعناية ثم اختر المنطقة واضغط Stock IN</p>
+                    <p class="hint">المسح يقرأ الباركود الأول فقط (رقم الشاسيه الكامل 17 حرفاً) ويتجاهل الباركود السفلي القصير — راجع وصحّح ثم Stock IN</p>
                 </div>
 
                 <div class="wh-field">
@@ -531,6 +546,36 @@
 
         function normVin(v) {
             return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        /** Toyota windshield: top barcode = full 17 VIN; bottom barcode = short serial — ignore short. */
+        function extractFullVin(raw) {
+            const cleaned = normVin(raw);
+            if (!cleaned) return '';
+            // Prefer standard VIN charset (no I/O/Q)
+            const strict = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
+            if (strict) return strict[0];
+            const loose = cleaned.match(/[A-Z0-9]{17}/);
+            if (loose) return loose[0];
+            // Exact 17 after clean
+            if (cleaned.length === 17) return cleaned;
+            return '';
+        }
+
+        function pickBestVinFromCodes(codes) {
+            const list = (codes || [])
+                .map((c) => {
+                    const raw = typeof c === 'string' ? c : (c.rawValue || c.decodedText || '');
+                    const vin = extractFullVin(raw);
+                    const box = c.boundingBox || {};
+                    const y = Number(box.y ?? c.cornerPoints?.[0]?.y ?? 1e9);
+                    return { vin, y, raw };
+                })
+                .filter((c) => c.vin && c.vin.length === 17);
+            if (!list.length) return '';
+            // First barcode on sticker is the upper one
+            list.sort((a, b) => a.y - b.y);
+            return list[0].vin;
         }
 
         function authBody(extra = {}) {
@@ -724,23 +769,36 @@
             }
         }
 
-        function onDetectedCode(raw) {
+        function onDetectedVin(vin) {
             const now = Date.now();
-            if (now - lastScanAt < 1500) return;
-            const vin = normVin(raw);
-            if (vin.length < 8) return;
+            if (now - lastScanAt < 1800) return;
+            if (!vin || vin.length !== 17) return;
             lastScanAt = now;
             $('vinInput').value = vin;
             $('vinInput').focus();
-            setStatus('scanStatus', `تم المسح — راجع وصحّح إن لزم: ${vin}`, 'ok');
+            setStatus('scanStatus', `تم قراءة الباركود الأول: ${vin}`, 'ok');
             if (navigator.vibrate) navigator.vibrate(40);
+        }
+
+        function onDetectedCode(raw) {
+            const vin = extractFullVin(raw);
+            if (!vin) {
+                // Ignore bottom short barcode (e.g. 193TK049841)
+                return;
+            }
+            onDetectedVin(vin);
         }
 
         async function startNativeDetector() {
             const video = $('scannerVideo');
             mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
-                video: { facingMode: { ideal: 'environment' } }
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    focusMode: { ideal: 'continuous' }
+                }
             });
             video.srcObject = mediaStream;
             await video.play();
@@ -749,21 +807,20 @@
             $('scannerOverlay').style.display = '';
 
             if (!('BarcodeDetector' in window)) {
-                setStatus('scanStatus', 'الكاميرا تعمل — اكتب الشاسيه يدوياً أو استخدم ماسح html5', 'err');
                 return false;
             }
+            // Linear barcodes on Toyota VIN stickers (top = full VIN)
             const detector = new BarcodeDetector({
-                formats: ['code_128', 'code_39', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'codabar', 'data_matrix']
+                formats: ['code_128', 'code_39', 'codabar', 'itf']
             });
             const tick = async () => {
                 if (!mediaStream) return;
                 try {
                     const codes = await detector.detect(video);
-                    if (codes && codes[0] && codes[0].rawValue) {
-                        onDetectedCode(codes[0].rawValue);
-                    }
+                    const vin = pickBestVinFromCodes(codes);
+                    if (vin) onDetectedVin(vin);
                 } catch { /* ignore frame errors */ }
-                detectTimer = setTimeout(tick, 350);
+                detectTimer = setTimeout(tick, 280);
             };
             tick();
             return true;
@@ -775,9 +832,27 @@
             $('scannerOverlay').style.display = 'none';
             $('qrReader').style.display = 'block';
             html5Scanner = new Html5Qrcode('qrReader');
+            const formats = window.Html5QrcodeSupportedFormats
+                ? [
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.CODABAR,
+                    Html5QrcodeSupportedFormats.ITF
+                ]
+                : undefined;
             await html5Scanner.start(
                 { facingMode: 'environment' },
-                { fps: 8, qrbox: { width: 240, height: 120 } },
+                {
+                    fps: 10,
+                    // Wide band matches the first (top) linear VIN barcode
+                    qrbox: (viewW, viewH) => ({
+                        width: Math.floor(viewW * 0.92),
+                        height: Math.floor(Math.min(140, viewH * 0.28))
+                    }),
+                    aspectRatio: 1.777,
+                    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+                    ...(formats ? { formatsToSupport: formats } : {})
+                },
                 (decoded) => onDetectedCode(decoded),
                 () => {}
             );
@@ -790,14 +865,14 @@
                 try {
                     const ok = await startNativeDetector();
                     if (ok) {
-                        setStatus('scanStatus', 'وجّه الكاميرا لباركود / ملصق الشاسيه', 'ok');
+                        setStatus('scanStatus', 'وجّه الإطار الأحمر على الباركود الأول (الأعلى تحت رقم الشاسيه)', 'ok');
                         return;
                     }
                 } catch {
                     /* fall through */
                 }
                 await startHtml5Qr();
-                setStatus('scanStatus', 'وجّه الكاميرا لباركود الشاسيه', 'ok');
+                setStatus('scanStatus', 'وجّه الكاميرا على الباركود الأول فقط — رقم الشاسيه 17 حرفاً', 'ok');
             } catch (err) {
                 setStatus('scanStatus', err.message || 'تعذر فتح الكاميرا — اكتب الشاسيه يدوياً', 'err');
             }
