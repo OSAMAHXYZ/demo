@@ -1,0 +1,22 @@
+# Word extraction artifacts (keep .docx in templates/ only)
+*_extracted/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
+.cursor/
+
+# Logs & env
+*.log
+.env
+.env.*
+
+# Node
+node_modules/
+
+# Runtime inventory (persisted on server)
+delivery-inventory-data.json
+delivery-inventory-data.json.*.tmp
