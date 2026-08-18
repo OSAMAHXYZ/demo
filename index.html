@@ -3,386 +3,780 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Toyota Programs Hub</title>
+  <title>Toyota KSA — Stock &amp; Back Order Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --red: #EB0A1E;
       --red-dark: #c40819;
-      --ink: #111;
+      --ink: #0f172a;
       --muted: #64748b;
       --line: #e2e8f0;
-      --bg: #f5f6f8;
+      --bg: #f4f6f8;
       --surface: #fff;
-      --shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+      --ok: #059669;
+      --warn: #d97706;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
       --radius: 16px;
       --font: "DM Sans", "Segoe UI", sans-serif;
       --ar: "Tajawal", "DM Sans", sans-serif;
     }
     * { box-sizing: border-box; }
+    html, body { margin: 0; }
     body {
-      margin: 0;
-      min-height: 100vh;
       font-family: var(--font);
       color: var(--ink);
       background:
         radial-gradient(900px 420px at 100% -10%, rgba(235, 10, 30, 0.07), transparent 55%),
-        radial-gradient(700px 360px at -5% 30%, rgba(0, 0, 0, 0.03), transparent 50%),
         var(--bg);
+      min-height: 100vh;
     }
-    a { color: inherit; }
-    .shell { max-width: 1120px; margin: 0 auto; padding: 20px 16px 48px; }
-
-    .top {
+    .shell { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+    header.top {
       display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
       background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-      padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 18px;
+      padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 16px;
     }
-    .brand { display: flex; gap: 12px; align-items: center; min-width: 220px; }
-    .brand img { height: 34px; }
-    .brand-mark {
+    .brand { display: flex; gap: 12px; align-items: center; }
+    .mark {
       width: 42px; height: 42px; border-radius: 12px; background: var(--red); color: #fff;
-      display: grid; place-items: center; font-weight: 800; letter-spacing: .04em;
+      display: grid; place-items: center; font-weight: 800;
       box-shadow: 0 8px 18px rgba(235, 10, 30, 0.28);
     }
-    .brand h1 { margin: 0; font-size: 1.15rem; letter-spacing: -.02em; }
+    .brand h1 { margin: 0; font-size: 1.12rem; }
     .brand p { margin: 2px 0 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
-    .top-note { margin-left: auto; color: var(--muted); font-size: .84rem; max-width: 36ch; }
+    .top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    button, .btn {
+      appearance: none; border: 1px solid var(--line); background: #fff; color: var(--ink);
+      border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 700; font-size: .86rem;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--red-dark); }
+    .status {
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: 999px; padding: 8px 12px; font-size: .8rem; font-weight: 700;
+      background: #f1f5f9; color: var(--muted);
+    }
+    .status.ok { background: #ecfdf5; color: var(--ok); }
+    .status.busy { background: #fff7ed; color: var(--warn); }
+    .status.err { background: #fef2f2; color: var(--red); }
 
-    .hero {
-      background: linear-gradient(135deg, #111 0%, #2a2a2a 55%, #3b0a10 100%);
-      color: #fff; border-radius: 20px; padding: clamp(20px, 3vw, 32px);
-      margin-bottom: 16px; box-shadow: var(--shadow);
-    }
-    .hero .eyebrow {
-      margin: 0 0 8px; font-size: .72rem; font-weight: 800; letter-spacing: .12em;
-      text-transform: uppercase; color: #fda4af;
-    }
-    .hero h2 { margin: 0 0 8px; font-size: clamp(1.35rem, 3vw, 1.85rem); letter-spacing: -.03em; }
-    .hero p { margin: 0; color: #cbd5e1; max-width: 58ch; line-height: 1.55; }
-
-    .tabs {
-      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
-      background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-      padding: 8px; box-shadow: var(--shadow);
-    }
-    .tab {
-      appearance: none; border: 1px solid transparent; background: transparent;
-      border-radius: 999px; padding: 10px 14px; font: inherit; font-size: .88rem;
-      font-weight: 700; color: var(--muted); cursor: pointer; transition: .15s;
-    }
-    .tab:hover { color: var(--ink); background: #f8fafc; }
-    .tab.is-active {
-      background: var(--red); border-color: var(--red); color: #fff;
-      box-shadow: 0 8px 18px rgba(235, 10, 30, 0.22);
-    }
-
-    .panel { display: none; animation: fade .22s ease; }
-    .panel.is-active { display: block; }
-    @keyframes fade {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: none; }
-    }
-
-    .panel-head { margin: 4px 0 14px; }
-    .panel-head h3 { margin: 0 0 4px; font-size: 1.15rem; }
-    .panel-head p { margin: 0; color: var(--muted); font-size: .9rem; }
-
-    .grid {
+    .grid-5 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .slot {
+      background: var(--surface); border: 1px dashed #cbd5e1; border-radius: var(--radius);
+      padding: 16px; min-height: 176px; cursor: pointer; position: relative;
+      box-shadow: var(--shadow); transition: .15s border-color, .15s transform;
+    }
+    .slot:hover { border-color: #fecaca; transform: translateY(-2px); }
+    .slot.loaded { border-style: solid; border-color: #86efac; }
+    .slot input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .slot .n {
+      width: 24px; height: 24px; border-radius: 8px; background: #111; color: #fff;
+      display: grid; place-items: center; font-size: .72rem; font-weight: 800; margin-bottom: 10px;
+    }
+    .slot h3 { margin: 0 0 4px; font-size: .98rem; }
+    .slot .ar { font-family: var(--ar); color: var(--muted); font-size: .82rem; margin: 0 0 10px; }
+    .slot .meta { font-size: .78rem; color: var(--muted); line-height: 1.4; }
+    .slot .meta b { color: var(--ink); }
+
+    .banner {
+      display: none; margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; font-weight: 600;
+    }
+    .banner.show { display: block; }
+    .banner.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .banner.load { background: #fff; border: 1px solid var(--line); color: var(--muted); }
+
+    #dashboard { display: none; }
+    #dashboard.show { display: block; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px; box-shadow: var(--shadow); cursor: pointer; text-align: start;
+    }
+    .kpi:hover { border-color: #fecaca; }
+    .kpi .label { color: var(--muted); font-size: .75rem; font-weight: 700; }
+    .kpi .value { font-size: 1.55rem; font-weight: 800; margin-top: 6px; letter-spacing: -.03em; }
+    .kpi .sub { color: var(--muted); font-size: .72rem; margin-top: 4px; }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
     }
     .card {
-      display: flex; flex-direction: column; gap: 10px;
       background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-      padding: 18px; text-decoration: none; box-shadow: var(--shadow);
-      transition: .18s transform, .18s border-color, .18s box-shadow;
-      min-height: 168px;
+      padding: 16px; box-shadow: var(--shadow);
     }
-    .card:hover {
-      transform: translateY(-3px);
-      border-color: #fecaca;
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
-    }
-    .card .kicker {
-      font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--red);
-    }
-    .card h4 { margin: 0; font-size: 1.02rem; }
-    .card p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.5; flex: 1; }
-    .card .go {
-      display: inline-flex; align-items: center; justify-content: center;
-      margin-top: 4px; padding: 9px 12px; border-radius: 10px; font-size: .84rem; font-weight: 700;
-      background: #111; color: #fff; width: fit-content;
-    }
-    .card:hover .go { background: var(--red); }
-    .card.ar h4, .card.ar p { font-family: var(--ar); }
+    .card h2 { margin: 0 0 12px; font-size: 1rem; }
+    .chart-box { height: 240px; }
 
-    .footer {
-      margin-top: 28px; color: var(--muted); font-size: .8rem;
-      display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between;
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .tab {
+      border-radius: 999px; padding: 8px 12px; font-size: .82rem;
     }
-
-    @media (max-width: 640px) {
-      .top-note { margin-left: 0; width: 100%; }
-      .tabs { overflow-x: auto; flex-wrap: nowrap; }
-      .tab { white-space: nowrap; }
+    .tab.active { background: var(--red); border-color: var(--red); color: #fff; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .toolbar input, .toolbar select {
+      border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: .85rem;
+      min-width: 180px;
     }
+    .table-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #f8fafc; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    tr:hover td { background: #f8fafc; }
+    .badge {
+      display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: .72rem; font-weight: 800;
+      background: #e2e8f0;
+    }
+    .badge.ok { background: #d1fae5; color: #065f46; }
+    .badge.warn { background: #ffedd5; color: #9a3412; }
+    .badge.bad { background: #fee2e2; color: #991b1b; }
+    .foot { color: var(--muted); font-size: .78rem; margin: 8px 0 0; }
+    footer { color: var(--muted); font-size: .78rem; margin-top: 18px; text-align: center; }
   </style>
 </head>
 <body>
   <div class="shell">
     <header class="top">
       <div class="brand">
-        <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'" />
-        <div class="brand-mark" aria-hidden="true">T</div>
+        <div class="mark">T</div>
         <div>
-          <h1>Toyota Programs Hub</h1>
-          <p>All internal tools in one place</p>
+          <h1>Stock &amp; Back Order Dashboard</h1>
+          <p>Toyota Saudi Arabia · Excel upload · client-side only</p>
         </div>
       </div>
-      <p class="top-note">Pick a tab to open Calculator, Delivery, Stock Matching, Games, and more.</p>
+      <div class="top-actions">
+        <span class="status" id="status">Waiting for files</span>
+        <button type="button" id="clear-btn" disabled>Clear</button>
+        <button type="button" class="btn-primary" id="run-btn" disabled>Build dashboard</button>
+      </div>
     </header>
 
-    <section class="hero">
-      <p class="eyebrow">Internal · Employee tools</p>
-      <h2>One hub. Every program.</h2>
-      <p>Browse by category — Calculator, Delivery Hub, Stock Matching, Break Games, and other utilities.</p>
+    <section class="grid-5" id="slots"></section>
+    <div class="banner load" id="load-banner">Reading workbooks…</div>
+    <div class="banner err" id="error-banner"></div>
+
+    <section id="dashboard">
+      <div class="kpis" id="kpis"></div>
+      <div class="charts">
+        <article class="card"><h2>Stock by product</h2><div class="chart-box"><canvas id="chart-stock"></canvas></div></article>
+        <article class="card"><h2>Back orders by salesman</h2><div class="chart-box"><canvas id="chart-salesman"></canvas></div></article>
+        <article class="card"><h2>VIN matching</h2><div class="chart-box"><canvas id="chart-match"></canvas></div></article>
+        <article class="card"><h2>Sales by product</h2><div class="chart-box"><canvas id="chart-sales"></canvas></div></article>
+      </div>
+      <article class="card">
+        <div class="tabs" id="tabs"></div>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Search…" />
+          <select id="filter-extra"></select>
+          <button type="button" id="csv-btn">Export CSV</button>
+        </div>
+        <div class="table-wrap" id="table-wrap"></div>
+        <p class="foot" id="table-foot"></p>
+      </article>
     </section>
-
-    <nav class="tabs" role="tablist" aria-label="Program categories">
-      <button type="button" class="tab is-active" role="tab" aria-selected="true" data-tab="calculator">Calculator</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="delivery">Delivery</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="stock">Stock Matching</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="games">Games</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="more">More tools</button>
-    </nav>
-
-    <!-- Calculator -->
-    <section class="panel is-active" id="tab-calculator" role="tabpanel">
-      <div class="panel-head">
-        <h3>Lease Calculator</h3>
-        <p>Toyota Internal Lease Calculator and related sales tools.</p>
-      </div>
-      <div class="grid">
-        <a class="card" href="toyota-internal-lease-calculator-main/simple-app.html">
-          <span class="kicker">Main app</span>
-          <h4>Lease Calculator</h4>
-          <p>Calculate internal lease payments, offers, and vehicle financing details.</p>
-          <span class="go">Open calculator →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/login.html">
-          <span class="kicker">Access</span>
-          <h4>Login / Queue</h4>
-          <p>Sign in to the Toyota queue / calculator access screen.</p>
-          <span class="go">Open login →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/detailed-calculations.html">
-          <span class="kicker">Details</span>
-          <h4>Detailed Calculations</h4>
-          <p>Deeper calculation breakdown views for lease scenarios.</p>
-          <span class="go">Open details →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/car-comparison.html">
-          <span class="kicker">Sales</span>
-          <h4>Car Comparison</h4>
-          <p>Compare vehicle options side by side for customers.</p>
-          <span class="go">Open comparison →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/admin-dashboard.html">
-          <span class="kicker">Admin</span>
-          <h4>Calculator Admin</h4>
-          <p>Admin dashboard for calculator / lease system settings and data.</p>
-          <span class="go">Open admin →</span>
-        </a>
-      </div>
-    </section>
-
-    <!-- Delivery -->
-    <section class="panel" id="tab-delivery" role="tabpanel" hidden>
-      <div class="panel-head">
-        <h3>Delivery Hub</h3>
-        <p>مركز الترحيل — منسق، مذكرة، مستودع، وإدارة. كل الصفحات داخل <code>delivery-hub/</code>.</p>
-      </div>
-      <div class="grid">
-        <a class="card ar" href="delivery-hub/index.html">
-          <span class="kicker">Home</span>
-          <h4>مركز الترحيل</h4>
-          <p>قائمة أدوات الترحيل من مكان واحد.</p>
-          <span class="go">فتح المركز →</span>
-        </a>
-        <a class="card ar" href="masterpage/">
-          <span class="kicker">Master Page</span>
-          <h4>BO & Stock Management</h4>
-          <p>Next.js app — dashboard, stock, back orders, matching, quality audit.</p>
-          <span class="go">Open masterpage →</span>
-        </a>
-        <a class="card ar" href="delivery-hub/Delivery_coordinator.html">
-          <span class="kicker">Coordinator</span>
-          <h4>منسق الترحيل</h4>
-          <p>رفع بيانات Excel وإرسال أرقام الشاسيه للفريق.</p>
-          <span class="go">فتح المنسق →</span>
-        </a>
-        <a class="card ar" href="delivery-hub/Delivery_pdf.html">
-          <span class="kicker">Agent</span>
-          <h4>مذكرة الترحيل</h4>
-          <p>تسجيل الدخول، اختيار الشاسيه، وطباعة مذكرة الترحيل.</p>
-          <span class="go">فتح المذكرة →</span>
-        </a>
-        <a class="card ar" href="delivery-hub/warehouse-entry.html">
-          <span class="kicker">Warehouse</span>
-          <h4>إدخال المستودع</h4>
-          <p>مسح الشاسيه بالكاميرا، Stock IN/OUT، مناطق A و B، وطباعة ورقة الموقف.</p>
-          <span class="go">فتح إدخال الساحة →</span>
-        </a>
-        <a class="card ar" href="delivery-hub/admin-Delivery-pdf.html">
-          <span class="kicker">Admin</span>
-          <h4>لوحة الإدارة</h4>
-          <p>إدارة المخزون، رفع Excel، ومتابعة قائمة الشاسيه.</p>
-          <span class="go">فتح الإدارة →</span>
-        </a>
-        <a class="card ar" href="delivery-hub/pdf-annotator.html">
-          <span class="kicker">PDF</span>
-          <h4>محرر PDF</h4>
-          <p>تحميل أي PDF، إضافة نصوص، ثم حفظ PDF جديد.</p>
-          <span class="go">فتح المحرر →</span>
-        </a>
-      </div>
-    </section>
-
-    <!-- Stock -->
-    <section class="panel" id="tab-stock" role="tabpanel" hidden>
-      <div class="panel-head">
-        <h3>Stock Matching</h3>
-        <p>Backorder, RTL, and Central stock matching tools.</p>
-      </div>
-      <div class="grid">
-        <a class="card" href="excel-dashboard/index.html">
-          <span class="kicker">Full control</span>
-          <h4>Excel Dashboard</h4>
-          <p>Upload BO + Fleet, RTL, and Central stock — Full Control results and order grouping.</p>
-          <span class="go">Open dashboard →</span>
-        </a>
-        <a class="card" href="test.html">
-          <span class="kicker">Live engine</span>
-          <h4>Stock Matching Engine</h4>
-          <p>Daily / All Stock FIFO / Full Control matching with color dictionaries.</p>
-          <span class="go">Open engine →</span>
-        </a>
-        <a class="card" href="master-page.html">
-          <span class="kicker">Docs</span>
-          <h4>Master Page</h4>
-          <p>Power Query matching documentation and process overview.</p>
-          <span class="go">Open docs →</span>
-        </a>
-        <a class="card" href="master-excel.html">
-          <span class="kicker">Colors</span>
-          <h4>Master Excel Colors</h4>
-          <p>Exterior / Interior color dictionaries used by matching.</p>
-          <span class="go">Open colors →</span>
-        </a>
-      </div>
-    </section>
-
-    <!-- Games -->
-    <section class="panel" id="tab-games" role="tabpanel" hidden>
-      <div class="panel-head">
-        <h3>Break Games</h3>
-        <p>10-minute employee games for short breaks.</p>
-      </div>
-      <div class="grid">
-        <a class="card" href="games/toyota-break-challenge.html">
-          <span class="kicker">Game center</span>
-          <h4>TOYOTA BREAK CHALLENGE</h4>
-          <p>10 minutes · VIN, Guess Toyota, Parts, Memory, Speed Sort, What’s Different, Rubik.</p>
-          <span class="go">Play →</span>
-        </a>
-        <a class="card" href="games/toyota-rubiks-cube.html">
-          <span class="kicker">3D</span>
-          <h4>Rubik’s Cube</h4>
-          <p>Interactive Three.js cube with stages, scramble, hints, and scoring.</p>
-          <span class="go">Open cube →</span>
-        </a>
-      </div>
-    </section>
-
-    <!-- More -->
-    <section class="panel" id="tab-more" role="tabpanel" hidden>
-      <div class="panel-head">
-        <h3>More tools</h3>
-        <p>Extra utilities from the calculator / showroom package.</p>
-      </div>
-      <div class="grid">
-        <a class="card" href="toyota-internal-lease-calculator-main/showroom-dashboard.html">
-          <span class="kicker">Showroom</span>
-          <h4>Showroom Dashboard</h4>
-          <p>Showroom operations dashboard.</p>
-          <span class="go">Open →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/bo-order-lookup.html">
-          <span class="kicker">Backorder</span>
-          <h4>BO Order Lookup</h4>
-          <p>Look up back-order information quickly.</p>
-          <span class="go">Open →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/back-order-correction.html">
-          <span class="kicker">Backorder</span>
-          <h4>Back Order Correction</h4>
-          <p>Correct and review back-order data.</p>
-          <span class="go">Open →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/advisor-availability.html">
-          <span class="kicker">Sales</span>
-          <h4>Advisor Availability</h4>
-          <p>Check advisor availability board.</p>
-          <span class="go">Open →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/generate-codes.html">
-          <span class="kicker">Codes</span>
-          <h4>Generate Codes</h4>
-          <p>Generate codes / barcodes related tools.</p>
-          <span class="go">Open →</span>
-        </a>
-        <a class="card" href="toyota-internal-lease-calculator-main/customers-page-interface.html">
-          <span class="kicker">CRM</span>
-          <h4>Customers Page</h4>
-          <p>Customer interface page from the calculator suite.</p>
-          <span class="go">Open →</span>
-        </a>
-      </div>
-    </section>
-
-    <footer class="footer">
-      <span>Toyota Programs Hub · Internal use</span>
-      <span>Calculator · Delivery · Stock · Games</span>
-    </footer>
+    <footer>Files stay in your browser. Nothing is uploaded to a server.</footer>
   </div>
 
-  <script>
-    (function () {
-      const tabs = Array.from(document.querySelectorAll(".tab"));
-      const panels = Array.from(document.querySelectorAll(".panel"));
+<script>
+(function () {
+  const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+  const MAX_ROWS = 4000;
 
-      function activate(id) {
-        tabs.forEach((t) => {
-          const on = t.dataset.tab === id;
-          t.classList.toggle("is-active", on);
-          t.setAttribute("aria-selected", on ? "true" : "false");
-        });
-        panels.forEach((p) => {
-          const on = p.id === "tab-" + id;
-          p.classList.toggle("is-active", on);
-          p.hidden = !on;
-        });
-        try { history.replaceState(null, "", "#" + id); } catch (_) {}
+  const SLOT_DEFS = [
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
+    { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
+    { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
+    { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Sales report export" },
+    { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Cancelled BO list" },
+  ];
+
+  const HEADER_ALIASES = {
+    product: ["product", "model", "item", "vehicle model", "car model"],
+    suffix: ["alj suffix", "suffix", "tmc suffix"],
+    year: ["model year", "year", "my"],
+    ext: ["exterior color  1", "exterior color 1", "exterior color", "ext color", "ext. color"],
+    int: ["interior color 1", "interior color", "inter color 1", "int color"],
+    vin: ["vin", "vehicle identification number", "chassis", "شاسيه"],
+    boNumber: ["back order number", "backorder number", "bo number", "order number", "bo no"],
+    salesman: ["salesman name", "salesman", "advisor", "consultant"],
+    orderDate: ["order date", "bo date", "created date", "date"],
+    confirm: ["confirm flag", "confirm", "confirmation"],
+    paid: ["المبلغ المدفوع", "paid", "paid amount", "amount paid", "payment"],
+    location: ["current location", "gt location", "location", "storage location"],
+    status: ["primary status", "status", "secondary status"],
+    customer: ["customer", "customer name", "cust name"],
+    amount: ["amount", "net amount", "total", "sales amount", "invoice amount", "قيمة"],
+    qty: ["qty", "quantity", "units"],
+    reason: ["reason", "cancel reason", "cancellation reason", "سبب"],
+    cancelDate: ["cancel date", "cancellation date", "cancelled date"],
+  };
+
+  const HEADER_MARKERS = [
+    "product", "vin", "vehicle identification number", "alj suffix", "exterior color",
+    "interior color", "model year", "back order number", "salesman name", "amount",
+  ];
+
+  const slots = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, { file: null, rows: [], name: "" }]));
+  let view = { tab: "backorder", search: "", extra: "" };
+  const charts = {};
+
+  const $ = (sel) => document.querySelector(sel);
+
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function cellToString(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+    }
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+  function normHeader(h) {
+    return String(h || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+  function upperTrim(v) {
+    return String(v ?? "").trim().toUpperCase();
+  }
+  function formatNumber(n) {
+    if (!Number.isFinite(n)) return "—";
+    return new Intl.NumberFormat().format(n);
+  }
+  function formatBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+  function setStatus(text, kind) {
+    const el = $("#status");
+    el.textContent = text;
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+  function showError(msg) {
+    const el = $("#error-banner");
+    el.textContent = msg || "";
+    el.classList.toggle("show", !!msg);
+    if (msg) setStatus("Error", "err");
+  }
+
+  function detectFileType(file) {
+    const name = (file.name || "").toLowerCase();
+    if (name.endsWith(".csv")) return "csv";
+    if (name.endsWith(".xls") && !name.endsWith(".xlsx")) return "xls";
+    if (name.endsWith(".xlsx")) return "xlsx";
+    return "unknown";
+  }
+
+  function buildFieldGetter(sampleRow) {
+    const normKeys = Object.keys(sampleRow || {}).map((k) => ({ raw: k, n: normHeader(k) }));
+    const cache = {};
+    return function get(row, aliasKey) {
+      if (!(aliasKey in cache)) {
+        const aliases = HEADER_ALIASES[aliasKey] || [aliasKey];
+        let found = null;
+        for (const alias of aliases) {
+          found = normKeys.find((k) => k.n === alias) || normKeys.find((k) => k.n.includes(alias));
+          if (found) break;
+        }
+        cache[aliasKey] = found ? found.raw : null;
       }
+      const key = cache[aliasKey];
+      return key ? row[key] : "";
+    };
+  }
 
-      tabs.forEach((t) => t.addEventListener("click", () => activate(t.dataset.tab)));
+  function parseDate(v) {
+    if (v == null || v === "") return null;
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+    if (typeof v === "number" && v > 20000 && v < 100000) {
+      return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+    }
+    const t = Date.parse(String(v));
+    return Number.isNaN(t) ? null : new Date(t);
+  }
 
-      const hash = (location.hash || "").replace("#", "");
-      const valid = tabs.some((t) => t.dataset.tab === hash);
-      activate(valid ? hash : "calculator");
-    })();
-  </script>
+  function toNumber(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const n = Number(String(v).replace(/[, ]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function isPaid(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    if (["paid", "yes", "y", "1", "true", "مدفوع"].includes(s)) return true;
+    return toNumber(v) > 0;
+  }
+
+  async function readFileToWorkbook(file) {
+    const buffer = await file.arrayBuffer();
+    if (detectFileType(file) === "csv") {
+      const text = new TextDecoder("utf-8").decode(buffer);
+      return XLSX.read(text, { type: "string", FS: ",", cellDates: true });
+    }
+    return XLSX.read(buffer, { type: "array", cellDates: true });
+  }
+
+  function sheetRows(workbook, sheetName) {
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
+    });
+    if (!matrix.length) return [];
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = HEADER_MARKERS.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 3) break;
+    }
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const seen = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seen[h]) { seen[h] = 1; return h; }
+      seen[h] += 1;
+      return `${h} (${seen[h]})`;
+    });
+    const rows = [];
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      const obj = {};
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function backorderRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const first = names[0];
+    const fleet = names.filter((n, i) => i > 0 && /fleet/i.test(n) && !/summary/i.test(n));
+    const combined = [];
+    [first, ...fleet].forEach((sn) => sheetRows(workbook, sn).forEach((row) => combined.push(row)));
+    return combined;
+  }
+
+  function rowsForSlot(id, workbook) {
+    return id === "backorder" ? backorderRows(workbook) : sheetRows(workbook, workbook.SheetNames[0]);
+  }
+
+  function colorKey(v) {
+    return upperTrim(v).replace(/[^A-Z0-9]/g, "");
+  }
+
+  function matchScore(bo, stock) {
+    const checks = [
+      ["product", upperTrim(bo.product) && upperTrim(bo.product) === upperTrim(stock.product)],
+      ["year", String(bo.year || "") && String(bo.year) === String(stock.year)],
+      ["suffix", upperTrim(bo.suffix) && upperTrim(bo.suffix) === upperTrim(stock.suffix)],
+      ["ext", colorKey(bo.ext) && colorKey(bo.ext) === colorKey(stock.ext)],
+      ["int", colorKey(bo.int) && colorKey(bo.int) === colorKey(stock.int)],
+    ];
+    const applicable = checks.filter((c) => bo[c[0]] && String(bo[c[0]]).trim()).length || 5;
+    const hits = checks.filter((c) => c[1]).length;
+    return Math.round((hits / applicable) * 100);
+  }
+
+  function mapBo(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    return rows.map((r, i) => {
+      const orderDate = parseDate(get(r, "orderDate"));
+      const aging = orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null;
+      return {
+        id: i,
+        boNumber: cellToString(get(r, "boNumber")),
+        customer: cellToString(get(r, "customer")),
+        salesman: cellToString(get(r, "salesman")),
+        product: cellToString(get(r, "product")),
+        year: cellToString(get(r, "year")),
+        suffix: cellToString(get(r, "suffix")),
+        ext: cellToString(get(r, "ext")),
+        int: cellToString(get(r, "int")),
+        paid: isPaid(get(r, "paid")),
+        confirm: cellToString(get(r, "confirm")),
+        orderDate: orderDate ? cellToString(orderDate) : "",
+        aging,
+        vin: cellToString(get(r, "vin")),
+      };
+    });
+  }
+
+  function mapStock(rows, source) {
+    const get = buildFieldGetter(rows[0] || {});
+    return rows.map((r, i) => ({
+      id: source + "-" + i,
+      source,
+      vin: cellToString(get(r, "vin")),
+      product: cellToString(get(r, "product")),
+      year: cellToString(get(r, "year")),
+      suffix: cellToString(get(r, "suffix")),
+      ext: cellToString(get(r, "ext")),
+      int: cellToString(get(r, "int")),
+      location: cellToString(get(r, "location")),
+      status: cellToString(get(r, "status")),
+    }));
+  }
+
+  function mapSales(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    return rows.map((r, i) => ({
+      id: i,
+      salesman: cellToString(get(r, "salesman")),
+      product: cellToString(get(r, "product")),
+      vin: cellToString(get(r, "vin")),
+      amount: toNumber(get(r, "amount")),
+      qty: toNumber(get(r, "qty")) || 1,
+      date: cellToString(parseDate(get(r, "orderDate")) || get(r, "orderDate")),
+    }));
+  }
+
+  function mapCancelled(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    return rows.map((r, i) => ({
+      id: i,
+      boNumber: cellToString(get(r, "boNumber")),
+      product: cellToString(get(r, "product")),
+      salesman: cellToString(get(r, "salesman")),
+      reason: cellToString(get(r, "reason")),
+      date: cellToString(parseDate(get(r, "cancelDate")) || get(r, "cancelDate") || get(r, "orderDate")),
+    }));
+  }
+
+  function uniqueVins(list) {
+    const set = new Set();
+    list.forEach((r) => { if (r.vin) set.add(upperTrim(r.vin)); });
+    return set;
+  }
+
+  function bestMatches(bos, stock) {
+    const free = stock.filter((s) => s.vin).slice();
+    const used = new Set();
+    return bos.map((bo) => {
+      let best = null;
+      free.forEach((s) => {
+        if (used.has(s.id)) return;
+        const score = matchScore(bo, s);
+        if (!best || score > best.score) best = { stock: s, score };
+      });
+      if (best && best.score >= 60) {
+        used.add(best.stock.id);
+        return { ...bo, matchVin: best.stock.vin, matchScore: best.score, matchSource: best.stock.source };
+      }
+      return { ...bo, matchVin: bo.vin || "", matchScore: bo.vin ? 100 : 0, matchSource: bo.vin ? "existing" : "" };
+    });
+  }
+
+  function countBy(list, key, limit) {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = String(r[key] || "—").trim() || "—";
+      map.set(k, (map.get(k) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit || 8);
+  }
+
+  function sumBy(list, key, valueKey, limit) {
+    const map = new Map();
+    list.forEach((r) => {
+      const k = String(r[key] || "—").trim() || "—";
+      map.set(k, (map.get(k) || 0) + (r[valueKey] || 0));
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit || 8);
+  }
+
+  function renderSlots() {
+    $("#slots").innerHTML = SLOT_DEFS.map((d) => {
+      const s = slots[d.id];
+      const loaded = s.file ? " loaded" : "";
+      const meta = s.file
+        ? `<span class="meta"><b>${escapeHtml(s.name)}</b><br>${formatNumber(s.rows.length)} rows · ${formatBytes(s.file.size)}</span>`
+        : `<span class="meta">Drop or click to choose .xlsx / .xls / .csv</span>`;
+      return `<label class="slot${loaded}">
+        <input type="file" accept="${ACCEPT}" data-slot="${d.id}" />
+        <div class="n">${d.n}</div>
+        <h3>${d.title}</h3>
+        <p class="ar">${d.ar} · ${d.blurb}</p>
+        ${meta}
+      </label>`;
+    }).join("");
+    const any = SLOT_DEFS.some((d) => slots[d.id].file);
+    const enough = slots.backorder.file || slots.rtl.file || slots.central.file || slots.sales.file || slots.cancelled.file;
+    $("#clear-btn").disabled = !any;
+    $("#run-btn").disabled = !enough;
+    if (!any) setStatus("Waiting for files");
+    else setStatus("Ready to build", "ok");
+  }
+
+  async function onFileChosen(slotId, file) {
+    if (!file) return;
+    if (detectFileType(file) === "unknown") {
+      showError(`Unsupported file “${file.name}”. Use .xlsx, .xls, or .csv.`);
+      return;
+    }
+    showError("");
+    $("#load-banner").classList.add("show");
+    $("#load-banner").textContent = `Reading ${file.name}…`;
+    setStatus("Reading…", "busy");
+    try {
+      const wb = await readFileToWorkbook(file);
+      const rows = rowsForSlot(slotId, wb);
+      slots[slotId] = { file, rows, name: file.name };
+      renderSlots();
+      setStatus("File loaded", "ok");
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      $("#load-banner").classList.remove("show");
+    }
+  }
+
+  function data() {
+    const bos = mapBo(slots.backorder.rows);
+    const rtl = mapStock(slots.rtl.rows, "RTL");
+    const central = mapStock(slots.central.rows, "Central");
+    const sales = mapSales(slots.sales.rows);
+    const cancelled = mapCancelled(slots.cancelled.rows);
+    const stock = [...rtl, ...central];
+    const matched = bestMatches(bos, stock);
+    return { bos, rtl, central, sales, cancelled, stock, matched };
+  }
+
+  function renderKpis(d) {
+    const rtlVins = uniqueVins(d.rtl);
+    const centralVins = uniqueVins(d.central);
+    const paid = d.bos.filter((b) => b.paid).length;
+    const matched = d.matched.filter((b) => b.matchScore >= 80).length;
+    const avgAge = d.bos.length
+      ? Math.round(d.bos.reduce((s, b) => s + (b.aging || 0), 0) / d.bos.length)
+      : 0;
+    const salesAmt = d.sales.reduce((s, r) => s + r.amount, 0);
+    const cards = [
+      { label: "Back Orders", value: d.bos.length, sub: "open BO cars", tab: "backorder" },
+      { label: "Paid BOs", value: paid, sub: `${d.bos.length ? Math.round((paid / d.bos.length) * 100) : 0}% of BO`, tab: "backorder" },
+      { label: "RTL Stock", value: rtlVins.size || d.rtl.length, sub: "retail VINs", tab: "rtl" },
+      { label: "Central Stock", value: centralVins.size || d.central.length, sub: "central VINs", tab: "central" },
+      { label: "Matched ≥80%", value: matched, sub: "recommended VIN", tab: "matches" },
+      { label: "Avg BO aging", value: avgAge, sub: "days", tab: "backorder" },
+      { label: "Sales rows", value: d.sales.length, sub: salesAmt ? formatNumber(salesAmt) : "raw records", tab: "sales" },
+      { label: "Cancelled BOs", value: d.cancelled.length, sub: "cancelled list", tab: "cancelled" },
+    ];
+    $("#kpis").innerHTML = cards.map((c) => `
+      <button class="kpi" data-tab="${c.tab}">
+        <div class="label">${c.label}</div>
+        <div class="value">${formatNumber(c.value)}</div>
+        <div class="sub">${escapeHtml(String(c.sub))}</div>
+      </button>`).join("");
+  }
+
+  function upsertChart(id, type, labels, values, extra) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (charts[id]) charts[id].destroy();
+    const colors = ["#EB0A1E", "#111827", "#64748b", "#059669", "#d97706", "#2563eb", "#7c3aed", "#0f766e"];
+    charts[id] = new Chart(canvas, {
+      type,
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: type === "doughnut" ? colors : "#EB0A1E",
+          borderWidth: 0,
+          borderRadius: type === "bar" ? 6 : 0,
+          ...(extra || {}),
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: type === "doughnut" } },
+        scales: type === "doughnut" ? {} : { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { ticks: { maxRotation: 40 } } },
+      },
+    });
+  }
+
+  function renderCharts(d) {
+    const stockBy = countBy(d.stock.length ? d.stock : d.rtl.concat(d.central), "product");
+    upsertChart("chart-stock", "bar", stockBy.map((x) => x[0]), stockBy.map((x) => x[1]));
+    const sm = countBy(d.bos, "salesman");
+    upsertChart("chart-salesman", "bar", sm.map((x) => x[0]), sm.map((x) => x[1]));
+    const hi = d.matched.filter((b) => b.matchScore >= 80).length;
+    const mid = d.matched.filter((b) => b.matchScore >= 60 && b.matchScore < 80).length;
+    const low = Math.max(0, d.matched.length - hi - mid);
+    upsertChart("chart-match", "doughnut", ["≥80%", "60–79%", "No match"], [hi, mid, low]);
+    const salesBy = d.sales.some((r) => r.amount)
+      ? sumBy(d.sales, "product", "amount")
+      : countBy(d.sales, "product");
+    upsertChart("chart-sales", "bar", salesBy.map((x) => x[0]), salesBy.map((x) => x[1]));
+  }
+
+  const TAB_DEFS = [
+    { id: "backorder", label: "Back Orders" },
+    { id: "rtl", label: "RTL Stock" },
+    { id: "central", label: "Central Stock" },
+    { id: "sales", label: "Sales" },
+    { id: "cancelled", label: "Cancelled" },
+    { id: "matches", label: "VIN Matches" },
+  ];
+
+  function rowsForTab(d, tab) {
+    if (tab === "rtl") return d.rtl.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
+    if (tab === "central") return d.central.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
+    if (tab === "sales") return d.sales.map((r) => ({ Salesman: r.salesman, Product: r.product, VIN: r.vin, Amount: r.amount || "", Qty: r.qty, Date: r.date }));
+    if (tab === "cancelled") return d.cancelled.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, Reason: r.reason, Date: r.date }));
+    if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
+    return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
+  }
+
+  function renderTabs() {
+    $("#tabs").innerHTML = TAB_DEFS.map((t) =>
+      `<button class="tab${view.tab === t.id ? " active" : ""}" data-tab="${t.id}">${t.label}</button>`
+    ).join("");
+    const extra = $("#filter-extra");
+    extra.innerHTML = view.tab === "backorder"
+      ? `<option value="">All payment</option><option value="Paid">Paid</option><option value="Unpaid">Unpaid</option>`
+      : view.tab === "matches"
+        ? `<option value="">All scores</option><option value="high">≥80%</option><option value="mid">60–79%</option><option value="none">No match</option>`
+        : `<option value="">All rows</option>`;
+    extra.value = view.extra;
+  }
+
+  function renderTable(d) {
+    let rows = rowsForTab(d, view.tab);
+    const q = view.search.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(q)));
+    }
+    if (view.tab === "backorder" && view.extra) {
+      rows = rows.filter((r) => r.Paid === view.extra);
+    }
+    if (view.tab === "matches" && view.extra) {
+      rows = rows.filter((r) => {
+        const n = parseInt(String(r.Score), 10) || 0;
+        if (view.extra === "high") return n >= 80;
+        if (view.extra === "mid") return n >= 60 && n < 80;
+        return n < 60;
+      });
+    }
+    if (!rows.length) {
+      $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show for this file/filter.</p>`;
+      $("#table-foot").textContent = "0 rows";
+      return;
+    }
+    const headers = Object.keys(rows[0]);
+    const body = rows.slice(0, MAX_ROWS).map((r) => {
+      const cells = headers.map((h) => {
+        let val = escapeHtml(r[h]);
+        if (h === "Paid") val = `<span class="badge ${r[h] === "Paid" ? "ok" : "warn"}">${val}</span>`;
+        if (h === "Score") {
+          const n = parseInt(String(r[h]), 10) || 0;
+          val = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${val || "0%"}</span>`;
+        }
+        return `<td>${val}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    $("#table-foot").textContent = `${formatNumber(rows.length)} rows` + (rows.length > MAX_ROWS ? ` · showing first ${formatNumber(MAX_ROWS)}` : "");
+    window._exportRows = rows;
+  }
+
+  function exportCsv() {
+    const rows = window._exportRows || [];
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = view.tab + "-export.csv";
+    a.click();
+  }
+
+  function buildDashboard() {
+    showError("");
+    const d = data();
+    window._data = d;
+    $("#dashboard").classList.add("show");
+    renderKpis(d);
+    renderCharts(d);
+    renderTabs();
+    renderTable(d);
+    setStatus("Dashboard ready", "ok");
+  }
+
+  function clearAll() {
+    SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
+    $("#dashboard").classList.remove("show");
+    showError("");
+    renderSlots();
+    setStatus("Waiting for files");
+  }
+
+  document.getElementById("slots").addEventListener("change", (e) => {
+    const input = e.target.closest("input[type=file]");
+    if (!input) return;
+    onFileChosen(input.dataset.slot, input.files[0]);
+  });
+  $("#clear-btn").addEventListener("click", clearAll);
+  $("#run-btn").addEventListener("click", buildDashboard);
+  $("#csv-btn").addEventListener("click", exportCsv);
+  $("#search").addEventListener("input", (e) => {
+    view.search = e.target.value;
+    if (window._data) renderTable(window._data);
+  });
+  $("#filter-extra").addEventListener("change", (e) => {
+    view.extra = e.target.value;
+    if (window._data) renderTable(window._data);
+  });
+  $("#tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tab]");
+    if (!btn) return;
+    view.tab = btn.dataset.tab;
+    view.extra = "";
+    view.search = "";
+    $("#search").value = "";
+    renderTabs();
+    renderTable(window._data);
+  });
+  $("#kpis").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tab]");
+    if (!btn || !window._data) return;
+    view.tab = btn.dataset.tab;
+    view.extra = "";
+    renderTabs();
+    renderTable(window._data);
+  });
+
+  renderSlots();
+})();
+</script>
 </body>
 </html>
