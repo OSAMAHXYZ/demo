@@ -177,11 +177,14 @@
 
     <section id="dashboard">
       <div class="kpis" id="kpis"></div>
+      <div class="kpis" id="sr-kpis" style="display:none"></div>
       <div class="charts">
         <article class="card"><h2>Stock by product</h2><div class="chart-box"><canvas id="chart-stock"></canvas></div></article>
         <article class="card"><h2>Back orders by salesman</h2><div class="chart-box"><canvas id="chart-salesman"></canvas></div></article>
         <article class="card"><h2>VIN matching</h2><div class="chart-box"><canvas id="chart-match"></canvas></div></article>
         <article class="card"><h2>Sales by product</h2><div class="chart-box"><canvas id="chart-sales"></canvas></div></article>
+        <article class="card" id="chart-sr-card" style="display:none"><h2>Delivery vs Target by salesman</h2><div class="chart-box"><canvas id="chart-sr"></canvas></div></article>
+        <article class="card" id="chart-cancel-card" style="display:none"><h2>Cancellation % by salesman</h2><div class="chart-box"><canvas id="chart-cancel"></canvas></div></article>
       </div>
       <article class="card">
         <div class="tabs" id="tabs"></div>
@@ -229,6 +232,10 @@
     qty: ["qty", "quantity", "units"],
     reason: ["reason", "cancel reason", "cancellation reason", "سبب"],
     cancelDate: ["cancel date", "cancellation date", "cancelled date"],
+    target: ["target", "monthly target", "الهدف"],
+    vsnd: ["vsnd", "vehicle sold not delivered", "sold not delivered"],
+    delivery: ["delivery", "delivered", "deliveries", "تسليم"],
+    proforma: ["proforma", "proforma orders", "pro forma", "فاتورة مبدئية"],
   };
 
   const HEADER_MARKERS = [
@@ -558,6 +565,109 @@
     }
   }
 
+  function buildSalesReport(bos, sales, cancelled) {
+    const CANCEL_TARGET = 0.30;
+    const byPerson = new Map();
+    const ensure = (name) => {
+      if (!name) return null;
+      if (!byPerson.has(name)) byPerson.set(name, { salesman: name, proforma: 0, delivery: 0, target: 0, vsnd: 0, cancelledBOs: 0, totalOrders: 0 });
+      return byPerson.get(name);
+    };
+
+    const getSales = buildFieldGetter(slots.sales.rows[0] || {});
+    slots.sales.rows.forEach((r) => {
+      const name = cellToString(getSales(r, "salesman")).trim();
+      if (!name) return;
+      const p = ensure(name);
+      const proforma = toNumber(getSales(r, "proforma"));
+      const delivery = toNumber(getSales(r, "delivery"));
+      const target = toNumber(getSales(r, "target"));
+      const vsnd = toNumber(getSales(r, "vsnd"));
+      if (proforma) p.proforma += proforma;
+      if (delivery) p.delivery += delivery;
+      if (target) p.target += target;
+      if (vsnd) p.vsnd += vsnd;
+      p.totalOrders += 1;
+    });
+
+    if (!byPerson.size) {
+      const salesGet = buildFieldGetter(slots.sales.rows[0] || {});
+      const boGet = buildFieldGetter(slots.backorder.rows[0] || {});
+      const salesmen = new Set();
+      slots.sales.rows.forEach((r) => { const n = cellToString(salesGet(r, "salesman")).trim(); if (n) salesmen.add(n); });
+      slots.backorder.rows.forEach((r) => { const n = cellToString(boGet(r, "salesman")).trim(); if (n) salesmen.add(n); });
+
+      salesmen.forEach((name) => ensure(name));
+
+      bos.forEach((b) => {
+        const p = ensure(b.salesman);
+        if (!p) return;
+        p.totalOrders += 1;
+        if (b.paid) p.proforma += 1;
+        if (b.vin) p.delivery += 1;
+        else p.vsnd += 1;
+      });
+    }
+
+    cancelled.forEach((c) => {
+      const p = ensure(c.salesman);
+      if (p) p.cancelledBOs += 1;
+    });
+
+    const rows = [...byPerson.values()].map((p) => {
+      const delPlusVsnd = p.delivery + p.vsnd;
+      const deliveryAch = p.target ? p.delivery / p.target : 0;
+      const salesAch = p.target ? delPlusVsnd / p.target : 0;
+      const diff = p.target - delPlusVsnd;
+      const orderBase = p.totalOrders || (p.proforma + p.delivery + p.vsnd) || 1;
+      const cancelPct = p.cancelledBOs / orderBase;
+      const gap = CANCEL_TARGET - cancelPct;
+      return {
+        Salesman: p.salesman,
+        Proforma: p.proforma,
+        Delivery: p.delivery,
+        Target: p.target,
+        "Ach % (Del)": deliveryAch ? (deliveryAch * 100).toFixed(1) + "%" : "—",
+        VSND: p.vsnd,
+        "Del+VSND": delPlusVsnd,
+        "Ach % (Sales)": salesAch ? (salesAch * 100).toFixed(1) + "%" : "—",
+        Diff: diff,
+        "Cancelled BOs": p.cancelledBOs,
+        "Cancel %": (cancelPct * 100).toFixed(1) + "%",
+        "Can. Target": "30%",
+        "Gap +/-": (gap * 100).toFixed(1) + "%",
+        _deliveryAch: deliveryAch,
+        _salesAch: salesAch,
+        _cancelPct: cancelPct,
+        _gap: gap,
+        _diff: diff,
+      };
+    });
+
+    const totProforma = rows.reduce((s, r) => s + r.Proforma, 0);
+    const totDelivery = rows.reduce((s, r) => s + r.Delivery, 0);
+    const totTarget = rows.reduce((s, r) => s + r.Target, 0);
+    const totVsnd = rows.reduce((s, r) => s + r.VSND, 0);
+    const totDelVsnd = totDelivery + totVsnd;
+    const totCancelled = rows.reduce((s, r) => s["Cancelled BOs"] + r["Cancelled BOs"], { "Cancelled BOs": 0 })["Cancelled BOs"] || cancelled.length;
+
+    return {
+      rows,
+      totals: {
+        proforma: totProforma,
+        delivery: totDelivery,
+        target: totTarget,
+        vsnd: totVsnd,
+        delVsnd: totDelVsnd,
+        diff: totTarget - totDelVsnd,
+        deliveryAch: totTarget ? totDelivery / totTarget : 0,
+        salesAch: totTarget ? totDelVsnd / totTarget : 0,
+        cancelled: totCancelled,
+        cancelPct: (totProforma + totDelivery + totVsnd) ? totCancelled / (totProforma + totDelivery + totVsnd) : 0,
+      },
+    };
+  }
+
   function data() {
     const bos = mapBo(slots.backorder.rows);
     const rtl = mapStock(slots.rtl.rows, "RTL");
@@ -566,7 +676,8 @@
     const cancelled = mapCancelled(slots.cancelled.rows);
     const stock = [...rtl, ...central];
     const matched = bestMatches(bos, stock);
-    return { bos, rtl, central, sales, cancelled, stock, matched };
+    const salesReport = buildSalesReport(bos, sales, cancelled);
+    return { bos, rtl, central, sales, cancelled, stock, matched, salesReport };
   }
 
   function renderKpis(d) {
@@ -644,6 +755,7 @@
     { id: "sales", label: "Sales" },
     { id: "cancelled", label: "Cancelled" },
     { id: "matches", label: "VIN Matches" },
+    { id: "salesreport", label: "Sales Report" },
   ];
 
   function rowsForTab(d, tab) {
@@ -652,6 +764,21 @@
     if (tab === "sales") return d.sales.map((r) => ({ Salesman: r.salesman, Product: r.product, VIN: r.vin, Amount: r.amount || "", Qty: r.qty, Date: r.date }));
     if (tab === "cancelled") return d.cancelled.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, Reason: r.reason, Date: r.date }));
     if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
+    if (tab === "salesreport") return d.salesReport.rows.map((r) => ({
+      Salesman: r.Salesman,
+      Proforma: r.Proforma,
+      Delivery: r.Delivery,
+      Target: r.Target,
+      "Ach%(Del)": r["Ach % (Del)"],
+      VSND: r.VSND,
+      "Del+VSND": r["Del+VSND"],
+      "Ach%(Sales)": r["Ach % (Sales)"],
+      Diff: r.Diff,
+      "Can. BOs": r["Cancelled BOs"],
+      "Cancel%": r["Cancel %"],
+      "Can.Target": r["Can. Target"],
+      "Gap+/-": r["Gap +/-"],
+    }));
     return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
   }
 
@@ -664,7 +791,9 @@
       ? `<option value="">All payment</option><option value="Paid">Paid</option><option value="Unpaid">Unpaid</option>`
       : view.tab === "matches"
         ? `<option value="">All scores</option><option value="high">≥80%</option><option value="mid">60–79%</option><option value="none">No match</option>`
-        : `<option value="">All rows</option>`;
+        : view.tab === "salesreport"
+          ? `<option value="">All salesmen</option><option value="above">Ach ≥100%</option><option value="below">Ach &lt;100%</option>`
+          : `<option value="">All rows</option>`;
     extra.value = view.extra;
   }
 
@@ -685,6 +814,12 @@
         return n < 60;
       });
     }
+    if (view.tab === "salesreport" && view.extra) {
+      rows = rows.filter((r) => {
+        const n = parseFloat(String(r["Ach%(Sales)"])) || 0;
+        return view.extra === "above" ? n >= 100 : n < 100;
+      });
+    }
     if (!rows.length) {
       $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show for this file/filter.</p>`;
       $("#table-foot").textContent = "0 rows";
@@ -699,11 +834,47 @@
           const n = parseInt(String(r[h]), 10) || 0;
           val = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${val || "0%"}</span>`;
         }
+        if (h === "Ach%(Del)" || h === "Ach%(Sales)") {
+          const n = parseFloat(val) || 0;
+          val = `<span class="badge ${n >= 100 ? "ok" : n >= 70 ? "warn" : "bad"}">${val}</span>`;
+        }
+        if (h === "Diff") {
+          const n = parseFloat(val) || 0;
+          val = `<span class="badge ${n <= 0 ? "ok" : "bad"}">${val}</span>`;
+        }
+        if (h === "Cancel%") {
+          const n = parseFloat(val) || 0;
+          val = `<span class="badge ${n <= 30 ? "ok" : "bad"}">${val}</span>`;
+        }
+        if (h === "Gap+/-") {
+          const n = parseFloat(val) || 0;
+          val = `<span class="badge ${n >= 0 ? "ok" : "bad"}">${val}</span>`;
+        }
         return `<td>${val}</td>`;
       }).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
-    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    let totalsRow = "";
+    if (view.tab === "salesreport" && d.salesReport && d.salesReport.totals) {
+      const t = d.salesReport.totals;
+      const totObj = {
+        Salesman: "TOTAL",
+        Proforma: t.proforma,
+        Delivery: t.delivery,
+        Target: t.target,
+        "Ach%(Del)": (t.deliveryAch * 100).toFixed(1) + "%",
+        VSND: t.vsnd,
+        "Del+VSND": t.delVsnd,
+        "Ach%(Sales)": (t.salesAch * 100).toFixed(1) + "%",
+        Diff: t.diff,
+        "Can. BOs": t.cancelled,
+        "Cancel%": (t.cancelPct * 100).toFixed(1) + "%",
+        "Can.Target": "30%",
+        "Gap+/-": ((0.30 - t.cancelPct) * 100).toFixed(1) + "%",
+      };
+      totalsRow = `<tr style="font-weight:800;background:#f1f5f9">${headers.map((h) => `<td>${escapeHtml(String(totObj[h] ?? ""))}</td>`).join("")}</tr>`;
+    }
+    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}${totalsRow}</tbody></table>`;
     $("#table-foot").textContent = `${formatNumber(rows.length)} rows` + (rows.length > MAX_ROWS ? ` · showing first ${formatNumber(MAX_ROWS)}` : "");
     window._exportRows = rows;
   }
@@ -720,6 +891,54 @@
     a.click();
   }
 
+  function renderSalesReportKpis(sr) {
+    const t = sr.totals;
+    const srKpis = $("#sr-kpis");
+    if (!sr.rows.length) { srKpis.style.display = "none"; return; }
+    srKpis.style.display = "";
+    const cards = [
+      { label: "Target", value: formatNumber(t.target) },
+      { label: "Del + VSND", value: formatNumber(t.delVsnd) },
+      { label: "Gap", value: formatNumber(t.diff), cls: t.diff <= 0 ? "ok" : "bad" },
+      { label: "Del Achievement", value: (t.deliveryAch * 100).toFixed(1) + "%", cls: t.deliveryAch >= 1 ? "ok" : t.deliveryAch >= 0.7 ? "warn" : "bad" },
+      { label: "Sales Achievement", value: (t.salesAch * 100).toFixed(1) + "%", cls: t.salesAch >= 1 ? "ok" : t.salesAch >= 0.7 ? "warn" : "bad" },
+      { label: "Cancelled BOs %", value: (t.cancelPct * 100).toFixed(1) + "%", cls: t.cancelPct <= 0.3 ? "ok" : "bad" },
+    ];
+    srKpis.innerHTML = cards.map((c) => `
+      <div class="kpi">
+        <div class="label">${c.label}</div>
+        <div class="value">${c.value}</div>
+        ${c.cls ? `<div class="sub"><span class="badge ${c.cls}">${c.cls === "ok" ? "On track" : c.cls === "warn" ? "Needs attention" : "Below target"}</span></div>` : ""}
+      </div>`).join("");
+  }
+
+  function renderSalesReportCharts(sr) {
+    const show = sr.rows.length > 0;
+    document.getElementById("chart-sr-card").style.display = show ? "" : "none";
+    document.getElementById("chart-cancel-card").style.display = show ? "" : "none";
+    if (!show) return;
+
+    const labels = sr.rows.map((r) => r.Salesman);
+    upsertChart("chart-sr", "bar", labels, sr.rows.map((r) => r.Delivery), {
+      label: "Delivery",
+      backgroundColor: "#EB0A1E",
+    });
+    if (charts["chart-sr"]) {
+      charts["chart-sr"].data.datasets.push({
+        label: "Target",
+        data: sr.rows.map((r) => r.Target),
+        backgroundColor: "#111827",
+        borderWidth: 0,
+        borderRadius: 6,
+      });
+      charts["chart-sr"].update();
+    }
+    upsertChart("chart-cancel", "bar", labels, sr.rows.map((r) => parseFloat(r["Cancel %"]) || 0), {
+      label: "Cancel %",
+      backgroundColor: sr.rows.map((r) => (parseFloat(r["Cancel %"]) || 0) <= 30 ? "#059669" : "#EB0A1E"),
+    });
+  }
+
   function buildDashboard() {
     showError("");
     const d = data();
@@ -727,6 +946,8 @@
     $("#dashboard").classList.add("show");
     renderKpis(d);
     renderCharts(d);
+    renderSalesReportKpis(d.salesReport);
+    renderSalesReportCharts(d.salesReport);
     renderTabs();
     renderTable(d);
     setStatus("Dashboard ready", "ok");
