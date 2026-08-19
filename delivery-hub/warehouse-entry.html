@@ -100,11 +100,186 @@
         .wh-grid {
             display: grid;
             gap: 16px;
-            grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
             align-items: start;
         }
         @media (max-width: 900px) {
             .wh-grid { grid-template-columns: 1fr; }
+        }
+
+        .yard-panel {
+            margin-bottom: 16px;
+            background: linear-gradient(180deg, rgba(18, 22, 28, .98), rgba(12, 16, 22, .98));
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 20px;
+            padding: 18px 18px 14px;
+            box-shadow: 0 18px 40px rgba(0,0,0,.35);
+        }
+        .yard-head h2 {
+            margin: 0 0 6px;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .yard-sub {
+            margin: 0 0 16px;
+            color: #94a3b8;
+            font-size: .82rem;
+            line-height: 1.5;
+        }
+        .yard-map {
+            display: grid;
+            grid-template-columns: 0.95fr 1fr 1fr 1.15fr;
+            grid-template-rows: minmax(110px, 1fr) minmax(110px, 1fr) minmax(96px, .85fr);
+            gap: 10px;
+            min-height: 380px;
+        }
+        @media (max-width: 760px) {
+            .yard-map {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto;
+            }
+            .zone-card-a, .zone-card-b, .zone-card-c, .zone-card-d, .zone-card-e, .zone-card-f {
+                grid-column: auto !important;
+                grid-row: auto !important;
+                min-height: 120px;
+            }
+        }
+        .zone-card {
+            position: relative;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,.1);
+            background: rgba(255,255,255,.03);
+            padding: 12px 14px 10px;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s, transform .15s;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .zone-card::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; left: 0;
+            height: 3px;
+            background: var(--zone-accent, #14b8a6);
+        }
+        .zone-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.18); }
+        .zone-card.selected {
+            border-color: rgba(235,10,30,.85);
+            box-shadow: 0 0 0 1px rgba(235,10,30,.45), 0 12px 28px rgba(235,10,30,.12);
+        }
+        .zone-card.selected::before { background: #EB0A1E; }
+        .zone-card.status-warn { --zone-accent: #f59e0b; }
+        .zone-card.status-full { --zone-accent: #ef4444; }
+        .zone-card-a { grid-column: 2 / 5; grid-row: 1; }
+        .zone-card-b { grid-column: 1; grid-row: 1 / 3; }
+        .zone-card-c { grid-column: 4; grid-row: 2; }
+        .zone-card-d { grid-column: 2; grid-row: 2; }
+        .zone-card-e { grid-column: 1; grid-row: 3; }
+        .zone-card-f { grid-column: 2 / 5; grid-row: 3; }
+        .zone-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        .zone-pct {
+            font-size: .78rem;
+            font-weight: 700;
+            color: #94a3b8;
+            direction: ltr;
+        }
+        .zone-letter {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            background: rgba(255,255,255,.08);
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            color: #fff;
+            font-size: .9rem;
+        }
+        .zone-label {
+            font-size: .92rem;
+            font-weight: 800;
+            color: #f1f5f9;
+            margin-bottom: 4px;
+        }
+        .zone-count {
+            font-size: .8rem;
+            color: #94a3b8;
+            margin-bottom: auto;
+            direction: ltr;
+            text-align: right;
+        }
+        .zone-blocks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 10px;
+        }
+        .zone-block {
+            width: 14px;
+            height: 10px;
+            border-radius: 3px;
+            background: rgba(20,184,166,.35);
+            border: 1px solid rgba(20,184,166,.45);
+        }
+        .zone-block.filled {
+            background: rgba(239,68,68,.45);
+            border-color: rgba(239,68,68,.55);
+        }
+        .zone-block.warn {
+            background: rgba(245,158,11,.45);
+            border-color: rgba(245,158,11,.55);
+        }
+        .yard-footer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: .82rem;
+            color: #cbd5e1;
+        }
+        .yard-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+        }
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #94a3b8;
+            font-size: .78rem;
+        }
+        .legend-dot {
+            width: 10px; height: 10px; border-radius: 999px;
+        }
+        .legend-dot.ok { background: #14b8a6; }
+        .legend-dot.warn { background: #f59e0b; }
+        .legend-dot.full { background: #ef4444; }
+
+        .zone-slot-panel {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255,255,255,.08);
+        }
+        .zone-slot-panel h3 {
+            margin: 0 0 10px;
+            font-size: .88rem;
+            font-weight: 800;
+            color: #e2e8f0;
+        }
+        .zone-slot-panel select {
+            width: 100%;
+            margin-bottom: 10px;
         }
 
         .wh-card {
@@ -190,30 +365,7 @@
             font-weight: 700;
         }
 
-        .zone-toggle {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        .zone-opt {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 14px;
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,.14);
-            background: rgba(255,255,255,.04);
-            cursor: pointer;
-            font-weight: 800;
-            color: #e2e8f0;
-        }
-        .zone-opt input { display: none; }
-        .zone-opt:has(input:checked) {
-            border-color: var(--tot-primary);
-            background: rgba(235,10,30,.14);
-            box-shadow: 0 0 0 1px rgba(235,10,30,.35);
-        }
+        .zone-toggle { display: none; }
         .zone-map {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
@@ -334,21 +486,7 @@
             border-radius: 999px;
             padding: 2px 8px;
         }
-        .zone-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 14px;
-        }
-        .zone-stat {
-            padding: 12px;
-            border-radius: 12px;
-            background: rgba(255,255,255,.04);
-            border: 1px solid rgba(255,255,255,.08);
-            text-align: center;
-        }
-        .zone-stat b { display: block; font-size: 1.2rem; color: #fff; }
-        .zone-stat span { font-size: .75rem; color: #94a3b8; }
+        .zone-stats { display: none; }
 
         /* Print slip */
         #printSlip {
@@ -429,8 +567,8 @@
             <div class="hub-brand">
                 <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
                 <div>
-                    <h1>إدخال المستودع <span class="live-pill" id="livePill" title="Live sync">● Live</span></h1>
-                    <p>مسح الشاسيه · Stock IN / OUT · مناطق A و B</p>
+                    <h1>مناطق الساحة – إدخال المستودع <span class="live-pill" id="livePill" title="Live sync">● Live</span></h1>
+                    <p>امسح أو اكتب رقم الشاسيه · اختر المنطقة من الخريطة · Stock IN / OUT</p>
                 </div>
             </div>
             <div class="hub-actions">
@@ -440,6 +578,30 @@
                 <button type="button" class="hub-btn" id="btnLogout">خروج</button>
             </div>
         </header>
+
+        <section class="yard-panel">
+            <div class="yard-head">
+                <h2>١ – خريطة المناطق</h2>
+                <p class="yard-sub">اضغط على المنطقة لاختيارها · اللون الأخضر متاح · الأصفر شبه ممتلئ · الأحمر ممتلئ</p>
+            </div>
+            <div class="yard-map" id="yardMap" aria-label="خريطة مناطق الساحة"></div>
+            <div class="yard-footer">
+                <span id="yardTotal">إشغال الساحة 0/158</span>
+                <div class="yard-legend">
+                    <span class="legend-item"><span class="legend-dot ok"></span>متاح</span>
+                    <span class="legend-item"><span class="legend-dot warn"></span>شبه ممتلئ</span>
+                    <span class="legend-item"><span class="legend-dot full"></span>ممتلئ</span>
+                </div>
+            </div>
+            <div class="zone-slot-panel">
+                <h3 id="zonePickerTitle">المنطقة A — استلام · اختر موقفاً (اختياري)</h3>
+                <select id="slotSelect">
+                    <option value="">— تلقائي (أول موقف فارغ) —</option>
+                </select>
+                <div class="zone-map" id="zoneMap" aria-label="مواقف المنطقة المختارة"></div>
+            </div>
+            <input type="hidden" id="selectedZone" value="A">
+        </section>
 
         <div class="wh-grid">
             <section class="wh-card">
@@ -464,20 +626,12 @@
                     <p class="hint">المسح يقرأ الباركود الأول فقط (رقم الشاسيه الكامل 17 حرفاً) ويتجاهل الباركود السفلي القصير — راجع وصحّح ثم Stock IN</p>
                 </div>
 
-                <div class="wh-field">
+                <div class="wh-field" style="display:none">
                     <label>المنطقة — Zone</label>
                     <div class="zone-toggle">
                         <label class="zone-opt"><input type="radio" name="zone" value="A" checked> Zone A</label>
                         <label class="zone-opt"><input type="radio" name="zone" value="B"> Zone B</label>
                     </div>
-                </div>
-
-                <div class="wh-field">
-                    <label for="slotSelect">مكان الوقوف (اختياري — يُختار تلقائياً إن تُرك فارغاً)</label>
-                    <select id="slotSelect">
-                        <option value="">— تلقائي (أول موقف فارغ) —</option>
-                    </select>
-                    <div class="zone-map" id="zoneMap" aria-label="خريطة المواقف"></div>
                 </div>
 
                 <div class="action-row">
@@ -499,7 +653,6 @@
 
             <section class="wh-card">
                 <h2>٢ — الساحة الحالية</h2>
-                <div class="zone-stats" id="zoneStats"></div>
                 <div class="stock-list" id="stockList">
                     <div class="hub-empty">لا توجد سيارات في الساحة</div>
                 </div>
@@ -578,9 +731,87 @@
             return zxingLoadPromise;
         }
 
+        const ZONE_META = {
+            A: { label: 'استلام', cls: 'zone-card-a' },
+            B: { label: 'جاهز للتسليم', cls: 'zone-card-b' },
+            C: { label: 'غسيل وتجهيز', cls: 'zone-card-c' },
+            D: { label: 'انتظار الفحص', cls: 'zone-card-d' },
+            E: { label: 'حجز العملاء', cls: 'zone-card-e' },
+            F: { label: 'التحميل والخروج', cls: 'zone-card-f' }
+        };
+        const ZONE_ORDER = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const YARD_TOTAL = 158;
+
         function selectedZone() {
-            const el = document.querySelector('input[name="zone"]:checked');
-            return el ? el.value : 'A';
+            return ($('selectedZone') && $('selectedZone').value) || 'A';
+        }
+
+        function setSelectedZone(zone) {
+            const z = String(zone || 'A').toUpperCase();
+            if ($('selectedZone')) $('selectedZone').value = z;
+            const radio = document.querySelector(`input[name="zone"][value="${z}"]`);
+            if (radio) radio.checked = true;
+            renderYardMap();
+            renderZoneMap();
+        }
+
+        function zoneStatusClass(used, total) {
+            if (!total) return '';
+            const pct = used / total;
+            if (pct >= 1) return 'status-full';
+            if (pct >= 0.85) return 'status-warn';
+            return '';
+        }
+
+        function renderZoneBlocks(used, total) {
+            const blocks = 12;
+            const filled = total ? Math.round((used / total) * blocks) : 0;
+            return Array.from({ length: blocks }, (_, i) => {
+                let cls = 'zone-block';
+                if (i < filled) {
+                    const pct = used / total;
+                    cls += pct >= 1 ? ' filled' : (pct >= 0.85 ? ' warn filled' : ' filled');
+                }
+                return `<span class="${cls}"></span>`;
+            }).join('');
+        }
+
+        function renderYardMap() {
+            const map = $('yardMap');
+            if (!map) return;
+            const current = selectedZone();
+            let totalUsed = 0;
+            let totalCap = 0;
+
+            map.innerHTML = ZONE_ORDER.map((id) => {
+                const meta = ZONE_META[id] || { label: id, cls: '' };
+                const info = zonesData[id] || { used: 0, total: 0, labelAr: meta.label };
+                const used = info.used || 0;
+                const total = info.total || 0;
+                totalUsed += used;
+                totalCap += total;
+                const pct = total ? Math.round((used / total) * 100) : 0;
+                const statusCls = zoneStatusClass(used, total);
+                const selectedCls = current === id ? ' selected' : '';
+                return `<button type="button" class="zone-card ${meta.cls} ${statusCls}${selectedCls}" data-zone="${id}">
+                    <div class="zone-card-top">
+                        <span class="zone-pct">${pct}%</span>
+                        <span class="zone-letter">${id}</span>
+                    </div>
+                    <div class="zone-label">${info.labelAr || meta.label}</div>
+                    <div class="zone-count">${used}/${total || '—'}</div>
+                    <div class="zone-blocks">${renderZoneBlocks(used, total)}</div>
+                </button>`;
+            }).join('');
+
+            if ($('yardTotal')) {
+                $('yardTotal').textContent = `إشغال الساحة ${totalUsed}/${totalCap || YARD_TOTAL}`;
+            }
+            const meta = ZONE_META[current] || { label: current };
+            const info = zonesData[current] || {};
+            if ($('zonePickerTitle')) {
+                $('zonePickerTitle').textContent = `المنطقة ${current} — ${info.labelAr || meta.label} · اختر موقفاً (اختياري)`;
+            }
         }
 
         function normVin(v) {
@@ -724,12 +955,7 @@
 
         function renderStock(stock, zones) {
             zonesData = zones || {};
-            const a = zonesData.A || {};
-            const b = zonesData.B || {};
-            $('zoneStats').innerHTML = `
-                <div class="zone-stat"><b>${a.used || 0}/${a.total || 0}</b><span>Zone A · التالي ${a.nextSlot || '—'}</span></div>
-                <div class="zone-stat"><b>${b.used || 0}/${b.total || 0}</b><span>Zone B · التالي ${b.nextSlot || '—'}</span></div>
-            `;
+            renderYardMap();
             renderZoneMap();
 
             const list = $('stockList');
@@ -1160,8 +1386,15 @@
         document.querySelectorAll('input[name="zone"]').forEach((el) => {
             el.addEventListener('change', () => {
                 $('slotSelect').value = '';
-                renderZoneMap();
+                setSelectedZone(el.value);
             });
+        });
+
+        $('yardMap').addEventListener('click', (e) => {
+            const card = e.target.closest('[data-zone]');
+            if (!card) return;
+            $('slotSelect').value = '';
+            setSelectedZone(card.getAttribute('data-zone'));
         });
 
         $('slotSelect').addEventListener('change', renderZoneMap);

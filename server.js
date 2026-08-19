@@ -26,8 +26,15 @@ const USER_ROLES = Object.freeze({
   مستودع: 'warehouse',
   warehouse: 'warehouse'
 });
-const WAREHOUSE_ZONES = Object.freeze(['A', 'B']);
-const WAREHOUSE_SLOTS_PER_ZONE = 60;
+const WAREHOUSE_ZONE_CONFIG = Object.freeze({
+  A: { total: 40, labelAr: 'استلام' },
+  B: { total: 40, labelAr: 'جاهز للتسليم' },
+  C: { total: 24, labelAr: 'غسيل وتجهيز' },
+  D: { total: 24, labelAr: 'انتظار الفحص' },
+  E: { total: 18, labelAr: 'حجز العملاء' },
+  F: { total: 12, labelAr: 'التحميل والخروج' }
+});
+const WAREHOUSE_ZONES = Object.freeze(Object.keys(WAREHOUSE_ZONE_CONFIG));
 const MAX_DRAFTS = 2000;
 
 const {
@@ -487,13 +494,15 @@ function warehouseOccupancy() {
   );
   const zones = {};
   for (const zone of WAREHOUSE_ZONES) {
+    const cfg = WAREHOUSE_ZONE_CONFIG[zone] || { total: 40, labelAr: zone };
     const slots = [];
-    for (let i = 1; i <= WAREHOUSE_SLOTS_PER_ZONE; i += 1) {
+    for (let i = 1; i <= cfg.total; i += 1) {
       const slot = `${zone}-${i}`;
       slots.push({ slot, free: !used.has(slot) });
     }
     zones[zone] = {
-      total: WAREHOUSE_SLOTS_PER_ZONE,
+      total: cfg.total,
+      labelAr: cfg.labelAr,
       used: slots.filter((s) => !s.free).length,
       free: slots.filter((s) => s.free).length,
       nextSlot: (slots.find((s) => s.free) || {}).slot || null,
@@ -1623,17 +1632,18 @@ app.post('/api/warehouse/stock-in', (req, res) => {
 
   let zone = String(req.body?.zone || '').trim().toUpperCase();
   if (!WAREHOUSE_ZONES.includes(zone)) {
-    return res.status(400).json({ error: 'اختر المنطقة A أو B' });
+    return res.status(400).json({ error: 'اختر منطقة صالحة (A–F)' });
   }
 
   let slot = String(req.body?.slot || '').trim().toUpperCase();
   if (slot) {
-    const m = slot.match(/^([AB])-?(\d{1,3})$/i);
+    const m = slot.match(/^([A-F])-?(\d{1,3})$/i);
     if (!m) return res.status(400).json({ error: 'مكان الوقوف غير صالح — مثال: A-1' });
     zone = m[1].toUpperCase();
     slot = `${zone}-${Number(m[2])}`;
-    if (Number(m[2]) < 1 || Number(m[2]) > WAREHOUSE_SLOTS_PER_ZONE) {
-      return res.status(400).json({ error: `رقم الموقف يجب أن يكون بين 1 و ${WAREHOUSE_SLOTS_PER_ZONE}` });
+    const zoneMax = WAREHOUSE_ZONE_CONFIG[zone]?.total || 40;
+    if (Number(m[2]) < 1 || Number(m[2]) > zoneMax) {
+      return res.status(400).json({ error: `رقم الموقف يجب أن يكون بين 1 و ${zoneMax} للمنطقة ${zone}` });
     }
   } else {
     slot = nextFreeSlot(zone);
