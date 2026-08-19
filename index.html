@@ -176,26 +176,57 @@
     <div class="banner err" id="error-banner"></div>
 
     <section id="dashboard">
-      <div class="kpis" id="kpis"></div>
-      <div class="kpis" id="sr-kpis" style="display:none"></div>
-      <div class="charts">
-        <article class="card"><h2>Stock by product</h2><div class="chart-box"><canvas id="chart-stock"></canvas></div></article>
-        <article class="card"><h2>Back orders by salesman</h2><div class="chart-box"><canvas id="chart-salesman"></canvas></div></article>
-        <article class="card"><h2>VIN matching</h2><div class="chart-box"><canvas id="chart-match"></canvas></div></article>
-        <article class="card"><h2>Sales by product</h2><div class="chart-box"><canvas id="chart-sales"></canvas></div></article>
-        <article class="card" id="chart-sr-card" style="display:none"><h2>Delivery vs Target by salesman</h2><div class="chart-box"><canvas id="chart-sr"></canvas></div></article>
-        <article class="card" id="chart-cancel-card" style="display:none"><h2>Cancellation % by salesman</h2><div class="chart-box"><canvas id="chart-cancel"></canvas></div></article>
-      </div>
-      <article class="card">
-        <div class="tabs" id="tabs"></div>
-        <div class="toolbar">
-          <input id="search" type="search" placeholder="Search…" />
-          <select id="filter-extra"></select>
-          <button type="button" id="csv-btn">Export CSV</button>
+      <!-- Panel tabs -->
+      <div class="tabs" id="panel-tabs" style="margin-bottom:16px"></div>
+
+      <!-- PANEL: Sales Report -->
+      <div class="panel-section" id="panel-salesreport" style="display:none">
+        <div class="kpis" id="sr-kpis"></div>
+        <div class="charts">
+          <article class="card"><h2>Delivery vs Target</h2><div class="chart-box"><canvas id="chart-sr"></canvas></div></article>
+          <article class="card"><h2>Sales Achievement %</h2><div class="chart-box"><canvas id="chart-sr-ach"></canvas></div></article>
+          <article class="card"><h2>Cancellation %</h2><div class="chart-box"><canvas id="chart-cancel"></canvas></div></article>
+          <article class="card"><h2>Gap +/- by Salesman</h2><div class="chart-box"><canvas id="chart-sr-gap"></canvas></div></article>
         </div>
-        <div class="table-wrap" id="table-wrap"></div>
-        <p class="foot" id="table-foot"></p>
-      </article>
+        <article class="card">
+          <h2>Sales Report — Per Salesman</h2>
+          <p style="color:var(--muted);font-size:.82rem;margin:0 0 12px">
+            Proforma · Delivery · Target · Achievement · VSND · Del+VSND · Diff · Cancelled · Cancel% · Gap
+          </p>
+          <div class="toolbar">
+            <input id="sr-search" type="search" placeholder="Search salesman…" />
+            <select id="sr-filter">
+              <option value="">All salesmen</option>
+              <option value="above">Achievement ≥100%</option>
+              <option value="below">Achievement &lt;100%</option>
+            </select>
+            <button type="button" id="sr-csv-btn">Export CSV</button>
+          </div>
+          <div class="table-wrap" id="sr-table-wrap"></div>
+          <p class="foot" id="sr-table-foot"></p>
+        </article>
+      </div>
+
+      <!-- PANEL: Stock & BO Dashboard -->
+      <div class="panel-section" id="panel-dashboard" style="display:none">
+        <div class="kpis" id="kpis"></div>
+        <div class="charts">
+          <article class="card"><h2>Stock by product</h2><div class="chart-box"><canvas id="chart-stock"></canvas></div></article>
+          <article class="card"><h2>Back orders by salesman</h2><div class="chart-box"><canvas id="chart-salesman"></canvas></div></article>
+          <article class="card"><h2>VIN matching</h2><div class="chart-box"><canvas id="chart-match"></canvas></div></article>
+          <article class="card"><h2>Sales by product</h2><div class="chart-box"><canvas id="chart-sales"></canvas></div></article>
+        </div>
+        <article class="card">
+          <div class="tabs" id="tabs"></div>
+          <div class="toolbar">
+            <input id="search" type="search" placeholder="Search…" />
+            <select id="filter-extra"></select>
+            <button type="button" id="csv-btn">Export CSV</button>
+          </div>
+          <div class="table-wrap" id="table-wrap"></div>
+          <p class="foot" id="table-foot"></p>
+        </article>
+      </div>
     </section>
     <footer>Files stay in your browser. Nothing is uploaded to a server.</footer>
   </div>
@@ -748,14 +779,19 @@
     upsertChart("chart-sales", "bar", salesBy.map((x) => x[0]), salesBy.map((x) => x[1]));
   }
 
+  const PANEL_DEFS = [
+    { id: "salesreport", label: "Sales Report" },
+    { id: "dashboard", label: "Stock & BO Dashboard" },
+  ];
+  let activePanel = "salesreport";
+
   const TAB_DEFS = [
     { id: "backorder", label: "Back Orders" },
     { id: "rtl", label: "RTL Stock" },
     { id: "central", label: "Central Stock" },
-    { id: "sales", label: "Sales" },
+    { id: "sales", label: "Sales Raw" },
     { id: "cancelled", label: "Cancelled" },
     { id: "matches", label: "VIN Matches" },
-    { id: "salesreport", label: "Sales Report" },
   ];
 
   function rowsForTab(d, tab) {
@@ -764,21 +800,6 @@
     if (tab === "sales") return d.sales.map((r) => ({ Salesman: r.salesman, Product: r.product, VIN: r.vin, Amount: r.amount || "", Qty: r.qty, Date: r.date }));
     if (tab === "cancelled") return d.cancelled.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, Reason: r.reason, Date: r.date }));
     if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
-    if (tab === "salesreport") return d.salesReport.rows.map((r) => ({
-      Salesman: r.Salesman,
-      Proforma: r.Proforma,
-      Delivery: r.Delivery,
-      Target: r.Target,
-      "Ach%(Del)": r["Ach % (Del)"],
-      VSND: r.VSND,
-      "Del+VSND": r["Del+VSND"],
-      "Ach%(Sales)": r["Ach % (Sales)"],
-      Diff: r.Diff,
-      "Can. BOs": r["Cancelled BOs"],
-      "Cancel%": r["Cancel %"],
-      "Can.Target": r["Can. Target"],
-      "Gap+/-": r["Gap +/-"],
-    }));
     return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
   }
 
@@ -791,9 +812,7 @@
       ? `<option value="">All payment</option><option value="Paid">Paid</option><option value="Unpaid">Unpaid</option>`
       : view.tab === "matches"
         ? `<option value="">All scores</option><option value="high">≥80%</option><option value="mid">60–79%</option><option value="none">No match</option>`
-        : view.tab === "salesreport"
-          ? `<option value="">All salesmen</option><option value="above">Ach ≥100%</option><option value="below">Ach &lt;100%</option>`
-          : `<option value="">All rows</option>`;
+        : `<option value="">All rows</option>`;
     extra.value = view.extra;
   }
 
@@ -814,12 +833,6 @@
         return n < 60;
       });
     }
-    if (view.tab === "salesreport" && view.extra) {
-      rows = rows.filter((r) => {
-        const n = parseFloat(String(r["Ach%(Sales)"])) || 0;
-        return view.extra === "above" ? n >= 100 : n < 100;
-      });
-    }
     if (!rows.length) {
       $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show for this file/filter.</p>`;
       $("#table-foot").textContent = "0 rows";
@@ -834,6 +847,76 @@
           const n = parseInt(String(r[h]), 10) || 0;
           val = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${val || "0%"}</span>`;
         }
+        return `<td>${val}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    $("#table-foot").textContent = `${formatNumber(rows.length)} rows` + (rows.length > MAX_ROWS ? ` · showing first ${formatNumber(MAX_ROWS)}` : "");
+    window._exportRows = rows;
+  }
+
+  function exportCsv() {
+    const rows = window._exportRows || [];
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = view.tab + "-export.csv";
+    a.click();
+  }
+
+  function switchPanel(panelId) {
+    activePanel = panelId;
+    PANEL_DEFS.forEach((p) => {
+      const el = document.getElementById("panel-" + p.id);
+      if (el) el.style.display = p.id === panelId ? "" : "none";
+    });
+    $("#panel-tabs").innerHTML = PANEL_DEFS.map((p) =>
+      `<button class="tab${p.id === activePanel ? " active" : ""}" data-panel="${p.id}">${p.label}</button>`
+    ).join("");
+  }
+
+  let srView = { search: "", filter: "" };
+
+  function renderSalesReportTable(sr) {
+    const SR_HEADERS = ["Salesman", "Proforma", "Delivery", "Target", "Ach%(Del)", "VSND", "Del+VSND", "Ach%(Sales)", "Diff", "Can. BOs", "Cancel%", "Can.Target", "Gap+/-"];
+    let rows = sr.rows.map((r) => ({
+      Salesman: r.Salesman,
+      Proforma: r.Proforma,
+      Delivery: r.Delivery,
+      Target: r.Target,
+      "Ach%(Del)": r["Ach % (Del)"],
+      VSND: r.VSND,
+      "Del+VSND": r["Del+VSND"],
+      "Ach%(Sales)": r["Ach % (Sales)"],
+      Diff: r.Diff,
+      "Can. BOs": r["Cancelled BOs"],
+      "Cancel%": r["Cancel %"],
+      "Can.Target": r["Can. Target"],
+      "Gap+/-": r["Gap +/-"],
+    }));
+
+    const q = srView.search.trim().toLowerCase();
+    if (q) rows = rows.filter((r) => r.Salesman.toLowerCase().includes(q));
+    if (srView.filter) {
+      rows = rows.filter((r) => {
+        const n = parseFloat(String(r["Ach%(Sales)"])) || 0;
+        return srView.filter === "above" ? n >= 100 : n < 100;
+      });
+    }
+
+    if (!rows.length) {
+      $("#sr-table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show.</p>`;
+      $("#sr-table-foot").textContent = "0 rows";
+      return;
+    }
+
+    const body = rows.map((r) => {
+      const cells = SR_HEADERS.map((h) => {
+        let val = escapeHtml(r[h]);
         if (h === "Ach%(Del)" || h === "Ach%(Sales)") {
           const n = parseFloat(val) || 0;
           val = `<span class="badge ${n >= 100 ? "ok" : n >= 70 ? "warn" : "bad"}">${val}</span>`;
@@ -854,41 +937,20 @@
       }).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
-    let totalsRow = "";
-    if (view.tab === "salesreport" && d.salesReport && d.salesReport.totals) {
-      const t = d.salesReport.totals;
-      const totObj = {
-        Salesman: "TOTAL",
-        Proforma: t.proforma,
-        Delivery: t.delivery,
-        Target: t.target,
-        "Ach%(Del)": (t.deliveryAch * 100).toFixed(1) + "%",
-        VSND: t.vsnd,
-        "Del+VSND": t.delVsnd,
-        "Ach%(Sales)": (t.salesAch * 100).toFixed(1) + "%",
-        Diff: t.diff,
-        "Can. BOs": t.cancelled,
-        "Cancel%": (t.cancelPct * 100).toFixed(1) + "%",
-        "Can.Target": "30%",
-        "Gap+/-": ((0.30 - t.cancelPct) * 100).toFixed(1) + "%",
-      };
-      totalsRow = `<tr style="font-weight:800;background:#f1f5f9">${headers.map((h) => `<td>${escapeHtml(String(totObj[h] ?? ""))}</td>`).join("")}</tr>`;
-    }
-    $("#table-wrap").innerHTML = `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}${totalsRow}</tbody></table>`;
-    $("#table-foot").textContent = `${formatNumber(rows.length)} rows` + (rows.length > MAX_ROWS ? ` · showing first ${formatNumber(MAX_ROWS)}` : "");
-    window._exportRows = rows;
-  }
 
-  function exportCsv() {
-    const rows = window._exportRows || [];
-    if (!rows.length) return;
-    const headers = Object.keys(rows[0]);
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = view.tab + "-export.csv";
-    a.click();
+    const t = sr.totals;
+    const totObj = {
+      Salesman: "TOTAL", Proforma: t.proforma, Delivery: t.delivery, Target: t.target,
+      "Ach%(Del)": (t.deliveryAch * 100).toFixed(1) + "%", VSND: t.vsnd, "Del+VSND": t.delVsnd,
+      "Ach%(Sales)": (t.salesAch * 100).toFixed(1) + "%", Diff: t.diff,
+      "Can. BOs": t.cancelled, "Cancel%": (t.cancelPct * 100).toFixed(1) + "%", "Can.Target": "30%",
+      "Gap+/-": ((0.30 - t.cancelPct) * 100).toFixed(1) + "%",
+    };
+    const totalsRow = `<tr style="font-weight:800;background:#f1f5f9">${SR_HEADERS.map((h) => `<td>${escapeHtml(String(totObj[h] ?? ""))}</td>`).join("")}</tr>`;
+
+    $("#sr-table-wrap").innerHTML = `<table><thead><tr>${SR_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}${totalsRow}</tbody></table>`;
+    $("#sr-table-foot").textContent = `${formatNumber(rows.length)} salesmen`;
+    window._srExportRows = rows;
   }
 
   function renderSalesReportKpis(sr) {
@@ -913,12 +975,9 @@
   }
 
   function renderSalesReportCharts(sr) {
-    const show = sr.rows.length > 0;
-    document.getElementById("chart-sr-card").style.display = show ? "" : "none";
-    document.getElementById("chart-cancel-card").style.display = show ? "" : "none";
-    if (!show) return;
-
+    if (!sr.rows.length) return;
     const labels = sr.rows.map((r) => r.Salesman);
+
     upsertChart("chart-sr", "bar", labels, sr.rows.map((r) => r.Delivery), {
       label: "Delivery",
       backgroundColor: "#EB0A1E",
@@ -933,9 +992,20 @@
       });
       charts["chart-sr"].update();
     }
+
+    upsertChart("chart-sr-ach", "bar", labels, sr.rows.map((r) => parseFloat(r["Ach % (Sales)"]) || 0), {
+      label: "Sales Ach %",
+      backgroundColor: sr.rows.map((r) => (parseFloat(r["Ach % (Sales)"]) || 0) >= 100 ? "#059669" : (parseFloat(r["Ach % (Sales)"]) || 0) >= 70 ? "#d97706" : "#EB0A1E"),
+    });
+
     upsertChart("chart-cancel", "bar", labels, sr.rows.map((r) => parseFloat(r["Cancel %"]) || 0), {
       label: "Cancel %",
       backgroundColor: sr.rows.map((r) => (parseFloat(r["Cancel %"]) || 0) <= 30 ? "#059669" : "#EB0A1E"),
+    });
+
+    upsertChart("chart-sr-gap", "bar", labels, sr.rows.map((r) => parseFloat(r["Gap +/-"]) || 0), {
+      label: "Gap +/-",
+      backgroundColor: sr.rows.map((r) => (parseFloat(r["Gap +/-"]) || 0) >= 0 ? "#059669" : "#EB0A1E"),
     });
   }
 
@@ -944,10 +1014,12 @@
     const d = data();
     window._data = d;
     $("#dashboard").classList.add("show");
+    switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
     renderSalesReportKpis(d.salesReport);
     renderSalesReportCharts(d.salesReport);
+    renderSalesReportTable(d.salesReport);
     renderTabs();
     renderTable(d);
     setStatus("Dashboard ready", "ok");
@@ -969,6 +1041,31 @@
   $("#clear-btn").addEventListener("click", clearAll);
   $("#run-btn").addEventListener("click", buildDashboard);
   $("#csv-btn").addEventListener("click", exportCsv);
+
+  $("#panel-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-panel]");
+    if (!btn) return;
+    switchPanel(btn.dataset.panel);
+  });
+  $("#sr-search").addEventListener("input", (e) => {
+    srView.search = e.target.value;
+    if (window._data) renderSalesReportTable(window._data.salesReport);
+  });
+  $("#sr-filter").addEventListener("change", (e) => {
+    srView.filter = e.target.value;
+    if (window._data) renderSalesReportTable(window._data.salesReport);
+  });
+  $("#sr-csv-btn").addEventListener("click", () => {
+    const rows = window._srExportRows || [];
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "sales-report-export.csv";
+    a.click();
+  });
   $("#search").addEventListener("input", (e) => {
     view.search = e.target.value;
     if (window._data) renderTable(window._data);
