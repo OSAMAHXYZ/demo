@@ -151,6 +151,46 @@
     .badge.warn { background: #ffedd5; color: #9a3412; }
     .badge.bad { background: #fee2e2; color: #991b1b; }
     .foot { color: var(--muted); font-size: .78rem; margin: 8px 0 0; }
+    .admin-bar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin: 0 0 14px;
+    }
+    .admin-bar .hint { color: var(--muted); font-size: .82rem; margin-inline-start: auto; }
+    .target-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+    .target-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 88px;
+      gap: 8px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+    .target-row .idx {
+      width: 28px; height: 28px; border-radius: 8px; background: #111; color: #fff;
+      display: grid; place-items: center; font-size: .72rem; font-weight: 800;
+    }
+    .target-row input {
+      width: 100%; border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 10px; font: inherit; font-size: .85rem;
+    }
+    .target-row input[type="number"] { text-align: center; font-weight: 700; }
+    .target-summary {
+      display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;
+    }
+    .target-summary .pill {
+      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      padding: 8px 12px; font-size: .8rem; font-weight: 700; box-shadow: var(--shadow);
+    }
+    #panel-targets { display: none; }
+    #panel-targets.show { display: block; }
+    #upload-section.hidden { display: none; }
     footer { color: var(--muted); font-size: .78rem; margin-top: 18px; text-align: center; }
   </style>
 </head>
@@ -166,14 +206,43 @@
       </div>
       <div class="top-actions">
         <span class="status" id="status">Waiting for files</span>
+        <button type="button" id="targets-btn">Admin Targets</button>
         <button type="button" id="clear-btn" disabled>Clear</button>
         <button type="button" class="btn-primary" id="run-btn" disabled>Build dashboard</button>
       </div>
     </header>
 
-    <section class="grid-5" id="slots"></section>
-    <div class="banner load" id="load-banner">Reading workbooks…</div>
-    <div class="banner err" id="error-banner"></div>
+    <div class="admin-bar" id="nav-bar">
+      <button type="button" class="tab active" data-nav="uploads">1 · Uploads</button>
+      <button type="button" class="tab" data-nav="targets">2 · Admin Targets (29)</button>
+      <button type="button" class="tab" data-nav="dashboard" id="nav-dashboard" disabled>3 · Dashboard</button>
+      <span class="hint">Set employee targets before or after uploading Excel files</span>
+    </div>
+
+    <section id="upload-section">
+      <section class="grid-5" id="slots"></section>
+      <div class="banner load" id="load-banner">Reading workbooks…</div>
+      <div class="banner err" id="error-banner"></div>
+    </section>
+
+    <section id="panel-targets">
+      <article class="card">
+        <h2>Admin Targets — 29 Employees</h2>
+        <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
+          Set the monthly target for each salesperson. Saved in this browser and used by the Sales Report panel.
+        </p>
+        <div class="target-summary" id="target-summary"></div>
+        <div class="toolbar" style="margin-bottom:12px">
+          <input id="target-search" type="search" placeholder="Search employee…" />
+          <input id="bulk-target" type="number" min="0" step="1" placeholder="Bulk target" style="min-width:120px" />
+          <button type="button" id="bulk-apply-btn">Apply to all</button>
+          <button type="button" class="btn-primary" id="save-targets-btn">Save targets</button>
+          <button type="button" id="reset-targets-btn">Reset names</button>
+        </div>
+        <div class="target-grid" id="target-grid"></div>
+        <p class="foot" id="target-foot"></p>
+      </article>
+    </section>
 
     <section id="dashboard">
       <!-- Panel tabs -->
@@ -243,6 +312,114 @@
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Sales report export" },
     { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Cancelled BO list" },
   ];
+
+  const TARGETS_KEY = "toyota_admin_employee_targets_v1";
+  const EMPLOYEE_COUNT = 29;
+  const DEFAULT_EMPLOYEES = Array.from({ length: EMPLOYEE_COUNT }, (_, i) => ({
+    id: i + 1,
+    name: `Employee ${String(i + 1).padStart(2, "0")}`,
+    target: 0,
+  }));
+
+  function loadEmployeeTargets() {
+    try {
+      const raw = localStorage.getItem(TARGETS_KEY);
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
+        const row = parsed[i] || {};
+        return {
+          id: i + 1,
+          name: String(row.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
+          target: Math.max(0, Number(row.target) || 0),
+        };
+      });
+    } catch {
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+    }
+  }
+
+  let employeeTargets = loadEmployeeTargets();
+  let targetSearch = "";
+  let activeNav = "uploads";
+
+  function saveEmployeeTargets(showMsg) {
+    employeeTargets = Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
+      const nameEl = document.querySelector(`[data-emp-name="${i}"]`);
+      const targetEl = document.querySelector(`[data-emp-target="${i}"]`);
+      return {
+        id: i + 1,
+        name: (nameEl ? nameEl.value : employeeTargets[i]?.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
+        target: Math.max(0, Number(targetEl ? targetEl.value : employeeTargets[i]?.target) || 0),
+      };
+    });
+    localStorage.setItem(TARGETS_KEY, JSON.stringify(employeeTargets));
+    renderTargetsPanel();
+    if (showMsg) setStatus("Targets saved", "ok");
+    if (window._data) {
+      window._data = data();
+      renderSalesReportKpis(window._data.salesReport);
+      renderSalesReportCharts(window._data.salesReport);
+      renderSalesReportTable(window._data.salesReport);
+    }
+  }
+
+  function adminTargetMap() {
+    const map = new Map();
+    employeeTargets.forEach((e) => {
+      const key = String(e.name || "").trim().toLowerCase();
+      if (key) map.set(key, e.target);
+    });
+    return map;
+  }
+
+  function resolveAdminTarget(name, fallback) {
+    const key = String(name || "").trim().toLowerCase();
+    if (!key) return fallback || 0;
+    const map = adminTargetMap();
+    if (map.has(key)) return map.get(key);
+    return fallback || 0;
+  }
+
+  function renderTargetsPanel() {
+    const q = targetSearch.trim().toLowerCase();
+    const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
+    const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
+    const named = employeeTargets.filter((e) => e.name && !/^Employee \d+$/i.test(e.name)).length;
+    $("#target-summary").innerHTML = `
+      <span class="pill">Employees: ${EMPLOYEE_COUNT}</span>
+      <span class="pill">Named: ${named}</span>
+      <span class="pill">Targets set: ${filled}</span>
+      <span class="pill">Total target: ${formatNumber(totalTarget)}</span>
+    `;
+    $("#target-grid").innerHTML = employeeTargets.map((e, i) => {
+      const hidden = q && !String(e.name).toLowerCase().includes(q) ? ' style="display:none"' : "";
+      return `<div class="target-row"${hidden}>
+        <div class="idx">${e.id}</div>
+        <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name)}" placeholder="Employee name" />
+        <input data-emp-target="${i}" type="number" min="0" step="1" value="${e.target || 0}" title="Monthly target" />
+      </div>`;
+    }).join("");
+    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · edit names to match Excel salesman names`;
+  }
+
+  function switchNav(nav) {
+    activeNav = nav;
+    document.querySelectorAll("#nav-bar [data-nav]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.nav === nav);
+    });
+    $("#upload-section").classList.toggle("hidden", nav !== "uploads");
+    $("#panel-targets").classList.toggle("show", nav === "targets");
+    if (nav === "targets") renderTargetsPanel();
+
+    const dash = $("#dashboard");
+    if (nav === "dashboard" && dash.classList.contains("show")) {
+      dash.style.display = "";
+    } else {
+      dash.style.display = "none";
+    }
+  }
 
   const HEADER_ALIASES = {
     product: ["product", "model", "item", "vehicle model", "car model"],
@@ -605,6 +782,13 @@
       return byPerson.get(name);
     };
 
+    // Always seed the 29 admin employees so targets appear even before Excel match
+    employeeTargets.forEach((e) => {
+      if (!e.name) return;
+      const p = ensure(e.name);
+      if (p) p.target = Number(e.target) || 0;
+    });
+
     const getSales = buildFieldGetter(slots.sales.rows[0] || {});
     slots.sales.rows.forEach((r) => {
       const name = cellToString(getSales(r, "salesman")).trim();
@@ -616,19 +800,20 @@
       const vsnd = toNumber(getSales(r, "vsnd"));
       if (proforma) p.proforma += proforma;
       if (delivery) p.delivery += delivery;
-      if (target) p.target += target;
       if (vsnd) p.vsnd += vsnd;
       p.totalOrders += 1;
+      // Admin target wins when set; otherwise use Excel target
+      const adminT = resolveAdminTarget(name, 0);
+      if (adminT > 0) p.target = adminT;
+      else if (target) p.target += target;
     });
 
-    if (!byPerson.size) {
-      const salesGet = buildFieldGetter(slots.sales.rows[0] || {});
+    if (!slots.sales.rows.length) {
       const boGet = buildFieldGetter(slots.backorder.rows[0] || {});
-      const salesmen = new Set();
-      slots.sales.rows.forEach((r) => { const n = cellToString(salesGet(r, "salesman")).trim(); if (n) salesmen.add(n); });
-      slots.backorder.rows.forEach((r) => { const n = cellToString(boGet(r, "salesman")).trim(); if (n) salesmen.add(n); });
-
-      salesmen.forEach((name) => ensure(name));
+      slots.backorder.rows.forEach((r) => {
+        const n = cellToString(boGet(r, "salesman")).trim();
+        if (n) ensure(n);
+      });
 
       bos.forEach((b) => {
         const p = ensure(b.salesman);
@@ -637,12 +822,24 @@
         if (b.paid) p.proforma += 1;
         if (b.vin) p.delivery += 1;
         else p.vsnd += 1;
+        const adminT = resolveAdminTarget(b.salesman, 0);
+        if (adminT > 0) p.target = adminT;
+      });
+    } else {
+      // Apply admin targets to any salesman present
+      byPerson.forEach((p) => {
+        const adminT = resolveAdminTarget(p.salesman, 0);
+        if (adminT > 0) p.target = adminT;
       });
     }
 
     cancelled.forEach((c) => {
       const p = ensure(c.salesman);
-      if (p) p.cancelledBOs += 1;
+      if (p) {
+        p.cancelledBOs += 1;
+        const adminT = resolveAdminTarget(c.salesman, 0);
+        if (adminT > 0) p.target = adminT;
+      }
     });
 
     const rows = [...byPerson.values()].map((p) => {
@@ -658,10 +855,10 @@
         Proforma: p.proforma,
         Delivery: p.delivery,
         Target: p.target,
-        "Ach % (Del)": deliveryAch ? (deliveryAch * 100).toFixed(1) + "%" : "—",
+        "Ach % (Del)": p.target ? (deliveryAch * 100).toFixed(1) + "%" : "—",
         VSND: p.vsnd,
         "Del+VSND": delPlusVsnd,
-        "Ach % (Sales)": salesAch ? (salesAch * 100).toFixed(1) + "%" : "—",
+        "Ach % (Sales)": p.target ? (salesAch * 100).toFixed(1) + "%" : "—",
         Diff: diff,
         "Cancelled BOs": p.cancelledBOs,
         "Cancel %": (cancelPct * 100).toFixed(1) + "%",
@@ -680,7 +877,7 @@
     const totTarget = rows.reduce((s, r) => s + r.Target, 0);
     const totVsnd = rows.reduce((s, r) => s + r.VSND, 0);
     const totDelVsnd = totDelivery + totVsnd;
-    const totCancelled = rows.reduce((s, r) => s["Cancelled BOs"] + r["Cancelled BOs"], { "Cancelled BOs": 0 })["Cancelled BOs"] || cancelled.length;
+    const totCancelled = rows.reduce((s, r) => s + r["Cancelled BOs"], 0) || cancelled.length;
 
     return {
       rows,
@@ -1011,9 +1208,14 @@
 
   function buildDashboard() {
     showError("");
+    saveEmployeeTargets(false);
     const d = data();
     window._data = d;
     $("#dashboard").classList.add("show");
+    $("#dashboard").style.display = "";
+    const navDash = $("#nav-dashboard");
+    if (navDash) navDash.disabled = false;
+    switchNav("dashboard");
     switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
@@ -1028,8 +1230,12 @@
   function clearAll() {
     SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
     $("#dashboard").classList.remove("show");
+    $("#dashboard").style.display = "";
+    const navDash = $("#nav-dashboard");
+    if (navDash) navDash.disabled = true;
     showError("");
     renderSlots();
+    switchNav("uploads");
     setStatus("Waiting for files");
   }
 
@@ -1041,6 +1247,32 @@
   $("#clear-btn").addEventListener("click", clearAll);
   $("#run-btn").addEventListener("click", buildDashboard);
   $("#csv-btn").addEventListener("click", exportCsv);
+  $("#targets-btn").addEventListener("click", () => switchNav("targets"));
+
+  $("#nav-bar").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-nav]");
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.nav === "dashboard" && !window._data) return;
+    switchNav(btn.dataset.nav);
+  });
+  $("#target-search").addEventListener("input", (e) => {
+    targetSearch = e.target.value;
+    renderTargetsPanel();
+  });
+  $("#save-targets-btn").addEventListener("click", () => saveEmployeeTargets(true));
+  $("#bulk-apply-btn").addEventListener("click", () => {
+    const n = Math.max(0, Number($("#bulk-target").value) || 0);
+    document.querySelectorAll("[data-emp-target]").forEach((el) => { el.value = String(n); });
+    saveEmployeeTargets(true);
+  });
+  $("#reset-targets-btn").addEventListener("click", () => {
+    if (!confirm("Reset all 29 names to Employee 01–29 and keep current target numbers?")) return;
+    document.querySelectorAll("[data-emp-name]").forEach((el, i) => {
+      el.value = DEFAULT_EMPLOYEES[i].name;
+    });
+    saveEmployeeTargets(true);
+  });
+  $("#target-grid").addEventListener("change", () => saveEmployeeTargets(false));
 
   $("#panel-tabs").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-panel]");
@@ -1094,6 +1326,8 @@
   });
 
   renderSlots();
+  renderTargetsPanel();
+  switchNav("uploads");
 })();
 </script>
 </body>
