@@ -627,7 +627,7 @@
     { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
-    { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Rowdata · Col A name · P proforma · V delivery" },
+    { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Cancelled BO list" },
   ];
 
@@ -725,7 +725,7 @@
     localStorage.setItem(TARGETS_KEY, JSON.stringify(employeeTargets));
     renderTargetsPanel();
     if (showMsg) setStatus("Targets saved", "ok");
-    if (window._data) {
+    if (window._data && hasSalesRaw()) {
       window._data = data();
       renderSalesReportKpis(window._data.salesReport);
       renderSalesReportCharts(window._data.salesReport);
@@ -1635,6 +1635,31 @@
   ];
   let activePanel = "salesreport";
 
+  function hasSalesRaw() {
+    return !!(slots.sales && slots.sales.file && (slots.sales.rows || []).length);
+  }
+
+  function visiblePanels() {
+    return PANEL_DEFS.filter((p) => p.id !== "salesreport" || hasSalesRaw());
+  }
+
+  function clearSalesReportUi() {
+    ["#sr-day-kpis", "#sr-kpis"].forEach((sel) => {
+      const el = $(sel);
+      if (el) { el.innerHTML = ""; el.style.display = "none"; }
+    });
+    ["#sr-day-table-wrap", "#sr-table-wrap"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Upload <b>Sales Raw Data</b> to build the Sales Report.</p>`;
+    });
+    ["#sr-day-table-foot", "#sr-table-foot"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.textContent = "Sales Raw Data not uploaded";
+    });
+    const hint = $("#sr-live-hint");
+    if (hint) hint.textContent = "Sales Report needs Sales Raw Data (upload slot 4)";
+  }
+
   const TAB_DEFS = [
     { id: "backorder", label: "Back Orders" },
     { id: "rtl", label: "RTL Stock" },
@@ -1719,12 +1744,16 @@
   }
 
   function switchPanel(panelId) {
+    const panels = visiblePanels();
+    if (!panels.some((p) => p.id === panelId)) {
+      panelId = panels[0] ? panels[0].id : "dashboard";
+    }
     activePanel = panelId;
     PANEL_DEFS.forEach((p) => {
       const el = document.getElementById("panel-" + p.id);
       if (el) el.style.display = p.id === panelId ? "" : "none";
     });
-    $("#panel-tabs").innerHTML = PANEL_DEFS.map((p) =>
+    $("#panel-tabs").innerHTML = panels.map((p) =>
       `<button class="tab${p.id === activePanel ? " active" : ""}" data-panel="${p.id}">${p.label}</button>`
     ).join("");
   }
@@ -2113,15 +2142,21 @@
     const navDash = $("#nav-dashboard");
     if (navDash) navDash.disabled = false;
     switchNav("dashboard");
+    if (!hasSalesRaw()) activePanel = "dashboard";
+    else if (activePanel !== "salesreport" && activePanel !== "dashboard") activePanel = "salesreport";
     switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
-    renderSalesReportKpis(d.salesReport);
-    renderSalesReportCharts(d.salesReport);
-    renderSalesReportTable(d.salesReport);
+    if (hasSalesRaw()) {
+      renderSalesReportKpis(d.salesReport);
+      renderSalesReportCharts(d.salesReport);
+      renderSalesReportTable(d.salesReport);
+    } else {
+      clearSalesReportUi();
+    }
     renderTabs();
     renderTable(d);
-    setStatus("Dashboard ready", "ok");
+    setStatus(hasSalesRaw() ? "Dashboard ready" : "Dashboard ready · Sales Report needs Sales Raw Data", "ok");
   }
 
   function clearAll() {
@@ -2178,11 +2213,11 @@
   });
   $("#sr-search").addEventListener("input", (e) => {
     srView.search = e.target.value;
-    if (window._data) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesRaw()) renderSalesReportTable(window._data.salesReport);
   });
   $("#sr-filter").addEventListener("change", (e) => {
     srView.filter = e.target.value;
-    if (window._data) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesRaw()) renderSalesReportTable(window._data.salesReport);
   });
   $("#sr-csv-btn").addEventListener("click", () => {
     const rows = window._srExportRows || [];
