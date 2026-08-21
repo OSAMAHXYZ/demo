@@ -433,6 +433,10 @@
       border-bottom: 1px solid #c5cdd8;
       letter-spacing: -.01em;
     }
+    .xl-mtd.day {
+      background: #a9d08e;
+    }
+    .xl-sheet + .xl-sheet { margin-top: 16px; }
 
     .xl-table-wrap {
       overflow: auto;
@@ -544,22 +548,31 @@
 
       <!-- PANEL: Sales Report (Excel layout) -->
       <div class="panel-section" id="panel-salesreport" style="display:none">
-        <div class="xl-sheet">
-          <div class="xl-toolbar">
-            <input id="sr-search" type="search" placeholder="Search employee…" />
-            <select id="sr-filter">
-              <option value="">All</option>
-              <option value="above">Ach% ≥100%</option>
-              <option value="below">Ach% &lt;100%</option>
-            </select>
-            <button type="button" id="sr-csv-btn">Export CSV</button>
-            <span class="hint" id="sr-live-hint">Month to Date · click employee for VINs</span>
-          </div>
-          <div class="xl-kpi" id="sr-kpis"></div>
-          <div class="xl-mtd">Month to Date</div>
-          <div class="xl-table-wrap" id="sr-table-wrap"></div>
+        <div class="xl-toolbar" style="border:1px solid #c5cdd8;border-radius:12px 12px 0 0;background:#fafbfd;margin-bottom:0">
+          <input id="sr-search" type="search" placeholder="Search employee…" />
+          <select id="sr-filter">
+            <option value="">All</option>
+            <option value="above">Ach% ≥100%</option>
+            <option value="below">Ach% &lt;100%</option>
+          </select>
+          <button type="button" id="sr-csv-btn">Export CSV</button>
+          <span class="hint" id="sr-live-hint">Day to Date + Month to Date · click employee for VINs</span>
         </div>
-        <p class="foot" id="sr-table-foot"></p>
+
+        <div class="xl-sheet" style="border-radius:0 0 12px 12px;border-top:none">
+          <div class="xl-kpi" id="sr-day-kpis"></div>
+          <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+          <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
+          <p class="foot" id="sr-day-table-foot" style="padding:8px 14px 12px;margin:0"></p>
+        </div>
+
+        <div class="xl-sheet">
+          <div class="xl-kpi" id="sr-kpis"></div>
+          <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+          <div class="xl-table-wrap" id="sr-table-wrap"></div>
+          <p class="foot" id="sr-table-foot" style="padding:8px 14px 12px;margin:0"></p>
+        </div>
+
         <!-- Charts kept for rebuild; hidden to match Excel sheet look -->
         <div class="charts" style="display:none" aria-hidden="true">
           <article class="card"><h2>Delivery / Proforma / Target (Month)</h2><div class="chart-box"><canvas id="chart-sr"></canvas></div></article>
@@ -1287,6 +1300,7 @@
           target: 0,
           vsnd: 0,
           cancelledBOs: 0,
+          cancelledDay: 0,
           totalOrders: 0,
           vins: [],
           vinSet: new Set(),
@@ -1373,9 +1387,45 @@
       const p = ensure(c.salesman);
       if (!p) return;
       p.cancelledBOs += 1;
+      const cancelDate = parseDate(c.date) || (c.date instanceof Date ? c.date : null);
+      const cancelDay = toYyyymmdd(cancelDate);
+      if (cancelDay && cancelDay === live.dayKey) p.cancelledDay += 1;
       const adminT = resolveAdminTarget(c.salesman, 0);
       if (adminT > 0) p.target = adminT;
     });
+
+    const daysInMonth = new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
+    const pct1 = (n) => (n * 100).toFixed(1) + "%";
+    const pct0 = (n) => Math.round(n * 100) + "%";
+
+    const makeBlock = (proforma, delivery, target, cancelledCount, vsnd, note) => {
+      const delPlusVsnd = delivery + vsnd;
+      const deliveryAch = target ? delivery / target : 0;
+      const salesAch = target ? delPlusVsnd / target : 0;
+      const diff = target - delPlusVsnd;
+      const cancelBase = proforma + delivery + cancelledCount;
+      const cancelPct = cancelBase ? cancelledCount / cancelBase : null;
+      const gap = cancelPct == null ? null : CANCEL_TARGET - cancelPct;
+      return {
+        Proforma: proforma,
+        Delivery: delivery,
+        Target: target,
+        "Ach%": target ? pct1(deliveryAch) : "#DIV/0!",
+        "Del+VSND": delPlusVsnd,
+        "Ach% (Sales)": target ? pct1(salesAch) : "#DIV/0!",
+        Diff: diff,
+        "Cancelled BOs": cancelledCount,
+        "Cancellation %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
+        "Can. Target 30%": "30%",
+        "Gap +/-": gap == null ? "#DIV/0!" : pct0(gap),
+        Notes: note || "",
+        _deliveryAch: deliveryAch,
+        _salesAch: salesAch,
+        _cancelPct: cancelPct,
+        _gap: gap,
+        _diff: diff,
+      };
+    };
 
     // Prefer admin employee order, then any extra names from files
     const ordered = [];
@@ -1393,54 +1443,36 @@
     });
 
     const rows = ordered.filter(Boolean).map((p) => {
-      // Achievement uses monthly delivery (live month), matching business report
-      const delivery = p.deliveryMonth;
-      const proforma = p.proformaMonth;
-      const delPlusVsnd = delivery + p.vsnd;
-      const achGap = delivery - p.target; // Delivery − Target
-      const deliveryAch = p.target ? delivery / p.target : 0;
-      const salesAch = p.target ? delPlusVsnd / p.target : 0;
-      const diff = p.target - delPlusVsnd;
-      const cancelBase = proforma + delivery + p.cancelledBOs;
-      const cancelPct = cancelBase ? p.cancelledBOs / cancelBase : null;
-      const gap = cancelPct == null ? null : CANCEL_TARGET - cancelPct;
-      const pct1 = (n) => (n * 100).toFixed(1) + "%";
-      const pct0 = (n) => Math.round(n * 100) + "%";
+      const dayTarget = p.target ? Math.round((p.target / daysInMonth) * 10) / 10 : 0;
+      const monthBlock = makeBlock(p.proformaMonth, p.deliveryMonth, p.target, p.cancelledBOs, p.vsnd, p.note);
+      const dayBlock = makeBlock(p.proformaDay, p.deliveryDay, dayTarget, p.cancelledDay, 0, p.note);
       return {
         No: 0,
         Plant: p.plant || "—",
         Salesman: p.salesmanCode || "",
         "Sales Employee": p.salesman,
-        Proforma: proforma,
-        Delivery: delivery,
-        Target: p.target,
-        "Ach%": p.target ? pct1(deliveryAch) : "#DIV/0!",
-        "Del+VSND": delPlusVsnd,
-        "Ach% (Sales)": p.target ? pct1(salesAch) : "#DIV/0!",
-        Diff: diff,
-        "Cancelled BOs": p.cancelledBOs,
-        "Cancellation %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
-        "Can. Target 30%": "30%",
-        "Gap +/-": gap == null ? "#DIV/0!" : pct0(gap),
         Notes: p.note || "",
+        VSND: p.vsnd,
         "Proforma (Day)": p.proformaDay,
         "Proforma (Month)": p.proformaMonth,
         "Delivery (Day)": p.deliveryDay,
         "Delivery (Month)": p.deliveryMonth,
-        "Del−Target": achGap,
-        "Ach % (Del)": p.target ? pct1(deliveryAch) : "#DIV/0!",
-        VSND: p.vsnd,
-        "Ach % (Sales)": p.target ? pct1(salesAch) : "#DIV/0!",
-        "Cancel %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
+        "Day Target": dayTarget,
+        Target: p.target,
+        // Month fields (default / backward compatible)
+        ...monthBlock,
+        Proforma: monthBlock.Proforma,
+        Delivery: monthBlock.Delivery,
+        "Del−Target": p.deliveryMonth - p.target,
+        "Ach % (Del)": monthBlock["Ach%"],
+        "Ach % (Sales)": monthBlock["Ach% (Sales)"],
+        "Cancel %": monthBlock["Cancellation %"],
         "Can. Target": "30%",
-        _deliveryAch: deliveryAch,
-        _salesAch: salesAch,
-        _cancelPct: cancelPct,
-        _gap: gap,
-        _diff: diff,
-        _achGap: achGap,
+        day: dayBlock,
+        month: monthBlock,
         _vins: p.vins.slice(),
         _key: nameKey(p.salesman),
+        _achGap: p.deliveryMonth - p.target,
       };
     }).map((r, i) => ({ ...r, No: i + 1 }));
 
@@ -1449,13 +1481,19 @@
     const totDeliveryDay = rows.reduce((s, r) => s + r["Delivery (Day)"], 0);
     const totDeliveryMonth = rows.reduce((s, r) => s + r["Delivery (Month)"], 0);
     const totTarget = rows.reduce((s, r) => s + r.Target, 0);
+    const totDayTarget = rows.reduce((s, r) => s + (r["Day Target"] || 0), 0);
     const totVsnd = rows.reduce((s, r) => s + r.VSND, 0);
     const totDelVsnd = totDeliveryMonth + totVsnd;
+    const totDelVsndDay = totDeliveryDay;
     const totCancelled = rows.reduce((s, r) => s + r["Cancelled BOs"], 0);
+    const totCancelledDay = rows.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
+    const monthCancelBase = totProformaMonth + totDeliveryMonth + totCancelled;
+    const dayCancelBase = totProformaDay + totDeliveryDay + totCancelledDay;
 
     return {
       rows,
       live,
+      daysInMonth,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
@@ -1464,15 +1502,20 @@
         proforma: totProformaMonth,
         delivery: totDeliveryMonth,
         target: totTarget,
+        dayTarget: totDayTarget,
         vsnd: totVsnd,
         delVsnd: totDelVsnd,
+        delVsndDay: totDelVsndDay,
         diff: totTarget - totDelVsnd,
+        diffDay: totDayTarget - totDelVsndDay,
         deliveryAch: totTarget ? totDeliveryMonth / totTarget : 0,
         salesAch: totTarget ? totDelVsnd / totTarget : 0,
+        deliveryAchDay: totDayTarget ? totDeliveryDay / totDayTarget : 0,
+        salesAchDay: totDayTarget ? totDelVsndDay / totDayTarget : 0,
         cancelled: totCancelled,
-        cancelPct: (totProformaMonth + totDeliveryMonth + totCancelled)
-          ? totCancelled / (totProformaMonth + totDeliveryMonth + totCancelled)
-          : 0,
+        cancelledDay: totCancelledDay,
+        cancelPct: monthCancelBase ? totCancelled / monthCancelBase : 0,
+        cancelPctDay: dayCancelBase ? totCancelledDay / dayCancelBase : 0,
       },
     };
   }
@@ -1688,76 +1731,83 @@
 
   let srView = { search: "", filter: "" };
 
-  function renderSalesReportTable(sr) {
-    const live = sr.live || todayKeys();
-    const hint = $("#sr-live-hint");
-    if (hint) {
-      hint.textContent = `As of ${live.label} · Month ${live.monthKey} · Ach% = Delivery÷Target · 2nd Ach% = Del+VSND÷Target · click row for VINs`;
-    }
+  const SR_COLS = [
+    { key: "No", label: "No" },
+    { key: "Plant", label: "Plant" },
+    { key: "Salesman", label: "Salesman" },
+    { key: "Sales Employee", label: "Sales Employee" },
+    { key: "Proforma", label: "Proforma" },
+    { key: "Delivery", label: "Delivery" },
+    { key: "Target", label: "Target" },
+    { key: "Ach%", label: "Ach%" },
+    { key: "Del+VSND", label: "Del+VSND" },
+    { key: "Ach% (Sales)", label: "Ach%" },
+    { key: "Diff", label: "Diff" },
+    { key: "Cancelled BOs", label: "Cancelled BOs", divide: true },
+    { key: "Cancellation %", label: "Cancellation %" },
+    { key: "Can. Target 30%", label: "Can. Target 30%" },
+    { key: "Gap +/-", label: "Gap +/-" },
+    { key: "Notes", label: "" },
+  ];
 
-    const SR_COLS = [
-      { key: "No", label: "No" },
-      { key: "Plant", label: "Plant" },
-      { key: "Salesman", label: "Salesman" },
-      { key: "Sales Employee", label: "Sales Employee" },
-      { key: "Proforma", label: "Proforma" },
-      { key: "Delivery", label: "Delivery" },
-      { key: "Target", label: "Target" },
-      { key: "Ach%", label: "Ach%" },
-      { key: "Del+VSND", label: "Del+VSND" },
-      { key: "Ach% (Sales)", label: "Ach%" },
-      { key: "Diff", label: "Diff" },
-      { key: "Cancelled BOs", label: "Cancelled BOs", divide: true },
-      { key: "Cancellation %", label: "Cancellation %" },
-      { key: "Can. Target 30%", label: "Can. Target 30%" },
-      { key: "Gap +/-", label: "Gap +/-" },
-      { key: "Notes", label: "" },
-    ];
-    const YELLOW = new Set(["Proforma", "Delivery"]);
-    const DIV0_KEYS = new Set(["Ach%", "Ach% (Sales)", "Cancellation %", "Gap +/-"]);
-
-    let rows = sr.rows.map((r) => ({
-      No: r.No,
-      Plant: r.Plant,
-      Salesman: r.Salesman,
-      "Sales Employee": r["Sales Employee"],
-      Proforma: r.Proforma,
-      Delivery: r.Delivery,
-      Target: r.Target,
-      "Ach%": r["Ach%"],
-      "Del+VSND": r["Del+VSND"],
-      "Ach% (Sales)": r["Ach% (Sales)"],
-      Diff: r.Diff,
-      "Cancelled BOs": r["Cancelled BOs"],
-      "Cancellation %": r["Cancellation %"],
-      "Can. Target 30%": r["Can. Target 30%"],
-      "Gap +/-": r["Gap +/-"],
-      Notes: r.Notes || "",
-      _key: r._key,
-      _vins: r._vins,
-      _full: r,
-    }));
-
+  function filterSrRows(baseRows) {
+    let rows = baseRows.slice();
     const q = srView.search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
         String(r["Sales Employee"]).toLowerCase().includes(q) ||
         String(r.Plant).toLowerCase().includes(q) ||
         String(r.Salesman).toLowerCase().includes(q) ||
-        String(r.Notes).toLowerCase().includes(q)
+        String(r.Notes || "").toLowerCase().includes(q)
       );
     }
     if (srView.filter) {
       rows = rows.filter((r) => {
-        if (r["Ach%"] === "#DIV/0!") return srView.filter === "below";
-        const n = parseFloat(String(r["Ach%"])) || 0;
+        const ach = r["Ach%"];
+        if (ach === "#DIV/0!") return srView.filter === "below";
+        const n = parseFloat(String(ach)) || 0;
         return srView.filter === "above" ? n >= 100 : n < 100;
       });
     }
+    return rows;
+  }
+
+  function mapPeriodRow(r, period) {
+    const block = period === "day" ? (r.day || {}) : (r.month || r);
+    return {
+      No: r.No,
+      Plant: r.Plant,
+      Salesman: r.Salesman,
+      "Sales Employee": r["Sales Employee"],
+      Proforma: block.Proforma,
+      Delivery: block.Delivery,
+      Target: block.Target,
+      "Ach%": block["Ach%"],
+      "Del+VSND": block["Del+VSND"],
+      "Ach% (Sales)": block["Ach% (Sales)"],
+      Diff: block.Diff,
+      "Cancelled BOs": block["Cancelled BOs"],
+      "Cancellation %": block["Cancellation %"],
+      "Can. Target 30%": block["Can. Target 30%"] || "30%",
+      "Gap +/-": block["Gap +/-"],
+      Notes: block.Notes || r.Notes || "",
+      _key: r._key,
+      _vins: r._vins,
+      _full: r,
+      _period: period,
+    };
+  }
+
+  function renderXlTable(rows, totalsObj, tableSel, footSel, footText) {
+    const YELLOW = new Set(["Proforma", "Delivery"]);
+    const DIV0_KEYS = new Set(["Ach%", "Ach% (Sales)", "Cancellation %", "Gap +/-"]);
+    const tableEl = $(tableSel);
+    const footEl = $(footSel);
+    if (!tableEl) return;
 
     if (!rows.length) {
-      $("#sr-table-wrap").innerHTML = `<p class="foot" style="padding:16px">No rows to show.</p>`;
-      $("#sr-table-foot").textContent = "0 rows";
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">No rows to show.</p>`;
+      if (footEl) footEl.textContent = "0 rows";
       return;
     }
 
@@ -1784,16 +1834,49 @@
       `<tr class="emp-row" data-emp-key="${escapeHtml(r._key || "")}">${SR_COLS.map((c) => cellHtml(r, c, idx)).join("")}</tr>`
     ).join("");
 
+    const totalsRow = `<tr>${SR_COLS.map((c) => {
+      let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
+      if (c.divide) cls += " col-divide";
+      return `<td class="${cls}">${escapeHtml(String(totalsObj[c.key] ?? ""))}</td>`;
+    }).join("")}</tr>`;
+
+    tableEl.innerHTML = `<table class="xl-table"><thead><tr>${SR_COLS.map((c) =>
+      `<th class="${c.divide ? "col-divide" : ""}">${escapeHtml(c.label)}</th>`
+    ).join("")}</tr></thead><tbody>${body}</tbody><tfoot>${totalsRow}</tfoot></table>`;
+    if (footEl) footEl.textContent = footText;
+  }
+
+  function buildTotalsObj(sr, period) {
     const t = sr.totals;
+    if (period === "day") {
+      const totDelivery = t.deliveryDay || 0;
+      const totTarget = t.dayTarget || 0;
+      const totDelVsnd = t.delVsndDay || 0;
+      const cancelBase = (t.proformaDay || 0) + totDelivery + (t.cancelledDay || 0);
+      return {
+        No: "",
+        Plant: "TOTAL",
+        Salesman: "",
+        "Sales Employee": "",
+        Proforma: t.proformaDay,
+        Delivery: totDelivery,
+        Target: totTarget,
+        "Ach%": totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+        "Del+VSND": totDelVsnd,
+        "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+        Diff: t.diffDay,
+        "Cancelled BOs": t.cancelledDay || 0,
+        "Cancellation %": cancelBase ? Math.round(((t.cancelledDay || 0) / cancelBase) * 100) + "%" : "#DIV/0!",
+        "Can. Target 30%": "30%",
+        "Gap +/-": cancelBase ? Math.round((0.30 - ((t.cancelledDay || 0) / cancelBase)) * 100) + "%" : "#DIV/0!",
+        Notes: "",
+      };
+    }
     const totDelivery = t.deliveryMonth || 0;
     const totTarget = t.target || 0;
     const totDelVsnd = t.delVsnd || 0;
-    const totAch = totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!";
-    const totAchSales = totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!";
     const cancelBase = (t.proformaMonth || 0) + totDelivery + (t.cancelled || 0);
-    const totCancelPct = cancelBase ? Math.round(((t.cancelled || 0) / cancelBase) * 100) + "%" : "#DIV/0!";
-    const totGap = cancelBase ? Math.round((0.30 - ((t.cancelled || 0) / cancelBase)) * 100) + "%" : "#DIV/0!";
-    const totObj = {
+    return {
       No: "",
       Plant: "TOTAL",
       Salesman: "",
@@ -1801,27 +1884,110 @@
       Proforma: t.proformaMonth,
       Delivery: totDelivery,
       Target: totTarget,
-      "Ach%": totAch,
+      "Ach%": totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
       "Del+VSND": totDelVsnd,
-      "Ach% (Sales)": totAchSales,
+      "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
       Diff: t.diff,
       "Cancelled BOs": t.cancelled,
-      "Cancellation %": totCancelPct,
+      "Cancellation %": cancelBase ? Math.round(((t.cancelled || 0) / cancelBase) * 100) + "%" : "#DIV/0!",
       "Can. Target 30%": "30%",
-      "Gap +/-": totGap,
+      "Gap +/-": cancelBase ? Math.round((0.30 - ((t.cancelled || 0) / cancelBase)) * 100) + "%" : "#DIV/0!",
       Notes: "",
     };
-    const totalsRow = `<tr>${SR_COLS.map((c) => {
-      let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
-      if (c.divide) cls += " col-divide";
-      return `<td class="${cls}">${escapeHtml(String(totObj[c.key] ?? ""))}</td>`;
-    }).join("")}</tr>`;
+  }
 
-    $("#sr-table-wrap").innerHTML = `<table class="xl-table"><thead><tr>${SR_COLS.map((c) =>
-      `<th class="${c.divide ? "col-divide" : ""}">${escapeHtml(c.label)}</th>`
-    ).join("")}</tr></thead><tbody>${body}</tbody><tfoot>${totalsRow}</tfoot></table>`;
-    $("#sr-table-foot").textContent = `${formatNumber(rows.length)} employees · Ach% (1)=Delivery÷Target · Ach% (2)=Del+VSND÷Target · Gap=30%−Cancel%`;
-    window._srExportRows = rows.map(({ _key, _vins, _full, ...rest }) => rest);
+  function renderKpiStrip(el, sr, period) {
+    if (!el) return;
+    if (!sr.rows.length) { el.style.display = "none"; return; }
+    el.style.display = "";
+    const t = sr.totals;
+    const live = sr.live || todayKeys();
+    const isDay = period === "day";
+    const target = isDay ? (t.dayTarget || 0) : (t.target || 0);
+    const delivery = isDay ? (t.deliveryDay || 0) : (t.deliveryMonth || 0);
+    const proforma = isDay ? (t.proformaDay || 0) : (t.proformaMonth || 0);
+    const delVsnd = isDay ? (t.delVsndDay || 0) : (t.delVsnd || 0);
+    const diff = isDay ? (t.diffDay || 0) : (t.diff || 0);
+    const cancelPct = Math.round(((isDay ? t.cancelPctDay : t.cancelPct) || 0) * 100);
+    const gapLabel = isDay
+      ? "Today Gap"
+      : `${(live.now || new Date()).toLocaleString("en-US", { month: "long" })} Gap`;
+    const gapVal = target - delivery;
+    const remainTotal = Math.max(0, target - delVsnd);
+    const remainConfirm = Math.max(0, target - delivery);
+    const allocGap = Math.abs(proforma - delivery);
+
+    el.innerHTML = `
+      <div class="xl-kpi-cell blue">
+        <span class="lab">Target</span>
+        <span class="val">${formatNumber(target)}</span>
+      </div>
+      <div class="xl-kpi-cell blue">
+        <span class="lab">${escapeHtml(gapLabel)}</span>
+        <span class="val">${formatNumber(gapVal)}</span>
+      </div>
+      <div class="xl-kpi-cell green">
+        <span class="lab">Del+VSND</span>
+        <span class="val">${formatNumber(delVsnd)}</span>
+      </div>
+      <div class="xl-kpi-cell split">
+        <span class="lab">Remaining of allocation</span>
+        <div class="subrow">
+          <div class="sub"><div class="s-lab">Total</div><div class="s-val">${formatNumber(remainTotal)}</div></div>
+          <div class="sub"><div class="s-lab">Confirm</div><div class="s-val">${formatNumber(remainConfirm)}</div></div>
+        </div>
+      </div>
+      <div class="xl-kpi-cell blue">
+        <span class="lab">Dif of sales</span>
+        <span class="val">${formatNumber(diff)}</span>
+      </div>
+      <div class="xl-kpi-cell peach">
+        <span class="lab">Gap between allocation &amp; actual sales</span>
+        <span class="val">${formatNumber(allocGap)}</span>
+      </div>
+      <div class="xl-kpi-cell cancel">
+        <span class="lab">Cancelled Bos %</span>
+        <span class="val">${cancelPct}%</span>
+      </div>
+    `;
+  }
+
+  function renderSalesReportTable(sr) {
+    const live = sr.live || todayKeys();
+    const hint = $("#sr-live-hint");
+    if (hint) {
+      hint.textContent = `As of ${live.label} · Day ${live.dayKey} · Month ${live.monthKey} · Daily target = monthly ÷ ${sr.daysInMonth || 30} days`;
+    }
+    const dayTitle = $("#sr-day-title");
+    if (dayTitle) dayTitle.textContent = `Day to Date · ${live.label}`;
+    const monthTitle = $("#sr-month-title");
+    if (monthTitle) {
+      const monthLabel = (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
+      monthTitle.textContent = `Month to Date · ${monthLabel}`;
+    }
+
+    const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
+    const monthRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "month")));
+
+    renderXlTable(
+      dayRows,
+      buildTotalsObj(sr, "day"),
+      "#sr-day-table-wrap",
+      "#sr-day-table-foot",
+      `${formatNumber(dayRows.length)} employees · today Proforma/Delivery · Daily Target = Month Target ÷ ${sr.daysInMonth || 30}`
+    );
+    renderXlTable(
+      monthRows,
+      buildTotalsObj(sr, "month"),
+      "#sr-table-wrap",
+      "#sr-table-foot",
+      `${formatNumber(monthRows.length)} employees · Ach% (1)=Delivery÷Target · Ach% (2)=Del+VSND÷Target · Gap=30%−Cancel%`
+    );
+
+    window._srExportRows = [
+      ...dayRows.map(({ _key, _vins, _full, _period, ...rest }) => ({ Period: "Day", ...rest })),
+      ...monthRows.map(({ _key, _vins, _full, _period, ...rest }) => ({ Period: "Month", ...rest })),
+    ];
     window._srRowsByKey = Object.fromEntries(sr.rows.map((r) => [r._key, r]));
   }
 
@@ -1829,25 +1995,37 @@
     const row = window._srRowsByKey && window._srRowsByKey[key];
     if (!row) return;
     const live = (window._data && window._data.salesReport && window._data.salesReport.live) || todayKeys();
+    const day = row.day || {};
+    const month = row.month || row;
     $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
-    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · Live ${live.label} · Ach% = Delivery ÷ Target`;
+    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · Live ${live.label}`;
     const vins = row._vins || [];
     $("#emp-drawer-body").innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:.85rem;color:#64748b">Day to Date</h4>
       <div class="emp-stat-grid">
-        <div class="emp-stat"><div class="k">Proforma (Month)</div><div class="v">${formatNumber(row.Proforma)}</div></div>
-        <div class="emp-stat"><div class="k">Delivery (Month)</div><div class="v">${formatNumber(row.Delivery)}</div></div>
-        <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(row.Target)}</div></div>
-        <div class="emp-stat"><div class="k">Ach% (Delivery)</div><div class="v">${escapeHtml(row["Ach%"])}</div></div>
-        <div class="emp-stat"><div class="k">Del + VSND</div><div class="v">${formatNumber(row["Del+VSND"])}</div></div>
-        <div class="emp-stat"><div class="k">Ach% (Sales)</div><div class="v">${escapeHtml(row["Ach% (Sales)"])}</div></div>
-        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(row.Diff)}</div></div>
-        <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(row["Cancelled BOs"])}</div></div>
-        <div class="emp-stat"><div class="k">Cancellation %</div><div class="v">${escapeHtml(row["Cancellation %"] || row["Cancel %"])}</div></div>
-        <div class="emp-stat"><div class="k">Gap +/-</div><div class="v">${escapeHtml(row["Gap +/-"])}</div></div>
+        <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(day.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(day.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Daily Target</div><div class="v">${formatNumber(day.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(day["Ach%"] || "—")}</div></div>
+        <div class="emp-stat"><div class="k">Del+VSND</div><div class="v">${formatNumber(day["Del+VSND"])}</div></div>
+        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(day.Diff)}</div></div>
+      </div>
+      <h4 style="margin:12px 0 8px;font-size:.85rem;color:#64748b">Month to Date</h4>
+      <div class="emp-stat-grid">
+        <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Delivery)</div><div class="v">${escapeHtml(month["Ach%"])}</div></div>
+        <div class="emp-stat"><div class="k">Del + VSND</div><div class="v">${formatNumber(month["Del+VSND"])}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Sales)</div><div class="v">${escapeHtml(month["Ach% (Sales)"])}</div></div>
+        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(month.Diff)}</div></div>
+        <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"])}</div></div>
+        <div class="emp-stat"><div class="k">Cancellation %</div><div class="v">${escapeHtml(month["Cancellation %"] || "—")}</div></div>
+        <div class="emp-stat"><div class="k">Gap +/-</div><div class="v">${escapeHtml(month["Gap +/-"] || "—")}</div></div>
         <div class="emp-stat"><div class="k">Notes</div><div class="v">${escapeHtml(row.Notes || "—")}</div></div>
         <div class="emp-stat"><div class="k">VIN count</div><div class="v">${formatNumber(vins.length)}</div></div>
       </div>
-      <h4 style="margin:0 0 8px;font-size:.92rem">VIN numbers</h4>
+      <h4 style="margin:12px 0 8px;font-size:.92rem">VIN numbers</h4>
       ${vins.length
         ? `<div class="vin-list">${vins.map((v) => `
             <div class="vin-item">${escapeHtml(v.vin)}
@@ -1867,52 +2045,8 @@
   }
 
   function renderSalesReportKpis(sr) {
-    const t = sr.totals;
-    const srKpis = $("#sr-kpis");
-    if (!sr.rows.length) { srKpis.style.display = "none"; return; }
-    srKpis.style.display = "";
-    const live = sr.live || todayKeys();
-    const monthLabel = (live.now || new Date()).toLocaleString("en-US", { month: "long" });
-    const monthGap = (t.target || 0) - (t.deliveryMonth || 0);
-    const remainTotal = Math.max(0, (t.target || 0) - (t.delVsnd || 0));
-    const remainConfirm = Math.max(0, (t.target || 0) - (t.deliveryMonth || 0));
-    const difSales = t.diff != null ? t.diff : ((t.target || 0) - (t.delVsnd || 0));
-    const allocGap = Math.abs((t.proformaMonth || 0) - (t.deliveryMonth || 0));
-    const cancelPct = Math.round((t.cancelPct || 0) * 100);
-
-    srKpis.innerHTML = `
-      <div class="xl-kpi-cell blue">
-        <span class="lab">Target</span>
-        <span class="val">${formatNumber(t.target)}</span>
-      </div>
-      <div class="xl-kpi-cell blue">
-        <span class="lab">${escapeHtml(monthLabel)} Gap</span>
-        <span class="val">${formatNumber(monthGap)}</span>
-      </div>
-      <div class="xl-kpi-cell green">
-        <span class="lab">Del+VSND</span>
-        <span class="val">${formatNumber(t.delVsnd)}</span>
-      </div>
-      <div class="xl-kpi-cell split">
-        <span class="lab">Remaining of allocation</span>
-        <div class="subrow">
-          <div class="sub"><div class="s-lab">Total</div><div class="s-val">${formatNumber(remainTotal)}</div></div>
-          <div class="sub"><div class="s-lab">Confirm</div><div class="s-val">${formatNumber(remainConfirm)}</div></div>
-        </div>
-      </div>
-      <div class="xl-kpi-cell blue">
-        <span class="lab">Dif of sales</span>
-        <span class="val">${formatNumber(difSales)}</span>
-      </div>
-      <div class="xl-kpi-cell peach">
-        <span class="lab">Gap between allocation &amp; actual sales</span>
-        <span class="val">${formatNumber(allocGap)}</span>
-      </div>
-      <div class="xl-kpi-cell cancel">
-        <span class="lab">Cancelled Bos %</span>
-        <span class="val">${cancelPct}%</span>
-      </div>
-    `;
+    renderKpiStrip($("#sr-day-kpis"), sr, "day");
+    renderKpiStrip($("#sr-kpis"), sr, "month");
   }
 
   function renderSalesReportCharts(sr) {
