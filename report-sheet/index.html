@@ -583,6 +583,7 @@
           <button type="button" id="sr-csv-btn">Export CSV</button>
           <span class="hint" id="sr-live-hint">Day to Date + Month to Date · click employee for VINs</span>
         </div>
+        <div class="banner load" id="sr-diag-banner" style="display:none;margin:0;border-radius:0;border-left:none;border-right:none"></div>
 
         <div class="xl-sheet" style="border-radius:0 0 12px 12px;border-top:none">
           <div class="xl-kpi" id="sr-day-kpis"></div>
@@ -919,12 +920,60 @@
 
   function parseDate(v) {
     if (v == null || v === "") return null;
-    if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
-    if (typeof v === "number" && v > 20000 && v < 100000) {
-      return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      // Normalize to local calendar date (avoid UTC day-shift for Excel serials)
+      return new Date(v.getFullYear(), v.getMonth(), v.getDate());
     }
-    const t = Date.parse(String(v));
-    return Number.isNaN(t) ? null : new Date(t);
+    if (typeof v === "number" && Number.isFinite(v)) {
+      // Excel serial (days since 1899-12-30). Support fractions (date+time).
+      if (v > 20000 && v < 100000) {
+        const utc = new Date(Date.UTC(1899, 11, 30) + Math.floor(v) * 86400000);
+        return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+      }
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+
+    // DD/MM/YYYY or DD-MM-YYYY (common in KSA exports)
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s|$)/);
+    if (m) {
+      let dd = Number(m[1]);
+      let mm = Number(m[2]);
+      let yy = Number(m[3]);
+      if (yy < 100) yy += 2000;
+      // If first part > 12, it's clearly DD/MM; if second > 12, it's MM/DD
+      if (dd > 31 && mm <= 31) { const t = dd; dd = mm; mm = t; }
+      if (mm > 12 && dd <= 12) { const t = dd; dd = mm; mm = t; }
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+        return new Date(yy, mm - 1, dd);
+      }
+    }
+
+    // YYYY-MM-DD
+    m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+    if (m) {
+      const yy = Number(m[1]);
+      const mm = Number(m[2]);
+      const dd = Number(m[3]);
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return new Date(yy, mm - 1, dd);
+    }
+
+    const t = Date.parse(s);
+    if (Number.isNaN(t)) return null;
+    const d = new Date(t);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function toYyyymm(d) {
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return "";
+    return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function toYyyymmdd(d) {
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return "";
+    return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
   }
 
   function toNumber(v) {
@@ -1008,22 +1057,13 @@
       .replace(/\s+/g, " ");
   }
 
-  function toYyyymm(d) {
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-  }
-
-  function toYyyymmdd(d) {
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  }
-
   function todayKeys(now = new Date()) {
+    const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return {
-      now,
-      monthKey: toYyyymm(now),
-      dayKey: toYyyymmdd(now),
-      label: cellToString(now),
+      now: local,
+      monthKey: toYyyymm(local),
+      dayKey: toYyyymmdd(local),
+      label: cellToString(local),
     };
   }
 
@@ -1053,16 +1093,31 @@
       if (hits >= 3) break;
     }
 
-    // Excel formulas use fixed letters even if a title row exists above headers.
-    // Prefer letter columns A / P / V; if header looks like real names, still use letter indices.
-    const idxA = colLetterToIndex("A");
-    const idxP = colLetterToIndex("P");
-    const idxV = colLetterToIndex("V");
+    // Excel formulas use fixed letters A / P / V; also fall back to header names.
+    let idxA = colLetterToIndex("A");
+    let idxP = colLetterToIndex("P");
+    let idxV = colLetterToIndex("V");
 
     const headerRow = matrix[headerIdx] || [];
     const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+    const headerSalesman = findHeaderIdx([
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
+    ]);
+    const headerProforma = findHeaderIdx([
+      (n) => n.includes("proforma") && n.includes("date"),
+      (n) => n === "proforma" || n === "proforma date" || n === "pro forma date",
+    ]);
+    const headerDelivery = findHeaderIdx([
+      (n) => n.includes("delivery") && n.includes("date"),
+      (n) => n === "delivery" || n === "delivery date" || n === "delivered date",
+    ]);
+    if (headerSalesman >= 0) idxA = headerSalesman;
+    if (headerProforma >= 0) idxP = headerProforma;
+    if (headerDelivery >= 0) idxV = headerDelivery;
+
     // Excel Rowdata formulas start at row 2 → skip header row (index 0+)
-    const start = bestHits >= 1 ? headerIdx + 1 : 1;
+    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
 
     const rows = [];
     for (let r = start; r < matrix.length; r += 1) {
@@ -1444,6 +1499,40 @@
       }
     });
 
+    // Diagnostics: help explain empty Day/Month calculations
+    const diag = {
+      salesRows: salesRows.length,
+      withProformaDate: 0,
+      withDeliveryDate: 0,
+      monthProforma: 0,
+      monthDelivery: 0,
+      dayProforma: 0,
+      dayDelivery: 0,
+      sampleProforma: [],
+      sampleDelivery: [],
+      today: live.label,
+      monthKey: live.monthKey,
+      dayKey: live.dayKey,
+    };
+    salesRows.forEach((r) => {
+      if (r.proformaDate) {
+        diag.withProformaDate += 1;
+        const ym = toYyyymm(r.proformaDate);
+        const yd = toYyyymmdd(r.proformaDate);
+        if (ym === live.monthKey) diag.monthProforma += 1;
+        if (yd === live.dayKey) diag.dayProforma += 1;
+        if (diag.sampleProforma.length < 5) diag.sampleProforma.push(cellToString(r.proformaDate) || ym || "(unparsed)");
+      }
+      if (r.deliveryDate) {
+        diag.withDeliveryDate += 1;
+        const ym = toYyyymm(r.deliveryDate);
+        const yd = toYyyymmdd(r.deliveryDate);
+        if (ym === live.monthKey) diag.monthDelivery += 1;
+        if (yd === live.dayKey) diag.dayDelivery += 1;
+        if (diag.sampleDelivery.length < 5) diag.sampleDelivery.push(cellToString(r.deliveryDate) || ym || "(unparsed)");
+      }
+    });
+
     // VSND fallback from open BOs without VIN (not in Excel formula, keep for report)
     bos.forEach((b) => {
       const p = ensure(b.salesman);
@@ -1580,6 +1669,7 @@
       rows,
       live,
       daysInMonth,
+      diag,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
@@ -2079,6 +2169,35 @@
     if (monthTitle) {
       const monthLabel = (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
       monthTitle.textContent = `Month to Date · ${monthLabel}`;
+    }
+
+    const diag = sr.diag || {};
+    const diagEl = $("#sr-diag-banner");
+    if (diagEl) {
+      const dayEmpty = (diag.dayProforma || 0) === 0 && (diag.dayDelivery || 0) === 0;
+      const monthEmpty = (diag.monthProforma || 0) === 0 && (diag.monthDelivery || 0) === 0;
+      if (diag.salesRows > 0 && (dayEmpty || monthEmpty)) {
+        diagEl.style.display = "block";
+        diagEl.className = "banner load show";
+        const samples = [...new Set([...(diag.sampleProforma || []), ...(diag.sampleDelivery || [])])].slice(0, 6).join(", ");
+        diagEl.innerHTML = `
+          <b>Why Proforma/Delivery look empty:</b>
+          Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
+          parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
+          parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
+          Matching <b>today (${escapeHtml(diag.today || live.label)})</b>:
+          Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
+          Delivery <b>${formatNumber(diag.dayDelivery || 0)}</b>.
+          Matching <b>this month (${escapeHtml(diag.monthKey || live.monthKey)})</b>:
+          Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>,
+          Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>.
+          ${samples ? `<br>Sample dates found in file: ${escapeHtml(samples)}` : "<br>No readable dates found in Col P/V — check those columns contain dates."}
+          <br><span style="font-weight:500">Day to Date only counts rows dated today. Scroll to Month to Date for current-month totals. Ach%/Diff still calculate from Target even when Proforma/Delivery are 0.</span>
+        `;
+      } else if (diagEl) {
+        diagEl.style.display = "none";
+        diagEl.classList.remove("show");
+      }
     }
 
     const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
