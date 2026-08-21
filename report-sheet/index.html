@@ -324,7 +324,7 @@
     }
     .drawer-backdrop.show { display: block; }
     .emp-drawer {
-      position: fixed; top: 0; right: 0; height: 100%; width: min(460px, 100%);
+      position: fixed; top: 0; right: 0; height: 100%; width: min(560px, 100%);
       background: #fff; z-index: 90;
       box-shadow: -12px 0 40px rgba(15, 23, 42, .12);
       transform: translateX(100%); transition: transform .25s ease;
@@ -348,19 +348,44 @@
     }
     .emp-stat .k { font-size: .68rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
     .emp-stat .v { font-size: 1.12rem; font-weight: 700; margin-top: 6px; color: #0f172a; }
+    .vin-section-title {
+      margin: 14px 0 8px; font-size: .82rem; font-weight: 700; color: #334155;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .vin-section-title .count {
+      font-size: .72rem; font-weight: 600; color: var(--muted);
+      background: #e8eef5; border-radius: 999px; padding: 2px 8px;
+    }
     .vin-list {
-      display: grid; gap: 8px; max-height: 320px; overflow: auto;
+      display: grid; gap: 10px; max-height: 420px; overflow: auto;
       border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: #fff;
     }
     .vin-item {
-      font-family: ui-monospace, Consolas, monospace; font-size: .8rem; font-weight: 600;
-      direction: ltr; text-align: left; padding: 10px 12px; border-radius: 10px;
+      direction: ltr; text-align: left; padding: 12px 12px 10px; border-radius: 12px;
       background: var(--surface-2); border: 1px solid var(--line);
     }
-    .vin-item span {
-      display: block; font-family: var(--font); font-size: .68rem; font-weight: 500;
-      color: var(--muted); margin-top: 4px;
+    .vin-item .vin-code {
+      font-family: ui-monospace, Consolas, monospace; font-size: .88rem; font-weight: 700;
+      color: #0f172a; letter-spacing: .02em;
     }
+    .vin-item .vin-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
+    .vin-tag {
+      font-family: var(--font); font-size: .65rem; font-weight: 700;
+      border-radius: 999px; padding: 2px 8px;
+      background: #e8eef5; color: #475569;
+    }
+    .vin-tag.pro { background: #fff2cc; color: #92400e; }
+    .vin-tag.del { background: #c6efce; color: #166534; }
+    .vin-details {
+      display: grid; gap: 4px;
+      font-family: var(--font); font-size: .72rem; font-weight: 500; color: #475569;
+    }
+    .vin-details div {
+      display: grid; grid-template-columns: 110px 1fr; gap: 6px;
+      padding: 3px 0; border-top: 1px solid #eef2f7;
+    }
+    .vin-details .dk { color: #94a3b8; font-weight: 600; }
+    .vin-details .dv { color: #1e293b; word-break: break-word; }
 
     /* Excel-like Sales Report */
     .xl-sheet {
@@ -1304,10 +1329,51 @@
           totalOrders: 0,
           vins: [],
           vinSet: new Set(),
+          records: [],
         });
       }
       return byPerson.get(key);
     };
+
+    function buildSalesRecord(r, flags) {
+      const vin = extractVinValue(r.vin) || extractVinValue(
+        Object.values(r).find((v) => extractVinValue(v))
+      );
+      const skipKeys = new Set([
+        "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
+      ]);
+      const extra = [];
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        if (skipKeys.has(normHeader(k).replace(/\s+/g, ""))) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        // Skip duplicate of known date/vin columns by value only if header is Column N
+        extra.push({ key: k, value: val });
+      });
+      // Prefer common fields first in display order
+      const preferredOrder = ["product", "model", "year", "model year", "exterior", "interior", "suffix", "customer", "amount", "status", "location"];
+      extra.sort((a, b) => {
+        const ia = preferredOrder.findIndex((p) => normHeader(a.key).includes(p));
+        const ib = preferredOrder.findIndex((p) => normHeader(b.key).includes(p));
+        if (ia < 0 && ib < 0) return String(a.key).localeCompare(String(b.key));
+        if (ia < 0) return 1;
+        if (ib < 0) return -1;
+        return ia - ib;
+      });
+      return {
+        vin: vin || "",
+        salesman: cellToString(r.salesman).trim(),
+        plant: cellToString(r.plant || "").trim(),
+        salesmanCode: cellToString(r.salesmanCode || "").trim(),
+        proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+        deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        product: cellToString(r.product || r.Product || r.model || r.Model || "").trim(),
+        extra: extra.slice(0, 24),
+        flags,
+        source: "Sales Raw",
+      };
+    }
 
     // Seed 29 admin employees + their targets
     employeeTargets.forEach((e) => {
@@ -1333,20 +1399,30 @@
       if (plantVal) p.plant = plantVal;
       if (codeVal) p.salesmanCode = codeVal;
 
-      let kind = "";
+      const flags = {
+        proformaMonth: false,
+        proformaDay: false,
+        deliveryMonth: false,
+        deliveryDay: false,
+      };
       if (r.proformaDate) {
         const ym = toYyyymm(r.proformaDate);
         const yd = toYyyymmdd(r.proformaDate);
-        if (ym === live.monthKey) { p.proformaMonth += 1; kind = kind || "Proforma (month)"; }
-        if (yd === live.dayKey) { p.proformaDay += 1; kind = "Proforma (today)"; }
+        if (ym === live.monthKey) { p.proformaMonth += 1; flags.proformaMonth = true; }
+        if (yd === live.dayKey) { p.proformaDay += 1; flags.proformaDay = true; }
       }
       if (r.deliveryDate) {
         const ym = toYyyymm(r.deliveryDate);
         const yd = toYyyymmdd(r.deliveryDate);
-        if (ym === live.monthKey) { p.deliveryMonth += 1; kind = kind ? kind + " · Delivery (month)" : "Delivery (month)"; }
-        if (yd === live.dayKey) { p.deliveryDay += 1; kind = "Delivery (today)"; }
+        if (ym === live.monthKey) { p.deliveryMonth += 1; flags.deliveryMonth = true; }
+        if (yd === live.dayKey) { p.deliveryDay += 1; flags.deliveryDay = true; }
       }
       p.totalOrders += 1;
+
+      // Keep detailed raw rows for proforma/delivery (month or day) for the click drawer
+      if (flags.proformaMonth || flags.proformaDay || flags.deliveryMonth || flags.deliveryDay) {
+        p.records.push(buildSalesRecord(r, flags));
+      }
 
       const vin = extractVinValue(r.vin) || extractVinValue(
         Object.values(r).find((v) => extractVinValue(v))
@@ -1356,7 +1432,12 @@
         p.vins.push({
           vin,
           source: "Sales Raw",
-          kind: kind || "Sales row",
+          kind: [
+            flags.proformaDay ? "Proforma (today)" : "",
+            flags.proformaMonth ? "Proforma (month)" : "",
+            flags.deliveryDay ? "Delivery (today)" : "",
+            flags.deliveryMonth ? "Delivery (month)" : "",
+          ].filter(Boolean).join(" · ") || "Sales row",
           proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
           deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
         });
@@ -1475,6 +1556,7 @@
         day: dayBlock,
         month: monthBlock,
         _vins: p.vins.slice(),
+        _records: p.records.slice(),
         _key: nameKey(p.salesman),
         _achGap: p.deliveryMonth - p.target,
       };
@@ -2024,6 +2106,42 @@
     window._srRowsByKey = Object.fromEntries(sr.rows.map((r) => [r._key, r]));
   }
 
+  function renderVinCard(rec) {
+    const tags = [];
+    if (rec.flags?.proformaDay) tags.push('<span class="vin-tag pro">Proforma today</span>');
+    else if (rec.flags?.proformaMonth) tags.push('<span class="vin-tag pro">Proforma month</span>');
+    if (rec.flags?.deliveryDay) tags.push('<span class="vin-tag del">Delivery today</span>');
+    else if (rec.flags?.deliveryMonth) tags.push('<span class="vin-tag del">Delivery month</span>');
+
+    const rows = [];
+    rows.push(["Proforma (Col P)", rec.proformaDate || "—"]);
+    rows.push(["Delivery (Col V)", rec.deliveryDate || "—"]);
+    if (rec.product) rows.push(["Product", rec.product]);
+    if (rec.plant) rows.push(["Plant", rec.plant]);
+    if (rec.salesmanCode) rows.push(["Salesman code", rec.salesmanCode]);
+    (rec.extra || []).forEach((x) => {
+      if (/proforma|delivery|vin|salesman name|^salesman$/i.test(String(x.key))) return;
+      rows.push([x.key, x.value]);
+    });
+
+    return `<div class="vin-item">
+      <div class="vin-code">${escapeHtml(rec.vin || "No VIN")}</div>
+      <div class="vin-tags">${tags.join("") || '<span class="vin-tag">Sales Raw</span>'}</div>
+      <div class="vin-details">
+        ${rows.map(([k, v]) => `<div><span class="dk">${escapeHtml(k)}</span><span class="dv">${escapeHtml(v)}</span></div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  function renderVinSection(title, list) {
+    return `
+      <div class="vin-section-title">${escapeHtml(title)} <span class="count">${formatNumber(list.length)}</span></div>
+      ${list.length
+        ? `<div class="vin-list">${list.map(renderVinCard).join("")}</div>`
+        : `<p class="foot" style="margin:0 0 8px">No matching Sales Raw rows.</p>`}
+    `;
+  }
+
   function openEmployeeDrawer(key) {
     const row = window._srRowsByKey && window._srRowsByKey[key];
     if (!row) return;
@@ -2031,8 +2149,14 @@
     const day = row.day || {};
     const month = row.month || row;
     $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
-    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · Live ${live.label}`;
+    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · Live ${live.label} · VIN details from Sales Raw`;
+    const records = row._records || [];
+    const proformaMonth = records.filter((r) => r.flags?.proformaMonth);
+    const deliveryMonth = records.filter((r) => r.flags?.deliveryMonth);
+    const proformaDay = records.filter((r) => r.flags?.proformaDay);
+    const deliveryDay = records.filter((r) => r.flags?.deliveryDay);
     const vins = row._vins || [];
+
     $("#emp-drawer-body").innerHTML = `
       <h4 style="margin:0 0 8px;font-size:.85rem;color:#64748b">Day to Date</h4>
       <div class="emp-stat-grid">
@@ -2052,19 +2176,16 @@
         <div class="emp-stat"><div class="k">Del + VSND</div><div class="v">${formatNumber(month["Del+VSND"])}</div></div>
         <div class="emp-stat"><div class="k">Ach% (Sales)</div><div class="v">${escapeHtml(month["Ach% (Sales)"])}</div></div>
         <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(month.Diff)}</div></div>
-        <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"])}</div></div>
-        <div class="emp-stat"><div class="k">Cancellation %</div><div class="v">${escapeHtml(month["Cancellation %"] || "—")}</div></div>
-        <div class="emp-stat"><div class="k">Gap +/-</div><div class="v">${escapeHtml(month["Gap +/-"] || "—")}</div></div>
-        <div class="emp-stat"><div class="k">Notes</div><div class="v">${escapeHtml(row.Notes || "—")}</div></div>
-        <div class="emp-stat"><div class="k">VIN count</div><div class="v">${formatNumber(vins.length)}</div></div>
+        <div class="emp-stat"><div class="k">Unique VINs</div><div class="v">${formatNumber(vins.length)}</div></div>
       </div>
-      <h4 style="margin:12px 0 8px;font-size:.92rem">VIN numbers</h4>
-      ${vins.length
-        ? `<div class="vin-list">${vins.map((v) => `
-            <div class="vin-item">${escapeHtml(v.vin)}
-              <span>${escapeHtml(v.source)} · ${escapeHtml(v.kind)}${v.deliveryDate ? " · Del " + escapeHtml(v.deliveryDate) : ""}${v.proformaDate ? " · Pro " + escapeHtml(v.proformaDate) : ""}</span>
-            </div>`).join("")}</div>`
-        : `<p class="foot">No VIN numbers found for this employee in the uploaded files.</p>`}
+
+      <h4 style="margin:16px 0 4px;font-size:.95rem">Sales Raw · Day</h4>
+      ${renderVinSection("Proforma today (Col P)", proformaDay)}
+      ${renderVinSection("Delivery today (Col V)", deliveryDay)}
+
+      <h4 style="margin:16px 0 4px;font-size:.95rem">Sales Raw · Month</h4>
+      ${renderVinSection("Proforma this month (Col P)", proformaMonth)}
+      ${renderVinSection("Delivery this month (Col V)", deliveryMonth)}
     `;
     $("#emp-backdrop").classList.add("show");
     $("#emp-drawer").classList.add("open");
