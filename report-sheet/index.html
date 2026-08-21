@@ -441,7 +441,7 @@
     }
     .xl-table {
       width: 100%; border-collapse: collapse; font-size: .82rem;
-      min-width: 880px;
+      min-width: 1280px;
     }
     .xl-table th, .xl-table td {
       border: 1px solid #c5cdd8;
@@ -461,6 +461,11 @@
     .xl-table td.tl { text-align: left; }
     .xl-table td.num { font-variant-numeric: tabular-nums; font-weight: 600; }
     .xl-table td.col-yellow { background: #fff2cc; }
+    .xl-table th.col-divide,
+    .xl-table td.col-divide {
+      border-left: 4px solid #9dc3e6;
+    }
+    .xl-table td.note { text-align: left; font-weight: 600; color: #334155; }
     .xl-table tbody tr:nth-child(even) td:not(.col-yellow) { background: #fafafa; }
     .xl-table tbody tr.emp-row:hover td { background: #eef6fc !important; }
     .xl-table tbody tr.emp-row:hover td.col-yellow { background: #ffe9a8 !important; }
@@ -650,17 +655,17 @@
     target: 0,
   }));
 
-  /** Plant / salesman code defaults (Excel Month-to-Date columns) */
+  /** Plant / salesman code / notes defaults (Excel Month-to-Date columns) */
   const EMPLOYEE_META = {
-    "samaher abdulmoghni al amri": { plant: "Telesales North", code: "36684" },
-    "haneen talal aqeel al madani": { plant: "Telesales North", code: "36685" },
-    "not assigned": { plant: "eCommerce Sales – Retail", code: "" },
-    "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "12020" },
+    "samaher abdulmoghni al amri": { plant: "Telesales North", code: "36684", note: "Vacation" },
+    "haneen talal aqeel al madani": { plant: "Telesales North", code: "36685", note: "Vacation" },
+    "not assigned": { plant: "eCommerce Sales – Retail", code: "", note: "Vacation" },
+    "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "12020", note: "Fleet" },
   };
 
   function employeeMeta(name) {
     const key = nameKey(name);
-    return EMPLOYEE_META[key] || { plant: "eCommerce Sales – Retail", code: "" };
+    return EMPLOYEE_META[key] || { plant: "eCommerce Sales – Retail", code: "", note: "" };
   }
 
   function isPlaceholderName(name) {
@@ -1274,6 +1279,7 @@
           salesman: display,
           plant: meta.plant,
           salesmanCode: meta.code,
+          note: meta.note || "",
           proformaDay: 0,
           proformaMonth: 0,
           deliveryDay: 0,
@@ -1395,9 +1401,11 @@
       const deliveryAch = p.target ? delivery / p.target : 0;
       const salesAch = p.target ? delPlusVsnd / p.target : 0;
       const diff = p.target - delPlusVsnd;
-      const orderBase = Math.max(1, p.proformaMonth + p.deliveryMonth + p.cancelledBOs);
-      const cancelPct = p.cancelledBOs / orderBase;
-      const gap = CANCEL_TARGET - cancelPct;
+      const cancelBase = proforma + delivery + p.cancelledBOs;
+      const cancelPct = cancelBase ? p.cancelledBOs / cancelBase : null;
+      const gap = cancelPct == null ? null : CANCEL_TARGET - cancelPct;
+      const pct1 = (n) => (n * 100).toFixed(1) + "%";
+      const pct0 = (n) => Math.round(n * 100) + "%";
       return {
         No: 0,
         Plant: p.plant || "—",
@@ -1406,21 +1414,25 @@
         Proforma: proforma,
         Delivery: delivery,
         Target: p.target,
-        "Ach%": p.target ? (deliveryAch * 100).toFixed(1) + "%" : "#DIV/0!",
+        "Ach%": p.target ? pct1(deliveryAch) : "#DIV/0!",
         "Del+VSND": delPlusVsnd,
+        "Ach% (Sales)": p.target ? pct1(salesAch) : "#DIV/0!",
+        Diff: diff,
+        "Cancelled BOs": p.cancelledBOs,
+        "Cancellation %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
+        "Can. Target 30%": "30%",
+        "Gap +/-": gap == null ? "#DIV/0!" : pct0(gap),
+        Notes: p.note || "",
         "Proforma (Day)": p.proformaDay,
         "Proforma (Month)": p.proformaMonth,
         "Delivery (Day)": p.deliveryDay,
         "Delivery (Month)": p.deliveryMonth,
         "Del−Target": achGap,
-        "Ach % (Del)": p.target ? (deliveryAch * 100).toFixed(1) + "%" : "#DIV/0!",
+        "Ach % (Del)": p.target ? pct1(deliveryAch) : "#DIV/0!",
         VSND: p.vsnd,
-        "Ach % (Sales)": p.target ? (salesAch * 100).toFixed(1) + "%" : "#DIV/0!",
-        Diff: diff,
-        "Cancelled BOs": p.cancelledBOs,
-        "Cancel %": (cancelPct * 100).toFixed(1) + "%",
+        "Ach % (Sales)": p.target ? pct1(salesAch) : "#DIV/0!",
+        "Cancel %": cancelPct == null ? "#DIV/0!" : pct0(cancelPct),
         "Can. Target": "30%",
-        "Gap +/-": (gap * 100).toFixed(1) + "%",
         _deliveryAch: deliveryAch,
         _salesAch: salesAch,
         _cancelPct: cancelPct,
@@ -1680,11 +1692,29 @@
     const live = sr.live || todayKeys();
     const hint = $("#sr-live-hint");
     if (hint) {
-      hint.textContent = `As of ${live.label} · Month ${live.monthKey} · Ach% = Delivery ÷ Target · click row for VINs`;
+      hint.textContent = `As of ${live.label} · Month ${live.monthKey} · Ach% = Delivery÷Target · 2nd Ach% = Del+VSND÷Target · click row for VINs`;
     }
 
-    const SR_HEADERS = ["No", "Plant", "Salesman", "Sales Employee", "Proforma", "Delivery", "Target", "Ach%", "Del+VSND"];
+    const SR_COLS = [
+      { key: "No", label: "No" },
+      { key: "Plant", label: "Plant" },
+      { key: "Salesman", label: "Salesman" },
+      { key: "Sales Employee", label: "Sales Employee" },
+      { key: "Proforma", label: "Proforma" },
+      { key: "Delivery", label: "Delivery" },
+      { key: "Target", label: "Target" },
+      { key: "Ach%", label: "Ach%" },
+      { key: "Del+VSND", label: "Del+VSND" },
+      { key: "Ach% (Sales)", label: "Ach%" },
+      { key: "Diff", label: "Diff" },
+      { key: "Cancelled BOs", label: "Cancelled BOs", divide: true },
+      { key: "Cancellation %", label: "Cancellation %" },
+      { key: "Can. Target 30%", label: "Can. Target 30%" },
+      { key: "Gap +/-", label: "Gap +/-" },
+      { key: "Notes", label: "" },
+    ];
     const YELLOW = new Set(["Proforma", "Delivery"]);
+    const DIV0_KEYS = new Set(["Ach%", "Ach% (Sales)", "Cancellation %", "Gap +/-"]);
 
     let rows = sr.rows.map((r) => ({
       No: r.No,
@@ -1696,6 +1726,13 @@
       Target: r.Target,
       "Ach%": r["Ach%"],
       "Del+VSND": r["Del+VSND"],
+      "Ach% (Sales)": r["Ach% (Sales)"],
+      Diff: r.Diff,
+      "Cancelled BOs": r["Cancelled BOs"],
+      "Cancellation %": r["Cancellation %"],
+      "Can. Target 30%": r["Can. Target 30%"],
+      "Gap +/-": r["Gap +/-"],
+      Notes: r.Notes || "",
       _key: r._key,
       _vins: r._vins,
       _full: r,
@@ -1706,7 +1743,8 @@
       rows = rows.filter((r) =>
         String(r["Sales Employee"]).toLowerCase().includes(q) ||
         String(r.Plant).toLowerCase().includes(q) ||
-        String(r.Salesman).toLowerCase().includes(q)
+        String(r.Salesman).toLowerCase().includes(q) ||
+        String(r.Notes).toLowerCase().includes(q)
       );
     }
     if (srView.filter) {
@@ -1723,33 +1761,38 @@
       return;
     }
 
-    const body = rows.map((r, idx) => {
-      const cells = SR_HEADERS.map((h) => {
-        let raw = h === "No" ? (idx + 1) : r[h];
-        let val = escapeHtml(raw == null || raw === "" ? "—" : raw);
-        let cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" || h === "Sales Employee" ? "tl" : "num");
-        if (h === "Ach%") {
-          if (String(raw) === "#DIV/0!") {
-            val = `<span class="xl-div0">#DIV/0!</span>`;
-            cls = "num";
-          } else {
-            val = escapeHtml(String(raw));
-          }
-        }
-        if (h === "Sales Employee") {
-          val = `<span class="emp-name">${escapeHtml(r["Sales Employee"])}</span><span class="emp-hint">Click for VINs</span>`;
-          cls = "tl";
-        }
-        if (h === "No") cls = "num";
-        return `<td class="${cls}">${val}</td>`;
-      }).join("");
-      return `<tr class="emp-row" data-emp-key="${escapeHtml(r._key || "")}">${cells}</tr>`;
-    }).join("");
+    const cellHtml = (r, col, idx) => {
+      const h = col.key;
+      let raw = h === "No" ? (idx + 1) : r[h];
+      let val = escapeHtml(raw == null || raw === "" ? (h === "Notes" ? "" : "—") : raw);
+      let cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" || h === "Sales Employee" || h === "Notes" ? "tl" : "num");
+      if (col.divide) cls += " col-divide";
+      if (h === "Notes") cls += " note";
+      if (DIV0_KEYS.has(h) && String(raw) === "#DIV/0!") {
+        val = `<span class="xl-div0">#DIV/0!</span>`;
+        cls = (col.divide ? "col-divide " : "") + "num";
+      }
+      if (h === "Sales Employee") {
+        val = `<span class="emp-name">${escapeHtml(r["Sales Employee"])}</span><span class="emp-hint">Click for VINs</span>`;
+        cls = "tl";
+      }
+      if (h === "No") cls = "num";
+      return `<td class="${cls}">${val}</td>`;
+    };
+
+    const body = rows.map((r, idx) =>
+      `<tr class="emp-row" data-emp-key="${escapeHtml(r._key || "")}">${SR_COLS.map((c) => cellHtml(r, c, idx)).join("")}</tr>`
+    ).join("");
 
     const t = sr.totals;
     const totDelivery = t.deliveryMonth || 0;
     const totTarget = t.target || 0;
+    const totDelVsnd = t.delVsnd || 0;
     const totAch = totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!";
+    const totAchSales = totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!";
+    const cancelBase = (t.proformaMonth || 0) + totDelivery + (t.cancelled || 0);
+    const totCancelPct = cancelBase ? Math.round(((t.cancelled || 0) / cancelBase) * 100) + "%" : "#DIV/0!";
+    const totGap = cancelBase ? Math.round((0.30 - ((t.cancelled || 0) / cancelBase)) * 100) + "%" : "#DIV/0!";
     const totObj = {
       No: "",
       Plant: "TOTAL",
@@ -1759,15 +1802,25 @@
       Delivery: totDelivery,
       Target: totTarget,
       "Ach%": totAch,
-      "Del+VSND": t.delVsnd,
+      "Del+VSND": totDelVsnd,
+      "Ach% (Sales)": totAchSales,
+      Diff: t.diff,
+      "Cancelled BOs": t.cancelled,
+      "Cancellation %": totCancelPct,
+      "Can. Target 30%": "30%",
+      "Gap +/-": totGap,
+      Notes: "",
     };
-    const totalsRow = `<tr>${SR_HEADERS.map((h) => {
-      const cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" ? "tl" : "num");
-      return `<td class="${cls}">${escapeHtml(String(totObj[h] ?? ""))}</td>`;
+    const totalsRow = `<tr>${SR_COLS.map((c) => {
+      let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
+      if (c.divide) cls += " col-divide";
+      return `<td class="${cls}">${escapeHtml(String(totObj[c.key] ?? ""))}</td>`;
     }).join("")}</tr>`;
 
-    $("#sr-table-wrap").innerHTML = `<table class="xl-table"><thead><tr>${SR_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody><tfoot>${totalsRow}</tfoot></table>`;
-    $("#sr-table-foot").textContent = `${formatNumber(rows.length)} employees · click a name for personal result & VINs`;
+    $("#sr-table-wrap").innerHTML = `<table class="xl-table"><thead><tr>${SR_COLS.map((c) =>
+      `<th class="${c.divide ? "col-divide" : ""}">${escapeHtml(c.label)}</th>`
+    ).join("")}</tr></thead><tbody>${body}</tbody><tfoot>${totalsRow}</tfoot></table>`;
+    $("#sr-table-foot").textContent = `${formatNumber(rows.length)} employees · Ach% (1)=Delivery÷Target · Ach% (2)=Del+VSND÷Target · Gap=30%−Cancel%`;
     window._srExportRows = rows.map(({ _key, _vins, _full, ...rest }) => rest);
     window._srRowsByKey = Object.fromEntries(sr.rows.map((r) => [r._key, r]));
   }
@@ -1784,12 +1837,14 @@
         <div class="emp-stat"><div class="k">Proforma (Month)</div><div class="v">${formatNumber(row.Proforma)}</div></div>
         <div class="emp-stat"><div class="k">Delivery (Month)</div><div class="v">${formatNumber(row.Delivery)}</div></div>
         <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(row.Target)}</div></div>
-        <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(row["Ach%"])}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Delivery)</div><div class="v">${escapeHtml(row["Ach%"])}</div></div>
         <div class="emp-stat"><div class="k">Del + VSND</div><div class="v">${formatNumber(row["Del+VSND"])}</div></div>
-        <div class="emp-stat"><div class="k">VSND</div><div class="v">${formatNumber(row.VSND)}</div></div>
-        <div class="emp-stat"><div class="k">Del − Target</div><div class="v">${formatNumber(row["Del−Target"])}</div></div>
+        <div class="emp-stat"><div class="k">Ach% (Sales)</div><div class="v">${escapeHtml(row["Ach% (Sales)"])}</div></div>
+        <div class="emp-stat"><div class="k">Diff</div><div class="v">${formatNumber(row.Diff)}</div></div>
         <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(row["Cancelled BOs"])}</div></div>
-        <div class="emp-stat"><div class="k">Cancel %</div><div class="v">${escapeHtml(row["Cancel %"])}</div></div>
+        <div class="emp-stat"><div class="k">Cancellation %</div><div class="v">${escapeHtml(row["Cancellation %"] || row["Cancel %"])}</div></div>
+        <div class="emp-stat"><div class="k">Gap +/-</div><div class="v">${escapeHtml(row["Gap +/-"])}</div></div>
+        <div class="emp-stat"><div class="k">Notes</div><div class="v">${escapeHtml(row.Notes || "—")}</div></div>
         <div class="emp-stat"><div class="k">VIN count</div><div class="v">${formatNumber(vins.length)}</div></div>
       </div>
       <h4 style="margin:0 0 8px;font-size:.92rem">VIN numbers</h4>
@@ -1897,14 +1952,20 @@
       backgroundColor: sr.rows.map((r) => (parseFloat(r["Ach%"]) || 0) >= 100 ? "rgba(13, 148, 136, 0.85)" : (parseFloat(r["Ach%"]) || 0) >= 70 ? "rgba(180, 83, 9, 0.8)" : "rgba(200, 30, 44, 0.82)"),
     });
 
-    upsertChart("chart-cancel", "bar", labels, sr.rows.map((r) => parseFloat(r["Cancel %"]) || 0), {
+    upsertChart("chart-cancel", "bar", labels, sr.rows.map((r) => parseFloat(r["Cancellation %"] || r["Cancel %"]) || 0), {
       label: "Cancel %",
-      backgroundColor: sr.rows.map((r) => (parseFloat(r["Cancel %"]) || 0) <= 30 ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)"),
+      backgroundColor: sr.rows.map((r) => {
+        const n = parseFloat(r["Cancellation %"] || r["Cancel %"]);
+        return (!Number.isFinite(n) || n <= 30) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
+      }),
     });
 
     upsertChart("chart-sr-gap", "bar", labels, sr.rows.map((r) => parseFloat(r["Gap +/-"]) || 0), {
       label: "Gap +/-",
-      backgroundColor: sr.rows.map((r) => (parseFloat(r["Gap +/-"]) || 0) >= 0 ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)"),
+      backgroundColor: sr.rows.map((r) => {
+        const n = parseFloat(r["Gap +/-"]);
+        return (!Number.isFinite(n) || n >= 0) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
+      }),
     });
   }
 
