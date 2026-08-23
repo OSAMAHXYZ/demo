@@ -70,14 +70,20 @@
         <div class="xl-toolbar">
           <input id="sr-search" type="search" placeholder="Search employee…" />
           <select id="sr-filter">
-            <option value="">All</option>
+            <option value="">All employees</option>
             <option value="above">Ach% ≥100%</option>
             <option value="below">Ach% &lt;100%</option>
           </select>
+          <select id="sr-chart-mode" title="Who appears on charts">
+            <option value="active">Charts: Active only</option>
+            <option value="top12">Charts: Top 12</option>
+            <option value="all">Charts: All names</option>
+          </select>
           <button type="button" id="sr-csv-btn">Export CSV</button>
-          <span class="hint" id="sr-live-hint">Dashboard · charts + Day/Month sheets · click employee for VINs</span>
+          <span class="hint" id="sr-live-hint">Click any name on a chart or table to see their Excel rows</span>
         </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
+        <p class="foot" id="sr-charts-note" style="margin:0 0 10px"></p>
 
         <div class="charts sr-charts" id="sr-charts">
           <article class="card chart-span-2">
@@ -1263,46 +1269,66 @@
     const fontFamily = "'Manrope', 'Segoe UI', sans-serif";
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
+    const empKeys = opts.empKeys || null;
     const datasetsExtra = { ...opts };
     delete datasetsExtra.horizontal;
     delete datasetsExtra.datasets;
     delete datasetsExtra.legend;
     delete datasetsExtra.max;
+    delete datasetsExtra.empKeys;
+    delete datasetsExtra.clickable;
     const softScale = {
       beginAtZero: true,
       suggestedMax: opts.max,
       grid: { color: "rgba(148, 163, 184, 0.18)", drawBorder: false },
-      ticks: { precision: 0, color: "#94a3b8", font: { size: 11, family: fontFamily } },
+      ticks: { precision: 0, color: "#64748b", font: { size: 12, family: fontFamily, weight: "600" } },
       border: { display: false },
     };
     const categoryScale = {
       grid: { display: false },
       ticks: {
         maxRotation: horizontal ? 0 : 40,
-        autoSkip: !horizontal,
-        color: "#64748b",
-        font: { size: 10, family: fontFamily },
+        autoSkip: false,
+        color: "#0b3a66",
+        font: { size: 12, family: fontFamily, weight: "700" },
       },
       border: { display: false },
     };
+    const clickable = !!(opts.clickable && empKeys && empKeys.length);
     charts[id] = new Chart(canvas, {
       type,
       data: {
         labels,
-        datasets: opts.datasets || [{
+        datasets: (opts.datasets || [{
           data: values,
           backgroundColor: type === "doughnut" ? colors : (opts.backgroundColor || "rgba(11, 58, 102, 0.85)"),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? "#fff" : undefined,
           borderRadius: type === "bar" ? 6 : 0,
           ...datasetsExtra,
-        }],
+        }]).map((ds) => ({
+          categoryPercentage: 0.78,
+          barPercentage: 0.88,
+          maxBarThickness: 28,
+          ...ds,
+        })),
       },
       options: {
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 450, easing: "easeOutQuart" },
+        animation: { duration: 400, easing: "easeOutQuart" },
+        onHover: clickable
+          ? (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; }
+          : undefined,
+        onClick: clickable
+          ? (_evt, els) => {
+              if (!els.length) return;
+              const idx = els[0].index;
+              const key = empKeys[idx];
+              if (key) openEmployeeDrawer(key);
+            }
+          : undefined,
         plugins: {
           legend: {
             display: type === "doughnut" || opts.legend === true || !!(opts.datasets && opts.datasets.length > 1),
@@ -1310,10 +1336,13 @@
           },
           tooltip: {
             backgroundColor: "rgba(30, 41, 59, 0.92)",
-            titleFont: { family: fontFamily, size: 12 },
+            titleFont: { family: fontFamily, size: 13, weight: "700" },
             bodyFont: { family: fontFamily, size: 12 },
-            padding: 10,
+            padding: 12,
             cornerRadius: 10,
+            callbacks: clickable
+              ? { footer: () => "Click to open Excel rows" }
+              : undefined,
           },
         },
         scales: type === "doughnut"
@@ -1515,7 +1544,7 @@
     ).join("");
   }
 
-  let srView = { search: "", filter: "" };
+  let srView = { search: "", filter: "", chartMode: "active" };
 
   const SR_COLS = [
     { key: "No", label: "No" },
@@ -1849,7 +1878,9 @@
     const day = row.day || {};
     const month = row.month || row;
     $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
-    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · Live ${live.label} · VIN details from Sales Raw`;
+    $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · Excel rows from Sales Raw`;
+
+    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
     const records = row._records || [];
     const proformaMonth = records.filter((r) => r.flags?.proformaMonth);
     const deliveryMonth = records.filter((r) => r.flags?.deliveryMonth);
@@ -1879,17 +1910,75 @@
         <div class="emp-stat"><div class="k">Unique VINs</div><div class="v">${formatNumber(vins.length)}</div></div>
       </div>
 
-      <h4 style="margin:16px 0 4px;font-size:.95rem">Sales Raw · Day</h4>
+      <h4 style="margin:16px 0 6px;font-size:.95rem">All Excel rows for this employee <span class="count-pill">${formatNumber(rawRows.length)}</span></h4>
+      <p class="foot" style="margin:0 0 8px">Full Sales Raw lines matching this name (Col A).</p>
+      ${renderEmployeeRawTable(rawRows)}
+
+      <h4 style="margin:18px 0 4px;font-size:.95rem">Counted in Day / Month formulas</h4>
       ${renderVinSection("Proforma today (Col P)", proformaDay)}
       ${renderVinSection("Delivery today (Col V)", deliveryDay)}
-
-      <h4 style="margin:16px 0 4px;font-size:.95rem">Sales Raw · Month</h4>
       ${renderVinSection("Proforma this month (Col P)", proformaMonth)}
       ${renderVinSection("Delivery this month (Col V)", deliveryMonth)}
     `;
     $("#emp-backdrop").classList.add("show");
     $("#emp-drawer").classList.add("open");
     $("#emp-drawer").setAttribute("aria-hidden", "false");
+  }
+
+  function renderEmployeeRawTable(rawRows) {
+    if (!rawRows.length) {
+      return `<p class="foot" style="padding:12px;background:var(--surface-2);border-radius:10px">No Sales Raw rows found for this name. Check Admin target name matches Col A exactly.</p>`;
+    }
+    const preferred = [
+      "VIN", "Product", "Model", "Proforma Date", "Delivery Date", "Plant",
+      "Customer", "Amount", "Status", "Year", "Suffix", "Exterior", "Interior",
+    ];
+    const skip = new Set(["salesman", "salesmancode", "_sheet"]);
+    const keySet = new Set();
+    rawRows.forEach((r) => {
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        const compact = normHeader(k).replace(/\s+/g, "");
+        if (skip.has(compact)) return;
+        if (/^column\d+$/i.test(compact)) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        keySet.add(k);
+      });
+    });
+    const keys = [...keySet].sort((a, b) => {
+      const ia = preferred.findIndex((p) => normHeader(a).includes(normHeader(p)));
+      const ib = preferred.findIndex((p) => normHeader(b).includes(normHeader(p)));
+      if (ia < 0 && ib < 0) return String(a).localeCompare(String(b));
+      if (ia < 0) return 1;
+      if (ib < 0) return -1;
+      return ia - ib;
+    }).slice(0, 14);
+
+    const cols = ["#", "Proforma (P)", "Delivery (V)", "VIN", ...keys.filter((k) => {
+      const n = normHeader(k);
+      return !n.includes("proforma") && !n.includes("delivery") && n !== "vin";
+    }).slice(0, 10)];
+
+    const body = rawRows.slice(0, 800).map((r, i) => {
+      const vin = extractVinValue(r.vin) || extractVinValue(Object.values(r).find((v) => extractVinValue(v))) || "";
+      const cells = [
+        String(i + 1),
+        r.proformaDate ? cellToString(r.proformaDate) : "",
+        r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        vin,
+        ...cols.slice(4).map((k) => cellToString(r[k]).trim()),
+      ];
+      return `<tr>${cells.map((c) => `<td>${escapeHtml(c || "—")}</td>`).join("")}</tr>`;
+    }).join("");
+
+    return `<div class="emp-raw-wrap">
+      <table class="emp-raw-table">
+        <thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      ${rawRows.length > 800 ? `<p class="foot">Showing first 800 of ${formatNumber(rawRows.length)} rows</p>` : ""}
+    </div>`;
   }
 
   function closeEmployeeDrawer() {
@@ -1915,23 +2004,60 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function chartRowsForMode(allRows) {
+    const base = filterSrRows(allRows || []);
+    const mode = srView.chartMode || "active";
+    const score = (r) =>
+      (Number(r["Delivery (Month)"]) || 0) * 3 +
+      (Number(r["Proforma (Month)"]) || 0) * 2 +
+      (Number(r["Delivery (Day)"]) || 0) * 2 +
+      (Number(r["Proforma (Day)"]) || 0) +
+      (Number(r.Target) || 0) * 0.01;
+
+    if (mode === "all") return base;
+
+    if (mode === "top12") {
+      return base.slice().sort((a, b) => score(b) - score(a)).slice(0, 12);
+    }
+
+    // active: any day/month proforma or delivery
+    const active = base.filter((r) =>
+      (Number(r["Delivery (Month)"]) || 0) > 0 ||
+      (Number(r["Proforma (Month)"]) || 0) > 0 ||
+      (Number(r["Delivery (Day)"]) || 0) > 0 ||
+      (Number(r["Proforma (Day)"]) || 0) > 0
+    );
+    if (active.length) return active.slice().sort((a, b) => score(b) - score(a));
+    // fallback when everything is zero: top 12 by target so chart stays readable
+    return base.slice().sort((a, b) => (Number(b.Target) || 0) - (Number(a.Target) || 0)).slice(0, 12);
+  }
+
   function renderSalesReportCharts(sr) {
-    const rows = filterSrRows(sr.rows || []);
+    const rows = chartRowsForMode(sr.rows || []);
     if (!rows.length) return;
 
-    const tallH = Math.min(560, Math.max(280, rows.length * 18 + 48));
+    const tallH = Math.min(720, Math.max(320, rows.length * 36 + 72));
     document.querySelectorAll("#sr-charts .chart-box.tall").forEach((el) => {
       el.style.height = tallH + "px";
     });
 
     const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const empKeys = rows.map((r) => r._key);
+    const clickOpts = { horizontal: true, clickable: true, empKeys };
     const achColors = rows.map((r) => {
       const n = parsePct(r["Ach%"]) || 0;
       return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)";
     });
 
+    const modeNote = $("#sr-charts-note");
+    if (modeNote) {
+      const mode = srView.chartMode || "active";
+      const label = mode === "all" ? "all employees" : mode === "top12" ? "top 12" : "active employees only";
+      modeNote.textContent = `Showing ${rows.length} · ${label} · click a name to open Excel rows`;
+    }
+
     upsertChart("chart-sr", "bar", labels, null, {
-      horizontal: true,
+      ...clickOpts,
       legend: true,
       datasets: [
         {
@@ -1959,14 +2085,14 @@
     });
 
     upsertChart("chart-sr-ach", "bar", labels, rows.map((r) => parsePct(r["Ach%"]) || 0), {
-      horizontal: true,
+      ...clickOpts,
       label: "Ach%",
       backgroundColor: achColors,
       max: 120,
     });
 
     upsertChart("chart-sr-day", "bar", labels, null, {
-      horizontal: true,
+      ...clickOpts,
       legend: true,
       datasets: [
         {
@@ -1987,7 +2113,7 @@
     });
 
     const plantMap = new Map();
-    rows.forEach((r) => {
+    filterSrRows(sr.rows || []).forEach((r) => {
       const plant = String(r.Plant || "—").trim() || "—";
       plantMap.set(plant, (plantMap.get(plant) || 0) + (Number(r["Delivery (Month)"]) || 0));
     });
@@ -2005,7 +2131,7 @@
     );
 
     upsertChart("chart-cancel", "bar", labels, rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0), {
-      horizontal: true,
+      ...clickOpts,
       label: "Cancel %",
       backgroundColor: rows.map((r) => {
         const n = parsePct(r["Cancellation %"] || r["Cancel %"]);
@@ -2014,7 +2140,7 @@
     });
 
     upsertChart("chart-sr-gap", "bar", labels, rows.map((r) => parsePct(r["Gap +/-"]) || 0), {
-      horizontal: true,
+      ...clickOpts,
       label: "Gap +/-",
       backgroundColor: rows.map((r) => {
         const n = parsePct(r["Gap +/-"]);
@@ -2185,6 +2311,12 @@
     if (window._data && hasSalesReportInputs()) {
       renderSalesReportCharts(window._data.salesReport);
       renderSalesReportTable(window._data.salesReport);
+    }
+  });
+  $("#sr-chart-mode").addEventListener("change", (e) => {
+    srView.chartMode = e.target.value || "active";
+    if (window._data && hasSalesReportInputs()) {
+      renderSalesReportCharts(window._data.salesReport);
     }
   });
   $("#sr-csv-btn").addEventListener("click", () => {

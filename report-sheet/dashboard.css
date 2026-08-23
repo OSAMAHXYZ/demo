@@ -481,7 +481,7 @@ button:disabled {
 }
 
 .chart-box.tall {
-  height: min(420px, max(280px, 28px * 14));
+  height: min(720px, max(320px, 36px * 12));
 }
 
 @media (max-width: 900px) {
@@ -779,7 +779,7 @@ footer.page-foot {
   top: 0;
   right: 0;
   height: 100%;
-  width: min(560px, 100%);
+  width: min(760px, 100%);
   background: #fff;
   z-index: 90;
   box-shadow: -12px 0 40px rgba(11, 42, 74, 0.14);
@@ -854,6 +854,55 @@ footer.page-foot {
   font-weight: 800;
   margin-top: 6px;
   color: var(--navy);
+}
+
+.count-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sky-soft);
+  color: var(--navy);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.emp-raw-wrap {
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+
+.emp-raw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  min-width: 640px;
+}
+
+.emp-raw-table th,
+.emp-raw-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.emp-raw-table th {
+  position: sticky;
+  top: 0;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+  z-index: 1;
+}
+
+.emp-raw-table tr:hover td {
+  background: rgba(11, 58, 102, 0.04);
 }
 
 .vin-section-title {
