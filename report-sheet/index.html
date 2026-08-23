@@ -18,7 +18,7 @@
     <div class="page-hero-inner">
       <div class="hero-brand">
         <h1>Sales Report Dashboard</h1>
-        <p>Live view · Excel &amp; targets pushed from Admin</p>
+        <p>Live dashboard · charts · Day &amp; Month sheets · Admin Push</p>
       </div>
       <div class="hero-logo">
         <div class="co">Abdul Latif Jameel</div>
@@ -65,7 +65,7 @@
       <!-- Panel tabs -->
       <div class="tabs" id="panel-tabs" style="margin-bottom:16px"></div>
 
-      <!-- PANEL: Sales Report (Excel layout) -->
+      <!-- PANEL: Sales Report Dashboard -->
       <div class="panel-section" id="panel-salesreport" style="display:none">
         <div class="xl-toolbar">
           <input id="sr-search" type="search" placeholder="Search employee…" />
@@ -75,30 +75,53 @@
             <option value="below">Ach% &lt;100%</option>
           </select>
           <button type="button" id="sr-csv-btn">Export CSV</button>
-          <span class="hint" id="sr-live-hint">Day to Date + Month to Date · click employee for VINs</span>
+          <span class="hint" id="sr-live-hint">Dashboard · charts + Day/Month sheets · click employee for VINs</span>
         </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
+        <div class="charts sr-charts" id="sr-charts">
+          <article class="card chart-span-2">
+            <h2>Month · Delivery / Proforma / Target</h2>
+            <div class="chart-box tall"><canvas id="chart-sr"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Month · Ach% (Delivery ÷ Target)</h2>
+            <div class="chart-box tall"><canvas id="chart-sr-ach"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Day · Delivery / Proforma</h2>
+            <div class="chart-box tall"><canvas id="chart-sr-day"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Delivery by Plant (Month)</h2>
+            <div class="chart-box"><canvas id="chart-sr-plant"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Month overview</h2>
+            <div class="chart-box"><canvas id="chart-sr-overview"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Cancellation %</h2>
+            <div class="chart-box tall"><canvas id="chart-cancel"></canvas></div>
+          </article>
+          <article class="card">
+            <h2>Gap +/- vs 30% cancel target</h2>
+            <div class="chart-box tall"><canvas id="chart-sr-gap"></canvas></div>
+          </article>
+        </div>
+
         <div class="xl-sheet">
-          <div class="xl-kpi" id="sr-day-kpis"></div>
           <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+          <div class="xl-kpi" id="sr-day-kpis"></div>
           <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
           <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
         </div>
 
         <div class="xl-sheet">
-          <div class="xl-kpi" id="sr-kpis"></div>
           <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+          <div class="xl-kpi" id="sr-kpis"></div>
           <div class="xl-table-wrap" id="sr-table-wrap"></div>
           <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-        </div>
-
-        <!-- Charts kept for rebuild; hidden to match Excel sheet look -->
-        <div class="charts" style="display:none" aria-hidden="true">
-          <article class="card"><h2>Delivery / Proforma / Target (Month)</h2><div class="chart-box"><canvas id="chart-sr"></canvas></div></article>
-          <article class="card"><h2>Ach% (Delivery ÷ Target)</h2><div class="chart-box"><canvas id="chart-sr-ach"></canvas></div></article>
-          <article class="card"><h2>Cancellation %</h2><div class="chart-box"><canvas id="chart-cancel"></canvas></div></article>
-          <article class="card"><h2>Gap +/- by Salesman</h2><div class="chart-box"><canvas id="chart-sr-gap"></canvas></div></article>
         </div>
       </div>
 
@@ -1236,53 +1259,68 @@
     const canvas = document.getElementById(id);
     if (!canvas) return;
     if (charts[id]) charts[id].destroy();
-    const colors = ["#c81e2c", "#64748b", "#94a3b8", "#0d9488", "#b45309", "#3b82f6", "#8b5cf6", "#0f766e"];
+    const colors = ["#0b3a66", "#c81e2c", "#0d9488", "#64748b", "#b45309", "#3b82f6", "#94a3b8", "#0f766e"];
+    const fontFamily = "'Manrope', 'Segoe UI', sans-serif";
+    const opts = extra || {};
+    const horizontal = !!opts.horizontal;
+    const datasetsExtra = { ...opts };
+    delete datasetsExtra.horizontal;
+    delete datasetsExtra.datasets;
+    delete datasetsExtra.legend;
+    delete datasetsExtra.max;
     const softScale = {
       beginAtZero: true,
+      suggestedMax: opts.max,
       grid: { color: "rgba(148, 163, 184, 0.18)", drawBorder: false },
-      ticks: { precision: 0, color: "#94a3b8", font: { size: 11, family: "'IBM Plex Sans', sans-serif" } },
+      ticks: { precision: 0, color: "#94a3b8", font: { size: 11, family: fontFamily } },
+      border: { display: false },
+    };
+    const categoryScale = {
+      grid: { display: false },
+      ticks: {
+        maxRotation: horizontal ? 0 : 40,
+        autoSkip: !horizontal,
+        color: "#64748b",
+        font: { size: 10, family: fontFamily },
+      },
       border: { display: false },
     };
     charts[id] = new Chart(canvas, {
       type,
       data: {
         labels,
-        datasets: [{
+        datasets: opts.datasets || [{
           data: values,
-          backgroundColor: type === "doughnut" ? colors : "rgba(200, 30, 44, 0.82)",
+          backgroundColor: type === "doughnut" ? colors : (opts.backgroundColor || "rgba(11, 58, 102, 0.85)"),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? "#fff" : undefined,
-          borderRadius: type === "bar" ? 8 : 0,
-          ...(extra || {}),
+          borderRadius: type === "bar" ? 6 : 0,
+          ...datasetsExtra,
         }],
       },
       options: {
+        indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 450, easing: "easeOutQuart" },
         plugins: {
           legend: {
-            display: type === "doughnut",
-            labels: { color: "#64748b", font: { size: 12, family: "'IBM Plex Sans', sans-serif" }, boxWidth: 12, padding: 14 },
+            display: type === "doughnut" || opts.legend === true || !!(opts.datasets && opts.datasets.length > 1),
+            labels: { color: "#64748b", font: { size: 12, family: fontFamily }, boxWidth: 12, padding: 14 },
           },
           tooltip: {
             backgroundColor: "rgba(30, 41, 59, 0.92)",
-            titleFont: { family: "'IBM Plex Sans', sans-serif", size: 12 },
-            bodyFont: { family: "'IBM Plex Sans', sans-serif", size: 12 },
+            titleFont: { family: fontFamily, size: 12 },
+            bodyFont: { family: fontFamily, size: 12 },
             padding: 10,
             cornerRadius: 10,
           },
         },
         scales: type === "doughnut"
           ? {}
-          : {
-              y: softScale,
-              x: {
-                grid: { display: false },
-                ticks: { maxRotation: 40, color: "#94a3b8", font: { size: 10, family: "'IBM Plex Sans', sans-serif" } },
-                border: { display: false },
-              },
-            },
+          : horizontal
+            ? { x: softScale, y: categoryScale }
+            : { y: softScale, x: categoryScale },
       },
     });
   }
@@ -1303,7 +1341,7 @@
   }
 
   const PANEL_DEFS = [
-    { id: "salesreport", label: "Sales Report" },
+    { id: "salesreport", label: "Sales Dashboard" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
   let activePanel = "salesreport";
@@ -1865,56 +1903,122 @@
     renderKpiStrip($("#sr-kpis"), sr, "month");
   }
 
-  function renderSalesReportCharts(sr) {
-    if (!sr.rows.length) return;
-    const labels = sr.rows.map((r) => r["Sales Employee"] || r.Salesman);
+  function shortEmpLabel(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 2) return parts.join(" ");
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  }
 
-    upsertChart("chart-sr", "bar", labels, sr.rows.map((r) => r["Delivery (Month)"]), {
-      label: "Delivery Month",
-      backgroundColor: "rgba(200, 30, 44, 0.82)",
+  function parsePct(v) {
+    if (v == null || v === "#DIV/0!") return null;
+    const n = parseFloat(String(v).replace(/%/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function renderSalesReportCharts(sr) {
+    const rows = filterSrRows(sr.rows || []);
+    if (!rows.length) return;
+
+    const tallH = Math.min(560, Math.max(280, rows.length * 18 + 48));
+    document.querySelectorAll("#sr-charts .chart-box.tall").forEach((el) => {
+      el.style.height = tallH + "px";
     });
-    if (charts["chart-sr"]) {
-      charts["chart-sr"].data.datasets.push(
+
+    const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const achColors = rows.map((r) => {
+      const n = parsePct(r["Ach%"]) || 0;
+      return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)";
+    });
+
+    upsertChart("chart-sr", "bar", labels, null, {
+      horizontal: true,
+      legend: true,
+      datasets: [
         {
-          label: "Proforma Month",
-          data: sr.rows.map((r) => r["Proforma (Month)"]),
-          backgroundColor: "rgba(148, 163, 184, 0.75)",
+          label: "Delivery",
+          data: rows.map((r) => r["Delivery (Month)"] || 0),
+          backgroundColor: "rgba(200, 30, 44, 0.85)",
           borderWidth: 0,
-          borderRadius: 8,
+          borderRadius: 5,
+        },
+        {
+          label: "Proforma",
+          data: rows.map((r) => r["Proforma (Month)"] || 0),
+          backgroundColor: "rgba(100, 116, 139, 0.75)",
+          borderWidth: 0,
+          borderRadius: 5,
         },
         {
           label: "Target",
-          data: sr.rows.map((r) => r.Target),
-          backgroundColor: "rgba(71, 85, 105, 0.8)",
+          data: rows.map((r) => r.Target || 0),
+          backgroundColor: "rgba(11, 58, 102, 0.8)",
           borderWidth: 0,
-          borderRadius: 8,
+          borderRadius: 5,
         },
-      );
-      charts["chart-sr"].options.plugins.legend = {
-        display: true,
-        labels: { color: "#64748b", font: { size: 12, family: "'IBM Plex Sans', sans-serif" }, boxWidth: 12, padding: 14 },
-      };
-      charts["chart-sr"].update();
-    }
-
-    upsertChart("chart-sr-ach", "bar", labels, sr.rows.map((r) => parseFloat(r["Ach%"]) || 0), {
-      label: "Ach%",
-      backgroundColor: sr.rows.map((r) => (parseFloat(r["Ach%"]) || 0) >= 100 ? "rgba(13, 148, 136, 0.85)" : (parseFloat(r["Ach%"]) || 0) >= 70 ? "rgba(180, 83, 9, 0.8)" : "rgba(200, 30, 44, 0.82)"),
+      ],
     });
 
-    upsertChart("chart-cancel", "bar", labels, sr.rows.map((r) => parseFloat(r["Cancellation %"] || r["Cancel %"]) || 0), {
+    upsertChart("chart-sr-ach", "bar", labels, rows.map((r) => parsePct(r["Ach%"]) || 0), {
+      horizontal: true,
+      label: "Ach%",
+      backgroundColor: achColors,
+      max: 120,
+    });
+
+    upsertChart("chart-sr-day", "bar", labels, null, {
+      horizontal: true,
+      legend: true,
+      datasets: [
+        {
+          label: "Delivery today",
+          data: rows.map((r) => r["Delivery (Day)"] || 0),
+          backgroundColor: "rgba(200, 30, 44, 0.85)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Proforma today",
+          data: rows.map((r) => r["Proforma (Day)"] || 0),
+          backgroundColor: "rgba(13, 148, 136, 0.8)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
+    });
+
+    const plantMap = new Map();
+    rows.forEach((r) => {
+      const plant = String(r.Plant || "—").trim() || "—";
+      plantMap.set(plant, (plantMap.get(plant) || 0) + (Number(r["Delivery (Month)"]) || 0));
+    });
+    const plantEntries = [...plantMap.entries()].sort((a, b) => b[1] - a[1]);
+    upsertChart("chart-sr-plant", "doughnut", plantEntries.map((x) => x[0]), plantEntries.map((x) => x[1]));
+
+    const t = sr.totals || {};
+    upsertChart("chart-sr-overview", "doughnut",
+      ["Delivery", "Proforma", "Remaining to target"],
+      [
+        t.deliveryMonth || 0,
+        Math.max(0, (t.proformaMonth || 0) - (t.deliveryMonth || 0)),
+        Math.max(0, (t.target || 0) - (t.proformaMonth || 0)),
+      ]
+    );
+
+    upsertChart("chart-cancel", "bar", labels, rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0), {
+      horizontal: true,
       label: "Cancel %",
-      backgroundColor: sr.rows.map((r) => {
-        const n = parseFloat(r["Cancellation %"] || r["Cancel %"]);
-        return (!Number.isFinite(n) || n <= 30) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
+      backgroundColor: rows.map((r) => {
+        const n = parsePct(r["Cancellation %"] || r["Cancel %"]);
+        return (n == null || n <= 30) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
       }),
     });
 
-    upsertChart("chart-sr-gap", "bar", labels, sr.rows.map((r) => parseFloat(r["Gap +/-"]) || 0), {
+    upsertChart("chart-sr-gap", "bar", labels, rows.map((r) => parsePct(r["Gap +/-"]) || 0), {
+      horizontal: true,
       label: "Gap +/-",
-      backgroundColor: sr.rows.map((r) => {
-        const n = parseFloat(r["Gap +/-"]);
-        return (!Number.isFinite(n) || n >= 0) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
+      backgroundColor: rows.map((r) => {
+        const n = parsePct(r["Gap +/-"]);
+        return (n == null || n >= 0) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
       }),
     });
   }
@@ -2071,11 +2175,17 @@
   });
   $("#sr-search").addEventListener("input", (e) => {
     srView.search = e.target.value;
-    if (window._data && hasSalesReportInputs()) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesReportInputs()) {
+      renderSalesReportCharts(window._data.salesReport);
+      renderSalesReportTable(window._data.salesReport);
+    }
   });
   $("#sr-filter").addEventListener("change", (e) => {
     srView.filter = e.target.value;
-    if (window._data && hasSalesReportInputs()) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesReportInputs()) {
+      renderSalesReportCharts(window._data.salesReport);
+      renderSalesReportTable(window._data.salesReport);
+    }
   });
   $("#sr-csv-btn").addEventListener("click", () => {
     const rows = window._srExportRows || [];
