@@ -47,13 +47,13 @@
 
     <div class="admin-bar" id="nav-bar">
       <button type="button" class="tab active" data-nav="dashboard" id="nav-dashboard" disabled>Live Dashboard</button>
-      <span class="hint">Upload Excel on Admin · Sales Report needs Sales Raw + Cancelled BO</span>
+      <span class="hint">Upload Excel on Admin · Sales Report builds from Sales Raw (Cancelled BO optional)</span>
     </div>
 
     <section id="wait-section" class="card" style="margin-bottom:16px">
       <h2>Waiting for Admin Push</h2>
       <p style="color:var(--muted);font-size:.9rem;margin:0 0 12px">
-        Open <a href="admin.html">Admin</a>, upload Excel (Sales Raw + Cancelled BO for Sales Report), set targets, then click <b>Push to live</b>.
+        Open <a href="admin.html">Admin</a>, upload Excel (<b>Sales Raw</b> for Sales Report), set targets, then click <b>Push to live</b>.
         This page will update automatically.
       </p>
       <div class="banner load" id="load-banner">Loading pushed workbooks…</div>
@@ -706,17 +706,20 @@
   }
 
   function mapSales(rows) {
-    return rows.map((r, i) => ({
-      id: i,
-      salesman: cellToString(r.salesman || "").trim(),
-      product: cellToString(r.product || r.Product || ""),
-      vin: cellToString(r.vin || r.VIN || ""),
-      amount: toNumber(r.amount),
-      qty: toNumber(r.qty) || 1,
-      proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
-      deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
-      date: r.proformaDate ? cellToString(r.proformaDate) : (r.deliveryDate ? cellToString(r.deliveryDate) : ""),
-    }));
+    return rows.map((r, i) => {
+      const get = buildFieldGetter(r);
+      return {
+        id: i,
+        salesman: cellToString(r.salesman || get(r, "salesman") || "").trim(),
+        product: cellToString(r.product || r.Product || r.model || r.Model || get(r, "product") || ""),
+        vin: cellToString(r.vin || r.VIN || ""),
+        amount: toNumber(r.amount != null ? r.amount : get(r, "amount")),
+        qty: toNumber(r.qty != null ? r.qty : get(r, "qty")) || 1,
+        proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+        deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        date: r.proformaDate ? cellToString(r.proformaDate) : (r.deliveryDate ? cellToString(r.deliveryDate) : ""),
+      };
+    });
   }
 
   function mapCancelled(rows) {
@@ -789,11 +792,11 @@
     if (sales && cancelled) {
       el.textContent = "Sales Raw + Cancelled loaded · building live dashboard…";
     } else if (sales) {
-      el.textContent = "Sales Raw loaded · waiting for Cancelled Back Orders (Admin Push).";
+      el.textContent = "Sales Raw loaded · building Sales Report (Cancelled optional).";
     } else if (cancelled) {
-      el.textContent = "Cancelled BO loaded · waiting for Sales Raw Data (Admin Push).";
+      el.textContent = "Cancelled BO loaded · add Sales Raw for Sales Report.";
     } else if (hasAnyPushedFiles()) {
-      el.textContent = "Some files loaded · Sales Report needs Sales Raw + Cancelled BO from Admin.";
+      el.textContent = "Some files loaded · Push Sales Raw from Admin for Sales Report.";
     } else {
       el.textContent = "No workbooks yet · use Admin → Push to live.";
     }
@@ -1313,9 +1316,9 @@
     return slotHasRows("cancelled");
   }
 
-  /** Sales Report only when both Sales Raw and Cancelled BO are present */
+  /** Sales Report when Sales Raw is pushed (Cancelled BO optional — zeros if missing) */
   function hasSalesReportInputs() {
-    return hasSalesRaw() && hasCancelledBO();
+    return hasSalesRaw();
   }
 
   function visiblePanels() {
@@ -1327,21 +1330,16 @@
       const el = $(sel);
       if (el) { el.innerHTML = ""; el.style.display = "none"; }
     });
-    const need = !hasSalesRaw() && !hasCancelledBO()
-      ? "Sales Raw Data and Cancelled Back Orders"
-      : !hasSalesRaw()
-        ? "Sales Raw Data"
-        : "Cancelled Back Orders";
     ["#sr-day-table-wrap", "#sr-table-wrap"].forEach((sel) => {
       const el = $(sel);
-      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Push <b>${need}</b> from Admin to build the Sales Report.</p>`;
+      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Push <b>Sales Raw Data</b> from Admin to build the Sales Report.</p>`;
     });
     ["#sr-day-table-foot", "#sr-table-foot"].forEach((sel) => {
       const el = $(sel);
-      if (el) el.textContent = "Sales Report needs Sales Raw + Cancelled BO";
+      if (el) el.textContent = "Sales Report needs Sales Raw Data";
     });
     const hint = $("#sr-live-hint");
-    if (hint) hint.textContent = "Sales Report needs Sales Raw + Cancelled BO from Admin Push";
+    if (hint) hint.textContent = "Sales Report needs Sales Raw from Admin Push · Cancelled BO optional";
   }
 
   const TAB_DEFS = [
@@ -1353,10 +1351,47 @@
     { id: "matches", label: "VIN Matches" },
   ];
 
+  function pickDefaultStockTab(d) {
+    if (d.sales && d.sales.length && !(d.bos && d.bos.length)) return "sales";
+    if (d.bos && d.bos.length) return "backorder";
+    if (d.sales && d.sales.length) return "sales";
+    if (d.cancelled && d.cancelled.length) return "cancelled";
+    if (d.rtl && d.rtl.length) return "rtl";
+    if (d.central && d.central.length) return "central";
+    return "backorder";
+  }
+
+  function salesRawDisplayRows() {
+    const raw = slots.sales.rows || [];
+    return raw.map((r) => {
+      const row = {
+        Salesman: cellToString(r.salesman).trim(),
+        Plant: cellToString(r.plant || "").trim(),
+        Code: cellToString(r.salesmanCode || "").trim(),
+        "Proforma Date": r.proformaDate ? cellToString(r.proformaDate) : "",
+        "Delivery Date": r.deliveryDate ? cellToString(r.deliveryDate) : "",
+        VIN: cellToString(r.vin || "").trim(),
+      };
+      const skip = new Set([
+        "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
+      ]);
+      Object.keys(r).forEach((k) => {
+        if (String(k).startsWith("_")) return;
+        const compact = normHeader(k).replace(/\s+/g, "");
+        if (skip.has(compact)) return;
+        if (/^column\d+$/i.test(compact)) return;
+        const val = cellToString(r[k]).trim();
+        if (!val) return;
+        if (row[k] == null) row[k] = val;
+      });
+      return row;
+    });
+  }
+
   function rowsForTab(d, tab) {
     if (tab === "rtl") return d.rtl.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
     if (tab === "central") return d.central.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
-    if (tab === "sales") return d.sales.map((r) => ({ Salesman: r.salesman, "Proforma Date": r.proformaDate, "Delivery Date": r.deliveryDate, Product: r.product, VIN: r.vin }));
+    if (tab === "sales") return salesRawDisplayRows();
     if (tab === "cancelled") return d.cancelled.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, Reason: r.reason, Date: r.date }));
     if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
     return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
@@ -1898,8 +1933,9 @@
     const navDash = $("#nav-dashboard");
     if (navDash) navDash.disabled = false;
     switchNav("dashboard");
-    if (!hasSalesReportInputs()) activePanel = "dashboard";
-    else if (activePanel !== "salesreport" && activePanel !== "dashboard") activePanel = "salesreport";
+    if (hasSalesReportInputs()) activePanel = "salesreport";
+    else activePanel = "dashboard";
+    if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
@@ -1914,8 +1950,8 @@
     renderTable(d);
     setStatus(
       hasSalesReportInputs()
-        ? "Live dashboard ready"
-        : "Dashboard ready · Sales Report needs Sales Raw + Cancelled BO",
+        ? (hasCancelledBO() ? "Live dashboard ready" : "Live Sales Report ready · Cancelled BO optional for cancel %")
+        : "Dashboard ready · Push Sales Raw for Sales Report",
       "ok"
     );
   }

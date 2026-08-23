@@ -10,18 +10,15 @@ Stock & Back Order Excel dashboard — separate from Delivery Hub.
 
 ## Flow
 
-1. Open **Admin** → upload Excel (especially **Sales Raw** + **Cancelled BO**) → set monthly targets → **Push to live**
+1. Open **Admin** → upload Excel (especially **Sales Raw**) → set monthly targets → **Push to live**
 2. Open **Live Sales Report** — it builds automatically from the Admin Push
 3. Push again from Admin anytime; keep the live tab open to see Ach% / Diff / sheets refresh
 
-## Sales Report gate
+## Sales Report
 
-Sales Report is generated only when **both** are pushed:
-
-- Sales Raw Data
-- Cancelled Back Orders
-
-Other files (Back Order / RTL / Central) power the Stock & BO dashboard.
+- Builds when **Sales Raw Data** is pushed
+- **Cancelled Back Orders** is optional (cancel % / gap columns stay at 0 until pushed)
+- Other files (Back Order / RTL / Central) power the Stock & BO dashboard
 
 ## Notes
 
