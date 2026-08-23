@@ -3,18 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Targets — Abdul Latif Jameel MOTORS</title>
+  <title>Admin — Abdul Latif Jameel MOTORS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="dashboard.css" />
+  <script src="data-store.js"></script>
 </head>
 <body>
   <header class="page-hero">
     <div class="page-hero-inner">
       <div class="hero-brand">
-        <h1>Admin Targets</h1>
-        <p>Set monthly employee targets · Push to update the live Sales Report</p>
+        <h1>Admin Control</h1>
+        <p>Upload Excel · set targets · Push to live Sales Report</p>
       </div>
       <div class="hero-logo">
         <div class="co">Abdul Latif Jameel</div>
@@ -28,21 +29,34 @@
       <div class="brand">
         <div class="mark">AD</div>
         <div>
-          <h1>Target control</h1>
-          <p>Names must match Sales Raw Col A · Push publishes to the live page</p>
+          <h1>Admin Push</h1>
+          <p>Sales Raw + Cancelled BO required for Sales Report on live page</p>
         </div>
       </div>
       <div class="top-actions">
         <span class="status" id="status">Ready</span>
         <a class="btn" href="index.html">← Live Sales Report</a>
-        <button type="button" class="btn-primary" id="push-btn">Push targets</button>
+        <button type="button" id="clear-files-btn" disabled>Clear files</button>
+        <button type="button" class="btn-primary" id="push-btn">Push to live</button>
       </div>
     </header>
 
-    <article class="card">
-      <h2>Employees · monthly targets</h2>
+    <article class="card" style="margin-bottom:16px">
+      <h2>1 · Excel uploads</h2>
       <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
-        Edit targets here, then click <b>Push targets</b>. Any open live Sales Report tab will refresh Ach% / Diff automatically.
+        Submit workbooks here. Click <b>Push to live</b> so the live Sales Report can build.
+        Sales Report needs <b>Sales Raw Data</b> and <b>Cancelled Back Orders</b>.
+      </p>
+      <section class="grid-5" id="slots"></section>
+      <div class="banner load" id="load-banner">Reading…</div>
+      <div class="banner err" id="error-banner"></div>
+      <p class="foot" id="files-foot" style="margin-top:10px"></p>
+    </article>
+
+    <article class="card">
+      <h2>2 · Employees · monthly targets</h2>
+      <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
+        Edit targets, then <b>Push to live</b>. Names must match Sales Raw Col A.
       </p>
       <div class="target-summary" id="target-summary"></div>
       <div class="toolbar" style="margin-bottom:12px">
@@ -55,13 +69,24 @@
       <p class="foot" id="target-foot"></p>
     </article>
 
-    <footer class="page-foot">Admin only · Targets stored in this browser · Live page: <a href="index.html" style="color:#9fd0ff">report-sheet/index.html</a></footer>
+    <footer class="page-foot">Admin only · Data stays in this browser · Live: <a href="index.html" style="color:#9fd0ff">report-sheet/index.html</a></footer>
   </div>
 
 <script>
 (function () {
-  const TARGETS_KEY = "toyota_admin_employee_targets_v1";
-  const TARGETS_PUSH_KEY = "toyota_admin_employee_targets_push_v1";
+  const Store = window.ReportSheetStore;
+  const TARGETS_KEY = Store.TARGETS_KEY;
+  const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
+  const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+
+  const SLOT_DEFS = [
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
+    { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
+    { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
+    { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A / P / V" },
+    { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Required for Sales Report" },
+  ];
+
   const DEFAULT_EMPLOYEE_NAMES = [
     "Samaher Abdulmoghni Al Amri",
     "Haneen Talal Aqeel Al Madani",
@@ -94,6 +119,10 @@
   const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
   const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({ id: i + 1, name, target: 0 }));
 
+  const slots = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, { name: "", buffer: null, size: 0 }]));
+  let targetSearch = "";
+  let employeeTargets = loadEmployeeTargets();
+
   const $ = (sel) => document.querySelector(sel);
   function escapeHtml(str) {
     return String(str ?? "")
@@ -103,13 +132,30 @@
     if (!Number.isFinite(n)) return "—";
     return new Intl.NumberFormat().format(n);
   }
+  function formatBytes(n) {
+    if (!n) return "0 B";
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1048576).toFixed(1) + " MB";
+  }
   function setStatus(text, kind) {
     const el = $("#status");
     el.textContent = text;
     el.className = "status" + (kind ? " " + kind : "");
   }
+  function showError(msg) {
+    const el = $("#error-banner");
+    el.textContent = msg || "";
+    el.classList.toggle("show", !!msg);
+    if (msg) setStatus("Error", "err");
+  }
   function isPlaceholderName(name) {
     return /^Employee\s*\d+$/i.test(String(name || "").trim());
+  }
+  function detectFileType(file) {
+    const name = (file.name || "").toLowerCase();
+    if (name.endsWith(".csv") || name.endsWith(".xls") || name.endsWith(".xlsx")) return "ok";
+    return "unknown";
   }
 
   function loadEmployeeTargets() {
@@ -135,11 +181,7 @@
     }
   }
 
-  let employeeTargets = loadEmployeeTargets();
-  let targetSearch = "";
-  const channel = ("BroadcastChannel" in window) ? new BroadcastChannel("toyota_targets_live") : null;
-
-  function collectFromForm() {
+  function collectTargetsFromForm() {
     return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
       const nameEl = document.querySelector(`[data-emp-name="${i}"]`);
       const targetEl = document.querySelector(`[data-emp-target="${i}"]`);
@@ -170,18 +212,121 @@
         <input data-emp-target="${i}" type="number" min="0" step="1" value="${e.target || 0}" title="Monthly target" />
       </div>`;
     }).join("");
-    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · edit names to match Excel salesman names · then Push`;
+    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · edit names to match Excel · then Push to live`;
   }
 
-  function pushTargets() {
-    employeeTargets = collectFromForm();
-    const payload = JSON.stringify(employeeTargets);
-    localStorage.setItem(TARGETS_KEY, payload);
-    const stamp = { at: Date.now(), total: employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0) };
-    localStorage.setItem(TARGETS_PUSH_KEY, JSON.stringify(stamp));
-    if (channel) channel.postMessage({ type: "targets-pushed", ...stamp });
-    renderTargetsPanel();
-    setStatus("Targets pushed to live page", "ok");
+  function renderSlots() {
+    $("#slots").innerHTML = SLOT_DEFS.map((d) => {
+      const s = slots[d.id];
+      const loaded = s.buffer ? " loaded" : "";
+      const required = d.id === "sales" || d.id === "cancelled" ? ' <span class="pill" style="margin-left:4px">Required</span>' : "";
+      const meta = s.buffer
+        ? `<span class="meta"><b>${escapeHtml(s.name)}</b><br>${formatBytes(s.size)}</span>`
+        : `<span class="meta">Drop or click · .xlsx / .xls / .csv</span>`;
+      return `<label class="slot${loaded}">
+        <input type="file" accept="${ACCEPT}" data-slot="${d.id}" />
+        <div class="n">${d.n}</div>
+        <h3>${d.title}${required}</h3>
+        <p class="ar">${d.ar} · ${d.blurb}</p>
+        ${meta}
+      </label>`;
+    }).join("");
+
+    const any = SLOT_DEFS.some((d) => slots[d.id].buffer);
+    $("#clear-files-btn").disabled = !any;
+    const hasSales = !!slots.sales.buffer;
+    const hasCancelled = !!slots.cancelled.buffer;
+    let foot = "Optional: Back Order / RTL / Central for Stock & BO dashboard.";
+    if (hasSales && hasCancelled) foot = "Sales Raw + Cancelled ready · Push to live to generate Sales Report.";
+    else if (hasSales) foot = "Add Cancelled Back Orders — both required for Sales Report.";
+    else if (hasCancelled) foot = "Add Sales Raw Data — both required for Sales Report.";
+    else foot = "Upload Sales Raw + Cancelled BO for Sales Report · other files optional.";
+    $("#files-foot").textContent = foot;
+    if (any) setStatus(hasSales && hasCancelled ? "Ready to push" : "Files loaded · Sales Report needs both required sheets", "ok");
+  }
+
+  async function onFileChosen(slotId, file) {
+    if (!file) return;
+    if (detectFileType(file) === "unknown") {
+      showError(`Unsupported file “${file.name}”. Use .xlsx, .xls, or .csv.`);
+      return;
+    }
+    showError("");
+    $("#load-banner").classList.add("show");
+    $("#load-banner").textContent = `Reading ${file.name}…`;
+    setStatus("Reading…", "busy");
+    try {
+      const buffer = await file.arrayBuffer();
+      slots[slotId] = { name: file.name, buffer, size: buffer.byteLength };
+      renderSlots();
+      setStatus("File ready — click Push to live", "busy");
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      $("#load-banner").classList.remove("show");
+    }
+  }
+
+  async function hydrateFromStore() {
+    try {
+      const payload = await Store.loadWorkbookFiles();
+      if (!payload || !payload.files) return;
+      Object.keys(payload.files).forEach((id) => {
+        const f = payload.files[id];
+        if (!f || !f.buffer) return;
+        slots[id] = { name: f.name, buffer: f.buffer, size: f.size || f.buffer.byteLength };
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function pushToLive() {
+    showError("");
+    setStatus("Pushing…", "busy");
+    try {
+      employeeTargets = collectTargetsFromForm();
+      localStorage.setItem(TARGETS_KEY, JSON.stringify(employeeTargets));
+      const targetStamp = {
+        at: Date.now(),
+        total: employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0),
+      };
+      localStorage.setItem(TARGETS_PUSH_KEY, JSON.stringify(targetStamp));
+
+      const filesBySlot = {};
+      SLOT_DEFS.forEach((d) => {
+        const s = slots[d.id];
+        if (s.buffer) filesBySlot[d.id] = { name: s.name, buffer: s.buffer };
+      });
+      const dataStamp = await Store.saveWorkbookFiles(filesBySlot);
+
+      Store.broadcast({
+        type: "admin-pushed",
+        at: dataStamp.at,
+        hasSales: dataStamp.hasSales,
+        hasCancelled: dataStamp.hasCancelled,
+        targetsAt: targetStamp.at,
+      });
+
+      renderTargetsPanel();
+      const srOk = dataStamp.hasSales && dataStamp.hasCancelled;
+      setStatus(
+        srOk
+          ? "Pushed to live — Sales Report can build"
+          : "Pushed to live — add Sales Raw + Cancelled for Sales Report",
+        "ok"
+      );
+    } catch (err) {
+      showError(err.message || String(err));
+    }
+  }
+
+  async function clearFiles() {
+    SLOT_DEFS.forEach((d) => { slots[d.id] = { name: "", buffer: null, size: 0 }; });
+    try { await Store.clearWorkbookFiles(); } catch { /* ignore */ }
+    Store.broadcast({ type: "admin-cleared", at: Date.now() });
+    renderSlots();
+    setStatus("Files cleared", "ok");
   }
 
   $("#target-search").addEventListener("input", (e) => {
@@ -191,19 +336,26 @@
   $("#bulk-apply-btn").addEventListener("click", () => {
     const n = Math.max(0, Number($("#bulk-target").value) || 0);
     document.querySelectorAll("[data-emp-target]").forEach((el) => { el.value = String(n); });
-    setStatus("Bulk value applied — click Push targets", "busy");
+    setStatus("Bulk value applied — click Push to live", "busy");
   });
   $("#reset-targets-btn").addEventListener("click", () => {
     if (!confirm("Reset all employee names to the official list and keep current target numbers?")) return;
     document.querySelectorAll("[data-emp-name]").forEach((el, i) => {
       el.value = DEFAULT_EMPLOYEES[i]?.name || `Employee ${i + 1}`;
     });
-    setStatus("Names reset — click Push targets", "busy");
+    setStatus("Names reset — click Push to live", "busy");
   });
-  $("#push-btn").addEventListener("click", pushTargets);
-  $("#target-grid").addEventListener("change", () => setStatus("Changes pending — click Push targets", "busy"));
+  $("#push-btn").addEventListener("click", pushToLive);
+  $("#clear-files-btn").addEventListener("click", clearFiles);
+  $("#target-grid").addEventListener("change", () => setStatus("Changes pending — click Push to live", "busy"));
+  $("#slots").addEventListener("change", (e) => {
+    const input = e.target.closest("input[type=file]");
+    if (!input) return;
+    onFileChosen(input.dataset.slot, input.files[0]);
+  });
 
   renderTargetsPanel();
+  hydrateFromStore().then(renderSlots);
 })();
 </script>
 </body>

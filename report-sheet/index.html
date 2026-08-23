@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="data-store.js"></script>
   <link rel="stylesheet" href="dashboard.css" />
 
 </head>
@@ -17,7 +18,7 @@
     <div class="page-hero-inner">
       <div class="hero-brand">
         <h1>Sales Report Dashboard</h1>
-        <p>Live Day to Date · Month to Date · targets from Admin Push</p>
+        <p>Live view · Excel &amp; targets pushed from Admin</p>
       </div>
       <div class="hero-logo">
         <div class="co">Abdul Latif Jameel</div>
@@ -32,28 +33,32 @@
         <div class="mark">SR</div>
         <div>
           <h1>Report Sheet</h1>
-          <p>Toyota Saudi Arabia · client-side only · files stay in your browser</p>
+          <p>Toyota Saudi Arabia · live page · upload on Admin only</p>
         </div>
       </div>
       <div class="top-actions">
-        <span class="status" id="status">Waiting for files</span>
-        <span class="status ok" id="live-badge" title="Targets refresh when Admin pushes">LIVE</span>
-        <a class="btn" href="admin.html">Admin Targets</a>
-        <button type="button" id="clear-btn" disabled>Clear</button>
-        <button type="button" class="btn-primary" id="run-btn" disabled>Build dashboard</button>
+        <span class="status" id="status">Waiting for Admin Push</span>
+        <span class="status ok" id="live-badge" title="Refreshes when Admin pushes">LIVE</span>
+        <a class="btn" href="admin.html">Admin · Upload &amp; Push</a>
+        <button type="button" id="clear-btn" disabled>Clear view</button>
+        <button type="button" class="btn-primary" id="run-btn" disabled>Refresh from Admin</button>
       </div>
     </header>
 
     <div class="admin-bar" id="nav-bar">
-      <button type="button" class="tab active" data-nav="uploads">1 · Uploads</button>
-      <button type="button" class="tab" data-nav="dashboard" id="nav-dashboard" disabled>2 · Live Dashboard</button>
-      <span class="hint">Targets are set on Admin page · Push there to update Ach% live</span>
+      <button type="button" class="tab active" data-nav="dashboard" id="nav-dashboard" disabled>Live Dashboard</button>
+      <span class="hint">Upload Excel on Admin · Sales Report needs Sales Raw + Cancelled BO</span>
     </div>
 
-    <section id="upload-section">
-      <section class="grid-5" id="slots"></section>
-      <div class="banner load" id="load-banner">Reading workbooks…</div>
+    <section id="wait-section" class="card" style="margin-bottom:16px">
+      <h2>Waiting for Admin Push</h2>
+      <p style="color:var(--muted);font-size:.9rem;margin:0 0 12px">
+        Open <a href="admin.html">Admin</a>, upload Excel (Sales Raw + Cancelled BO for Sales Report), set targets, then click <b>Push to live</b>.
+        This page will update automatically.
+      </p>
+      <div class="banner load" id="load-banner">Loading pushed workbooks…</div>
       <div class="banner err" id="error-banner"></div>
+      <p class="foot" id="wait-foot"></p>
     </section>
 
     <section id="dashboard">
@@ -118,7 +123,7 @@
         </article>
       </div>
     </section>
-    <footer class="page-foot">Files stay in your browser. Nothing is uploaded to a server. · Abdul Latif Jameel MOTORS</footer>
+    <footer class="page-foot">Live view · Excel &amp; targets from Admin Push · Abdul Latif Jameel MOTORS</footer>
   </div>
 
   <div class="drawer-backdrop" id="emp-backdrop"></div>
@@ -135,7 +140,6 @@
 
 <script>
 (function () {
-  const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
   const MAX_ROWS = 4000;
 
   const SLOT_DEFS = [
@@ -146,8 +150,10 @@
     { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Cancelled BO list" },
   ];
 
-  const TARGETS_KEY = "toyota_admin_employee_targets_v1";
-  const TARGETS_PUSH_KEY = "toyota_admin_employee_targets_push_v1";
+  const Store = window.ReportSheetStore;
+  const TARGETS_KEY = Store.TARGETS_KEY;
+  const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
+  const DATA_PUSH_KEY = Store.DATA_PUSH_KEY;
   const DEFAULT_EMPLOYEE_NAMES = [
     "Samaher Abdulmoghni Al Amri",
     "Haneen Talal Aqeel Al Madani",
@@ -225,7 +231,7 @@
   }
 
   let employeeTargets = loadEmployeeTargets();
-  let activeNav = "uploads";
+  let activeNav = "dashboard";
 
   function refreshTargetsFromAdmin() {
     employeeTargets = loadEmployeeTargets();
@@ -233,7 +239,7 @@
 
   function applyLiveTargets(reason) {
     refreshTargetsFromAdmin();
-    if (!window._data || !hasSalesRaw()) return false;
+    if (!window._data || !hasSalesReportInputs()) return false;
     window._data = data();
     renderSalesReportKpis(window._data.salesReport);
     renderSalesReportCharts(window._data.salesReport);
@@ -264,14 +270,11 @@
     document.querySelectorAll("#nav-bar [data-nav]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.nav === nav);
     });
-    $("#upload-section").classList.toggle("hidden", nav !== "uploads");
-
     const dash = $("#dashboard");
-    if (nav === "dashboard" && dash.classList.contains("show")) {
-      dash.style.display = "";
-    } else {
-      dash.style.display = "none";
-    }
+    const wait = $("#wait-section");
+    const showDash = nav === "dashboard" && dash.classList.contains("show");
+    dash.style.display = showDash ? "" : "none";
+    if (wait) wait.style.display = showDash ? "none" : "";
   }
 
   const HEADER_ALIASES = {
@@ -770,50 +773,82 @@
     return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit || 8);
   }
 
-  function renderSlots() {
-    $("#slots").innerHTML = SLOT_DEFS.map((d) => {
-      const s = slots[d.id];
-      const loaded = s.file ? " loaded" : "";
-      const meta = s.file
-        ? `<span class="meta"><b>${escapeHtml(s.name)}</b><br>${formatNumber(s.rows.length)} rows · ${formatBytes(s.file.size)}</span>`
-        : `<span class="meta">Drop or click to choose .xlsx / .xls / .csv</span>`;
-      return `<label class="slot${loaded}">
-        <input type="file" accept="${ACCEPT}" data-slot="${d.id}" />
-        <div class="n">${d.n}</div>
-        <h3>${d.title}</h3>
-        <p class="ar">${d.ar} · ${d.blurb}</p>
-        ${meta}
-      </label>`;
-    }).join("");
-    const any = SLOT_DEFS.some((d) => slots[d.id].file);
-    const enough = slots.backorder.file || slots.rtl.file || slots.central.file || slots.sales.file || slots.cancelled.file;
-    $("#clear-btn").disabled = !any;
-    $("#run-btn").disabled = !enough;
-    if (!any) setStatus("Waiting for files");
-    else setStatus("Ready to build", "ok");
+  function slotHasRows(id) {
+    return !!(slots[id] && (slots[id].rows || []).length);
   }
 
-  async function onFileChosen(slotId, file) {
-    if (!file) return;
-    if (detectFileType(file) === "unknown") {
-      showError(`Unsupported file “${file.name}”. Use .xlsx, .xls, or .csv.`);
-      return;
+  function hasAnyPushedFiles() {
+    return SLOT_DEFS.some((d) => slotHasRows(d.id) || (slots[d.id] && slots[d.id].name));
+  }
+
+  function updateWaitFoot() {
+    const el = $("#wait-foot");
+    if (!el) return;
+    const sales = slotHasRows("sales");
+    const cancelled = slotHasRows("cancelled");
+    if (sales && cancelled) {
+      el.textContent = "Sales Raw + Cancelled loaded · building live dashboard…";
+    } else if (sales) {
+      el.textContent = "Sales Raw loaded · waiting for Cancelled Back Orders (Admin Push).";
+    } else if (cancelled) {
+      el.textContent = "Cancelled BO loaded · waiting for Sales Raw Data (Admin Push).";
+    } else if (hasAnyPushedFiles()) {
+      el.textContent = "Some files loaded · Sales Report needs Sales Raw + Cancelled BO from Admin.";
+    } else {
+      el.textContent = "No workbooks yet · use Admin → Push to live.";
     }
-    showError("");
+  }
+
+  function bufferToWorkbook(name, buffer) {
+    const lower = String(name || "").toLowerCase();
+    if (lower.endsWith(".csv")) {
+      const text = new TextDecoder("utf-8").decode(buffer);
+      return XLSX.read(text, { type: "string", FS: ",", cellDates: true });
+    }
+    return XLSX.read(buffer, { type: "array", cellDates: true });
+  }
+
+  async function hydrateSlotsFromAdmin() {
+    const payload = await Store.loadWorkbookFiles();
+    SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
+    if (!payload || !payload.files) {
+      updateWaitFoot();
+      $("#run-btn").disabled = true;
+      $("#clear-btn").disabled = true;
+      return false;
+    }
     $("#load-banner").classList.add("show");
-    $("#load-banner").textContent = `Reading ${file.name}…`;
-    setStatus("Reading…", "busy");
+    $("#load-banner").textContent = "Reading pushed workbooks…";
+    setStatus("Loading Admin Push…", "busy");
     try {
-      const wb = await readFileToWorkbook(file);
-      const rows = rowsForSlot(slotId, wb);
-      slots[slotId] = { file, rows, name: file.name };
-      renderSlots();
-      setStatus("File loaded", "ok");
-    } catch (err) {
-      showError(err.message || String(err));
+      for (const d of SLOT_DEFS) {
+        const f = payload.files[d.id];
+        if (!f || !f.buffer) continue;
+        const wb = bufferToWorkbook(f.name, f.buffer);
+        const rows = rowsForSlot(d.id, wb);
+        slots[d.id] = {
+          file: { name: f.name, size: f.size || f.buffer.byteLength },
+          rows,
+          name: f.name,
+        };
+      }
+      const any = hasAnyPushedFiles();
+      $("#run-btn").disabled = !any;
+      $("#clear-btn").disabled = !any;
+      updateWaitFoot();
+      return any;
     } finally {
       $("#load-banner").classList.remove("show");
     }
+  }
+
+  function renderSlots() {
+    updateWaitFoot();
+    const any = hasAnyPushedFiles();
+    $("#clear-btn").disabled = !any;
+    $("#run-btn").disabled = !any;
+    if (!any) setStatus("Waiting for Admin Push");
+    else setStatus("Ready · Refresh from Admin", "ok");
   }
 
   function buildSalesReport(bos, sales, cancelled) {
@@ -1271,11 +1306,20 @@
   let activePanel = "salesreport";
 
   function hasSalesRaw() {
-    return !!(slots.sales && slots.sales.file && (slots.sales.rows || []).length);
+    return slotHasRows("sales");
+  }
+
+  function hasCancelledBO() {
+    return slotHasRows("cancelled");
+  }
+
+  /** Sales Report only when both Sales Raw and Cancelled BO are present */
+  function hasSalesReportInputs() {
+    return hasSalesRaw() && hasCancelledBO();
   }
 
   function visiblePanels() {
-    return PANEL_DEFS.filter((p) => p.id !== "salesreport" || hasSalesRaw());
+    return PANEL_DEFS.filter((p) => p.id !== "salesreport" || hasSalesReportInputs());
   }
 
   function clearSalesReportUi() {
@@ -1283,16 +1327,21 @@
       const el = $(sel);
       if (el) { el.innerHTML = ""; el.style.display = "none"; }
     });
+    const need = !hasSalesRaw() && !hasCancelledBO()
+      ? "Sales Raw Data and Cancelled Back Orders"
+      : !hasSalesRaw()
+        ? "Sales Raw Data"
+        : "Cancelled Back Orders";
     ["#sr-day-table-wrap", "#sr-table-wrap"].forEach((sel) => {
       const el = $(sel);
-      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Upload <b>Sales Raw Data</b> to build the Sales Report.</p>`;
+      if (el) el.innerHTML = `<p class="foot" style="padding:16px">Push <b>${need}</b> from Admin to build the Sales Report.</p>`;
     });
     ["#sr-day-table-foot", "#sr-table-foot"].forEach((sel) => {
       const el = $(sel);
-      if (el) el.textContent = "Sales Raw Data not uploaded";
+      if (el) el.textContent = "Sales Report needs Sales Raw + Cancelled BO";
     });
     const hint = $("#sr-live-hint");
-    if (hint) hint.textContent = "Sales Report needs Sales Raw Data (upload slot 4)";
+    if (hint) hint.textContent = "Sales Report needs Sales Raw + Cancelled BO from Admin Push";
   }
 
   const TAB_DEFS = [
@@ -1838,6 +1887,10 @@
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
+    if (!hasAnyPushedFiles()) {
+      setStatus("Waiting for Admin Push");
+      return;
+    }
     const d = data();
     window._data = d;
     $("#dashboard").classList.add("show");
@@ -1845,12 +1898,12 @@
     const navDash = $("#nav-dashboard");
     if (navDash) navDash.disabled = false;
     switchNav("dashboard");
-    if (!hasSalesRaw()) activePanel = "dashboard";
+    if (!hasSalesReportInputs()) activePanel = "dashboard";
     else if (activePanel !== "salesreport" && activePanel !== "dashboard") activePanel = "salesreport";
     switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
-    if (hasSalesRaw()) {
+    if (hasSalesReportInputs()) {
       renderSalesReportKpis(d.salesReport);
       renderSalesReportCharts(d.salesReport);
       renderSalesReportTable(d.salesReport);
@@ -1859,28 +1912,45 @@
     }
     renderTabs();
     renderTable(d);
-    setStatus(hasSalesRaw() ? "Live dashboard ready" : "Dashboard ready · Sales Report needs Sales Raw Data", "ok");
+    setStatus(
+      hasSalesReportInputs()
+        ? "Live dashboard ready"
+        : "Dashboard ready · Sales Report needs Sales Raw + Cancelled BO",
+      "ok"
+    );
   }
 
   function clearAll() {
     SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
+    window._data = null;
     $("#dashboard").classList.remove("show");
-    $("#dashboard").style.display = "";
+    $("#dashboard").style.display = "none";
     const navDash = $("#nav-dashboard");
     if (navDash) navDash.disabled = true;
     showError("");
     renderSlots();
-    switchNav("uploads");
-    setStatus("Waiting for files");
+    switchNav("dashboard");
+    setStatus("View cleared · Push again from Admin to reload");
   }
 
-  document.getElementById("slots").addEventListener("change", (e) => {
-    const input = e.target.closest("input[type=file]");
-    if (!input) return;
-    onFileChosen(input.dataset.slot, input.files[0]);
-  });
+  async function refreshFromAdmin(reason) {
+    showError("");
+    try {
+      const ok = await hydrateSlotsFromAdmin();
+      if (!ok) {
+        clearAll();
+        setStatus(reason || "Waiting for Admin Push");
+        return;
+      }
+      buildDashboard();
+      if (reason) setStatus(reason, "ok");
+    } catch (err) {
+      showError(err.message || String(err));
+    }
+  }
+
   $("#clear-btn").addEventListener("click", clearAll);
-  $("#run-btn").addEventListener("click", buildDashboard);
+  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed from Admin"));
   $("#csv-btn").addEventListener("click", exportCsv);
 
   $("#nav-bar").addEventListener("click", (e) => {
@@ -1891,9 +1961,13 @@
   });
 
   let lastPushAt = 0;
+  let lastDataPushAt = 0;
   try {
     const stamp = JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}");
     lastPushAt = Number(stamp.at) || 0;
+  } catch { /* ignore */ }
+  try {
+    lastDataPushAt = Number(Store.readDataPushStamp().at) || 0;
   } catch { /* ignore */ }
 
   function maybeApplyPushedTargets(reason) {
@@ -1907,28 +1981,51 @@
       applyLiveTargets(reason || "Targets pushed — live update");
       return true;
     }
-    // Always reload targets when told to (BroadcastChannel / storage)
     if (reason) return applyLiveTargets(reason);
     return false;
   }
 
-  // Live targets from Admin page (other tab / Push)
+  async function onAdminPushMessage(ev) {
+    const msg = ev && ev.data;
+    if (!msg) return;
+    if (msg.type === "admin-cleared") {
+      clearAll();
+      return;
+    }
+    if (msg.type === "admin-pushed" || msg.type === "targets-pushed") {
+      lastPushAt = Number(msg.targetsAt || msg.at) || Date.now();
+      lastDataPushAt = Number(msg.at) || lastDataPushAt;
+      if (msg.type === "admin-pushed") {
+        await refreshFromAdmin("Admin Push received — live update");
+      } else {
+        applyLiveTargets("Targets pushed — live update");
+      }
+    }
+  }
+
   window.addEventListener("storage", (e) => {
     if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY) {
       maybeApplyPushedTargets("Targets pushed — live update");
     }
+    if (e.key === DATA_PUSH_KEY) {
+      const at = Number(Store.readDataPushStamp().at) || 0;
+      if (at && at !== lastDataPushAt) {
+        lastDataPushAt = at;
+        refreshFromAdmin("Workbook pushed — live update");
+      }
+    }
   });
   if ("BroadcastChannel" in window) {
-    const bc = new BroadcastChannel("toyota_targets_live");
-    bc.onmessage = (ev) => {
-      if (ev.data && ev.data.type === "targets-pushed") {
-        lastPushAt = Number(ev.data.at) || Date.now();
-        applyLiveTargets("Targets pushed — live update");
-      }
-    };
+    const bc = new BroadcastChannel(Store.CHANNEL);
+    bc.onmessage = (ev) => { onAdminPushMessage(ev); };
   }
   window.addEventListener("focus", () => {
     maybeApplyPushedTargets();
+    const at = Number(Store.readDataPushStamp().at) || 0;
+    if (at && at !== lastDataPushAt) {
+      lastDataPushAt = at;
+      refreshFromAdmin();
+    }
   });
 
   $("#panel-tabs").addEventListener("click", (e) => {
@@ -1938,11 +2035,11 @@
   });
   $("#sr-search").addEventListener("input", (e) => {
     srView.search = e.target.value;
-    if (window._data && hasSalesRaw()) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesReportInputs()) renderSalesReportTable(window._data.salesReport);
   });
   $("#sr-filter").addEventListener("change", (e) => {
     srView.filter = e.target.value;
-    if (window._data && hasSalesRaw()) renderSalesReportTable(window._data.salesReport);
+    if (window._data && hasSalesReportInputs()) renderSalesReportTable(window._data.salesReport);
   });
   $("#sr-csv-btn").addEventListener("click", () => {
     const rows = window._srExportRows || [];
@@ -1994,7 +2091,8 @@
   });
 
   renderSlots();
-  switchNav("uploads");
+  switchNav("dashboard");
+  refreshFromAdmin();
 })();
 </script>
 </body>
