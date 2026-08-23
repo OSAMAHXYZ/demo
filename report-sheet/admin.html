@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Targets — Abdul Latif Jameel MOTORS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="page-hero">
+    <div class="page-hero-inner">
+      <div class="hero-brand">
+        <h1>Admin Targets</h1>
+        <p>Set monthly employee targets · Push to update the live Sales Report</p>
+      </div>
+      <div class="hero-logo">
+        <div class="co">Abdul Latif Jameel</div>
+        <div class="motors">MOTORS</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <div class="mark">AD</div>
+        <div>
+          <h1>Target control</h1>
+          <p>Names must match Sales Raw Col A · Push publishes to the live page</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="status" id="status">Ready</span>
+        <a class="btn" href="index.html">← Live Sales Report</a>
+        <button type="button" class="btn-primary" id="push-btn">Push targets</button>
+      </div>
+    </header>
+
+    <article class="card">
+      <h2>Employees · monthly targets</h2>
+      <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
+        Edit targets here, then click <b>Push targets</b>. Any open live Sales Report tab will refresh Ach% / Diff automatically.
+      </p>
+      <div class="target-summary" id="target-summary"></div>
+      <div class="toolbar" style="margin-bottom:12px">
+        <input id="target-search" type="search" placeholder="Search employee…" />
+        <input id="bulk-target" type="number" min="0" step="1" placeholder="Bulk target" style="min-width:120px" />
+        <button type="button" id="bulk-apply-btn">Apply to all</button>
+        <button type="button" id="reset-targets-btn">Reset names</button>
+      </div>
+      <div class="target-grid" id="target-grid"></div>
+      <p class="foot" id="target-foot"></p>
+    </article>
+
+    <footer class="page-foot">Admin only · Targets stored in this browser · Live page: <a href="index.html" style="color:#9fd0ff">report-sheet/index.html</a></footer>
+  </div>
+
+<script>
+(function () {
+  const TARGETS_KEY = "toyota_admin_employee_targets_v1";
+  const TARGETS_PUSH_KEY = "toyota_admin_employee_targets_push_v1";
+  const DEFAULT_EMPLOYEE_NAMES = [
+    "Samaher Abdulmoghni Al Amri",
+    "Haneen Talal Aqeel Al Madani",
+    "Not assigned",
+    "Wasim Kathem Awad",
+    "Ahmed Saleh Ahmed Binmahfoodh",
+    "Ghina Assad Alameer",
+    "Amjad Ahmed Alwafi",
+    "Ghadeer Abdulhadi Attia Altayyari",
+    "Maryam Salah Abdulrahman Tabakh",
+    "Muteb Abdullah Nasser Al Shehri",
+    "Mansuor Ali Al Qahtani",
+    "Ahmed Mahmoud Yousef Al Fitni",
+    "Mohammed Abkar Mohammed Abkar Negry",
+    "Mohammed Al Khateeb",
+    "Mohsen Zuhair Ali Al Attas",
+    "Fatmah Mohammed Alasseri",
+    "Essa Meraizeeq Almutairy",
+    "Moath Khalel Al Hjoouj",
+    "Khulood Abdulmajeed Albaloushi",
+    "Raoum Fahad Samkari",
+    "Alawiyyah Rafi Saad Al Shehri",
+    "Manal Moshref Almalki",
+    "Lujen Sami Saeed Bazhair",
+    "Muhannad Abdullah Makdour Minyawi",
+    "Maqbool Omar Ashour",
+    "Tawdod Al Sharef",
+    "Ali Muharraq A Alharbi",
+  ];
+  const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
+  const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({ id: i + 1, name, target: 0 }));
+
+  const $ = (sel) => document.querySelector(sel);
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function formatNumber(n) {
+    if (!Number.isFinite(n)) return "—";
+    return new Intl.NumberFormat().format(n);
+  }
+  function setStatus(text, kind) {
+    const el = $("#status");
+    el.textContent = text;
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+  function isPlaceholderName(name) {
+    return /^Employee\s*\d+$/i.test(String(name || "").trim());
+  }
+
+  function loadEmployeeTargets() {
+    try {
+      const raw = localStorage.getItem(TARGETS_KEY);
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
+        const row = parsed[i] || {};
+        const savedName = String(row.name || "").trim();
+        const name = !savedName || isPlaceholderName(savedName)
+          ? DEFAULT_EMPLOYEES[i].name
+          : savedName;
+        return {
+          id: i + 1,
+          name,
+          target: Math.max(0, Number(row.target) || 0),
+        };
+      });
+    } catch {
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+    }
+  }
+
+  let employeeTargets = loadEmployeeTargets();
+  let targetSearch = "";
+  const channel = ("BroadcastChannel" in window) ? new BroadcastChannel("toyota_targets_live") : null;
+
+  function collectFromForm() {
+    return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
+      const nameEl = document.querySelector(`[data-emp-name="${i}"]`);
+      const targetEl = document.querySelector(`[data-emp-target="${i}"]`);
+      return {
+        id: i + 1,
+        name: (nameEl ? nameEl.value : employeeTargets[i]?.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
+        target: Math.max(0, Number(targetEl ? targetEl.value : employeeTargets[i]?.target) || 0),
+      };
+    });
+  }
+
+  function renderTargetsPanel() {
+    const q = targetSearch.trim().toLowerCase();
+    const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
+    const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
+    const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
+    $("#target-summary").innerHTML = `
+      <span class="pill">Employees: ${EMPLOYEE_COUNT}</span>
+      <span class="pill">Named: ${named}</span>
+      <span class="pill">Targets set: ${filled}</span>
+      <span class="pill">Total target: ${formatNumber(totalTarget)}</span>
+    `;
+    $("#target-grid").innerHTML = employeeTargets.map((e, i) => {
+      const hidden = q && !String(e.name).toLowerCase().includes(q) ? ' style="display:none"' : "";
+      return `<div class="target-row"${hidden}>
+        <div class="idx">${e.id}</div>
+        <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name)}" placeholder="Employee name" />
+        <input data-emp-target="${i}" type="number" min="0" step="1" value="${e.target || 0}" title="Monthly target" />
+      </div>`;
+    }).join("");
+    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · edit names to match Excel salesman names · then Push`;
+  }
+
+  function pushTargets() {
+    employeeTargets = collectFromForm();
+    const payload = JSON.stringify(employeeTargets);
+    localStorage.setItem(TARGETS_KEY, payload);
+    const stamp = { at: Date.now(), total: employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0) };
+    localStorage.setItem(TARGETS_PUSH_KEY, JSON.stringify(stamp));
+    if (channel) channel.postMessage({ type: "targets-pushed", ...stamp });
+    renderTargetsPanel();
+    setStatus("Targets pushed to live page", "ok");
+  }
+
+  $("#target-search").addEventListener("input", (e) => {
+    targetSearch = e.target.value;
+    renderTargetsPanel();
+  });
+  $("#bulk-apply-btn").addEventListener("click", () => {
+    const n = Math.max(0, Number($("#bulk-target").value) || 0);
+    document.querySelectorAll("[data-emp-target]").forEach((el) => { el.value = String(n); });
+    setStatus("Bulk value applied — click Push targets", "busy");
+  });
+  $("#reset-targets-btn").addEventListener("click", () => {
+    if (!confirm("Reset all employee names to the official list and keep current target numbers?")) return;
+    document.querySelectorAll("[data-emp-name]").forEach((el, i) => {
+      el.value = DEFAULT_EMPLOYEES[i]?.name || `Employee ${i + 1}`;
+    });
+    setStatus("Names reset — click Push targets", "busy");
+  });
+  $("#push-btn").addEventListener("click", pushTargets);
+  $("#target-grid").addEventListener("change", () => setStatus("Changes pending — click Push targets", "busy"));
+
+  renderTargetsPanel();
+})();
+</script>
+</body>
+</html>

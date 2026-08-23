@@ -4,19 +4,18 @@ Stock & Back Order Excel dashboard — separate from Delivery Hub.
 
 ## Open
 
-- Local: open `report-sheet/index.html` in the browser  
-- Hub link: from repo root → **Report Sheet** card  
-- Direct path: `/report-sheet/`
+- **Live Sales Report:** `report-sheet/index.html`
+- **Admin Targets:** `report-sheet/admin.html` (Push targets to live page)
+- Hub links from repo root
 
-## What’s inside
+## Flow
 
-1. Upload Excel files (Back Order, RTL, Central, Sales Raw, Cancelled)
-2. Admin Targets (employee monthly targets)
-3. Sales Report (live Proforma / Delivery daily + monthly from Sales Raw Data)
-4. Stock & BO dashboard panels
+1. Open **Admin Targets** → set monthly targets → click **Push targets**
+2. Open **Live Sales Report** → upload Excel (especially Sales Raw) → Build dashboard
+3. When you Push again from Admin, the live page updates Ach% / Diff automatically (keep both tabs open)
 
 ## Notes
 
-- Client-side only — files stay in the browser  
-- Targets are saved in `localStorage`  
+- Client-side only — files stay in the browser
+- Targets are saved in `localStorage` and broadcast to the live tab
 - Sales formulas use Col **A** (name), **P** (proforma date), **V** (delivery date)
