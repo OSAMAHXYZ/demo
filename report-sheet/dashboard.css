@@ -484,6 +484,228 @@ button:disabled {
   height: min(720px, max(320px, 36px * 12));
 }
 
+/* Power BI–style sales page */
+.pbi-page {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.pbi-slicer {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+}
+
+.pbi-slicer h2 {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+
+.pbi-slicer-hint {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pbi-name-list {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 200px;
+  padding-right: 2px;
+}
+
+.pbi-name {
+  appearance: none;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pbi-name:hover {
+  border-color: #c5d4e4;
+  background: #fff;
+}
+
+.pbi-name.active {
+  background: rgba(11, 58, 102, 0.08);
+  border-color: var(--navy);
+}
+
+.pbi-name .nm {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.pbi-name .meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pbi-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pbi-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(11, 58, 102, 0.08);
+  border: 1px solid rgba(11, 58, 102, 0.18);
+  font-size: 0.85rem;
+  color: var(--navy);
+}
+
+.pbi-filter-bar[hidden] {
+  display: none !important;
+}
+
+.pbi-filter-bar strong {
+  font-weight: 800;
+}
+
+.pbi-filter-bar button {
+  margin-left: auto;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pbi-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pbi-kpi {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+.pbi-kpi .lab {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.pbi-kpi .val {
+  margin-top: 6px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+.pbi-visuals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pbi-viz {
+  margin: 0;
+  min-width: 0;
+}
+
+.pbi-viz h2 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
+
+.chart-box.pbi-box {
+  height: 220px;
+}
+
+.pbi-detail {
+  padding: 16px 18px;
+}
+
+.pbi-detail-head h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.pbi-detail-head p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.pbi-tables {
+  padding: 12px 16px 16px;
+}
+
+.pbi-tables summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 0.9rem;
+  list-style: none;
+}
+
+.pbi-tables summary::-webkit-details-marker {
+  display: none;
+}
+
+.pbi-tables summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.pbi-tables[open] summary::before {
+  content: "▾ ";
+}
+
+@media (max-width: 1100px) {
+  .pbi-page {
+    grid-template-columns: 1fr;
+  }
+  .pbi-slicer {
+    position: static;
+    max-height: 240px;
+  }
+  .pbi-visuals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pbi-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .sr-charts {
     grid-template-columns: 1fr;
@@ -493,6 +715,12 @@ button:disabled {
   }
   .chart-box.tall {
     height: 320px;
+  }
+  .pbi-visuals {
+    grid-template-columns: 1fr;
+  }
+  .pbi-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

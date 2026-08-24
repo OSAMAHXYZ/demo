@@ -65,7 +65,7 @@
       <!-- Panel tabs -->
       <div class="tabs" id="panel-tabs" style="margin-bottom:16px"></div>
 
-      <!-- PANEL: Sales Report Dashboard -->
+      <!-- PANEL: Sales Dashboard (Power BI–style one page) -->
       <div class="panel-section" id="panel-salesreport" style="display:none">
         <div class="xl-toolbar">
           <input id="sr-search" type="search" placeholder="Search employee…" />
@@ -74,60 +74,88 @@
             <option value="above">Ach% ≥100%</option>
             <option value="below">Ach% &lt;100%</option>
           </select>
-          <select id="sr-chart-mode" title="Who appears on charts">
-            <option value="active">Charts: Active only</option>
-            <option value="top12">Charts: Top 12</option>
-            <option value="all">Charts: All names</option>
+          <select id="sr-chart-mode" title="Who appears when no name is selected">
+            <option value="active">List: Active only</option>
+            <option value="top12">List: Top 12</option>
+            <option value="all">List: All names</option>
           </select>
+          <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name filter</button>
           <button type="button" id="sr-csv-btn">Export CSV</button>
-          <span class="hint" id="sr-live-hint">Click any name on a chart or table to see their Excel rows</span>
+          <span class="hint" id="sr-live-hint">Click a name to filter this page to that person only</span>
         </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
-        <p class="foot" id="sr-charts-note" style="margin:0 0 10px"></p>
 
-        <div class="charts sr-charts" id="sr-charts">
-          <article class="card chart-span-2">
-            <h2>Month · Delivery / Proforma / Target</h2>
-            <div class="chart-box tall"><canvas id="chart-sr"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Month · Ach% (Delivery ÷ Target)</h2>
-            <div class="chart-box tall"><canvas id="chart-sr-ach"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Day · Delivery / Proforma</h2>
-            <div class="chart-box tall"><canvas id="chart-sr-day"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Delivery by Plant (Month)</h2>
-            <div class="chart-box"><canvas id="chart-sr-plant"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Month overview</h2>
-            <div class="chart-box"><canvas id="chart-sr-overview"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Cancellation %</h2>
-            <div class="chart-box tall"><canvas id="chart-cancel"></canvas></div>
-          </article>
-          <article class="card">
-            <h2>Gap +/- vs 30% cancel target</h2>
-            <div class="chart-box tall"><canvas id="chart-sr-gap"></canvas></div>
-          </article>
-        </div>
+        <div class="pbi-page" id="sr-pbi-page">
+          <aside class="pbi-slicer card">
+            <h2>Sales Employee</h2>
+            <p class="pbi-slicer-hint" id="sr-charts-note">Click a name to filter</p>
+            <div class="pbi-name-list" id="sr-name-list"></div>
+          </aside>
 
-        <div class="xl-sheet">
-          <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
-          <div class="xl-kpi" id="sr-day-kpis"></div>
-          <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
-          <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-        </div>
+          <div class="pbi-canvas">
+            <div class="pbi-filter-bar" id="sr-filter-bar" hidden>
+              <span>Filtered to</span>
+              <strong id="sr-filter-name">—</strong>
+              <button type="button" id="sr-filter-clear">✕ Clear</button>
+            </div>
 
-        <div class="xl-sheet">
-          <div class="xl-mtd" id="sr-month-title">Month to Date</div>
-          <div class="xl-kpi" id="sr-kpis"></div>
-          <div class="xl-table-wrap" id="sr-table-wrap"></div>
-          <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+            <div class="pbi-kpis" id="sr-pbi-kpis"></div>
+
+            <div class="pbi-visuals" id="sr-charts">
+              <article class="card pbi-viz">
+                <h2>Delivery / Proforma / Target</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
+              </article>
+              <article class="card pbi-viz">
+                <h2>Ach%</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
+              </article>
+              <article class="card pbi-viz">
+                <h2>Day · Delivery / Proforma</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
+              </article>
+              <article class="card pbi-viz">
+                <h2>By Plant</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+              </article>
+              <article class="card pbi-viz">
+                <h2>Month overview</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
+              </article>
+              <article class="card pbi-viz">
+                <h2>Cancellation % / Gap</h2>
+                <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+              </article>
+            </div>
+
+            <article class="card pbi-detail" id="sr-detail-card">
+              <div class="pbi-detail-head">
+                <div>
+                  <h2 id="sr-detail-title">Employee details</h2>
+                  <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
+                </div>
+              </div>
+              <div id="sr-detail-body">
+                <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
+              </div>
+            </article>
+
+            <details class="pbi-tables card">
+              <summary>Day to Date &amp; Month to Date tables</summary>
+              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+                <div class="xl-kpi" id="sr-day-kpis"></div>
+                <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
+                <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+              </div>
+              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+                <div class="xl-kpi" id="sr-kpis"></div>
+                <div class="xl-table-wrap" id="sr-table-wrap"></div>
+                <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
 
@@ -270,9 +298,9 @@
     refreshTargetsFromAdmin();
     if (!window._data || !hasSalesReportInputs()) return false;
     window._data = data();
+    window._srRowsByKey = Object.fromEntries((window._data.salesReport.rows || []).map((r) => [r._key, r]));
     renderSalesReportKpis(window._data.salesReport);
-    renderSalesReportCharts(window._data.salesReport);
-    renderSalesReportTable(window._data.salesReport);
+    refreshSalesSelection();
     setStatus(reason || "Targets updated live", "ok");
     return true;
   }
@@ -1326,7 +1354,7 @@
               if (!els.length) return;
               const idx = els[0].index;
               const key = empKeys[idx];
-              if (key) openEmployeeDrawer(key);
+              if (key) selectEmployee(key);
             }
           : undefined,
         plugins: {
@@ -1341,7 +1369,7 @@
             padding: 12,
             cornerRadius: 10,
             callbacks: clickable
-              ? { footer: () => "Click to open Excel rows" }
+              ? { footer: () => "Click to filter this page to this name" }
               : undefined,
           },
         },
@@ -1544,7 +1572,7 @@
     ).join("");
   }
 
-  let srView = { search: "", filter: "", chartMode: "active" };
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "" };
 
   const SR_COLS = [
     { key: "No", label: "No" },
@@ -1567,6 +1595,9 @@
 
   function filterSrRows(baseRows) {
     let rows = baseRows.slice();
+    if (srView.selectedKey) {
+      rows = rows.filter((r) => r._key === srView.selectedKey);
+    }
     const q = srView.search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
@@ -2004,8 +2035,160 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function selectEmployee(key) {
+    if (!key) {
+      clearEmployeeFilter();
+      return;
+    }
+    // Toggle off if same name clicked again
+    srView.selectedKey = srView.selectedKey === key ? "" : key;
+    refreshSalesSelection();
+  }
+
+  function clearEmployeeFilter() {
+    srView.selectedKey = "";
+    refreshSalesSelection();
+  }
+
+  function refreshSalesSelection() {
+    const sr = window._data && window._data.salesReport;
+    if (!sr) return;
+    const clearBtn = $("#sr-clear-sel");
+    if (clearBtn) clearBtn.disabled = !srView.selectedKey;
+    const bar = $("#sr-filter-bar");
+    const nameEl = $("#sr-filter-name");
+    if (bar && nameEl) {
+      if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
+        bar.hidden = false;
+        nameEl.textContent = window._srRowsByKey[srView.selectedKey]["Sales Employee"] || srView.selectedKey;
+      } else {
+        bar.hidden = true;
+        nameEl.textContent = "—";
+      }
+    }
+    renderNameList(sr);
+    renderPbiKpis(sr);
+    renderSalesReportCharts(sr);
+    renderSelectedDetail(sr);
+    renderSalesReportTable(sr);
+    const hint = $("#sr-live-hint");
+    if (hint) {
+      hint.textContent = srView.selectedKey
+        ? "Showing one employee only · click Clear or the name again to show all"
+        : "Click a name to filter this page to that person only";
+    }
+  }
+
+  function renderNameList(sr) {
+    const el = $("#sr-name-list");
+    if (!el) return;
+    // List uses mode filter but NOT selectedKey (so user can pick another name)
+    const prev = srView.selectedKey;
+    srView.selectedKey = "";
+    const rows = chartRowsForMode(sr.rows || []);
+    srView.selectedKey = prev;
+
+    const q = srView.search.trim().toLowerCase();
+    const list = q
+      ? rows.filter((r) => String(r["Sales Employee"]).toLowerCase().includes(q) || String(r.Plant || "").toLowerCase().includes(q))
+      : rows;
+
+    el.innerHTML = list.map((r) => {
+      const active = r._key === srView.selectedKey ? " active" : "";
+      const del = Number(r["Delivery (Month)"]) || 0;
+      const pro = Number(r["Proforma (Month)"]) || 0;
+      return `<button type="button" class="pbi-name${active}" data-emp-key="${escapeHtml(r._key)}">
+        <span class="nm">${escapeHtml(shortEmpLabel(r["Sales Employee"]))}</span>
+        <span class="meta">D ${formatNumber(del)} · P ${formatNumber(pro)}</span>
+      </button>`;
+    }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`;
+
+    const note = $("#sr-charts-note");
+    if (note) {
+      note.textContent = srView.selectedKey
+        ? "1 name selected · charts filtered"
+        : `${list.length} names · click to filter page`;
+    }
+  }
+
+  function renderPbiKpis(sr) {
+    const el = $("#sr-pbi-kpis");
+    if (!el) return;
+    const rows = filterSrRows(sr.rows || []);
+    const t = sr.totals || {};
+    let cards;
+    if (srView.selectedKey && rows[0]) {
+      const r = rows[0];
+      const m = r.month || r;
+      const d = r.day || {};
+      cards = [
+        { lab: "Delivery MTD", val: formatNumber(r["Delivery (Month)"] || m.Delivery) },
+        { lab: "Proforma MTD", val: formatNumber(r["Proforma (Month)"] || m.Proforma) },
+        { lab: "Target", val: formatNumber(r.Target) },
+        { lab: "Ach%", val: escapeHtml(String(m["Ach%"] ?? "—")) },
+        { lab: "Delivery today", val: formatNumber(r["Delivery (Day)"] || d.Delivery) },
+        { lab: "Diff", val: formatNumber(m.Diff) },
+      ];
+    } else {
+      cards = [
+        { lab: "Delivery MTD", val: formatNumber(t.deliveryMonth || 0) },
+        { lab: "Proforma MTD", val: formatNumber(t.proformaMonth || 0) },
+        { lab: "Target", val: formatNumber(t.target || 0) },
+        { lab: "Ach%", val: t.target ? ((t.deliveryMonth / t.target) * 100).toFixed(1) + "%" : "—" },
+        { lab: "Delivery today", val: formatNumber(t.deliveryDay || 0) },
+        { lab: "Employees", val: formatNumber((sr.rows || []).length) },
+      ];
+    }
+    el.innerHTML = cards.map((c) => `
+      <div class="pbi-kpi">
+        <div class="lab">${c.lab}</div>
+        <div class="val">${c.val}</div>
+      </div>`).join("");
+  }
+
+  function renderSelectedDetail(sr) {
+    const title = $("#sr-detail-title");
+    const sub = $("#sr-detail-sub");
+    const body = $("#sr-detail-body");
+    if (!body) return;
+
+    if (!srView.selectedKey || !window._srRowsByKey || !window._srRowsByKey[srView.selectedKey]) {
+      if (title) title.textContent = "Employee details";
+      if (sub) sub.textContent = "Select a name to see only their Excel rows";
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>`;
+      return;
+    }
+
+    const row = window._srRowsByKey[srView.selectedKey];
+    const key = srView.selectedKey;
+    const live = sr.live || todayKeys();
+    const day = row.day || {};
+    const month = row.month || row;
+    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
+    const records = row._records || [];
+
+    if (title) title.textContent = row["Sales Employee"] || "Employee";
+    if (sub) sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Excel rows`;
+
+    body.innerHTML = `
+      <div class="emp-stat-grid">
+        <div class="emp-stat"><div class="k">Day Proforma</div><div class="v">${formatNumber(day.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Day Delivery</div><div class="v">${formatNumber(day.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Month Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
+        <div class="emp-stat"><div class="k">Month Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
+        <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
+      </div>
+      <h4 style="margin:8px 0 6px;font-size:.9rem">Excel rows for this name only</h4>
+      ${renderEmployeeRawTable(rawRows)}
+      ${renderVinSection("Proforma / Delivery counted this month", records.filter((r) => r.flags?.proformaMonth || r.flags?.deliveryMonth))}
+    `;
+  }
+
   function chartRowsForMode(allRows) {
     const base = filterSrRows(allRows || []);
+    if (srView.selectedKey) return base;
+
     const mode = srView.chartMode || "active";
     const score = (r) =>
       (Number(r["Delivery (Month)"]) || 0) * 3 +
@@ -2015,12 +2198,9 @@
       (Number(r.Target) || 0) * 0.01;
 
     if (mode === "all") return base;
-
     if (mode === "top12") {
       return base.slice().sort((a, b) => score(b) - score(a)).slice(0, 12);
     }
-
-    // active: any day/month proforma or delivery
     const active = base.filter((r) =>
       (Number(r["Delivery (Month)"]) || 0) > 0 ||
       (Number(r["Proforma (Month)"]) || 0) > 0 ||
@@ -2028,7 +2208,6 @@
       (Number(r["Proforma (Day)"]) || 0) > 0
     );
     if (active.length) return active.slice().sort((a, b) => score(b) - score(a));
-    // fallback when everything is zero: top 12 by target so chart stays readable
     return base.slice().sort((a, b) => (Number(b.Target) || 0) - (Number(a.Target) || 0)).slice(0, 12);
   }
 
@@ -2036,24 +2215,55 @@
     const rows = chartRowsForMode(sr.rows || []);
     if (!rows.length) return;
 
-    const tallH = Math.min(720, Math.max(320, rows.length * 36 + 72));
-    document.querySelectorAll("#sr-charts .chart-box.tall").forEach((el) => {
-      el.style.height = tallH + "px";
-    });
-
-    const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const single = rows.length === 1;
+    const horizontal = !single && rows.length > 1;
+    const labels = single
+      ? ["This employee"]
+      : rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
     const empKeys = rows.map((r) => r._key);
-    const clickOpts = { horizontal: true, clickable: true, empKeys };
+    const clickOpts = { horizontal, clickable: !single, empKeys };
+    // When single, still allow click but less useful — keep clickable false for cleaner UX
+
     const achColors = rows.map((r) => {
       const n = parsePct(r["Ach%"]) || 0;
       return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)";
     });
 
-    const modeNote = $("#sr-charts-note");
-    if (modeNote) {
-      const mode = srView.chartMode || "active";
-      const label = mode === "all" ? "all employees" : mode === "top12" ? "top 12" : "active employees only";
-      modeNote.textContent = `Showing ${rows.length} · ${label} · click a name to open Excel rows`;
+    if (single) {
+      const r = rows[0];
+      upsertChart("chart-sr", "bar", ["Delivery", "Proforma", "Target"], [
+        Number(r["Delivery (Month)"]) || 0,
+        Number(r["Proforma (Month)"]) || 0,
+        Number(r.Target) || 0,
+      ], {
+        backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(100, 116, 139, 0.75)", "rgba(11, 58, 102, 0.8)"],
+      });
+      upsertChart("chart-sr-ach", "doughnut", ["Ach%", "Remaining"], [
+        Math.min(100, parsePct(r["Ach%"]) || 0),
+        Math.max(0, 100 - (parsePct(r["Ach%"]) || 0)),
+      ]);
+      upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [
+        Number(r["Delivery (Day)"]) || 0,
+        Number(r["Proforma (Day)"]) || 0,
+      ], {
+        backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
+      });
+      upsertChart("chart-sr-plant", "doughnut", [String(r.Plant || "—")], [Number(r["Delivery (Month)"]) || 1]);
+      upsertChart("chart-sr-overview", "doughnut",
+        ["Delivery", "Proforma gap", "To target"],
+        [
+          Number(r["Delivery (Month)"]) || 0,
+          Math.max(0, (Number(r["Proforma (Month)"]) || 0) - (Number(r["Delivery (Month)"]) || 0)),
+          Math.max(0, (Number(r.Target) || 0) - (Number(r["Proforma (Month)"]) || 0)),
+        ]
+      );
+      upsertChart("chart-cancel", "bar", ["Cancel %", "Gap +/-"], [
+        parsePct(r["Cancellation %"] || r["Cancel %"]) || 0,
+        parsePct(r["Gap +/-"]) || 0,
+      ], {
+        backgroundColor: ["rgba(200, 30, 44, 0.75)", "rgba(13, 148, 136, 0.75)"],
+      });
+      return;
     }
 
     upsertChart("chart-sr", "bar", labels, null, {
@@ -2113,7 +2323,7 @@
     });
 
     const plantMap = new Map();
-    filterSrRows(sr.rows || []).forEach((r) => {
+    rows.forEach((r) => {
       const plant = String(r.Plant || "—").trim() || "—";
       plantMap.set(plant, (plantMap.get(plant) || 0) + (Number(r["Delivery (Month)"]) || 0));
     });
@@ -2130,22 +2340,25 @@
       ]
     );
 
-    upsertChart("chart-cancel", "bar", labels, rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0), {
+    upsertChart("chart-cancel", "bar", labels, null, {
       ...clickOpts,
-      label: "Cancel %",
-      backgroundColor: rows.map((r) => {
-        const n = parsePct(r["Cancellation %"] || r["Cancel %"]);
-        return (n == null || n <= 30) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
-      }),
-    });
-
-    upsertChart("chart-sr-gap", "bar", labels, rows.map((r) => parsePct(r["Gap +/-"]) || 0), {
-      ...clickOpts,
-      label: "Gap +/-",
-      backgroundColor: rows.map((r) => {
-        const n = parsePct(r["Gap +/-"]);
-        return (n == null || n >= 0) ? "rgba(13, 148, 136, 0.85)" : "rgba(200, 30, 44, 0.82)";
-      }),
+      legend: true,
+      datasets: [
+        {
+          label: "Cancel %",
+          data: rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0),
+          backgroundColor: "rgba(200, 30, 44, 0.75)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Gap +/-",
+          data: rows.map((r) => parsePct(r["Gap +/-"]) || 0),
+          backgroundColor: "rgba(13, 148, 136, 0.75)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
     });
   }
 
@@ -2170,9 +2383,9 @@
     renderKpis(d);
     renderCharts(d);
     if (hasSalesReportInputs()) {
+      window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
       renderSalesReportKpis(d.salesReport);
-      renderSalesReportCharts(d.salesReport);
-      renderSalesReportTable(d.salesReport);
+      refreshSalesSelection();
     } else {
       clearSalesReportUi();
     }
@@ -2301,23 +2514,22 @@
   });
   $("#sr-search").addEventListener("input", (e) => {
     srView.search = e.target.value;
-    if (window._data && hasSalesReportInputs()) {
-      renderSalesReportCharts(window._data.salesReport);
-      renderSalesReportTable(window._data.salesReport);
-    }
+    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
   });
   $("#sr-filter").addEventListener("change", (e) => {
     srView.filter = e.target.value;
-    if (window._data && hasSalesReportInputs()) {
-      renderSalesReportCharts(window._data.salesReport);
-      renderSalesReportTable(window._data.salesReport);
-    }
+    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
   });
   $("#sr-chart-mode").addEventListener("change", (e) => {
     srView.chartMode = e.target.value || "active";
-    if (window._data && hasSalesReportInputs()) {
-      renderSalesReportCharts(window._data.salesReport);
-    }
+    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+  });
+  $("#sr-clear-sel").addEventListener("click", clearEmployeeFilter);
+  $("#sr-filter-clear").addEventListener("click", clearEmployeeFilter);
+  $("#sr-name-list").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-emp-key]");
+    if (!btn) return;
+    selectEmployee(btn.getAttribute("data-emp-key"));
   });
   $("#sr-csv-btn").addEventListener("click", () => {
     const rows = window._srExportRows || [];
@@ -2330,15 +2542,20 @@
     a.download = "sales-report-export.csv";
     a.click();
   });
-  $("#sr-table-wrap").addEventListener("click", (e) => {
+  function onEmpTableClick(e) {
     const tr = e.target.closest("tr.emp-row");
     if (!tr) return;
-    openEmployeeDrawer(tr.getAttribute("data-emp-key"));
-  });
+    selectEmployee(tr.getAttribute("data-emp-key"));
+  }
+  $("#sr-table-wrap").addEventListener("click", onEmpTableClick);
+  $("#sr-day-table-wrap").addEventListener("click", onEmpTableClick);
   $("#emp-drawer-close").addEventListener("click", closeEmployeeDrawer);
   $("#emp-backdrop").addEventListener("click", closeEmployeeDrawer);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeEmployeeDrawer();
+    if (e.key === "Escape") {
+      if (srView.selectedKey) clearEmployeeFilter();
+      closeEmployeeDrawer();
+    }
   });
 
   $("#search").addEventListener("input", (e) => {
