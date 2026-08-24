@@ -285,9 +285,40 @@
           <div class="bo-grid">
             <article class="card bo-span-2">
               <div class="pbi-viz-head">
-                <h2>Product back order analysis</h2>
+                <h2>Each product · BO / Confirmed / Not confirmed / Avg aging</h2>
+                <span class="hint">Click a product row to open suffix &amp; payment mix</span>
               </div>
               <div class="table-wrap" id="bo-product-table"></div>
+            </article>
+
+            <article class="card bo-span-2" id="bo-car-detail">
+              <div class="pbi-viz-head">
+                <h2>Choose car · suffix &amp; payment mix</h2>
+              </div>
+              <div class="bo-car-pick">
+                <label for="bo-car-select">Product / car</label>
+                <select id="bo-car-select"><option value="">Select a product…</option></select>
+                <button type="button" id="bo-car-clear" class="btn">Clear selection</button>
+              </div>
+              <div class="bo-car-summary" id="bo-car-summary"></div>
+              <div class="bo-car-charts">
+                <article class="card pbi-viz" data-chart-id="chart-bo-car-sfx" style="margin:0">
+                  <div class="pbi-viz-head">
+                    <h2>BO by suffix (this car)</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx">Wide</button>
+                  </div>
+                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-sfx"></canvas></div></div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-bo-car-pay" style="margin:0">
+                  <div class="pbi-viz-head">
+                    <h2>Cash · Bank · Employee · Fleet</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay">Wide</button>
+                  </div>
+                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-pay"></canvas></div></div>
+                </article>
+              </div>
+              <h3 class="bo-subhead">Suffix breakdown for selected car</h3>
+              <div class="table-wrap" id="bo-car-sfx-table"></div>
             </article>
 
             <article class="card pbi-viz" data-chart-id="chart-bo-backlog">
@@ -2996,6 +3027,7 @@
     type: "",
     sfx: "",
     confirm: "",
+    car: "",
   };
 
   function boMetrics(list) {
@@ -3181,20 +3213,121 @@
     }
     el.innerHTML = `<table class="bo-table">
       <thead><tr>
-        <th>Product</th><th>Category</th><th>Total BO</th><th>Confirmed</th><th>Not Confirmed</th>
-        <th>Confirmation %</th><th>Average Aging</th>
+        <th>Product</th>
+        <th>Total BO</th>
+        <th>Confirmed</th>
+        <th>Not Confirmed</th>
+        <th>Avg Aging</th>
+        <th>Conf %</th>
       </tr></thead>
-      <tbody>${aggs.map((a) => `
-        <tr data-bo-product="${escapeHtml(a.product)}" class="bo-row">
+      <tbody>${aggs.map((a) => {
+        const active = a.product === boView.car ? " active" : "";
+        return `<tr data-bo-product="${escapeHtml(a.product)}" class="bo-row${active}">
           <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
-          <td>${escapeHtml(a.category)}</td>
-          <td>${formatNumber(a.total)}</td>
+          <td><b>${formatNumber(a.total)}</b></td>
           <td>${formatNumber(a.confirmed)}</td>
           <td>${formatNumber(a.notConfirmed)}</td>
-          <td class="${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
           <td class="${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
-        </tr>`).join("")}</tbody>
+          <td class="${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
+        </tr>`;
+      }).join("")}</tbody>
     </table>`;
+  }
+
+  const PAY_TYPES = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"];
+
+  function countPayTypes(items) {
+    const byType = {};
+    PAY_TYPES.forEach((t) => { byType[t] = 0; });
+    byType.Other = 0;
+    items.forEach((b) => {
+      const t = b.salesType || "Other";
+      if (byType[t] == null) byType.Other += 1;
+      else byType[t] += 1;
+    });
+    return byType;
+  }
+
+  function renderBoCarDetail(allBos, filteredList) {
+    const select = $("#bo-car-select");
+    const summary = $("#bo-car-summary");
+    const tableEl = $("#bo-car-sfx-table");
+    if (!select || !summary || !tableEl) return;
+
+    const products = [...new Set((allBos || []).map((b) => b.product).filter(Boolean))].sort();
+    select.innerHTML = `<option value="">Select a product…</option>` +
+      products.map((p) => `<option value="${escapeHtml(p)}"${p === boView.car ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
+
+    if (!boView.car) {
+      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix BO counts and Cash / Bank / Employee / Fleet mix.</p>`;
+      tableEl.innerHTML = "";
+      upsertChart("chart-bo-car-sfx", "bar", ["—"], [0], { horizontal: true, backgroundColor: "rgba(148,163,184,0.5)" });
+      upsertChart("chart-bo-car-pay", "doughnut", ["No selection"], [1]);
+      return;
+    }
+
+    const source = filteredList || allBos || [];
+    const carRows = source.filter((b) => b.product === boView.car);
+    const m = boMetrics(carRows);
+    const pay = countPayTypes(carRows);
+    summary.innerHTML = `
+      <div class="bo-car-kpis">
+        <div class="bo-kpi ok"><div class="lab">Product</div><div class="val" style="font-size:1.05rem">${escapeHtml(boView.car)}</div><div class="sub">selected car</div></div>
+        <div class="bo-kpi ok"><div class="lab">Total BO</div><div class="val">${formatNumber(m.total)}</div><div class="sub">for this product</div></div>
+        <div class="bo-kpi ok"><div class="lab">Confirmed</div><div class="val">${formatNumber(m.confirmed)}</div><div class="sub">${(m.confirmPct * 100).toFixed(1)}%</div></div>
+        <div class="bo-kpi warn"><div class="lab">Not Confirmed</div><div class="val">${formatNumber(m.notConfirmed)}</div><div class="sub">waiting</div></div>
+        <div class="bo-kpi ${kpiStatus("aging", m)}"><div class="lab">Avg Aging</div><div class="val">${formatNumber(m.avgAging)}d</div><div class="sub">days</div></div>
+        <div class="bo-kpi ok"><div class="lab">Cash</div><div class="val">${formatNumber(pay.Cash)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Bank</div><div class="val">${formatNumber(pay.Bank)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Employee</div><div class="val">${formatNumber(pay.Employee)}</div><div class="sub">sales type</div></div>
+        <div class="bo-kpi ok"><div class="lab">Fleet</div><div class="val">${formatNumber(pay.Fleet)}</div><div class="sub">sales type</div></div>
+      </div>`;
+
+    const sfxRows = [...groupBoBy(carRows, (b) => b.sfx || "—").entries()]
+      .map(([sfx, items]) => {
+        const metrics = boMetrics(items);
+        const byType = countPayTypes(items);
+        return { sfx, ...metrics, byType };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    tableEl.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Suffix / SFX</th>
+        <th>Total BO</th>
+        <th>Confirmed</th>
+        <th>Not Confirmed</th>
+        <th>Avg Aging</th>
+        <th>Cash</th>
+        <th>Bank</th>
+        <th>Employee</th>
+        <th>Fleet</th>
+        <th>ALJUF</th>
+      </tr></thead>
+      <tbody>${sfxRows.map((r) => `
+        <tr>
+          <td><b>${escapeHtml(r.sfx)}</b></td>
+          <td><b>${formatNumber(r.total)}</b></td>
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td class="${heatAging(r.avgAging)}">${formatNumber(r.avgAging)}d</td>
+          <td>${formatNumber(r.byType.Cash || 0)}</td>
+          <td>${formatNumber(r.byType.Bank || 0)}</td>
+          <td>${formatNumber(r.byType.Employee || 0)}</td>
+          <td>${formatNumber(r.byType.Fleet || 0)}</td>
+          <td>${formatNumber(r.byType.ALJUF || 0)}</td>
+        </tr>`).join("") || `<tr><td colspan="10" class="foot">No suffix rows for this product</td></tr>`}</tbody>
+    </table>`;
+
+    const topSfx = sfxRows.slice(0, 15);
+    upsertChart("chart-bo-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(11, 58, 102, 0.85)",
+    });
+    upsertChart("chart-bo-car-pay", "doughnut",
+      ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0),
+      ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0).map((t) => pay[t] || 0)
+    );
   }
 
   function renderBoSalesTypeTable(list) {
@@ -3349,6 +3482,7 @@
     renderBoInsights(list, m);
     renderBoStrategic(list);
     renderBoProductTable(aggs);
+    renderBoCarDetail(all, list);
     renderBoSalesTypeTable(list);
     renderBoSfxTable(list);
     renderBoCharts(list, aggs);
@@ -3549,8 +3683,12 @@
       }
       const prod = e.target.closest("[data-bo-product]");
       if (prod) {
-        boView.product = prod.getAttribute("data-bo-product") || "";
+        const name = prod.getAttribute("data-bo-product") || "";
+        boView.car = name;
+        boView.product = name;
         if (window._data) renderBoDashboard(window._data);
+        const detail = $("#bo-car-detail");
+        if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
       const typ = e.target.closest("[data-bo-type]");
@@ -3600,7 +3738,23 @@
   const boClearEl = $("#bo-clear-filters");
   if (boClearEl) {
     boClearEl.addEventListener("click", () => {
-      boView = { search: "", product: "", category: "", scope: "", channel: "", type: "", sfx: "", confirm: "" };
+      boView = { search: "", product: "", category: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "" };
+      refreshBoFromFilters();
+    });
+  }
+  const boCarSelect = $("#bo-car-select");
+  if (boCarSelect) {
+    boCarSelect.addEventListener("change", (e) => {
+      boView.car = e.target.value || "";
+      if (boView.car) boView.product = boView.car;
+      refreshBoFromFilters();
+    });
+  }
+  const boCarClear = $("#bo-car-clear");
+  if (boCarClear) {
+    boCarClear.addEventListener("click", () => {
+      boView.car = "";
+      boView.product = "";
       refreshBoFromFilters();
     });
   }
