@@ -47,7 +47,7 @@
 
     <div class="admin-bar" id="nav-bar">
       <button type="button" class="tab active" data-nav="dashboard" id="nav-dashboard" disabled>Live Dashboard</button>
-      <span class="hint">Upload Excel on Admin · Sales Report builds from Sales Raw (Cancelled BO optional)</span>
+      <span class="hint">Sales · BO Dashboard · Stock · Upload Excel on Admin</span>
     </div>
 
     <section id="wait-section" class="card" style="margin-bottom:16px">
@@ -247,7 +247,16 @@
       <div class="panel-section" id="panel-bodashboard" style="display:none">
         <div class="bo-empty card" id="bo-empty">
           <h2>Back Order Management Dashboard</h2>
-          <p style="color:var(--muted);margin:0">Push a <b>Back Order</b> Excel file from Admin to open this executive BO view.</p>
+          <p style="color:var(--muted);margin:0 0 12px">
+            This page opens after you push a <b>Back Order</b> Excel file from Admin.
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
+            <li>Upload slot <b>1 · Back Order</b></li>
+            <li>Click <b>Push to live</b></li>
+            <li>Return here and click <b>Refresh from Admin</b> (or reopen this tab)</li>
+          </ol>
+          <p class="foot" style="margin:0">Until then, Sales Dashboard can still run from Sales Raw alone.</p>
         </div>
 
         <div id="bo-dash" class="bo-dash" hidden>
@@ -1795,7 +1804,7 @@
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "salesreport") return hasSalesReportInputs();
-      if (p.id === "bodashboard") return hasBackOrder();
+      // BO Dashboard always visible — empty state explains when BO file is missing
       return true;
     });
   }
