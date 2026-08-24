@@ -47,7 +47,7 @@
 
     <div class="admin-bar" id="nav-bar">
       <button type="button" class="tab active" data-nav="dashboard" id="nav-dashboard" disabled>Live Dashboard</button>
-      <span class="hint">Sales · BO Dashboard · Stock · Upload Excel on Admin</span>
+      <span class="hint">Sales · BO · Stock Allocation · Upload Excel on Admin</span>
     </div>
 
     <section id="wait-section" class="card" style="margin-bottom:16px">
@@ -379,6 +379,46 @@
               <div class="table-wrap" id="bo-sfx-table"></div>
             </article>
           </div>
+        </div>
+      </div>
+
+      <!-- PANEL: Stock Dashboard (BO Allocation from available stock) -->
+      <div class="panel-section" id="panel-stockdashboard" style="display:none">
+        <div class="bo-empty card" id="stock-empty">
+          <h2>Stock Dashboard · Back Order Allocation</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Shows only back orders that can be fulfilled from available inventory
+            (<b>Col AE &gt; 0</b> and <b>Col AD ≤ Col AE</b>).
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
+            <li>Upload slot <b>1 · Back Order</b></li>
+            <li>Click <b>Push to live</b></li>
+            <li>Return here and click <b>Refresh from Admin</b></li>
+          </ol>
+        </div>
+
+        <div id="stock-dash" class="stock-dash" hidden>
+          <div class="bo-toolbar stock-toolbar">
+            <select id="stock-f-k"><option value="">All · Col K</option></select>
+            <select id="stock-f-l"><option value="">All · Col L</option></select>
+            <select id="stock-f-m"><option value="">All · Col M</option></select>
+            <select id="stock-f-g"><option value="">All · Col G</option></select>
+            <select id="stock-f-own"><option value="">All · Sales ownership</option></select>
+            <select id="stock-f-a"><option value="">All · Col A</option></select>
+            <button type="button" id="stock-clear-filters" class="btn">Clear filters</button>
+          </div>
+
+          <div class="bo-kpis" id="stock-kpis"></div>
+
+          <article class="card">
+            <div class="pbi-viz-head">
+              <h2>Fulfillable back orders</h2>
+              <span class="hint">AE &gt; 0 and AD ≤ AE · filters use All to ignore that column</span>
+            </div>
+            <div class="table-wrap" id="stock-alloc-table"></div>
+            <p class="foot" id="stock-alloc-foot"></p>
+          </article>
         </div>
       </div>
 
@@ -792,9 +832,45 @@
       if (line.every((c) => cellToString(c).trim() === "")) continue;
       const obj = {};
       uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      // Preserve Excel column positions (A=0…) for letter-based dashboards
+      obj.__cells = line;
+      obj.__headers = uniqueHeaders;
       rows.push(obj);
     }
     return rows;
+  }
+
+  function indexToColLetter(idx) {
+    let n = Number(idx) + 1;
+    let s = "";
+    while (n > 0) {
+      const rem = (n - 1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  function cellByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (idx < 0 || !row) return "";
+    if (Array.isArray(row.__cells)) return row.__cells[idx] != null ? row.__cells[idx] : "";
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      return row[row.__headers[idx]] != null ? row[row.__headers[idx]] : "";
+    }
+    const keys = Object.keys(row).filter((k) => !k.startsWith("__"));
+    if (keys[idx] != null) return row[keys[idx]] != null ? row[keys[idx]] : "";
+    return "";
+  }
+
+  function headerByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (row && Array.isArray(row.__headers) && row.__headers[idx]) return row.__headers[idx];
+    return `Column ${String(letter || "").toUpperCase()}`;
+  }
+
+  function isYesFlag(v) {
+    return /^(yes|y|1|true)$/i.test(String(v ?? "").trim());
   }
 
   function backorderRows(workbook) {
@@ -1811,6 +1887,7 @@
   const PANEL_DEFS = [
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
+    { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
   let activePanel = "salesreport";
@@ -1835,7 +1912,7 @@
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "salesreport") return hasSalesReportInputs();
-      // BO Dashboard always visible — empty state explains when BO file is missing
+      // BO + Stock Dashboard always visible — empty state when BO file missing
       return true;
     });
   }
@@ -3488,6 +3565,160 @@
     renderBoCharts(list, aggs);
   }
 
+  /* ——— Stock Dashboard · Back Order Allocation ——— */
+  const STOCK_DISPLAY_COLS = ["E", "K", "L", "M", "P", "G", "H", "AB", "AC", "AF", "AG", "AI", "AH"];
+  const STOCK_MAIN_SALES = "__MAIN_SALES__";
+  let stockView = { k: "", l: "", m: "", g: "", own: "", a: "" };
+
+  function rawBoRows() {
+    return slots.backorder.rows || [];
+  }
+
+  function stockDisplayLabel(sample, letter) {
+    const h = headerByLetter(sample, letter);
+    const clean = String(h || "").trim();
+    if (!clean || /^Column\s+\d+$/i.test(clean)) return `Col ${letter}`;
+    return `${clean}`;
+  }
+
+  function isFulfillableBo(row) {
+    const ae = toNumber(cellByLetter(row, "AE"));
+    const ad = toNumber(cellByLetter(row, "AD"));
+    return ae > 0 && ad <= ae;
+  }
+
+  function fulfillableBoRows() {
+    return rawBoRows().filter(isFulfillableBo);
+  }
+
+  function uniqueColValues(rows, letter) {
+    const set = new Set();
+    rows.forEach((r) => {
+      const v = cellToString(cellByLetter(r, letter)).trim();
+      if (v) set.add(v);
+    });
+    return set;
+  }
+
+  function filteredAllocRows() {
+    return fulfillableBoRows().filter((r) => {
+      if (stockView.k && cellToString(cellByLetter(r, "K")).trim() !== stockView.k) return false;
+      if (stockView.l && cellToString(cellByLetter(r, "L")).trim() !== stockView.l) return false;
+      if (stockView.m && cellToString(cellByLetter(r, "M")).trim() !== stockView.m) return false;
+      if (stockView.g && cellToString(cellByLetter(r, "G")).trim() !== stockView.g) return false;
+      if (stockView.a && cellToString(cellByLetter(r, "A")).trim() !== stockView.a) return false;
+      if (stockView.own) {
+        if (stockView.own === STOCK_MAIN_SALES) {
+          if (!isYesFlag(cellByLetter(r, "AC"))) return false;
+        } else if (cellToString(cellByLetter(r, "H")).trim() !== stockView.own) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function fillStockSelect(sel, values, current, allLabel) {
+    fillBoSelect(sel, values, current, allLabel);
+  }
+
+  function renderStockKpis(baseCount, filteredCount) {
+    const el = $("#stock-kpis");
+    if (!el) return;
+    el.innerHTML = `
+      <div class="bo-kpi ok">
+        <div class="lab">Fulfillable BOs</div>
+        <div class="val">${formatNumber(baseCount)}</div>
+        <div class="sub">AE &gt; 0 and AD ≤ AE</div>
+      </div>
+      <div class="bo-kpi ok">
+        <div class="lab">After filters</div>
+        <div class="val">${formatNumber(filteredCount)}</div>
+        <div class="sub">matching allocation rows</div>
+      </div>
+      <div class="bo-kpi ${filteredCount ? "ok" : "warn"}">
+        <div class="lab">Status</div>
+        <div class="val" style="font-size:1rem">${filteredCount ? "Ready" : "None"}</div>
+        <div class="sub">${filteredCount ? "stock available to allocate" : "no matching stock"}</div>
+      </div>`;
+  }
+
+  function renderStockAllocTable(rows, sample) {
+    const el = $("#stock-alloc-table");
+    const foot = $("#stock-alloc-foot");
+    if (!el) return;
+
+    if (!rows.length) {
+      el.innerHTML = `<p class="stock-empty-msg">No matching Back Orders with available stock.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const headers = STOCK_DISPLAY_COLS.map((letter) => ({
+      letter,
+      label: stockDisplayLabel(sample || rows[0], letter),
+    }));
+
+    const limit = Math.min(rows.length, MAX_ROWS);
+    el.innerHTML = `<table class="bo-table stock-alloc-table">
+      <thead><tr>${headers.map((h) =>
+        `<th title="Column ${h.letter}">${escapeHtml(h.label)}<span class="stock-col-letter">${h.letter}</span></th>`
+      ).join("")}</tr></thead>
+      <tbody>${rows.slice(0, limit).map((r) => `
+        <tr>${STOCK_DISPLAY_COLS.map((letter) =>
+          `<td>${escapeHtml(cellToString(cellByLetter(r, letter)))}</td>`
+        ).join("")}</tr>`
+      ).join("")}</tbody>
+    </table>`;
+    if (foot) {
+      foot.textContent = rows.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${rows.length.toLocaleString()} fulfillable rows`
+        : `${rows.length.toLocaleString()} fulfillable row${rows.length === 1 ? "" : "s"}`;
+    }
+  }
+
+  function renderStockDashboard() {
+    const empty = $("#stock-empty");
+    const dash = $("#stock-dash");
+    if (!hasBackOrder()) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const base = fulfillableBoRows();
+    const sample = base[0] || rawBoRows()[0] || {};
+
+    fillStockSelect("#stock-f-k", uniqueColValues(base, "K"), stockView.k, `All · ${stockDisplayLabel(sample, "K")}`);
+    fillStockSelect("#stock-f-l", uniqueColValues(base, "L"), stockView.l, `All · ${stockDisplayLabel(sample, "L")}`);
+    fillStockSelect("#stock-f-m", uniqueColValues(base, "M"), stockView.m, `All · ${stockDisplayLabel(sample, "M")}`);
+    fillStockSelect("#stock-f-g", uniqueColValues(base, "G"), stockView.g, `All · ${stockDisplayLabel(sample, "G")}`);
+    fillStockSelect("#stock-f-a", uniqueColValues(base, "A"), stockView.a, `All · ${stockDisplayLabel(sample, "A")}`);
+
+    const ownEl = $("#stock-f-own");
+    if (ownEl) {
+      const hVals = [...uniqueColValues(base, "H")].sort();
+      const opts = [
+        `<option value="">All · Sales ownership</option>`,
+        `<option value="${STOCK_MAIN_SALES}"${stockView.own === STOCK_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
+        ...hVals.map((v) =>
+          `<option value="${escapeHtml(v)}"${v === stockView.own ? " selected" : ""}>${escapeHtml(v)}</option>`
+        ),
+      ];
+      ownEl.innerHTML = opts.join("");
+    }
+
+    const list = filteredAllocRows();
+    renderStockKpis(base.length, list.length);
+    renderStockAllocTable(list, sample);
+  }
+
+  function refreshStockFromFilters() {
+    renderStockDashboard();
+  }
+
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
@@ -3510,6 +3741,7 @@
     renderKpis(d);
     renderCharts(d);
     renderBoDashboard(d);
+    renderStockDashboard();
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
       renderSalesReportKpis(d.salesReport);
@@ -3758,6 +3990,30 @@
       refreshBoFromFilters();
     });
   }
+
+  [
+    ["#stock-f-k", "k"],
+    ["#stock-f-l", "l"],
+    ["#stock-f-m", "m"],
+    ["#stock-f-g", "g"],
+    ["#stock-f-own", "own"],
+    ["#stock-f-a", "a"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      stockView[key] = e.target.value;
+      refreshStockFromFilters();
+    });
+  });
+  const stockClearEl = $("#stock-clear-filters");
+  if (stockClearEl) {
+    stockClearEl.addEventListener("click", () => {
+      stockView = { k: "", l: "", m: "", g: "", own: "", a: "" };
+      refreshStockFromFilters();
+    });
+  }
+
   $("#pbi-wide-close").addEventListener("click", closeWideChart);
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
     if (e.target.id === "pbi-wide-backdrop") closeWideChart();

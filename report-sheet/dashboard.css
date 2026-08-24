@@ -955,6 +955,33 @@ button:disabled {
   padding: 0;
 }
 
+.stock-empty-msg {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.stock-alloc-table th .stock-col-letter {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.stock-toolbar select {
+  max-width: 200px;
+}
+
+@media (max-width: 900px) {
+  .stock-toolbar select {
+    max-width: none;
+  }
+}
+
 .heat-ok { background: rgba(13, 148, 136, 0.14); font-weight: 700; color: #0f766e; }
 .heat-mid { background: rgba(180, 83, 9, 0.14); font-weight: 700; color: #9a3412; }
 .heat-bad { background: rgba(200, 30, 44, 0.14); font-weight: 700; color: #b91c1c; }
