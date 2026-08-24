@@ -601,6 +601,18 @@
             }
         }
 
+        function isUnassignedCompany(item) {
+            const c = String(item?.deliveryCompany || item?.company || '').trim();
+            if (!c) return true;
+            const key = c.toLowerCase().replace(/\s+/g, ' ');
+            return key === 'بدون شركة'
+                || key === 'بدون الشركه'
+                || key === 'unassigned'
+                || key === 'no company'
+                || key === 'none'
+                || key === '-';
+        }
+
         async function submitBoardVins(company) {
             if (!rawUploaded) {
                 return setBoardStatus(company, 'ارفع البيانات الخام أولاً', 'err');
@@ -616,13 +628,16 @@
                 ? (company || 'مستودع الهاتفية')
                 : company;
 
-            const existing = new Set(
-                currentQueue.map((item) => String(item.vin || '').trim().toUpperCase()).filter(Boolean)
+            const byVin = new Map(
+                currentQueue
+                    .map((item) => [String(item.vin || '').trim().toUpperCase(), item])
+                    .filter(([vin]) => vin)
             );
             const seenInPaste = new Set();
-            const newVins = [];
+            const toSubmit = [];
             let pastedDuplicates = 0;
             let queueDuplicates = 0;
+            let willReassign = 0;
 
             parsed.forEach((vin) => {
                 if (seenInPaste.has(vin)) {
@@ -630,28 +645,34 @@
                     return;
                 }
                 seenInPaste.add(vin);
-                if (existing.has(vin)) {
+                const existingItem = byVin.get(vin);
+                if (existingItem) {
+                    if (isUnassignedCompany(existingItem)) {
+                        toSubmit.push(vin);
+                        willReassign++;
+                        return;
+                    }
                     queueDuplicates++;
                     return;
                 }
-                newVins.push(vin);
+                toSubmit.push(vin);
             });
 
-            if (!newVins.length) {
+            if (!toSubmit.length) {
                 return setBoardStatus(
                     company,
-                    `كل الشاسيهات مكررة${pastedDuplicates ? ` (${pastedDuplicates} داخل اللصق)` : ''}${queueDuplicates ? ` (${queueDuplicates} موجودة مسبقاً)` : ''}`,
+                    `كل الشاسيهات مكررة أو معيّنة مسبقاً${pastedDuplicates ? ` (${pastedDuplicates} داخل اللصق)` : ''}${queueDuplicates ? ` (${queueDuplicates} لها شركة مسبقاً)` : ''}`,
                     'err'
                 );
             }
 
-            setBoardStatus(company, 'جاري الإرسال…');
+            setBoardStatus(company, willReassign ? 'جاري إعادة التعيين / الإرسال…' : 'جاري الإرسال…');
             try {
                 const res = await fetch('/api/delivery-coordinator/submit-vins', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        vins: newVins,
+                        vins: toSubmit,
                         company: deliveryCompany,
                         plannedDeliveryMode
                     })
@@ -665,8 +686,9 @@
 
                 const parts = [];
                 if (data.added) parts.push(`تم إضافة ${data.added}`);
+                if (data.reassigned) parts.push(`أُعيد تعيين ${data.reassigned} لشركة ${deliveryCompany}`);
                 if (pastedDuplicates) parts.push(`${pastedDuplicates} مكررة داخل اللصق`);
-                if (queueDuplicates) parts.push(`${queueDuplicates} موجودة مسبقاً`);
+                if (queueDuplicates) parts.push(`${queueDuplicates} لها شركة مسبقاً`);
                 if (missing.length) parts.push(`${missing.length} غير موجودة في Excel`);
                 else if (data.skipped) parts.push(`${data.skipped} تم تخطيها`);
                 const whHits = Array.isArray(data.alreadyInWarehouse) ? data.alreadyInWarehouse : [];
@@ -674,7 +696,7 @@
                 setBoardStatus(
                     company,
                     parts.join(' · ') || 'لم تتم إضافة شاسيه',
-                    data.added ? 'ok' : 'err'
+                    (data.added || data.reassigned) ? 'ok' : 'err'
                 );
 
                 const missingBox = document.getElementById('missingVinBox');

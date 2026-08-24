@@ -778,6 +778,19 @@ function normalizePlannedDeliveryMode(raw) {
   return '';
 }
 
+/** True when queue item has no real delivery company (needs coordinator assign). */
+function isUnassignedDeliveryCompany(item) {
+  const c = String(item?.deliveryCompany || item?.company || '').trim();
+  if (!c) return true;
+  const key = c.toLowerCase().replace(/\s+/g, ' ');
+  return key === 'بدون شركة'
+    || key === 'بدون الشركه'
+    || key === 'unassigned'
+    || key === 'no company'
+    || key === 'none'
+    || key === '-';
+}
+
 function enrichQueueItem(item) {
   const vin = normVin(item.vin);
   const veh = vehicleIndex().get(vin);
@@ -2120,9 +2133,9 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   }
 
   store.queue = dedupeQueue(store.queue);
-  const existing = new Set(store.queue.map((q) => normVin(q.vin)));
   const byVin = vehicleIndex();
   let added = 0;
+  let reassigned = 0;
   let skipped = 0;
   const missingVins = [];
   const alreadyInWarehouse = [];
@@ -2135,11 +2148,29 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       skipped += 1;
       continue;
     }
-    if (seenBatch.has(vin) || existing.has(vin)) {
+    if (seenBatch.has(vin)) {
       skipped += 1;
       continue;
     }
     seenBatch.add(vin);
+
+    const existingItem = findQueueItem(vin);
+    if (existingItem) {
+      // Already in queue with no company → assign to the company pasted into
+      if (isUnassignedDeliveryCompany(existingItem) && deliveryCompany) {
+        existingItem.deliveryCompany = deliveryCompany;
+        existingItem.company = deliveryCompany;
+        existingItem.plannedDeliveryMode = plannedDeliveryMode;
+        reassigned += 1;
+        const wh = findWarehouseInStock(vin);
+        if (wh) {
+          alreadyInWarehouse.push({ vin, slot: wh.slot, zone: wh.zone });
+        }
+        continue;
+      }
+      skipped += 1;
+      continue;
+    }
 
     const veh = byVin.get(vin);
     if (!veh) {
@@ -2165,13 +2196,13 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       company: deliveryCompany
     };
     store.queue.push(enrichFromVehicle(base, veh));
-    existing.add(vin);
     added += 1;
   }
 
   persistAndBroadcast();
   res.json({
     added,
+    reassigned,
     skipped,
     notInInventory: missingVins.length,
     missingVins,
