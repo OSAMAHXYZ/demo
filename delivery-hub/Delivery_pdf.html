@@ -981,6 +981,42 @@
         }
         .stock-action-btns .sa-cancel:hover { color: #cbd5e1; transform: none; filter: none; }
 
+        .quick-print-strip {
+            border: 1px solid rgba(235, 10, 30, 0.35) !important;
+            background: linear-gradient(165deg, rgba(235, 10, 30, 0.1), rgba(15, 23, 42, 0.04)) !important;
+        }
+        .quick-print-strip h2 { color: var(--tot-primary); }
+        .quick-print-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .quick-print-meta {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .quick-print-meta span {
+            display: block;
+            font-size: .72rem;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .quick-print-meta strong {
+            font-size: .92rem;
+            color: #0f172a;
+        }
+        .field-spotlight {
+            outline: 2px solid rgba(235, 10, 30, 0.45);
+            outline-offset: 4px;
+            border-radius: 8px;
+        }
+        @media (max-width: 640px) {
+            .quick-print-grid { grid-template-columns: 1fr; }
+        }
 
         /* ——— Futuristic agent workspace ——— */
         .status-modal {
@@ -1120,7 +1156,7 @@
                     <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
                     <div>
                         <h1>لوحة الترحيل <span class="live-pill" id="livePill" title="Live sync">● Live</span></h1>
-                        <p>اختر السيارات وحدد حالتها — يمكنك إدارة عدة سيارات</p>
+                        <p>شركات المنسق · انقر الشاسيه · مدينة + مرفقات · طباعة</p>
                     </div>
                 </div>
                 <div class="ws-user-pill">
@@ -1136,8 +1172,8 @@
 
             <section class="ws-section">
                 <div class="ws-section-head">
-                    <h2>السيارات المتاحة</h2>
-                    <span class="hint">مجمّعة حسب الشركة من المنسق — انقر الشاسيه لفتح المذكرة</span>
+                    <h2>حسب الشركة — VINs جاهزة للطباعة</h2>
+                    <span class="hint">كل شركة مع شاسيهها · انقر الشاسيه → اختر المدينة → مرفقات (اختياري) → طباعة</span>
                 </div>
                 <div class="fleet-search-wrap">
                     <input
@@ -1254,11 +1290,39 @@
     <div class="layout">
         <header class="hero no-print">
             <h1>مذكرة ترحيل السيارات</h1>
-            <p>املأ البيانات — شاهد المعاينة — اطبع على ورق A4</p>
+            <p>الشركة والشاسيه من المنسق — اختر المدينة، أضف مرفقات إن لزم، ثم اطبع</p>
         </header>
 
         <div class="form-col">
             <form id="deliveryForm">
+                <section class="card no-print quick-print-strip" id="quickPrintStrip" hidden>
+                    <h2>خطوات سريعة للطباعة</h2>
+                    <p class="hint" id="quickPrintHint">الشركة والشاسيه مُعبّأتان — أكمل المدينة والمرفقات</p>
+                    <div class="quick-print-grid">
+                        <div class="quick-print-meta">
+                            <span>الشركة</span>
+                            <strong id="quickCompanyLabel">—</strong>
+                        </div>
+                        <div class="quick-print-meta">
+                            <span>الشاسيه</span>
+                            <strong id="quickVinLabel" style="direction:ltr;font-family:ui-monospace,Consolas,monospace">—</strong>
+                        </div>
+                    </div>
+                    <div class="grid grid-2" style="margin-top:12px">
+                        <div>
+                            <label for="quick_branch_focus">محولة إلى فرع / المدينة</label>
+                            <button type="button" class="btn btn-secondary" id="btnFocusCity" style="width:100%">اختر المدينة من الحقل أدناه ↓</button>
+                        </div>
+                        <div>
+                            <label for="quick_att_focus">المرفقات</label>
+                            <button type="button" class="btn btn-secondary" id="btnFocusAttachments" style="width:100%">إضافة مرفقات (اختياري) ↓</button>
+                        </div>
+                    </div>
+                    <div class="actions" style="margin-top:14px;margin-bottom:0">
+                        <button type="button" class="btn btn-primary" id="btnQuickPrint">🖨 طباعة A4</button>
+                    </div>
+                </section>
+
                 <section class="card memo-only-section">
                     <h2>بيانات المذكرة — Header</h2>
                     <div class="grid grid-4">
@@ -2371,6 +2435,7 @@
             setWarehousePrintMode(false);
             setStatus('');
             applyAgentAutoBranch();
+            hideQuickPrintStrip();
         }
 
         function setWarehousePrintMode(enabled) {
@@ -2548,7 +2613,19 @@
                     </div>`;
                 }).join('');
                 availEl.querySelectorAll('.fleet-card').forEach((card) => {
-                    card.addEventListener('click', () => openCarAction(card.dataset.vin, 'available'));
+                    card.addEventListener('click', () => {
+                        const vin = card.dataset.vin;
+                        const item = workspaceQueue.find((q) => q.vin === vin) || { vin };
+                        const planned = String(
+                            item.plannedDeliveryMode || card.dataset.planned || ''
+                        ).toLowerCase();
+                        // Coordinator already assigned company + type → open memo directly
+                        if (planned === 'memo' || planned === 'warehouse') {
+                            startDeliveryNote(vin);
+                            return;
+                        }
+                        openCarAction(vin, 'available');
+                    });
                 });
             }
             filterAvailableFleetByVin();
@@ -2650,6 +2727,7 @@
             const mode = String(forceMode || item.plannedDeliveryMode || '').toLowerCase();
             if (mode === 'warehouse') {
                 applyWarehouseDelivery();
+                showQuickPrintStrip(item, { warehouse: true });
                 return;
             }
             setWarehousePrintMode(false);
@@ -2659,6 +2737,8 @@
                 const companyEl = document.getElementById('company_rep');
                 if (companyEl) {
                     companyEl.value = company;
+                    companyEl.readOnly = true;
+                    companyEl.style.opacity = '0.85';
                     companyEl.dispatchEvent(new Event('input', { bubbles: true }));
                     companyEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
@@ -2679,7 +2759,50 @@
             } else {
                 window.__forceVehicleStatus = '';
             }
+            showQuickPrintStrip(item, { warehouse: false });
             updatePreview();
+            // Focus city unless auto-locked for this agent
+            setTimeout(() => {
+                const branch = document.getElementById('branch_to');
+                if (branch && !branch.classList.contains('branch-auto-locked')) {
+                    branch.focus();
+                    branch.closest('div')?.classList.add('field-spotlight');
+                    setTimeout(() => branch.closest('div')?.classList.remove('field-spotlight'), 2200);
+                } else {
+                    const att = document.getElementById('attachments');
+                    att?.focus();
+                    att?.closest('div')?.classList.add('field-spotlight');
+                    setTimeout(() => att?.closest('div')?.classList.remove('field-spotlight'), 2200);
+                }
+            }, 180);
+        }
+
+        function showQuickPrintStrip(item, { warehouse = false } = {}) {
+            const strip = document.getElementById('quickPrintStrip');
+            if (!strip) return;
+            const company = String(item.deliveryCompany || item.company || '').trim() || '—';
+            const vin = String(item.vin || '').trim() || '—';
+            const companyLabel = document.getElementById('quickCompanyLabel');
+            const vinLabel = document.getElementById('quickVinLabel');
+            const hint = document.getElementById('quickPrintHint');
+            if (companyLabel) companyLabel.textContent = warehouse ? `${company} · مستودع` : company;
+            if (vinLabel) vinLabel.textContent = vin;
+            if (hint) {
+                hint.textContent = warehouse
+                    ? 'نموذج المستودع — أكمل الحقول المطلوبة ثم اطبع'
+                    : 'الشركة والشاسيه جاهزة — اختر المدينة، أضف مرفقات إن وجدت، ثم اطبع';
+            }
+            strip.hidden = false;
+        }
+
+        function hideQuickPrintStrip() {
+            const strip = document.getElementById('quickPrintStrip');
+            if (strip) strip.hidden = true;
+            const companyEl = document.getElementById('company_rep');
+            if (companyEl) {
+                companyEl.readOnly = false;
+                companyEl.style.opacity = '';
+            }
         }
 
         /** Allow coordinator-assigned company even if not yet in local options list. */
@@ -3270,8 +3393,34 @@
             setWarehousePrintMode(false);
             applyShowroomUi(false);
             clearClaimedVin();
+            hideQuickPrintStrip();
             openWorkspace();
         });
+
+        const btnQuickPrint = document.getElementById('btnQuickPrint');
+        if (btnQuickPrint) btnQuickPrint.addEventListener('click', () => doPrintA4());
+        const btnFocusCity = document.getElementById('btnFocusCity');
+        if (btnFocusCity) {
+            btnFocusCity.addEventListener('click', () => {
+                const branch = document.getElementById('branch_to');
+                if (!branch) return;
+                branch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                branch.focus();
+                branch.closest('div')?.classList.add('field-spotlight');
+                setTimeout(() => branch.closest('div')?.classList.remove('field-spotlight'), 1800);
+            });
+        }
+        const btnFocusAttachments = document.getElementById('btnFocusAttachments');
+        if (btnFocusAttachments) {
+            btnFocusAttachments.addEventListener('click', () => {
+                const att = document.getElementById('attachments');
+                if (!att) return;
+                att.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                att.focus();
+                att.closest('div')?.classList.add('field-spotlight');
+                setTimeout(() => att.closest('div')?.classList.remove('field-spotlight'), 1800);
+            });
+        }
 
         buildCarRows();
         buildOverlay();
