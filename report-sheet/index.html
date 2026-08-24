@@ -80,7 +80,7 @@
             <option value="all">List: All names</option>
           </select>
           <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name filter</button>
-          <button type="button" id="sr-csv-btn">Export CSV</button>
+          <button type="button" id="sr-csv-btn" class="btn-primary">Export Excel Schedule</button>
           <span class="hint" id="sr-live-hint">Click a name to filter this page to that person only</span>
         </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
@@ -154,6 +154,60 @@
                 </div>
                 <div class="chart-scroll">
                   <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
+                <div class="pbi-viz-head">
+                  <h2>Schedule · Del % (Delivery ÷ Target)</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-profdel">
+                <div class="pbi-viz-head">
+                  <h2>Schedule · Prof + Del</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
+                <div class="pbi-viz-head">
+                  <h2>Schedule · Prof+Del %</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdelpct" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-prev">
+                <div class="pbi-viz-head">
+                  <h2>Proforma · Prior month vs Today</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-pace">
+                <div class="pbi-viz-head">
+                  <h2>Month pace</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
+                <div class="pbi-viz-head">
+                  <h2>Cancelled BOs by employee</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-cancelcount" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div>
                 </div>
               </article>
             </div>
@@ -960,6 +1014,9 @@
   function buildSalesReport(bos, sales, cancelled) {
     const CANCEL_TARGET = 0.30;
     const live = todayKeys();
+    const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
+    const prevMonthKey = toYyyymm(prevDate);
+    const prevMonthLabel = prevDate.toLocaleString("en-US", { month: "long" });
     const byPerson = new Map();
 
     const ensure = (name) => {
@@ -975,8 +1032,10 @@
           note: meta.note || "",
           proformaDay: 0,
           proformaMonth: 0,
+          proformaPrev: 0,
           deliveryDay: 0,
           deliveryMonth: 0,
+          deliveryPrev: 0,
           target: 0,
           vsnd: 0,
           cancelledBOs: 0,
@@ -1064,12 +1123,14 @@
         const ym = toYyyymm(r.proformaDate);
         const yd = toYyyymmdd(r.proformaDate);
         if (ym === live.monthKey) { p.proformaMonth += 1; flags.proformaMonth = true; }
+        if (ym === prevMonthKey) { p.proformaPrev += 1; flags.proformaPrev = true; }
         if (yd === live.dayKey) { p.proformaDay += 1; flags.proformaDay = true; }
       }
       if (r.deliveryDate) {
         const ym = toYyyymm(r.deliveryDate);
         const yd = toYyyymmdd(r.deliveryDate);
         if (ym === live.monthKey) { p.deliveryMonth += 1; flags.deliveryMonth = true; }
+        if (ym === prevMonthKey) { p.deliveryPrev += 1; flags.deliveryPrev = true; }
         if (yd === live.dayKey) { p.deliveryDay += 1; flags.deliveryDay = true; }
       }
       p.totalOrders += 1;
@@ -1220,6 +1281,12 @@
       // Day sheet = same formulas as month, but Col P / Col V filtered to today
       const monthBlock = makeBlock(p.proformaMonth, p.deliveryMonth, p.target, p.cancelledBOs, p.note);
       const dayBlock = makeBlock(p.proformaDay, p.deliveryDay, p.target, p.cancelledDay, p.note);
+      const prof = p.proformaMonth;
+      const del = p.deliveryMonth;
+      const target = p.target || 0;
+      const profPlusDel = prof + del;
+      const delPct = target ? del / target : null;
+      const profDelPct = target ? profPlusDel / target : null;
       return {
         No: 0,
         Plant: p.plant || "—",
@@ -1229,10 +1296,17 @@
         VSND: p.vsnd,
         "Proforma (Day)": p.proformaDay,
         "Proforma (Month)": p.proformaMonth,
+        "Proforma (Prev)": p.proformaPrev,
         "Delivery (Day)": p.deliveryDay,
         "Delivery (Month)": p.deliveryMonth,
+        "Delivery (Prev)": p.deliveryPrev,
         "Day Target": p.target,
         Target: p.target,
+        "Prof+Del": profPlusDel,
+        "Del %": delPct == null ? "#DIV/0!" : pct1(delPct),
+        "Prof+Del %": profDelPct == null ? "#DIV/0!" : pct1(profDelPct),
+        _delPct: delPct,
+        _profDelPct: profDelPct,
         // Month fields (default / backward compatible)
         ...monthBlock,
         Proforma: monthBlock.Proforma,
@@ -1253,10 +1327,13 @@
 
     const totProformaDay = rows.reduce((s, r) => s + r["Proforma (Day)"], 0);
     const totProformaMonth = rows.reduce((s, r) => s + r["Proforma (Month)"], 0);
+    const totProformaPrev = rows.reduce((s, r) => s + r["Proforma (Prev)"], 0);
     const totDeliveryDay = rows.reduce((s, r) => s + r["Delivery (Day)"], 0);
     const totDeliveryMonth = rows.reduce((s, r) => s + r["Delivery (Month)"], 0);
+    const totDeliveryPrev = rows.reduce((s, r) => s + r["Delivery (Prev)"], 0);
     const totTarget = rows.reduce((s, r) => s + r.Target, 0);
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
+    const totProfPlusDel = totProformaMonth + totDeliveryMonth;
     const totVsnd = rows.reduce((s, r) => s + r.VSND, 0);
     const totDelVsnd = totProformaMonth; // Del+VSND = Proforma
     const totDelVsndDay = totProformaDay;
@@ -1264,21 +1341,32 @@
     const totCancelledDay = rows.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
     const monthCancelBase = totProformaMonth + totDeliveryMonth + totCancelled;
     const dayCancelBase = totProformaDay + totDeliveryDay + totCancelledDay;
+    const daysPassed = live.now.getDate();
+    const daysRemaining = Math.max(0, daysInMonth - daysPassed);
 
     return {
       rows,
       live,
       daysInMonth,
+      daysPassed,
+      daysRemaining,
+      prevMonthKey,
+      prevMonthLabel,
       diag,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
+        proformaPrev: totProformaPrev,
         deliveryDay: totDeliveryDay,
         deliveryMonth: totDeliveryMonth,
+        deliveryPrev: totDeliveryPrev,
         proforma: totProformaMonth,
         delivery: totDeliveryMonth,
         target: totTarget,
         dayTarget: totDayTarget,
+        profPlusDel: totProfPlusDel,
+        delPct: totTarget ? totDeliveryMonth / totTarget : 0,
+        profDelPct: totTarget ? totProfPlusDel / totTarget : 0,
         vsnd: totVsnd,
         delVsnd: totDelVsnd,
         delVsndDay: totDelVsndDay,
@@ -2262,18 +2350,18 @@
       cards = [
         { lab: "Delivery MTD", val: formatNumber(r["Delivery (Month)"] || m.Delivery) },
         { lab: "Proforma MTD", val: formatNumber(r["Proforma (Month)"] || m.Proforma) },
+        { lab: "Prof+Del", val: formatNumber(r["Prof+Del"]) },
+        { lab: "Del %", val: escapeHtml(String(r["Del %"] ?? "—")) },
         { lab: "Target", val: formatNumber(r.Target) },
-        { lab: "Ach%", val: escapeHtml(String(m["Ach%"] ?? "—")) },
-        { lab: "Delivery today", val: formatNumber(r["Delivery (Day)"] || d.Delivery) },
-        { lab: "Diff", val: formatNumber(m.Diff) },
+        { lab: "Today Prof", val: formatNumber(r["Proforma (Day)"] || d.Proforma) },
       ];
     } else {
       cards = [
         { lab: "Delivery MTD", val: formatNumber(t.deliveryMonth || 0) },
         { lab: "Proforma MTD", val: formatNumber(t.proformaMonth || 0) },
+        { lab: "Prof+Del", val: formatNumber(t.profPlusDel || 0) },
+        { lab: "Del %", val: t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "—" },
         { lab: "Target", val: formatNumber(t.target || 0) },
-        { lab: "Ach%", val: t.target ? ((t.deliveryMonth / t.target) * 100).toFixed(1) + "%" : "—" },
-        { lab: "Delivery today", val: formatNumber(t.deliveryDay || 0) },
         { lab: "Employees", val: formatNumber((sr.rows || []).length) },
       ];
     }
@@ -2401,6 +2489,35 @@
       ], {
         backgroundColor: ["rgba(200, 30, 44, 0.75)", "rgba(13, 148, 136, 0.75)"],
       });
+      upsertChart("chart-sr-delpct", "doughnut", ["Del %", "Remaining"], [
+        Math.min(100, (r._delPct || 0) * 100),
+        Math.max(0, 100 - (r._delPct || 0) * 100),
+      ]);
+      upsertChart("chart-sr-profdel", "bar", ["Prof", "Del", "Prof+Del"], [
+        Number(r["Proforma (Month)"]) || 0,
+        Number(r["Delivery (Month)"]) || 0,
+        Number(r["Prof+Del"]) || 0,
+      ], {
+        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(200, 30, 44, 0.85)", "rgba(11, 58, 102, 0.8)"],
+      });
+      upsertChart("chart-sr-profdelpct", "doughnut", ["Prof+Del %", "Remaining"], [
+        Math.min(100, (r._profDelPct || 0) * 100),
+        Math.max(0, 100 - (r._profDelPct || 0) * 100),
+      ]);
+      upsertChart("chart-sr-prev", "bar", ["Prior month Prof", "Today Prof", "Today Del"], [
+        Number(r["Proforma (Prev)"]) || 0,
+        Number(r["Proforma (Day)"]) || 0,
+        Number(r["Delivery (Day)"]) || 0,
+      ], {
+        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(13, 148, 136, 0.8)", "rgba(200, 30, 44, 0.85)"],
+      });
+      upsertChart("chart-sr-pace", "doughnut",
+        ["Days passed", "Days remaining"],
+        [sr.daysPassed || 0, sr.daysRemaining || 0]
+      );
+      upsertChart("chart-sr-cancelcount", "bar", ["Cancelled BOs"], [
+        Number((r.month || r)["Cancelled BOs"]) || 0,
+      ], { backgroundColor: "rgba(200, 30, 44, 0.8)" });
       return;
     }
 
@@ -2498,6 +2615,211 @@
         },
       ],
     });
+
+    upsertChart("chart-sr-delpct", "bar", labels, rows.map((r) => (r._delPct || 0) * 100), {
+      ...clickOpts,
+      label: "Del %",
+      backgroundColor: rows.map((r) => ((r._delPct || 0) >= 1 ? "rgba(13, 148, 136, 0.88)" : "rgba(200, 30, 44, 0.82)")),
+      max: 120,
+    });
+
+    upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => r["Prof+Del"] || 0), {
+      ...clickOpts,
+      label: "Prof+Del",
+      backgroundColor: "rgba(11, 58, 102, 0.85)",
+    });
+
+    upsertChart("chart-sr-profdelpct", "bar", labels, rows.map((r) => (r._profDelPct || 0) * 100), {
+      ...clickOpts,
+      label: "Prof+Del %",
+      backgroundColor: rows.map((r) => ((r._profDelPct || 0) >= 1 ? "rgba(13, 148, 136, 0.88)" : "rgba(180, 83, 9, 0.82)")),
+      max: 120,
+    });
+
+    upsertChart("chart-sr-prev", "bar", labels, null, {
+      ...clickOpts,
+      legend: true,
+      datasets: [
+        {
+          label: (sr.prevMonthLabel || "Prior") + " Prof",
+          data: rows.map((r) => r["Proforma (Prev)"] || 0),
+          backgroundColor: "rgba(100, 116, 139, 0.75)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Today Prof",
+          data: rows.map((r) => r["Proforma (Day)"] || 0),
+          backgroundColor: "rgba(13, 148, 136, 0.8)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
+    });
+
+    upsertChart("chart-sr-pace", "doughnut",
+      ["Days passed (" + (sr.daysPassed || 0) + ")", "Days remaining (" + (sr.daysRemaining || 0) + ")"],
+      [sr.daysPassed || 0, sr.daysRemaining || 0]
+    );
+
+    upsertChart("chart-sr-cancelcount", "bar", labels, rows.map((r) => Number((r.month || r)["Cancelled BOs"]) || 0), {
+      ...clickOpts,
+      label: "Cancelled BOs",
+      backgroundColor: "rgba(200, 30, 44, 0.8)",
+    });
+  }
+
+  function exportTelesalesSchedule() {
+    const sr = window._data && window._data.salesReport;
+    if (!sr || !(sr.rows || []).length) {
+      setStatus("No Sales Report to export", "err");
+      return;
+    }
+    const live = sr.live || todayKeys();
+    const monthName = (live.now || new Date()).toLocaleString("en-US", { month: "long" }).toUpperCase();
+    const prevLabel = (sr.prevMonthLabel || "Prior").toUpperCase();
+    const t = sr.totals || {};
+    const stamp = live.label || cellToString(live.now);
+    const timeStr = new Date().toLocaleTimeString("en-GB", { hour12: false });
+
+    const aoa = [];
+    aoa.push(["Telesales Daily Sales Monitor"]);
+    aoa.push(["MTD:", stamp, "", "Time:", timeStr]);
+    aoa.push([]);
+    // Group header row
+    aoa.push([
+      "S.N.", "Sales Advisor", "Emp. No.",
+      monthName, "", "", "", "", "",
+      "Pro-Forma", "",
+      "Cancelled", "Notes",
+      "Lead Time", "NPS", "PSFU%",
+      "Lead Mgmt MTD Dist.", "Lead Mgmt MTD Cont.", "Lead Mgmt MTD %",
+      "NPS Prospect",
+      "Acc Target", "Acc Achieved", "Acc Ach %",
+      "Del Quest", "Del Employee",
+    ]);
+    // Sub header
+    aoa.push([
+      "", "", "",
+      "Target", "Prof.", "Del.", "Prof+Del", "Del %", "Prof+Del %",
+      prevLabel, "Today",
+      "BOs", "",
+      "", "", "",
+      "", "", "",
+      "",
+      "", "", "",
+      "", "",
+    ]);
+
+    const exportRows = filterSrRows(sr.rows || []);
+    exportRows.forEach((r) => {
+      const m = r.month || r;
+      aoa.push([
+        r.No,
+        r["Sales Employee"],
+        r.Salesman || "",
+        r.Target || 0,
+        r["Proforma (Month)"] || 0,
+        r["Delivery (Month)"] || 0,
+        r["Prof+Del"] || 0,
+        r["Del %"] || "",
+        r["Prof+Del %"] || "",
+        r["Proforma (Prev)"] || 0,
+        r["Proforma (Day)"] || 0,
+        m["Cancelled BOs"] || 0,
+        r.Notes || "",
+        "", "", "",
+        "", "", "",
+        "",
+        "", "", "",
+        "", "",
+      ]);
+    });
+
+    // Totals
+    aoa.push([
+      "", "TOTAL", "",
+      t.target || 0,
+      t.proformaMonth || 0,
+      t.deliveryMonth || 0,
+      t.profPlusDel || 0,
+      t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "",
+      t.target ? ((t.profDelPct || 0) * 100).toFixed(1) + "%" : "",
+      t.proformaPrev || 0,
+      t.proformaDay || 0,
+      t.cancelled || 0,
+      "",
+      "", "", "",
+      "", "", "",
+      "",
+      "", "", "",
+      "", "",
+    ]);
+
+    aoa.push([]);
+    aoa.push(["Summary"]);
+    aoa.push(["No. of calendar days in month", sr.daysInMonth || ""]);
+    aoa.push(["Days passed", sr.daysPassed || ""]);
+    aoa.push(["Days remaining", sr.daysRemaining || ""]);
+    aoa.push(["Delivery Ach% (Total)", t.target ? ((t.deliveryAch || 0) * 100).toFixed(1) + "%" : ""]);
+    aoa.push(["Prof+Del Ach% (Total)", t.target ? ((t.profDelPct || 0) * 100).toFixed(1) + "%" : ""]);
+
+    // Plant / brand-like summary
+    const plantMap = new Map();
+    (sr.rows || []).forEach((r) => {
+      const plant = String(r.Plant || "—").trim() || "—";
+      if (!plantMap.has(plant)) plantMap.set(plant, { target: 0, del: 0, prof: 0 });
+      const p = plantMap.get(plant);
+      p.target += Number(r.Target) || 0;
+      p.del += Number(r["Delivery (Month)"]) || 0;
+      p.prof += Number(r["Proforma (Month)"]) || 0;
+    });
+    aoa.push([]);
+    aoa.push(["By Plant / Channel"]);
+    aoa.push(["Plant", "Target", "Prof.", "Del.", "% Del"]);
+    [...plantMap.entries()].forEach(([plant, p]) => {
+      aoa.push([
+        plant,
+        p.target,
+        p.prof,
+        p.del,
+        p.target ? ((p.del / p.target) * 100).toFixed(1) + "%" : "",
+      ]);
+    });
+
+    aoa.push([]);
+    aoa.push(["Notes"]);
+    aoa.push(["Schedule built from Sales Raw (Col A/P/V) + Admin targets."]);
+    aoa.push(["Lead Time / NPS / PSFU / Accessories / Lead Management columns are reserved (no source file yet)."]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [
+      { wch: 6 }, { wch: 36 }, { wch: 10 },
+      { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
+      { wch: 10 }, { wch: 8 },
+      { wch: 8 }, { wch: 14 },
+      { wch: 10 }, { wch: 8 }, { wch: 8 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 },
+      { wch: 12 },
+      { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 10 }, { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, "Daily Sales Monitor");
+
+    // Second sheet: filtered day/month detail for transparency
+    const detail = [["Period", "No", "Plant", "Salesman", "Sales Employee", "Proforma", "Delivery", "Target", "Ach%", "Del+VSND", "Diff", "Cancelled BOs"]];
+    (window._srExportRows || []).forEach((r) => {
+      detail.push([
+        r.Period, r.No, r.Plant, r.Salesman, r["Sales Employee"],
+        r.Proforma, r.Delivery, r.Target, r["Ach%"], r["Del+VSND"], r.Diff, r["Cancelled BOs"],
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detail), "Day Month Detail");
+
+    const fileName = `Telesales-Daily-Sales-Monitor-${stamp.replace(/[^\d-]/g, "")}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    setStatus("Excel schedule exported", "ok");
   }
 
   function buildDashboard() {
@@ -2686,17 +3008,7 @@
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
     if (e.target.id === "pbi-wide-backdrop") closeWideChart();
   });
-  $("#sr-csv-btn").addEventListener("click", () => {
-    const rows = window._srExportRows || [];
-    if (!rows.length) return;
-    const headers = Object.keys(rows[0]);
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "sales-report-export.csv";
-    a.click();
-  });
+  $("#sr-csv-btn").addEventListener("click", exportTelesalesSchedule);
   function onEmpTableClick(e) {
     const tr = e.target.closest("tr.emp-row");
     if (!tr) return;
