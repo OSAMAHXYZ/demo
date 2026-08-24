@@ -18,7 +18,7 @@
     <div class="page-hero-inner">
       <div class="hero-brand">
         <h1>Sales Report Dashboard</h1>
-        <p>Live dashboard · charts · Day &amp; Month sheets · Admin Push</p>
+        <p>Live dashboard · scroll charts · Wide view · click name to filter</p>
       </div>
       <div class="hero-logo">
         <div class="co">Abdul Latif Jameel</div>
@@ -102,29 +102,59 @@
             <div class="pbi-kpis" id="sr-pbi-kpis"></div>
 
             <div class="pbi-visuals" id="sr-charts">
-              <article class="card pbi-viz">
-                <h2>Delivery / Proforma / Target</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-sr">
+                <div class="pbi-viz-head">
+                  <h2>Delivery / Proforma / Target</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
+                </div>
               </article>
-              <article class="card pbi-viz">
-                <h2>Ach%</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-sr-ach">
+                <div class="pbi-viz-head">
+                  <h2>Ach%</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-ach" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
+                </div>
               </article>
-              <article class="card pbi-viz">
-                <h2>Day · Delivery / Proforma</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-sr-day">
+                <div class="pbi-viz-head">
+                  <h2>Day · Delivery / Proforma</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-day" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
+                </div>
               </article>
-              <article class="card pbi-viz">
-                <h2>By Plant</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-sr-plant">
+                <div class="pbi-viz-head">
+                  <h2>By Plant</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+                </div>
               </article>
-              <article class="card pbi-viz">
-                <h2>Month overview</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-sr-overview">
+                <div class="pbi-viz-head">
+                  <h2>Month overview</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
+                </div>
               </article>
-              <article class="card pbi-viz">
-                <h2>Cancellation % / Gap</h2>
-                <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+              <article class="card pbi-viz" data-chart-id="chart-cancel">
+                <div class="pbi-viz-head">
+                  <h2>Cancellation % / Gap</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+                </div>
               </article>
             </div>
 
@@ -194,6 +224,21 @@
     </div>
     <div class="emp-drawer-body" id="emp-drawer-body"></div>
   </aside>
+
+  <div class="pbi-wide-backdrop" id="pbi-wide-backdrop" hidden>
+    <div class="pbi-wide-modal" role="dialog" aria-modal="true" aria-labelledby="pbi-wide-title">
+      <header class="pbi-wide-head">
+        <h2 id="pbi-wide-title">Chart</h2>
+        <button type="button" id="pbi-wide-close">Close</button>
+      </header>
+      <div class="pbi-wide-scroll" id="pbi-wide-scroll">
+        <div class="chart-box pbi-wide-box" id="pbi-wide-box">
+          <canvas id="pbi-wide-canvas"></canvas>
+        </div>
+      </div>
+      <p class="foot" id="pbi-wide-hint" style="margin:0;padding:8px 16px 14px">Scroll to see all names · click a name bar to filter</p>
+    </div>
+  </div>
 
 <script>
 (function () {
@@ -369,6 +414,7 @@
   const slots = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, { file: null, rows: [], name: "" }]));
   let view = { tab: "backorder", search: "", extra: "" };
   const charts = {};
+  const chartSnapshots = {};
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -1289,6 +1335,29 @@
       </button>`).join("");
   }
 
+  function sizeChartScrollBox(canvasId, labelCount, horizontal) {
+    if (canvasId === "pbi-wide-canvas") return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const box = canvas.closest(".chart-box");
+    const scroll = canvas.closest(".chart-scroll");
+    if (!box) return;
+    if (horizontal && labelCount > 1) {
+      const h = Math.max(240, labelCount * 40 + 56);
+      box.style.height = h + "px";
+      if (scroll) {
+        scroll.classList.add("is-scroll");
+        scroll.style.maxHeight = "280px";
+      }
+    } else {
+      box.style.height = "220px";
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
+    }
+  }
+
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
@@ -1298,6 +1367,24 @@
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
     const empKeys = opts.empKeys || null;
+    const labelCount = (labels && labels.length) || 0;
+    chartSnapshots[id] = {
+      type,
+      labels: labels ? labels.slice() : [],
+      values: Array.isArray(values) ? values.slice() : values,
+      extra: JSON.parse(JSON.stringify({
+        ...opts,
+        backgroundColor: opts.backgroundColor,
+        datasets: opts.datasets,
+        empKeys: opts.empKeys,
+        clickable: opts.clickable,
+        horizontal: opts.horizontal,
+        legend: opts.legend,
+        max: opts.max,
+      })),
+    };
+    sizeChartScrollBox(id, labelCount, horizontal && type === "bar");
+
     const datasetsExtra = { ...opts };
     delete datasetsExtra.horizontal;
     delete datasetsExtra.datasets;
@@ -1318,7 +1405,7 @@
         maxRotation: horizontal ? 0 : 40,
         autoSkip: false,
         color: "#0b3a66",
-        font: { size: 12, family: fontFamily, weight: "700" },
+        font: { size: horizontal ? 13 : 12, family: fontFamily, weight: "700" },
       },
       border: { display: false },
     };
@@ -1335,9 +1422,10 @@
           borderRadius: type === "bar" ? 6 : 0,
           ...datasetsExtra,
         }]).map((ds) => ({
-          categoryPercentage: 0.78,
-          barPercentage: 0.88,
-          maxBarThickness: 28,
+          categoryPercentage: 0.72,
+          barPercentage: 0.9,
+          maxBarThickness: horizontal ? 26 : 36,
+          minBarLength: 2,
           ...ds,
         })),
       },
@@ -1345,7 +1433,8 @@
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 400, easing: "easeOutQuart" },
+        animation: { duration: 350, easing: "easeOutQuart" },
+        layout: { padding: { left: 4, right: 8, top: 4, bottom: 4 } },
         onHover: clickable
           ? (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; }
           : undefined,
@@ -1354,7 +1443,10 @@
               if (!els.length) return;
               const idx = els[0].index;
               const key = empKeys[idx];
-              if (key) selectEmployee(key);
+              if (key) {
+                closeWideChart();
+                selectEmployee(key);
+              }
             }
           : undefined,
         plugins: {
@@ -1369,7 +1461,7 @@
             padding: 12,
             cornerRadius: 10,
             callbacks: clickable
-              ? { footer: () => "Click to filter this page to this name" }
+              ? { footer: () => "Click name to filter · use Wide for full view" }
               : undefined,
           },
         },
@@ -1380,6 +1472,52 @@
             : { y: softScale, x: categoryScale },
       },
     });
+  }
+
+  function openWideChart(sourceId) {
+    const snap = chartSnapshots[sourceId];
+    if (!snap) return;
+    const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
+    $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Chart";
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.classList.add("show");
+
+    const n = (snap.labels || []).length;
+    const horizontal = !!(snap.extra && snap.extra.horizontal);
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    if (horizontal && snap.type === "bar" && n > 1) {
+      box.style.height = Math.max(420, n * 42 + 80) + "px";
+      scroll.style.maxHeight = "min(78vh, 900px)";
+    } else {
+      box.style.height = "420px";
+      scroll.style.maxHeight = "";
+    }
+    const hint = $("#pbi-wide-hint");
+    if (hint) {
+      hint.textContent = horizontal && n > 1
+        ? "Scroll inside to see every name clearly · click a bar to filter that employee"
+        : "Wide view · Close or press Esc";
+    }
+    // Re-render into wide canvas
+    const extra = { ...(snap.extra || {}) };
+    upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
+    // Force wide box height after upsert (upsert may reset)
+    if (horizontal && snap.type === "bar" && n > 1) {
+      box.style.height = Math.max(420, n * 42 + 80) + "px";
+    }
+  }
+
+  function closeWideChart() {
+    const backdrop = $("#pbi-wide-backdrop");
+    if (!backdrop) return;
+    backdrop.classList.remove("show");
+    backdrop.hidden = true;
+    if (charts["pbi-wide-canvas"]) {
+      charts["pbi-wide-canvas"].destroy();
+      delete charts["pbi-wide-canvas"];
+    }
   }
 
   function renderCharts(d) {
@@ -2531,6 +2669,23 @@
     if (!btn) return;
     selectEmployee(btn.getAttribute("data-emp-key"));
   });
+  $("#sr-charts").addEventListener("click", (e) => {
+    const expand = e.target.closest("[data-expand]");
+    if (expand) {
+      e.preventDefault();
+      openWideChart(expand.getAttribute("data-expand"));
+      return;
+    }
+  });
+  $("#sr-charts").addEventListener("dblclick", (e) => {
+    const viz = e.target.closest("[data-chart-id]");
+    if (!viz) return;
+    openWideChart(viz.getAttribute("data-chart-id"));
+  });
+  $("#pbi-wide-close").addEventListener("click", closeWideChart);
+  $("#pbi-wide-backdrop").addEventListener("click", (e) => {
+    if (e.target.id === "pbi-wide-backdrop") closeWideChart();
+  });
   $("#sr-csv-btn").addEventListener("click", () => {
     const rows = window._srExportRows || [];
     if (!rows.length) return;
@@ -2553,6 +2708,10 @@
   $("#emp-backdrop").addEventListener("click", closeEmployeeDrawer);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (!$("#pbi-wide-backdrop").hidden) {
+        closeWideChart();
+        return;
+      }
       if (srView.selectedKey) clearEmployeeFilter();
       closeEmployeeDrawer();
     }
