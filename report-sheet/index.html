@@ -802,9 +802,45 @@
     return XLSX.read(buffer, { type: "array", cellDates: true });
   }
 
+  function expandSheetRange(sheet, minLastColLetter) {
+    if (!sheet) return;
+    const minCol = colLetterToIndex(minLastColLetter);
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    } catch {
+      range = { s: { r: 0, c: 0 }, e: { r: 0, c: minCol } };
+    }
+    if (range.e.c < minCol) {
+      range.e.c = minCol;
+      sheet["!ref"] = XLSX.utils.encode_range(range);
+    }
+  }
+
+  function padCells(line, width) {
+    const out = new Array(width);
+    for (let i = 0; i < width; i += 1) {
+      out[i] = line && line[i] != null ? line[i] : "";
+    }
+    return out;
+  }
+
+  function sheetCellValue(sheet, rowIdx, colIdx) {
+    if (!sheet) return "";
+    const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+    const cell = sheet[addr];
+    if (!cell) return "";
+    if (cell.v != null && cell.v !== "") return cell.v;
+    if (cell.w != null && cell.w !== "") return cell.w;
+    return "";
+  }
+
   function sheetRows(workbook, sheetName) {
     if (!sheetName || !workbook.Sheets[sheetName]) return [];
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    const sheet = workbook.Sheets[sheetName];
+    // Keep Excel letters through AI so AD/AE stock columns are not dropped
+    expandSheetRange(sheet, "AI");
+    const matrix = XLSX.utils.sheet_to_json(sheet, {
       header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
     });
     if (!matrix.length) return [];
@@ -818,21 +854,34 @@
       if (hits > bestHits) { bestHits = hits; headerIdx = i; }
       if (hits >= 3) break;
     }
-    const headerRow = matrix[headerIdx] || [];
-    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const minWidth = colLetterToIndex("AI") + 1;
+    const headerRaw = padCells(matrix[headerIdx] || [], Math.max(minWidth, (matrix[headerIdx] || []).length));
+    for (let c = 0; c < headerRaw.length; c += 1) {
+      if (cellToString(headerRaw[c]).trim() === "") {
+        const direct = sheetCellValue(sheet, headerIdx, c);
+        if (cellToString(direct).trim() !== "") headerRaw[c] = direct;
+      }
+    }
+    const headers = headerRaw.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const seen = {};
     const uniqueHeaders = headers.map((h) => {
       if (!seen[h]) { seen[h] = 1; return h; }
       seen[h] += 1;
       return `${h} (${seen[h]})`;
     });
+    const width = uniqueHeaders.length;
     const rows = [];
     for (let r = headerIdx + 1; r < matrix.length; r += 1) {
-      const line = matrix[r] || [];
+      const line = padCells(matrix[r] || [], width);
+      // Prefer direct sheet cells for sparse / far-right columns (AD–AI)
+      for (let c = 0; c < width; c += 1) {
+        if (cellToString(line[c]).trim() !== "") continue;
+        const direct = sheetCellValue(sheet, r, c);
+        if (cellToString(direct).trim() !== "") line[c] = direct;
+      }
       if (line.every((c) => cellToString(c).trim() === "")) continue;
       const obj = {};
       uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
-      // Preserve Excel column positions (A=0…) for letter-based dashboards
       obj.__cells = line;
       obj.__headers = uniqueHeaders;
       rows.push(obj);
@@ -854,7 +903,15 @@
   function cellByLetter(row, letter) {
     const idx = colLetterToIndex(letter);
     if (idx < 0 || !row) return "";
-    if (Array.isArray(row.__cells)) return row.__cells[idx] != null ? row.__cells[idx] : "";
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      const key = row.__headers[idx];
+      if (Object.prototype.hasOwnProperty.call(row, key) && row[key] != null && row[key] !== "") {
+        return row[key];
+      }
+    }
+    if (Array.isArray(row.__cells) && row.__cells[idx] != null && row.__cells[idx] !== "") {
+      return row.__cells[idx];
+    }
     if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
       return row[row.__headers[idx]] != null ? row[row.__headers[idx]] : "";
     }
@@ -867,6 +924,39 @@
     const idx = colLetterToIndex(letter);
     if (row && Array.isArray(row.__headers) && row.__headers[idx]) return row.__headers[idx];
     return `Column ${String(letter || "").toUpperCase()}`;
+  }
+
+  function findHeaderLetter(row, tests) {
+    const headers = row && Array.isArray(row.__headers) ? row.__headers : [];
+    for (let i = 0; i < headers.length; i += 1) {
+      const n = normHeader(headers[i]);
+      if (tests.some((t) => t(n))) return indexToColLetter(i);
+    }
+    return "";
+  }
+
+  function boQtyValue(row) {
+    let v = cellByLetter(row, "AD");
+    if (cellToString(v).trim() !== "") return toNumber(v);
+    const letter = findHeaderLetter(row, [
+      (n) => n === "bo qty" || n === "back order qty" || n === "backorder qty",
+      (n) => n.includes("bo") && n.includes("qty"),
+      (n) => n === "qty" || n === "quantity" || n === "order qty",
+    ]);
+    if (letter) return toNumber(cellByLetter(row, letter));
+    return toNumber(v);
+  }
+
+  function availableStockValue(row) {
+    let v = cellByLetter(row, "AE");
+    if (cellToString(v).trim() !== "") return toNumber(v);
+    const letter = findHeaderLetter(row, [
+      (n) => n.includes("available") && (n.includes("stock") || n.includes("qty")),
+      (n) => n === "available stock" || n === "avail stock" || n === "stock available",
+      (n) => n === "available" || n === "avl" || n === "avl qty",
+    ]);
+    if (letter) return toNumber(cellByLetter(row, letter));
+    return toNumber(v);
   }
 
   function isYesFlag(v) {
@@ -3582,9 +3672,39 @@
   }
 
   function isFulfillableBo(row) {
-    const ae = toNumber(cellByLetter(row, "AE"));
-    const ad = toNumber(cellByLetter(row, "AD"));
+    const ae = availableStockValue(row);
+    const ad = boQtyValue(row);
     return ae > 0 && ad <= ae;
+  }
+
+  function stockAllocStats(rows) {
+    let withStock = 0;
+    let fulfillable = 0;
+    let sampleAd = "";
+    let sampleAe = "";
+    let headerAd = "";
+    let headerAe = "";
+    rows.forEach((r, i) => {
+      const ae = availableStockValue(r);
+      const ad = boQtyValue(r);
+      if (i === 0) {
+        sampleAd = cellToString(cellByLetter(r, "AD"));
+        sampleAe = cellToString(cellByLetter(r, "AE"));
+        headerAd = headerByLetter(r, "AD");
+        headerAe = headerByLetter(r, "AE");
+      }
+      if (ae > 0) withStock += 1;
+      if (ae > 0 && ad <= ae) fulfillable += 1;
+    });
+    return {
+      total: rows.length,
+      withStock,
+      fulfillable,
+      sampleAd,
+      sampleAe,
+      headerAd,
+      headerAe,
+    };
   }
 
   function fulfillableBoRows() {
@@ -3622,13 +3742,23 @@
     fillBoSelect(sel, values, current, allLabel);
   }
 
-  function renderStockKpis(baseCount, filteredCount) {
+  function renderStockKpis(stats, filteredCount) {
     const el = $("#stock-kpis");
     if (!el) return;
     el.innerHTML = `
       <div class="bo-kpi ok">
+        <div class="lab">Total BO rows</div>
+        <div class="val">${formatNumber(stats.total)}</div>
+        <div class="sub">from Back Order file</div>
+      </div>
+      <div class="bo-kpi ${stats.withStock ? "ok" : "warn"}">
+        <div class="lab">AE stock &gt; 0</div>
+        <div class="val">${formatNumber(stats.withStock)}</div>
+        <div class="sub">${escapeHtml(stats.headerAe || "Col AE")}</div>
+      </div>
+      <div class="bo-kpi ${stats.fulfillable ? "ok" : "warn"}">
         <div class="lab">Fulfillable BOs</div>
-        <div class="val">${formatNumber(baseCount)}</div>
+        <div class="val">${formatNumber(stats.fulfillable)}</div>
         <div class="sub">AE &gt; 0 and AD ≤ AE</div>
       </div>
       <div class="bo-kpi ok">
@@ -3643,13 +3773,24 @@
       </div>`;
   }
 
-  function renderStockAllocTable(rows, sample) {
+  function renderStockAllocTable(rows, sample, stats) {
     const el = $("#stock-alloc-table");
     const foot = $("#stock-alloc-foot");
     if (!el) return;
 
     if (!rows.length) {
-      el.innerHTML = `<p class="stock-empty-msg">No matching Back Orders with available stock.</p>`;
+      const hint = stats && stats.total
+        ? `<p class="foot" style="margin:12px 0 0;text-align:center">
+            Loaded <b>${formatNumber(stats.total)}</b> BO rows ·
+            <b>${formatNumber(stats.withStock)}</b> with AE &gt; 0 ·
+            AD header: <b>${escapeHtml(stats.headerAd || "—")}</b>
+            (sample: ${escapeHtml(stats.sampleAd || "empty")}) ·
+            AE header: <b>${escapeHtml(stats.headerAe || "—")}</b>
+            (sample: ${escapeHtml(stats.sampleAe || "empty")}).
+            Re-push the Back Order file from Admin if AD/AE were updated.
+          </p>`
+        : "";
+      el.innerHTML = `<p class="stock-empty-msg">No matching Back Orders with available stock.</p>${hint}`;
       if (foot) foot.textContent = "0 rows";
       return;
     }
@@ -3688,18 +3829,22 @@
     if (empty) empty.hidden = true;
     if (dash) dash.hidden = false;
 
+    const allRows = rawBoRows();
+    const stats = stockAllocStats(allRows);
     const base = fulfillableBoRows();
-    const sample = base[0] || rawBoRows()[0] || {};
+    const sample = base[0] || allRows[0] || {};
 
-    fillStockSelect("#stock-f-k", uniqueColValues(base, "K"), stockView.k, `All · ${stockDisplayLabel(sample, "K")}`);
-    fillStockSelect("#stock-f-l", uniqueColValues(base, "L"), stockView.l, `All · ${stockDisplayLabel(sample, "L")}`);
-    fillStockSelect("#stock-f-m", uniqueColValues(base, "M"), stockView.m, `All · ${stockDisplayLabel(sample, "M")}`);
-    fillStockSelect("#stock-f-g", uniqueColValues(base, "G"), stockView.g, `All · ${stockDisplayLabel(sample, "G")}`);
-    fillStockSelect("#stock-f-a", uniqueColValues(base, "A"), stockView.a, `All · ${stockDisplayLabel(sample, "A")}`);
+    // Filter option lists: prefer fulfillable rows; fall back to all BO rows so slicers still fill
+    const optionSource = base.length ? base : allRows;
+    fillStockSelect("#stock-f-k", uniqueColValues(optionSource, "K"), stockView.k, `All · ${stockDisplayLabel(sample, "K")}`);
+    fillStockSelect("#stock-f-l", uniqueColValues(optionSource, "L"), stockView.l, `All · ${stockDisplayLabel(sample, "L")}`);
+    fillStockSelect("#stock-f-m", uniqueColValues(optionSource, "M"), stockView.m, `All · ${stockDisplayLabel(sample, "M")}`);
+    fillStockSelect("#stock-f-g", uniqueColValues(optionSource, "G"), stockView.g, `All · ${stockDisplayLabel(sample, "G")}`);
+    fillStockSelect("#stock-f-a", uniqueColValues(optionSource, "A"), stockView.a, `All · ${stockDisplayLabel(sample, "A")}`);
 
     const ownEl = $("#stock-f-own");
     if (ownEl) {
-      const hVals = [...uniqueColValues(base, "H")].sort();
+      const hVals = [...uniqueColValues(optionSource, "H")].sort();
       const opts = [
         `<option value="">All · Sales ownership</option>`,
         `<option value="${STOCK_MAIN_SALES}"${stockView.own === STOCK_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
@@ -3711,8 +3856,8 @@
     }
 
     const list = filteredAllocRows();
-    renderStockKpis(base.length, list.length);
-    renderStockAllocTable(list, sample);
+    renderStockKpis(stats, list.length);
+    renderStockAllocTable(list, sample, stats);
   }
 
   function refreshStockFromFilters() {
