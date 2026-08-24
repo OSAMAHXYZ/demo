@@ -243,6 +243,105 @@
         </div>
       </div>
 
+      <!-- PANEL: BO Dashboard (executive) -->
+      <div class="panel-section" id="panel-bodashboard" style="display:none">
+        <div class="bo-empty card" id="bo-empty">
+          <h2>Back Order Management Dashboard</h2>
+          <p style="color:var(--muted);margin:0">Push a <b>Back Order</b> Excel file from Admin to open this executive BO view.</p>
+        </div>
+
+        <div id="bo-dash" class="bo-dash" hidden>
+          <div class="bo-toolbar">
+            <input id="bo-search" type="search" placeholder="Search product / SFX / salesman…" />
+            <select id="bo-f-product"><option value="">All products</option></select>
+            <select id="bo-f-category"><option value="">All categories</option></select>
+            <select id="bo-f-scope"><option value="">All sales scopes</option></select>
+            <select id="bo-f-channel"><option value="">All channels</option></select>
+            <select id="bo-f-type"><option value="">All sales types</option></select>
+            <select id="bo-f-sfx"><option value="">All SFX / grades</option></select>
+            <select id="bo-f-confirm">
+              <option value="">All confirmation</option>
+              <option value="yes">Confirmed</option>
+              <option value="no">Not confirmed</option>
+            </select>
+            <button type="button" id="bo-clear-filters" class="btn">Clear filters</button>
+          </div>
+
+          <div class="bo-kpis" id="bo-kpis"></div>
+
+          <div class="bo-insights card" id="bo-insights"></div>
+
+          <div class="bo-strategic" id="bo-strategic"></div>
+
+          <div class="bo-grid">
+            <article class="card bo-span-2">
+              <div class="pbi-viz-head">
+                <h2>Product back order analysis</h2>
+              </div>
+              <div class="table-wrap" id="bo-product-table"></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-backlog">
+              <div class="pbi-viz-head">
+                <h2>Top 10 product backlog</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-backlog">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-confirm">
+              <div class="pbi-viz-head">
+                <h2>Confirmation by product</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-confirm">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-confirm"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-aging">
+              <div class="pbi-viz-head">
+                <h2>Average aging by product</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-aging">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-salestype">
+              <div class="pbi-viz-head">
+                <h2>Sales type · Confirmed vs Not</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-salestype">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-salestype"></canvas></div></div>
+            </article>
+
+            <article class="card">
+              <h2>Sales type analysis</h2>
+              <div class="table-wrap" id="bo-salestype-table"></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-sfx">
+              <div class="pbi-viz-head">
+                <h2>SFX / Grade demand (Top 12)</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-sfx">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-bo-sfx-confirm">
+              <div class="pbi-viz-head">
+                <h2>SFX confirmation rate</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx-confirm"></canvas></div></div>
+            </article>
+
+            <article class="card bo-span-2">
+              <h2>SFX / Grade demand table</h2>
+              <div class="table-wrap" id="bo-sfx-table"></div>
+            </article>
+          </div>
+        </div>
+      </div>
+
       <!-- PANEL: Stock & BO Dashboard -->
       <div class="panel-section" id="panel-dashboard" style="display:none">
         <div class="kpis" id="kpis"></div>
@@ -442,10 +541,10 @@
     vin: ["vin", "vehicle identification number", "chassis", "شاسيه"],
     boNumber: ["back order number", "backorder number", "bo number", "order number", "bo no"],
     salesman: ["salesman name", "salesman", "advisor", "consultant", "sales employee", "employee name"],
-    plant: ["plant", "sales plant", "department", "sales office", "channel", "team"],
+    plant: ["plant", "sales plant", "department", "sales office", "team"],
     salesmanCode: ["salesman code", "salesman id", "employee id", "employee no", "emp id", "staff id", "code"],
     orderDate: ["order date", "bo date", "created date", "date"],
-    confirm: ["confirm flag", "confirm", "confirmation"],
+    confirm: ["confirm flag", "confirm", "confirmation", "confirmation status", "confirm status", "bo confirm"],
     paid: ["المبلغ المدفوع", "paid", "paid amount", "amount paid", "payment"],
     location: ["current location", "gt location", "location", "storage location"],
     status: ["primary status", "status", "secondary status"],
@@ -458,6 +557,12 @@
     vsnd: ["vsnd", "vehicle sold not delivered", "sold not delivered"],
     delivery: ["delivery", "delivered", "deliveries", "تسليم"],
     proforma: ["proforma", "proforma orders", "pro forma", "فاتورة مبدئية"],
+    category: ["category", "vehicle category", "segment", "class", "series"],
+    salesScope: ["sales scope", "scope", "business scope", "region scope"],
+    salesChannel: ["sales channel", "channel", "distribution channel", "sales plant"],
+    salesType: ["sales type", "payment type", "finance type", "deal type", "type of sale", "sale type", "payment method"],
+    sfx: ["sfx", "grade", "alj suffix", "tmc suffix", "suffix", "variant", "trim"],
+    agingDays: ["aging", "aging days", "age days", "days aging", "bo aging"],
   };
 
   const HEADER_MARKERS = [
@@ -822,24 +927,64 @@
     return Math.round((hits / applicable) * 100);
   }
 
+  function isConfirmedFlag(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    if (/(not\s*confirm|unconfirm|غير\s*مؤكد|\bno\b)/i.test(s)) return false;
+    if (["confirmed", "yes", "y", "1", "true", "confirm", "مؤكد", "c"].includes(s)) return true;
+    if (s.includes("confirm")) return true;
+    return false;
+  }
+
+  function inferSalesType(raw, paid) {
+    const s = String(raw ?? "").trim().toLowerCase();
+    if (!s) return paid ? "Cash" : "Other";
+    if (/fleet|أسطول/.test(s)) return "Fleet";
+    if (/employee|emp|موظف|staff/.test(s)) return "Employee";
+    if (/aljuf|alj\s*uf|ufinance|u-?finance/.test(s)) return "ALJUF";
+    if (/bank|بنك|finance|تمويل/.test(s)) return "Bank";
+    if (/cash|نقد/.test(s)) return "Cash";
+    const t = String(raw).trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Other";
+  }
+
   function mapBo(rows) {
     const get = buildFieldGetter(rows[0] || {});
     return rows.map((r, i) => {
       const orderDate = parseDate(get(r, "orderDate"));
-      const aging = orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null;
+      const agingFromCol = toNumber(get(r, "agingDays"));
+      const aging = agingFromCol > 0
+        ? agingFromCol
+        : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
+      const confirmRaw = get(r, "confirm") || get(r, "status");
+      const confirmed = isConfirmedFlag(confirmRaw);
+      const product = cellToString(get(r, "product"));
+      const suffix = cellToString(get(r, "sfx") || get(r, "suffix"));
+      const paid = isPaid(get(r, "paid"));
+      const salesType = inferSalesType(get(r, "salesType"), paid);
+      const category = cellToString(get(r, "category")) || (product ? String(product).split(/\s+/)[0] : "—");
+      const salesChannel = cellToString(get(r, "salesChannel") || get(r, "plant")) || "—";
+      const salesScope = cellToString(get(r, "salesScope")) || salesChannel || "—";
       return {
         id: i,
         boNumber: cellToString(get(r, "boNumber")),
         customer: cellToString(get(r, "customer")),
         salesman: cellToString(get(r, "salesman")),
-        product: cellToString(get(r, "product")),
+        product: product || "—",
+        category,
         year: cellToString(get(r, "year")),
-        suffix: cellToString(get(r, "suffix")),
+        suffix,
+        sfx: suffix || "—",
         ext: cellToString(get(r, "ext")),
         int: cellToString(get(r, "int")),
-        paid: isPaid(get(r, "paid")),
-        confirm: cellToString(get(r, "confirm")),
+        paid,
+        confirm: cellToString(confirmRaw),
+        confirmed,
+        salesType,
+        salesChannel,
+        salesScope,
         orderDate: orderDate ? cellToString(orderDate) : "",
+        orderDateObj: orderDate,
         aging,
         vin: cellToString(get(r, "vin")),
       };
@@ -1625,6 +1770,7 @@
 
   const PANEL_DEFS = [
     { id: "salesreport", label: "Sales Dashboard" },
+    { id: "bodashboard", label: "BO Dashboard" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
   let activePanel = "salesreport";
@@ -1637,13 +1783,21 @@
     return slotHasRows("cancelled");
   }
 
+  function hasBackOrder() {
+    return slotHasRows("backorder");
+  }
+
   /** Sales Report when Sales Raw is pushed (Cancelled BO optional — zeros if missing) */
   function hasSalesReportInputs() {
     return hasSalesRaw();
   }
 
   function visiblePanels() {
-    return PANEL_DEFS.filter((p) => p.id !== "salesreport" || hasSalesReportInputs());
+    return PANEL_DEFS.filter((p) => {
+      if (p.id === "salesreport") return hasSalesReportInputs();
+      if (p.id === "bodashboard") return hasBackOrder();
+      return true;
+    });
   }
 
   function clearSalesReportUi() {
@@ -2822,6 +2976,375 @@
     setStatus("Excel schedule exported", "ok");
   }
 
+  const STRATEGIC_PRODUCTS = ["CAMRY", "LC300", "RAV4", "RAV 4", "PRADO", "HILUX"];
+
+  let boView = {
+    search: "",
+    product: "",
+    category: "",
+    scope: "",
+    channel: "",
+    type: "",
+    sfx: "",
+    confirm: "",
+  };
+
+  function boMetrics(list) {
+    const total = list.length;
+    const confirmed = list.filter((b) => b.confirmed).length;
+    const notConfirmed = total - confirmed;
+    const agingVals = list.map((b) => b.aging).filter((n) => n != null && Number.isFinite(n));
+    const avgAging = agingVals.length
+      ? Math.round(agingVals.reduce((s, n) => s + n, 0) / agingVals.length)
+      : 0;
+    const over30 = list.filter((b) => (b.aging || 0) > 30).length;
+    const over60 = list.filter((b) => (b.aging || 0) > 60).length;
+    return {
+      total,
+      confirmed,
+      notConfirmed,
+      confirmPct: total ? confirmed / total : 0,
+      avgAging,
+      over30,
+      over60,
+    };
+  }
+
+  function filteredBos(d) {
+    let list = (d && d.bos) || [];
+    const q = boView.search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((b) =>
+        [b.product, b.sfx, b.salesman, b.customer, b.boNumber, b.category, b.salesType]
+          .some((v) => String(v || "").toLowerCase().includes(q))
+      );
+    }
+    if (boView.product) list = list.filter((b) => b.product === boView.product);
+    if (boView.category) list = list.filter((b) => b.category === boView.category);
+    if (boView.scope) list = list.filter((b) => b.salesScope === boView.scope);
+    if (boView.channel) list = list.filter((b) => b.salesChannel === boView.channel);
+    if (boView.type) list = list.filter((b) => b.salesType === boView.type);
+    if (boView.sfx) list = list.filter((b) => b.sfx === boView.sfx);
+    if (boView.confirm === "yes") list = list.filter((b) => b.confirmed);
+    if (boView.confirm === "no") list = list.filter((b) => !b.confirmed);
+    return list;
+  }
+
+  function fillBoSelect(sel, values, current, allLabel) {
+    const el = $(sel);
+    if (!el) return;
+    const opts = [`<option value="">${allLabel}</option>`]
+      .concat([...values].sort().map((v) =>
+        `<option value="${escapeHtml(v)}"${v === current ? " selected" : ""}>${escapeHtml(v)}</option>`
+      ));
+    el.innerHTML = opts.join("");
+  }
+
+  function groupBoBy(list, keyFn) {
+    const map = new Map();
+    list.forEach((b) => {
+      const k = keyFn(b) || "—";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(b);
+    });
+    return map;
+  }
+
+  function productAgg(list) {
+    return [...groupBoBy(list, (b) => b.product).entries()]
+      .map(([product, rows]) => {
+        const m = boMetrics(rows);
+        const category = rows[0]?.category || "—";
+        return { product, category, ...m };
+      })
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function heatConfirm(pct) {
+    if (pct >= 0.7) return "heat-ok";
+    if (pct >= 0.4) return "heat-mid";
+    return "heat-bad";
+  }
+
+  function heatAging(days) {
+    if (days > 60) return "heat-bad";
+    if (days > 30) return "heat-mid";
+    return "heat-ok";
+  }
+
+  function kpiStatus(kind, m) {
+    if (kind === "confirm") return m.confirmPct >= 0.7 ? "ok" : m.confirmPct >= 0.4 ? "warn" : "bad";
+    if (kind === "aging") return m.avgAging <= 30 ? "ok" : m.avgAging <= 60 ? "warn" : "bad";
+    if (kind === "over30") return m.total ? (m.over30 / m.total <= 0.4 ? "ok" : m.over30 / m.total <= 0.7 ? "warn" : "bad") : "ok";
+    if (kind === "over60") return m.total ? (m.over60 / m.total <= 0.2 ? "ok" : m.over60 / m.total <= 0.4 ? "warn" : "bad") : "ok";
+    return "ok";
+  }
+
+  function renderBoKpis(m) {
+    const cards = [
+      { lab: "Total Back Orders", val: m.total, sub: "open orders", status: "ok" },
+      { lab: "Confirmed", val: m.confirmed, sub: "allocated", status: "ok" },
+      { lab: "Not Confirmed", val: m.notConfirmed, sub: "waiting allocation", status: m.notConfirmed ? "warn" : "ok" },
+      { lab: "Confirmation %", val: (m.confirmPct * 100).toFixed(1) + "%", sub: "confirmed ÷ total", status: kpiStatus("confirm", m) },
+      { lab: "Orders >30 Days", val: m.over30, sub: "aging risk", status: kpiStatus("over30", m) },
+      { lab: "Orders >60 Days", val: m.over60, sub: "critical aging", status: kpiStatus("over60", m) },
+      { lab: "Average Aging", val: m.avgAging, sub: "days", status: kpiStatus("aging", m) },
+    ];
+    $("#bo-kpis").innerHTML = cards.map((c) => `
+      <div class="bo-kpi ${c.status}">
+        <div class="lab">${c.lab}</div>
+        <div class="val">${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
+        <div class="sub">${escapeHtml(c.sub)}</div>
+      </div>`).join("");
+  }
+
+  function renderBoInsights(list, m) {
+    const el = $("#bo-insights");
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = "<h2>Executive insights</h2><p class=\"foot\">No back orders match the current filters.</p>";
+      return;
+    }
+    const byProd = productAgg(list);
+    const top = byProd[0];
+    const lowestConfirm = byProd.slice().sort((a, b) => a.confirmPct - b.confirmPct)[0];
+    const highestAging = byProd.slice().sort((a, b) => b.avgAging - a.avgAging)[0];
+    const best = byProd.slice().filter((p) => p.total >= 3).sort((a, b) => b.confirmPct - a.confirmPct)[0] || byProd[0];
+    const share = top && m.total ? ((top.total / m.total) * 100).toFixed(1) : "0";
+    const pct30 = m.total ? ((m.over30 / m.total) * 100).toFixed(1) : "0";
+    const pct60 = m.total ? ((m.over60 / m.total) * 100).toFixed(1) : "0";
+    const bullets = [
+      top ? `<b>${escapeHtml(top.product)}</b> contributes the largest share of total backlog (${share}%).` : null,
+      lowestConfirm ? `<b>${escapeHtml(lowestConfirm.product)}</b> has the lowest confirmation rate (${(lowestConfirm.confirmPct * 100).toFixed(1)}%).` : null,
+      highestAging ? `<b>${escapeHtml(highestAging.product)}</b> shows the highest average aging (${highestAging.avgAging} days).` : null,
+      `Overall confirmation is <b>${(m.confirmPct * 100).toFixed(1)}%</b> — ${m.confirmPct >= 0.7 ? "healthy" : m.confirmPct >= 0.4 ? "needs attention" : "at risk"}.`,
+      `Orders older than 30 days: <b>${pct30}%</b> · older than 60 days: <b>${pct60}%</b>.`,
+      best ? `<b>${escapeHtml(best.product)}</b> is among the strongest allocation performers (${(best.confirmPct * 100).toFixed(1)}% confirmed).` : null,
+    ].filter(Boolean);
+    el.innerHTML = `<h2>Executive insights</h2><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+  }
+
+  function renderBoStrategic(list) {
+    const el = $("#bo-strategic");
+    if (!el) return;
+    const cards = STRATEGIC_PRODUCTS.map((key) => {
+          const rows2 = list.filter((b) => {
+            const p = String(b.product || "").toUpperCase().replace(/\s+/g, "");
+            const k = String(key).toUpperCase().replace(/\s+/g, "");
+            return p.includes(k);
+          });
+      const m = boMetrics(rows2);
+      const label = key === "RAV 4" ? "RAV4" : key;
+      return { label, m, has: rows2.length > 0 };
+    }).filter((c, i, arr) => {
+      // dedupe RAV4 / RAV 4
+      if (c.label === "RAV4" && arr.find((x) => x.label === "RAV4" && x !== c)) return c.has;
+      return true;
+    });
+    // unique by label
+    const seen = new Set();
+    const unique = cards.filter((c) => {
+      if (seen.has(c.label)) return false;
+      seen.add(c.label);
+      return true;
+    });
+    el.innerHTML = unique.map((c) => `
+      <div class="bo-strat card ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}">
+        <div class="bo-strat-name">${escapeHtml(c.label)}</div>
+        <div class="bo-strat-grid">
+          <div><span>Total BO</span><b>${formatNumber(c.m.total)}</b></div>
+          <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
+          <div><span>Not Conf.</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
+          <div><span>Conf %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
+          <div><span>&gt;30d</span><b>${formatNumber(c.m.over30)}</b></div>
+          <div><span>&gt;60d</span><b>${formatNumber(c.m.over60)}</b></div>
+          <div><span>Avg age</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderBoProductTable(aggs) {
+    const el = $("#bo-product-table");
+    if (!el) return;
+    if (!aggs.length) {
+      el.innerHTML = `<p class="foot" style="padding:12px">No products to show.</p>`;
+      return;
+    }
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Product</th><th>Category</th><th>Total BO</th><th>Confirmed</th><th>Not Confirmed</th>
+        <th>Confirmation %</th><th>Average Aging</th>
+      </tr></thead>
+      <tbody>${aggs.map((a) => `
+        <tr data-bo-product="${escapeHtml(a.product)}" class="bo-row">
+          <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
+          <td>${escapeHtml(a.category)}</td>
+          <td>${formatNumber(a.total)}</td>
+          <td>${formatNumber(a.confirmed)}</td>
+          <td>${formatNumber(a.notConfirmed)}</td>
+          <td class="${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
+          <td class="${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function renderBoSalesTypeTable(list) {
+    const el = $("#bo-salestype-table");
+    if (!el) return;
+    const rows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr><th>Sales Type</th><th>Total BO</th><th>Confirmed</th><th>Not Confirmed</th><th>Orders &gt;60 Days</th><th>Conf %</th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td><button type="button" class="bo-link" data-bo-type="${escapeHtml(r.salesType)}">${escapeHtml(r.salesType)}</button></td>
+          <td>${formatNumber(r.total)}</td>
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td>${formatNumber(r.over60)}</td>
+          <td class="${heatConfirm(r.confirmPct)}">${(r.confirmPct * 100).toFixed(1)}%</td>
+        </tr>`).join("") || `<tr><td colspan="6" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function renderBoSfxTable(list) {
+    const el = $("#bo-sfx-table");
+    if (!el) return;
+    const types = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
+    const rows = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => {
+        const m = boMetrics(items);
+        const byType = {};
+        types.forEach((t) => { byType[t] = items.filter((b) => b.salesType === t).length; });
+        return { sfx, ...m, byType };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 40);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>SFX/Grade</th><th>Total BO</th>${types.map((t) => `<th>${t}</th>`).join("")}
+        <th>Confirmed</th><th>Not Confirmed</th><th>&gt;60 Days</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td><button type="button" class="bo-link" data-bo-sfx="${escapeHtml(r.sfx)}">${escapeHtml(r.sfx)}</button></td>
+          <td>${formatNumber(r.total)}</td>
+          ${types.map((t) => `<td>${formatNumber(r.byType[t] || 0)}</td>`).join("")}
+          <td>${formatNumber(r.confirmed)}</td>
+          <td>${formatNumber(r.notConfirmed)}</td>
+          <td class="${heatAging(r.over60 > 0 ? 61 : 0)}">${formatNumber(r.over60)}</td>
+        </tr>`).join("") || `<tr><td colspan="10" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function renderBoCharts(list, aggs) {
+    const top = aggs.slice(0, 10);
+    const labels = top.map((a) => a.product);
+    const maxIdx = 0;
+    upsertChart("chart-bo-backlog", "bar", labels, top.map((a) => a.total), {
+      horizontal: true,
+      backgroundColor: top.map((_, i) => i === maxIdx ? "rgba(200, 30, 44, 0.9)" : "rgba(11, 58, 102, 0.8)"),
+    });
+
+    const confLabels = aggs.slice(0, 12).map((a) => a.product);
+    upsertChart("chart-bo-confirm", "bar", confLabels, null, {
+      legend: true,
+      datasets: [
+        {
+          label: "Confirmed",
+          data: aggs.slice(0, 12).map((a) => a.confirmed),
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+        {
+          label: "Not Confirmed",
+          data: aggs.slice(0, 12).map((a) => a.notConfirmed),
+          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+    });
+
+    const agingRows = aggs.slice(0, 12);
+    upsertChart("chart-bo-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
+      horizontal: true,
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(200, 30, 44, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+    });
+
+    const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    upsertChart("chart-bo-salestype", "bar", typeRows.map((r) => r.salesType), null, {
+      legend: true,
+      datasets: [
+        {
+          label: "Confirmed",
+          data: typeRows.map((r) => r.confirmed),
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+        {
+          label: "Not Confirmed",
+          data: typeRows.map((r) => r.notConfirmed),
+          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+    });
+
+    const sfxRows = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12);
+    upsertChart("chart-bo-sfx", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(11, 58, 102, 0.85)",
+    });
+    upsertChart("chart-bo-sfx-confirm", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => +(r.confirmPct * 100).toFixed(1)), {
+      horizontal: true,
+      max: 100,
+      backgroundColor: sfxRows.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(200, 30, 44, 0.85)"),
+    });
+  }
+
+  function renderBoDashboard(d) {
+    const empty = $("#bo-empty");
+    const dash = $("#bo-dash");
+    if (!hasBackOrder()) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const all = d.bos || [];
+    fillBoSelect("#bo-f-product", new Set(all.map((b) => b.product).filter(Boolean)), boView.product, "All products");
+    fillBoSelect("#bo-f-category", new Set(all.map((b) => b.category).filter(Boolean)), boView.category, "All categories");
+    fillBoSelect("#bo-f-scope", new Set(all.map((b) => b.salesScope).filter(Boolean)), boView.scope, "All sales scopes");
+    fillBoSelect("#bo-f-channel", new Set(all.map((b) => b.salesChannel).filter(Boolean)), boView.channel, "All channels");
+    fillBoSelect("#bo-f-type", new Set(all.map((b) => b.salesType).filter(Boolean)), boView.type, "All sales types");
+    fillBoSelect("#bo-f-sfx", new Set(all.map((b) => b.sfx).filter(Boolean)), boView.sfx, "All SFX / grades");
+    if ($("#bo-f-confirm")) $("#bo-f-confirm").value = boView.confirm || "";
+    if ($("#bo-search")) $("#bo-search").value = boView.search || "";
+
+    const list = filteredBos(d);
+    const m = boMetrics(list);
+    const aggs = productAgg(list);
+    renderBoKpis(m);
+    renderBoInsights(list, m);
+    renderBoStrategic(list);
+    renderBoProductTable(aggs);
+    renderBoSalesTypeTable(list);
+    renderBoSfxTable(list);
+    renderBoCharts(list, aggs);
+  }
+
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
@@ -2837,11 +3360,13 @@
     if (navDash) navDash.disabled = false;
     switchNav("dashboard");
     if (hasSalesReportInputs()) activePanel = "salesreport";
+    else if (hasBackOrder()) activePanel = "bodashboard";
     else activePanel = "dashboard";
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
     renderKpis(d);
     renderCharts(d);
+    renderBoDashboard(d);
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
       renderSalesReportKpis(d.salesReport);
@@ -2852,9 +3377,9 @@
     renderTabs();
     renderTable(d);
     setStatus(
-      hasSalesReportInputs()
-        ? (hasCancelledBO() ? "Live dashboard ready" : "Live Sales Report ready · Cancelled BO optional for cancel %")
-        : "Dashboard ready · Push Sales Raw for Sales Report",
+      hasBackOrder() || hasSalesReportInputs()
+        ? "Live dashboard ready"
+        : "Dashboard ready · Push Back Order or Sales Raw from Admin",
       "ok"
     );
   }
@@ -3004,6 +3529,72 @@
     if (!viz) return;
     openWideChart(viz.getAttribute("data-chart-id"));
   });
+  const boDashEl = $("#bo-dash");
+  if (boDashEl) {
+    boDashEl.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand) {
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const prod = e.target.closest("[data-bo-product]");
+      if (prod) {
+        boView.product = prod.getAttribute("data-bo-product") || "";
+        if (window._data) renderBoDashboard(window._data);
+        return;
+      }
+      const typ = e.target.closest("[data-bo-type]");
+      if (typ) {
+        boView.type = typ.getAttribute("data-bo-type") || "";
+        if (window._data) renderBoDashboard(window._data);
+        return;
+      }
+      const sfx = e.target.closest("[data-bo-sfx]");
+      if (sfx) {
+        boView.sfx = sfx.getAttribute("data-bo-sfx") || "";
+        if (window._data) renderBoDashboard(window._data);
+      }
+    });
+    boDashEl.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+  }
+  function refreshBoFromFilters() {
+    if (window._data) renderBoDashboard(window._data);
+  }
+  const boSearchEl = $("#bo-search");
+  if (boSearchEl) {
+    boSearchEl.addEventListener("input", (e) => {
+      boView.search = e.target.value;
+      refreshBoFromFilters();
+    });
+  }
+  [
+    ["#bo-f-product", "product"],
+    ["#bo-f-category", "category"],
+    ["#bo-f-scope", "scope"],
+    ["#bo-f-channel", "channel"],
+    ["#bo-f-type", "type"],
+    ["#bo-f-sfx", "sfx"],
+    ["#bo-f-confirm", "confirm"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      boView[key] = e.target.value;
+      refreshBoFromFilters();
+    });
+  });
+  const boClearEl = $("#bo-clear-filters");
+  if (boClearEl) {
+    boClearEl.addEventListener("click", () => {
+      boView = { search: "", product: "", category: "", scope: "", channel: "", type: "", sfx: "", confirm: "" };
+      refreshBoFromFilters();
+    });
+  }
   $("#pbi-wide-close").addEventListener("click", closeWideChart);
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
     if (e.target.id === "pbi-wide-backdrop") closeWideChart();
