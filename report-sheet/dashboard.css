@@ -1941,3 +1941,152 @@ footer.page-foot {
     opacity: 0.45;
   }
 }
+
+/* ——— Admin page (match Live Sales Dashboard chrome) ——— */
+body.admin-page .admin-kpis {
+  margin-bottom: 14px;
+}
+
+body.admin-page .admin-section-card {
+  margin-bottom: 16px;
+}
+
+body.admin-page .admin-section-card .pbi-viz-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+body.admin-page .admin-section-card .pbi-viz-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+body.admin-page .admin-section-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+body.admin-page .admin-lead {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+body.admin-page .admin-toolbar {
+  margin-bottom: 12px;
+}
+
+body.admin-page .admin-toolbar #bulk-target {
+  min-width: 120px;
+  max-width: 140px;
+}
+
+body.admin-page .admin-targets-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+body.admin-page .admin-targets-layout .pbi-slicer {
+  position: sticky;
+  top: 12px;
+}
+
+body.admin-page .target-summary {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+body.admin-page .admin-side-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+body.admin-page .admin-side-stat span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+body.admin-page .admin-side-stat b {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+body.admin-page .slot-required {
+  display: inline-flex;
+  margin-inline-start: 6px;
+  vertical-align: middle;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  background: var(--sky-soft);
+  color: var(--navy-2);
+  border: 1px solid #b7d7ef;
+}
+
+body.admin-page .slot {
+  background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
+}
+
+body.admin-page .grid-5 {
+  margin-bottom: 0;
+}
+
+body.admin-page #panel-targets[hidden],
+body.admin-page #panel-uploads[hidden] {
+  display: none !important;
+}
+
+body.admin-page #panel-targets:not([hidden]) {
+  display: block !important;
+  animation: fadeUp 0.28s ease;
+}
+
+body.admin-page #panel-uploads:not([hidden]) {
+  display: block !important;
+}
+
+@media (max-width: 960px) {
+  body.admin-page .admin-targets-layout {
+    grid-template-columns: 1fr;
+  }
+
+  body.admin-page .admin-targets-layout .pbi-slicer {
+    position: static;
+  }
+
+  body.admin-page .admin-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  body.admin-page .admin-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+

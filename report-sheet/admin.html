@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="dashboard.css" />
   <script src="data-store.js"></script>
 </head>
-<body>
+<body class="admin-page">
   <header class="page-hero">
     <div class="page-hero-inner">
       <div class="hero-brand">
@@ -35,41 +35,70 @@
       </div>
       <div class="top-actions">
         <span class="status" id="status">Ready</span>
+        <span class="status ok" id="admin-mode-badge">ADMIN</span>
         <a class="btn" href="index.html">← Live Sales Report</a>
         <button type="button" id="clear-files-btn" disabled>Clear files</button>
         <button type="button" class="btn-primary" id="push-btn">Push to live</button>
       </div>
     </header>
 
-    <article class="card" style="margin-bottom:16px">
-      <h2>1 · Excel uploads</h2>
-      <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
-        Submit workbooks here. Click <b>Push to live</b> so the live Sales Report can build.
-        <b>Sales Raw Data</b> is required for Sales Report · <b>Cancelled Back Orders</b> optional for cancel %.
-      </p>
-      <section class="grid-5" id="slots"></section>
+    <div class="admin-bar" id="nav-bar">
+      <button type="button" class="tab active" data-admin-panel="uploads" id="tab-uploads">1 · Excel Uploads</button>
+      <button type="button" class="tab" data-admin-panel="targets" id="tab-targets">2 · Employees &amp; Targets</button>
+      <span class="hint">Same look as Live Dashboard · Push when ready</span>
+    </div>
+
+    <div class="pbi-kpis admin-kpis" id="admin-kpis"></div>
+
+    <section class="admin-panel" id="panel-uploads">
+      <div class="xl-toolbar admin-toolbar">
+        <span class="hint" id="files-foot">Upload Sales Raw for Sales Report · other files optional.</span>
+      </div>
       <div class="banner load" id="load-banner">Reading…</div>
       <div class="banner err" id="error-banner"></div>
-      <p class="foot" id="files-foot" style="margin-top:10px"></p>
-    </article>
 
-    <article class="card">
-      <h2>2 · Employees · monthly targets</h2>
-      <p style="color:var(--muted);font-size:.84rem;margin:0 0 12px">
-        Edit targets, then <b>Push to live</b>. Names must match Sales Raw Col A.
-      </p>
-      <div class="target-summary" id="target-summary"></div>
-      <div class="toolbar" style="margin-bottom:12px">
-        <input id="target-search" type="search" placeholder="Search employee…" />
-        <input id="bulk-target" type="number" min="0" step="1" placeholder="Bulk target" style="min-width:120px" />
-        <button type="button" id="bulk-apply-btn">Apply to all</button>
-        <button type="button" id="reset-targets-btn">Reset names</button>
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Excel uploads</h2>
+          <span class="admin-section-tag">Drop or click · .xlsx / .xls / .csv</span>
+        </div>
+        <p class="admin-lead">
+          Submit workbooks here, then click <b>Push to live</b>.
+          <b>Sales Raw Data</b> is required · <b>Cancelled Back Orders</b> optional for cancel %.
+        </p>
+        <section class="grid-5" id="slots"></section>
       </div>
-      <div class="target-grid" id="target-grid"></div>
-      <p class="foot" id="target-foot"></p>
-    </article>
+    </section>
 
-    <footer class="page-foot">Admin only · Data stays in this browser · Live: <a href="index.html" style="color:#9fd0ff">report-sheet/index.html</a></footer>
+    <section class="admin-panel" id="panel-targets" hidden>
+      <div class="xl-toolbar admin-toolbar">
+        <input id="target-search" type="search" placeholder="Search employee…" />
+        <input id="bulk-target" type="number" min="0" step="1" placeholder="Bulk target" />
+        <button type="button" id="bulk-apply-btn" class="btn">Apply to all</button>
+        <button type="button" id="reset-targets-btn" class="btn">Reset names</button>
+        <button type="button" class="btn-primary" id="push-btn-2">Push to live</button>
+        <span class="hint">Names must match Sales Raw Col A</span>
+      </div>
+
+      <div class="admin-targets-layout">
+        <aside class="pbi-slicer card">
+          <h2>Target summary</h2>
+          <p class="pbi-slicer-hint">Monthly targets for live Ach%</p>
+          <div class="target-summary" id="target-summary"></div>
+          <p class="foot" id="target-foot"></p>
+        </aside>
+
+        <div class="card admin-section-card admin-targets-main">
+          <div class="pbi-viz-head">
+            <h2>Employees · monthly targets</h2>
+            <span class="admin-section-tag">Edit · then Push</span>
+          </div>
+          <div class="target-grid" id="target-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="page-foot">Admin only · Data stays in this browser · Live: <a href="index.html">report-sheet/index.html</a></footer>
   </div>
 
 <script>
@@ -193,16 +222,32 @@
     });
   }
 
+  function renderAdminKpis() {
+    const loaded = SLOT_DEFS.filter((d) => slots[d.id].buffer).length;
+    const hasSales = !!slots.sales.buffer;
+    const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
+    const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
+    const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
+    $("#admin-kpis").innerHTML = `
+      <div class="pbi-kpi"><div class="lab">Files loaded</div><div class="val">${loaded}<span style="font-size:.75rem;font-weight:600;color:var(--muted)"> / ${SLOT_DEFS.length}</span></div></div>
+      <div class="pbi-kpi"><div class="lab">Sales Raw</div><div class="val">${hasSales ? "Ready" : "Missing"}</div></div>
+      <div class="pbi-kpi"><div class="lab">Employees</div><div class="val">${EMPLOYEE_COUNT}</div></div>
+      <div class="pbi-kpi"><div class="lab">Named</div><div class="val">${named}</div></div>
+      <div class="pbi-kpi"><div class="lab">Targets set</div><div class="val">${filled}</div></div>
+      <div class="pbi-kpi"><div class="lab">Total target</div><div class="val">${formatNumber(totalTarget)}</div></div>
+    `;
+  }
+
   function renderTargetsPanel() {
     const q = targetSearch.trim().toLowerCase();
     const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
     const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
     const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
     $("#target-summary").innerHTML = `
-      <span class="pill">Employees: ${EMPLOYEE_COUNT}</span>
-      <span class="pill">Named: ${named}</span>
-      <span class="pill">Targets set: ${filled}</span>
-      <span class="pill">Total target: ${formatNumber(totalTarget)}</span>
+      <div class="admin-side-stat"><span>Employees</span><b>${EMPLOYEE_COUNT}</b></div>
+      <div class="admin-side-stat"><span>Named</span><b>${named}</b></div>
+      <div class="admin-side-stat"><span>Targets set</span><b>${filled}</b></div>
+      <div class="admin-side-stat"><span>Total target</span><b>${formatNumber(totalTarget)}</b></div>
     `;
     $("#target-grid").innerHTML = employeeTargets.map((e, i) => {
       const hidden = q && !String(e.name).toLowerCase().includes(q) ? ' style="display:none"' : "";
@@ -212,14 +257,15 @@
         <input data-emp-target="${i}" type="number" min="0" step="1" value="${e.target || 0}" title="Monthly target" />
       </div>`;
     }).join("");
-    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · edit names to match Excel · then Push to live`;
+    $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · match Excel names · then Push to live`;
+    renderAdminKpis();
   }
 
   function renderSlots() {
     $("#slots").innerHTML = SLOT_DEFS.map((d) => {
       const s = slots[d.id];
       const loaded = s.buffer ? " loaded" : "";
-      const required = d.id === "sales" ? ' <span class="pill" style="margin-left:4px">Required</span>' : "";
+      const required = d.id === "sales" ? ' <span class="pill slot-required">Required</span>' : "";
       const meta = s.buffer
         ? `<span class="meta"><b>${escapeHtml(s.name)}</b><br>${formatBytes(s.size)}</span>`
         : `<span class="meta">Drop or click · .xlsx / .xls / .csv</span>`;
@@ -243,6 +289,18 @@
     else foot = "Upload Sales Raw for Sales Report · other files optional.";
     $("#files-foot").textContent = foot;
     if (any) setStatus(hasSales ? "Ready to push" : "Files loaded · add Sales Raw for Sales Report", "ok");
+    renderAdminKpis();
+  }
+
+  function showAdminPanel(which) {
+    const uploads = $("#panel-uploads");
+    const targets = $("#panel-targets");
+    const isTargets = which === "targets";
+    uploads.hidden = isTargets;
+    targets.hidden = !isTargets;
+    document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.adminPanel === which);
+    });
   }
 
   async function onFileChosen(slotId, file) {
@@ -329,6 +387,9 @@
     setStatus("Files cleared", "ok");
   }
 
+  document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
+    btn.addEventListener("click", () => showAdminPanel(btn.dataset.adminPanel));
+  });
   $("#target-search").addEventListener("input", (e) => {
     targetSearch = e.target.value;
     renderTargetsPanel();
@@ -336,6 +397,8 @@
   $("#bulk-apply-btn").addEventListener("click", () => {
     const n = Math.max(0, Number($("#bulk-target").value) || 0);
     document.querySelectorAll("[data-emp-target]").forEach((el) => { el.value = String(n); });
+    employeeTargets = collectTargetsFromForm();
+    renderAdminKpis();
     setStatus("Bulk value applied — click Push to live", "busy");
   });
   $("#reset-targets-btn").addEventListener("click", () => {
@@ -343,17 +406,25 @@
     document.querySelectorAll("[data-emp-name]").forEach((el, i) => {
       el.value = DEFAULT_EMPLOYEES[i]?.name || `Employee ${i + 1}`;
     });
+    employeeTargets = collectTargetsFromForm();
+    renderTargetsPanel();
     setStatus("Names reset — click Push to live", "busy");
   });
   $("#push-btn").addEventListener("click", pushToLive);
+  $("#push-btn-2").addEventListener("click", pushToLive);
   $("#clear-files-btn").addEventListener("click", clearFiles);
-  $("#target-grid").addEventListener("change", () => setStatus("Changes pending — click Push to live", "busy"));
+  $("#target-grid").addEventListener("change", () => {
+    employeeTargets = collectTargetsFromForm();
+    renderAdminKpis();
+    setStatus("Changes pending — click Push to live", "busy");
+  });
   $("#slots").addEventListener("change", (e) => {
     const input = e.target.closest("input[type=file]");
     if (!input) return;
     onFileChosen(input.dataset.slot, input.files[0]);
   });
 
+  showAdminPanel("uploads");
   renderTargetsPanel();
   hydrateFromStore().then(renderSlots);
 })();
