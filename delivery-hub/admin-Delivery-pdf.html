@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260809dn">
-    <link rel="stylesheet" href="admin-saas.css?v=20260809dn">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
+    <link rel="stylesheet" href="admin-saas.css?v=20260825c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1615,6 +1615,120 @@
                 transition: none !important;
             }
         }
+
+        /* —— Tabbed admin workspace layout —— */
+        .admin-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 14px 0 16px;
+            padding: 10px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(15, 23, 42, 0.55));
+            position: sticky;
+            top: 76px;
+            z-index: 40;
+            backdrop-filter: blur(14px);
+        }
+        .admin-nav__btn {
+            appearance: none;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #94a3b8;
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 10px 14px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+        }
+        .admin-nav__btn:hover {
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .admin-nav__btn.is-active {
+            color: #fff;
+            background: rgba(235, 10, 30, 0.18);
+            border-color: rgba(235, 10, 30, 0.4);
+            box-shadow: 0 8px 20px rgba(235, 10, 30, 0.15);
+        }
+        .admin-nav__btn .nav-count {
+            display: inline-grid;
+            place-items: center;
+            min-width: 1.4rem;
+            height: 1.2rem;
+            margin-inline-start: 6px;
+            padding: 0 5px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            background: rgba(255, 255, 255, 0.08);
+            color: #cbd5e1;
+        }
+        .admin-nav__btn.is-active .nav-count {
+            background: rgba(235, 10, 30, 0.35);
+            color: #fecaca;
+        }
+        .admin-workspace {
+            display: grid;
+            gap: 14px;
+        }
+        .admin-pane {
+            display: none;
+            gap: 14px;
+            animation: adminPaneIn 0.28s ease;
+        }
+        .admin-pane.is-active {
+            display: grid;
+        }
+        @keyframes adminPaneIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: none; }
+        }
+        .admin-pane-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+        .admin-pane-head h2 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #f8fafc;
+            letter-spacing: -0.02em;
+        }
+        .admin-pane-head p {
+            margin: 0;
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .admin-console .admin-pane .hub-section.hub-fold {
+            margin-bottom: 0;
+        }
+        .admin-console #adminFilterBar.ft-shell {
+            margin-bottom: 0;
+        }
+        .admin-filters-sticky {
+            position: sticky;
+            top: 148px;
+            z-index: 35;
+        }
+        @media (max-width: 900px) {
+            .admin-nav {
+                top: 8px;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+            }
+            .admin-nav__btn { white-space: nowrap; flex: 0 0 auto; }
+            .admin-filters-sticky { top: 72px; }
+        }
     </style>
 </head>
 <body class="delivery-hub admin-console">
@@ -1646,33 +1760,16 @@
             </div>
         </header>
 
-        <div class="admin-restore-box saas-card saas-section hub-fold" id="adminRestoreBox" data-fold style="margin-top:10px">
-            <button type="button" class="hub-fold-toggle" aria-expanded="false" style="width:100%;background:transparent;border:0;padding:0;text-align:inherit;cursor:pointer">
-                <div class="saas-section__head" style="margin:0;width:100%">
-                    <div>
-                        <h3>الإعدادات والأرشيف</h3>
-                        <p>استعادة تصدير قديم · تحديث Sales Raw من صفحة المنسق</p>
-                    </div>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </div>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-            <div class="admin-restore-actions">
-                <label class="hub-btn hub-btn--primary restore-file-btn" id="btnRestoreExport">
-                    <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
-                    استيراد أرشيف delivery_export
-                </label>
-                <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
-                <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
-            </div>
-            <p class="hub-status" id="restoreExportStatus" style="min-height:1.4em"></p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <nav class="admin-nav" id="adminNav" aria-label="أقسام لوحة الإدارة">
+            <button type="button" class="admin-nav__btn is-active" data-pane-target="overview">نظرة عامة</button>
+            <button type="button" class="admin-nav__btn" data-pane-target="analytics">لوحة النقل <span class="nav-count" id="navCountXfer"></span></button>
+            <button type="button" class="admin-nav__btn" data-pane-target="pdfs">ملفات PDF <span class="nav-count" id="navCountPdfs"></span></button>
+            <button type="button" class="admin-nav__btn" data-pane-target="queue">القائمة <span class="nav-count" id="navCountQueue"></span></button>
+            <button type="button" class="admin-nav__btn" data-pane-target="yard">العرض والمخزون <span class="nav-count" id="navCountYard"></span></button>
+            <button type="button" class="admin-nav__btn" data-pane-target="tools">الإعدادات والأرشيف</button>
+        </nav>
 
+        <div class="admin-filters-sticky">
         <div class="ft-shell" id="adminFilterBar">
             <div class="ft-toolbar" role="search" aria-label="Filter toolbar">
                 <div class="ft-search">
@@ -1758,6 +1855,32 @@
             <p class="ft-meta admin-filter-meta" id="trackFilterMeta">Showing all records</p>
             <p class="hub-meta" id="trackFilterHint" hidden></p>
 
+            <div class="ft-hidden-natives" aria-hidden="true">
+                <select id="trackDateType">
+                    <option value="delivery_note" selected>Delivery note</option>
+                    <option value="invoice">Invoice</option>
+                </select>
+                <input type="date" id="trackDateFrom">
+                <input type="date" id="trackDateTo">
+                <button type="button" id="btnTrackToday" hidden>Today</button>
+                <button type="button" id="btnClearCompanyScope" hidden>Clear company</button>
+            </div>
+        </div>
+        </div>
+
+        <div class="company-filter-chip saas-chip-bar hidden" id="companyFilterChip" hidden>
+            <span class="label">Company</span>
+            <span class="name" id="companyFilterName">—</span>
+            <span class="meta" id="companyFilterMeta"></span>
+        </div>
+
+        <div class="admin-workspace" id="adminWorkspace">
+
+        <div class="admin-pane is-active" data-pane="overview" id="pane-overview">
+            <div class="admin-pane-head">
+                <h2>نظرة عامة</h2>
+                <p>مؤشرات سريعة · تقدم الترحيل · إحصاءات الشهر</p>
+            </div>
             <section class="dn-mgmt" id="dnMonthBar" aria-label="Delivery Management">
                 <div class="dn-mgmt__head">
                     <div>
@@ -1772,165 +1895,72 @@
                 </div>
                 <div class="dn-mgmt__stats" id="dnStatsBar"></div>
             </section>
+            <div class="admin-overview-row">
+            <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
 
-            <section class="hub-section hub-fold" id="vinHistorySection" data-fold>
+            <section class="saas-hero saas-card" id="heroProgressCard" aria-label="تقدم الترحيل">
+                <div>
+                    <p class="saas-hero__eyebrow">Delivery Progress</p>
+                    <h2>تقدم الترحيل</h2>
+                    <p class="saas-hero__caption" id="deliveredTotalCaption">لا توجد بيانات بعد</p>
+                </div>
+                <div>
+                    <div class="saas-hero__pct" id="deliveredTotalPct">0%</div>
+                    <div class="saas-hero__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                        <span id="deliveredTotalBarFill"></span>
+                    </div>
+                    <div class="saas-hero__stats">
+                        <div><b id="deliveredTotalDone">0</b><span>تم الترحيل</span></div>
+                        <div><b id="deliveredTotalRemaining">0</b><span>متبقي</span></div>
+                        <div><b id="deliveredTotalAll">0</b><span>الإجمالي</span></div>
+                    </div>
+                </div>
+                <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
+            </section>
+            </div>
+            <section class="hub-section hub-fold" id="statsFold" data-fold hidden>
                 <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                    <span class="hub-fold-title">سجل VIN المكرر — Duplicate VIN History</span>
+                    <span class="hub-fold-title">ملخص المخزون — Inventory Stats</span>
                     <span class="hub-fold-meta">
-                        <span class="hub-hint">عدة مذكرات لنفس الشاسيه</span>
-                        <span class="hub-fold-count" id="vinHistoryFoldCount" data-empty="1"></span>
+                        <span class="hub-hint">إجمالي المركبات والمنتجات</span>
+                        <span class="hub-fold-count" id="statsFoldCount" data-empty="1"></span>
                         <span class="hub-fold-chevron" aria-hidden="true"></span>
                     </span>
                 </button>
                 <div class="hub-fold-body">
                     <div class="hub-fold-body-inner">
                         <div class="hub-fold-content">
-                            <div class="pdf-browser-search" style="margin-bottom:12px;max-width:360px">
-                                <input type="search" id="vinHistorySearch" class="hub-input" placeholder="بحث VIN لعرض السجل الكامل…" autocomplete="off">
-                            </div>
-                            <div id="vinHistoryPanel" class="hub-meta">لا توجد بيانات</div>
+                            <div class="hub-stats" id="stats"></div>
                         </div>
                     </div>
                 </div>
             </section>
-
-            <section class="hub-section hub-fold" id="lastMonthsSection" data-fold>
+            <section class="hub-section hub-fold" id="queueStatsFold" data-fold hidden>
                 <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                    <span class="hub-fold-title">الأشهر السابقة — Last Months Archive</span>
+                    <span class="hub-fold-title">ملخص القائمة — Queue Stats</span>
                     <span class="hub-fold-meta">
-                        <span class="hub-hint">تم الترحيل المخفي من المنسق منذ يوم 1 لكل شهر</span>
-                        <span class="hub-fold-count" id="lastMonthsFoldCount" data-empty="1"></span>
+                        <span class="hub-hint">حالات الترحيل الحية</span>
+                        <span class="hub-fold-count" id="queueStatsFoldCount" data-empty="1"></span>
                         <span class="hub-fold-chevron" aria-hidden="true"></span>
                     </span>
                 </button>
                 <div class="hub-fold-body">
                     <div class="hub-fold-body-inner">
                         <div class="hub-fold-content">
-                            <p class="hub-meta" style="margin-bottom:12px">
-                                من يوم <strong>1</strong> لكل شهر، سيارات <strong>تم الترحيل</strong> من الأشهر السابقة تُخفى من المنسق وتُحفظ هنا حسب الشهر.
-                            </p>
-                            <div id="lastMonthsFolders" class="last-months-folders"></div>
-                            <div id="lastMonthsDetail" class="last-months-detail" hidden></div>
+                            <div class="hub-stats" id="queueStats"></div>
                         </div>
                     </div>
                 </div>
             </section>
-
-            <div class="ft-hidden-natives" aria-hidden="true">
-                <select id="trackDateType">
-                    <option value="delivery_note" selected>Delivery note</option>
-                    <option value="invoice">Invoice</option>
-                </select>
-                <input type="date" id="trackDateFrom">
-                <input type="date" id="trackDateTo">
-                <button type="button" id="btnTrackToday" hidden>Today</button>
-                <button type="button" id="btnClearCompanyScope" hidden>Clear company</button>
-            </div>
         </div>
 
-        <div class="company-filter-chip saas-chip-bar hidden" id="companyFilterChip" hidden>
-            <span class="label">Company</span>
-            <span class="name" id="companyFilterName">—</span>
-            <span class="meta" id="companyFilterMeta"></span>
-        </div>
-
-        <div class="admin-overview-row">
-        <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
-
-        <section class="saas-hero saas-card" id="heroProgressCard" aria-label="تقدم الترحيل">
-            <div>
-                <p class="saas-hero__eyebrow">Delivery Progress</p>
-                <h2>تقدم الترحيل</h2>
-                <p class="saas-hero__caption" id="deliveredTotalCaption">لا توجد بيانات بعد</p>
+        <div class="admin-pane" data-pane="analytics" id="pane-analytics">
+            <div class="admin-pane-head">
+                <h2>لوحة النقل</h2>
+                <p>اتجاهات · شركات · فروع · حالة الترحيل</p>
             </div>
-            <div>
-                <div class="saas-hero__pct" id="deliveredTotalPct">0%</div>
-                <div class="saas-hero__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
-                    <span id="deliveredTotalBarFill"></span>
-                </div>
-                <div class="saas-hero__stats">
-                    <div><b id="deliveredTotalDone">0</b><span>تم الترحيل</span></div>
-                    <div><b id="deliveredTotalRemaining">0</b><span>متبقي</span></div>
-                    <div><b id="deliveredTotalAll">0</b><span>الإجمالي</span></div>
-                </div>
-            </div>
-            <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
-        </section>
-        </div>
 
-        <section class="hub-section hub-fold" id="statsFold" data-fold hidden>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">ملخص المخزون — Inventory Stats</span>
-                <span class="hub-fold-meta">
-                    <span class="hub-hint">إجمالي المركبات والمنتجات</span>
-                    <span class="hub-fold-count" id="statsFoldCount" data-empty="1"></span>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </span>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-                        <div class="hub-stats" id="stats"></div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="hub-section hub-fold" id="queueStatsFold" data-fold hidden>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">ملخص القائمة — Queue Stats</span>
-                <span class="hub-fold-meta">
-                    <span class="hub-hint">حالات الترحيل الحية</span>
-                    <span class="hub-fold-count" id="queueStatsFoldCount" data-empty="1"></span>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </span>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-                        <div class="hub-stats" id="queueStats"></div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="hub-section hub-fold" id="optionsManagerSection" data-fold>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">إدارة القوائم — Companies & Cities</span>
-                <span class="hub-fold-meta">
-                    <span class="hub-hint">إضافة أو حذف الشركات والمدن</span>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </span>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-                        <div class="options-manage-grid">
-                            <div class="options-manage-card">
-                                <h3>شركات النقل</h3>
-                                <div class="options-add-row">
-                                    <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
-                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
-                                </div>
-                                <p class="hub-status" id="companyOptionsStatus"></p>
-                                <div class="options-list" id="companyOptionsList"></div>
-                            </div>
-                            <div class="options-manage-card">
-                                <h3>المدن / الفروع</h3>
-                                <div class="options-add-row">
-                                    <input type="text" id="newCityInput" class="hub-input" placeholder="اسم المدينة أو الفرع…" autocomplete="off">
-                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCity">إضافة</button>
-                                </div>
-                                <p class="hub-status" id="cityOptionsStatus"></p>
-                                <div class="options-list" id="cityOptionsList"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="hub-section hub-section--xfer hub-fold is-open" id="xferDashSection" data-fold>
+            <section class="hub-section hub-section--xfer hub-fold is-open" id="xferDashSection" data-fold>
             <button type="button" class="hub-fold-toggle" aria-expanded="true">
                 <span class="hub-fold-title">لوحة النقل — Companies & Cities</span>
                 <span class="hub-fold-meta">
@@ -2108,45 +2138,14 @@
                 </div>
             </div>
         </section>
+        </div>
 
-        <section class="hub-section hub-fold" id="queueSection" data-fold>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">قائمة المنسق — Coordinator Queue</span>
-                <span class="hub-fold-meta">
-                    <span class="hub-hint">تحديث فوري — Live sync</span>
-                    <span class="hub-fold-count" id="queueFoldCount" data-empty="1"></span>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </span>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-                        <p class="hub-meta" style="margin-bottom:12px">Waiting for delivery · مع الفاضل/ياسين/البراء · تم الترحيل</p>
-                        <div class="hub-table-wrap">
-                            <table class="hub-table">
-                                <thead>
-                                    <tr>
-                                        <th>الشاسيه</th>
-                                        <th>Product</th>
-                                        <th>GT</th>
-                                        <th>Location</th>
-                                        <th>المسؤول</th>
-                                        <th>التصنيف</th>
-                                        <th>الحالة</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="queueBody">
-                                    <tr><td colspan="8" class="hub-empty">لا توجد شاسيه في القائمة</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+        <div class="admin-pane" data-pane="pdfs" id="pane-pdfs">
+            <div class="admin-pane-head">
+                <h2>ملفات PDF</h2>
+                <p>جميع مذكرات الترحيل · تسليم المستودع</p>
             </div>
-        </section>
-
-        <section class="hub-section hub-fold is-open" id="draftsSection" data-fold>
+            <section class="hub-section hub-fold is-open" id="draftsSection" data-fold>
             <button type="button" class="hub-fold-toggle" aria-expanded="true">
                 <span class="hub-fold-title">جميع ملفات PDF — All Car PDFs</span>
                 <span class="hub-fold-meta">
@@ -2219,8 +2218,74 @@
                 </div>
             </div>
         </section>
+            <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold hidden>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">التسليم في المستودع — Warehouse Delivery</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">قوائم فحص المستودع — تصدير PDF</span>
+                    <span class="hub-fold-count" id="warehouseDraftsFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <p class="hub-meta">استخدم قسم «جميع ملفات PDF» أعلاه مع فلتر المستودع.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        </div>
 
-        <section class="hub-section hub-fold" id="showroomParkingSection" data-fold>
+        <div class="admin-pane" data-pane="queue" id="pane-queue">
+            <div class="admin-pane-head">
+                <h2>قائمة المنسق</h2>
+                <p>الشاسيه المرسلة للفريق وحالاتها</p>
+            </div>
+            <section class="hub-section hub-fold" id="queueSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">قائمة المنسق — Coordinator Queue</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">تحديث فوري — Live sync</span>
+                    <span class="hub-fold-count" id="queueFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <p class="hub-meta" style="margin-bottom:12px">Waiting for delivery · مع الفاضل/ياسين/البراء · تم الترحيل</p>
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>الشاسيه</th>
+                                        <th>Product</th>
+                                        <th>GT</th>
+                                        <th>Location</th>
+                                        <th>المسؤول</th>
+                                        <th>التصنيف</th>
+                                        <th>الحالة</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="queueBody">
+                                    <tr><td colspan="8" class="hub-empty">لا توجد شاسيه في القائمة</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        </div>
+
+        <div class="admin-pane" data-pane="yard" id="pane-yard">
+            <div class="admin-pane-head">
+                <h2>العرض والمخزون</h2>
+                <p>موقف العرض · المنتجات · سجل المركبات</p>
+            </div>
+            <section class="hub-section hub-fold" id="showroomParkingSection" data-fold>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">Showroom Cars — موقف العرض (7 أماكن)</span>
                 <span class="hub-fold-meta">
@@ -2254,29 +2319,7 @@
                 </div>
             </div>
         </section>
-
-        <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold hidden>
-            <button type="button" class="hub-fold-toggle" aria-expanded="false">
-                <span class="hub-fold-title">التسليم في المستودع — Warehouse Delivery</span>
-                <span class="hub-fold-meta">
-                    <span class="hub-hint">قوائم فحص المستودع — تصدير PDF</span>
-                    <span class="hub-fold-count" id="warehouseDraftsFoldCount" data-empty="1"></span>
-                    <span class="hub-fold-chevron" aria-hidden="true"></span>
-                </span>
-            </button>
-            <div class="hub-fold-body">
-                <div class="hub-fold-body-inner">
-                    <div class="hub-fold-content">
-                        <p class="hub-meta">استخدم قسم «جميع ملفات PDF» أعلاه مع فلتر المستودع.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <p class="hub-status" id="uploadStatus"></p>
-        <p class="hub-meta" id="uploadMeta" style="display:none"></p>
-
-        <section class="hub-section hub-fold" id="productsSection" data-fold>
+            <section class="hub-section hub-fold" id="productsSection" data-fold>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">توزيع المنتجات — Products</span>
                 <span class="hub-fold-meta">
@@ -2294,8 +2337,7 @@
                 </div>
             </div>
         </section>
-
-        <section class="hub-section hub-fold" id="inventorySection" data-fold>
+            <section class="hub-section hub-fold" id="inventorySection" data-fold>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">سجل المركبات — Vehicle Inventory</span>
                 <span class="hub-fold-meta">
@@ -2334,7 +2376,119 @@
                 </div>
             </div>
         </section>
-    </div>
+        </div>
+
+        <div class="admin-pane" data-pane="tools" id="pane-tools">
+            <div class="admin-pane-head">
+                <h2>الإعدادات والأرشيف</h2>
+                <p>استيراد · شركات ومدن · سجل VIN · الأشهر السابقة</p>
+            </div>
+            <div class="admin-restore-box saas-card saas-section hub-fold" id="adminRestoreBox" data-fold style="margin-top:10px">
+            <button type="button" class="hub-fold-toggle" aria-expanded="false" style="width:100%;background:transparent;border:0;padding:0;text-align:inherit;cursor:pointer">
+                <div class="saas-section__head" style="margin:0;width:100%">
+                    <div>
+                        <h3>الإعدادات والأرشيف</h3>
+                        <p>استعادة تصدير قديم · تحديث Sales Raw من صفحة المنسق</p>
+                    </div>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </div>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+            <div class="admin-restore-actions">
+                <label class="hub-btn hub-btn--primary restore-file-btn" id="btnRestoreExport">
+                    <input type="file" id="restoreExportInput" accept=".xlsx,.xls">
+                    استيراد أرشيف delivery_export
+                </label>
+                <span class="hub-meta" id="restoreExportMeta">لم يتم استيراد أرشيف بعد</span>
+                <a href="Delivery_coordinator.html" class="hub-btn" style="text-decoration:none">تحديث Sales Raw من المنسق</a>
+            </div>
+            <p class="hub-status" id="restoreExportStatus" style="min-height:1.4em"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+            <section class="hub-section hub-fold" id="optionsManagerSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">إدارة القوائم — Companies & Cities</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">إضافة أو حذف الشركات والمدن</span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <div class="options-manage-grid">
+                            <div class="options-manage-card">
+                                <h3>شركات النقل</h3>
+                                <div class="options-add-row">
+                                    <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
+                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
+                                </div>
+                                <p class="hub-status" id="companyOptionsStatus"></p>
+                                <div class="options-list" id="companyOptionsList"></div>
+                            </div>
+                            <div class="options-manage-card">
+                                <h3>المدن / الفروع</h3>
+                                <div class="options-add-row">
+                                    <input type="text" id="newCityInput" class="hub-input" placeholder="اسم المدينة أو الفرع…" autocomplete="off">
+                                    <button type="button" class="hub-btn hub-btn--primary" id="btnAddCity">إضافة</button>
+                                </div>
+                                <p class="hub-status" id="cityOptionsStatus"></p>
+                                <div class="options-list" id="cityOptionsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+            <section class="hub-section hub-fold" id="vinHistorySection" data-fold>
+                <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                    <span class="hub-fold-title">سجل VIN المكرر — Duplicate VIN History</span>
+                    <span class="hub-fold-meta">
+                        <span class="hub-hint">عدة مذكرات لنفس الشاسيه</span>
+                        <span class="hub-fold-count" id="vinHistoryFoldCount" data-empty="1"></span>
+                        <span class="hub-fold-chevron" aria-hidden="true"></span>
+                    </span>
+                </button>
+                <div class="hub-fold-body">
+                    <div class="hub-fold-body-inner">
+                        <div class="hub-fold-content">
+                            <div class="pdf-browser-search" style="margin-bottom:12px;max-width:360px">
+                                <input type="search" id="vinHistorySearch" class="hub-input" placeholder="بحث VIN لعرض السجل الكامل…" autocomplete="off">
+                            </div>
+                            <div id="vinHistoryPanel" class="hub-meta">لا توجد بيانات</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section class="hub-section hub-fold" id="lastMonthsSection" data-fold>
+                <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                    <span class="hub-fold-title">الأشهر السابقة — Last Months Archive</span>
+                    <span class="hub-fold-meta">
+                        <span class="hub-hint">تم الترحيل المخفي من المنسق منذ يوم 1 لكل شهر</span>
+                        <span class="hub-fold-count" id="lastMonthsFoldCount" data-empty="1"></span>
+                        <span class="hub-fold-chevron" aria-hidden="true"></span>
+                    </span>
+                </button>
+                <div class="hub-fold-body">
+                    <div class="hub-fold-body-inner">
+                        <div class="hub-fold-content">
+                            <p class="hub-meta" style="margin-bottom:12px">
+                                من يوم <strong>1</strong> لكل شهر، سيارات <strong>تم الترحيل</strong> من الأشهر السابقة تُخفى من المنسق وتُحفظ هنا حسب الشهر.
+                            </p>
+                            <div id="lastMonthsFolders" class="last-months-folders"></div>
+                            <div id="lastMonthsDetail" class="last-months-detail" hidden></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        </div><!-- /admin-workspace -->
+    </div><!-- /adminApp -->
 
     <script>
         const ADMIN_PASSWORD = '1234';
@@ -2466,10 +2620,42 @@
             if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         }
 
+        function showAdminPane(paneId, { openFolds = true } = {}) {
+            const id = String(paneId || 'overview');
+            document.querySelectorAll('.admin-pane').forEach((pane) => {
+                pane.classList.toggle('is-active', pane.dataset.pane === id);
+            });
+            document.querySelectorAll('[data-pane-target]').forEach((btn) => {
+                btn.classList.toggle('is-active', btn.dataset.paneTarget === id);
+            });
+            if (openFolds) {
+                const pane = document.querySelector(`.admin-pane[data-pane="${id}"]`);
+                pane?.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, true));
+            }
+            try { sessionStorage.setItem('deliveryAdminPane', id); } catch (_) { /* ignore */ }
+            // Charts in newly visible panes need a size refresh
+            requestAnimationFrame(() => {
+                window.dispatchEvent(new Event('resize'));
+                if (id === 'analytics' && typeof renderTransferDashboard === 'function') {
+                    try {
+                        renderTransferDashboard(
+                            typeof filteredDrafts === 'function' ? filteredDrafts() : (allDrafts || [])
+                        );
+                    } catch (_) { /* ignore */ }
+                }
+            });
+        }
+
+        function paneForSection(section) {
+            return section?.closest?.('.admin-pane')?.dataset?.pane || '';
+        }
+
         function openFold(sectionOrId, { scroll = false } = {}) {
             const section = typeof sectionOrId === 'string'
                 ? document.getElementById(sectionOrId)
                 : sectionOrId;
+            const pane = paneForSection(section);
+            if (pane) showAdminPane(pane, { openFolds: false });
             setFoldOpen(section, true);
             if (scroll && section) {
                 section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2484,20 +2670,33 @@
             el.dataset.empty = n > 0 ? '0' : '1';
         }
 
+        function setNavCount(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const n = Number(value) || 0;
+            el.textContent = n > 0 ? String(n) : '';
+            el.hidden = n <= 0;
+        }
+
         function updateFoldCounts() {
             const vehicleCount = allVehicles.length;
             const queueCount = allQueue.length;
             const draftCount = allDrafts.length;
             const productCount = (lastDashboard && lastDashboard.uniqueProducts) || 0;
+            const yardCount = (allShowroomParking || []).length;
             setFoldCount('statsFoldCount', vehicleCount);
             setFoldCount('queueStatsFoldCount', queueCount);
             setFoldCount('queueFoldCount', queueCount);
             setFoldCount('draftsFoldCount', draftCount);
             setFoldCount('warehouseDraftsFoldCount', (allDrafts || []).filter(isWarehouseAdminDraft).length);
-            setFoldCount('showroomParkingFoldCount', (allShowroomParking || []).length);
+            setFoldCount('showroomParkingFoldCount', yardCount);
             setFoldCount('xferFoldCount', draftCount);
             setFoldCount('inventoryFoldCount', vehicleCount);
             setFoldCount('productsFoldCount', productCount);
+            setNavCount('navCountXfer', draftCount);
+            setNavCount('navCountPdfs', draftCount);
+            setNavCount('navCountQueue', queueCount);
+            setNavCount('navCountYard', yardCount);
         }
 
         document.querySelectorAll('[data-fold]').forEach((section) => {
@@ -2508,12 +2707,25 @@
             });
         });
 
+        document.getElementById('adminNav')?.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-pane-target]');
+            if (!btn) return;
+            showAdminPane(btn.dataset.paneTarget);
+        });
+
         document.getElementById('btnExpandAll')?.addEventListener('click', () => {
-            document.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, true));
+            const active = document.querySelector('.admin-pane.is-active') || document;
+            active.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, true));
         });
         document.getElementById('btnCollapseAll')?.addEventListener('click', () => {
-            document.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, false));
+            const active = document.querySelector('.admin-pane.is-active') || document;
+            active.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, false));
         });
+
+        try {
+            const savedPane = sessionStorage.getItem('deliveryAdminPane');
+            if (savedPane) showAdminPane(savedPane);
+        } catch (_) { /* ignore */ }
 
         function setUploadStatus(msg, type) {
             const el = document.getElementById('uploadStatus');
