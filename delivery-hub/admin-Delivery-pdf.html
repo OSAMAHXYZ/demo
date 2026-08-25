@@ -9,6 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260825c">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260825d">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1731,7 +1732,7 @@
         }
     </style>
 </head>
-<body class="delivery-hub admin-console">
+<body class="delivery-hub admin-console admin-light">
     <div id="adminGate">
         <div class="admin-gate-card">
             <h2>دخول لوحة الإدارة</h2>
@@ -1744,32 +1745,68 @@
     </div>
 
     <div class="hub-shell hidden" id="adminApp">
-        <header class="saas-header saas-card">
-            <div>
-                <p class="saas-header__eyebrow">Toyota Delivery Hub</p>
-                <h1>لوحة متابعة الترحيل</h1>
-            </div>
-            <div class="saas-header__actions">
-                <a href="index.html" class="saas-btn saas-btn--ghost saas-btn--sm">المركز</a>
-                <a href="Delivery_coordinator.html" class="saas-btn saas-btn--ghost saas-btn--sm">المنسق</a>
-                <button type="button" class="saas-btn saas-btn--primary" id="btnExportExcel">تصدير Excel</button>
-                <button type="button" class="saas-btn saas-btn--sm" id="btnExpandAll">فتح الكل</button>
-                <button type="button" class="saas-btn saas-btn--sm" id="btnCollapseAll">طي الكل</button>
-                <button type="button" class="saas-btn saas-btn--danger saas-btn--sm" id="btnClear">مسح</button>
-                <button type="button" class="saas-btn" id="btnAdminLogout">خروج</button>
-            </div>
-        </header>
+        <div class="admin-layout">
+            <aside class="admin-sidebar" aria-label="التنقل">
+                <div class="admin-sidebar__brand">
+                    <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+                    <div>
+                        <strong>Delivery Hub</strong>
+                        <span>لوحة متابعة الترحيل</span>
+                    </div>
+                </div>
+                <a class="admin-sidebar__cta" href="Delivery_coordinator.html">فتح المنسق +</a>
+                <nav class="admin-sidebar__nav" id="adminNav" aria-label="أقسام لوحة الإدارة">
+                    <button type="button" class="admin-nav__btn is-active" data-pane-target="overview"><span class="nav-ico">OV</span>نظرة عامة</button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="analytics"><span class="nav-ico">TR</span>لوحة النقل <span class="nav-count" id="navCountXfer"></span></button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="pdfs"><span class="nav-ico">PDF</span>ملفات PDF <span class="nav-count" id="navCountPdfs"></span></button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="queue"><span class="nav-ico">Q</span>القائمة <span class="nav-count" id="navCountQueue"></span></button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="yard"><span class="nav-ico">SR</span>العرض والمخزون <span class="nav-count" id="navCountYard"></span></button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="tools"><span class="nav-ico">⚙</span>الإعدادات والأرشيف</button>
+                </nav>
+                <div class="admin-sidebar__foot">
+                    <strong>Toyota Delivery</strong>
+                    <p>فلاتر التاريخ والشركة تبقى أعلى المحتوى في كل الأقسام.</p>
+                </div>
+            </aside>
 
-        <nav class="admin-nav" id="adminNav" aria-label="أقسام لوحة الإدارة">
-            <button type="button" class="admin-nav__btn is-active" data-pane-target="overview">نظرة عامة</button>
-            <button type="button" class="admin-nav__btn" data-pane-target="analytics">لوحة النقل <span class="nav-count" id="navCountXfer"></span></button>
-            <button type="button" class="admin-nav__btn" data-pane-target="pdfs">ملفات PDF <span class="nav-count" id="navCountPdfs"></span></button>
-            <button type="button" class="admin-nav__btn" data-pane-target="queue">القائمة <span class="nav-count" id="navCountQueue"></span></button>
-            <button type="button" class="admin-nav__btn" data-pane-target="yard">العرض والمخزون <span class="nav-count" id="navCountYard"></span></button>
-            <button type="button" class="admin-nav__btn" data-pane-target="tools">الإعدادات والأرشيف</button>
-        </nav>
+            <div class="admin-main">
+                <header class="admin-topbar">
+                    <div class="admin-topbar__search" role="search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="m20 20-3.5-3.5"></path>
+                        </svg>
+                        <input type="search" id="topbarSearchProxy" placeholder="بحث سريع — استخدم فلاتر VIN بالأسفل" autocomplete="off" aria-label="Quick search hint">
+                    </div>
+                    <div class="admin-topbar__actions">
+                        <a href="index.html" class="saas-btn saas-btn--ghost saas-btn--sm">المركز</a>
+                        <button type="button" class="saas-btn saas-btn--primary saas-btn--sm" id="btnExportExcel">تصدير Excel</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnExpandAll">فتح الكل</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnCollapseAll">طي الكل</button>
+                        <button type="button" class="saas-btn saas-btn--danger saas-btn--sm" id="btnClear">مسح</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnAdminLogout">خروج</button>
+                        <div class="admin-topbar__user">
+                            <div class="admin-topbar__avatar">AD</div>
+                            <div>
+                                <strong>Admin</strong>
+                                <span>Delivery Hub</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
 
-        <div class="admin-filters-sticky">
+                <!-- legacy header kept for compatibility but hidden by CSS -->
+                <header class="saas-header saas-card" hidden>
+                    <div>
+                        <p class="saas-header__eyebrow">Toyota Delivery Hub</p>
+                        <h1>لوحة متابعة الترحيل</h1>
+                    </div>
+                    <div class="saas-header__actions">
+                        <a href="Delivery_coordinator.html" class="saas-btn saas-btn--ghost saas-btn--sm">المنسق</a>
+                    </div>
+                </header>
+
+                <div class="admin-filters-sticky">
         <div class="ft-shell" id="adminFilterBar">
             <div class="ft-toolbar" role="search" aria-label="Filter toolbar">
                 <div class="ft-search">
@@ -1898,6 +1935,7 @@
             <div class="admin-overview-row">
             <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
 
+            <div class="admin-overview-mid">
             <section class="saas-hero saas-card" id="heroProgressCard" aria-label="تقدم الترحيل">
                 <div>
                     <p class="saas-hero__eyebrow">Delivery Progress</p>
@@ -1917,6 +1955,17 @@
                 </div>
                 <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
             </section>
+            <aside class="admin-highlight-card" id="monthHighlightCard" aria-label="ملخص الشهر">
+                <div>
+                    <strong id="monthHighlightValue">0</strong>
+                    <span>مذكرات هذا النطاق</span>
+                </div>
+                <svg class="spark" viewBox="0 0 120 36" fill="none" aria-hidden="true">
+                    <path d="M0 28 C18 26 22 10 36 14 C50 18 54 30 68 24 C82 18 90 6 104 10 C112 12 116 16 120 14" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                    <path d="M0 28 C18 26 22 10 36 14 C50 18 54 30 68 24 C82 18 90 6 104 10 C112 12 116 16 120 14 L120 36 L0 36 Z" fill="rgba(255,255,255,0.18)"/>
+                </svg>
+            </aside>
+            </div>
             </div>
             <section class="hub-section hub-fold" id="statsFold" data-fold hidden>
                 <button type="button" class="hub-fold-toggle" aria-expanded="false">
@@ -2488,6 +2537,8 @@
         </div>
 
         </div><!-- /admin-workspace -->
+            </div><!-- /admin-main -->
+        </div><!-- /admin-layout -->
     </div><!-- /adminApp -->
 
     <script>
@@ -2711,6 +2762,20 @@
             const btn = e.target.closest('[data-pane-target]');
             if (!btn) return;
             showAdminPane(btn.dataset.paneTarget);
+        });
+
+        document.getElementById('topbarSearchProxy')?.addEventListener('focus', () => {
+            const vin = document.getElementById('ftSearchInput');
+            if (vin) {
+                vin.focus();
+                vin.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+        document.getElementById('topbarSearchProxy')?.addEventListener('input', (e) => {
+            const vin = document.getElementById('ftSearchInput');
+            if (!vin) return;
+            vin.value = e.target.value;
+            vin.dispatchEvent(new Event('input', { bubbles: true }));
         });
 
         document.getElementById('btnExpandAll')?.addEventListener('click', () => {
@@ -2944,20 +3009,21 @@
                     .filter((n) => n && n !== '-' && n !== 'المستودع')
             ).size;
             const cards = [
-                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#3B82F6', icon: '🚗' },
-                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#22C55E', icon: '✓' },
-                { label: 'تم التسليم في المستودع', value: warehouse.count, trend: `${warehouse.pct}% من الإجمالي`, accent: '#0EA5E9', icon: '🏭' },
-                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ / غير مرحّل', accent: '#F59E0B', icon: '⏳' },
-                { label: 'الشركات', value: companies, trend: 'من المذكرات المصفّاة', accent: '#3B82F6', icon: '🏢' },
-                { label: 'الفروع', value: branches, trend: 'وجهات التحويل', accent: '#64748B', icon: '📍' },
-                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#22C55E', icon: '%' },
-                { label: 'نسبة التسليم في المستودع', value: `${warehouse.pct}%`, trend: `${warehouse.count} من ${warehouse.total}`, accent: '#0EA5E9', icon: '%' }
+                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#6C5CE7', icon: '🚗' },
+                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#2EC4B6', icon: '✓' },
+                { label: 'تم التسليم في المستودع', value: warehouse.count, trend: `${warehouse.pct}% من الإجمالي`, accent: '#5B8DEF', icon: '🏭' },
+                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ / غير مرحّل', accent: '#FF8A4C', icon: '⏳' },
+                { label: 'الشركات', value: companies, trend: 'من المذكرات المصفّاة', accent: '#6C5CE7', icon: '🏢' },
+                { label: 'الفروع', value: branches, trend: 'وجهات التحويل', accent: '#F472B6', icon: '📍' },
+                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#2EC4B6', icon: '%' },
+                { label: 'نسبة التسليم في المستودع', value: `${warehouse.pct}%`, trend: `${warehouse.count} من ${warehouse.total}`, accent: '#5B8DEF', icon: '%' }
             ];
             host.innerHTML = cards.map((c) => `
                 <article class="saas-kpi saas-card">
                     <div class="saas-kpi__icon" style="color:${c.accent};background:${c.accent}22">${c.icon}</div>
-                    <div class="saas-kpi__label">${c.label}</div>
                     <div class="saas-kpi__value">${c.value}</div>
+                    <div class="saas-kpi__label">${c.label}</div>
+                    <div class="saas-kpi__menu" aria-hidden="true">⋯</div>
                     <div class="saas-kpi__trend">${c.trend}</div>
                     <span class="saas-kpi__accent" style="background:${c.accent}"></span>
                 </article>
@@ -5261,6 +5327,11 @@
             if (remEl) remEl.textContent = String(stats.remaining);
             if (pctEl) pctEl.textContent = `${stats.pct}%`;
             if (barEl) barEl.style.width = `${Math.min(100, stats.pct)}%`;
+            const highlight = document.getElementById('monthHighlightValue');
+            if (highlight) {
+                const n = (typeof filteredDrafts === 'function' ? filteredDrafts() : []).length;
+                highlight.textContent = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
             const heroBar = document.querySelector('#heroProgressCard .saas-hero__bar');
             if (heroBar) heroBar.setAttribute('aria-valuenow', String(stats.pct));
             if (capEl) {
