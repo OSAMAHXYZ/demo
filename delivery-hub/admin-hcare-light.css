@@ -770,3 +770,274 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* —— Kill leftover dark-theme colors from inline admin CSS —— */
+.admin-light,
+.admin-light * {
+  --tot-ink: #1f2430;
+}
+
+.admin-light .hub-shell {
+  width: 100% !important;
+  animation: none !important;
+  padding: 0 !important;
+}
+
+.admin-light .admin-layout {
+  direction: ltr; /* sidebar on left like reference */
+}
+
+.admin-light .admin-main,
+.admin-light .admin-sidebar__nav,
+.admin-light .admin-pane,
+.admin-light .ft-shell,
+.admin-light .dn-mgmt,
+.admin-light .hub-section,
+.admin-light .saas-hero,
+.admin-light .admin-gate-card {
+  direction: rtl; /* Arabic content */
+}
+
+.admin-light .admin-topbar {
+  direction: ltr;
+}
+.admin-light .admin-topbar__search input {
+  direction: rtl;
+  text-align: right;
+}
+
+.admin-light .hub-fold-title,
+.admin-light .hub-fold-toggle,
+.admin-light .saas-section__head h3,
+.admin-light .saas-section__head p,
+.admin-light .xfer-dash-name,
+.admin-light .xfer-dash-count,
+.admin-light .xfer-dash-top,
+.admin-light .xfer-dash-top strong,
+.admin-light .xfer-account-name,
+.admin-light .xfer-account-total,
+.admin-light .xfer-account-chip,
+.admin-light .pct-legend,
+.admin-light .pct-status-pill,
+.admin-light .pct-status-pill b,
+.admin-light .pct-status-pill span,
+.admin-light .invoice-status-stats,
+.admin-light .lead-company-row,
+.admin-light .hub-status,
+.admin-light .hub-badge,
+.admin-light .pdf-browser-search,
+.admin-light .last-months-folders,
+.admin-light .options-manage-card h3,
+.admin-light .options-list,
+.admin-light .qv-product,
+.admin-light pre,
+.admin-light .ft-control__value,
+.admin-light .ft-more__label,
+.admin-light .ft-date-inline__field span,
+.admin-light .company-filter-chip,
+.admin-light .company-filter-chip .name,
+.admin-light .company-filter-chip .meta,
+.admin-light .company-filter-chip .label {
+  color: var(--hc-text) !important;
+}
+
+.admin-light .saas-section__head p,
+.admin-light .hub-hint,
+.admin-light .hub-meta,
+.admin-light .xfer-dash-sub,
+.admin-light .pct-chart-sub,
+.admin-light .ft-meta,
+.admin-light .qv-product,
+.admin-light .ft-date-inline__field span,
+.admin-light .ft-more__label,
+.admin-light .company-filter-chip .label,
+.admin-light .company-filter-chip .meta {
+  color: var(--hc-muted) !important;
+}
+
+.admin-light .xfer-dash-card,
+.admin-light .xfer-mosaic-cell,
+.admin-light .pct-chart-card,
+.admin-light .saas-section,
+.admin-light .options-manage-card,
+.admin-light .hub-table-wrap,
+.admin-light .lead-time-table-wrap,
+.admin-light .pdf-browser,
+.admin-light .last-months-detail,
+.admin-light .company-filter-chip {
+  background: #fff !important;
+  border-color: var(--hc-line) !important;
+  color: var(--hc-text) !important;
+  box-shadow: var(--hc-shadow) !important;
+}
+
+.admin-light .xfer-dash-row,
+.admin-light .xfer-account-item,
+.admin-light .queue-vin-row,
+.admin-light .options-list button,
+.admin-light .hub-chips > * {
+  background: #f8f9fc !important;
+  border-color: var(--hc-line) !important;
+  color: var(--hc-text) !important;
+}
+
+.admin-light .xfer-dash-row.is-active,
+.admin-light .xfer-account-item.is-active {
+  background: var(--hc-primary-soft) !important;
+  border-color: #ddd6fe !important;
+}
+
+.admin-light .xfer-dash-bar,
+.admin-light .pct-donut-wrap,
+.admin-light .invoice-status-chart,
+.admin-light .xfer-trend-chart,
+.admin-light .xfer-city-chart {
+  background: #fafbff !important;
+  border-radius: 14px;
+}
+
+.admin-light .hub-input,
+.admin-light .ft-input,
+.admin-light .ft-native,
+.admin-light select,
+.admin-light input[type="search"],
+.admin-light input[type="date"],
+.admin-light input[type="text"],
+.admin-light input[type="password"],
+.admin-light textarea {
+  background: #fff !important;
+  color: var(--hc-text) !important;
+  border: 1px solid var(--hc-line) !important;
+  border-radius: 12px !important;
+}
+
+.admin-light .ft-panel,
+.admin-light .ft-more__panel,
+.admin-light .ft-control__trigger {
+  background: #fff !important;
+  color: var(--hc-text) !important;
+  border-color: var(--hc-line) !important;
+}
+
+.admin-light .hub-badge--avail,
+.admin-light .hub-badge--memo-plan { background: #e6faf7 !important; color: #0f766e !important; border-color: #99f6e4 !important; }
+.admin-light .hub-badge--stock { background: #eff6ff !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; }
+.admin-light .hub-badge--ready { background: #fff7ed !important; color: #c2410c !important; border-color: #fed7aa !important; }
+.admin-light .hub-badge--delivered { background: #eeebff !important; color: #5a4bd1 !important; border-color: #ddd6fe !important; }
+.admin-light .hub-badge--wh { background: #eff6ff !important; color: #2563eb !important; border-color: #bfdbfe !important; }
+.admin-light .hub-badge--yard { background: #ecfdf5 !important; color: #047857 !important; border-color: #a7f3d0 !important; }
+.admin-light .hub-badge--unassigned { background: #fffbeb !important; color: #b45309 !important; border-color: #fde68a !important; }
+
+.admin-light .pdf-type-badge--showroom { background: #fce7f3 !important; color: #be185d !important; }
+.admin-light .pdf-type-badge--warehouse { background: #e0f2fe !important; color: #0369a1 !important; }
+
+.admin-light .hub-stat {
+  background: #fff !important;
+  border: 1px solid var(--hc-line) !important;
+  box-shadow: var(--hc-shadow) !important;
+}
+.admin-light .hub-stat span { color: var(--hc-muted) !important; }
+.admin-light .hub-stat b { color: var(--hc-text) !important; }
+
+.admin-light .admin-restore-actions .hub-meta,
+.admin-light #restoreExportMeta { color: var(--hc-muted) !important; }
+
+.admin-light .hub-upload {
+  background: #f8f9fc !important;
+  border: 1px dashed #c7cbe0 !important;
+  color: var(--hc-text) !important;
+}
+
+/* Topbar: cleaner H-care actions */
+.admin-light .admin-topbar {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 4px 2px 8px !important;
+}
+.admin-light .admin-topbar__search {
+  background: #fff !important;
+  border: 1px solid var(--hc-line) !important;
+  box-shadow: var(--hc-shadow);
+}
+.admin-light .admin-topbar__actions .saas-btn--sm {
+  padding: 8px 12px !important;
+  font-size: 0.75rem !important;
+}
+
+/* Soft filter card */
+.admin-light #adminFilterBar.ft-shell {
+  padding: 12px !important;
+  margin-bottom: 4px !important;
+}
+.admin-light .ft-toolbar {
+  background: #f8f9fc !important;
+  box-shadow: none !important;
+}
+
+/* Pane titles quieter */
+.admin-light .admin-pane-head {
+  margin-bottom: 4px;
+}
+.admin-light .admin-pane-head h2 {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em;
+}
+
+/* Apex light canvas */
+.admin-light .apexcharts-canvas,
+.admin-light .apexcharts-svg {
+  background: transparent !important;
+}
+.admin-light .apexcharts-text tspan,
+.admin-light .apexcharts-legend-text {
+  fill: #64748b !important;
+  color: #64748b !important;
+}
+
+/* Upload banner — last days data */
+.admin-light .admin-upload-banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 16px;
+  align-items: center;
+  padding: 14px 16px !important;
+  margin-bottom: 4px;
+  border: 1px solid #ddd6fe !important;
+  background:
+    radial-gradient(420px 120px at 100% 0%, rgba(108, 92, 231, 0.1), transparent 60%),
+    #fff !important;
+}
+.admin-light .admin-upload-banner strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--hc-text);
+  margin-bottom: 4px;
+}
+.admin-light .admin-upload-banner p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--hc-muted);
+  line-height: 1.45;
+}
+.admin-light .admin-upload-banner code {
+  font-size: 0.72rem;
+  background: #f3f4f8;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.admin-light .admin-upload-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.admin-light .hub-status.ok { color: #059669 !important; }
+.admin-light .hub-status.err { color: #dc2626 !important; }
+@media (max-width: 900px) {
+  .admin-light .admin-upload-banner {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260825c">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260825d">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260825f">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1776,14 +1776,18 @@
                             <circle cx="11" cy="11" r="7"></circle>
                             <path d="m20 20-3.5-3.5"></path>
                         </svg>
-                        <input type="search" id="topbarSearchProxy" placeholder="بحث سريع — استخدم فلاتر VIN بالأسفل" autocomplete="off" aria-label="Quick search hint">
+                        <input type="search" id="topbarSearchProxy" placeholder="Search..." autocomplete="off" aria-label="Search">
                     </div>
                     <div class="admin-topbar__actions">
-                        <a href="index.html" class="saas-btn saas-btn--ghost saas-btn--sm">المركز</a>
-                        <button type="button" class="saas-btn saas-btn--primary saas-btn--sm" id="btnExportExcel">تصدير Excel</button>
-                        <button type="button" class="saas-btn saas-btn--sm" id="btnExpandAll">فتح الكل</button>
-                        <button type="button" class="saas-btn saas-btn--sm" id="btnCollapseAll">طي الكل</button>
+                        <input type="file" id="restoreExportInputTop" accept=".xlsx,.xls" hidden>
+                        <input type="file" id="salesRawUploadInput" accept=".xlsx,.xls,.csv" hidden>
+                        <button type="button" class="saas-btn saas-btn--primary saas-btn--sm" id="btnUploadArchive" title="استيراد delivery_export من الأيام السابقة">رفع أرشيف</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnUploadSalesRaw" title="رفع Sales Raw لآخر الأيام">رفع Sales Raw</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnExportExcel">تصدير Excel</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnExpandAll" title="فتح الكل">فتح</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnCollapseAll" title="طي الكل">طي</button>
                         <button type="button" class="saas-btn saas-btn--danger saas-btn--sm" id="btnClear">مسح</button>
+                        <a href="index.html" class="saas-btn saas-btn--ghost saas-btn--sm">المركز</a>
                         <button type="button" class="saas-btn saas-btn--sm" id="btnAdminLogout">خروج</button>
                         <div class="admin-topbar__user">
                             <div class="admin-topbar__avatar">AD</div>
@@ -1794,6 +1798,22 @@
                         </div>
                     </div>
                 </header>
+
+                <div class="admin-upload-banner saas-card" id="adminUploadBanner">
+                    <div>
+                        <strong>رفع بيانات آخر الأيام</strong>
+                        <p>
+                            <b>أرشيف</b> = ملف <code>delivery_export_*.xlsx</code> الذي صدّرته سابقاً (يستبدل البيانات) ·
+                            <b>Sales Raw</b> = ملف المبيعات الخام لتحديث المخزون والتواريخ
+                        </p>
+                    </div>
+                    <div class="admin-upload-banner__actions">
+                        <button type="button" class="saas-btn saas-btn--primary saas-btn--sm" id="btnUploadArchive2">رفع أرشيف delivery_export</button>
+                        <button type="button" class="saas-btn saas-btn--sm" id="btnUploadSalesRaw2">رفع Sales Raw</button>
+                        <a href="Delivery_coordinator.html" class="saas-btn saas-btn--ghost saas-btn--sm">المنسق</a>
+                    </div>
+                    <p class="hub-status" id="adminUploadStatus" style="grid-column:1/-1;margin:0;min-height:1.2em"></p>
+                </div>
 
                 <!-- legacy header kept for compatibility but hidden by CSS -->
                 <header class="saas-header saas-card" hidden>
@@ -2597,9 +2617,15 @@
 
         function setRestoreStatus(msg, type) {
             const el = document.getElementById('restoreExportStatus');
-            if (!el) return;
-            el.textContent = msg || '';
-            el.className = 'hub-status' + (type ? ` ${type}` : '');
+            if (el) {
+                el.textContent = msg || '';
+                el.className = 'hub-status' + (type ? ` ${type}` : '');
+            }
+            const top = document.getElementById('adminUploadStatus');
+            if (top) {
+                top.textContent = msg || '';
+                top.className = 'hub-status' + (type ? ` ${type}` : '');
+            }
         }
 
         function syncRestoreMetaFromDashboard() {
@@ -2608,6 +2634,15 @@
             const name = String((lastDashboard && lastDashboard.filename) || '').trim();
             if (!name) return;
             meta.textContent = `${name} · ${allVehicles.length} مركبة · ${allDrafts.length} مسودة · ${allQueue.length} قائمة`;
+        }
+
+        function readFileAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error('فشل قراءة الملف من الجهاز'));
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
         }
 
         async function restoreExportFile(file) {
@@ -2622,12 +2657,7 @@
             }
             setRestoreStatus('جاري استيراد الأرشيف…');
             try {
-                const readerResult = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onerror = () => reject(new Error('فشل قراءة الملف من الجهاز'));
-                    reader.onload = () => resolve(reader.result);
-                    reader.readAsDataURL(file);
-                });
+                const readerResult = await readFileAsDataUrl(file);
                 const res = await fetch('/api/delivery-inventory/restore-export', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2657,12 +2687,55 @@
             }
         }
 
+        async function uploadSalesRawFile(file) {
+            if (!file) {
+                setRestoreStatus('اختر ملف Sales Raw أولاً', 'err');
+                return;
+            }
+            setRestoreStatus(`جاري رفع Sales Raw: ${file.name}…`);
+            try {
+                const readerResult = await readFileAsDataUrl(file);
+                const res = await fetch('/api/delivery-inventory/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileData: readerResult, filename: file.name })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'فشل رفع Sales Raw');
+                setRestoreStatus(
+                    `تم رفع Sales Raw · ${data.imported || 0} صف · حدّثت القائمة من البيانات الجديدة`,
+                    'ok'
+                );
+                await loadDashboard();
+                showAdminPane('overview');
+            } catch (err) {
+                setRestoreStatus(err.message || 'فشل رفع Sales Raw', 'err');
+            }
+        }
+
+        function wireFileInput(inputId, handler) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.addEventListener('change', (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (file) handler(file);
+                e.target.value = '';
+            });
+        }
+
+        function triggerInput(id) {
+            document.getElementById(id)?.click();
+        }
+
         // Native file input sits on top of the blue label — no programmatic .click() needed.
-        document.getElementById('restoreExportInput')?.addEventListener('change', (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (file) restoreExportFile(file);
-            e.target.value = '';
-        });
+        wireFileInput('restoreExportInput', restoreExportFile);
+        wireFileInput('restoreExportInputTop', restoreExportFile);
+        wireFileInput('salesRawUploadInput', uploadSalesRawFile);
+
+        document.getElementById('btnUploadArchive')?.addEventListener('click', () => triggerInput('restoreExportInputTop'));
+        document.getElementById('btnUploadArchive2')?.addEventListener('click', () => triggerInput('restoreExportInputTop'));
+        document.getElementById('btnUploadSalesRaw')?.addEventListener('click', () => triggerInput('salesRawUploadInput'));
+        document.getElementById('btnUploadSalesRaw2')?.addEventListener('click', () => triggerInput('salesRawUploadInput'));
 
         function setFoldOpen(section, open) {
             if (!section) return;
@@ -3009,18 +3082,18 @@
                     .filter((n) => n && n !== '-' && n !== 'المستودع')
             ).size;
             const cards = [
-                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#6C5CE7', icon: '🚗' },
-                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#2EC4B6', icon: '✓' },
-                { label: 'تم التسليم في المستودع', value: warehouse.count, trend: `${warehouse.pct}% من الإجمالي`, accent: '#5B8DEF', icon: '🏭' },
-                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ / غير مرحّل', accent: '#FF8A4C', icon: '⏳' },
-                { label: 'الشركات', value: companies, trend: 'من المذكرات المصفّاة', accent: '#6C5CE7', icon: '🏢' },
-                { label: 'الفروع', value: branches, trend: 'وجهات التحويل', accent: '#F472B6', icon: '📍' },
-                { label: 'نسبة الترحيل', value: `${progress.pct}%`, trend: `${progress.delivered} من ${progress.total}`, accent: '#2EC4B6', icon: '%' },
-                { label: 'نسبة التسليم في المستودع', value: `${warehouse.pct}%`, trend: `${warehouse.count} من ${warehouse.total}`, accent: '#5B8DEF', icon: '%' }
+                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#6C5CE7', soft: '#eeebff', icon: '▣' },
+                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#2EC4B6', soft: '#e6faf7', icon: '✓' },
+                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ', accent: '#FF8A4C', soft: '#fff1e8', icon: '◷' },
+                { label: 'سيارات العرض', value: (allShowroomParking || []).length, trend: 'موقف SR', accent: '#F472B6', soft: '#fce7f3', icon: '✚' }
             ];
+            // Keep secondary metrics available for logic/tooltips via data attributes
+            host.dataset.warehouse = String(warehouse.count);
+            host.dataset.companies = String(companies);
+            host.dataset.branches = String(branches);
             host.innerHTML = cards.map((c) => `
                 <article class="saas-kpi saas-card">
-                    <div class="saas-kpi__icon" style="color:${c.accent};background:${c.accent}22">${c.icon}</div>
+                    <div class="saas-kpi__icon" style="color:${c.accent};background:${c.soft}">${c.icon}</div>
                     <div class="saas-kpi__value">${c.value}</div>
                     <div class="saas-kpi__label">${c.label}</div>
                     <div class="saas-kpi__menu" aria-hidden="true">⋯</div>
@@ -3119,7 +3192,7 @@
                         dynamicAnimation: { enabled: true, speed: 280 }
                     }
                 },
-                theme: { mode: 'dark' },
+                theme: { mode: 'light' },
                 plotOptions: {
                     bar: {
                         borderRadius: 7,
@@ -3141,11 +3214,11 @@
                         stops: [0, 100]
                     }
                 },
-                colors: ['#3B82F6'],
+                colors: ['#6C5CE7'],
                 dataLabels: {
                     enabled: true,
                     offsetY: -14,
-                    style: { colors: ['#E2E8F0'], fontSize: '11px', fontWeight: 700 },
+                    style: { colors: ['#64748B'], fontSize: '11px', fontWeight: 700 },
                     formatter: (val) => (val ? String(val) : '')
                 },
                 grid: {
@@ -3198,7 +3271,7 @@
                     fontFamily: 'Inter, Tajawal, sans-serif',
                     animations: { enabled: true, speed: 400 }
                 },
-                theme: { mode: 'dark' },
+                theme: { mode: 'light' },
                 plotOptions: {
                     bar: {
                         horizontal: true,
@@ -3222,7 +3295,7 @@
                 dataLabels: {
                     enabled: true,
                     offsetX: 6,
-                    style: { colors: ['#E2E8F0'], fontSize: '11px', fontWeight: 700 }
+                    style: { colors: ['#64748B'], fontSize: '11px', fontWeight: 700 }
                 },
                 grid: {
                     borderColor: 'rgba(255,255,255,0.06)',
@@ -5113,10 +5186,10 @@
                     background: 'transparent',
                     fontFamily: 'Inter, sans-serif'
                 },
-                theme: { mode: 'dark' },
+                theme: { mode: 'light' },
                 labels: ['١ يوم', '٢ يوم', '٣+ أيام'],
                 series: [stats.day1, stats.day2, stats.day3plus],
-                colors: ['#22C55E', '#3B82F6', '#F59E0B'],
+                colors: ['#2EC4B6', '#6C5CE7', '#FF8A4C'],
                 stroke: { width: 0 },
                 legend: {
                     position: 'bottom',
