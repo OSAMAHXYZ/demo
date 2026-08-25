@@ -107,6 +107,19 @@
     boOrders: [],
   };
 
+  /** VIN lookup indexes — rebuilt on Run Matching (and after parse). */
+  const indexes = {
+    backorderByVin: new Map(),
+    rtlByVin: new Map(),
+    centralByVin: new Map(),
+  };
+
+  const REQUIRED_FIELDS = {
+    backorder: ["vin"],
+    rtl: ["vin"],
+    central: ["vin"],
+  };
+
   const ui = {
     1: { search: "", sortCol: null, sortDir: 1 },
     2: { search: "", filter: "", sortCol: null, sortDir: 1 },
@@ -179,6 +192,26 @@
 
   function upperTrim(v) {
     return String(v == null ? "" : v).trim().toUpperCase();
+  }
+
+  /**
+   * Central VIN normalizer — use for Central, Backorder, and RTL.
+   * Never compare raw VIN strings.
+   */
+  function normalizeVin(v) {
+    if (v == null || v === "") return "";
+    const s = String(v)
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .replace(/[\-_.]/g, "");
+    return s || "";
+  }
+
+  function clearIndexes() {
+    indexes.backorderByVin = new Map();
+    indexes.rtlByVin = new Map();
+    indexes.centralByVin = new Map();
   }
 
   function removeDashSpace(v) {
@@ -413,6 +446,60 @@
   function rowsForSlot(slotId, workbook) {
     if (slotId === "backorder") return backorderRows(workbook);
     return firstSheetRows(workbook);
+  }
+
+  function validateSlotColumns(slotId, rows) {
+    const def = SLOT_DEFS.find((d) => d.id === slotId);
+    const title = def ? def.title : slotId;
+    if (!rows || !rows.length) {
+      throw new Error(`${title} sheet is empty — no data rows found.`);
+    }
+    const get = buildFieldGetter(rows[0] || {});
+    const headerMissing = (REQUIRED_FIELDS[slotId] || []).filter((alias) => {
+      const aliases = HEADER_ALIASES[alias] || [alias];
+      const keys = Object.keys(rows[0] || {}).map((k) => normHeader(k));
+      return !aliases.some((a) => keys.some((k) => k === a || k.includes(a)));
+    });
+    if (headerMissing.length) {
+      throw new Error(
+        `${title} is missing required column(s): ${headerMissing
+          .map((a) => (a === "vin" ? "VIN" : a))
+          .join(", ")}.`
+      );
+    }
+    const withVin = rows.filter((r) => normalizeVin(get(r, "vin"))).length;
+    if (!withVin) {
+      throw new Error(`${title} has a VIN column but no valid VIN values.`);
+    }
+    return { rowCount: rows.length, vinCount: withVin };
+  }
+
+  function buildVinIndexes(boRows, rtlRows, centralRows) {
+    clearIndexes();
+    const getBo = buildFieldGetter(boRows[0] || {});
+    const getRtl = buildFieldGetter(rtlRows[0] || {});
+    const getCen = buildFieldGetter(centralRows[0] || {});
+
+    boRows.forEach((r) => {
+      const vin = normalizeVin(getBo(r, "vin"));
+      if (!vin) return;
+      if (!indexes.backorderByVin.has(vin)) indexes.backorderByVin.set(vin, []);
+      indexes.backorderByVin.get(vin).push(r);
+    });
+
+    rtlRows.forEach((r) => {
+      const vin = normalizeVin(getRtl(r, "vin"));
+      if (!vin) return;
+      if (!indexes.rtlByVin.has(vin)) indexes.rtlByVin.set(vin, []);
+      indexes.rtlByVin.get(vin).push(r);
+    });
+
+    centralRows.forEach((r) => {
+      const vin = normalizeVin(getCen(r, "vin"));
+      if (!vin) return;
+      if (!indexes.centralByVin.has(vin)) indexes.centralByVin.set(vin, []);
+      indexes.centralByVin.get(vin).push(r);
+    });
   }
 
   /** Exterior for daily match: code → pad3; name → dictionary code → pad3. */
@@ -745,64 +832,32 @@
     return out;
   }
 
+  /**
+   * Full Control — start from unique Central VINs.
+   * BO Status: Matched | No BO (VIN in Backorder)
+   * RTL Status: In Stock | Not in RTL Stock (VIN in RTL)
+   */
   function runFullControl(boRows, rtlRows, centralRows) {
+    buildVinIndexes(boRows, rtlRows, centralRows);
+
     const getBo = buildFieldGetter(boRows[0] || {});
     const getCen = buildFieldGetter(centralRows[0] || {});
-    const getRtl = buildFieldGetter(rtlRows[0] || {});
-
-    const bos = boRows.map((r, idx) => {
-      const product = upperTrim(getBo(r, "product"));
-      const suffix = upperTrim(getBo(r, "suffix"));
-      const year = String(getBo(r, "year") ?? "");
-      const extCode = upperTrim(getBo(r, "extBo"));
-      const intCode = upperTrim(getBo(r, "intBo"));
-      return {
-        idx,
-        product,
-        suffix,
-        year,
-        extCode,
-        intCode,
-        key: [product, year, suffix, extCode, intCode].join("|"),
-        salesman: getBo(r, "salesman"),
-        boNumber: getBo(r, "boNumber"),
-        orderDate: getBo(r, "orderDate"),
-        confirm: getBo(r, "confirm"),
-        custGroup: getBo(r, "custGroup"),
-        dpr: getBo(r, "dpr"),
-        paid: getBo(r, "paid"),
-        grade: getBo(r, "grade"),
-      };
-    });
-
-    const boByKey = new Map();
-    bos.forEach((b) => {
-      if (!boByKey.has(b.key)) boByKey.set(b.key, []);
-      boByKey.get(b.key).push(b);
-    });
-
-    const retailVins = new Set(
-      rtlRows.map((r) => cellToString(getRtl(r, "vin")).trim()).filter(Boolean)
-    );
-
-    const seenVin = new Set();
     const out = [];
 
-    centralRows.forEach((r) => {
-      const vin = cellToString(getCen(r, "vin")).trim();
-      if (!vin || seenVin.has(vin)) return;
-      seenVin.add(vin);
+    indexes.centralByVin.forEach((centralList, vin) => {
+      const r = centralList[0];
+      const boList = indexes.backorderByVin.get(vin) || [];
+      const rtlList = indexes.rtlByVin.get(vin) || [];
+      const boHit = boList[0] || null;
+      const matched = !!boHit;
 
       const product = upperTrim(getCen(r, "product"));
       const suffix = upperTrim(getCen(r, "suffix"));
-      const year = String(getCen(r, "modelYearStock") ?? "");
+      const year = cellToString(getCen(r, "modelYearStock") || getCen(r, "year"));
       const extName = cellToString(getCen(r, "extStock"));
       const intName = cellToString(getCen(r, "intStock"));
       const extCode = upperTrim(lastToken(extName));
       const intCode = upperTrim(lastToken(intName));
-      const key = [product, year, suffix, extCode, intCode].join("|");
-      const boHit = (boByKey.get(key) || [])[0] || null;
-      const matched = !!boHit;
 
       out.push({
         VIN: vin,
@@ -816,14 +871,17 @@
         "Current Location": cellToString(getCen(r, "currentLocation")),
         "Secondary Status": cellToString(getCen(r, "secondaryStatus")),
         "Sharing Level": cellToString(getCen(r, "sharing")),
-        "Salesman Name": matched ? cellToString(boHit.salesman) : "",
-        "Back Order Number": matched ? cellToString(boHit.boNumber) : "",
-        "Order Date": matched ? cellToString(boHit.orderDate) : "",
-        "Confirm Flag": matched ? cellToString(boHit.confirm) : "",
-        "Cust Group": matched ? cellToString(boHit.custGroup) : "",
-        "المبلغ المدفوع": matched ? cellToString(boHit.paid) : "",
+        "Salesman Name": matched ? cellToString(getBo(boHit, "salesman")) : "",
+        "Back Order Number": matched ? cellToString(getBo(boHit, "boNumber")) : "",
+        "Order Date": matched ? cellToString(getBo(boHit, "orderDate")) : "",
+        "Confirm Flag": matched ? cellToString(getBo(boHit, "confirm")) : "",
+        "Cust Group": matched ? cellToString(getBo(boHit, "custGroup")) : "",
+        "المبلغ المدفوع": matched ? cellToString(getBo(boHit, "paid")) : "",
         "BO Match": matched ? "Matched" : "No BO",
-        "RTL Stock matched": retailVins.has(vin) ? "In Stock" : "Not in RTL Stock",
+        "RTL Stock matched": rtlList.length ? "In Stock" : "Not in RTL Stock",
+        "BO rows": boList.length,
+        "Central rows": centralList.length,
+        "RTL rows": rtlList.length,
       });
     });
 
@@ -846,7 +904,9 @@
           <p class="hint">${escapeHtml(blurb)}. Drop a file here or choose one.</p>
           ${
             has
-              ? `<p class="file-name">${escapeHtml(slot.name)} · ${formatBytes(slot.file.size)} · ${detectFileType(slot.file).toUpperCase()}</p>`
+              ? `<p class="file-name">${escapeHtml(slot.name)} · ${formatBytes(slot.file.size)} · ${detectFileType(slot.file).toUpperCase()}${
+                  slot.rows.length ? ` · ${formatNumber(slot.rows.length)} rows` : ""
+                }</p>`
               : `<p class="file-name">No file selected</p>`
           }
           <div class="upload-actions">
@@ -859,29 +919,59 @@
   }
 
   function updateActionButtons() {
-    const ready = SLOT_DEFS.every((d) => slots[d.id].file);
+    const ready = SLOT_DEFS.every((d) => slots[d.id].file && slots[d.id].rows.length);
+    const any = SLOT_DEFS.some((d) => slots[d.id].file || slots[d.id].rows.length);
     $("#analyze-btn").disabled = !ready;
-    $("#clear-btn").disabled = !SLOT_DEFS.some((d) => slots[d.id].file);
+    $("#clear-btn").disabled = !any;
     if (ready) setStatus("Ready to match", "ready");
-    else if (SLOT_DEFS.some((d) => slots[d.id].file)) setStatus("Waiting for all 3 files");
+    else if (any) setStatus("Waiting for all 3 valid files");
     else setStatus("Waiting for files");
   }
 
-  function assignFile(id, file) {
+  async function assignFile(id, file) {
     const err = validateFile(file);
     if (err) {
       showError(err);
       return;
     }
+    if (typeof XLSX === "undefined") {
+      showError("SheetJS failed to load. Check your network connection and reload.");
+      return;
+    }
+
+    const def = SLOT_DEFS.find((d) => d.id === id);
+    const title = def ? def.title : id;
     showError("");
-    slots[id] = { file, rows: [], name: file.name };
-    renderUploadSlots();
-    updateActionButtons();
-    bindUploadCardEvents();
+    setLoading(true, `Reading ${title}: ${file.name}…`);
+    $("#analyze-btn").disabled = true;
+
+    try {
+      const wb = await readFileToWorkbook(file);
+      const rows = rowsForSlot(id, wb);
+      const meta = validateSlotColumns(id, rows);
+      slots[id] = { file, rows, name: file.name };
+      setStatus(`${title} loaded · ${formatNumber(meta.vinCount)} VINs`, "ready");
+      showError("");
+    } catch (e) {
+      console.error(e);
+      slots[id] = emptySlot();
+      showError(e.message || String(e));
+      setStatus("Error", "error");
+    } finally {
+      setLoading(false);
+      renderUploadSlots();
+      updateActionButtons();
+      bindUploadCardEvents();
+    }
   }
 
   function clearSlot(id) {
     slots[id] = emptySlot();
+    results.fullControl = [];
+    results.boOrders = [];
+    clearIndexes();
+    const section3 = $("#section-3");
+    if (section3) section3.hidden = true;
     renderUploadSlots();
     updateActionButtons();
     bindUploadCardEvents();
@@ -957,6 +1047,7 @@
       if (!group["Cust Group"]) group["Cust Group"] = cellToString(getBo(r, "custGroup"));
 
       group.cars.push({
+        VIN: normalizeVin(getBo(r, "vin")),
         Product: upperTrim(getBo(r, "product")),
         "Alj Suffix": upperTrim(getBo(r, "suffix")),
         "Model Year": cellToString(getBo(r, "year")),
@@ -1298,23 +1389,30 @@
     if (sectionNum !== 3) return;
     const section = $("#section-3");
     if (!section) return;
-    const rows = getSectionRows(3);
+    const allResults = getSectionRows(3);
     section.hidden = false;
 
-    const matched = rows.filter((r) => r["BO Match"] === "Matched").length;
-    const rtl = rows.filter((r) => r["RTL Stock matched"] === "In Stock").length;
+    const matched = allResults.filter((r) => r["BO Match"] === "Matched").length;
+    const noBo = allResults.filter((r) => r["BO Match"] === "No BO").length;
+    const rtlIn = allResults.filter((r) => r["RTL Stock matched"] === "In Stock").length;
+    const rtlOut = allResults.filter((r) => r["RTL Stock matched"] === "Not in RTL Stock").length;
+    // Full Control = Central VIN with BO Matched AND In RTL Stock
+    const fullControl = allResults.filter(
+      (r) => r["BO Match"] === "Matched" && r["RTL Stock matched"] === "In Stock"
+    ).length;
     const multi = results.boOrders.filter((r) => r.Cars > 1).length;
     renderKpis("#s3-kpis", [
-      { label: "Unique VINs", value: formatNumber(rows.length), sub: "central stock" },
-      { label: "BO Matched", value: formatNumber(matched), sub: "spec join hit" },
-      { label: "No BO", value: formatNumber(rows.length - matched), sub: "unmatched" },
-      { label: "In RTL Stock", value: formatNumber(rtl), sub: "VIN present in retail" },
+      { label: "Unique Central VINs", value: formatNumber(allResults.length), sub: "primary dataset" },
+      { label: "BO Matched", value: formatNumber(matched), sub: "VIN in Backorder" },
+      { label: "No BO", value: formatNumber(noBo), sub: "no Backorder VIN" },
+      { label: "RTL In Stock", value: formatNumber(rtlIn), sub: "VIN in RTL" },
+      { label: "Not in RTL Stock", value: formatNumber(rtlOut), sub: "missing from retail" },
+      { label: "Full Control", value: formatNumber(fullControl), sub: "Matched + In Stock" },
       {
         label: "BO orders",
         value: formatNumber(results.boOrders.length),
         sub: `${formatNumber(slots.backorder.rows.length)} cars · ${formatNumber(multi)} multi`,
       },
-      { label: "RTL rows", value: formatNumber(slots.rtl.rows.length), sub: "source rows" },
     ]);
 
     renderBoOrders();
@@ -1341,34 +1439,39 @@
       return;
     }
 
+    const missing = SLOT_DEFS.filter((d) => !slots[d.id].rows.length);
+    if (missing.length) {
+      showError(`Load all 3 files first (${missing.map((d) => d.title).join(", ")} still missing).`);
+      return;
+    }
+
     showError("");
-    setLoading(true, "Loading color dictionaries…");
+    setLoading(true, "Preparing matching…");
     $("#analyze-btn").disabled = true;
 
     try {
       colors = new MasterExcel.MasterExcelColors();
       buildMastersFromColors();
 
+      // Re-validate in-memory datasets (no unnecessary re-read)
       for (const d of SLOT_DEFS) {
-        setLoading(true, `Reading ${d.title}: ${slots[d.id].name}…`);
-        await new Promise((r) => setTimeout(r, 15));
-        const wb = await readFileToWorkbook(slots[d.id].file);
-        const rows = rowsForSlot(d.id, wb);
-        if (!rows.length) {
-          throw new Error(
-            d.id === "backorder"
-              ? `${d.title} (“${slots[d.id].name}”) has no data in the first or Fleet sheet.`
-              : `${d.title} (“${slots[d.id].name}”) first sheet has no data rows.`
-          );
-        }
-        slots[d.id].rows = rows;
+        validateSlotColumns(d.id, slots[d.id].rows);
       }
+
+      setLoading(true, "Building VIN indexes…");
+      await new Promise((r) => setTimeout(r, 10));
+      buildVinIndexes(slots.backorder.rows, slots.rtl.rows, slots.central.rows);
 
       setLoading(true, "Running Full control…");
       await new Promise((r) => setTimeout(r, 10));
       results.allStock = [];
       results.daily = [];
-      results.fullControl = runFullControl(slots.backorder.rows, slots.rtl.rows, slots.central.rows);
+      // allResults stored here; filters build filtered views without mutating
+      results.fullControl = runFullControl(
+        slots.backorder.rows,
+        slots.rtl.rows,
+        slots.central.rows
+      );
       results.boOrders = groupBackOrders(slots.backorder.rows);
 
       ui[3].search = "";
@@ -1416,9 +1519,30 @@
     results.daily = [];
     results.fullControl = [];
     results.boOrders = [];
+    clearIndexes();
+    ui[3].search = "";
+    ui[3].boFilter = "";
+    ui[3].rtlFilter = "";
+    ui[3].sortCol = null;
+    ui.bo.search = "";
+    ui.bo.carsFilter = "";
     ui.bo.expanded = new Set();
     const section3 = $("#section-3");
     if (section3) section3.hidden = true;
+    const s3Kpis = $("#s3-kpis");
+    if (s3Kpis) s3Kpis.innerHTML = "";
+    const boWrap = $("#bo-orders-wrap");
+    if (boWrap) boWrap.innerHTML = "";
+    const boFoot = $("#bo-orders-foot");
+    if (boFoot) boFoot.textContent = "";
+    const s3Wrap = $("#s3-table-wrap");
+    if (s3Wrap) s3Wrap.innerHTML = "";
+    const s3Foot = $("#s3-table-foot");
+    if (s3Foot) s3Foot.textContent = "";
+    ["#s3-search", "#s3-bo-filter", "#s3-rtl-filter", "#bo-search", "#bo-cars-filter"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.value = "";
+    });
     $("#page-sub").textContent = "Upload Backorder, RTL Stock, and Central Stock";
     showError("");
     setLoading(false);
@@ -1466,7 +1590,11 @@
     }
     const s3Dl = $("#s3-download");
     if (s3Dl) {
-      s3Dl.addEventListener("click", () => downloadCsv(getFilteredRows(3), "full_control.csv"));
+      s3Dl.addEventListener("click", () => {
+        const filteredResults = getFilteredRows(3);
+        const stamp = new Date().toISOString().slice(0, 10);
+        downloadCsv(filteredResults, `full-control-results-${stamp}.csv`);
+      });
     }
 
     const boSearch = $("#bo-search");
