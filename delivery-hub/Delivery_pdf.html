@@ -6,6 +6,7 @@
     <title>مذكرة ترحيل — Delivery PDF</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="delivery-user-ui.css?v=20260825b">
     <style>
         :root {
             --tot-primary: #EB0A1E;
@@ -1184,16 +1185,19 @@
         }
     </style>
 </head>
-<body>
+<body class="user-ui">
     <div id="gateLogin" class="gate-wrap">
         <div class="gate-card">
-            <h2>تسجيل الدخول</h2>
+            <div class="gate-eyebrow">Agent · Delivery Memo</div>
+            <h2>مذكرة الترحيل</h2>
+            <p class="gate-lead">اختر اسمك · افتح الشركات والشاسيه · مدينة + مرفقات · طباعة</p>
             <div class="gate-user">
                 <div>
                     <label for="loginUser">اسم المستخدم</label>
                     <select id="loginUser" required>
                         <option value="">— اختر الاسم —</option>
                         <option value="ياسين">ياسين</option>
+                        <option value="showroom admin">showroom admin</option>
                         <option value="الفاضل">الفاضل</option>
                         <option value="البراء">البراء</option>
                     </select>
@@ -1675,6 +1679,11 @@
 
         function isShowroomAgent(agent = getAgent()) {
             return String(agent?.username || '').trim() === SHOWROOM_AGENT;
+        }
+
+        function isShowroomAdminAgent(agent = getAgent()) {
+            const u = String(agent?.username || '').trim().toLowerCase();
+            return u === 'showroom admin' || u === 'سيارات العرض' || u === 'showroom cars';
         }
 
         function applyShowroomUi(enabled) {
@@ -3476,6 +3485,10 @@
 
                 setAgent(username, password);
                 statusEl.textContent = '';
+                if (isShowroomAdminAgent()) {
+                    location.href = 'showroom-parking.html';
+                    return;
+                }
                 if (isShowroomAgent()) {
                     openShowroomForm();
                     return;

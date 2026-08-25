@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>إدخال المستودع — Warehouse Entry</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260813a">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825b">
+    <link rel="stylesheet" href="delivery-user-ui.css?v=20260825b">
     <style>
         :root {
             --tot-primary: #EB0A1E;
@@ -538,11 +539,12 @@
         .slip-sheet .meta-line { font-size: .85rem; color: #444; }
     </style>
 </head>
-<body class="delivery-hub">
-    <div id="gateLogin">
-        <div class="gate-card">
-            <h2>تسجيل الدخول</h2>
-            <p class="sub">إدخال ساحة المستودع — Warehouse Entry</p>
+<body class="delivery-hub user-ui">
+    <div id="gateLogin" class="user-gate">
+        <div class="user-gate-card gate-card">
+            <div class="gate-eyebrow">Warehouse · Yard</div>
+            <h2>إدخال المستودع</h2>
+            <p class="gate-lead sub">امسح VIN · اختر المنطقة · Stock IN / OUT</p>
             <div class="gate-user">
                 <div>
                     <label for="loginUser">اسم المستخدم</label>
@@ -555,7 +557,7 @@
                     <label for="loginPass">كلمة المرور</label>
                     <input id="loginPass" type="password" placeholder="1234" autocomplete="current-password">
                 </div>
-                <button type="button" class="btn-login" id="btnLogin">دخول</button>
+                <button type="button" class="hub-btn hub-btn--primary btn-login" id="btnLogin" style="width:100%">دخول</button>
                 <p class="hub-status" id="loginStatus"></p>
                 <p class="sub" style="margin:8px 0 0;font-size:.75rem">استخدم مستودع / warehouse — كلمة المرور الافتراضية 1234</p>
             </div>

@@ -5,49 +5,108 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>منسق الترحيل — Delivery Coordinator</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260824a">
+    <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825b">
+    <link rel="stylesheet" href="delivery-user-ui.css?v=20260825b">
     <style>
+        body.delivery-hub.user-ui .hub-shell.coord-shell { max-width: 1380px; }
+
+        .coord-hero {
+            margin-bottom: 18px;
+            padding: 18px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(235, 10, 30, 0.28);
+            background:
+                radial-gradient(560px 180px at 100% 0%, rgba(235, 10, 30, 0.18), transparent 55%),
+                linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.5));
+        }
+        .coord-hero h2 {
+            margin: 0 0 6px;
+            font-size: 1.15rem;
+            color: #f8fafc;
+            font-weight: 800;
+        }
+        .coord-hero p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: .86rem;
+            line-height: 1.5;
+            max-width: 48rem;
+        }
+
         .coord-flow {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
-            margin-bottom: 22px;
+            margin-bottom: 18px;
         }
         .coord-flow-step {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: flex-start;
-            padding: 14px 16px;
-            border-radius: 16px;
+            padding: 12px 14px;
+            border-radius: 14px;
             border: 1px solid var(--hub-line);
             background: rgba(255,255,255,.03);
         }
         .coord-flow-num {
-            width: 28px; height: 28px; border-radius: 10px;
+            width: 26px; height: 26px; border-radius: 9px;
             display: grid; place-items: center;
-            font-weight: 800; font-size: .85rem;
+            font-weight: 800; font-size: .8rem;
             background: rgba(235, 10, 30, .18);
             color: #fecaca;
             flex-shrink: 0;
         }
-        .coord-flow-step strong { display: block; font-size: .88rem; color: #f8fafc; }
-        .coord-flow-step span { font-size: .75rem; color: var(--hub-muted); line-height: 1.45; }
+        .coord-flow-step strong { display: block; font-size: .82rem; color: #f8fafc; }
+        .coord-flow-step span { font-size: .72rem; color: var(--hub-muted); line-height: 1.4; }
+
+        .coord-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,.1);
+            background: rgba(2, 6, 23, .35);
+            position: sticky;
+            top: 8px;
+            z-index: 20;
+            backdrop-filter: blur(12px);
+        }
+        .coord-toolbar input[type="search"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,.12);
+            background: rgba(0,0,0,.28);
+            color: #f1f5f9;
+            font: inherit;
+        }
+        .coord-toolbar input:focus {
+            outline: none;
+            border-color: rgba(235, 10, 30, .5);
+            box-shadow: 0 0 0 3px rgba(235, 10, 30, .12);
+        }
+        .coord-toolbar .hub-meta { margin: 0; }
 
         .company-boards {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 12px;
         }
         .company-board {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            padding: 16px;
-            border-radius: 18px;
+            gap: 8px;
+            padding: 14px;
+            border-radius: 16px;
             border: 1px solid rgba(255,255,255,.1);
             background: linear-gradient(165deg, rgba(30, 41, 59, .55), rgba(15, 23, 42, .4));
-            min-height: 220px;
+            min-height: 190px;
         }
+        .company-board.is-filtered-out { display: none; }
         .company-board--warehouse {
             border-color: rgba(14, 165, 233, .35);
             background: linear-gradient(165deg, rgba(14, 165, 233, .12), rgba(15, 23, 42, .4));
@@ -56,19 +115,19 @@
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 10px;
+            gap: 8px;
         }
         .company-board-name {
-            font-size: .95rem;
+            font-size: .9rem;
             font-weight: 800;
             color: #f8fafc;
-            line-height: 1.35;
+            line-height: 1.3;
         }
         .company-board-count {
             flex-shrink: 0;
-            font-size: .72rem;
+            font-size: .68rem;
             font-weight: 700;
-            padding: 4px 10px;
+            padding: 3px 8px;
             border-radius: 999px;
             background: rgba(255,255,255,.06);
             color: #94a3b8;
@@ -81,7 +140,7 @@
         }
         .company-board textarea {
             width: 100%;
-            min-height: 110px;
+            min-height: 88px;
             resize: vertical;
             border-radius: 12px;
             border: 1px solid rgba(255,255,255,.12);
@@ -89,11 +148,11 @@
             color: #e2e8f0;
             font: inherit;
             font-family: ui-monospace, Consolas, monospace;
-            font-size: .82rem;
+            font-size: .78rem;
             direction: ltr;
             text-align: left;
-            padding: 10px 12px;
-            line-height: 1.55;
+            padding: 9px 11px;
+            line-height: 1.5;
         }
         .company-board textarea:focus {
             outline: none;
@@ -111,33 +170,110 @@
             margin-top: auto;
         }
         .company-board-status {
-            font-size: .72rem;
+            font-size: .7rem;
             color: var(--hub-muted);
             min-height: 1.2em;
-            line-height: 1.4;
+            line-height: 1.35;
         }
         .company-board-status.ok { color: #86efac; }
         .company-board-status.err { color: #fca5a5; }
 
-        .queue-by-company {
-            display: grid;
-            gap: 12px;
+        .unassigned-panel {
+            margin-bottom: 18px;
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(251, 191, 36, .35);
+            background:
+                radial-gradient(420px 140px at 0% 0%, rgba(251, 191, 36, .12), transparent 55%),
+                rgba(15, 23, 42, .55);
         }
+        .unassigned-panel[hidden] { display: none !important; }
+        .unassigned-panel h3 {
+            margin: 0 0 6px;
+            font-size: 1rem;
+            color: #fde68a;
+            font-weight: 800;
+        }
+        .unassigned-panel .lead {
+            margin: 0 0 12px;
+            font-size: .82rem;
+            color: #cbd5e1;
+            line-height: 1.45;
+        }
+        .unassigned-assign-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(0,0,0,.22);
+            border: 1px solid rgba(255,255,255,.08);
+        }
+        .unassigned-assign-bar select,
+        .unassigned-assign-bar input {
+            padding: 9px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,.14);
+            background: rgba(2, 6, 23, .45);
+            color: #f8fafc;
+            font: inherit;
+            min-width: 180px;
+        }
+        .unassigned-list {
+            display: grid;
+            gap: 6px;
+            max-height: 320px;
+            overflow: auto;
+        }
+        .unassigned-row {
+            display: grid;
+            grid-template-columns: auto minmax(150px, 1.1fr) minmax(90px, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255,255,255,.03);
+            border: 1px solid rgba(255,255,255,.06);
+            font-size: .8rem;
+        }
+        .unassigned-row .qv-vin {
+            font-family: ui-monospace, Consolas, monospace;
+            font-weight: 800;
+            direction: ltr;
+            text-align: left;
+            color: #fef3c7;
+        }
+        .unassigned-status {
+            min-height: 1.2em;
+            font-size: .78rem;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+        .unassigned-status.ok { color: #86efac; }
+        .unassigned-status.err { color: #fca5a5; }
+        .hub-stat--warn b { color: #fbbf24; }
+
+        .queue-by-company { display: grid; gap: 10px; }
         .queue-company {
-            border-radius: 16px;
+            border-radius: 14px;
             border: 1px solid rgba(255,255,255,.1);
             background: rgba(255,255,255,.03);
             overflow: hidden;
         }
-        .queue-company--warehouse {
-            border-color: rgba(14, 165, 233, .28);
+        .queue-company.is-filtered-out { display: none; }
+        .queue-company--warehouse { border-color: rgba(14, 165, 233, .28); }
+        .queue-company--unassigned {
+            border-color: rgba(251, 191, 36, .4);
+            order: -1;
         }
         .queue-company-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             background: rgba(255,255,255,.03);
             border-bottom: 1px solid rgba(255,255,255,.06);
             cursor: pointer;
@@ -150,22 +286,17 @@
             gap: 10px;
             flex-wrap: wrap;
         }
-        .queue-company-title strong {
-            font-size: .95rem;
-            color: #f8fafc;
-        }
-        .queue-company-body {
-            padding: 8px;
-        }
+        .queue-company-title strong { font-size: .9rem; color: #f8fafc; }
+        .queue-company-body { padding: 6px; }
         .queue-company.collapsed .queue-company-body { display: none; }
         .queue-vin-row {
             display: grid;
-            grid-template-columns: minmax(160px, 1.2fr) minmax(100px, 1fr) auto auto auto;
-            gap: 10px;
+            grid-template-columns: minmax(150px, 1.2fr) minmax(90px, 1fr) auto auto auto;
+            gap: 8px;
             align-items: center;
-            padding: 10px 12px;
-            border-radius: 12px;
-            font-size: .82rem;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: .78rem;
         }
         .queue-vin-row:hover { background: rgba(255,255,255,.04); }
         .queue-vin-row .qv-vin {
@@ -194,6 +325,11 @@
             color: #86efac;
             border: 1px solid rgba(34, 197, 94, 0.28);
         }
+        .hub-badge--unassigned {
+            background: rgba(251, 191, 36, 0.16);
+            color: #fde68a;
+            border: 1px solid rgba(251, 191, 36, 0.35);
+        }
         .add-company-row {
             display: flex;
             gap: 10px;
@@ -211,23 +347,36 @@
             color: #e2e8f0;
             font: inherit;
         }
-        @media (max-width: 800px) {
+        details.coord-upload summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        details.coord-upload summary::-webkit-details-marker { display: none; }
+        details.coord-upload[open] .summary-hint::after { content: ' · اضغط للإغلاق'; }
+        details.coord-upload:not([open]) .summary-hint::after { content: ' · اضغط للفتح'; }
+        @media (max-width: 900px) {
+            .coord-flow { grid-template-columns: 1fr 1fr; }
+            .unassigned-row { grid-template-columns: auto 1fr; }
+            .queue-vin-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+        }
+        @media (max-width: 560px) {
             .coord-flow { grid-template-columns: 1fr; }
-            .queue-vin-row {
-                grid-template-columns: 1fr 1fr;
-                gap: 6px;
-            }
         }
     </style>
 </head>
-<body class="delivery-hub">
-    <div class="hub-shell">
+<body class="delivery-hub user-ui">
+    <div class="hub-shell coord-shell">
         <header class="hub-topbar">
             <div class="hub-brand">
                 <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
                 <div>
                     <h1>منسق الترحيل</h1>
-                    <p>لوحة الشركات — الصق الشاسيه لكل شركة على حدة</p>
+                    <p>لوحات الشركات · تعيين بدون شركة · إرسال للفريق</p>
                 </div>
             </div>
             <div class="hub-actions">
@@ -238,54 +387,78 @@
             </div>
         </header>
 
+        <div class="coord-hero">
+            <h2>عمل واضح وسريع</h2>
+            <p>
+                ابحث عن شركة أو VIN من الشريط الأصفر · السيارات بدون شركة تظهر أولاً ويمكن تعيينها لشركة بضغطة ·
+                أو الصق الشاسيه داخل لوحة الشركة لإضافتها أو إعادة تعيينها.
+            </p>
+        </div>
+
         <div class="coord-flow" aria-hidden="true">
             <div class="coord-flow-step">
                 <div class="coord-flow-num">١</div>
                 <div>
-                    <strong>ارفع Excel</strong>
-                    <span>بيانات Sales Raw أولاً</span>
+                    <strong>Excel</strong>
+                    <span>رفع Sales Raw</span>
                 </div>
             </div>
             <div class="coord-flow-step">
                 <div class="coord-flow-num">٢</div>
                 <div>
-                    <strong>الصق الشاسيه لكل شركة</strong>
-                    <span>كل شركة لها مكانها — الفريق يراها مجمّعة</span>
+                    <strong>لوحات الشركات</strong>
+                    <span>لصق VIN لكل شركة</span>
                 </div>
             </div>
             <div class="coord-flow-step">
                 <div class="coord-flow-num">٣</div>
                 <div>
-                    <strong>الفريق يطبع</strong>
-                    <span>اختيار المدينة + المرفقات ثم طباعة</span>
+                    <strong>بدون شركة</strong>
+                    <span>عيّنيها لشركة</span>
+                </div>
+            </div>
+            <div class="coord-flow-step">
+                <div class="coord-flow-num">٤</div>
+                <div>
+                    <strong>الفريق</strong>
+                    <span>مدينة + طباعة</span>
                 </div>
             </div>
         </div>
 
         <div class="hub-stats" id="stats"></div>
 
+        <div class="coord-toolbar" id="coordToolbar">
+            <input type="search" id="coordSearch" placeholder="ابحث شركة أو VIN أو منتج…" autocomplete="off">
+            <span class="hub-meta" id="coordSearchMeta">فلترة اللوحات والقائمة</span>
+        </div>
+
         <section class="hub-section">
-            <div class="hub-section-head">
-                <h2>١ — رفع بيانات خام — Sales Raw</h2>
-                <span class="hub-hint">مطلوب أولاً · Product · GT · Location · تواريخ</span>
-            </div>
-            <label class="hub-upload" id="uploadZone">
-                <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
-                <strong>اسحب ملف Excel أو انقر للاختيار — رفع كامل</strong>
-                <p class="hub-meta">ارفع Sales Raw Data أولاً قبل إضافة أرقام الشاسيه</p>
-            </label>
-            <p class="hub-status" id="uploadStatus"></p>
-            <div class="hub-actions-row" style="margin-top:14px;flex-wrap:wrap;gap:10px;align-items:center">
-                <input type="file" id="mergeDatesInput" accept=".xlsx,.xls" hidden>
-                <button type="button" class="hub-btn hub-btn--primary" id="btnMergeDates">تحديث التواريخ من Sales Raw</button>
-                <span class="hub-meta" id="mergeDatesMeta">يحدّث Proforma / Invoice / هاتف بدون مسح المسودات أو القائمة</span>
-            </div>
-            <p class="hub-status" id="mergeDatesStatus"></p>
+            <details class="coord-upload" id="uploadDetails" open>
+                <summary class="hub-section-head" style="margin-bottom:0">
+                    <h2>١ — رفع بيانات خام — Sales Raw</h2>
+                    <span class="hub-hint summary-hint">مطلوب أولاً · Product · GT · Location</span>
+                </summary>
+                <div style="margin-top:14px">
+                    <label class="hub-upload" id="uploadZone">
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+                        <strong>اسحب ملف Excel أو انقر للاختيار — رفع كامل</strong>
+                        <p class="hub-meta">ارفع Sales Raw Data أولاً قبل إضافة أرقام الشاسيه</p>
+                    </label>
+                    <p class="hub-status" id="uploadStatus"></p>
+                    <div class="hub-actions-row" style="margin-top:14px;flex-wrap:wrap;gap:10px;align-items:center">
+                        <input type="file" id="mergeDatesInput" accept=".xlsx,.xls" hidden>
+                        <button type="button" class="hub-btn hub-btn--primary" id="btnMergeDates">تحديث التواريخ من Sales Raw</button>
+                        <span class="hub-meta" id="mergeDatesMeta">يحدّث Proforma / Invoice / هاتف بدون مسح المسودات أو القائمة</span>
+                    </div>
+                    <p class="hub-status" id="mergeDatesStatus"></p>
+                </div>
+            </details>
         </section>
 
         <section class="hub-section" id="vinSection">
             <div class="hub-section-head">
-                <h2>٢ — لوحات الشركات — Paste VINs per company</h2>
+                <h2>٢ — لوحات الشركات — Paste VINs</h2>
                 <span class="hub-hint" id="vinSectionHint">ارفع البيانات الخام أولاً</span>
             </div>
             <div id="vinGateMsg" class="hub-status err" style="margin-bottom:12px">
@@ -313,6 +486,20 @@
             </div>
         </section>
 
+        <div class="unassigned-panel" id="unassignedPanel" hidden>
+            <h3>٣ — سيارات بدون شركة — عيّنيها الآن</h3>
+            <p class="lead">حددي الشاسيه واختاري الشركة ثم «تعيين المحددة» · أو الصقي نفس الـ VIN داخل لوحة الشركة أعلاه.</p>
+            <div class="unassigned-assign-bar">
+                <label style="font-size:.75rem;font-weight:700;color:#fde68a">الشركة</label>
+                <select id="assignCompanySelect"></select>
+                <button type="button" class="hub-btn hub-btn--primary hub-btn--sm" id="btnAssignSelected">تعيين المحددة</button>
+                <button type="button" class="hub-btn hub-btn--sm" id="btnSelectAllUnassigned">تحديد الكل</button>
+                <button type="button" class="hub-btn hub-btn--sm" id="btnClearUnassignedSel">إلغاء التحديد</button>
+            </div>
+            <div class="unassigned-list" id="unassignedList"></div>
+            <p class="unassigned-status" id="unassignedStatus"></p>
+        </div>
+
         <section class="hub-section" id="yardAlertSection" style="display:none">
             <div class="hub-section-head">
                 <h2>تنبيه الساحة — VINs في المستودع</h2>
@@ -323,8 +510,8 @@
 
         <section class="hub-section">
             <div class="hub-section-head">
-                <h2>٣ — القائمة حسب الشركة — Queue by company</h2>
-                <span class="hub-hint">ما يراه الفريق في مذكرة الترحيل — مجمّع بالشركة</span>
+                <h2>٤ — القائمة حسب الشركة</h2>
+                <span class="hub-hint">ما يراه الفريق — بدون شركة تظهر أولاً بالأصفر</span>
             </div>
             <div class="queue-by-company" id="queueByCompany">
                 <div class="hub-empty" style="padding:24px;text-align:center">ارفع البيانات الخام أولاً ثم الصق الشاسيه في لوحة الشركة</div>
@@ -341,9 +528,11 @@
         }
 
         function renderStats(stats, hasRaw) {
+            const unassigned = currentQueue.filter(isUnassignedCompany).length;
             document.getElementById('stats').innerHTML = `
                 <div class="hub-stat"><span>إجمالي الشاسيه</span><b>${stats.total || 0}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${stats.available || 0}</b></div>
+                <div class="hub-stat hub-stat--warn"><span>بدون شركة</span><b>${unassigned}</b></div>
                 <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${stats.in_stock || 0}</b></div>
                 <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${stats.ready_for_delivery || 0}</b></div>
                 <div class="hub-stat"><span>بيانات خام</span><b style="font-size:1rem">${hasRaw ? '✓' : '—'}</b></div>
@@ -355,6 +544,18 @@
         let rawUploaded = false;
         let companyOptions = [];
         const boardPasteCache = new Map();
+
+        function isUnassignedCompany(item) {
+            const c = String(item?.deliveryCompany || item?.company || '').trim();
+            if (!c) return true;
+            const key = c.toLowerCase().replace(/\s+/g, ' ');
+            return key === 'بدون شركة'
+                || key === 'بدون الشركه'
+                || key === 'unassigned'
+                || key === 'no company'
+                || key === 'none'
+                || key === '-';
+        }
 
         function isWarehouseCompany(name) {
             const n = String(name || '');
@@ -423,19 +624,19 @@
                 const count = countForCompany(company);
                 const cached = boardPasteCache.get(company) || '';
                 const esc = String(company).replace(/"/g, '&quot;');
-                return `<div class="company-board${wh ? ' company-board--warehouse' : ''}" data-company="${esc}">
+                return `<div class="company-board${wh ? ' company-board--warehouse' : ''}" data-company="${esc}" data-search="${esc.toLowerCase()}">
                     <div class="company-board-head">
                         <div class="company-board-name">${company}${wh ? ' · مستودع' : ''}</div>
                         <span class="company-board-count${count ? ' has-vins' : ''}">${count} في القائمة</span>
                     </div>
                     <textarea
                         data-board-paste="${esc}"
-                        placeholder="${wh ? 'الصق VIN للتسليم في المستودع…' : 'الصق أرقام الشاسيه لهذه الشركة — سطر لكل VIN'}"
+                        placeholder="${wh ? 'الصق VIN للمستودع…' : 'الصق VIN لهذه الشركة · أو VIN بدون شركة لإعادة تعيينها'}"
                         ${rawUploaded ? '' : 'disabled'}
                     >${cached.replace(/</g, '&lt;')}</textarea>
                     <div class="company-board-actions">
                         <button type="button" class="hub-btn hub-btn--primary hub-btn--sm" data-submit-company="${esc}">
-                            إرسال للفريق
+                            إرسال / تعيين
                         </button>
                     </div>
                     <div class="company-board-status" data-board-status="${esc}"></div>
@@ -445,6 +646,103 @@
             wrap.querySelectorAll('[data-submit-company]').forEach((btn) => {
                 btn.addEventListener('click', () => submitBoardVins(btn.dataset.submitCompany));
             });
+            fillAssignCompanySelect();
+            applyCoordSearch();
+        }
+
+        function fillAssignCompanySelect() {
+            const sel = document.getElementById('assignCompanySelect');
+            if (!sel) return;
+            const prev = sel.value;
+            const opts = companyOptions.filter((c) => !isWarehouseCompany(c));
+            sel.innerHTML = '<option value="">— اختاري الشركة —</option>'
+                + opts.map((c) => `<option value="${String(c).replace(/"/g, '&quot;')}">${c}</option>`).join('');
+            if (prev && opts.some((c) => c === prev)) sel.value = prev;
+        }
+
+        function setUnassignedStatus(msg, type) {
+            const el = document.getElementById('unassignedStatus');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.className = 'unassigned-status' + (type ? ` ${type}` : '');
+        }
+
+        function renderUnassignedPanel() {
+            const panel = document.getElementById('unassignedPanel');
+            const list = document.getElementById('unassignedList');
+            if (!panel || !list) return;
+            const items = currentQueue.filter(isUnassignedCompany);
+            if (!rawUploaded || !items.length) {
+                panel.hidden = true;
+                list.innerHTML = '';
+                return;
+            }
+            panel.hidden = false;
+            fillAssignCompanySelect();
+            list.innerHTML = items.map((item) => {
+                const vin = String(item.vin || '').trim().toUpperCase();
+                return `<label class="unassigned-row">
+                    <input type="checkbox" class="unassigned-check" value="${vin}">
+                    <span class="qv-vin">${vin}</span>
+                    <span>${item.product || item.model || '—'}</span>
+                    <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-assign-one="${vin}">تعيين</button>
+                </label>`;
+            }).join('');
+            list.querySelectorAll('[data-assign-one]').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    assignVinsToCompany([btn.dataset.assignOne]);
+                });
+            });
+        }
+
+        async function assignVinsToCompany(vins) {
+            const company = String(document.getElementById('assignCompanySelect').value || '').trim();
+            if (!company) return setUnassignedStatus('اختاري الشركة أولاً', 'err');
+            const list = (vins || []).map((v) => String(v || '').trim().toUpperCase()).filter(Boolean);
+            if (!list.length) return setUnassignedStatus('حددي شاسيه واحدةً على الأقل', 'err');
+            setUnassignedStatus('جاري التعيين…');
+            try {
+                const res = await fetch('/api/delivery-coordinator/assign-meta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vins: list,
+                        company,
+                        plannedDeliveryMode: 'memo'
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل التعيين');
+                setUnassignedStatus(`تم تعيين ${data.updated?.length || list.length} → ${company}`, 'ok');
+                await loadQueue();
+            } catch (err) {
+                setUnassignedStatus(err.message || 'فشل التعيين', 'err');
+            }
+        }
+
+        function applyCoordSearch() {
+            const q = String(document.getElementById('coordSearch')?.value || '').trim().toLowerCase();
+            const meta = document.getElementById('coordSearchMeta');
+            let boardsShown = 0;
+            let queueShown = 0;
+            document.querySelectorAll('.company-board').forEach((board) => {
+                const hay = `${board.dataset.company || ''} ${board.dataset.search || ''}`.toLowerCase();
+                const show = !q || hay.includes(q);
+                board.classList.toggle('is-filtered-out', !show);
+                if (show) boardsShown++;
+            });
+            document.querySelectorAll('.queue-company').forEach((group) => {
+                const hay = String(group.dataset.search || '').toLowerCase();
+                const show = !q || hay.includes(q);
+                group.classList.toggle('is-filtered-out', !show);
+                if (show) queueShown++;
+            });
+            if (meta) {
+                meta.textContent = q
+                    ? `نتائج: ${boardsShown} لوحة · ${queueShown} مجموعة`
+                    : 'فلترة اللوحات والقائمة';
+            }
         }
 
         function groupQueueByCompany(queue) {
@@ -453,14 +751,16 @@
                 const mode = String(item.plannedDeliveryMode || '').toLowerCase();
                 const isWh = mode === 'warehouse' || item.deliveryMode === 'warehouse'
                     || isWarehouseCompany(item.deliveryCompany || item.company);
+                const unassigned = !isWh && isUnassignedCompany(item);
                 const company = isWh
                     ? (String(item.deliveryCompany || item.company || '').trim() || 'مستودع الهاتفية')
-                    : (String(item.deliveryCompany || item.company || '').trim() || 'بدون شركة');
-                const key = `${isWh ? 'wh' : 'memo'}::${company}`;
-                if (!groups.has(key)) groups.set(key, { company, isWh, items: [] });
+                    : (unassigned ? 'بدون شركة' : String(item.deliveryCompany || item.company || '').trim());
+                const key = `${isWh ? 'wh' : (unassigned ? 'un' : 'memo')}::${company}`;
+                if (!groups.has(key)) groups.set(key, { company, isWh, unassigned, items: [] });
                 groups.get(key).items.push(item);
             });
             return [...groups.values()].sort((a, b) => {
+                if (a.unassigned !== b.unassigned) return a.unassigned ? -1 : 1;
                 if (a.isWh !== b.isWh) return a.isWh ? 1 : -1;
                 return a.company.localeCompare(b.company, 'ar');
             });
@@ -470,6 +770,7 @@
             const wrap = document.getElementById('queueByCompany');
             if (!rawUploaded) {
                 wrap.innerHTML = '<div class="hub-empty" style="padding:24px;text-align:center">ارفع البيانات الخام أولاً ثم الصق الشاسيه في لوحة الشركة</div>';
+                renderUnassignedPanel();
                 return;
             }
             const seen = new Set();
@@ -483,6 +784,7 @@
             if (!unique.length) {
                 wrap.innerHTML = '<div class="hub-empty" style="padding:24px;text-align:center">لا توجد شاسيه بعد — الصق في لوحة الشركة أعلاه</div>';
                 renderYardAlert([]);
+                renderUnassignedPanel();
                 return;
             }
 
@@ -497,7 +799,8 @@
                     const state = item.agentStatus === 'delivered'
                         ? 'تم الترحيل'
                         : (item.agentStatus === 'display' ? 'عرض' : (avail ? 'متاح' : (item.assignedTo || 'محجوز')));
-                    return `<div class="queue-vin-row">
+                    const searchBits = `${item.vin} ${item.product || ''} ${item.model || ''} ${g.company}`;
+                    return `<div class="queue-vin-row" data-search="${searchBits.replace(/"/g, '&quot;').toLowerCase()}">
                         <div class="qv-vin">${item.vin}</div>
                         <div class="qv-product">${item.product || '—'}</div>
                         <div>${yard || '—'}</div>
@@ -505,10 +808,13 @@
                         <div style="color:#94a3b8">${state}</div>
                     </div>`;
                 }).join('');
-                const badge = g.isWh
-                    ? '<span class="hub-badge hub-badge--wh">مستودع</span>'
-                    : '<span class="hub-badge hub-badge--memo-plan">ترحيل</span>';
-                return `<div class="queue-company${g.isWh ? ' queue-company--warehouse' : ''}" data-q-company="${String(g.company).replace(/"/g, '&quot;')}">
+                const badge = g.unassigned
+                    ? '<span class="hub-badge hub-badge--unassigned">بدون شركة</span>'
+                    : (g.isWh
+                        ? '<span class="hub-badge hub-badge--wh">مستودع</span>'
+                        : '<span class="hub-badge hub-badge--memo-plan">ترحيل</span>');
+                const searchHay = `${g.company} ${g.items.map((i) => `${i.vin} ${i.product || ''}`).join(' ')}`.toLowerCase().replace(/"/g, '');
+                return `<div class="queue-company${g.isWh ? ' queue-company--warehouse' : ''}${g.unassigned ? ' queue-company--unassigned' : ''}" data-q-company="${String(g.company).replace(/"/g, '&quot;')}" data-search="${searchHay}">
                     <div class="queue-company-head">
                         <div class="queue-company-title">
                             <strong>${g.company}</strong>
@@ -524,6 +830,8 @@
                 head.addEventListener('click', () => head.parentElement.classList.toggle('collapsed'));
             });
             renderYardAlert(unique);
+            renderUnassignedPanel();
+            applyCoordSearch();
         }
 
         function renderYardAlert(queue) {
@@ -565,13 +873,16 @@
             rawUploaded = Boolean(enabled);
             const gate = document.getElementById('vinGateMsg');
             const hint = document.getElementById('vinSectionHint');
+            const uploadDetails = document.getElementById('uploadDetails');
             if (rawUploaded) {
                 gate.style.display = 'none';
-                hint.textContent = 'الصق الشاسيه داخل لوحة الشركة المناسبة ثم أرسل';
+                hint.textContent = 'الصق VIN في لوحة الشركة · VIN بدون شركة يُعاد تعيينه تلقائياً';
+                if (uploadDetails) uploadDetails.open = false;
             } else {
                 gate.style.display = '';
                 gate.textContent = 'ارفع ملف Excel أولاً — بعدها تظهر لوحة لكل شركة للصق الشاسيه';
                 hint.textContent = 'ارفع البيانات الخام أولاً';
+                if (uploadDetails) uploadDetails.open = true;
                 hideVinPrompt();
             }
             renderCompanyBoards();
@@ -599,18 +910,6 @@
                 missingBox.style.display = 'none';
                 document.getElementById('missingVinList').textContent = '';
             }
-        }
-
-        function isUnassignedCompany(item) {
-            const c = String(item?.deliveryCompany || item?.company || '').trim();
-            if (!c) return true;
-            const key = c.toLowerCase().replace(/\s+/g, ' ');
-            return key === 'بدون شركة'
-                || key === 'بدون الشركه'
-                || key === 'unassigned'
-                || key === 'no company'
-                || key === 'none'
-                || key === '-';
         }
 
         async function submitBoardVins(company) {
@@ -855,6 +1154,19 @@
             const file = e.dataTransfer.files?.[0];
             if (file) document.getElementById('fileInput').files = e.dataTransfer.files;
             document.getElementById('fileInput').dispatchEvent(new Event('change'));
+        });
+
+        document.getElementById('coordSearch').addEventListener('input', applyCoordSearch);
+
+        document.getElementById('btnAssignSelected').addEventListener('click', () => {
+            const vins = [...document.querySelectorAll('.unassigned-check:checked')].map((el) => el.value);
+            assignVinsToCompany(vins);
+        });
+        document.getElementById('btnSelectAllUnassigned').addEventListener('click', () => {
+            document.querySelectorAll('.unassigned-check').forEach((el) => { el.checked = true; });
+        });
+        document.getElementById('btnClearUnassignedSel').addEventListener('click', () => {
+            document.querySelectorAll('.unassigned-check').forEach((el) => { el.checked = false; });
         });
 
         setVinSectionEnabled(false);

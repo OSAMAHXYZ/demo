@@ -17,15 +17,20 @@ const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
 const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-note-form.png');
 const PORT = Number(process.env.PORT) || 3000;
 
-const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse']);
+const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse', 'showroom admin', 'سيارات العرض']);
 const AGENT_PASSWORD = process.env.DELIVERY_AGENT_PASSWORD || '1234';
 const USER_ROLES = Object.freeze({
   ياسين: 'showroom',
   الفاضل: 'agent',
   البراء: 'agent',
   مستودع: 'warehouse',
-  warehouse: 'warehouse'
+  warehouse: 'warehouse',
+  'showroom admin': 'showroom_admin',
+  'سيارات العرض': 'showroom_admin'
 });
+const SHOWROOM_ADMIN_AGENT = 'showroom admin';
+const SHOWROOM_PARKING_SLOTS = Object.freeze(['SR-1', 'SR-2', 'SR-3', 'SR-4', 'SR-5', 'SR-6', 'SR-7']);
+const SHOWROOM_PARKING_LABEL = 'Showroom Cars';
 const WAREHOUSE_ZONE_CONFIG = Object.freeze({
   A: { total: 40, labelAr: 'استلام' },
   B: { total: 40, labelAr: 'جاهز للتسليم' },
@@ -76,6 +81,7 @@ const emptyStore = () => ({
   drafts: [],
   manualVehicles: [],
   warehouseStock: [],
+  showroomParking: [],
   options: defaultOptions(),
   meta: {
     filename: '',
@@ -125,6 +131,7 @@ function loadStore() {
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
       manualVehicles: Array.isArray(parsed.manualVehicles) ? parsed.manualVehicles : [],
       warehouseStock: Array.isArray(parsed.warehouseStock) ? parsed.warehouseStock : [],
+      showroomParking: Array.isArray(parsed.showroomParking) ? parsed.showroomParking : [],
       options: parsed.options && typeof parsed.options === 'object'
         ? {
             companies: Array.isArray(parsed.options.companies) ? parsed.options.companies : [],
@@ -478,6 +485,62 @@ function statusLabelFor(item) {
 
 function ensureWarehouseStock() {
   if (!Array.isArray(store.warehouseStock)) store.warehouseStock = [];
+}
+
+function ensureShowroomParking() {
+  if (!Array.isArray(store.showroomParking)) store.showroomParking = [];
+}
+
+function findShowroomParkingInStock(vin) {
+  ensureShowroomParking();
+  const key = normVin(vin);
+  if (!key) return null;
+  return store.showroomParking.find((e) => normVin(e.vin) === key && e.status === 'in') || null;
+}
+
+function normalizeShowroomParkingSlot(raw) {
+  const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!s) return '';
+  if (SHOWROOM_PARKING_SLOTS.includes(s)) return s;
+  const m = s.match(/^(?:SR-?)?([1-7])$/);
+  if (m) return `SR-${m[1]}`;
+  return '';
+}
+
+function enrichShowroomParkingEntry(entry) {
+  const vin = normVin(entry.vin);
+  const veh = vehicleIndex().get(vin);
+  const queueItem = findQueueItem(vin);
+  return {
+    ...entry,
+    vin,
+    product: entry.product || veh?.product || veh?.model || queueItem?.product || '',
+    plate: entry.plate || veh?.plate || queueItem?.plate || '',
+    model: entry.model || veh?.model || entry.product || '',
+    label: SHOWROOM_PARKING_LABEL,
+    section: 'showroom'
+  };
+}
+
+function showroomParkingOccupancy() {
+  ensureShowroomParking();
+  const used = new Map(
+    store.showroomParking
+      .filter((e) => e.status === 'in')
+      .map((e) => [String(e.slot || '').toUpperCase(), enrichShowroomParkingEntry(e)])
+  );
+  const slots = SHOWROOM_PARKING_SLOTS.map((slot) => ({
+    slot,
+    free: !used.has(slot),
+    entry: used.get(slot) || null
+  }));
+  return {
+    total: SHOWROOM_PARKING_SLOTS.length,
+    used: slots.filter((s) => !s.free).length,
+    free: slots.filter((s) => s.free).length,
+    slots,
+    label: SHOWROOM_PARKING_LABEL
+  };
 }
 
 function findWarehouseInStock(vin) {
@@ -875,6 +938,9 @@ function authenticateAgent(username, password) {
   const lower = user.toLowerCase();
   if (lower === 'warehouse' || lower === 'wh') user = 'warehouse';
   if (user === 'مستودع' || lower === 'mustawda') user = 'مستودع';
+  if (lower === 'showroom admin' || lower === 'showroomadmin' || lower === 'showroom cars' || user === 'سيارات العرض') {
+    user = SHOWROOM_ADMIN_AGENT;
+  }
   if (!AGENTS.has(user)) return { ok: false, error: 'اسم المستخدم غير معروف' };
   const pass = String(password || '').trim();
   if (pass !== String(AGENT_PASSWORD).trim()) {
@@ -1733,6 +1799,112 @@ app.post('/api/warehouse/stock-out', (req, res) => {
   });
 });
 
+app.get('/api/showroom-parking/stock', (_req, res) => {
+  ensureShowroomParking();
+  res.json({
+    stock: store.showroomParking
+      .filter((e) => e.status === 'in')
+      .map(enrichShowroomParkingEntry)
+      .sort((a, b) => String(a.slot).localeCompare(String(b.slot), 'en')),
+    history: store.showroomParking.slice(-100).map(enrichShowroomParkingEntry),
+    occupancy: showroomParkingOccupancy(),
+    slots: [...SHOWROOM_PARKING_SLOTS],
+    label: SHOWROOM_PARKING_LABEL
+  });
+});
+
+app.post('/api/showroom-parking/stock-in', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  if (auth.role !== 'showroom_admin') {
+    return res.status(403).json({ error: 'هذا الحساب غير مخصص لموقف سيارات العرض' });
+  }
+
+  const vin = normVin(req.body?.vin);
+  if (!vin || vin.length < 8) {
+    return res.status(400).json({ error: 'رقم الشاسيه غير صالح' });
+  }
+
+  let slot = normalizeShowroomParkingSlot(req.body?.slot);
+  if (!slot) {
+    const occ = showroomParkingOccupancy();
+    const free = occ.slots.find((s) => s.free);
+    if (!free) return res.status(409).json({ error: 'موقف العرض ممتلئ (7 أماكن)' });
+    slot = free.slot;
+  }
+
+  ensureShowroomParking();
+  const existing = findShowroomParkingInStock(vin);
+  if (existing) {
+    return res.status(409).json({
+      error: `هذا الشاسيه موجود مسبقاً في ${existing.slot}`,
+      entry: enrichShowroomParkingEntry(existing)
+    });
+  }
+
+  const slotTaken = store.showroomParking.find(
+    (e) => e.status === 'in' && String(e.slot).toUpperCase() === slot
+  );
+  if (slotTaken) {
+    return res.status(409).json({
+      error: `الموقف ${slot} مشغول بالشاسيه ${slotTaken.vin}`
+    });
+  }
+
+  const veh = vehicleIndex().get(vin);
+  const queueItem = findQueueItem(vin);
+  const now = new Date().toISOString();
+  const entry = {
+    id: `sr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    vin,
+    slot,
+    zone: 'SR',
+    status: 'in',
+    stockedInAt: now,
+    stockedOutAt: '',
+    stockedInBy: auth.username,
+    stockedOutBy: '',
+    product: veh?.product || veh?.model || queueItem?.product || String(req.body?.product || '').trim(),
+    model: veh?.model || String(req.body?.model || '').trim(),
+    plate: veh?.plate || queueItem?.plate || String(req.body?.plate || '').trim(),
+    section: 'showroom',
+    label: SHOWROOM_PARKING_LABEL
+  };
+  store.showroomParking.push(entry);
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    entry: enrichShowroomParkingEntry(entry),
+    occupancy: showroomParkingOccupancy()
+  });
+});
+
+app.post('/api/showroom-parking/stock-out', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  if (auth.role !== 'showroom_admin' && auth.username !== SHOWROOM_AGENT) {
+    return res.status(403).json({ error: 'هذا الحساب غير مخصص لموقف سيارات العرض' });
+  }
+
+  const vin = normVin(req.body?.vin);
+  if (!vin) return res.status(400).json({ error: 'رقم الشاسيه مطلوب' });
+
+  const entry = findShowroomParkingInStock(vin);
+  if (!entry) {
+    return res.status(404).json({ error: 'هذا الشاسيه غير موجود في موقف العرض' });
+  }
+
+  entry.status = 'out';
+  entry.stockedOutAt = new Date().toISOString();
+  entry.stockedOutBy = auth.username;
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    entry: enrichShowroomParkingEntry(entry),
+    occupancy: showroomParkingOccupancy()
+  });
+});
+
 app.get('/api/delivery-options', (_req, res) => {
   ensureOptions();
   res.json({
@@ -2077,6 +2249,7 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
 
   if (admin) {
     ensureWarehouseStock();
+    ensureShowroomParking();
     return res.json({
       queue,
       stats: computeStats(),
@@ -2085,16 +2258,21 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
       manualVehicles: store.manualVehicles || [],
       warehouseStock: store.warehouseStock.filter((e) => e.status === 'in').map(enrichWarehouseEntry),
       warehouseZones: warehouseOccupancy(),
+      showroomParking: store.showroomParking.filter((e) => e.status === 'in').map(enrichShowroomParkingEntry),
+      showroomParkingOccupancy: showroomParkingOccupancy(),
       rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
     });
   }
 
   if (forCoordinator) {
     ensureWarehouseStock();
+    ensureShowroomParking();
     return res.json({
       queue,
       warehouseStock: store.warehouseStock.filter((e) => e.status === 'in').map(enrichWarehouseEntry),
-      warehouseZones: warehouseOccupancy()
+      warehouseZones: warehouseOccupancy(),
+      showroomParking: store.showroomParking.filter((e) => e.status === 'in').map(enrichShowroomParkingEntry),
+      showroomParkingOccupancy: showroomParkingOccupancy()
     });
   }
 
@@ -2554,12 +2732,15 @@ app.delete('/api/delivery-coordinator/drafts/:draftId', (req, res) => {
   res.json({ ok: true, draftsTotal: store.drafts.length });
 });
 
-/** Manual vehicle entry (ياسين) — creates a new delivery note; duplicate VIN allowed. */
+/** Manual vehicle entry (ياسين / showroom admin) — creates a new delivery note. */
 app.post('/api/delivery-manual/vehicles', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
   if (!auth.ok) return res.status(401).json({ error: auth.error });
-  if (auth.username !== SHOWROOM_AGENT) {
-    return res.status(403).json({ error: 'الإدخال اليدوي متاح لياسين فقط' });
+
+  const isYassin = auth.username === SHOWROOM_AGENT;
+  const isShowroomAdmin = auth.role === 'showroom_admin' || auth.username === SHOWROOM_ADMIN_AGENT;
+  if (!isYassin && !isShowroomAdmin) {
+    return res.status(403).json({ error: 'الإدخال اليدوي متاح لياسين أو Showroom Admin فقط' });
   }
 
   const vehicle = String(req.body?.vehicle || req.body?.product || '').trim();
@@ -2578,6 +2759,17 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     return res.status(400).json({ error: 'Status مطلوب (display|delivery)' });
   }
 
+  // Showroom admin: only cars currently in the 7 parking places
+  let parkingEntry = null;
+  if (isShowroomAdmin) {
+    parkingEntry = findShowroomParkingInStock(vin);
+    if (!parkingEntry) {
+      return res.status(403).json({
+        error: 'يمكن إصدار مذكرة فقط لسيارات موقف العرض (7 أماكن) الخاصة بهذا الحساب'
+      });
+    }
+  }
+
   // Ensure branch is available in city options (do not block on list mismatch)
   ensureOptions();
   if (!store.options.cities.some((c) => normalizeOptionName(c) === branch)) {
@@ -2591,6 +2783,10 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
   const carRows = [{ model: model || vehicle, chassis: vin, plate, remarks: statusPaper ? `الحالة: ${statusPaper}` : '' }];
   while (carRows.length < 10) carRows.push(emptyCarSlot());
 
+  const companyLabel = isDisplay
+    ? (isShowroomAdmin ? SHOWROOM_PARKING_LABEL : SHOWROOM_SPECIAL_NAME)
+    : (String(req.body?.company || '').trim() || '');
+
   const draftPayload = {
     doc_date: today,
     deliveryNoteDate: today,
@@ -2603,7 +2799,7 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     dep_hour: '',
     dep_minute: '',
     customer_name: auth.username,
-    company_rep: isDisplay ? SHOWROOM_SPECIAL_NAME : (String(req.body?.company || '').trim() || ''),
+    company_rep: companyLabel,
     transfer_date: today,
     corresponding_date: today,
     day_name: dayName,
@@ -2614,16 +2810,22 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     cars: carRows,
     vins: [vin],
     showroom_display: isDisplay,
-    showroom_group: isDisplay,
-    deliveryMode: isDisplay ? 'showroom' : 'memo',
-    showroom_label: isDisplay ? SHOWROOM_SPECIAL_NAME : undefined
+    showroom_group: isDisplay || isShowroomAdmin,
+    deliveryMode: isDisplay || isShowroomAdmin ? 'showroom' : 'memo',
+    showroom_label: isDisplay || isShowroomAdmin ? (isShowroomAdmin ? SHOWROOM_PARKING_LABEL : SHOWROOM_SPECIAL_NAME) : undefined,
+    showroom_parking: Boolean(isShowroomAdmin),
+    showroom_parking_slot: parkingEntry?.slot || ''
   };
 
-  const carMetaByVin = new Map([[vin, { product: vehicle, model: model || vehicle, plate }]]);
+  const carMetaByVin = new Map([[vin, {
+    product: vehicle || parkingEntry?.product,
+    model: model || vehicle || parkingEntry?.model,
+    plate: plate || parkingEntry?.plate || ''
+  }]]);
   const { deliveredItems, blocked } = markVinsDelivered([vin], {
     assignedTo: auth.username,
     warehouseDelivery: false,
-    showroomDisplay: isDisplay,
+    showroomDisplay: isDisplay || isShowroomAdmin,
     vehicleStatus,
     forceAssign: true,
     carMetaByVin
@@ -2647,6 +2849,8 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     vehicleStatus,
     manualEntry: true,
     entryAgent: auth.username,
+    showroomParking: Boolean(isShowroomAdmin),
+    showroomParkingSlot: parkingEntry?.slot || '',
     createdAt: new Date().toISOString()
   };
   store.manualVehicles.unshift(vehicleRecord);
@@ -2661,12 +2865,14 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     model: model || vehicle,
     plate,
     assignedTo: auth.username,
-    customerName: isDisplay ? SHOWROOM_SPECIAL_NAME : (draftPayload.company_rep || ''),
-    showroomDisplay: isDisplay,
+    customerName: companyLabel || (isDisplay ? SHOWROOM_SPECIAL_NAME : ''),
+    showroomDisplay: isDisplay || isShowroomAdmin,
     manualEntry: true,
     branchEntryDate,
     vehicleStatus,
     entryAgent: auth.username,
+    showroomParking: Boolean(isShowroomAdmin),
+    showroomParkingSlot: parkingEntry?.slot || '',
     payload: draftPayload
   };
   attachDeliveryNoteMeta(draft, {
@@ -2684,6 +2890,13 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
   store.drafts.unshift(draft);
   if (store.drafts.length > MAX_DRAFTS) store.drafts.length = MAX_DRAFTS;
 
+  // Showroom admin delivery: free the parking slot when status is delivery
+  if (isShowroomAdmin && parkingEntry && vehicleStatus === 'delivery') {
+    parkingEntry.status = 'out';
+    parkingEntry.stockedOutAt = new Date().toISOString();
+    parkingEntry.stockedOutBy = auth.username;
+  }
+
   persistAndBroadcast();
   res.json({
     ok: true,
@@ -2697,6 +2910,8 @@ app.post('/api/delivery-manual/vehicles', (req, res) => {
     statusLabel: isDisplay ? 'عرض' : 'تم الترحيل',
     branch,
     branchEntryDate,
+    parkingSlot: parkingEntry?.slot || '',
+    occupancy: isShowroomAdmin ? showroomParkingOccupancy() : undefined,
     item: deliveredItems[0] || null,
     draft
   });

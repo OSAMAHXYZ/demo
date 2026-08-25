@@ -2220,6 +2220,41 @@
             </div>
         </section>
 
+        <section class="hub-section hub-fold" id="showroomParkingSection" data-fold>
+            <button type="button" class="hub-fold-toggle" aria-expanded="false">
+                <span class="hub-fold-title">Showroom Cars — موقف العرض (7 أماكن)</span>
+                <span class="hub-fold-meta">
+                    <span class="hub-hint">من Showroom Admin</span>
+                    <span class="hub-fold-count" id="showroomParkingFoldCount" data-empty="1"></span>
+                    <span class="hub-fold-chevron" aria-hidden="true"></span>
+                </span>
+            </button>
+            <div class="hub-fold-body">
+                <div class="hub-fold-body-inner">
+                    <div class="hub-fold-content">
+                        <p class="hub-meta" style="margin-bottom:12px" id="showroomParkingMeta">سيارات متوقفة في موقف العرض — مرتبطة بحساب showroom admin</p>
+                        <div class="hub-table-wrap">
+                            <table class="hub-table">
+                                <thead>
+                                    <tr>
+                                        <th>الموقف</th>
+                                        <th>الشاسيه</th>
+                                        <th>Product</th>
+                                        <th>اللوحة</th>
+                                        <th>أدخل بواسطة</th>
+                                        <th>وقت الدخول</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="showroomParkingBody">
+                                    <tr><td colspan="6" class="hub-empty">لا توجد سيارات في موقف العرض</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="hub-section hub-fold" id="warehouseDraftsSection" data-fold hidden>
             <button type="button" class="hub-fold-toggle" aria-expanded="false">
                 <span class="hub-fold-title">التسليم في المستودع — Warehouse Delivery</span>
@@ -2307,6 +2342,8 @@
         let allVehicles = [];
         let allQueue = [];
         let allDrafts = [];
+        let allShowroomParking = [];
+        let showroomParkingOccupancy = null;
         let lastDashboard = null;
         /** Warehouse deliveries show under this label — not as a transport company. */
         const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
@@ -2457,6 +2494,7 @@
             setFoldCount('queueFoldCount', queueCount);
             setFoldCount('draftsFoldCount', draftCount);
             setFoldCount('warehouseDraftsFoldCount', (allDrafts || []).filter(isWarehouseAdminDraft).length);
+            setFoldCount('showroomParkingFoldCount', (allShowroomParking || []).length);
             setFoldCount('xferFoldCount', draftCount);
             setFoldCount('inventoryFoldCount', vehicleCount);
             setFoldCount('productsFoldCount', productCount);
@@ -4029,6 +4067,7 @@
                 { cls: 'dn-stat--wh', label: 'Warehouse', value: s.warehouse },
                 { cls: 'dn-stat--memo', label: 'Memo', value: s.memo },
                 { cls: 'dn-stat--showroom', label: 'Showroom', value: s.showroom },
+                { cls: 'dn-stat--showroom', label: 'SR Parked', value: (allShowroomParking || []).length },
                 { cls: 'dn-stat--month', label: 'This Month', value: s.thisMonth },
                 { cls: 'dn-stat--month', label: 'Last Month', value: s.lastMonth }
             ];
@@ -4899,14 +4938,44 @@
             return { delivered, total, pct, remaining: Math.max(0, total - delivered) };
         }
 
+        function renderShowroomParkingTable() {
+            const tbody = document.getElementById('showroomParkingBody');
+            const meta = document.getElementById('showroomParkingMeta');
+            if (!tbody) return;
+            const list = Array.isArray(allShowroomParking) ? allShowroomParking.slice() : [];
+            list.sort((a, b) => String(a.slot || '').localeCompare(String(b.slot || ''), 'en'));
+            if (meta) {
+                const occ = showroomParkingOccupancy || {};
+                meta.textContent = `مشغول ${occ.used || list.length} من ${occ.total || 7} · فارغ ${occ.free != null ? occ.free : Math.max(0, 7 - list.length)} · Showroom Admin`;
+            }
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="hub-empty">لا توجد سيارات في موقف العرض — أضف من Showroom Admin</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map((e) => `
+                <tr>
+                    <td><strong style="color:#f9a8d4">${escapeHtml(e.slot || '—')}</strong></td>
+                    <td class="hub-vin">${escapeHtml(e.vin || '—')}</td>
+                    <td>${escapeHtml(e.product || e.model || '—')}</td>
+                    <td>${escapeHtml(e.plate || '—')}</td>
+                    <td>${escapeHtml(e.stockedInBy || '—')}</td>
+                    <td>${escapeHtml((e.stockedInAt || '').replace('T', ' ').slice(0, 19) || '—')}</td>
+                </tr>
+            `).join('');
+        }
+
         function isShowroomAdminDraft(d) {
             if (!d) return false;
-            if (d.showroomDisplay === true) return true;
+            if (d.showroomDisplay === true || d.showroomParking === true) return true;
             const p = d.payload || {};
-            if (p.showroom_display === true || p.showroom_group === true) return true;
+            if (p.showroom_display === true || p.showroom_group === true || p.showroom_parking === true) return true;
             if (p.deliveryMode === 'showroom') return true;
             if (String(d.vehicleStatus || p.vehicleStatus || '').toLowerCase() === 'display') return true;
             if (String(d.assignedTo || '').trim() === SHOWROOM_AGENT && p.showroom_label) return true;
+            const agent = String(d.assignedTo || d.entryAgent || p.entryAgent || '').trim().toLowerCase();
+            if (agent === 'showroom admin' || agent === 'سيارات العرض') return true;
+            const label = String(p.showroom_label || p.company_rep || d.customerName || '').trim();
+            if (label === 'Showroom Cars' || label === SHOWROOM_SPECIAL_NAME) return true;
             return false;
         }
 
@@ -5456,13 +5525,18 @@
             if (queueRes.ok) {
                 allQueue = queueData.queue || [];
                 allDrafts = queueData.drafts || [];
+                allShowroomParking = queueData.showroomParking || [];
+                showroomParkingOccupancy = queueData.showroomParkingOccupancy || null;
             } else {
                 allQueue = [];
                 allDrafts = [];
+                allShowroomParking = [];
+                showroomParkingOccupancy = null;
             }
             // Backfill archived delivery-note files for admin (non-blocking)
             fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
             loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
+            renderShowroomParkingTable();
             updateFoldCounts();
             refreshTransferDashboard();
             syncRestoreMetaFromDashboard();
