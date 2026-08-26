@@ -113,7 +113,7 @@
               </article>
               <article class="card pbi-viz" data-chart-id="chart-sr-ach">
                 <div class="pbi-viz-head">
-                  <h2>Ach%</h2>
+                  <h2>Ach% · Delivery ÷ Target</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-ach" title="Open wide view">Wide</button>
                 </div>
                 <div class="chart-scroll">
@@ -129,7 +129,7 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
                 </div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-plant">
+              <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
                 <div class="pbi-viz-head">
                   <h2>By Plant</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
@@ -183,7 +183,7 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
                 </div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-prev">
+              <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
                 <div class="pbi-viz-head">
                   <h2>Proforma · Prior month vs Today</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
@@ -192,7 +192,7 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
                 </div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-pace">
+              <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
                 <div class="pbi-viz-head">
                   <h2>Month pace</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
@@ -1833,7 +1833,7 @@
     delete datasetsExtra.clickable;
     const softScale = {
       beginAtZero: true,
-      suggestedMax: opts.max,
+      ...(opts.max != null ? { suggestedMax: opts.max } : {}),
       grid: { color: "rgba(148, 163, 184, 0.18)", drawBorder: false },
       ticks: { precision: 0, color: "#64748b", font: { size: 12, family: fontFamily, weight: "600" } },
       border: { display: false },
@@ -1864,7 +1864,7 @@
           categoryPercentage: 0.72,
           barPercentage: 0.9,
           maxBarThickness: horizontal ? 26 : 36,
-          minBarLength: 2,
+          // Do not force a min length — zeros were drawing fake 2px "ticks"
           ...ds,
         })),
       },
@@ -2798,6 +2798,58 @@
     return base.slice().sort((a, b) => (Number(b.Target) || 0) - (Number(a.Target) || 0)).slice(0, 12);
   }
 
+  /** Prefer employees with today’s Proforma/Delivery for the Day chart. */
+  function dayChartRows(allRows) {
+    const base = chartRowsForMode(allRows);
+    if (srView.selectedKey) return base;
+    const withDay = base.filter((r) =>
+      (Number(r["Delivery (Day)"]) || 0) > 0 ||
+      (Number(r["Proforma (Day)"]) || 0) > 0
+    );
+    if (!withDay.length) return [];
+    return withDay.slice().sort((a, b) => {
+      const sb = (Number(b["Delivery (Day)"]) || 0) + (Number(b["Proforma (Day)"]) || 0);
+      const sa = (Number(a["Delivery (Day)"]) || 0) + (Number(a["Proforma (Day)"]) || 0);
+      return sb - sa;
+    });
+  }
+
+  function setChartEmptyState(canvasId, message) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+      delete charts[canvasId];
+    }
+    const scroll = canvas.closest(".chart-scroll");
+    const box = canvas.closest(".chart-box");
+    if (box) box.style.height = "160px";
+    if (scroll) {
+      scroll.classList.remove("is-scroll");
+      scroll.style.maxHeight = "";
+    }
+    let note = scroll && scroll.querySelector(".chart-empty-note");
+    if (!note && scroll) {
+      note = document.createElement("p");
+      note.className = "chart-empty-note";
+      scroll.appendChild(note);
+    }
+    if (note) {
+      note.hidden = false;
+      note.textContent = message;
+    }
+    canvas.style.display = "none";
+  }
+
+  function clearChartEmptyState(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = "";
+    const scroll = canvas.closest(".chart-scroll");
+    const note = scroll && scroll.querySelector(".chart-empty-note");
+    if (note) note.hidden = true;
+  }
+
   function renderSalesReportCharts(sr) {
     const rows = chartRowsForMode(sr.rows || []);
     if (!rows.length) return;
@@ -2829,12 +2881,17 @@
         Math.min(100, parsePct(r["Ach%"]) || 0),
         Math.max(0, 100 - (parsePct(r["Ach%"]) || 0)),
       ]);
-      upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [
-        Number(r["Delivery (Day)"]) || 0,
-        Number(r["Proforma (Day)"]) || 0,
-      ], {
-        backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
-      });
+      clearChartEmptyState("chart-sr-day");
+      const dayDel = Number(r["Delivery (Day)"]) || 0;
+      const dayProf = Number(r["Proforma (Day)"]) || 0;
+      if (!dayDel && !dayProf) {
+        setChartEmptyState("chart-sr-day", "No Delivery or Proforma dated today for this employee.");
+      } else {
+        upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [dayDel, dayProf], {
+          backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
+          max: Math.max(1, dayDel, dayProf),
+        });
+      }
       upsertChart("chart-sr-plant", "doughnut", [String(r.Plant || "—")], [Number(r["Delivery (Month)"]) || 1]);
       upsertChart("chart-sr-overview", "doughnut",
         ["Delivery", "Proforma gap", "To target"],
@@ -2888,21 +2945,21 @@
       datasets: [
         {
           label: "Delivery",
-          data: rows.map((r) => r["Delivery (Month)"] || 0),
+          data: rows.map((r) => Number(r["Delivery (Month)"]) || 0),
           backgroundColor: "rgba(200, 30, 44, 0.85)",
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Proforma",
-          data: rows.map((r) => r["Proforma (Month)"] || 0),
+          data: rows.map((r) => Number(r["Proforma (Month)"]) || 0),
           backgroundColor: "rgba(100, 116, 139, 0.75)",
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Target",
-          data: rows.map((r) => r.Target || 0),
+          data: rows.map((r) => Number(r.Target) || 0),
           backgroundColor: "rgba(11, 58, 102, 0.8)",
           borderWidth: 0,
           borderRadius: 5,
@@ -2912,31 +2969,49 @@
 
     upsertChart("chart-sr-ach", "bar", labels, rows.map((r) => parsePct(r["Ach%"]) || 0), {
       ...clickOpts,
-      label: "Ach%",
+      label: "Delivery ÷ Target %",
       backgroundColor: achColors,
       max: 120,
     });
 
-    upsertChart("chart-sr-day", "bar", labels, null, {
-      ...clickOpts,
-      legend: true,
-      datasets: [
-        {
-          label: "Delivery today",
-          data: rows.map((r) => r["Delivery (Day)"] || 0),
-          backgroundColor: "rgba(200, 30, 44, 0.85)",
-          borderWidth: 0,
-          borderRadius: 5,
-        },
-        {
-          label: "Proforma today",
-          data: rows.map((r) => r["Proforma (Day)"] || 0),
-          backgroundColor: "rgba(13, 148, 136, 0.8)",
-          borderWidth: 0,
-          borderRadius: 5,
-        },
-      ],
-    });
+    // Day chart: only people with today's activity (zeros were rendering as broken ticks)
+    const dayRows = dayChartRows(sr.rows || []);
+    clearChartEmptyState("chart-sr-day");
+    if (!dayRows.length) {
+      setChartEmptyState(
+        "chart-sr-day",
+        "No Delivery or Proforma dated today. Day chart uses Col P / Col V = today’s date."
+      );
+    } else {
+      const dayLabels = dayRows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+      const dayKeys = dayRows.map((r) => r._key);
+      const dayDel = dayRows.map((r) => Number(r["Delivery (Day)"]) || 0);
+      const dayProf = dayRows.map((r) => Number(r["Proforma (Day)"]) || 0);
+      const dayMax = Math.max(1, ...dayDel, ...dayProf);
+      upsertChart("chart-sr-day", "bar", dayLabels, null, {
+        horizontal: dayRows.length > 1,
+        clickable: dayRows.length > 1,
+        empKeys: dayKeys,
+        legend: true,
+        max: dayMax,
+        datasets: [
+          {
+            label: "Delivery today",
+            data: dayDel,
+            backgroundColor: "rgba(200, 30, 44, 0.85)",
+            borderWidth: 0,
+            borderRadius: 5,
+          },
+          {
+            label: "Proforma today",
+            data: dayProf,
+            backgroundColor: "rgba(13, 148, 136, 0.8)",
+            borderWidth: 0,
+            borderRadius: 5,
+          },
+        ],
+      });
+    }
 
     const plantMap = new Map();
     rows.forEach((r) => {
@@ -2980,11 +3055,11 @@
     upsertChart("chart-sr-delpct", "bar", labels, rows.map((r) => (r._delPct || 0) * 100), {
       ...clickOpts,
       label: "Del %",
-      backgroundColor: rows.map((r) => ((r._delPct || 0) >= 1 ? "rgba(13, 148, 136, 0.88)" : "rgba(200, 30, 44, 0.82)")),
+      backgroundColor: "rgba(200, 30, 44, 0.8)",
       max: 120,
     });
 
-    upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => r["Prof+Del"] || 0), {
+    upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => Number(r["Prof+Del"]) || 0), {
       ...clickOpts,
       label: "Prof+Del",
       backgroundColor: "rgba(11, 58, 102, 0.85)",
@@ -2993,7 +3068,7 @@
     upsertChart("chart-sr-profdelpct", "bar", labels, rows.map((r) => (r._profDelPct || 0) * 100), {
       ...clickOpts,
       label: "Prof+Del %",
-      backgroundColor: rows.map((r) => ((r._profDelPct || 0) >= 1 ? "rgba(13, 148, 136, 0.88)" : "rgba(180, 83, 9, 0.82)")),
+      backgroundColor: "rgba(13, 148, 136, 0.85)",
       max: 120,
     });
 
@@ -3002,16 +3077,23 @@
       legend: true,
       datasets: [
         {
-          label: (sr.prevMonthLabel || "Prior") + " Prof",
-          data: rows.map((r) => r["Proforma (Prev)"] || 0),
+          label: "Prior month Prof",
+          data: rows.map((r) => Number(r["Proforma (Prev)"]) || 0),
           backgroundColor: "rgba(100, 116, 139, 0.75)",
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Today Prof",
-          data: rows.map((r) => r["Proforma (Day)"] || 0),
+          data: rows.map((r) => Number(r["Proforma (Day)"]) || 0),
           backgroundColor: "rgba(13, 148, 136, 0.8)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Today Del",
+          data: rows.map((r) => Number(r["Delivery (Day)"]) || 0),
+          backgroundColor: "rgba(200, 30, 44, 0.85)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -3019,7 +3101,7 @@
     });
 
     upsertChart("chart-sr-pace", "doughnut",
-      ["Days passed (" + (sr.daysPassed || 0) + ")", "Days remaining (" + (sr.daysRemaining || 0) + ")"],
+      ["Days passed", "Days remaining"],
       [sr.daysPassed || 0, sr.daysRemaining || 0]
     );
 
@@ -3029,7 +3111,6 @@
       backgroundColor: "rgba(200, 30, 44, 0.8)",
     });
   }
-
   function exportTelesalesSchedule() {
     const sr = window._data && window._data.salesReport;
     if (!sr || !(sr.rows || []).length) {

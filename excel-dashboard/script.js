@@ -8,6 +8,8 @@
 (function () {
   "use strict";
 
+  const F = typeof BusinessFormulas !== "undefined" ? new BusinessFormulas() : null;
+
   const ACCEPT =
     ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
   const MAX_TABLE_RENDER = 5000;
@@ -196,9 +198,10 @@
 
   /**
    * Central VIN normalizer — use for Central, Backorder, and RTL.
-   * Never compare raw VIN strings.
+   * Prefer BusinessFormulas.normalizeVin when formulas.js is loaded.
    */
   function normalizeVin(v) {
+    if (F) return F.normalizeVin(v);
     if (v == null || v === "") return "";
     const s = String(v)
       .trim()
@@ -707,6 +710,7 @@
   }
 
   function quantityStatus(boCount, stockCount) {
+    if (F) return F.quantityStatus(boCount, stockCount);
     if (boCount == null) return "NO BO";
     if (stockCount == null || stockCount === 0) return "NO STOCK";
     if (boCount > stockCount) return "BO > STOCK";
@@ -877,8 +881,12 @@
         "Confirm Flag": matched ? cellToString(getBo(boHit, "confirm")) : "",
         "Cust Group": matched ? cellToString(getBo(boHit, "custGroup")) : "",
         "المبلغ المدفوع": matched ? cellToString(getBo(boHit, "paid")) : "",
-        "BO Match": matched ? "Matched" : "No BO",
-        "RTL Stock matched": rtlList.length ? "In Stock" : "Not in RTL Stock",
+        "BO Match": F ? F.boMatchStatus(matched) : matched ? "Matched" : "No BO",
+        "RTL Stock matched": F
+          ? F.rtlStatus(!!rtlList.length)
+          : rtlList.length
+            ? "In Stock"
+            : "Not in RTL Stock",
         "BO rows": boList.length,
         "Central rows": centralList.length,
         "RTL rows": rtlList.length,
@@ -1392,22 +1400,26 @@
     const allResults = getSectionRows(3);
     section.hidden = false;
 
-    const matched = allResults.filter((r) => r["BO Match"] === "Matched").length;
-    const noBo = allResults.filter((r) => r["BO Match"] === "No BO").length;
-    const rtlIn = allResults.filter((r) => r["RTL Stock matched"] === "In Stock").length;
-    const rtlOut = allResults.filter((r) => r["RTL Stock matched"] === "Not in RTL Stock").length;
-    // Full Control = Central VIN with BO Matched AND In RTL Stock
-    const fullControl = allResults.filter(
-      (r) => r["BO Match"] === "Matched" && r["RTL Stock matched"] === "In Stock"
-    ).length;
+    const k = F
+      ? F.fullControlKpis(allResults)
+      : {
+          totalUniqueCentralVins: allResults.length,
+          boMatched: allResults.filter((r) => r["BO Match"] === "Matched").length,
+          noBo: allResults.filter((r) => r["BO Match"] === "No BO").length,
+          rtlInStock: allResults.filter((r) => r["RTL Stock matched"] === "In Stock").length,
+          notInRtlStock: allResults.filter((r) => r["RTL Stock matched"] === "Not in RTL Stock").length,
+          fullControl: allResults.filter(
+            (r) => r["BO Match"] === "Matched" && r["RTL Stock matched"] === "In Stock"
+          ).length,
+        };
     const multi = results.boOrders.filter((r) => r.Cars > 1).length;
     renderKpis("#s3-kpis", [
-      { label: "Unique Central VINs", value: formatNumber(allResults.length), sub: "primary dataset" },
-      { label: "BO Matched", value: formatNumber(matched), sub: "VIN in Backorder" },
-      { label: "No BO", value: formatNumber(noBo), sub: "no Backorder VIN" },
-      { label: "RTL In Stock", value: formatNumber(rtlIn), sub: "VIN in RTL" },
-      { label: "Not in RTL Stock", value: formatNumber(rtlOut), sub: "missing from retail" },
-      { label: "Full Control", value: formatNumber(fullControl), sub: "Matched + In Stock" },
+      { label: "Unique Central VINs", value: formatNumber(k.totalUniqueCentralVins), sub: "primary dataset" },
+      { label: "BO Matched", value: formatNumber(k.boMatched), sub: "VIN in Backorder" },
+      { label: "No BO", value: formatNumber(k.noBo), sub: "no Backorder VIN" },
+      { label: "RTL In Stock", value: formatNumber(k.rtlInStock), sub: "VIN in RTL" },
+      { label: "Not in RTL Stock", value: formatNumber(k.notInRtlStock), sub: "missing from retail" },
+      { label: "Full Control", value: formatNumber(k.fullControl), sub: "Matched + In Stock" },
       {
         label: "BO orders",
         value: formatNumber(results.boOrders.length),

@@ -700,6 +700,16 @@ button:disabled {
   border-radius: 8px;
 }
 
+.chart-empty-note {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .chart-box.pbi-box {
   height: 220px;
 }
