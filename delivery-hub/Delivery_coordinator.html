@@ -388,10 +388,10 @@
         </header>
 
         <div class="coord-hero">
-            <h2>عمل واضح وسريع</h2>
+            <h2>رحلة التعيين</h2>
             <p>
-                ابحث عن شركة أو VIN من الشريط الأصفر · السيارات بدون شركة تظهر أولاً ويمكن تعيينها لشركة بضغطة ·
-                أو الصق الشاسيه داخل لوحة الشركة لإضافتها أو إعادة تعيينها.
+                السيارات بدون شركة تبقى مفتوحة — الصقي VIN في لوحة الشركة لتعيينها.
+                إذا كان الشاسيه معيّناً لشركة أخرى يظهر تنبيه تكرار وتختارين: إعادة التعيين أو التخطي.
             </p>
         </div>
 
@@ -488,7 +488,7 @@
 
         <div class="unassigned-panel" id="unassignedPanel" hidden>
             <h3>٣ — سيارات بدون شركة — عيّنيها الآن</h3>
-            <p class="lead">حددي الشاسيه واختاري الشركة ثم «تعيين المحددة» · أو الصقي نفس الـ VIN داخل لوحة الشركة أعلاه.</p>
+            <p class="lead">حددي الشاسيه واختاري الشركة ثم «تعيين المحددة» · السيارات بدون شركة مفتوحة دائماً · التكرار لشركة أخرى يسأل قبل إعادة التعيين من لوحات اللصق.</p>
             <div class="unassigned-assign-bar">
                 <label style="font-size:.75rem;font-weight:700;color:#fde68a">الشركة</label>
                 <select id="assignCompanySelect"></select>
@@ -934,9 +934,10 @@
             );
             const seenInPaste = new Set();
             const toSubmit = [];
+            const conflictCandidates = [];
             let pastedDuplicates = 0;
-            let queueDuplicates = 0;
-            let willReassign = 0;
+            let alreadySame = 0;
+            let willAssignOpen = 0;
 
             parsed.forEach((vin) => {
                 if (seenInPaste.has(vin)) {
@@ -945,27 +946,58 @@
                 }
                 seenInPaste.add(vin);
                 const existingItem = byVin.get(vin);
-                if (existingItem) {
-                    if (isUnassignedCompany(existingItem)) {
-                        toSubmit.push(vin);
-                        willReassign++;
-                        return;
-                    }
-                    queueDuplicates++;
+                if (!existingItem) {
+                    toSubmit.push(vin);
                     return;
                 }
-                toSubmit.push(vin);
+                if (isUnassignedCompany(existingItem)) {
+                    toSubmit.push(vin);
+                    willAssignOpen++;
+                    return;
+                }
+                const prev = String(existingItem.deliveryCompany || existingItem.company || '').trim();
+                if (prev && prev.toLowerCase() === String(deliveryCompany).toLowerCase()) {
+                    alreadySame++;
+                    return;
+                }
+                conflictCandidates.push({
+                    vin,
+                    company: prev || 'بدون شركة'
+                });
             });
+
+            let forceReassign = false;
+            if (conflictCandidates.length) {
+                const lines = conflictCandidates
+                    .slice(0, 12)
+                    .map((c) => `${c.vin} → ${c.company}`)
+                    .join('\n');
+                const more = conflictCandidates.length > 12
+                    ? `\n… و ${conflictCandidates.length - 12} أخرى`
+                    : '';
+                const ok = confirm(
+                    `يوجد تكرار — شاسيه معيّنة لشركات أخرى:\n\n${lines}${more}\n\n` +
+                    `هل تريد إعادة تعيينها إلى «${deliveryCompany}»؟\n` +
+                    `(إلغاء = تخطي المكررة والمتابعة بالباقي فقط)`
+                );
+                if (ok) {
+                    forceReassign = true;
+                    conflictCandidates.forEach((c) => toSubmit.push(c.vin));
+                }
+            }
 
             if (!toSubmit.length) {
                 return setBoardStatus(
                     company,
-                    `كل الشاسيهات مكررة أو معيّنة مسبقاً${pastedDuplicates ? ` (${pastedDuplicates} داخل اللصق)` : ''}${queueDuplicates ? ` (${queueDuplicates} لها شركة مسبقاً)` : ''}`,
+                    `لا توجد شاسيه للإرسال${pastedDuplicates ? ` · ${pastedDuplicates} مكررة داخل اللصق` : ''}${alreadySame ? ` · ${alreadySame} موجودة مسبقاً في هذه الشركة` : ''}${conflictCandidates.length && !forceReassign ? ` · ${conflictCandidates.length} مكررة لشركات أخرى (تم التخطي)` : ''}`,
                     'err'
                 );
             }
 
-            setBoardStatus(company, willReassign ? 'جاري إعادة التعيين / الإرسال…' : 'جاري الإرسال…');
+            setBoardStatus(
+                company,
+                forceReassign || willAssignOpen ? 'جاري التعيين / الإرسال…' : 'جاري الإرسال…'
+            );
             try {
                 const res = await fetch('/api/delivery-coordinator/submit-vins', {
                     method: 'POST',
@@ -973,23 +1005,33 @@
                     body: JSON.stringify({
                         vins: toSubmit,
                         company: deliveryCompany,
-                        plannedDeliveryMode
+                        plannedDeliveryMode,
+                        forceReassign
                     })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'فشل الإرسال');
                 const missing = Array.isArray(data.missingVins) ? data.missingVins : [];
+                const conflictsLeft = Array.isArray(data.conflicts) ? data.conflicts : [];
                 ta.value = missing.length ? missing.join('\n') : '';
                 boardPasteCache.set(company, ta.value);
                 hideVinPrompt();
 
                 const parts = [];
                 if (data.added) parts.push(`تم إضافة ${data.added}`);
-                if (data.reassigned) parts.push(`أُعيد تعيين ${data.reassigned} لشركة ${deliveryCompany}`);
+                if (data.reassigned) parts.push(`أُعيد تعيين / فُتح ${data.reassigned} → ${deliveryCompany}`);
                 if (pastedDuplicates) parts.push(`${pastedDuplicates} مكررة داخل اللصق`);
-                if (queueDuplicates) parts.push(`${queueDuplicates} لها شركة مسبقاً`);
+                if (alreadySame || (data.alreadySameCompany || []).length) {
+                    parts.push(`${alreadySame || data.alreadySameCompany.length} موجودة مسبقاً في هذه الشركة`);
+                }
+                if (conflictCandidates.length && !forceReassign) {
+                    parts.push(`${conflictCandidates.length} مكررة لشركات أخرى (تم التخطي)`);
+                }
+                if (conflictsLeft.length && forceReassign) {
+                    parts.push(`${conflictsLeft.length} تعذر إعادة تعيينها`);
+                }
                 if (missing.length) parts.push(`${missing.length} غير موجودة في Excel`);
-                else if (data.skipped) parts.push(`${data.skipped} تم تخطيها`);
+                else if (data.skipped && !conflictsLeft.length) parts.push(`${data.skipped} تم تخطيها`);
                 const whHits = Array.isArray(data.alreadyInWarehouse) ? data.alreadyInWarehouse : [];
                 if (whHits.length) parts.push(`${whHits.length} في الساحة`);
                 setBoardStatus(

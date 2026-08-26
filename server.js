@@ -1838,7 +1838,9 @@ app.post('/api/showroom-parking/stock-in', (req, res) => {
   if (existing) {
     return res.status(409).json({
       error: `هذا الشاسيه موجود مسبقاً في ${existing.slot}`,
-      entry: enrichShowroomParkingEntry(existing)
+      code: 'already_parked',
+      entry: enrichShowroomParkingEntry(existing),
+      conflictSlot: existing.slot
     });
   }
 
@@ -1847,12 +1849,29 @@ app.post('/api/showroom-parking/stock-in', (req, res) => {
   );
   if (slotTaken) {
     return res.status(409).json({
-      error: `الموقف ${slot} مشغول بالشاسيه ${slotTaken.vin}`
+      error: `الموقف ${slot} مشغول بالشاسيه ${slotTaken.vin}`,
+      code: 'slot_taken',
+      takenBy: slotTaken.vin
+    });
+  }
+
+  const queueItem = findQueueItem(vin);
+  const forcePark = Boolean(req.body?.forcePark || req.body?.forceReassign);
+  if (queueItem && !isUnassignedDeliveryCompany(queueItem) && !forcePark) {
+    const company = String(queueItem.deliveryCompany || queueItem.company || '').trim();
+    return res.status(409).json({
+      error: `هذا الشاسيه معيّن لشركة ${company || 'أخرى'} — أكّد لإدخاله في موقف العرض`,
+      code: 'queue_company_conflict',
+      conflict: {
+        vin,
+        company: company || 'بدون شركة',
+        status: queueItem.status || '',
+        assignedTo: queueItem.assignedTo || ''
+      }
     });
   }
 
   const veh = vehicleIndex().get(vin);
-  const queueItem = findQueueItem(vin);
   const now = new Date().toISOString();
   const entry = {
     id: `sr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2317,6 +2336,9 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   let skipped = 0;
   const missingVins = [];
   const alreadyInWarehouse = [];
+  const conflicts = [];
+  const alreadySameCompany = [];
+  const forceReassign = Boolean(req.body?.forceReassign || req.body?.allowReassign);
   const seenBatch = new Set();
   const now = new Date().toISOString();
 
@@ -2334,7 +2356,12 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
 
     const existingItem = findQueueItem(vin);
     if (existingItem) {
-      // Already in queue with no company → assign to the company pasted into
+      const prevCompany = String(existingItem.deliveryCompany || existingItem.company || '').trim();
+      const sameCompany = prevCompany
+        && deliveryCompany
+        && prevCompany.toLowerCase() === deliveryCompany.toLowerCase();
+
+      // No company yet → always open for assign
       if (isUnassignedDeliveryCompany(existingItem) && deliveryCompany) {
         existingItem.deliveryCompany = deliveryCompany;
         existingItem.company = deliveryCompany;
@@ -2346,6 +2373,33 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
         }
         continue;
       }
+
+      // Already on this company
+      if (sameCompany) {
+        alreadySameCompany.push({ vin, company: prevCompany });
+        skipped += 1;
+        continue;
+      }
+
+      // Duplicate in another company — reassign only if coordinator confirmed
+      if (forceReassign && deliveryCompany) {
+        existingItem.deliveryCompany = deliveryCompany;
+        existingItem.company = deliveryCompany;
+        existingItem.plannedDeliveryMode = plannedDeliveryMode;
+        reassigned += 1;
+        const wh = findWarehouseInStock(vin);
+        if (wh) {
+          alreadyInWarehouse.push({ vin, slot: wh.slot, zone: wh.zone });
+        }
+        continue;
+      }
+
+      conflicts.push({
+        vin,
+        company: prevCompany || 'بدون شركة',
+        status: existingItem.status || '',
+        assignedTo: existingItem.assignedTo || ''
+      });
       skipped += 1;
       continue;
     }
@@ -2385,6 +2439,9 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
     notInInventory: missingVins.length,
     missingVins,
     alreadyInWarehouse,
+    conflicts,
+    alreadySameCompany,
+    forceReassign,
     deliveryCompany,
     plannedDeliveryMode
   });

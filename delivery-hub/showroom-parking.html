@@ -53,7 +53,10 @@
 
         <div class="sr-hero">
             <h2>خريطة الموقف — واضحة وسريعة</h2>
-            <p>الوردي مشغول · المتقطع فارغ · الصق الشاسيه ثم «إدخال» · من السيارة المتوقفة افتح المذكرة.</p>
+            <p>
+                الصق VIN في مكان فارغ ثم «إدخال». الشاسيه بدون شركة تُقبل مباشرة.
+                إذا كان معيّناً لشركة أخرى يظهر تنبيه تكرار وتختارين: إدخال أو إلغاء.
+            </p>
         </div>
 
         <div class="sr-stats" id="srStats"></div>
@@ -220,7 +223,7 @@
             renderSlots();
         }
 
-        async function parkVin(slot) {
+        async function parkVin(slot, { forcePark = false } = {}) {
             const input = document.querySelector(`[data-vin-input="${slot}"]`);
             const vin = String(input?.value || '').trim().toUpperCase().replace(/\s+/g, '');
             if (!vin || vin.length < 8) return setToast('stockStatus', 'أدخل رقم شاسيه صالح', 'err');
@@ -229,10 +232,26 @@
                 const res = await fetch('/api/showroom-parking/stock-in', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(authBody({ vin, slot }))
+                    body: JSON.stringify(authBody({ vin, slot, forcePark }))
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل الإدخال');
+                if (!res.ok) {
+                    if (res.status === 409 && data.code === 'queue_company_conflict' && !forcePark) {
+                        const company = data.conflict?.company || 'شركة أخرى';
+                        const ok = confirm(
+                            `تكرار — الشاسيه ${vin} معيّن لـ «${company}».\n\n` +
+                            `هل تريد إدخاله في موقف العرض (${slot}) رغم ذلك؟`
+                        );
+                        if (ok) return parkVin(slot, { forcePark: true });
+                        setToast('stockStatus', 'تم إلغاء الإدخال', 'err');
+                        return;
+                    }
+                    if (res.status === 409 && data.code === 'already_parked') {
+                        setToast('stockStatus', data.error || `موجود مسبقاً في ${data.conflictSlot}`, 'err');
+                        return;
+                    }
+                    throw new Error(data.error || 'فشل الإدخال');
+                }
                 occupancy = data.occupancy;
                 renderSlots();
                 setToast('stockStatus', `تم إدخال ${vin} في ${slot}`, 'ok');
