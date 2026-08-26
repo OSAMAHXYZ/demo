@@ -122,7 +122,7 @@
               </article>
               <article class="card pbi-viz" data-chart-id="chart-sr-day">
                 <div class="pbi-viz-head">
-                  <h2>Day · Delivery / Proforma</h2>
+                  <h2>Day · Delivery / Proforma (total)</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-day" title="Open wide view">Wide</button>
                 </div>
                 <div class="chart-scroll">
@@ -482,7 +482,7 @@
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
-    { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Cancelled BO list" },
+    { id: "cancelled", n: 5, title: "Previous / All Back Order", ar: "أوامر الحجز السابقة", blurb: "Old BO Excel · VIN missing from current BO = Cancelled" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -1111,7 +1111,7 @@
   }
 
   function rowsForSlot(id, workbook) {
-    if (id === "backorder") return backorderRows(workbook);
+    if (id === "backorder" || id === "cancelled") return backorderRows(workbook);
     if (id === "sales") return salesRawRows(workbook);
     return sheetRows(workbook, workbook.SheetNames[0]);
   }
@@ -1192,7 +1192,7 @@
         orderDate: orderDate ? cellToString(orderDate) : "",
         orderDateObj: orderDate,
         aging,
-        vin: cellToString(get(r, "vin")),
+        vin: extractVinValue(get(r, "vin")) || cellToString(get(r, "vin")).trim().toUpperCase(),
       };
     });
   }
@@ -1239,7 +1239,59 @@
       salesman: cellToString(get(r, "salesman")),
       reason: cellToString(get(r, "reason")),
       date: cellToString(parseDate(get(r, "cancelDate")) || get(r, "cancelDate") || get(r, "orderDate")),
+      vin: extractVinValue(get(r, "vin")) || cellToString(get(r, "vin")).trim().toUpperCase(),
     }));
+  }
+
+  /**
+   * Cancelled = VIN in Previous/All Back Order Excel but NOT in current Back Order Excel.
+   * Counts unique VINs; salesman comes from the previous (all) file.
+   */
+  function normalizeBoVin(v) {
+    return extractVinValue(v) || String(v ?? "").trim().toUpperCase().replace(/[\s\-_.]/g, "");
+  }
+
+  function deriveCancelledFromVinDiff(allRawRows, newRawRows) {
+    const allBos = mapBo(allRawRows || []);
+    const newBos = mapBo(newRawRows || []);
+    const newVins = new Set();
+    newBos.forEach((b) => {
+      const vin = normalizeBoVin(b.vin);
+      if (vin) newVins.add(vin);
+    });
+
+    const seen = new Set();
+    const out = [];
+    allBos.forEach((b, i) => {
+      const vin = normalizeBoVin(b.vin);
+      if (!vin || newVins.has(vin) || seen.has(vin)) return;
+      seen.add(vin);
+      out.push({
+        id: i,
+        boNumber: b.boNumber,
+        product: b.product,
+        salesman: b.salesman,
+        reason: "VIN not in current Back Order",
+        date: b.orderDate || "",
+        vin,
+        _derived: true,
+      });
+    });
+    return out;
+  }
+
+  function resolveCancelledList() {
+    const allRows = slots.cancelled.rows || [];
+    const newRows = slots.backorder.rows || [];
+    // Both files present → VIN diff (all vs new)
+    if (allRows.length && newRows.length) {
+      return deriveCancelledFromVinDiff(allRows, newRows);
+    }
+    // Legacy: only cancelled list uploaded (explicit cancel file)
+    if (allRows.length && !newRows.length) {
+      return mapCancelled(allRows);
+    }
+    return [];
   }
 
   function uniqueVins(list) {
@@ -1297,12 +1349,17 @@
     if (!el) return;
     const sales = slotHasRows("sales");
     const cancelled = slotHasRows("cancelled");
-    if (sales && cancelled) {
-      el.textContent = "Sales Raw + Cancelled loaded · building live dashboard…";
+    const bo = slotHasRows("backorder");
+    if (sales && cancelled && bo) {
+      el.textContent = "Sales + current BO + previous BO · cancelled = VIN missing from current BO.";
+    } else if (sales && cancelled) {
+      el.textContent = "Sales + Previous BO loaded · add current Back Order for VIN cancel compare.";
     } else if (sales) {
-      el.textContent = "Sales Raw loaded · building Sales Report (Cancelled optional).";
+      el.textContent = "Sales Raw loaded · building Sales Report (Previous BO optional for cancel %).";
+    } else if (cancelled && bo) {
+      el.textContent = "BO files loaded · cancelled = VIN in previous/all but not in current.";
     } else if (cancelled) {
-      el.textContent = "Cancelled BO loaded · add Sales Raw for Sales Report.";
+      el.textContent = "Previous/All BO loaded · add current Back Order for VIN cancel compare.";
     } else if (hasAnyPushedFiles()) {
       el.textContent = "Some files loaded · Push Sales Raw from Admin for Sales Report.";
     } else {
@@ -1740,7 +1797,7 @@
     const rtl = mapStock(slots.rtl.rows, "RTL");
     const central = mapStock(slots.central.rows, "Central");
     const sales = mapSales(slots.sales.rows);
-    const cancelled = mapCancelled(slots.cancelled.rows);
+    const cancelled = resolveCancelledList();
     const stock = [...rtl, ...central];
     const matched = bestMatches(bos, stock);
     const salesReport = buildSalesReport(bos, sales, cancelled);
@@ -1764,7 +1821,7 @@
       { label: "Matched ≥80%", value: matched, sub: "recommended VIN", tab: "matches" },
       { label: "Avg BO aging", value: avgAge, sub: "days", tab: "backorder" },
       { label: "Sales rows", value: d.sales.length, sub: salesAmt ? formatNumber(salesAmt) : "raw records", tab: "sales" },
-      { label: "Cancelled BOs", value: d.cancelled.length, sub: "cancelled list", tab: "cancelled" },
+      { label: "Cancelled BOs", value: d.cancelled.length, sub: "VIN missing from current BO", tab: "cancelled" },
     ];
     $("#kpis").innerHTML = cards.map((c) => `
       <button class="kpi" data-tab="${c.tab}">
@@ -2029,7 +2086,7 @@
     { id: "rtl", label: "RTL Stock" },
     { id: "central", label: "Central Stock" },
     { id: "sales", label: "Sales Raw" },
-    { id: "cancelled", label: "Cancelled" },
+    { id: "cancelled", label: "Cancelled (VIN)" },
     { id: "matches", label: "VIN Matches" },
   ];
 
@@ -2074,7 +2131,16 @@
     if (tab === "rtl") return d.rtl.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
     if (tab === "central") return d.central.map((r) => ({ VIN: r.vin, Product: r.product, Year: r.year, Suffix: r.suffix, Exterior: r.ext, Interior: r.int, Location: r.location, Status: r.status }));
     if (tab === "sales") return salesRawDisplayRows();
-    if (tab === "cancelled") return d.cancelled.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, Reason: r.reason, Date: r.date }));
+    if (tab === "cancelled") {
+      return d.cancelled.map((r) => ({
+        VIN: r.vin || "",
+        "BO Number": r.boNumber,
+        Product: r.product,
+        Salesman: r.salesman,
+        Reason: r.reason || "VIN not in current Back Order",
+        Date: r.date,
+      }));
+    }
     if (tab === "matches") return d.matched.map((r) => ({ "BO Number": r.boNumber, Product: r.product, Salesman: r.salesman, VIN: r.matchVin, Score: r.matchScore ? r.matchScore + "%" : "", Source: r.matchSource, Aging: r.aging != null ? r.aging + "d" : "" }));
     return d.bos.map((r) => ({ "BO Number": r.boNumber, Customer: r.customer, Salesman: r.salesman, Product: r.product, Year: r.year, Exterior: r.ext, Interior: r.int, Aging: r.aging != null ? r.aging + "d" : "", Paid: r.paid ? "Paid" : "Unpaid", VIN: r.vin }));
   }
@@ -2798,22 +2864,6 @@
     return base.slice().sort((a, b) => (Number(b.Target) || 0) - (Number(a.Target) || 0)).slice(0, 12);
   }
 
-  /** Prefer employees with today’s Proforma/Delivery for the Day chart. */
-  function dayChartRows(allRows) {
-    const base = chartRowsForMode(allRows);
-    if (srView.selectedKey) return base;
-    const withDay = base.filter((r) =>
-      (Number(r["Delivery (Day)"]) || 0) > 0 ||
-      (Number(r["Proforma (Day)"]) || 0) > 0
-    );
-    if (!withDay.length) return [];
-    return withDay.slice().sort((a, b) => {
-      const sb = (Number(b["Delivery (Day)"]) || 0) + (Number(b["Proforma (Day)"]) || 0);
-      const sa = (Number(a["Delivery (Day)"]) || 0) + (Number(a["Proforma (Day)"]) || 0);
-      return sb - sa;
-    });
-  }
-
   function setChartEmptyState(canvasId, message) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
@@ -2850,6 +2900,38 @@
     if (note) note.hidden = true;
   }
 
+  function renderDayTotalChart(sr, singleRow) {
+    clearChartEmptyState("chart-sr-day");
+    let dayDel;
+    let dayProf;
+    if (singleRow) {
+      dayDel = Number(singleRow["Delivery (Day)"]) || 0;
+      dayProf = Number(singleRow["Proforma (Day)"]) || 0;
+    } else {
+      const t = (sr && sr.totals) || {};
+      dayDel = Number(t.deliveryDay) || 0;
+      dayProf = Number(t.proformaDay) || 0;
+      // Fallback: sum visible/chart rows if totals missing
+      if (!dayDel && !dayProf && sr && Array.isArray(sr.rows)) {
+        const rows = filterSrRows(sr.rows);
+        dayDel = rows.reduce((s, r) => s + (Number(r["Delivery (Day)"]) || 0), 0);
+        dayProf = rows.reduce((s, r) => s + (Number(r["Proforma (Day)"]) || 0), 0);
+      }
+    }
+    if (!dayDel && !dayProf) {
+      setChartEmptyState(
+        "chart-sr-day",
+        "No Delivery or Proforma dated today (Col P / Col V = today’s date)."
+      );
+      return;
+    }
+    upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [dayDel, dayProf], {
+      backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
+      max: Math.max(1, dayDel, dayProf),
+      legend: false,
+    });
+  }
+
   function renderSalesReportCharts(sr) {
     const rows = chartRowsForMode(sr.rows || []);
     if (!rows.length) return;
@@ -2881,17 +2963,7 @@
         Math.min(100, parsePct(r["Ach%"]) || 0),
         Math.max(0, 100 - (parsePct(r["Ach%"]) || 0)),
       ]);
-      clearChartEmptyState("chart-sr-day");
-      const dayDel = Number(r["Delivery (Day)"]) || 0;
-      const dayProf = Number(r["Proforma (Day)"]) || 0;
-      if (!dayDel && !dayProf) {
-        setChartEmptyState("chart-sr-day", "No Delivery or Proforma dated today for this employee.");
-      } else {
-        upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [dayDel, dayProf], {
-          backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
-          max: Math.max(1, dayDel, dayProf),
-        });
-      }
+      renderDayTotalChart(sr, r);
       upsertChart("chart-sr-plant", "doughnut", [String(r.Plant || "—")], [Number(r["Delivery (Month)"]) || 1]);
       upsertChart("chart-sr-overview", "doughnut",
         ["Delivery", "Proforma gap", "To target"],
@@ -2974,44 +3046,8 @@
       max: 120,
     });
 
-    // Day chart: only people with today's activity (zeros were rendering as broken ticks)
-    const dayRows = dayChartRows(sr.rows || []);
-    clearChartEmptyState("chart-sr-day");
-    if (!dayRows.length) {
-      setChartEmptyState(
-        "chart-sr-day",
-        "No Delivery or Proforma dated today. Day chart uses Col P / Col V = today’s date."
-      );
-    } else {
-      const dayLabels = dayRows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
-      const dayKeys = dayRows.map((r) => r._key);
-      const dayDel = dayRows.map((r) => Number(r["Delivery (Day)"]) || 0);
-      const dayProf = dayRows.map((r) => Number(r["Proforma (Day)"]) || 0);
-      const dayMax = Math.max(1, ...dayDel, ...dayProf);
-      upsertChart("chart-sr-day", "bar", dayLabels, null, {
-        horizontal: dayRows.length > 1,
-        clickable: dayRows.length > 1,
-        empKeys: dayKeys,
-        legend: true,
-        max: dayMax,
-        datasets: [
-          {
-            label: "Delivery today",
-            data: dayDel,
-            backgroundColor: "rgba(200, 30, 44, 0.85)",
-            borderWidth: 0,
-            borderRadius: 5,
-          },
-          {
-            label: "Proforma today",
-            data: dayProf,
-            backgroundColor: "rgba(13, 148, 136, 0.8)",
-            borderWidth: 0,
-            borderRadius: 5,
-          },
-        ],
-      });
-    }
+    // Day chart: team totals for today (Delivery / Proforma)
+    renderDayTotalChart(sr, null);
 
     const plantMap = new Map();
     rows.forEach((r) => {
@@ -3105,11 +3141,35 @@
       [sr.daysPassed || 0, sr.daysRemaining || 0]
     );
 
-    upsertChart("chart-sr-cancelcount", "bar", labels, rows.map((r) => Number((r.month || r)["Cancelled BOs"]) || 0), {
-      ...clickOpts,
-      label: "Cancelled BOs",
-      backgroundColor: "rgba(200, 30, 44, 0.8)",
-    });
+    clearChartEmptyState("chart-sr-cancelcount");
+    const cancelRows = rows
+      .map((r) => ({
+        row: r,
+        count: Number((r.month || r)["Cancelled BOs"]) || 0,
+      }))
+      .filter((x) => x.count > 0)
+      .sort((a, b) => b.count - a.count);
+    if (!cancelRows.length) {
+      setChartEmptyState(
+        "chart-sr-cancelcount",
+        "No cancelled BOs yet. Upload Previous/All Back Order + current Back Order — VIN missing from current = cancelled."
+      );
+    } else {
+      upsertChart(
+        "chart-sr-cancelcount",
+        "bar",
+        cancelRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman)),
+        cancelRows.map((x) => x.count),
+        {
+          horizontal: cancelRows.length > 1,
+          clickable: cancelRows.length > 1,
+          empKeys: cancelRows.map((x) => x.row._key),
+          label: "Cancelled BOs",
+          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          max: Math.max(1, ...cancelRows.map((x) => x.count)),
+        }
+      );
+    }
   }
   function exportTelesalesSchedule() {
     const sr = window._data && window._data.salesReport;

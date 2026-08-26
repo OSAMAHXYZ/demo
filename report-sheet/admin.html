@@ -30,7 +30,7 @@
         <div class="mark">AD</div>
         <div>
           <h1>Admin Push</h1>
-          <p>Sales Raw drives Sales Report · Cancelled BO optional for cancel %</p>
+          <p>Sales Raw drives Sales Report · Previous BO + current BO → cancelled by VIN</p>
         </div>
       </div>
       <div class="top-actions">
@@ -64,7 +64,7 @@
         </div>
         <p class="admin-lead">
           Submit workbooks here, then click <b>Push to live</b>.
-          <b>Sales Raw Data</b> is required · <b>Cancelled Back Orders</b> optional for cancel %.
+          <b>Sales Raw Data</b> is required · <b>Previous / All Back Order</b> + current Back Order for cancel % (VIN missing from current).
         </p>
         <section class="grid-5" id="slots"></section>
       </div>
@@ -113,7 +113,7 @@
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A / P / V" },
-    { id: "cancelled", n: 5, title: "Cancelled Back Orders", ar: "أوامر ملغاة", blurb: "Optional · cancel % columns" },
+    { id: "cancelled", n: 5, title: "Previous / All Back Order", ar: "أوامر الحجز السابقة", blurb: "Old BO Excel · VIN not in current BO = Cancelled" },
   ];
 
   const DEFAULT_EMPLOYEE_NAMES = [
@@ -282,9 +282,9 @@
     $("#clear-files-btn").disabled = !any;
     const hasSales = !!slots.sales.buffer;
     const hasCancelled = !!slots.cancelled.buffer;
-    let foot = "Optional: Back Order / RTL / Central for Stock & BO · Cancelled for cancel %.";
-    if (hasSales && hasCancelled) foot = "Sales Raw + Cancelled ready · Push to live.";
-    else if (hasSales) foot = "Sales Raw ready · Push to live for Sales Report (Cancelled optional).";
+    let foot = "Optional: Back Order / RTL / Central for Stock & BO · Previous BO for VIN cancel compare.";
+    if (hasSales && hasCancelled) foot = "Sales Raw + Previous BO ready · add current Back Order for VIN cancel · Push to live.";
+    else if (hasSales) foot = "Sales Raw ready · Push to live for Sales Report (Previous BO optional).";
     else if (hasCancelled) foot = "Add Sales Raw Data to generate Sales Report.";
     else foot = "Upload Sales Raw for Sales Report · other files optional.";
     $("#files-foot").textContent = foot;

@@ -138,6 +138,16 @@
       return ae > 0 && ad <= ae;
     }
 
+    /**
+     * Cancelled BO by VIN compare:
+     *   VIN in Previous/All BO Excel AND VIN not in Current BO Excel → Cancelled
+     */
+    isCancelledVin(vin, newVinSet) {
+      const v = this.normalizeVin(vin);
+      if (!v) return false;
+      return !(newVinSet && newVinSet.has(v));
+    }
+
     // ═══════════════════════════════════════════════════════════
     // 5) SALES REPORT (Sales Raw · Col A / P / V)
     // ═══════════════════════════════════════════════════════════
@@ -400,6 +410,12 @@
           area: "Stock Allocation",
           formula: "AE > 0 AND AD ≤ AE",
           notes: "AD = BO qty · AE = available stock (Back Order file)",
+        },
+        {
+          id: "isCancelledVin",
+          area: "Cancelled BO",
+          formula: "VIN in Previous/All BO AND VIN not in Current BO → Cancelled",
+          notes: "Unique VIN count · salesman from previous file",
         },
         {
           id: "delPlusVsnd",
