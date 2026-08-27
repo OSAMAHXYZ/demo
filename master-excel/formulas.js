@@ -139,13 +139,11 @@
     }
 
     /**
-     * Cancelled BO by VIN compare:
-     *   VIN in Previous/All BO Excel AND VIN not in Current BO Excel → Cancelled
+     * Cancelled BO row counts when Col I has a VIN.
+     * Salesman name on the cancelled file is used for per-employee totals.
      */
-    isCancelledVin(vin, newVinSet) {
-      const v = this.normalizeVin(vin);
-      if (!v) return false;
-      return !(newVinSet && newVinSet.has(v));
+    isCancelledVin(vin, _newVinSet) {
+      return !!this.normalizeVin(vin);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -414,8 +412,8 @@
         {
           id: "isCancelledVin",
           area: "Cancelled BO",
-          formula: "VIN in Previous/All BO AND VIN not in Current BO → Cancelled",
-          notes: "Unique VIN count · salesman from previous file",
+          formula: "Cancelled Excel · Col I has VIN → count under salesman name",
+          notes: "Unique VIN · skip rows with empty Col I",
         },
         {
           id: "delPlusVsnd",

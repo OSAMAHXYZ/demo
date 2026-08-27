@@ -147,11 +147,12 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
                 </div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-cancel">
+              <article class="card pbi-viz pbi-viz-cancel" data-chart-id="chart-cancel">
                 <div class="pbi-viz-head">
-                  <h2>Cancellation % / Gap</h2>
+                  <h2>Cancellation %</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
                 </div>
+                <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
                 <div class="chart-scroll">
                   <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
                 </div>
@@ -464,10 +465,17 @@
         <h2 id="pbi-wide-title">Chart</h2>
         <button type="button" id="pbi-wide-close">Close</button>
       </header>
-      <div class="pbi-wide-scroll" id="pbi-wide-scroll">
-        <div class="chart-box pbi-wide-box" id="pbi-wide-box">
-          <canvas id="pbi-wide-canvas"></canvas>
+      <div class="pbi-wide-totals" id="pbi-wide-totals" hidden></div>
+      <div class="pbi-wide-body" id="pbi-wide-body">
+        <div class="pbi-wide-scroll" id="pbi-wide-scroll">
+          <div class="chart-box pbi-wide-box" id="pbi-wide-box">
+            <canvas id="pbi-wide-canvas"></canvas>
+          </div>
         </div>
+        <aside class="pbi-wide-numbers" id="pbi-wide-numbers" hidden>
+          <h3 class="pbi-wide-numbers-title">Numbers</h3>
+          <div class="pbi-wide-numbers-list" id="pbi-wide-numbers-list"></div>
+        </aside>
       </div>
       <p class="foot" id="pbi-wide-hint" style="margin:0;padding:8px 16px 14px">Scroll to see all names · click a name bar to filter</p>
     </div>
@@ -482,7 +490,7 @@
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
-    { id: "cancelled", n: 5, title: "Previous / All Back Order", ar: "أوامر الحجز السابقة", blurb: "Old BO Excel · VIN missing from current BO = Cancelled" },
+    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I = VIN required · count by salesman name" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -973,6 +981,97 @@
     return combined;
   }
 
+  /**
+   * Cancelled BOs Excel:
+   *   Col I = VIN (required to count)
+   *   Salesman from header (or Col A fallback)
+   * Rows without a VIN in Col I are skipped.
+   */
+  function cancelledBoRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /cancel/i.test(n)) ||
+      names.find((n) => /back\s*order|backorder|bo/i.test(n)) ||
+      names[0];
+    if (!workbook.Sheets[preferred]) return [];
+
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
+      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
+    });
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const cancelMarkers = [
+      "salesman", "sales employee", "advisor", "vin", "product", "back order",
+      "bo number", "cancel", "reason", "customer",
+    ];
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = cancelMarkers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 3) break;
+    }
+
+    const idxI = colLetterToIndex("I");
+    let idxSalesman = colLetterToIndex("A");
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+    const headerSalesman = findHeaderIdx([
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
+      (n) => n === "advisor" || n === "consultant" || n.includes("salesman"),
+    ]);
+    if (headerSalesman >= 0) idxSalesman = headerSalesman;
+
+    const headerBo = findHeaderIdx([
+      (n) => n.includes("back order") && n.includes("number"),
+      (n) => n === "bo number" || n === "bo no" || n === "order number",
+    ]);
+    const headerProduct = findHeaderIdx([
+      (n) => n === "product" || n === "model" || n.includes("vehicle model"),
+    ]);
+    const headerReason = findHeaderIdx([
+      (n) => n.includes("cancel") && n.includes("reason"),
+      (n) => n === "reason" || n === "cancellation reason",
+    ]);
+    const headerDate = findHeaderIdx([
+      (n) => n.includes("cancel") && n.includes("date"),
+      (n) => n === "order date" || n === "bo date" || n === "date",
+    ]);
+
+    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+
+      // Col I must contain a VIN — otherwise do not count
+      const vin = extractVinValue(line[idxI]);
+      if (!vin) continue;
+
+      const salesman = cellToString(line[idxSalesman]).trim();
+      if (!salesman) continue;
+
+      const obj = {
+        salesman,
+        vin,
+        boNumber: headerBo >= 0 ? cellToString(line[headerBo]).trim() : "",
+        product: headerProduct >= 0 ? cellToString(line[headerProduct]).trim() : "",
+        reason: headerReason >= 0 ? cellToString(line[headerReason]).trim() : "Cancelled BO",
+        cancelDate: headerDate >= 0 ? parseDate(line[headerDate]) : null,
+        _sheet: preferred,
+        _colI: true,
+      };
+      headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
   function colLetterToIndex(letter) {
     let n = 0;
     const s = String(letter || "").toUpperCase().replace(/[^A-Z]/g, "");
@@ -1111,7 +1210,8 @@
   }
 
   function rowsForSlot(id, workbook) {
-    if (id === "backorder" || id === "cancelled") return backorderRows(workbook);
+    if (id === "backorder") return backorderRows(workbook);
+    if (id === "cancelled") return cancelledBoRows(workbook);
     if (id === "sales") return salesRawRows(workbook);
     return sheetRows(workbook, workbook.SheetNames[0]);
   }
@@ -1232,66 +1332,49 @@
 
   function mapCancelled(rows) {
     const get = buildFieldGetter(rows[0] || {});
-    return rows.map((r, i) => ({
-      id: i,
-      boNumber: cellToString(get(r, "boNumber")),
-      product: cellToString(get(r, "product")),
-      salesman: cellToString(get(r, "salesman")),
-      reason: cellToString(get(r, "reason")),
-      date: cellToString(parseDate(get(r, "cancelDate")) || get(r, "cancelDate") || get(r, "orderDate")),
-      vin: extractVinValue(get(r, "vin")) || cellToString(get(r, "vin")).trim().toUpperCase(),
-    }));
-  }
-
-  /**
-   * Cancelled = VIN in Previous/All Back Order Excel but NOT in current Back Order Excel.
-   * Counts unique VINs; salesman comes from the previous (all) file.
-   */
-  function normalizeBoVin(v) {
-    return extractVinValue(v) || String(v ?? "").trim().toUpperCase().replace(/[\s\-_.]/g, "");
-  }
-
-  function deriveCancelledFromVinDiff(allRawRows, newRawRows) {
-    const allBos = mapBo(allRawRows || []);
-    const newBos = mapBo(newRawRows || []);
-    const newVins = new Set();
-    newBos.forEach((b) => {
-      const vin = normalizeBoVin(b.vin);
-      if (vin) newVins.add(vin);
-    });
-
     const seen = new Set();
     const out = [];
-    allBos.forEach((b, i) => {
-      const vin = normalizeBoVin(b.vin);
-      if (!vin || newVins.has(vin) || seen.has(vin)) return;
+    (rows || []).forEach((r, i) => {
+      // Prefer Col I VIN already extracted by cancelledBoRows
+      let vin = extractVinValue(r.vin);
+      if (!vin) vin = extractVinValue(get(r, "vin"));
+      if (!vin && Array.isArray(r.__cells)) {
+        vin = extractVinValue(r.__cells[colLetterToIndex("I")]);
+      }
+      // Count only when VIN is available (Col I rule)
+      if (!vin || seen.has(vin)) return;
       seen.add(vin);
+
+      const salesman = cellToString(r.salesman || get(r, "salesman")).trim();
+      if (!salesman) return;
+
       out.push({
         id: i,
-        boNumber: b.boNumber,
-        product: b.product,
-        salesman: b.salesman,
-        reason: "VIN not in current Back Order",
-        date: b.orderDate || "",
+        boNumber: cellToString(r.boNumber || get(r, "boNumber")),
+        product: cellToString(r.product || get(r, "product")),
+        salesman,
+        reason: cellToString(r.reason || get(r, "reason")) || "Cancelled BO",
+        date: cellToString(
+          r.cancelDate
+            || parseDate(get(r, "cancelDate"))
+            || get(r, "cancelDate")
+            || get(r, "orderDate")
+        ),
         vin,
-        _derived: true,
+        _fromCancelFile: true,
       });
     });
     return out;
   }
 
+  /**
+   * Cancelled BOs = rows from Cancelled Excel where Col I has a VIN,
+   * counted under the salesman name on that row (unique VIN).
+   */
   function resolveCancelledList() {
-    const allRows = slots.cancelled.rows || [];
-    const newRows = slots.backorder.rows || [];
-    // Both files present → VIN diff (all vs new)
-    if (allRows.length && newRows.length) {
-      return deriveCancelledFromVinDiff(allRows, newRows);
-    }
-    // Legacy: only cancelled list uploaded (explicit cancel file)
-    if (allRows.length && !newRows.length) {
-      return mapCancelled(allRows);
-    }
-    return [];
+    const rows = slots.cancelled.rows || [];
+    if (!rows.length) return [];
+    return mapCancelled(rows);
   }
 
   function uniqueVins(list) {
@@ -1349,17 +1432,12 @@
     if (!el) return;
     const sales = slotHasRows("sales");
     const cancelled = slotHasRows("cancelled");
-    const bo = slotHasRows("backorder");
-    if (sales && cancelled && bo) {
-      el.textContent = "Sales + current BO + previous BO · cancelled = VIN missing from current BO.";
-    } else if (sales && cancelled) {
-      el.textContent = "Sales + Previous BO loaded · add current Back Order for VIN cancel compare.";
+    if (sales && cancelled) {
+      el.textContent = "Sales + Cancelled BOs · count by name only when Col I has a VIN.";
     } else if (sales) {
-      el.textContent = "Sales Raw loaded · building Sales Report (Previous BO optional for cancel %).";
-    } else if (cancelled && bo) {
-      el.textContent = "BO files loaded · cancelled = VIN in previous/all but not in current.";
+      el.textContent = "Sales Raw loaded · building Sales Report (Cancelled BOs optional · Col I = VIN).";
     } else if (cancelled) {
-      el.textContent = "Previous/All BO loaded · add current Back Order for VIN cancel compare.";
+      el.textContent = "Cancelled BOs loaded · add Sales Raw for Sales Report.";
     } else if (hasAnyPushedFiles()) {
       el.textContent = "Some files loaded · Push Sales Raw from Admin for Sales Report.";
     } else {
@@ -1821,7 +1899,7 @@
       { label: "Matched ≥80%", value: matched, sub: "recommended VIN", tab: "matches" },
       { label: "Avg BO aging", value: avgAge, sub: "days", tab: "backorder" },
       { label: "Sales rows", value: d.sales.length, sub: salesAmt ? formatNumber(salesAmt) : "raw records", tab: "sales" },
-      { label: "Cancelled BOs", value: d.cancelled.length, sub: "VIN missing from current BO", tab: "cancelled" },
+      { label: "Cancelled BOs", value: d.cancelled.length, sub: "Col I VIN · by salesman name", tab: "cancelled" },
     ];
     $("#kpis").innerHTML = cards.map((c) => `
       <button class="kpi" data-tab="${c.tab}">
@@ -1854,6 +1932,61 @@
     }
   }
 
+  function formatBarEndLabel(n, suffix) {
+    if (!Number.isFinite(n)) return "";
+    const rounded = Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+    return rounded + (suffix || "");
+  }
+
+  /** Draw values at the end of bars (right for horizontal). */
+  const barEndLabelsPlugin = {
+    id: "barEndLabels",
+    afterDatasetsDraw(chart) {
+      const cfg = chart.options.plugins && chart.options.plugins.barEndLabels;
+      if (!cfg || !cfg.display) return;
+      const { ctx } = chart;
+      const suffix = cfg.suffix || "";
+      const fontFamily = cfg.fontFamily || "'Manrope', 'Segoe UI', sans-serif";
+      const horizontal = chart.options.indexAxis === "y";
+      ctx.save();
+      ctx.font = `700 12px ${fontFamily}`;
+      ctx.fillStyle = "#0b3a66";
+      ctx.textBaseline = "middle";
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.hidden) return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((el, i) => {
+          const raw = Number(ds.data[i]);
+          if (!Number.isFinite(raw)) return;
+          const text = formatBarEndLabel(raw, suffix);
+          if (!text) return;
+          const { x, y } = el.getProps(["x", "y"], true);
+          if (horizontal) {
+            const pad = 8;
+            const maxX = chart.chartArea.right - 2;
+            const tw = ctx.measureText(text).width;
+            // Outside bar on the right; if clipped, draw inside the bar in white
+            if (x + pad + tw <= maxX) {
+              ctx.textAlign = "left";
+              ctx.fillStyle = "#0b3a66";
+              ctx.fillText(text, x + pad, y);
+            } else {
+              ctx.textAlign = "right";
+              ctx.fillStyle = "#fff";
+              ctx.fillText(text, Math.max(x - 6, chart.chartArea.left + tw + 4), y);
+            }
+          } else {
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#0b3a66";
+            ctx.fillText(text, x, y - 10);
+          }
+        });
+      });
+      ctx.restore();
+    },
+  };
+
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
@@ -1864,6 +1997,8 @@
     const horizontal = !!opts.horizontal;
     const empKeys = opts.empKeys || null;
     const labelCount = (labels && labels.length) || 0;
+    const showValues = !!opts.showValues;
+    const valueSuffix = opts.valueSuffix != null ? opts.valueSuffix : "";
     chartSnapshots[id] = {
       type,
       labels: labels ? labels.slice() : [],
@@ -1877,6 +2012,8 @@
         horizontal: opts.horizontal,
         legend: opts.legend,
         max: opts.max,
+        showValues: opts.showValues,
+        valueSuffix: opts.valueSuffix,
       })),
     };
     sizeChartScrollBox(id, labelCount, horizontal && type === "bar");
@@ -1888,6 +2025,8 @@
     delete datasetsExtra.max;
     delete datasetsExtra.empKeys;
     delete datasetsExtra.clickable;
+    delete datasetsExtra.showValues;
+    delete datasetsExtra.valueSuffix;
     const softScale = {
       beginAtZero: true,
       ...(opts.max != null ? { suggestedMax: opts.max } : {}),
@@ -1925,12 +2064,20 @@
           ...ds,
         })),
       },
+      plugins: [barEndLabelsPlugin],
       options: {
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 350, easing: "easeOutQuart" },
-        layout: { padding: { left: 4, right: 8, top: 4, bottom: 4 } },
+        layout: {
+          padding: {
+            left: 4,
+            right: showValues && horizontal ? 48 : 8,
+            top: 4,
+            bottom: 4,
+          },
+        },
         onHover: clickable
           ? (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; }
           : undefined,
@@ -1960,6 +2107,11 @@
               ? { footer: () => "Click name to filter · use Wide for full view" }
               : undefined,
           },
+          barEndLabels: {
+            display: showValues && type === "bar",
+            suffix: valueSuffix,
+            fontFamily,
+          },
         },
         scales: type === "doughnut"
           ? {}
@@ -1968,6 +2120,140 @@
             : { y: softScale, x: categoryScale },
       },
     });
+  }
+
+  function sumNumeric(arr) {
+    return (arr || []).reduce((s, v) => s + (Number(v) || 0), 0);
+  }
+
+  function formatWideTotal(n) {
+    if (!Number.isFinite(n)) return "—";
+    // Percents often stay under ~200; keep 1 decimal when fractional
+    if (Math.abs(n) < 1000 && Math.abs(n - Math.round(n)) > 0.05) return n.toFixed(1);
+    return formatNumber(Math.round(n * 100) / 100);
+  }
+
+  function looksLikePercentLabel(lab) {
+    const s = String(lab || "");
+    return /%|ach|pace|rate|ratio/i.test(s);
+  }
+
+  function seriesStat(label, data) {
+    const nums = (data || []).map((v) => Number(v) || 0);
+    const n = nums.length;
+    const sum = nums.reduce((a, b) => a + b, 0);
+    if (looksLikePercentLabel(label) && n > 0) {
+      return { lab: `Avg ${label}`, val: formatWideTotal(sum / n) };
+    }
+    return { lab: `Total ${label}`, val: formatWideTotal(sum) };
+  }
+
+  function wideSeriesColumns(snap) {
+    const datasets = (snap.extra && snap.extra.datasets) || null;
+    const suffix = (snap.extra && snap.extra.valueSuffix) || "";
+    if (datasets && datasets.length) {
+      return datasets.map((ds) => ({
+        key: ds.label || "Series",
+        label: ds.label || "Series",
+        data: ds.data || [],
+        suffix: looksLikePercentLabel(ds.label) ? "%" : "",
+      }));
+    }
+    if (Array.isArray(snap.values)) {
+      const label = (snap.extra && snap.extra.label) || "Value";
+      return [{
+        key: label,
+        label,
+        data: snap.values,
+        suffix: suffix || (looksLikePercentLabel(label) ? "%" : ""),
+      }];
+    }
+    return [];
+  }
+
+  function formatWideCell(n, suffix) {
+    if (!Number.isFinite(n)) return "—";
+    const base = formatWideTotal(n);
+    return suffix ? `${base}${suffix}` : base;
+  }
+
+  /** Summary cards + per-row numbers list for Wide view. */
+  function renderWideNumbers(snap) {
+    const totalsEl = $("#pbi-wide-totals");
+    const numsEl = $("#pbi-wide-numbers");
+    const listEl = $("#pbi-wide-numbers-list");
+    const bodyEl = $("#pbi-wide-body");
+    if (!totalsEl || !numsEl || !listEl) return;
+
+    const labels = snap.labels || [];
+    const cols = wideSeriesColumns(snap);
+    const summary = [];
+
+    if (labels.length && snap.type !== "doughnut") {
+      summary.push({ lab: "Items", val: labels.length });
+    }
+
+    if (snap.type === "doughnut" && cols.length === 1) {
+      const data = cols[0].data || [];
+      const total = sumNumeric(data);
+      labels.forEach((lab, i) => {
+        const v = Number(data[i]) || 0;
+        const pct = total > 0 ? ((v / total) * 100).toFixed(1) + "%" : "—";
+        summary.push({ lab: String(lab || "—"), val: formatWideTotal(v), sub: pct });
+      });
+      summary.push({ lab: "Total", val: formatWideTotal(total), sub: "100%" });
+    } else {
+      cols.forEach((col) => summary.push(seriesStat(col.label, col.data)));
+    }
+
+    totalsEl.hidden = !summary.length;
+    totalsEl.innerHTML = summary.map((it) => `
+      <div class="pbi-wide-total">
+        <span class="lab">${escapeHtml(String(it.lab))}</span>
+        <span class="val">${escapeHtml(String(it.val))}</span>
+        ${it.sub != null ? `<span class="sub">${escapeHtml(String(it.sub))}</span>` : ""}
+      </div>`).join("");
+
+    // Detail rows: every label with its number(s)
+    const rows = [];
+    if (cols.length && labels.length) {
+      labels.forEach((lab, i) => {
+        const cells = cols.map((col) => {
+          const v = Number(col.data[i]);
+          const text = formatWideCell(Number.isFinite(v) ? v : 0, col.suffix);
+          const tip = cols.length > 1 ? `${col.label}: ${text}` : text;
+          return { text, tip, multi: cols.length > 1, colLabel: col.label };
+        });
+        rows.push({ name: String(lab || "—"), cells });
+      });
+    }
+
+    if (!rows.length) {
+      numsEl.hidden = true;
+      listEl.innerHTML = "";
+      if (bodyEl) bodyEl.classList.add("pbi-wide-body--chart-only");
+      return;
+    }
+
+    numsEl.hidden = false;
+    if (bodyEl) bodyEl.classList.remove("pbi-wide-body--chart-only");
+
+    const head = cols.length > 1
+      ? `<div class="pbi-wide-num-head"><span>Name</span><span>${cols.map((c) => escapeHtml(c.label)).join(" · ")}</span></div>`
+      : "";
+
+    listEl.innerHTML = head + rows.map((r) => {
+      const nums = r.cells.map((c) => {
+        if (c.multi) {
+          return `<span title="${escapeHtml(c.tip)}"><span class="muted">${escapeHtml(c.colLabel)}</span> ${escapeHtml(c.text)}</span>`;
+        }
+        return `<span>${escapeHtml(c.text)}</span>`;
+      }).join("");
+      return `<div class="pbi-wide-num-row">
+        <span class="name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+        <div class="nums">${nums}</div>
+      </div>`;
+    }).join("");
   }
 
   function openWideChart(sourceId) {
@@ -1986,6 +2272,9 @@
     if (horizontal && snap.type === "bar" && n > 1) {
       box.style.height = Math.max(420, n * 42 + 80) + "px";
       scroll.style.maxHeight = "min(78vh, 900px)";
+    } else if (snap.type === "doughnut") {
+      box.style.height = "380px";
+      scroll.style.maxHeight = "";
     } else {
       box.style.height = "420px";
       scroll.style.maxHeight = "";
@@ -1993,9 +2282,10 @@
     const hint = $("#pbi-wide-hint");
     if (hint) {
       hint.textContent = horizontal && n > 1
-        ? "Scroll inside to see every name clearly · click a bar to filter that employee"
-        : "Wide view · Close or press Esc";
+        ? "Numbers on the right · scroll for every name · click a bar to filter"
+        : "Numbers beside the chart · Close or press Esc";
     }
+    renderWideNumbers(snap);
     // Re-render into wide canvas
     const extra = { ...(snap.extra || {}) };
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
@@ -2010,6 +2300,17 @@
     if (!backdrop) return;
     backdrop.classList.remove("show");
     backdrop.hidden = true;
+    const totals = $("#pbi-wide-totals");
+    if (totals) {
+      totals.hidden = true;
+      totals.innerHTML = "";
+    }
+    const nums = $("#pbi-wide-numbers");
+    const list = $("#pbi-wide-numbers-list");
+    if (nums) nums.hidden = true;
+    if (list) list.innerHTML = "";
+    const body = $("#pbi-wide-body");
+    if (body) body.classList.add("pbi-wide-body--chart-only");
     if (charts["pbi-wide-canvas"]) {
       charts["pbi-wide-canvas"].destroy();
       delete charts["pbi-wide-canvas"];
@@ -2086,7 +2387,7 @@
     { id: "rtl", label: "RTL Stock" },
     { id: "central", label: "Central Stock" },
     { id: "sales", label: "Sales Raw" },
-    { id: "cancelled", label: "Cancelled (VIN)" },
+    { id: "cancelled", label: "Cancelled BOs" },
     { id: "matches", label: "VIN Matches" },
   ];
 
@@ -2137,7 +2438,7 @@
         "BO Number": r.boNumber,
         Product: r.product,
         Salesman: r.salesman,
-        Reason: r.reason || "VIN not in current Back Order",
+        Reason: r.reason || "Cancelled BO",
         Date: r.date,
       }));
     }
@@ -2321,6 +2622,10 @@
         val = `<span class="xl-div0">#DIV/0!</span>`;
         cls = (col.divide ? "col-divide " : "") + "num";
       }
+      if (h === "Cancellation %") {
+        const pct = parsePct(raw);
+        if (pct != null && pct > 30) cls += " is-cancel-over";
+      }
       if (h === "Sales Employee") {
         val = `<span class="emp-name">${escapeHtml(r["Sales Employee"])}</span><span class="emp-hint">Click for VINs</span>`;
         cls = "tl";
@@ -2336,6 +2641,10 @@
     const totalsRow = `<tr>${SR_COLS.map((c) => {
       let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
       if (c.divide) cls += " col-divide";
+      if (c.key === "Cancellation %") {
+        const pct = parsePct(totalsObj[c.key]);
+        if (pct != null && pct > 30) cls += " is-cancel-over";
+      }
       return `<td class="${cls}">${escapeHtml(String(totalsObj[c.key] ?? ""))}</td>`;
     }).join("")}</tr>`;
 
@@ -2408,6 +2717,7 @@
     const delVsnd = isDay ? (t.delVsndDay || 0) : (t.delVsnd || 0);
     const diff = isDay ? (t.diffDay || 0) : (t.diff || 0);
     const cancelPct = Math.round(((isDay ? t.cancelPctDay : t.cancelPct) || 0) * 100);
+    const cancelOver = cancelPct > 30;
     const gapLabel = isDay
       ? "Today Gap"
       : `${(live.now || new Date()).toLocaleString("en-US", { month: "long" })} Gap`;
@@ -2444,8 +2754,8 @@
         <span class="lab">Gap between allocation &amp; actual sales</span>
         <span class="val">${formatNumber(allocGap)}</span>
       </div>
-      <div class="xl-kpi-cell cancel">
-        <span class="lab">Cancelled Bos %</span>
+      <div class="xl-kpi-cell cancel${cancelOver ? " is-over" : " is-ok"}">
+        <span class="lab">Cancelled Bos % · &lt;30%</span>
         <span class="val">${cancelPct}%</span>
       </div>
     `;
@@ -2688,6 +2998,66 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  /** Cancel% = Cancelled ÷ (Delivery + Proforma + Cancelled) */
+  function cancelPctRatio(cancelled, delivery, proforma) {
+    const c = Number(cancelled) || 0;
+    const d = Number(delivery) || 0;
+    const p = Number(proforma) || 0;
+    const base = d + p + c;
+    if (!base) return null;
+    return c / base;
+  }
+
+  function renderCancelPctPanel(sr) {
+    const el = $("#sr-cancel-pct-panel");
+    if (!el) return;
+    const t = sr.totals || {};
+    let cancelled = t.cancelled || 0;
+    let delivery = t.deliveryMonth || 0;
+    let proforma = t.proformaMonth || 0;
+    let scope = "Team MTD";
+
+    if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
+      const row = window._srRowsByKey[srView.selectedKey];
+      const m = row.month || row;
+      cancelled = Number(m["Cancelled BOs"]) || 0;
+      delivery = Number(m.Delivery) || 0;
+      proforma = Number(m.Proforma) || 0;
+      scope = shortEmpLabel(row["Sales Employee"] || "Employee");
+    }
+
+    const ratio = cancelPctRatio(cancelled, delivery, proforma);
+    const pct = ratio == null ? null : Math.round(ratio * 1000) / 10; // 1 decimal
+    const over = pct != null && pct > 30;
+    const empty = pct == null;
+    el.className = "cancel-pct-panel" + (empty ? " is-empty" : over ? " is-over" : " is-ok");
+    const status = empty
+      ? "No data"
+      : over
+        ? "Over 30% target"
+        : "Within 30% target";
+    const pctText = pct == null ? "—" : `${pct}%`;
+
+    el.innerHTML = `
+      <p class="cancel-pct-formula">
+        ${escapeHtml(scope)} · Cancel % = Cancelled ÷ (Delivery + Proforma + Cancelled) × 100
+        · Target &lt; 30%
+      </p>
+      <div class="cancel-pct-row">
+        <div class="cancel-pct-main">
+          <span class="lab">Cancellation %</span>
+          <span class="val">${escapeHtml(pctText)}</span>
+        </div>
+        <div class="cancel-pct-parts">
+          <div class="cancel-pct-part"><span class="lab">Cancelled</span><span class="val">${formatNumber(cancelled)}</span></div>
+          <div class="cancel-pct-part"><span class="lab">Delivery</span><span class="val">${formatNumber(delivery)}</span></div>
+          <div class="cancel-pct-part"><span class="lab">Proforma</span><span class="val">${formatNumber(proforma)}</span></div>
+        </div>
+        <span class="cancel-pct-status">${escapeHtml(status)}</span>
+      </div>
+    `;
+  }
+
   function selectEmployee(key) {
     if (!key) {
       clearEmployeeFilter();
@@ -2721,6 +3091,7 @@
     }
     renderNameList(sr);
     renderPbiKpis(sr);
+    renderCancelPctPanel(sr);
     renderSalesReportCharts(sr);
     renderSelectedDetail(sr);
     renderSalesReportTable(sr);
@@ -2774,26 +3145,37 @@
       const r = rows[0];
       const m = r.month || r;
       const d = r.day || {};
+      const cancelN = Number(m["Cancelled BOs"]) || 0;
+      const del = Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
+      const pro = Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
+      const ratio = cancelPctRatio(cancelN, del, pro);
+      const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
+      const cancelOver = ratio != null && ratio * 100 > 30;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(r["Delivery (Month)"] || m.Delivery) },
-        { lab: "Proforma MTD", val: formatNumber(r["Proforma (Month)"] || m.Proforma) },
-        { lab: "Prof+Del", val: formatNumber(r["Prof+Del"]) },
+        { lab: "Delivery MTD", val: formatNumber(del) },
+        { lab: "Proforma MTD", val: formatNumber(pro) },
+        { lab: "Prof+Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)) },
         { lab: "Del %", val: escapeHtml(String(r["Del %"] ?? "—")) },
         { lab: "Target", val: formatNumber(r.Target) },
+        { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
         { lab: "Today Prof", val: formatNumber(r["Proforma (Day)"] || d.Proforma) },
       ];
     } else {
+      const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0, t.proformaMonth || 0);
+      const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
+      const cancelOver = ratio != null && ratio * 100 > 30;
       cards = [
         { lab: "Delivery MTD", val: formatNumber(t.deliveryMonth || 0) },
         { lab: "Proforma MTD", val: formatNumber(t.proformaMonth || 0) },
         { lab: "Prof+Del", val: formatNumber(t.profPlusDel || 0) },
         { lab: "Del %", val: t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "—" },
         { lab: "Target", val: formatNumber(t.target || 0) },
+        { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
         { lab: "Employees", val: formatNumber((sr.rows || []).length) },
       ];
     }
     el.innerHTML = cards.map((c) => `
-      <div class="pbi-kpi">
+      <div class="pbi-kpi${c.over ? " is-over" : c.ok ? " is-ok" : ""}">
         <div class="lab">${c.lab}</div>
         <div class="val">${c.val}</div>
       </div>`).join("");
@@ -2973,11 +3355,17 @@
           Math.max(0, (Number(r.Target) || 0) - (Number(r["Proforma (Month)"]) || 0)),
         ]
       );
+      const oneCancel = parsePct(r["Cancellation %"] || r["Cancel %"]) || 0;
       upsertChart("chart-cancel", "bar", ["Cancel %", "Gap +/-"], [
-        parsePct(r["Cancellation %"] || r["Cancel %"]) || 0,
+        oneCancel,
         parsePct(r["Gap +/-"]) || 0,
       ], {
-        backgroundColor: ["rgba(200, 30, 44, 0.75)", "rgba(13, 148, 136, 0.75)"],
+        showValues: true,
+        valueSuffix: "%",
+        backgroundColor: [
+          oneCancel > 30 ? "rgba(200, 30, 44, 0.85)" : "rgba(13, 148, 136, 0.8)",
+          "rgba(100, 116, 139, 0.65)",
+        ],
       });
       upsertChart("chart-sr-delpct", "doughnut", ["Del %", "Remaining"], [
         Math.min(100, (r._delPct || 0) * 100),
@@ -3044,6 +3432,8 @@
       label: "Delivery ÷ Target %",
       backgroundColor: achColors,
       max: 120,
+      showValues: true,
+      valueSuffix: "%",
     });
 
     // Day chart: team totals for today (Delivery / Proforma)
@@ -3067,21 +3457,26 @@
       ]
     );
 
+    const cancelPctVals = rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0);
     upsertChart("chart-cancel", "bar", labels, null, {
       ...clickOpts,
       legend: true,
+      showValues: true,
+      valueSuffix: "%",
       datasets: [
         {
           label: "Cancel %",
-          data: rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0),
-          backgroundColor: "rgba(200, 30, 44, 0.75)",
+          data: cancelPctVals,
+          backgroundColor: cancelPctVals.map((v) =>
+            v > 30 ? "rgba(200, 30, 44, 0.85)" : "rgba(13, 148, 136, 0.8)"
+          ),
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Gap +/-",
           data: rows.map((r) => parsePct(r["Gap +/-"]) || 0),
-          backgroundColor: "rgba(13, 148, 136, 0.75)",
+          backgroundColor: "rgba(100, 116, 139, 0.65)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -3093,6 +3488,8 @@
       label: "Del %",
       backgroundColor: "rgba(200, 30, 44, 0.8)",
       max: 120,
+      showValues: true,
+      valueSuffix: "%",
     });
 
     upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => Number(r["Prof+Del"]) || 0), {
@@ -3106,6 +3503,8 @@
       label: "Prof+Del %",
       backgroundColor: "rgba(13, 148, 136, 0.85)",
       max: 120,
+      showValues: true,
+      valueSuffix: "%",
     });
 
     upsertChart("chart-sr-prev", "bar", labels, null, {
@@ -3152,7 +3551,7 @@
     if (!cancelRows.length) {
       setChartEmptyState(
         "chart-sr-cancelcount",
-        "No cancelled BOs yet. Upload Previous/All Back Order + current Back Order — VIN missing from current = cancelled."
+        "No cancelled BOs yet. Upload Cancelled BOs Excel in Admin — counted only when Col I has a VIN, by salesman name."
       );
     } else {
       upsertChart(
