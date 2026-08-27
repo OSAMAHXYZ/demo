@@ -526,6 +526,41 @@
     "Tawdod Al Sharef",
     "Ali Muharraq A Alharbi",
   ];
+
+  /**
+   * Canonical admin/target name → alternate spellings from Sales Raw / Cancelled / Excel.
+   * Both sides resolve to the same nameKey so metrics merge on one employee.
+   */
+  const EMPLOYEE_NAME_ALIASES = {
+    "Samaher Abdulmoghni Al Amri": ["Samaher Al Amri"],
+    "Haneen Talal Aqeel Al Madani": ["Haneen Al Madani"],
+    "Not assigned": ["API-BATCH", "API BATCH", "Api-Batch"],
+    "Wasim Kathem Awad": ["Wasim Awad"],
+    "Ahmed Saleh Ahmed Binmahfoodh": ["Ahmed Binmahfoodh"],
+    "Ghina Assad Alameer": ["Ghina Assad Salem Alameer Assa", "Ghina Alameer"],
+    "Amjad Ahmed Alwafi": ["Amjad Alwafi"],
+    "Ghadeer Abdulhadi Attia Altayyari": ["Ghadeer Altayyari"],
+    "Maryam Salah Abdulrahman Tabakh": ["Maryam Tabakh"],
+    "Muteb Abdullah Nasser Al Shehri": ["Muteb Al Shehri"],
+    "Mansuor Ali Al Qahtani": ["Mansuor Al Qahtani"],
+    "Ahmed Mahmoud Yousef Al Fitni": ["Ahmed Al Fitni"],
+    "Mohammed Abkar Mohammed Abkar Negry": ["Mohammed Negry"],
+    "Mohammed Al Khateeb": ["Mohammed Al Khateeb"],
+    "Mohsen Zuhair Ali Al Attas": ["Mohsen Al Attas"],
+    "Fatmah Mohammed Alasseri": ["fatmah al asseri", "Fatmah Alasseri", "Fatmah Al Asseri"],
+    "Essa Meraizeeq Almutairy": ["Essa Almutairy"],
+    "Moath Khalel Al Hjoouj": ["Moath Al Hjoouj"],
+    "Khulood Abdulmajeed Albaloushi": ["Khulood Abdulmajeed Ghulam Alb", "Khulood Albaloushi"],
+    "Raoum Fahad Samkari": ["Raoum Samkari"],
+    "Alawiyyah Rafi Saad Al Shehri": ["Alawiyyah Al Shehri"],
+    "Manal Moshref Almalki": ["Manal Almalki"],
+    "Lujen Sami Saeed Bazhair": ["Lujen Bazhair"],
+    "Muhannad Abdullah Makdour Minyawi": ["Muhannad Minyawi"],
+    "Maqbool Omar Ashour": ["Maqbool Ashour", "Maqbool Omar Ashour -"],
+    "Tawdod Al Sharef": ["- Tawdod Al Sharef", "Tawdod Al Sharef -"],
+    "Ali Muharraq A Alharbi": ["Ali Alharbi", "Ali Muharraq A Alharbi -"],
+  };
+
   const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
   const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({
     id: i + 1,
@@ -540,6 +575,50 @@
     "not assigned": { plant: "eCommerce Sales – Retail", code: "", note: "Vacation" },
     "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "12020", note: "Fleet" },
   };
+
+  function normalizeNameLoose(v) {
+    return String(v ?? "")
+      .trim()
+      .replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  /** aliasKey → { canonical, key } */
+  const NAME_IDENTITY_MAP = (() => {
+    const map = new Map();
+    const add = (alias, canonical) => {
+      const a = normalizeNameLoose(alias);
+      const key = normalizeNameLoose(canonical);
+      if (!a || !key) return;
+      map.set(a, { canonical, key });
+    };
+    DEFAULT_EMPLOYEE_NAMES.forEach((canon) => {
+      add(canon, canon);
+      (EMPLOYEE_NAME_ALIASES[canon] || []).forEach((alias) => add(alias, canon));
+    });
+    return map;
+  })();
+
+  function resolveEmployeeIdentity(name) {
+    const loose = normalizeNameLoose(name);
+    if (!loose) return null;
+    if (NAME_IDENTITY_MAP.has(loose)) return NAME_IDENTITY_MAP.get(loose);
+    return {
+      canonical: String(name || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, ""),
+      key: loose,
+    };
+  }
+
+  function nameKey(v) {
+    const id = resolveEmployeeIdentity(v);
+    return id ? id.key : normalizeNameLoose(v);
+  }
+
+  function resolveDisplayName(v) {
+    const id = resolveEmployeeIdentity(v);
+    return id ? id.canonical : String(v || "").trim();
+  }
 
   function employeeMeta(name) {
     const key = nameKey(name);
@@ -594,17 +673,22 @@
   function adminTargetMap() {
     const map = new Map();
     employeeTargets.forEach((e) => {
-      const key = String(e.name || "").trim().toLowerCase();
+      const key = nameKey(e.name);
       if (key) map.set(key, e.target);
+      // Also index raw lowercase so old saves still hit
+      const raw = normalizeNameLoose(e.name);
+      if (raw && !map.has(raw)) map.set(raw, e.target);
     });
     return map;
   }
 
   function resolveAdminTarget(name, fallback) {
-    const key = String(name || "").trim().toLowerCase();
+    const key = nameKey(name);
     if (!key) return fallback || 0;
     const map = adminTargetMap();
     if (map.has(key)) return map.get(key);
+    const loose = normalizeNameLoose(name);
+    if (map.has(loose)) return map.get(loose);
     return fallback || 0;
   }
 
@@ -1079,13 +1163,6 @@
     return n - 1;
   }
 
-  function nameKey(v) {
-    return String(v ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
-  }
-
   function todayKeys(now = new Date()) {
     const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return {
@@ -1506,7 +1583,7 @@
     const byPerson = new Map();
 
     const ensure = (name) => {
-      const display = String(name || "").trim();
+      const display = resolveDisplayName(name);
       if (!display) return null;
       const key = nameKey(display);
       if (!byPerson.has(key)) {
