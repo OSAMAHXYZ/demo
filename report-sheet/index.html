@@ -388,54 +388,109 @@
         <div class="bo-empty card" id="stock-empty">
           <h2>Stock Dashboard · Inventory &amp; BO Allocation</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            View full <b>RTL Stock</b> and <b>Stock Central</b> uploads, plus fulfillable back orders
-            (<b>Col AE &gt; 0</b> and <b>Col AD ≤ Col AE</b> from the Back Order file).
+            Inventory KPIs, product breakdown, suffix/location drill-down, and charts — same layout as the BO Dashboard.
+            Upload <b>RTL Stock</b> (slot 2) and/or <b>Stock Central</b> (slot 3). Optionally add <b>Back Order</b> (slot 1) for fulfillable allocation rows.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
-            <li>Upload slot <b>2 · RTL Stock</b> and/or <b>3 · Stock Central</b> (full details shown here)</li>
-            <li>Upload slot <b>1 · Back Order</b> for allocation view (AD/AE)</li>
+            <li>Upload slot <b>2 · RTL Stock</b> and/or <b>3 · Stock Central</b></li>
+            <li>Upload slot <b>1 · Back Order</b> for fulfillable BO allocation (optional)</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
           </ol>
         </div>
 
-        <div id="stock-dash" class="stock-dash" hidden>
-          <div class="bo-toolbar stock-toolbar" id="stock-bo-filters">
-            <select id="stock-f-k"><option value="">All · Col K</option></select>
-            <select id="stock-f-l"><option value="">All · Col L</option></select>
-            <select id="stock-f-m"><option value="">All · Col M</option></select>
-            <select id="stock-f-g"><option value="">All · Col G</option></select>
-            <select id="stock-f-own"><option value="">All · Sales ownership</option></select>
-            <select id="stock-f-a"><option value="">All · Col A</option></select>
+        <div id="stock-dash" class="bo-dash" hidden>
+          <div class="bo-toolbar" id="stock-inv-toolbar">
+            <input id="stock-search" type="search" placeholder="Search product / VIN / suffix / location…" />
+            <select id="stock-f-source"><option value="">All sources</option><option value="RTL">RTL Stock</option><option value="Central">Stock Central</option></select>
+            <select id="stock-f-product"><option value="">All products</option></select>
+            <select id="stock-f-suffix"><option value="">All SFX / suffix</option></select>
+            <select id="stock-f-year"><option value="">All model years</option></select>
+            <select id="stock-f-usage"><option value="">All usage</option></select>
+            <select id="stock-f-location"><option value="">All locations</option></select>
             <button type="button" id="stock-clear-filters" class="btn">Clear filters</button>
           </div>
 
           <div class="bo-kpis" id="stock-kpis"></div>
 
-          <article class="card" id="stock-rtl-section" hidden>
-            <div class="pbi-viz-head">
-              <h2>RTL Stock · full file</h2>
-              <span class="hint">All columns from uploaded RTL Stock Excel</span>
-            </div>
-            <div id="stock-rtl-totals"></div>
-            <div class="table-wrap" id="stock-rtl-table"></div>
-            <p class="foot" id="stock-rtl-foot"></p>
-          </article>
+          <div class="bo-insights card" id="stock-insights"></div>
 
-          <article class="card" id="stock-central-section" hidden>
-            <div class="pbi-viz-head">
-              <h2>Stock Central · full file</h2>
-              <span class="hint">All columns from uploaded Stock Central Excel</span>
-            </div>
-            <div id="stock-central-totals"></div>
-            <div class="table-wrap" id="stock-central-table"></div>
-            <p class="foot" id="stock-central-foot"></p>
-          </article>
+          <div class="bo-grid">
+            <article class="card bo-span-2">
+              <div class="pbi-viz-head">
+                <h2>Each product · Total / VINs / Avg ageing / Suffixes</h2>
+                <span class="hint">Click a product row to open suffix &amp; location mix</span>
+              </div>
+              <div class="table-wrap" id="stock-product-table"></div>
+            </article>
 
-          <article class="card" id="stock-alloc-section">
+            <article class="card bo-span-2" id="stock-car-detail">
+              <div class="pbi-viz-head">
+                <h2>Choose car · suffix &amp; location mix</h2>
+              </div>
+              <div class="bo-car-pick">
+                <label for="stock-car-select">Product / car</label>
+                <select id="stock-car-select"><option value="">Select a product…</option></select>
+                <button type="button" id="stock-car-clear" class="btn">Clear selection</button>
+              </div>
+              <div class="bo-car-summary" id="stock-car-summary"></div>
+              <div class="bo-car-charts">
+                <article class="card pbi-viz" data-chart-id="chart-stock-car-sfx" style="margin:0">
+                  <div class="pbi-viz-head">
+                    <h2>Stock by suffix (this car)</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-stock-car-sfx">Wide</button>
+                  </div>
+                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-stock-car-sfx"></canvas></div></div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-stock-car-loc" style="margin:0">
+                  <div class="pbi-viz-head">
+                    <h2>By location / area</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-stock-car-loc">Wide</button>
+                  </div>
+                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-stock-car-loc"></canvas></div></div>
+                </article>
+              </div>
+              <h3 class="bo-subhead">Suffix breakdown for selected car</h3>
+              <div class="table-wrap" id="stock-car-sfx-table"></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-stock-backlog">
+              <div class="pbi-viz-head">
+                <h2>Top 10 product stock</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-stock-backlog">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-stock-backlog"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-stock-aging">
+              <div class="pbi-viz-head">
+                <h2>Average allocation ageing by product</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-stock-aging">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-stock-aging"></canvas></div></div>
+            </article>
+
+            <article class="card pbi-viz" data-chart-id="chart-stock-source">
+              <div class="pbi-viz-head">
+                <h2>RTL vs Central</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-stock-source">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-stock-source"></canvas></div></div>
+            </article>
+          </div>
+
+          <article class="card" id="stock-alloc-section" hidden>
             <div class="pbi-viz-head">
               <h2>Fulfillable back orders</h2>
-              <span class="hint">AE &gt; 0 and AD ≤ AE · filters use All to ignore that column</span>
+              <span class="hint">AE &gt; 0 and AD ≤ AE · from Back Order file</span>
+            </div>
+            <div class="bo-toolbar stock-toolbar" id="stock-bo-filters">
+              <select id="stock-f-k"><option value="">All · Col K</option></select>
+              <select id="stock-f-l"><option value="">All · Col L</option></select>
+              <select id="stock-f-m"><option value="">All · Col M</option></select>
+              <select id="stock-f-g"><option value="">All · Col G</option></select>
+              <select id="stock-f-own"><option value="">All · Sales ownership</option></select>
+              <select id="stock-f-a"><option value="">All · Col A</option></select>
             </div>
             <div class="table-wrap" id="stock-alloc-table"></div>
             <p class="foot" id="stock-alloc-foot"></p>
@@ -4354,10 +4409,320 @@
     renderBoCharts(list, aggs);
   }
 
-  /* ——— Stock Dashboard · Back Order Allocation ——— */
+  /* ——— Stock Dashboard · same layout as BO Dashboard ——— */
   const STOCK_DISPLAY_COLS = ["E", "K", "L", "M", "P", "G", "H", "AB", "AC", "AF", "AG", "AI", "AH"];
   const STOCK_MAIN_SALES = "__MAIN_SALES__";
-  let stockView = { k: "", l: "", m: "", g: "", own: "", a: "" };
+
+  let stockInvView = {
+    search: "",
+    source: "",
+    product: "",
+    suffix: "",
+    year: "",
+    usage: "",
+    location: "",
+    car: "",
+  };
+  let stockBoView = { k: "", l: "", m: "", g: "", own: "", a: "" };
+
+  function stockCol(row, letter, aliasKey) {
+    const direct = cellToString(cellByLetter(row, letter)).trim();
+    if (direct) return direct;
+    if (aliasKey) {
+      const get = buildFieldGetter(row);
+      return cellToString(get(row, aliasKey)).trim();
+    }
+    return "";
+  }
+
+  function mapStockInv(rows, source) {
+    return (rows || []).map((r, i) => {
+      const ageingRaw = cellByLetter(r, "J");
+      const ageingNum = toNumber(ageingRaw);
+      return {
+        id: `${source}-${i}`,
+        source,
+        product: stockCol(r, "B", "product") || "—",
+        vin: extractVinValue(cellByLetter(r, "E")) || stockCol(r, "E", "vin"),
+        suffix: stockCol(r, "G", "suffix") || "—",
+        year: stockCol(r, "F", "year"),
+        ext: stockCol(r, "H", "ext"),
+        int: stockCol(r, "I", "int"),
+        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        usage: stockCol(r, "K") || "—",
+        location: stockCol(r, "M") || stockCol(r, "N", "location") || "—",
+        status: stockCol(r, "D") || stockCol(r, "L", "status"),
+        _raw: r,
+      };
+    });
+  }
+
+  function allStockInv() {
+    return [
+      ...mapStockInv(slots.rtl.rows, "RTL"),
+      ...mapStockInv(slots.central.rows, "Central"),
+    ];
+  }
+
+  function stockInvMetrics(list) {
+    const total = list.length;
+    const vinSet = new Set();
+    list.forEach((s) => { if (s.vin) vinSet.add(s.vin); });
+    const agingVals = list.map((s) => s.aging).filter((n) => n != null && Number.isFinite(n));
+    const avgAging = agingVals.length
+      ? Math.round(agingVals.reduce((a, b) => a + b, 0) / agingVals.length)
+      : 0;
+    const suffixSet = new Set(list.map((s) => s.suffix).filter((x) => x && x !== "—"));
+    const productSet = new Set(list.map((s) => s.product).filter((x) => x && x !== "—"));
+    const rtl = list.filter((s) => s.source === "RTL").length;
+    const central = list.filter((s) => s.source === "Central").length;
+    return { total, vins: vinSet.size, avgAging, suffixes: suffixSet.size, products: productSet.size, rtl, central };
+  }
+
+  function filteredStockInv() {
+    let list = allStockInv();
+    const q = stockInvView.search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) =>
+        [s.product, s.vin, s.suffix, s.location, s.usage, s.year, s.ext, s.source]
+          .some((v) => String(v || "").toLowerCase().includes(q))
+      );
+    }
+    if (stockInvView.source) list = list.filter((s) => s.source === stockInvView.source);
+    if (stockInvView.product) list = list.filter((s) => s.product === stockInvView.product);
+    if (stockInvView.suffix) list = list.filter((s) => s.suffix === stockInvView.suffix);
+    if (stockInvView.year) list = list.filter((s) => s.year === stockInvView.year);
+    if (stockInvView.usage) list = list.filter((s) => s.usage === stockInvView.usage);
+    if (stockInvView.location) list = list.filter((s) => s.location === stockInvView.location);
+    return list;
+  }
+
+  function stockProductAgg(list) {
+    return [...groupBoBy(list, (s) => s.product).entries()]
+      .map(([product, rows]) => {
+        const m = stockInvMetrics(rows);
+        const suffixSet = new Set(rows.map((r) => r.suffix).filter((x) => x && x !== "—"));
+        return { product, ...m, suffixCount: suffixSet.size };
+      })
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function renderStockInvKpis(m) {
+    const el = $("#stock-kpis");
+    if (!el) return;
+    const cards = [
+      { lab: "Total stock units", val: m.total, sub: "RTL + Central", status: "ok" },
+      { lab: "Unique VINs", val: m.vins, sub: "in stock files", status: "ok" },
+      { lab: "Products", val: m.products, sub: "distinct models", status: "ok" },
+      { lab: "Avg allocation ageing", val: m.avgAging, sub: "days · Col J", status: kpiStatus("aging", { avgAging: m.avgAging, total: m.total }) },
+      { lab: "RTL units", val: m.rtl, sub: "slot 2 · retail", status: m.rtl ? "ok" : "warn" },
+      { lab: "Central units", val: m.central, sub: "slot 3 · central", status: m.central ? "ok" : "warn" },
+      { lab: "Suffixes", val: m.suffixes, sub: "unique grades", status: "ok" },
+    ];
+    el.innerHTML = cards.map((c) => `
+      <div class="bo-kpi ${c.status}">
+        <div class="lab">${c.lab}</div>
+        <div class="val">${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
+        <div class="sub">${escapeHtml(String(c.sub))}</div>
+      </div>`).join("");
+  }
+
+  function renderStockInsights(list, m) {
+    const el = $("#stock-insights");
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = "<h2>Executive insights</h2><p class=\"foot\">No stock rows match the current filters.</p>";
+      return;
+    }
+    const byProd = stockProductAgg(list);
+    const top = byProd[0];
+    const highestAging = byProd.slice().sort((a, b) => b.avgAging - a.avgAging)[0];
+    const share = top && m.total ? ((top.total / m.total) * 100).toFixed(1) : "0";
+    const bullets = [
+      top ? `<b>${escapeHtml(top.product)}</b> holds the largest share of stock (${share}%).` : null,
+      highestAging ? `<b>${escapeHtml(highestAging.product)}</b> has the highest average allocation ageing (${highestAging.avgAging} days).` : null,
+      `Total inventory: <b>${formatNumber(m.total)}</b> units · <b>${formatNumber(m.vins)}</b> unique VINs across <b>${formatNumber(m.products)}</b> products.`,
+      m.rtl && m.central ? `Split: <b>${formatNumber(m.rtl)}</b> RTL · <b>${formatNumber(m.central)}</b> Central.` : null,
+    ].filter(Boolean);
+    el.innerHTML = `<h2>Executive insights</h2><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+  }
+
+  function renderStockProductTable(aggs, totals) {
+    const el = $("#stock-product-table");
+    if (!el) return;
+    if (!aggs.length) {
+      el.innerHTML = `<p class="foot" style="padding:12px">No products to show.</p>`;
+      return;
+    }
+    const t = totals || {
+      total: aggs.reduce((s, a) => s + a.total, 0),
+      vins: aggs.reduce((s, a) => s + a.vins, 0),
+      avgAging: 0,
+      suffixes: aggs.reduce((s, a) => s + a.suffixCount, 0),
+      products: aggs.length,
+    };
+    if (!totals) {
+      const allRows = filteredStockInv();
+      t.avgAging = stockInvMetrics(allRows).avgAging;
+    }
+    const summary = `
+      <div class="bo-product-totals">
+        <div class="bo-product-total">
+          <span class="lab">Total units</span>
+          <span class="val">${formatNumber(t.total)}</span>
+        </div>
+        <div class="bo-product-total ok">
+          <span class="lab">Unique VINs</span>
+          <span class="val">${formatNumber(t.vins)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Products</span>
+          <span class="val">${formatNumber(t.products)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Avg ageing</span>
+          <span class="val">${formatNumber(t.avgAging || 0)}d</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Suffixes</span>
+          <span class="val">${formatNumber(t.suffixes)}</span>
+        </div>
+      </div>`;
+    el.innerHTML = `${summary}<table class="bo-table">
+      <thead><tr>
+        <th>Product</th>
+        <th class="num">Total</th>
+        <th class="num">VINs</th>
+        <th class="num">Avg Ageing</th>
+        <th class="num">Suffixes</th>
+        <th class="num">RTL</th>
+        <th class="num">Central</th>
+      </tr></thead>
+      <tbody>${aggs.map((a) => {
+        const active = a.product === stockInvView.car ? " active" : "";
+        return `<tr data-stock-product="${escapeHtml(a.product)}" class="stock-row${active}">
+          <td><button type="button" class="bo-link" data-stock-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
+          <td class="num"><b>${formatNumber(a.total)}</b></td>
+          <td class="num">${formatNumber(a.vins)}</td>
+          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
+          <td class="num">${formatNumber(a.suffixCount)}</td>
+          <td class="num">${formatNumber(a.rtl || 0)}</td>
+          <td class="num">${formatNumber(a.central || 0)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td class="num"><b>${formatNumber(t.total)}</b></td>
+        <td class="num"><b>${formatNumber(t.vins)}</b></td>
+        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}d</b></td>
+        <td class="num"><b>${formatNumber(t.suffixes)}</b></td>
+        <td class="num"><b>${formatNumber(totals ? totals.rtl : aggs.reduce((s, a) => s + (a.rtl || 0), 0))}</b></td>
+        <td class="num"><b>${formatNumber(totals ? totals.central : aggs.reduce((s, a) => s + (a.central || 0), 0))}</b></td>
+      </tr></tfoot>
+    </table>`;
+  }
+
+  function renderStockCarDetail(allItems, filteredList) {
+    const select = $("#stock-car-select");
+    const summary = $("#stock-car-summary");
+    const tableEl = $("#stock-car-sfx-table");
+    if (!select || !summary || !tableEl) return;
+
+    const products = [...new Set((allItems || []).map((s) => s.product).filter((p) => p && p !== "—"))].sort();
+    select.innerHTML = `<option value="">Select a product…</option>` +
+      products.map((p) => `<option value="${escapeHtml(p)}"${p === stockInvView.car ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
+
+    if (!stockInvView.car) {
+      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix counts and location mix.</p>`;
+      tableEl.innerHTML = "";
+      upsertChart("chart-stock-car-sfx", "bar", ["—"], [0], { horizontal: true, backgroundColor: "rgba(148,163,184,0.5)" });
+      upsertChart("chart-stock-car-loc", "doughnut", ["No selection"], [1]);
+      return;
+    }
+
+    const carRows = (filteredList || allItems || []).filter((s) => s.product === stockInvView.car);
+    const m = stockInvMetrics(carRows);
+
+    summary.innerHTML = `
+      <div class="bo-car-kpis">
+        <div class="bo-kpi ok"><div class="lab">Product</div><div class="val" style="font-size:1.05rem">${escapeHtml(stockInvView.car)}</div><div class="sub">selected car</div></div>
+        <div class="bo-kpi ok"><div class="lab">Total units</div><div class="val">${formatNumber(m.total)}</div><div class="sub">in stock</div></div>
+        <div class="bo-kpi ok"><div class="lab">Unique VINs</div><div class="val">${formatNumber(m.vins)}</div><div class="sub">vehicles</div></div>
+        <div class="bo-kpi ${kpiStatus("aging", { avgAging: m.avgAging, total: m.total })}"><div class="lab">Avg ageing</div><div class="val">${formatNumber(m.avgAging)}d</div><div class="sub">Col J</div></div>
+        <div class="bo-kpi ok"><div class="lab">RTL</div><div class="val">${formatNumber(m.rtl)}</div><div class="sub">units</div></div>
+        <div class="bo-kpi ok"><div class="lab">Central</div><div class="val">${formatNumber(m.central)}</div><div class="sub">units</div></div>
+      </div>`;
+
+    const sfxRows = [...groupBoBy(carRows, (s) => s.suffix || "—").entries()]
+      .map(([sfx, items]) => {
+        const metrics = stockInvMetrics(items);
+        const locMap = new Map();
+        items.forEach((it) => {
+          const loc = it.location || "—";
+          locMap.set(loc, (locMap.get(loc) || 0) + 1);
+        });
+        const topLoc = [...locMap.entries()].sort((a, b) => b[1] - a[1])[0];
+        return { sfx, ...metrics, topLoc: topLoc ? topLoc[0] : "—", topLocN: topLoc ? topLoc[1] : 0 };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    tableEl.innerHTML = `<table class="bo-table">
+      <thead><tr>
+        <th>Suffix / SFX</th>
+        <th>Total</th>
+        <th>VINs</th>
+        <th>Avg Ageing</th>
+        <th>RTL</th>
+        <th>Central</th>
+        <th>Top location</th>
+      </tr></thead>
+      <tbody>${sfxRows.map((r) => `
+        <tr>
+          <td><b>${escapeHtml(r.sfx)}</b></td>
+          <td><b>${formatNumber(r.total)}</b></td>
+          <td>${formatNumber(r.vins)}</td>
+          <td class="${heatAging(r.avgAging)}">${formatNumber(r.avgAging)}d</td>
+          <td>${formatNumber(r.rtl || 0)}</td>
+          <td>${formatNumber(r.central || 0)}</td>
+          <td>${escapeHtml(r.topLoc)} (${formatNumber(r.topLocN)})</td>
+        </tr>`).join("") || `<tr><td colspan="7" class="foot">No suffix rows for this product</td></tr>`}</tbody>
+    </table>`;
+
+    const topSfx = sfxRows.slice(0, 15);
+    upsertChart("chart-stock-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
+      horizontal: true,
+      backgroundColor: "rgba(11, 58, 102, 0.85)",
+    });
+
+    const locMap = new Map();
+    carRows.forEach((it) => {
+      const loc = it.location || "—";
+      locMap.set(loc, (locMap.get(loc) || 0) + 1);
+    });
+    const locEntries = [...locMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    upsertChart("chart-stock-car-loc", "doughnut",
+      locEntries.map((x) => x[0]),
+      locEntries.map((x) => x[1])
+    );
+  }
+
+  function renderStockInvCharts(list, aggs) {
+    const top = aggs.slice(0, 10);
+    upsertChart("chart-stock-backlog", "bar", top.map((a) => a.product), top.map((a) => a.total), {
+      horizontal: top.length > 6,
+      backgroundColor: "rgba(11, 58, 102, 0.85)",
+    });
+    const agingRows = aggs.filter((a) => a.avgAging > 0).slice(0, 12);
+    upsertChart("chart-stock-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
+      horizontal: agingRows.length > 6,
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(200, 30, 44, 0.85)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+    });
+    const m = stockInvMetrics(list);
+    upsertChart("chart-stock-source", "doughnut",
+      ["RTL", "Central"],
+      [m.rtl || 0, m.central || 0]
+    );
+  }
 
   function rawBoRows() {
     return slots.backorder.rows || [];
@@ -4421,15 +4786,15 @@
 
   function filteredAllocRows() {
     return fulfillableBoRows().filter((r) => {
-      if (stockView.k && cellToString(cellByLetter(r, "K")).trim() !== stockView.k) return false;
-      if (stockView.l && cellToString(cellByLetter(r, "L")).trim() !== stockView.l) return false;
-      if (stockView.m && cellToString(cellByLetter(r, "M")).trim() !== stockView.m) return false;
-      if (stockView.g && cellToString(cellByLetter(r, "G")).trim() !== stockView.g) return false;
-      if (stockView.a && cellToString(cellByLetter(r, "A")).trim() !== stockView.a) return false;
-      if (stockView.own) {
-        if (stockView.own === STOCK_MAIN_SALES) {
+      if (stockBoView.k && cellToString(cellByLetter(r, "K")).trim() !== stockBoView.k) return false;
+      if (stockBoView.l && cellToString(cellByLetter(r, "L")).trim() !== stockBoView.l) return false;
+      if (stockBoView.m && cellToString(cellByLetter(r, "M")).trim() !== stockBoView.m) return false;
+      if (stockBoView.g && cellToString(cellByLetter(r, "G")).trim() !== stockBoView.g) return false;
+      if (stockBoView.a && cellToString(cellByLetter(r, "A")).trim() !== stockBoView.a) return false;
+      if (stockBoView.own) {
+        if (stockBoView.own === STOCK_MAIN_SALES) {
           if (!isYesFlag(cellByLetter(r, "AC"))) return false;
-        } else if (cellToString(cellByLetter(r, "H")).trim() !== stockView.own) {
+        } else if (cellToString(cellByLetter(r, "H")).trim() !== stockBoView.own) {
           return false;
         }
       }
@@ -4443,121 +4808,6 @@
 
   function hasStockFiles() {
     return slotHasRows("rtl") || slotHasRows("central");
-  }
-
-  function stockFileColumns(sample) {
-    if (sample && Array.isArray(sample.__headers) && sample.__headers.length) {
-      return sample.__headers.map((label, i) => ({
-        letter: indexToColLetter(i),
-        label: String(label || "").trim() || `Col ${indexToColLetter(i)}`,
-        idx: i,
-      }));
-    }
-    const keys = Object.keys(sample || {}).filter((k) => !k.startsWith("__"));
-    return keys.map((label, i) => ({
-      letter: indexToColLetter(i),
-      label,
-      idx: i,
-      key: label,
-    }));
-  }
-
-  function stockFileCell(row, col) {
-    if (col.key) return row[col.key];
-    return cellByLetter(row, col.letter);
-  }
-
-  function stockFileStats(rows) {
-    const get = buildFieldGetter(rows[0] || {});
-    const vins = new Set();
-    const products = new Set();
-    rows.forEach((r) => {
-      const vin = extractVinValue(get(r, "vin")) || extractVinValue(cellByLetter(r, "E"));
-      if (vin) vins.add(vin);
-      const prod = cellToString(get(r, "product")).trim();
-      if (prod) products.add(prod);
-    });
-    return { total: rows.length, vins: vins.size, products: products.size };
-  }
-
-  function renderStockFileTotals(el, stats, sourceLabel) {
-    if (!el) return;
-    el.innerHTML = `
-      <div class="bo-product-totals">
-        <div class="bo-product-total ok">
-          <span class="lab">${escapeHtml(sourceLabel)} rows</span>
-          <span class="val">${formatNumber(stats.total)}</span>
-        </div>
-        <div class="bo-product-total">
-          <span class="lab">Unique VINs</span>
-          <span class="val">${formatNumber(stats.vins)}</span>
-        </div>
-        <div class="bo-product-total">
-          <span class="lab">Products</span>
-          <span class="val">${formatNumber(stats.products)}</span>
-        </div>
-      </div>`;
-  }
-
-  function renderStockFileTable(tableEl, footEl, rows, sourceLabel) {
-    if (!tableEl) return;
-    if (!rows.length) {
-      tableEl.innerHTML = `<p class="stock-empty-msg">No ${escapeHtml(sourceLabel)} rows loaded. Upload in Admin slot and Push to live.</p>`;
-      if (footEl) footEl.textContent = "0 rows";
-      return;
-    }
-    const sample = rows[0];
-    const cols = stockFileColumns(sample);
-    const stats = stockFileStats(rows);
-    const limit = Math.min(rows.length, MAX_ROWS);
-    const colCount = cols.length;
-
-    tableEl.innerHTML = `<table class="bo-table stock-file-table">
-      <thead><tr>${cols.map((c) =>
-        `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
-      ).join("")}</tr></thead>
-      <tbody>${rows.slice(0, limit).map((r) => `
-        <tr>${cols.map((c) =>
-          `<td>${escapeHtml(cellToString(stockFileCell(r, c)))}</td>`
-        ).join("")}</tr>`
-      ).join("")}</tbody>
-      <tfoot><tr class="bo-total-row">
-        <td><b>TOTAL</b></td>
-        <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(stats.total)} rows · ${formatNumber(stats.vins)} VINs · ${formatNumber(stats.products)} products</b></td>
-      </tr></tfoot>
-    </table>`;
-    if (footEl) {
-      footEl.textContent = rows.length > limit
-        ? `Showing ${limit.toLocaleString()} of ${rows.length.toLocaleString()} ${sourceLabel} rows · ${colCount} columns`
-        : `${rows.length.toLocaleString()} ${sourceLabel} row${rows.length === 1 ? "" : "s"} · ${colCount} columns`;
-    }
-  }
-
-  function renderStockKpis(stats, filteredCount, rtlCount, centralCount) {
-    const el = $("#stock-kpis");
-    if (!el) return;
-    const cards = [];
-    if (rtlCount != null) {
-      cards.push({ lab: "RTL Stock rows", val: rtlCount, sub: "slot 2 · retail", status: rtlCount ? "ok" : "warn" });
-    }
-    if (centralCount != null) {
-      cards.push({ lab: "Central Stock rows", val: centralCount, sub: "slot 3 · central", status: centralCount ? "ok" : "warn" });
-    }
-    if (stats) {
-      cards.push(
-        { lab: "Total BO rows", val: stats.total, sub: "from Back Order file", status: "ok" },
-        { lab: "AE stock > 0", val: stats.withStock, sub: stats.headerAe || "Col AE", status: stats.withStock ? "ok" : "warn" },
-        { lab: "Fulfillable BOs", val: stats.fulfillable, sub: "AE > 0 and AD ≤ AE", status: stats.fulfillable ? "ok" : "warn" },
-        { lab: "After filters", val: filteredCount, sub: "matching allocation rows", status: "ok" },
-        { lab: "Allocation status", val: filteredCount ? "Ready" : "None", sub: filteredCount ? "stock available" : "no matching stock", status: filteredCount ? "ok" : "warn", small: true },
-      );
-    }
-    el.innerHTML = cards.map((c) => `
-      <div class="bo-kpi ${c.status}">
-        <div class="lab">${c.lab}</div>
-        <div class="val"${c.small ? ' style="font-size:1rem"' : ""}>${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
-        <div class="sub">${escapeHtml(String(c.sub))}</div>
-      </div>`).join("");
   }
 
   function renderStockAllocTable(rows, sample, stats) {
@@ -4618,34 +4868,39 @@
     if (empty) empty.hidden = true;
     if (dash) dash.hidden = false;
 
-    const rtlRows = slots.rtl.rows || [];
-    const centralRows = slots.central.rows || [];
-    const rtlSection = $("#stock-rtl-section");
-    const centralSection = $("#stock-central-section");
+    const allInv = allStockInv();
     const allocSection = $("#stock-alloc-section");
     const boFilters = $("#stock-bo-filters");
+    const emptyInv = { total: 0, vins: 0, avgAging: 0, suffixes: 0, products: 0, rtl: 0, central: 0 };
 
-    if (rtlSection) {
-      rtlSection.hidden = !rtlRows.length;
-      if (rtlRows.length) {
-        const rtlStats = stockFileStats(rtlRows);
-        renderStockFileTotals($("#stock-rtl-totals"), rtlStats, "RTL Stock");
-        renderStockFileTable($("#stock-rtl-table"), $("#stock-rtl-foot"), rtlRows, "RTL Stock");
-      }
-    }
-    if (centralSection) {
-      centralSection.hidden = !centralRows.length;
-      if (centralRows.length) {
-        const centralStats = stockFileStats(centralRows);
-        renderStockFileTotals($("#stock-central-totals"), centralStats, "Stock Central");
-        renderStockFileTable($("#stock-central-table"), $("#stock-central-foot"), centralRows, "Stock Central");
-      }
+    if (hasStock) {
+      fillBoSelect("#stock-f-product", new Set(allInv.map((s) => s.product).filter((p) => p && p !== "—")), stockInvView.product, "All products");
+      fillBoSelect("#stock-f-suffix", new Set(allInv.map((s) => s.suffix).filter((x) => x && x !== "—")), stockInvView.suffix, "All SFX / suffix");
+      fillBoSelect("#stock-f-year", new Set(allInv.map((s) => s.year).filter(Boolean)), stockInvView.year, "All model years");
+      fillBoSelect("#stock-f-usage", new Set(allInv.map((s) => s.usage).filter((x) => x && x !== "—")), stockInvView.usage, "All usage");
+      fillBoSelect("#stock-f-location", new Set(allInv.map((s) => s.location).filter((x) => x && x !== "—")), stockInvView.location, "All locations");
+      if ($("#stock-f-source")) $("#stock-f-source").value = stockInvView.source || "";
+      if ($("#stock-search")) $("#stock-search").value = stockInvView.search || "";
+
+      const list = filteredStockInv();
+      const m = stockInvMetrics(list);
+      const aggs = stockProductAgg(list);
+      renderStockInvKpis(m);
+      renderStockInsights(list, m);
+      renderStockProductTable(aggs, m);
+      renderStockCarDetail(allInv, list);
+      renderStockInvCharts(list, aggs);
+    } else {
+      renderStockInvKpis(emptyInv);
+      renderStockInsights([], emptyInv);
+      renderStockProductTable([]);
+      renderStockCarDetail([], []);
+      renderStockInvCharts([], []);
     }
 
     if (!hasBo) {
       if (boFilters) boFilters.hidden = true;
       if (allocSection) allocSection.hidden = true;
-      renderStockKpis(null, 0, rtlRows.length, centralRows.length);
       return;
     }
 
@@ -4656,30 +4911,29 @@
     const stats = stockAllocStats(allRows);
     const base = fulfillableBoRows();
     const sample = base[0] || allRows[0] || {};
-
     const optionSource = base.length ? base : allRows;
-    fillStockSelect("#stock-f-k", uniqueColValues(optionSource, "K"), stockView.k, `All · ${stockDisplayLabel(sample, "K")}`);
-    fillStockSelect("#stock-f-l", uniqueColValues(optionSource, "L"), stockView.l, `All · ${stockDisplayLabel(sample, "L")}`);
-    fillStockSelect("#stock-f-m", uniqueColValues(optionSource, "M"), stockView.m, `All · ${stockDisplayLabel(sample, "M")}`);
-    fillStockSelect("#stock-f-g", uniqueColValues(optionSource, "G"), stockView.g, `All · ${stockDisplayLabel(sample, "G")}`);
-    fillStockSelect("#stock-f-a", uniqueColValues(optionSource, "A"), stockView.a, `All · ${stockDisplayLabel(sample, "A")}`);
+
+    fillStockSelect("#stock-f-k", uniqueColValues(optionSource, "K"), stockBoView.k, `All · ${stockDisplayLabel(sample, "K")}`);
+    fillStockSelect("#stock-f-l", uniqueColValues(optionSource, "L"), stockBoView.l, `All · ${stockDisplayLabel(sample, "L")}`);
+    fillStockSelect("#stock-f-m", uniqueColValues(optionSource, "M"), stockBoView.m, `All · ${stockDisplayLabel(sample, "M")}`);
+    fillStockSelect("#stock-f-g", uniqueColValues(optionSource, "G"), stockBoView.g, `All · ${stockDisplayLabel(sample, "G")}`);
+    fillStockSelect("#stock-f-a", uniqueColValues(optionSource, "A"), stockBoView.a, `All · ${stockDisplayLabel(sample, "A")}`);
 
     const ownEl = $("#stock-f-own");
     if (ownEl) {
       const hVals = [...uniqueColValues(optionSource, "H")].sort();
       const opts = [
         `<option value="">All · Sales ownership</option>`,
-        `<option value="${STOCK_MAIN_SALES}"${stockView.own === STOCK_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
+        `<option value="${STOCK_MAIN_SALES}"${stockBoView.own === STOCK_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
         ...hVals.map((v) =>
-          `<option value="${escapeHtml(v)}"${v === stockView.own ? " selected" : ""}>${escapeHtml(v)}</option>`
+          `<option value="${escapeHtml(v)}"${v === stockBoView.own ? " selected" : ""}>${escapeHtml(v)}</option>`
         ),
       ];
       ownEl.innerHTML = opts.join("");
     }
 
-    const list = filteredAllocRows();
-    renderStockKpis(stats, list.length, rtlRows.length, centralRows.length);
-    renderStockAllocTable(list, sample, stats);
+    const allocList = filteredAllocRows();
+    renderStockAllocTable(allocList, sample, stats);
   }
 
   function refreshStockFromFilters() {
@@ -4959,6 +5213,77 @@
     });
   }
 
+  const stockDashEl = $("#stock-dash");
+  if (stockDashEl) {
+    stockDashEl.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand) {
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const prod = e.target.closest("[data-stock-product]");
+      if (prod) {
+        const name = prod.getAttribute("data-stock-product") || "";
+        stockInvView.car = name;
+        stockInvView.product = name;
+        refreshStockFromFilters();
+        const detail = $("#stock-car-detail");
+        if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    stockDashEl.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+  }
+  const stockSearchEl = $("#stock-search");
+  if (stockSearchEl) {
+    stockSearchEl.addEventListener("input", (e) => {
+      stockInvView.search = e.target.value;
+      refreshStockFromFilters();
+    });
+  }
+  [
+    ["#stock-f-source", "source"],
+    ["#stock-f-product", "product"],
+    ["#stock-f-suffix", "suffix"],
+    ["#stock-f-year", "year"],
+    ["#stock-f-usage", "usage"],
+    ["#stock-f-location", "location"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      stockInvView[key] = e.target.value;
+      refreshStockFromFilters();
+    });
+  });
+  const stockClearEl = $("#stock-clear-filters");
+  if (stockClearEl) {
+    stockClearEl.addEventListener("click", () => {
+      stockInvView = { search: "", source: "", product: "", suffix: "", year: "", usage: "", location: "", car: "" };
+      refreshStockFromFilters();
+    });
+  }
+  const stockCarSelect = $("#stock-car-select");
+  if (stockCarSelect) {
+    stockCarSelect.addEventListener("change", (e) => {
+      stockInvView.car = e.target.value || "";
+      if (stockInvView.car) stockInvView.product = stockInvView.car;
+      refreshStockFromFilters();
+    });
+  }
+  const stockCarClear = $("#stock-car-clear");
+  if (stockCarClear) {
+    stockCarClear.addEventListener("click", () => {
+      stockInvView.car = "";
+      stockInvView.product = "";
+      refreshStockFromFilters();
+    });
+  }
+
   [
     ["#stock-f-k", "k"],
     ["#stock-f-l", "l"],
@@ -4970,17 +5295,10 @@
     const el = $(sel);
     if (!el) return;
     el.addEventListener("change", (e) => {
-      stockView[key] = e.target.value;
+      stockBoView[key] = e.target.value;
       refreshStockFromFilters();
     });
   });
-  const stockClearEl = $("#stock-clear-filters");
-  if (stockClearEl) {
-    stockClearEl.addEventListener("click", () => {
-      stockView = { k: "", l: "", m: "", g: "", own: "", a: "" };
-      refreshStockFromFilters();
-    });
-  }
 
   $("#pbi-wide-close").addEventListener("click", closeWideChart);
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
