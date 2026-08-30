@@ -485,17 +485,18 @@
 
           <article class="card" id="stock-alloc-section" hidden>
             <div class="pbi-viz-head">
-              <h2>Fulfillable back orders</h2>
-              <span class="hint">AE &gt; 0 and AD ≤ AE · from Back Order file</span>
+              <h2>Matched cars · fulfillable</h2>
+              <span class="hint">FIFO match · Product + Suffix + Year + Colors → stock VIN</span>
             </div>
             <div class="bo-toolbar stock-toolbar" id="stock-bo-filters">
-              <select id="stock-f-k"><option value="">All · Col K</option></select>
-              <select id="stock-f-l"><option value="">All · Col L</option></select>
-              <select id="stock-f-m"><option value="">All · Col M</option></select>
-              <select id="stock-f-g"><option value="">All · Col G</option></select>
-              <select id="stock-f-own"><option value="">All · Sales ownership</option></select>
-              <select id="stock-f-a"><option value="">All · Col A</option></select>
+              <select id="stock-alloc-product"><option value="">All products</option></select>
+              <select id="stock-alloc-suffix"><option value="">All suffixes</option></select>
+              <select id="stock-alloc-year"><option value="">All model years</option></select>
+              <select id="stock-alloc-salesman"><option value="">All salesmen</option></select>
+              <select id="stock-alloc-source"><option value="">All sources</option><option value="RTL">RTL Stock</option><option value="Central">Central Stock</option></select>
+              <button type="button" class="btn" id="stock-alloc-clear">Clear filters</button>
             </div>
+            <p class="foot" style="margin:0 0 8px">Only cars matched to available stock · order number, VIN, and details.</p>
             <div class="table-wrap" id="stock-alloc-table"></div>
             <p class="foot" id="stock-alloc-foot"></p>
           </article>
@@ -4562,7 +4563,24 @@
     location: "",
     car: "",
   };
-  let stockBoView = { k: "", l: "", m: "", g: "", own: "", a: "" };
+  let stockBoView = { product: "", suffix: "", year: "", salesman: "", source: "" };
+
+  const MATCHED_CAR_COLS = [
+    "Back Order Number",
+    "VIN",
+    "Product",
+    "Alj Suffix",
+    "Model Year",
+    "Salesman Name",
+    "Order Date",
+    "Confirm Flag",
+    "Exterior Color",
+    "Interior Color",
+    "Source",
+    "Current Location",
+    "Allocation Ageing",
+    "Cust Group",
+  ];
 
   function stockCol(row, letter, aliasKey) {
     const direct = cellToString(cellByLetter(row, letter)).trim();
@@ -4915,35 +4933,158 @@
     };
   }
 
-  function fulfillableBoRows() {
-    return rawBoRows().filter(isFulfillableBo);
+  function buildMatchedCars(boRows, rtlRows, centralRows) {
+    const getBo = buildFieldGetter(boRows[0] || {});
+    const getRtl = buildFieldGetter(rtlRows[0] || {});
+    const getCen = buildFieldGetter(centralRows[0] || {});
+
+    const matchKey = (product, suffix, year, ext, intc) =>
+      [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
+
+    const bos = (boRows || []).map((r, idx) => {
+      const product = upperTrim(getBo(r, "product") || cellByLetter(r, "B"));
+      const suffix = upperTrim(getBo(r, "suffix") || getBo(r, "sfx") || cellByLetter(r, "G"));
+      const year = String(getBo(r, "year") || cellByLetter(r, "F") || "").trim();
+      const ext = cellToString(getBo(r, "ext") || cellByLetter(r, "H"));
+      const intc = cellToString(getBo(r, "int") || cellByLetter(r, "I"));
+      const orderRaw = getBo(r, "orderDate");
+      const orderDate = parseDate(orderRaw);
+      return {
+        idx,
+        product,
+        suffix,
+        year,
+        ext,
+        int: intc,
+        key: matchKey(product, suffix, year, ext, intc),
+        salesman: cellToString(getBo(r, "salesman")),
+        boNumber: cellToString(getBo(r, "boNumber")),
+        orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
+        orderTs: orderDate ? orderDate.getTime() : idx,
+        confirm: cellToString(boConfirmRaw(r, getBo)),
+        custGroup: cellToString(getBo(r, "salesType") || getBo(r, "custGroup")),
+      };
+    });
+
+    const mapStock = (rows, get, source) =>
+      (rows || []).map((r, idx) => {
+        const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
+        const suffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
+        const ext = cellToString(get(r, "ext") || cellByLetter(r, "H"));
+        const intc = cellToString(get(r, "int") || cellByLetter(r, "I"));
+        const vin = extractVinValue(get(r, "vin") || cellByLetter(r, "E")) || cellToString(get(r, "vin") || cellByLetter(r, "E")).trim();
+        return {
+          idx: source + "-" + idx,
+          product,
+          suffix,
+          year,
+          ext,
+          int: intc,
+          vin,
+          source,
+          location: cellToString(get(r, "location") || cellByLetter(r, "N") || cellByLetter(r, "M")),
+          ageing: cellToString(cellByLetter(r, "J")),
+          key: matchKey(product, suffix, year, ext, intc),
+        };
+      });
+
+    const stocks = [
+      ...mapStock(rtlRows, getRtl, "RTL"),
+      ...mapStock(centralRows, getCen, "Central"),
+    ].filter((s) => s.vin);
+
+    const sortedBo = bos.slice().sort((a, b) => a.orderTs - b.orderTs || a.idx - b.idx);
+    const sortedStock = stocks
+      .slice()
+      .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
+
+    const pools = new Map();
+    sortedStock.forEach((s) => {
+      if (!pools.has(s.key)) pools.set(s.key, []);
+      pools.get(s.key).push(Object.assign({}, s, { used: false }));
+    });
+
+    const out = [];
+    sortedBo.forEach((bo) => {
+      const pool = pools.get(bo.key) || [];
+      const hit = pool.find((s) => !s.used && s.vin);
+      if (!hit) return;
+      hit.used = true;
+      out.push({
+        "Back Order Number": bo.boNumber || "—",
+        VIN: hit.vin,
+        Product: bo.product || "—",
+        "Alj Suffix": bo.suffix || "—",
+        "Model Year": bo.year || "—",
+        "Salesman Name": bo.salesman || "—",
+        "Order Date": bo.orderDate || "—",
+        "Confirm Flag": bo.confirm || "—",
+        "Exterior Color": bo.ext || "—",
+        "Interior Color": bo.int || "—",
+        Source: hit.source,
+        "Current Location": hit.location || "—",
+        "Allocation Ageing": hit.ageing || "—",
+        "Cust Group": bo.custGroup || "—",
+      });
+    });
+    return out;
   }
 
-  function uniqueColValues(rows, letter) {
+  function uniqueMatchedField(rows, field) {
     const set = new Set();
     rows.forEach((r) => {
-      const v = cellToString(cellByLetter(r, letter)).trim();
-      if (v) set.add(v);
+      const v = cellToString(r[field]).trim();
+      if (v && v !== "—") set.add(v);
     });
     return set;
   }
 
-  function filteredAllocRows() {
-    return fulfillableBoRows().filter((r) => {
-      if (stockBoView.k && cellToString(cellByLetter(r, "K")).trim() !== stockBoView.k) return false;
-      if (stockBoView.l && cellToString(cellByLetter(r, "L")).trim() !== stockBoView.l) return false;
-      if (stockBoView.m && cellToString(cellByLetter(r, "M")).trim() !== stockBoView.m) return false;
-      if (stockBoView.g && cellToString(cellByLetter(r, "G")).trim() !== stockBoView.g) return false;
-      if (stockBoView.a && cellToString(cellByLetter(r, "A")).trim() !== stockBoView.a) return false;
-      if (stockBoView.own) {
-        if (stockBoView.own === STOCK_MAIN_SALES) {
-          if (!isYesFlag(cellByLetter(r, "AC"))) return false;
-        } else if (cellToString(cellByLetter(r, "H")).trim() !== stockBoView.own) {
-          return false;
-        }
-      }
+  function filteredMatchedAllocRows(allMatched) {
+    const f = stockBoView;
+    return (allMatched || []).filter((r) => {
+      if (f.product && upperTrim(r.Product) !== upperTrim(f.product)) return false;
+      if (f.suffix && upperTrim(r["Alj Suffix"]) !== upperTrim(f.suffix)) return false;
+      if (f.year && String(r["Model Year"]) !== String(f.year)) return false;
+      if (f.salesman && cellToString(r["Salesman Name"]) !== f.salesman) return false;
+      if (f.source && r.Source !== f.source) return false;
       return true;
     });
+  }
+
+  function renderStockAllocTable(allMatched, filtered) {
+    const el = $("#stock-alloc-table");
+    const foot = $("#stock-alloc-foot");
+    if (!el) return;
+
+    if (!filtered.length) {
+      el.innerHTML = `<p class="stock-empty-msg">No matched cars with stock VIN.</p>
+        <p class="foot" style="margin:12px 0 0;text-align:center">
+          Loaded <b>${formatNumber(rawBoRows().length)}</b> BO cars ·
+          <b>${formatNumber((allMatched || []).length)}</b> matched ·
+          RTL <b>${formatNumber((slots.rtl.rows || []).length)}</b> ·
+          Central <b>${formatNumber((slots.central.rows || []).length)}</b>.
+          Matching: Product + Suffix + Year + Colors (FIFO by order date).
+        </p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const limit = Math.min(filtered.length, MAX_ROWS);
+    el.innerHTML = `<table class="bo-table stock-alloc-table">
+      <thead><tr>${MATCHED_CAR_COLS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
+      <tbody>${filtered.slice(0, limit).map((r) => `
+        <tr>${MATCHED_CAR_COLS.map((h) => {
+          const t = cellToString(r[h]);
+          return `<td title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
+        }).join("")}</tr>`
+      ).join("")}</tbody>
+    </table>`;
+    if (foot) {
+      foot.textContent = filtered.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${filtered.length.toLocaleString()} matched cars · ${(allMatched || []).length.toLocaleString()} total matched`
+        : `${filtered.length.toLocaleString()} matched car${filtered.length === 1 ? "" : "s"} · order # + VIN + details`;
+    }
   }
 
   function fillStockSelect(sel, values, current, allLabel) {
@@ -4952,54 +5093,6 @@
 
   function hasStockFiles() {
     return slotHasRows("rtl") || slotHasRows("central");
-  }
-
-  function renderStockAllocTable(rows, sample, stats) {
-    const el = $("#stock-alloc-table");
-    const foot = $("#stock-alloc-foot");
-    if (!el) return;
-
-    if (!rows.length) {
-      const aeNote = stats && stats.computedAe
-        ? ` AE counts computed from uploaded RTL + Central stock (Col AE empty in Back Order file).`
-        : "";
-      const hint = stats && stats.total
-        ? `<p class="foot" style="margin:12px 0 0;text-align:center">
-            Loaded <b>${formatNumber(stats.total)}</b> BO rows ·
-            <b>${formatNumber(stats.withStock)}</b> with available stock ·
-            AD header: <b>${escapeHtml(stats.headerAd || "—")}</b>
-            (sample: ${escapeHtml(stats.sampleAd || "empty")}) ·
-            AE header: <b>${escapeHtml(stats.headerAe || "—")}</b>
-            (sample: ${escapeHtml(stats.sampleAe || "empty")}).${aeNote}
-            Re-push files from Admin if AD/AE were updated in Excel.
-          </p>`
-        : "";
-      el.innerHTML = `<p class="stock-empty-msg">No matching Back Orders with available stock.</p>${hint}`;
-      if (foot) foot.textContent = "0 rows";
-      return;
-    }
-
-    const headers = STOCK_DISPLAY_COLS.map((letter) => ({
-      letter,
-      label: stockDisplayLabel(sample || rows[0], letter),
-    }));
-
-    const limit = Math.min(rows.length, MAX_ROWS);
-    el.innerHTML = `<table class="bo-table stock-alloc-table">
-      <thead><tr>${headers.map((h) =>
-        `<th title="Column ${h.letter}">${escapeHtml(h.label)}<span class="stock-col-letter">${h.letter}</span></th>`
-      ).join("")}</tr></thead>
-      <tbody>${rows.slice(0, limit).map((r) => `
-        <tr>${STOCK_DISPLAY_COLS.map((letter) =>
-          `<td>${escapeHtml(cellToString(cellByLetter(r, letter)))}</td>`
-        ).join("")}</tr>`
-      ).join("")}</tbody>
-    </table>`;
-    if (foot) {
-      foot.textContent = rows.length > limit
-        ? `Showing ${limit.toLocaleString()} of ${rows.length.toLocaleString()} fulfillable rows`
-        : `${rows.length.toLocaleString()} fulfillable row${rows.length === 1 ? "" : "s"}`;
-    }
   }
 
   function renderStockDashboard() {
@@ -5054,33 +5147,15 @@
     if (boFilters) boFilters.hidden = false;
     if (allocSection) allocSection.hidden = false;
 
-    const allRows = rawBoRows();
-    const stats = stockAllocStats(allRows);
-    const base = fulfillableBoRows();
-    const sample = base[0] || allRows[0] || {};
-    const optionSource = base.length ? base : allRows;
+    const allMatched = buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || []);
+    fillStockSelect("#stock-alloc-product", uniqueMatchedField(allMatched, "Product"), stockBoView.product, "All products");
+    fillStockSelect("#stock-alloc-suffix", uniqueMatchedField(allMatched, "Alj Suffix"), stockBoView.suffix, "All suffixes");
+    fillStockSelect("#stock-alloc-year", uniqueMatchedField(allMatched, "Model Year"), stockBoView.year, "All model years");
+    fillStockSelect("#stock-alloc-salesman", uniqueMatchedField(allMatched, "Salesman Name"), stockBoView.salesman, "All salesmen");
+    if ($("#stock-alloc-source")) $("#stock-alloc-source").value = stockBoView.source || "";
 
-    fillStockSelect("#stock-f-k", uniqueColValues(optionSource, "K"), stockBoView.k, `All · ${stockDisplayLabel(sample, "K")}`);
-    fillStockSelect("#stock-f-l", uniqueColValues(optionSource, "L"), stockBoView.l, `All · ${stockDisplayLabel(sample, "L")}`);
-    fillStockSelect("#stock-f-m", uniqueColValues(optionSource, "M"), stockBoView.m, `All · ${stockDisplayLabel(sample, "M")}`);
-    fillStockSelect("#stock-f-g", uniqueColValues(optionSource, "G"), stockBoView.g, `All · ${stockDisplayLabel(sample, "G")}`);
-    fillStockSelect("#stock-f-a", uniqueColValues(optionSource, "A"), stockBoView.a, `All · ${stockDisplayLabel(sample, "A")}`);
-
-    const ownEl = $("#stock-f-own");
-    if (ownEl) {
-      const hVals = [...uniqueColValues(optionSource, "H")].sort();
-      const opts = [
-        `<option value="">All · Sales ownership</option>`,
-        `<option value="${STOCK_MAIN_SALES}"${stockBoView.own === STOCK_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
-        ...hVals.map((v) =>
-          `<option value="${escapeHtml(v)}"${v === stockBoView.own ? " selected" : ""}>${escapeHtml(v)}</option>`
-        ),
-      ];
-      ownEl.innerHTML = opts.join("");
-    }
-
-    const allocList = filteredAllocRows();
-    renderStockAllocTable(allocList, sample, stats);
+    const allocList = filteredMatchedAllocRows(allMatched);
+    renderStockAllocTable(allMatched, allocList);
   }
 
   function refreshStockFromFilters() {
@@ -5432,12 +5507,11 @@
   }
 
   [
-    ["#stock-f-k", "k"],
-    ["#stock-f-l", "l"],
-    ["#stock-f-m", "m"],
-    ["#stock-f-g", "g"],
-    ["#stock-f-own", "own"],
-    ["#stock-f-a", "a"],
+    ["#stock-alloc-product", "product"],
+    ["#stock-alloc-suffix", "suffix"],
+    ["#stock-alloc-year", "year"],
+    ["#stock-alloc-salesman", "salesman"],
+    ["#stock-alloc-source", "source"],
   ].forEach(([sel, key]) => {
     const el = $(sel);
     if (!el) return;
@@ -5446,7 +5520,13 @@
       refreshStockFromFilters();
     });
   });
-
+  const stockAllocClear = $("#stock-alloc-clear");
+  if (stockAllocClear) {
+    stockAllocClear.addEventListener("click", () => {
+      stockBoView = { product: "", suffix: "", year: "", salesman: "", source: "" };
+      refreshStockFromFilters();
+    });
+  }
   $("#pbi-wide-close").addEventListener("click", closeWideChart);
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
     if (e.target.id === "pbi-wide-backdrop") closeWideChart();

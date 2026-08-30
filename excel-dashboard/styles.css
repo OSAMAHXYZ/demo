@@ -840,9 +840,10 @@ body.layout-focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fulfillable-table td:hover {
-  white-space: normal;
-  word-break: break-word;
+.fulfillable-table td.vin-cell {
+  font-family: var(--mono, "JetBrains Mono", ui-monospace, monospace);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 720px) {

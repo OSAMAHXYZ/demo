@@ -107,6 +107,7 @@
     daily: [],
     fullControl: [],
     boOrders: [],
+    matchedCars: [],
   };
 
   /** VIN lookup indexes — rebuilt on Run Matching (and after parse). */
@@ -127,10 +128,25 @@
     2: { search: "", filter: "", sortCol: null, sortDir: 1 },
     3: { search: "", boFilter: "", rtlFilter: "", sortCol: null, sortDir: 1 },
     bo: { search: "", carsFilter: "", sortCol: "Cars", sortDir: -1, expanded: new Set() },
-    fulfillable: { k: "", l: "", m: "", g: "", own: "", a: "" },
+    fulfillable: { product: "", suffix: "", year: "", salesman: "", source: "" },
   };
 
-  const FULFILLABLE_DISPLAY_COLS = ["E", "K", "L", "M", "P", "G", "H", "AB", "AC", "AF", "AG", "AI", "AH"];
+  const MATCHED_CAR_COLS = [
+    "Back Order Number",
+    "VIN",
+    "Product",
+    "Alj Suffix",
+    "Model Year",
+    "Salesman Name",
+    "Order Date",
+    "Confirm Flag",
+    "Exterior Color",
+    "Interior Color",
+    "Source",
+    "Current Location",
+    "Allocation Ageing",
+    "Cust Group",
+  ];
   const FULFILLABLE_MAIN_SALES = "__MAIN_SALES__";
 
   let colors = null;
@@ -1440,7 +1456,7 @@
         e.stopPropagation();
         const product = tr.getAttribute("data-bo-product") || "";
         if (!product) return;
-        ui.fulfillable.l = product;
+        ui.fulfillable.product = product;
         renderFulfillable();
         const card = $("#fulfillable-card");
         if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1455,24 +1471,111 @@
     });
   }
 
-  function isFulfillableBo(row) {
-    if (F && typeof F.isFulfillable === "function") {
-      return F.isFulfillable(boQtyValue(row), availableStockValue(row));
-    }
-    const ae = availableStockValue(row);
-    const ad = boQtyValue(row);
-    return ae > 0 && ad <= ae;
+  /**
+   * FIFO match BO cars to RTL + Central stock (same logic as All/Daily stock matched).
+   * Only returns rows that received a stock VIN.
+   */
+  function buildMatchedCars(boRows, rtlRows, centralRows) {
+    const getBo = buildFieldGetter(boRows[0] || {});
+    const getRtl = buildFieldGetter(rtlRows[0] || {});
+    const getCen = buildFieldGetter(centralRows[0] || {});
+
+    const matchKey = (product, suffix, year, ext, intc) =>
+      [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
+
+    const bos = (boRows || []).map((r, idx) => {
+      const product = upperTrim(getBo(r, "product"));
+      const suffix = removeDashSpace(getBo(r, "suffix"));
+      const year = String(getBo(r, "year") ?? "").trim();
+      const ext = cellToString(getBo(r, "extBo") || getBo(r, "ext"));
+      const intc = cellToString(getBo(r, "intBo") || getBo(r, "int"));
+      return {
+        idx,
+        product,
+        suffix: upperTrim(suffix),
+        year,
+        ext,
+        int: intc,
+        key: matchKey(product, suffix, year, ext, intc),
+        salesman: cellToString(getBo(r, "salesman")),
+        boNumber: cellToString(getBo(r, "boNumber")),
+        orderDate: cellToString(getBo(r, "orderDate")),
+        orderTs: parseOrderDate(getBo(r, "orderDate")),
+        confirm: cellToString(getBo(r, "confirm")),
+        custGroup: cellToString(getBo(r, "custGroup")),
+      };
+    });
+
+    const mapStock = (rows, get, source) =>
+      (rows || []).map((r, idx) => {
+        const product = upperTrim(get(r, "product"));
+        const suffix = upperTrim(removeDashSpace(get(r, "suffix")));
+        const year = String(get(r, "modelYearStock") || get(r, "year") || "").trim();
+        const ext = cellToString(get(r, "extStock") || get(r, "ext"));
+        const intc = cellToString(get(r, "intStock") || get(r, "int"));
+        const vin = cellToString(get(r, "vin")).trim();
+        return {
+          idx: source + "-" + idx,
+          product,
+          suffix,
+          year,
+          ext,
+          int: intc,
+          vin,
+          source,
+          location: cellToString(get(r, "currentLocation") || get(r, "location")),
+          ageing: cellToString(get(r, "allocationAgeing")),
+          key: matchKey(product, suffix, year, ext, intc),
+        };
+      });
+
+    const stocks = [
+      ...mapStock(rtlRows, getRtl, "RTL"),
+      ...mapStock(centralRows, getCen, "Central"),
+    ].filter((s) => s.vin);
+
+    const sortedBo = bos.slice().sort((a, b) => a.orderTs - b.orderTs || a.idx - b.idx);
+    const sortedStock = stocks
+      .slice()
+      .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
+
+    const pools = new Map();
+    sortedStock.forEach((s) => {
+      if (!pools.has(s.key)) pools.set(s.key, []);
+      pools.get(s.key).push({ ...s, used: false });
+    });
+
+    const out = [];
+    sortedBo.forEach((bo) => {
+      const pool = pools.get(bo.key) || [];
+      const hit = pool.find((s) => !s.used && s.vin);
+      if (!hit) return;
+      hit.used = true;
+      out.push({
+        "Back Order Number": bo.boNumber || "—",
+        VIN: hit.vin,
+        Product: bo.product || "—",
+        "Alj Suffix": bo.suffix || "—",
+        "Model Year": bo.year || "—",
+        "Salesman Name": bo.salesman || "—",
+        "Order Date": bo.orderDate || "—",
+        "Confirm Flag": bo.confirm || "—",
+        "Exterior Color": bo.ext || "—",
+        "Interior Color": bo.int || "—",
+        Source: hit.source,
+        "Current Location": hit.location || "—",
+        "Allocation Ageing": hit.ageing || "—",
+        "Cust Group": bo.custGroup || "—",
+      });
+    });
+    return out;
   }
 
-  function fulfillableBoRows() {
-    return (slots.backorder.rows || []).filter(isFulfillableBo);
-  }
-
-  function uniqueColValues(rows, letter) {
+  function uniqueFieldValues(rows, field) {
     const set = new Set();
     rows.forEach((r) => {
-      const v = cellToString(cellByLetter(r, letter)).trim();
-      if (v) set.add(v);
+      const v = cellToString(r[field]).trim();
+      if (v && v !== "—") set.add(v);
     });
     return set;
   }
@@ -1489,57 +1592,14 @@
     el.innerHTML = opts.join("");
   }
 
-  function stockAllocStats(rows) {
-    let withStock = 0;
-    let fulfillable = 0;
-    let sampleAd = "";
-    let sampleAe = "";
-    let headerAd = "";
-    let headerAe = "";
-    let fromFileAe = 0;
-    rows.forEach((r, i) => {
-      const aeCol = toNumber(cellByLetter(r, "AE"));
-      const ae = availableStockValue(r);
-      const ad = boQtyValue(r);
-      if (i === 0) {
-        sampleAd = cellToString(cellByLetter(r, "AD"));
-        sampleAe = cellToString(cellByLetter(r, "AE"));
-        headerAd = headerByLetter(r, "AD");
-        headerAe = headerByLetter(r, "AE");
-      }
-      if (cellToString(cellByLetter(r, "AE")).trim() !== "" && aeCol > 0) fromFileAe += 1;
-      if (ae > 0) withStock += 1;
-      if (ae > 0 && ad <= ae) fulfillable += 1;
-    });
-    const hasStock = (slots.rtl.rows || []).length || (slots.central.rows || []).length;
-    return {
-      total: rows.length,
-      withStock,
-      fulfillable,
-      fromFileAe,
-      sampleAd,
-      sampleAe,
-      headerAd,
-      headerAe,
-      computedAe: hasStock && fromFileAe === 0,
-    };
-  }
-
-  function filteredFulfillableRows() {
+  function filteredMatchedCars() {
     const f = ui.fulfillable;
-    return fulfillableBoRows().filter((r) => {
-      if (f.k && cellToString(cellByLetter(r, "K")).trim() !== f.k) return false;
-      if (f.l && cellToString(cellByLetter(r, "L")).trim().toUpperCase() !== String(f.l).trim().toUpperCase()) return false;
-      if (f.m && cellToString(cellByLetter(r, "M")).trim() !== f.m) return false;
-      if (f.g && cellToString(cellByLetter(r, "G")).trim() !== f.g) return false;
-      if (f.a && cellToString(cellByLetter(r, "A")).trim() !== f.a) return false;
-      if (f.own) {
-        if (f.own === FULFILLABLE_MAIN_SALES) {
-          if (!isYesFlag(cellByLetter(r, "AC"))) return false;
-        } else if (cellToString(cellByLetter(r, "H")).trim() !== f.own) {
-          return false;
-        }
-      }
+    return (results.matchedCars || []).filter((r) => {
+      if (f.product && upperTrim(r.Product) !== upperTrim(f.product)) return false;
+      if (f.suffix && upperTrim(r["Alj Suffix"]) !== upperTrim(f.suffix)) return false;
+      if (f.year && String(r["Model Year"]) !== String(f.year)) return false;
+      if (f.salesman && cellToString(r["Salesman Name"]) !== f.salesman) return false;
+      if (f.source && r.Source !== f.source) return false;
       return true;
     });
   }
@@ -1549,75 +1609,48 @@
     const foot = $("#fulfillable-table-foot");
     if (!wrap) return;
 
-    const allRows = slots.backorder.rows || [];
-    if (!allRows.length) {
-      wrap.innerHTML = `<div class="empty-state">Upload a Backorder file and run matching.</div>`;
+    const all = results.matchedCars || [];
+    const f = ui.fulfillable;
+
+    fillFcSelect("#fc-f-product", uniqueFieldValues(all, "Product"), f.product, "All products");
+    fillFcSelect("#fc-f-suffix", uniqueFieldValues(all, "Alj Suffix"), f.suffix, "All suffixes");
+    fillFcSelect("#fc-f-year", uniqueFieldValues(all, "Model Year"), f.year, "All model years");
+    fillFcSelect("#fc-f-salesman", uniqueFieldValues(all, "Salesman Name"), f.salesman, "All salesmen");
+    if ($("#fc-f-source")) $("#fc-f-source").value = f.source || "";
+
+    if (!(slots.backorder.rows || []).length) {
+      wrap.innerHTML = `<div class="empty-state">Upload Backorder + RTL/Central and run matching.</div>`;
       if (foot) foot.textContent = "0 rows";
       return;
     }
 
-    const stats = stockAllocStats(allRows);
-    const base = fulfillableBoRows();
-    const sample = base[0] || allRows[0] || {};
-    const optionSource = base.length ? base : allRows;
-    const f = ui.fulfillable;
-
-    fillFcSelect("#fc-f-k", uniqueColValues(optionSource, "K"), f.k, `All · ${stockDisplayLabel(sample, "K")}`);
-    fillFcSelect("#fc-f-l", uniqueColValues(optionSource, "L"), f.l, `All · ${stockDisplayLabel(sample, "L")}`);
-    fillFcSelect("#fc-f-m", uniqueColValues(optionSource, "M"), f.m, `All · ${stockDisplayLabel(sample, "M")}`);
-    fillFcSelect("#fc-f-g", uniqueColValues(optionSource, "G"), f.g, `All · ${stockDisplayLabel(sample, "G")}`);
-    fillFcSelect("#fc-f-a", uniqueColValues(optionSource, "A"), f.a, `All · ${stockDisplayLabel(sample, "A")}`);
-
-    const ownEl = $("#fc-f-own");
-    if (ownEl) {
-      const hVals = [...uniqueColValues(optionSource, "H")].sort();
-      ownEl.innerHTML = [
-        `<option value="">All · Sales ownership</option>`,
-        `<option value="${FULFILLABLE_MAIN_SALES}"${f.own === FULFILLABLE_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
-        ...hVals.map(
-          (v) =>
-            `<option value="${escapeHtml(v)}"${v === f.own ? " selected" : ""}>${escapeHtml(v)}</option>`
-        ),
-      ].join("");
-    }
-
-    const list = filteredFulfillableRows();
+    const list = filteredMatchedCars();
     if (!list.length) {
       wrap.innerHTML = `
-        <div class="empty-state">No matching Back Orders with available stock.</div>
+        <div class="empty-state">No matched cars with stock VIN.</div>
         <p class="muted fulfillable-debug">
-          Loaded <b>${formatNumber(stats.total)}</b> BO rows ·
-          <b>${formatNumber(stats.withStock)}</b> with available stock ·
-          AD header: <b>${escapeHtml(stats.headerAd || "—")}</b>
-          (sample: ${escapeHtml(stats.sampleAd || "empty")}) ·
-          AE header: <b>${escapeHtml(stats.headerAe || "—")}</b>
-          (sample: ${escapeHtml(stats.sampleAe || "empty")}).${stats.computedAe ? " AE counts computed from RTL + Central stock." : ""}
-          Re-upload files if AD/AE were updated in Excel.
+          Loaded <b>${formatNumber((slots.backorder.rows || []).length)}</b> BO cars ·
+          <b>${formatNumber(all.length)}</b> matched to stock ·
+          RTL <b>${formatNumber((slots.rtl.rows || []).length)}</b> ·
+          Central <b>${formatNumber((slots.central.rows || []).length)}</b>.
+          Matching uses Product + Suffix + Model Year + Exterior/Interior (FIFO by order date).
         </p>`;
       if (foot) foot.textContent = "0 rows";
       return;
     }
 
-    const headers = FULFILLABLE_DISPLAY_COLS.map((letter) => ({
-      letter,
-      label: stockDisplayLabel(sample || list[0], letter),
-    }));
     const limit = Math.min(list.length, MAX_TABLE_RENDER);
-
-    wrap.innerHTML = `<table class="data-table fulfillable-table" aria-label="Fulfillable back orders">
-      <thead><tr>${headers
-        .map(
-          (h) =>
-            `<th title="Column ${h.letter}">${escapeHtml(h.label)}<span class="col-letter">${h.letter}</span></th>`
-        )
-        .join("")}</tr></thead>
+    wrap.innerHTML = `<table class="data-table fulfillable-table" aria-label="Matched fulfillable cars">
+      <thead><tr>${MATCHED_CAR_COLS.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
       <tbody>${list
         .slice(0, limit)
         .map(
           (r) =>
-            `<tr>${FULFILLABLE_DISPLAY_COLS.map(
-              (letter) => `<td title="${escapeHtml(cellToString(cellByLetter(r, letter)))}">${escapeHtml(cellToString(cellByLetter(r, letter))) || "—"}</td>`
-            ).join("")}</tr>`
+            `<tr>${MATCHED_CAR_COLS.map((h) => {
+              const t = cellToString(r[h]);
+              const cls = h === "VIN" ? " vin-cell" : "";
+              return `<td class="${cls}" title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
+            }).join("")}</tr>`
         )
         .join("")}</tbody>
     </table>`;
@@ -1625,8 +1658,8 @@
     if (foot) {
       foot.textContent =
         list.length > limit
-          ? `Showing ${formatNumber(limit)} of ${formatNumber(list.length)} fulfillable rows · ${formatNumber(stats.fulfillable)} fulfillable of ${formatNumber(stats.total)} BO`
-          : `${formatNumber(list.length)} fulfillable row${list.length === 1 ? "" : "s"} · ${formatNumber(stats.withStock)} with AE > 0 of ${formatNumber(stats.total)} BO`;
+          ? `Showing ${formatNumber(limit)} of ${formatNumber(list.length)} matched cars · ${formatNumber(all.length)} total matched`
+          : `${formatNumber(list.length)} matched car${list.length === 1 ? "" : "s"} · order # + VIN + details`;
     }
   }
 
@@ -1862,6 +1895,11 @@
         slots.central.rows
       );
       results.boOrders = groupBackOrders(slots.backorder.rows);
+      results.matchedCars = buildMatchedCars(
+        slots.backorder.rows,
+        slots.rtl.rows,
+        slots.central.rows
+      );
       invalidateStockAvailabilityCache();
 
       ui[3].search = "";
@@ -1874,7 +1912,7 @@
       ui.bo.sortCol = "Cars";
       ui.bo.sortDir = -1;
       ui.bo.expanded = new Set();
-      ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
+      ui.fulfillable = { product: "", suffix: "", year: "", salesman: "", source: "" };
       const search = $("#s3-search");
       const boFilter = $("#s3-bo-filter");
       const rtlFilter = $("#s3-rtl-filter");
@@ -1910,6 +1948,7 @@
     results.daily = [];
     results.fullControl = [];
     results.boOrders = [];
+    results.matchedCars = [];
     clearIndexes();
     ui[3].search = "";
     ui[3].boFilter = "";
@@ -1918,7 +1957,7 @@
     ui.bo.search = "";
     ui.bo.carsFilter = "";
     ui.bo.expanded = new Set();
-    ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
+    ui.fulfillable = { product: "", suffix: "", year: "", salesman: "", source: "" };
     invalidateStockAvailabilityCache();
     const section3 = $("#section-3");
     if (section3) section3.hidden = true;
@@ -2013,12 +2052,11 @@
     }
 
     [
-      ["#fc-f-k", "k"],
-      ["#fc-f-l", "l"],
-      ["#fc-f-m", "m"],
-      ["#fc-f-g", "g"],
-      ["#fc-f-own", "own"],
-      ["#fc-f-a", "a"],
+      ["#fc-f-product", "product"],
+      ["#fc-f-suffix", "suffix"],
+      ["#fc-f-year", "year"],
+      ["#fc-f-salesman", "salesman"],
+      ["#fc-f-source", "source"],
     ].forEach(([sel, key]) => {
       const el = $(sel);
       if (!el) return;
@@ -2030,7 +2068,7 @@
     const fcClear = $("#fc-clear-filters");
     if (fcClear) {
       fcClear.addEventListener("click", () => {
-        ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
+        ui.fulfillable = { product: "", suffix: "", year: "", salesman: "", source: "" };
         renderFulfillable();
       });
     }
