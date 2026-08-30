@@ -1211,6 +1211,76 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.bo-table th.num,
+.bo-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bo-table tfoot td {
+  background: #f1f5f9;
+  border-top: 2px solid var(--navy);
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.bo-table tr.bo-total-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+.bo-product-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.bo-product-total {
+  min-width: 100px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.bo-product-total.ok {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+
+.bo-product-total.warn {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.bo-product-total .lab {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.bo-product-total .val {
+  display: block;
+  margin-top: 2px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.bo-product-total.warn .val {
+  color: #b45309;
+}
+
 .bo-table {
   width: 100%;
   border-collapse: collapse;

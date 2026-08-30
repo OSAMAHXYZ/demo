@@ -3988,33 +3988,74 @@
       </div>`).join("");
   }
 
-  function renderBoProductTable(aggs) {
+  function renderBoProductTable(aggs, totals) {
     const el = $("#bo-product-table");
     if (!el) return;
     if (!aggs.length) {
       el.innerHTML = `<p class="foot" style="padding:12px">No products to show.</p>`;
       return;
     }
-    el.innerHTML = `<table class="bo-table">
+    const t = totals || {
+      total: aggs.reduce((s, a) => s + a.total, 0),
+      confirmed: aggs.reduce((s, a) => s + a.confirmed, 0),
+      notConfirmed: aggs.reduce((s, a) => s + a.notConfirmed, 0),
+      confirmPct: 0,
+      avgAging: 0,
+    };
+    if (!totals) {
+      t.confirmPct = t.total ? t.confirmed / t.total : 0;
+    }
+    const summary = `
+      <div class="bo-product-totals">
+        <div class="bo-product-total">
+          <span class="lab">Total BO</span>
+          <span class="val">${formatNumber(t.total)}</span>
+        </div>
+        <div class="bo-product-total ok">
+          <span class="lab">Confirmed</span>
+          <span class="val">${formatNumber(t.confirmed)}</span>
+        </div>
+        <div class="bo-product-total${t.notConfirmed ? " warn" : " ok"}">
+          <span class="lab">Not Confirmed</span>
+          <span class="val">${formatNumber(t.notConfirmed)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Confirmation %</span>
+          <span class="val">${(t.confirmPct * 100).toFixed(1)}%</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Avg Aging</span>
+          <span class="val">${formatNumber(t.avgAging || 0)}d</span>
+        </div>
+      </div>`;
+    el.innerHTML = `${summary}<table class="bo-table">
       <thead><tr>
         <th>Product</th>
-        <th>Total BO</th>
-        <th>Confirmed</th>
-        <th>Not Confirmed</th>
-        <th>Avg Aging</th>
-        <th>Conf %</th>
+        <th class="num">Total BO</th>
+        <th class="num">Confirmed</th>
+        <th class="num">Not Confirmed</th>
+        <th class="num">Avg Aging</th>
+        <th class="num">Conf %</th>
       </tr></thead>
       <tbody>${aggs.map((a) => {
         const active = a.product === boView.car ? " active" : "";
         return `<tr data-bo-product="${escapeHtml(a.product)}" class="bo-row${active}">
           <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
-          <td><b>${formatNumber(a.total)}</b></td>
-          <td>${formatNumber(a.confirmed)}</td>
-          <td>${formatNumber(a.notConfirmed)}</td>
-          <td class="${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
-          <td class="${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
+          <td class="num"><b>${formatNumber(a.total)}</b></td>
+          <td class="num">${formatNumber(a.confirmed)}</td>
+          <td class="num">${formatNumber(a.notConfirmed)}</td>
+          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
+          <td class="num ${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
         </tr>`;
       }).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td class="num"><b>${formatNumber(t.total)}</b></td>
+        <td class="num"><b>${formatNumber(t.confirmed)}</b></td>
+        <td class="num"><b>${formatNumber(t.notConfirmed)}</b></td>
+        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}d</b></td>
+        <td class="num ${heatConfirm(t.confirmPct)}"><b>${(t.confirmPct * 100).toFixed(1)}%</b></td>
+      </tr></tfoot>
     </table>`;
   }
 
@@ -4265,7 +4306,7 @@
     renderBoKpis(m);
     renderBoInsights(list, m);
     renderBoStrategic(list);
-    renderBoProductTable(aggs);
+    renderBoProductTable(aggs, m);
     renderBoCarDetail(all, list);
     renderBoSalesTypeTable(list);
     renderBoSfxTable(list);
