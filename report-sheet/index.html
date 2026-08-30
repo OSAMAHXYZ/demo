@@ -320,6 +320,10 @@
               </div>
               <h3 class="bo-subhead">Suffix breakdown for selected car</h3>
               <div class="table-wrap" id="bo-car-sfx-table"></div>
+              <h3 class="bo-subhead">All back order rows for selected car</h3>
+              <p class="hint" style="margin:0 0 8px">Every column from the uploaded Back Order file for this product.</p>
+              <div class="table-wrap" id="bo-car-rows-table"></div>
+              <p class="foot" id="bo-car-rows-foot"></p>
             </article>
 
             <article class="card pbi-viz" data-chart-id="chart-bo-backlog">
@@ -4169,10 +4173,76 @@
     return byType;
   }
 
+  function boFileColumns(sample) {
+    if (sample && Array.isArray(sample.__headers) && sample.__headers.length) {
+      return sample.__headers.map((label, i) => ({
+        letter: indexToColLetter(i),
+        label: String(label || "").trim() || `Col ${indexToColLetter(i)}`,
+        idx: i,
+      }));
+    }
+    const keys = Object.keys(sample || {}).filter((k) => !k.startsWith("__"));
+    return keys.map((label, i) => ({
+      letter: indexToColLetter(i),
+      label,
+      idx: i,
+      key: label,
+    }));
+  }
+
+  function boFileCell(row, col) {
+    if (col.key) return row[col.key];
+    return cellByLetter(row, col.letter);
+  }
+
+  function renderBoCarRowsTable(allBos, product, tableEl, footEl) {
+    if (!tableEl) return;
+    if (!product) {
+      tableEl.innerHTML = "";
+      if (footEl) footEl.textContent = "";
+      return;
+    }
+    const mappedRows = (allBos || []).filter((b) => b.product === product);
+    const rawRows = mappedRows
+      .map((b) => (slots.backorder.rows || [])[b.id])
+      .filter(Boolean);
+    if (!rawRows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No back order rows for this product.</p>`;
+      if (footEl) footEl.textContent = "0 rows";
+      return;
+    }
+    const sample = rawRows[0];
+    const cols = boFileColumns(sample);
+    const limit = Math.min(rawRows.length, MAX_ROWS);
+    const colCount = cols.length;
+
+    tableEl.innerHTML = `<table class="bo-table stock-file-table">
+      <thead><tr>${cols.map((c) =>
+        `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
+      ).join("")}</tr></thead>
+      <tbody>${rawRows.slice(0, limit).map((r) => `
+        <tr>${cols.map((c) =>
+          `<td>${escapeHtml(cellToString(boFileCell(r, c)))}</td>`
+        ).join("")}</tr>`
+      ).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"} · ${formatNumber(colCount)} columns</b></td>
+      </tr></tfoot>
+    </table>`;
+    if (footEl) {
+      footEl.textContent = rawRows.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${rawRows.length.toLocaleString()} rows · ${colCount} columns`
+        : `${rawRows.length.toLocaleString()} row${rawRows.length === 1 ? "" : "s"} · ${colCount} columns`;
+    }
+  }
+
   function renderBoCarDetail(allBos, filteredList) {
     const select = $("#bo-car-select");
     const summary = $("#bo-car-summary");
     const tableEl = $("#bo-car-sfx-table");
+    const rowsTableEl = $("#bo-car-rows-table");
+    const rowsFootEl = $("#bo-car-rows-foot");
     if (!select || !summary || !tableEl) return;
 
     const products = [...new Set((allBos || []).map((b) => b.product).filter(Boolean))].sort();
@@ -4180,8 +4250,9 @@
       products.map((p) => `<option value="${escapeHtml(p)}"${p === boView.car ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
 
     if (!boView.car) {
-      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix BO counts and Cash / Bank / Employee / Fleet mix.</p>`;
+      summary.innerHTML = `<p class="foot" style="margin:0">Select a car/product above (or click a product in the table) to see suffix BO counts, payment mix, and all back order rows.</p>`;
       tableEl.innerHTML = "";
+      renderBoCarRowsTable(null, "", rowsTableEl, rowsFootEl);
       upsertChart("chart-bo-car-sfx", "bar", ["—"], [0], { horizontal: true, backgroundColor: "rgba(148,163,184,0.5)" });
       upsertChart("chart-bo-car-pay", "doughnut", ["No selection"], [1]);
       return;
@@ -4249,6 +4320,7 @@
       ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0),
       ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0).map((t) => pay[t] || 0)
     );
+    renderBoCarRowsTable(allBos, boView.car, rowsTableEl, rowsFootEl);
   }
 
   function renderBoSalesTypeTable(list) {
