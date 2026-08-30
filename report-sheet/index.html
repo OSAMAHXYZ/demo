@@ -716,7 +716,7 @@
     plant: ["plant", "sales plant", "department", "sales office", "team"],
     salesmanCode: ["salesman code", "salesman id", "employee id", "employee no", "emp id", "staff id", "code"],
     orderDate: ["order date", "bo date", "created date", "date"],
-    confirm: ["confirm flag", "confirm", "confirmation", "confirmation status", "confirm status", "bo confirm"],
+    confirm: ["confirm flag", "confirm", "confirmation", "confirmation status", "confirm status", "bo confirm", "allocation status", "allocated", "allocation"],
     paid: ["المبلغ المدفوع", "paid", "paid amount", "amount paid", "payment"],
     location: ["current location", "gt location", "location", "storage location"],
     status: ["primary status", "status", "secondary status"],
@@ -1313,10 +1313,31 @@
   function isConfirmedFlag(v) {
     const s = String(v ?? "").trim().toLowerCase();
     if (!s) return false;
-    if (/(not\s*confirm|unconfirm|غير\s*مؤكد|\bno\b)/i.test(s)) return false;
-    if (["confirmed", "yes", "y", "1", "true", "confirm", "مؤكد", "c"].includes(s)) return true;
-    if (s.includes("confirm")) return true;
+    // Not confirmed — check before generic "confirm" substring match
+    if (/^(n|no|nc|0|false)$/i.test(s)) return false;
+    if (/(not[\s_-]*conf|un[\s_-]*conf|non[\s_-]*conf|pending|waiting|open|unalloc|not alloc|غير\s*مؤكد)/i.test(s)) return false;
+    // Confirmed
+    if (/^(y|yes|c|1|true|confirmed|confirm|allocated|alloc|مؤكد)$/i.test(s)) return true;
+    if (/^conf(irmed)?$/i.test(s)) return true;
     return false;
+  }
+
+  /** Back Order confirmation: Col H first, then header match. */
+  function boConfirmRaw(row, get) {
+    const colH = cellByLetter(row, "H");
+    if (cellToString(colH).trim() !== "") return colH;
+    const letter = findHeaderLetter(row, [
+      (n) => n === "confirm flag" || n === "confirm" || n === "confirmation",
+      (n) => n.includes("confirm") && !n.includes("not"),
+      (n) => n.includes("allocation") || n.includes("allocated"),
+    ]);
+    if (letter) {
+      const v = cellByLetter(row, letter);
+      if (cellToString(v).trim() !== "") return v;
+    }
+    const fromAlias = get(row, "confirm");
+    if (cellToString(fromAlias).trim() !== "") return fromAlias;
+    return get(row, "status");
   }
 
   function inferSalesType(raw, paid) {
@@ -1339,7 +1360,7 @@
       const aging = agingFromCol > 0
         ? agingFromCol
         : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
-      const confirmRaw = get(r, "confirm") || get(r, "status");
+      const confirmRaw = boConfirmRaw(r, get);
       const confirmed = isConfirmedFlag(confirmRaw);
       const product = cellToString(get(r, "product"));
       const suffix = cellToString(get(r, "sfx") || get(r, "suffix"));
