@@ -261,27 +261,93 @@
   }
 
   function boQtyValue(row) {
-    let v = cellByLetter(row, "AD");
-    if (cellToString(v).trim() !== "") return toNumber(v);
     const letter = findHeaderLetter(row, [
       (n) => n === "bo qty" || n === "back order qty" || n === "backorder qty",
       (n) => n.includes("bo") && n.includes("qty"),
       (n) => n === "qty" || n === "quantity" || n === "order qty",
+      (n) => n.includes("order") && n.includes("qty"),
     ]);
-    if (letter) return toNumber(cellByLetter(row, letter));
-    return toNumber(v);
+    if (letter) {
+      const n = toNumber(cellByLetter(row, letter));
+      if (n > 0) return n;
+    }
+    const v = cellByLetter(row, "AD");
+    const n = toNumber(v);
+    if (cellToString(v).trim() !== "" && n > 0) return n;
+    return 1;
+  }
+
+  let stockAvailabilityCache = null;
+
+  function invalidateStockAvailabilityCache() {
+    stockAvailabilityCache = null;
+  }
+
+  function boAllocKey(row) {
+    const get = buildFieldGetter(row);
+    const product = upperTrim(get(row, "product") || cellByLetter(row, "B"));
+    const suffix = upperTrim(get(row, "suffix") || get(row, "sfx") || cellByLetter(row, "G"));
+    const year = String(get(row, "year") || cellByLetter(row, "F") || "").trim();
+    const ext = colorKey(get(row, "ext") || cellByLetter(row, "H"));
+    const int = colorKey(get(row, "int") || cellByLetter(row, "I"));
+    return { product, suffix, year, ext, int, full: [product, suffix, year, ext, int].join("|") };
+  }
+
+  function buildStockAvailabilityMap() {
+    const counts = new Map();
+    const addRows = (rows) => {
+      (rows || []).forEach((r) => {
+        const get = buildFieldGetter(r);
+        const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
+        const suffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
+        const ext = colorKey(get(r, "ext") || cellByLetter(r, "H"));
+        const int = colorKey(get(r, "int") || cellByLetter(r, "I"));
+        const full = [product, suffix, year, ext, int].join("|");
+        if (!product && !suffix) return;
+        counts.set(full, (counts.get(full) || 0) + 1);
+        const ps = `${product}|${suffix}`;
+        counts.set(ps, (counts.get(ps) || 0) + 1);
+        if (product) counts.set(product, (counts.get(product) || 0) + 1);
+      });
+    };
+    addRows(slots.rtl.rows);
+    addRows(slots.central.rows);
+    return counts;
+  }
+
+  function stockAvailabilityMap() {
+    if (!stockAvailabilityCache) stockAvailabilityCache = buildStockAvailabilityMap();
+    return stockAvailabilityCache;
+  }
+
+  function computedAvailableStock(row) {
+    const { product, suffix, full } = boAllocKey(row);
+    const counts = stockAvailabilityMap();
+    if (counts.get(full)) return counts.get(full);
+    const ps = `${product}|${suffix}`;
+    if (counts.get(ps)) return counts.get(ps);
+    if (product && counts.get(product)) return counts.get(product);
+    return 0;
   }
 
   function availableStockValue(row) {
-    let v = cellByLetter(row, "AE");
-    if (cellToString(v).trim() !== "") return toNumber(v);
     const letter = findHeaderLetter(row, [
       (n) => n.includes("available") && (n.includes("stock") || n.includes("qty")),
       (n) => n === "available stock" || n === "avail stock" || n === "stock available",
       (n) => n === "available" || n === "avl" || n === "avl qty",
+      (n) => n.includes("stock") && (n.includes("qty") || n.includes("count") || n.includes("avail")),
+      (n) => n.includes("inventory") && n.includes("avail"),
     ]);
-    if (letter) return toNumber(cellByLetter(row, letter));
-    return toNumber(v);
+    if (letter) {
+      const n = toNumber(cellByLetter(row, letter));
+      if (n > 0) return n;
+    }
+    const v = cellByLetter(row, "AE");
+    const n = toNumber(v);
+    if (cellToString(v).trim() !== "" && n > 0) return n;
+    if ((slots.rtl.rows || []).length || (slots.central.rows || []).length) return computedAvailableStock(row);
+    return 0;
   }
 
   function isYesFlag(v) {
@@ -297,6 +363,10 @@
 
   function upperTrim(v) {
     return String(v == null ? "" : v).trim().toUpperCase();
+  }
+
+  function colorKey(v) {
+    return upperTrim(v).replace(/[^A-Z0-9]/g, "");
   }
 
   /**
@@ -1426,7 +1496,9 @@
     let sampleAe = "";
     let headerAd = "";
     let headerAe = "";
+    let fromFileAe = 0;
     rows.forEach((r, i) => {
+      const aeCol = toNumber(cellByLetter(r, "AE"));
       const ae = availableStockValue(r);
       const ad = boQtyValue(r);
       if (i === 0) {
@@ -1435,10 +1507,22 @@
         headerAd = headerByLetter(r, "AD");
         headerAe = headerByLetter(r, "AE");
       }
+      if (cellToString(cellByLetter(r, "AE")).trim() !== "" && aeCol > 0) fromFileAe += 1;
       if (ae > 0) withStock += 1;
       if (ae > 0 && ad <= ae) fulfillable += 1;
     });
-    return { total: rows.length, withStock, fulfillable, sampleAd, sampleAe, headerAd, headerAe };
+    const hasStock = (slots.rtl.rows || []).length || (slots.central.rows || []).length;
+    return {
+      total: rows.length,
+      withStock,
+      fulfillable,
+      fromFileAe,
+      sampleAd,
+      sampleAe,
+      headerAd,
+      headerAe,
+      computedAe: hasStock && fromFileAe === 0,
+    };
   }
 
   function filteredFulfillableRows() {
@@ -1503,12 +1587,12 @@
         <div class="empty-state">No matching Back Orders with available stock.</div>
         <p class="muted fulfillable-debug">
           Loaded <b>${formatNumber(stats.total)}</b> BO rows ·
-          <b>${formatNumber(stats.withStock)}</b> with AE &gt; 0 ·
+          <b>${formatNumber(stats.withStock)}</b> with available stock ·
           AD header: <b>${escapeHtml(stats.headerAd || "—")}</b>
           (sample: ${escapeHtml(stats.sampleAd || "empty")}) ·
           AE header: <b>${escapeHtml(stats.headerAe || "—")}</b>
-          (sample: ${escapeHtml(stats.sampleAe || "empty")}).
-          Re-upload the Back Order file if AD/AE were updated.
+          (sample: ${escapeHtml(stats.sampleAe || "empty")}).${stats.computedAe ? " AE counts computed from RTL + Central stock." : ""}
+          Re-upload files if AD/AE were updated in Excel.
         </p>`;
       if (foot) foot.textContent = "0 rows";
       return;
@@ -1778,6 +1862,7 @@
         slots.central.rows
       );
       results.boOrders = groupBackOrders(slots.backorder.rows);
+      invalidateStockAvailabilityCache();
 
       ui[3].search = "";
       ui[3].sortCol = null;
@@ -1834,6 +1919,7 @@
     ui.bo.carsFilter = "";
     ui.bo.expanded = new Set();
     ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
+    invalidateStockAvailabilityCache();
     const section3 = $("#section-3");
     if (section3) section3.hidden = true;
     const s3Kpis = $("#s3-kpis");
