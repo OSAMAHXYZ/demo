@@ -1329,6 +1329,27 @@ button:disabled {
   color: var(--muted);
 }
 
+.stock-dash .card + .card {
+  margin-top: 14px;
+}
+
+.stock-file-table {
+  font-size: 0.78rem;
+}
+
+.stock-file-table td {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-file-table td:hover {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.stock-file-table th .stock-col-letter,
 .stock-alloc-table th .stock-col-letter {
   display: block;
   font-size: 0.68rem;

@@ -386,21 +386,21 @@
       <!-- PANEL: Stock Dashboard (BO Allocation from available stock) -->
       <div class="panel-section" id="panel-stockdashboard" style="display:none">
         <div class="bo-empty card" id="stock-empty">
-          <h2>Stock Dashboard · Back Order Allocation</h2>
+          <h2>Stock Dashboard · Inventory &amp; BO Allocation</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Shows only back orders that can be fulfilled from available inventory
-            (<b>Col AE &gt; 0</b> and <b>Col AD ≤ Col AE</b>).
+            View full <b>RTL Stock</b> and <b>Stock Central</b> uploads, plus fulfillable back orders
+            (<b>Col AE &gt; 0</b> and <b>Col AD ≤ Col AE</b> from the Back Order file).
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
-            <li>Upload slot <b>1 · Back Order</b></li>
-            <li>Click <b>Push to live</b></li>
-            <li>Return here and click <b>Refresh from Admin</b></li>
+            <li>Upload slot <b>2 · RTL Stock</b> and/or <b>3 · Stock Central</b> (full details shown here)</li>
+            <li>Upload slot <b>1 · Back Order</b> for allocation view (AD/AE)</li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
           </ol>
         </div>
 
         <div id="stock-dash" class="stock-dash" hidden>
-          <div class="bo-toolbar stock-toolbar">
+          <div class="bo-toolbar stock-toolbar" id="stock-bo-filters">
             <select id="stock-f-k"><option value="">All · Col K</option></select>
             <select id="stock-f-l"><option value="">All · Col L</option></select>
             <select id="stock-f-m"><option value="">All · Col M</option></select>
@@ -412,7 +412,27 @@
 
           <div class="bo-kpis" id="stock-kpis"></div>
 
-          <article class="card">
+          <article class="card" id="stock-rtl-section" hidden>
+            <div class="pbi-viz-head">
+              <h2>RTL Stock · full file</h2>
+              <span class="hint">All columns from uploaded RTL Stock Excel</span>
+            </div>
+            <div id="stock-rtl-totals"></div>
+            <div class="table-wrap" id="stock-rtl-table"></div>
+            <p class="foot" id="stock-rtl-foot"></p>
+          </article>
+
+          <article class="card" id="stock-central-section" hidden>
+            <div class="pbi-viz-head">
+              <h2>Stock Central · full file</h2>
+              <span class="hint">All columns from uploaded Stock Central Excel</span>
+            </div>
+            <div id="stock-central-totals"></div>
+            <div class="table-wrap" id="stock-central-table"></div>
+            <p class="foot" id="stock-central-foot"></p>
+          </article>
+
+          <article class="card" id="stock-alloc-section">
             <div class="pbi-viz-head">
               <h2>Fulfillable back orders</h2>
               <span class="hint">AE &gt; 0 and AD ≤ AE · filters use All to ignore that column</span>
@@ -4421,35 +4441,123 @@
     fillBoSelect(sel, values, current, allLabel);
   }
 
-  function renderStockKpis(stats, filteredCount) {
-    const el = $("#stock-kpis");
+  function hasStockFiles() {
+    return slotHasRows("rtl") || slotHasRows("central");
+  }
+
+  function stockFileColumns(sample) {
+    if (sample && Array.isArray(sample.__headers) && sample.__headers.length) {
+      return sample.__headers.map((label, i) => ({
+        letter: indexToColLetter(i),
+        label: String(label || "").trim() || `Col ${indexToColLetter(i)}`,
+        idx: i,
+      }));
+    }
+    const keys = Object.keys(sample || {}).filter((k) => !k.startsWith("__"));
+    return keys.map((label, i) => ({
+      letter: indexToColLetter(i),
+      label,
+      idx: i,
+      key: label,
+    }));
+  }
+
+  function stockFileCell(row, col) {
+    if (col.key) return row[col.key];
+    return cellByLetter(row, col.letter);
+  }
+
+  function stockFileStats(rows) {
+    const get = buildFieldGetter(rows[0] || {});
+    const vins = new Set();
+    const products = new Set();
+    rows.forEach((r) => {
+      const vin = extractVinValue(get(r, "vin")) || extractVinValue(cellByLetter(r, "E"));
+      if (vin) vins.add(vin);
+      const prod = cellToString(get(r, "product")).trim();
+      if (prod) products.add(prod);
+    });
+    return { total: rows.length, vins: vins.size, products: products.size };
+  }
+
+  function renderStockFileTotals(el, stats, sourceLabel) {
     if (!el) return;
     el.innerHTML = `
-      <div class="bo-kpi ok">
-        <div class="lab">Total BO rows</div>
-        <div class="val">${formatNumber(stats.total)}</div>
-        <div class="sub">from Back Order file</div>
-      </div>
-      <div class="bo-kpi ${stats.withStock ? "ok" : "warn"}">
-        <div class="lab">AE stock &gt; 0</div>
-        <div class="val">${formatNumber(stats.withStock)}</div>
-        <div class="sub">${escapeHtml(stats.headerAe || "Col AE")}</div>
-      </div>
-      <div class="bo-kpi ${stats.fulfillable ? "ok" : "warn"}">
-        <div class="lab">Fulfillable BOs</div>
-        <div class="val">${formatNumber(stats.fulfillable)}</div>
-        <div class="sub">AE &gt; 0 and AD ≤ AE</div>
-      </div>
-      <div class="bo-kpi ok">
-        <div class="lab">After filters</div>
-        <div class="val">${formatNumber(filteredCount)}</div>
-        <div class="sub">matching allocation rows</div>
-      </div>
-      <div class="bo-kpi ${filteredCount ? "ok" : "warn"}">
-        <div class="lab">Status</div>
-        <div class="val" style="font-size:1rem">${filteredCount ? "Ready" : "None"}</div>
-        <div class="sub">${filteredCount ? "stock available to allocate" : "no matching stock"}</div>
+      <div class="bo-product-totals">
+        <div class="bo-product-total ok">
+          <span class="lab">${escapeHtml(sourceLabel)} rows</span>
+          <span class="val">${formatNumber(stats.total)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Unique VINs</span>
+          <span class="val">${formatNumber(stats.vins)}</span>
+        </div>
+        <div class="bo-product-total">
+          <span class="lab">Products</span>
+          <span class="val">${formatNumber(stats.products)}</span>
+        </div>
       </div>`;
+  }
+
+  function renderStockFileTable(tableEl, footEl, rows, sourceLabel) {
+    if (!tableEl) return;
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="stock-empty-msg">No ${escapeHtml(sourceLabel)} rows loaded. Upload in Admin slot and Push to live.</p>`;
+      if (footEl) footEl.textContent = "0 rows";
+      return;
+    }
+    const sample = rows[0];
+    const cols = stockFileColumns(sample);
+    const stats = stockFileStats(rows);
+    const limit = Math.min(rows.length, MAX_ROWS);
+    const colCount = cols.length;
+
+    tableEl.innerHTML = `<table class="bo-table stock-file-table">
+      <thead><tr>${cols.map((c) =>
+        `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
+      ).join("")}</tr></thead>
+      <tbody>${rows.slice(0, limit).map((r) => `
+        <tr>${cols.map((c) =>
+          `<td>${escapeHtml(cellToString(stockFileCell(r, c)))}</td>`
+        ).join("")}</tr>`
+      ).join("")}</tbody>
+      <tfoot><tr class="bo-total-row">
+        <td><b>TOTAL</b></td>
+        <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(stats.total)} rows · ${formatNumber(stats.vins)} VINs · ${formatNumber(stats.products)} products</b></td>
+      </tr></tfoot>
+    </table>`;
+    if (footEl) {
+      footEl.textContent = rows.length > limit
+        ? `Showing ${limit.toLocaleString()} of ${rows.length.toLocaleString()} ${sourceLabel} rows · ${colCount} columns`
+        : `${rows.length.toLocaleString()} ${sourceLabel} row${rows.length === 1 ? "" : "s"} · ${colCount} columns`;
+    }
+  }
+
+  function renderStockKpis(stats, filteredCount, rtlCount, centralCount) {
+    const el = $("#stock-kpis");
+    if (!el) return;
+    const cards = [];
+    if (rtlCount != null) {
+      cards.push({ lab: "RTL Stock rows", val: rtlCount, sub: "slot 2 · retail", status: rtlCount ? "ok" : "warn" });
+    }
+    if (centralCount != null) {
+      cards.push({ lab: "Central Stock rows", val: centralCount, sub: "slot 3 · central", status: centralCount ? "ok" : "warn" });
+    }
+    if (stats) {
+      cards.push(
+        { lab: "Total BO rows", val: stats.total, sub: "from Back Order file", status: "ok" },
+        { lab: "AE stock > 0", val: stats.withStock, sub: stats.headerAe || "Col AE", status: stats.withStock ? "ok" : "warn" },
+        { lab: "Fulfillable BOs", val: stats.fulfillable, sub: "AE > 0 and AD ≤ AE", status: stats.fulfillable ? "ok" : "warn" },
+        { lab: "After filters", val: filteredCount, sub: "matching allocation rows", status: "ok" },
+        { lab: "Allocation status", val: filteredCount ? "Ready" : "None", sub: filteredCount ? "stock available" : "no matching stock", status: filteredCount ? "ok" : "warn", small: true },
+      );
+    }
+    el.innerHTML = cards.map((c) => `
+      <div class="bo-kpi ${c.status}">
+        <div class="lab">${c.lab}</div>
+        <div class="val"${c.small ? ' style="font-size:1rem"' : ""}>${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
+        <div class="sub">${escapeHtml(String(c.sub))}</div>
+      </div>`).join("");
   }
 
   function renderStockAllocTable(rows, sample, stats) {
@@ -4500,7 +4608,9 @@
   function renderStockDashboard() {
     const empty = $("#stock-empty");
     const dash = $("#stock-dash");
-    if (!hasBackOrder()) {
+    const hasBo = hasBackOrder();
+    const hasStock = hasStockFiles();
+    if (!hasBo && !hasStock) {
       if (empty) empty.hidden = false;
       if (dash) dash.hidden = true;
       return;
@@ -4508,12 +4618,45 @@
     if (empty) empty.hidden = true;
     if (dash) dash.hidden = false;
 
+    const rtlRows = slots.rtl.rows || [];
+    const centralRows = slots.central.rows || [];
+    const rtlSection = $("#stock-rtl-section");
+    const centralSection = $("#stock-central-section");
+    const allocSection = $("#stock-alloc-section");
+    const boFilters = $("#stock-bo-filters");
+
+    if (rtlSection) {
+      rtlSection.hidden = !rtlRows.length;
+      if (rtlRows.length) {
+        const rtlStats = stockFileStats(rtlRows);
+        renderStockFileTotals($("#stock-rtl-totals"), rtlStats, "RTL Stock");
+        renderStockFileTable($("#stock-rtl-table"), $("#stock-rtl-foot"), rtlRows, "RTL Stock");
+      }
+    }
+    if (centralSection) {
+      centralSection.hidden = !centralRows.length;
+      if (centralRows.length) {
+        const centralStats = stockFileStats(centralRows);
+        renderStockFileTotals($("#stock-central-totals"), centralStats, "Stock Central");
+        renderStockFileTable($("#stock-central-table"), $("#stock-central-foot"), centralRows, "Stock Central");
+      }
+    }
+
+    if (!hasBo) {
+      if (boFilters) boFilters.hidden = true;
+      if (allocSection) allocSection.hidden = true;
+      renderStockKpis(null, 0, rtlRows.length, centralRows.length);
+      return;
+    }
+
+    if (boFilters) boFilters.hidden = false;
+    if (allocSection) allocSection.hidden = false;
+
     const allRows = rawBoRows();
     const stats = stockAllocStats(allRows);
     const base = fulfillableBoRows();
     const sample = base[0] || allRows[0] || {};
 
-    // Filter option lists: prefer fulfillable rows; fall back to all BO rows so slicers still fill
     const optionSource = base.length ? base : allRows;
     fillStockSelect("#stock-f-k", uniqueColValues(optionSource, "K"), stockView.k, `All · ${stockDisplayLabel(sample, "K")}`);
     fillStockSelect("#stock-f-l", uniqueColValues(optionSource, "L"), stockView.l, `All · ${stockDisplayLabel(sample, "L")}`);
@@ -4535,7 +4678,7 @@
     }
 
     const list = filteredAllocRows();
-    renderStockKpis(stats, list.length);
+    renderStockKpis(stats, list.length, rtlRows.length, centralRows.length);
     renderStockAllocTable(list, sample, stats);
   }
 
@@ -4559,6 +4702,7 @@
     switchNav("dashboard");
     if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
+    else if (hasStockFiles()) activePanel = "stockdashboard";
     else activePanel = "dashboard";
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
@@ -4576,9 +4720,9 @@
     renderTabs();
     renderTable(d);
     setStatus(
-      hasBackOrder() || hasSalesReportInputs()
+      hasBackOrder() || hasStockFiles() || hasSalesReportInputs()
         ? "Live dashboard ready"
-        : "Dashboard ready · Push Back Order or Sales Raw from Admin",
+        : "Dashboard ready · Push files from Admin",
       "ok"
     );
   }
