@@ -787,6 +787,64 @@ body.layout-focus {
   width: 2.5em;
 }
 
+.bo-car-row[data-bo-product] {
+  cursor: pointer;
+}
+.bo-car-row[data-bo-product]:hover {
+  background: #e0f2fe;
+}
+
+.fulfillable-rule {
+  font-size: 0.8rem;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+.fulfillable-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+  align-items: center;
+}
+.fulfillable-toolbar select {
+  min-width: 140px;
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+.fulfillable-debug {
+  margin: 0;
+  padding: 0 16px 14px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-align: center;
+}
+.fulfillable-table {
+  font-size: 0.78rem;
+}
+.fulfillable-table th .col-letter {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+.fulfillable-table td {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fulfillable-table td:hover {
+  white-space: normal;
+  word-break: break-word;
+}
+
 @media (max-width: 720px) {
   .topbar-focus {
     border-radius: 0;
@@ -800,5 +858,9 @@ body.layout-focus {
   }
   .main-focus {
     padding: 14px 12px 8px;
+  }
+  .fulfillable-toolbar select {
+    max-width: none;
+    flex: 1 1 140px;
   }
 }

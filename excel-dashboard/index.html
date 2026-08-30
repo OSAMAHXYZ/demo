@@ -85,6 +85,25 @@
           <p class="table-foot" id="bo-orders-foot"></p>
         </article>
 
+        <article class="card table-card" id="fulfillable-card">
+          <div class="card-head table-toolbar">
+            <h3>Fulfillable back orders</h3>
+            <span class="muted fulfillable-rule">AE &gt; 0 and AD ≤ AE · from Back Order file</span>
+          </div>
+          <div class="fulfillable-toolbar" id="fulfillable-filters">
+            <select id="fc-f-k"><option value="">All · Col K</option></select>
+            <select id="fc-f-l"><option value="">All · Col L</option></select>
+            <select id="fc-f-m"><option value="">All · Col M</option></select>
+            <select id="fc-f-g"><option value="">All · Col G</option></select>
+            <select id="fc-f-own"><option value="">All · Sales ownership</option></select>
+            <select id="fc-f-a"><option value="">All · Col A</option></select>
+            <button type="button" class="btn" id="fc-clear-filters">Clear filters</button>
+          </div>
+          <p class="bo-hint muted">Click a car under Back orders to filter this list by that product · All = ignore that column.</p>
+          <div class="table-scroll" id="fulfillable-table-wrap"></div>
+          <p class="table-foot" id="fulfillable-table-foot"></p>
+        </article>
+
         <article class="card table-card">
           <div class="card-head table-toolbar">
             <h3>Full control results</h3>

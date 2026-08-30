@@ -127,7 +127,11 @@
     2: { search: "", filter: "", sortCol: null, sortDir: 1 },
     3: { search: "", boFilter: "", rtlFilter: "", sortCol: null, sortDir: 1 },
     bo: { search: "", carsFilter: "", sortCol: "Cars", sortDir: -1, expanded: new Set() },
+    fulfillable: { k: "", l: "", m: "", g: "", own: "", a: "" },
   };
+
+  const FULFILLABLE_DISPLAY_COLS = ["E", "K", "L", "M", "P", "G", "H", "AB", "AC", "AF", "AG", "AI", "AH"];
+  const FULFILLABLE_MAIN_SALES = "__MAIN_SALES__";
 
   let colors = null;
   let exteriorMaster = [];
@@ -190,6 +194,105 @@
     }
     if (typeof v === "object") return JSON.stringify(v);
     return String(v);
+  }
+
+  function toNumber(v) {
+    if (F && typeof F.toNumber === "function") return F.toNumber(v);
+    if (v == null || v === "") return 0;
+    if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+    const s = String(v).replace(/,/g, "").trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function colLetterToIndex(letter) {
+    const s = String(letter || "").toUpperCase().replace(/[^A-Z]/g, "");
+    if (!s) return -1;
+    let n = 0;
+    for (let i = 0; i < s.length; i += 1) n = n * 26 + (s.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  function indexToColLetter(idx) {
+    let n = Number(idx) + 1;
+    let s = "";
+    while (n > 0) {
+      const rem = (n - 1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  function cellByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (idx < 0 || !row) return "";
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      const key = row.__headers[idx];
+      if (Object.prototype.hasOwnProperty.call(row, key) && row[key] != null && row[key] !== "") {
+        return row[key];
+      }
+    }
+    if (Array.isArray(row.__cells) && row.__cells[idx] != null && row.__cells[idx] !== "") {
+      return row.__cells[idx];
+    }
+    if (Array.isArray(row.__headers) && row.__headers[idx] != null) {
+      return row[row.__headers[idx]] != null ? row[row.__headers[idx]] : "";
+    }
+    const keys = Object.keys(row).filter((k) => !k.startsWith("__"));
+    if (keys[idx] != null) return row[keys[idx]] != null ? row[keys[idx]] : "";
+    return "";
+  }
+
+  function headerByLetter(row, letter) {
+    const idx = colLetterToIndex(letter);
+    if (row && Array.isArray(row.__headers) && row.__headers[idx]) return row.__headers[idx];
+    return `Column ${String(letter || "").toUpperCase()}`;
+  }
+
+  function findHeaderLetter(row, tests) {
+    const headers = row && Array.isArray(row.__headers) ? row.__headers : [];
+    for (let i = 0; i < headers.length; i += 1) {
+      const n = normHeader(headers[i]);
+      if (tests.some((t) => t(n))) return indexToColLetter(i);
+    }
+    return "";
+  }
+
+  function boQtyValue(row) {
+    let v = cellByLetter(row, "AD");
+    if (cellToString(v).trim() !== "") return toNumber(v);
+    const letter = findHeaderLetter(row, [
+      (n) => n === "bo qty" || n === "back order qty" || n === "backorder qty",
+      (n) => n.includes("bo") && n.includes("qty"),
+      (n) => n === "qty" || n === "quantity" || n === "order qty",
+    ]);
+    if (letter) return toNumber(cellByLetter(row, letter));
+    return toNumber(v);
+  }
+
+  function availableStockValue(row) {
+    let v = cellByLetter(row, "AE");
+    if (cellToString(v).trim() !== "") return toNumber(v);
+    const letter = findHeaderLetter(row, [
+      (n) => n.includes("available") && (n.includes("stock") || n.includes("qty")),
+      (n) => n === "available stock" || n === "avail stock" || n === "stock available",
+      (n) => n === "available" || n === "avl" || n === "avl qty",
+    ]);
+    if (letter) return toNumber(cellByLetter(row, letter));
+    return toNumber(v);
+  }
+
+  function isYesFlag(v) {
+    return /^(yes|y|1|true)$/i.test(String(v ?? "").trim());
+  }
+
+  function stockDisplayLabel(sample, letter) {
+    const h = headerByLetter(sample, letter);
+    const clean = String(h || "").trim();
+    if (!clean || /^Column\s+\d+$/i.test(clean)) return `Col ${letter}`;
+    return clean;
   }
 
   function upperTrim(v) {
@@ -396,10 +499,16 @@
           .length >= 3;
       if (looksLikeHeader) continue;
 
+      // Ensure trailing columns (AD/AE/…) are preserved even when Excel omits empty cells
+      const padded = line.slice();
+      while (padded.length < uniqueHeaders.length) padded.push("");
+
       const obj = {};
       uniqueHeaders.forEach((h, i) => {
-        obj[h] = line[i] != null ? line[i] : "";
+        obj[h] = padded[i] != null ? padded[i] : "";
       });
+      obj.__cells = padded;
+      obj.__headers = uniqueHeaders;
       rows.push(obj);
     }
     return rows;
@@ -1171,8 +1280,10 @@
         ];
         const carRows = row.cars
           .map(
-            (c, i) => `
-            <tr class="bo-car-row">
+            (c, i) => {
+              const product = cellToString(c.Product);
+              return `
+            <tr class="bo-car-row" data-bo-product="${escapeHtml(product)}" tabindex="0" role="button" title="Filter fulfillable by this product">
               <td class="bo-car-idx">${i + 1}</td>
               ${carHeaders
                 .map((h) => {
@@ -1180,7 +1291,8 @@
                   return `<td class="${t ? "" : "empty-cell"}" title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
                 })
                 .join("")}
-            </tr>`
+            </tr>`;
+            }
           )
           .join("");
 
@@ -1252,6 +1364,186 @@
         }
       });
     });
+
+    $$(".bo-car-row[data-bo-product]", wrap).forEach((tr) => {
+      const selectProduct = (e) => {
+        e.stopPropagation();
+        const product = tr.getAttribute("data-bo-product") || "";
+        if (!product) return;
+        ui.fulfillable.l = product;
+        renderFulfillable();
+        const card = $("#fulfillable-card");
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+      tr.addEventListener("click", selectProduct);
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectProduct(e);
+        }
+      });
+    });
+  }
+
+  function isFulfillableBo(row) {
+    if (F && typeof F.isFulfillable === "function") {
+      return F.isFulfillable(boQtyValue(row), availableStockValue(row));
+    }
+    const ae = availableStockValue(row);
+    const ad = boQtyValue(row);
+    return ae > 0 && ad <= ae;
+  }
+
+  function fulfillableBoRows() {
+    return (slots.backorder.rows || []).filter(isFulfillableBo);
+  }
+
+  function uniqueColValues(rows, letter) {
+    const set = new Set();
+    rows.forEach((r) => {
+      const v = cellToString(cellByLetter(r, letter)).trim();
+      if (v) set.add(v);
+    });
+    return set;
+  }
+
+  function fillFcSelect(sel, values, current, allLabel) {
+    const el = $(sel);
+    if (!el) return;
+    const opts = [`<option value="">${escapeHtml(allLabel)}</option>`].concat(
+      [...values].sort().map(
+        (v) =>
+          `<option value="${escapeHtml(v)}"${v === current ? " selected" : ""}>${escapeHtml(v)}</option>`
+      )
+    );
+    el.innerHTML = opts.join("");
+  }
+
+  function stockAllocStats(rows) {
+    let withStock = 0;
+    let fulfillable = 0;
+    let sampleAd = "";
+    let sampleAe = "";
+    let headerAd = "";
+    let headerAe = "";
+    rows.forEach((r, i) => {
+      const ae = availableStockValue(r);
+      const ad = boQtyValue(r);
+      if (i === 0) {
+        sampleAd = cellToString(cellByLetter(r, "AD"));
+        sampleAe = cellToString(cellByLetter(r, "AE"));
+        headerAd = headerByLetter(r, "AD");
+        headerAe = headerByLetter(r, "AE");
+      }
+      if (ae > 0) withStock += 1;
+      if (ae > 0 && ad <= ae) fulfillable += 1;
+    });
+    return { total: rows.length, withStock, fulfillable, sampleAd, sampleAe, headerAd, headerAe };
+  }
+
+  function filteredFulfillableRows() {
+    const f = ui.fulfillable;
+    return fulfillableBoRows().filter((r) => {
+      if (f.k && cellToString(cellByLetter(r, "K")).trim() !== f.k) return false;
+      if (f.l && cellToString(cellByLetter(r, "L")).trim().toUpperCase() !== String(f.l).trim().toUpperCase()) return false;
+      if (f.m && cellToString(cellByLetter(r, "M")).trim() !== f.m) return false;
+      if (f.g && cellToString(cellByLetter(r, "G")).trim() !== f.g) return false;
+      if (f.a && cellToString(cellByLetter(r, "A")).trim() !== f.a) return false;
+      if (f.own) {
+        if (f.own === FULFILLABLE_MAIN_SALES) {
+          if (!isYesFlag(cellByLetter(r, "AC"))) return false;
+        } else if (cellToString(cellByLetter(r, "H")).trim() !== f.own) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function renderFulfillable() {
+    const wrap = $("#fulfillable-table-wrap");
+    const foot = $("#fulfillable-table-foot");
+    if (!wrap) return;
+
+    const allRows = slots.backorder.rows || [];
+    if (!allRows.length) {
+      wrap.innerHTML = `<div class="empty-state">Upload a Backorder file and run matching.</div>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const stats = stockAllocStats(allRows);
+    const base = fulfillableBoRows();
+    const sample = base[0] || allRows[0] || {};
+    const optionSource = base.length ? base : allRows;
+    const f = ui.fulfillable;
+
+    fillFcSelect("#fc-f-k", uniqueColValues(optionSource, "K"), f.k, `All · ${stockDisplayLabel(sample, "K")}`);
+    fillFcSelect("#fc-f-l", uniqueColValues(optionSource, "L"), f.l, `All · ${stockDisplayLabel(sample, "L")}`);
+    fillFcSelect("#fc-f-m", uniqueColValues(optionSource, "M"), f.m, `All · ${stockDisplayLabel(sample, "M")}`);
+    fillFcSelect("#fc-f-g", uniqueColValues(optionSource, "G"), f.g, `All · ${stockDisplayLabel(sample, "G")}`);
+    fillFcSelect("#fc-f-a", uniqueColValues(optionSource, "A"), f.a, `All · ${stockDisplayLabel(sample, "A")}`);
+
+    const ownEl = $("#fc-f-own");
+    if (ownEl) {
+      const hVals = [...uniqueColValues(optionSource, "H")].sort();
+      ownEl.innerHTML = [
+        `<option value="">All · Sales ownership</option>`,
+        `<option value="${FULFILLABLE_MAIN_SALES}"${f.own === FULFILLABLE_MAIN_SALES ? " selected" : ""}>Main Sales</option>`,
+        ...hVals.map(
+          (v) =>
+            `<option value="${escapeHtml(v)}"${v === f.own ? " selected" : ""}>${escapeHtml(v)}</option>`
+        ),
+      ].join("");
+    }
+
+    const list = filteredFulfillableRows();
+    if (!list.length) {
+      wrap.innerHTML = `
+        <div class="empty-state">No matching Back Orders with available stock.</div>
+        <p class="muted fulfillable-debug">
+          Loaded <b>${formatNumber(stats.total)}</b> BO rows ·
+          <b>${formatNumber(stats.withStock)}</b> with AE &gt; 0 ·
+          AD header: <b>${escapeHtml(stats.headerAd || "—")}</b>
+          (sample: ${escapeHtml(stats.sampleAd || "empty")}) ·
+          AE header: <b>${escapeHtml(stats.headerAe || "—")}</b>
+          (sample: ${escapeHtml(stats.sampleAe || "empty")}).
+          Re-upload the Back Order file if AD/AE were updated.
+        </p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const headers = FULFILLABLE_DISPLAY_COLS.map((letter) => ({
+      letter,
+      label: stockDisplayLabel(sample || list[0], letter),
+    }));
+    const limit = Math.min(list.length, MAX_TABLE_RENDER);
+
+    wrap.innerHTML = `<table class="data-table fulfillable-table" aria-label="Fulfillable back orders">
+      <thead><tr>${headers
+        .map(
+          (h) =>
+            `<th title="Column ${h.letter}">${escapeHtml(h.label)}<span class="col-letter">${h.letter}</span></th>`
+        )
+        .join("")}</tr></thead>
+      <tbody>${list
+        .slice(0, limit)
+        .map(
+          (r) =>
+            `<tr>${FULFILLABLE_DISPLAY_COLS.map(
+              (letter) => `<td title="${escapeHtml(cellToString(cellByLetter(r, letter)))}">${escapeHtml(cellToString(cellByLetter(r, letter))) || "—"}</td>`
+            ).join("")}</tr>`
+        )
+        .join("")}</tbody>
+    </table>`;
+
+    if (foot) {
+      foot.textContent =
+        list.length > limit
+          ? `Showing ${formatNumber(limit)} of ${formatNumber(list.length)} fulfillable rows · ${formatNumber(stats.fulfillable)} fulfillable of ${formatNumber(stats.total)} BO`
+          : `${formatNumber(list.length)} fulfillable row${list.length === 1 ? "" : "s"} · ${formatNumber(stats.withStock)} with AE > 0 of ${formatNumber(stats.total)} BO`;
+    }
   }
 
   function getSectionRows(sectionNum) {
@@ -1428,6 +1720,7 @@
     ]);
 
     renderBoOrders();
+    renderFulfillable();
     renderTable(3);
   }
 
@@ -1496,6 +1789,7 @@
       ui.bo.sortCol = "Cars";
       ui.bo.sortDir = -1;
       ui.bo.expanded = new Set();
+      ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
       const search = $("#s3-search");
       const boFilter = $("#s3-bo-filter");
       const rtlFilter = $("#s3-rtl-filter");
@@ -1539,6 +1833,7 @@
     ui.bo.search = "";
     ui.bo.carsFilter = "";
     ui.bo.expanded = new Set();
+    ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
     const section3 = $("#section-3");
     if (section3) section3.hidden = true;
     const s3Kpis = $("#s3-kpis");
@@ -1547,6 +1842,10 @@
     if (boWrap) boWrap.innerHTML = "";
     const boFoot = $("#bo-orders-foot");
     if (boFoot) boFoot.textContent = "";
+    const fcWrap = $("#fulfillable-table-wrap");
+    if (fcWrap) fcWrap.innerHTML = "";
+    const fcFoot = $("#fulfillable-table-foot");
+    if (fcFoot) fcFoot.textContent = "";
     const s3Wrap = $("#s3-table-wrap");
     if (s3Wrap) s3Wrap.innerHTML = "";
     const s3Foot = $("#s3-table-foot");
@@ -1624,6 +1923,29 @@
       boCars.addEventListener("change", (e) => {
         ui.bo.carsFilter = e.target.value;
         renderBoOrders();
+      });
+    }
+
+    [
+      ["#fc-f-k", "k"],
+      ["#fc-f-l", "l"],
+      ["#fc-f-m", "m"],
+      ["#fc-f-g", "g"],
+      ["#fc-f-own", "own"],
+      ["#fc-f-a", "a"],
+    ].forEach(([sel, key]) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("change", (e) => {
+        ui.fulfillable[key] = e.target.value;
+        renderFulfillable();
+      });
+    });
+    const fcClear = $("#fc-clear-filters");
+    if (fcClear) {
+      fcClear.addEventListener("click", () => {
+        ui.fulfillable = { k: "", l: "", m: "", g: "", own: "", a: "" };
+        renderFulfillable();
       });
     }
   }
