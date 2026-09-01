@@ -587,11 +587,22 @@
 
           <article class="card">
             <div class="pbi-viz-head">
-              <h2>Allocation vs Back Orders · product + suffix</h2>
+              <h2>Allocation vs All Back Orders · product + suffix</h2>
               <span class="hint">Gap = Allocation − BO · green = above plan · red = below plan</span>
             </div>
             <div class="table-wrap" id="bas-table"></div>
             <p class="foot" id="bas-foot"></p>
+          </article>
+
+          <article class="card bas-conf-block">
+            <div class="pbi-viz-head">
+              <h2>Allocation vs Confirmed Back Orders · product + suffix</h2>
+              <span class="hint">Same comparison · only confirmed / allocated BO rows · Gap = Allocation − Confirmed BO</span>
+            </div>
+            <div class="bo-kpis" id="bas-conf-kpis"></div>
+            <div class="bo-insights card" id="bas-conf-insights"></div>
+            <div class="table-wrap" id="bas-conf-table"></div>
+            <p class="foot" id="bas-conf-foot"></p>
           </article>
         </div>
       </div>
@@ -5862,8 +5873,9 @@
     });
   }
 
-  function buildBasRows(d) {
-    const bos = d.bos || [];
+  function buildBasRows(d, opts = {}) {
+    let bos = d.bos || [];
+    if (opts.confirmedOnly) bos = bos.filter((bo) => bo.confirmed);
     const stockRows = [...(d.rtl || []), ...(d.central || [])];
     const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
     return leaves.map((row) => {
@@ -5903,8 +5915,8 @@
     return `<span class="badge ${cls}">${basGapLabel(status)} (${sign}${formatNumber(gap)})</span>`;
   }
 
-  function renderBasKpis(rows) {
-    const el = $("#bas-kpis");
+  function renderBasKpis(rows, opts = {}) {
+    const el = $(opts.kpiEl || "#bas-kpis");
     if (!el) return;
     const totalAlloc = rows.reduce((s, r) => s + r.allocation, 0);
     const totalBo = rows.reduce((s, r) => s + r.boCount, 0);
@@ -5912,9 +5924,11 @@
     const totalGap = totalAlloc - totalBo;
     const below = rows.filter((r) => r.status === "below").length;
     const above = rows.filter((r) => r.status === "above").length;
+    const boLabel = opts.boLabel || "Matched back orders";
+    const boSub = opts.boSub || "Same product + suffix";
     el.innerHTML = [
       { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
-      { label: "Matched back orders", val: formatNumber(totalBo), sub: "Same product + suffix" },
+      { label: boLabel, val: formatNumber(totalBo), sub: boSub },
       { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
       { label: "Overall gap", val: (totalGap > 0 ? "+" : "") + formatNumber(totalGap), sub: totalGap >= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap >= 0 ? "ok" : "bad" },
       { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
@@ -5927,25 +5941,26 @@
     `).join("");
   }
 
-  function renderBasInsights(rows) {
-    const el = $("#bas-insights");
+  function renderBasInsights(rows, opts = {}) {
+    const el = $(opts.insightEl || "#bas-insights");
     if (!el) return;
+    const boWord = opts.boWord || "BO";
     const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => a.gap - b.gap).slice(0, 5);
     const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => b.gap - a.gap).slice(0, 5);
     const belowHtml = below.length
       ? `<ul class="bas-insight-list">${below.map((r) =>
-        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — BO ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${formatNumber(r.gap)}</span></li>`
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — ${boWord} ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${formatNumber(r.gap)}</span></li>`
       ).join("")}</ul>`
-      : `<p class="foot" style="margin:0">No suffixes where BO exceeds allocation.</p>`;
+      : `<p class="foot" style="margin:0">No suffixes where ${boWord} exceeds allocation.</p>`;
     const aboveHtml = above.length
       ? `<ul class="bas-insight-list">${above.map((r) =>
-        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs BO ${formatNumber(r.boCount)} <span class="badge ok">+${formatNumber(r.gap)}</span></li>`
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs ${boWord} ${formatNumber(r.boCount)} <span class="badge ok">+${formatNumber(r.gap)}</span></li>`
       ).join("")}</ul>`
       : `<p class="foot" style="margin:0">No surplus allocation rows.</p>`;
     el.innerHTML = `
       <div class="bas-insight-grid">
-        <div><h3 class="bas-insight-title bad">Shortfall · BO above allocation</h3>${belowHtml}</div>
-        <div><h3 class="bas-insight-title ok">Surplus · allocation above BO</h3>${aboveHtml}</div>
+        <div><h3 class="bas-insight-title bad">Shortfall · ${boWord} above allocation</h3>${belowHtml}</div>
+        <div><h3 class="bas-insight-title ok">Surplus · allocation above ${boWord}</h3>${aboveHtml}</div>
       </div>`;
   }
 
@@ -5963,9 +5978,10 @@
     });
   }
 
-  function renderBasTable(rows) {
-    const el = $("#bas-table");
-    const foot = $("#bas-foot");
+  function renderBasTable(rows, opts = {}) {
+    const el = $(opts.tableEl || "#bas-table");
+    const foot = $(opts.footEl || "#bas-foot");
+    const boColHeader = opts.boColHeader || "Back Orders";
     if (!el) return;
     if (!rows.length) {
       el.innerHTML = `<p class="foot" style="padding:16px">No rows match filters.</p>`;
@@ -5980,7 +5996,7 @@
     el.innerHTML = `<table class="bas-table">
       <thead><tr>
         <th>Seg</th><th>Product</th><th>SFX</th>
-        <th>Allocation</th><th>Back Orders</th><th>Stock</th>
+        <th>Allocation</th><th>${boColHeader}</th><th>Stock</th>
         <th>Gap</th><th>Status</th><th>Plan + Stock − BO</th>
       </tr></thead>
       <tbody>${sorted.map((r) => {
@@ -6018,6 +6034,7 @@
     if (dash) dash.hidden = false;
 
     const allRows = buildBasRows(d);
+    const confirmedAllRows = buildBasRows(d, { confirmedOnly: true });
     const segs = [...new Set(allRows.map((r) => r.seg))].sort();
     const products = [...new Set(allRows.map((r) => r.product))].sort((a, b) => a.localeCompare(b));
     fillBoSelect("#bas-f-seg", new Set(segs), basView.seg, "All segments");
@@ -6026,9 +6043,25 @@
     if ($("#bas-search")) $("#bas-search").value = basView.search || "";
 
     const rows = filteredBasRows(allRows);
+    const confirmedRows = filteredBasRows(confirmedAllRows);
     renderBasKpis(allRows);
     renderBasInsights(allRows);
     renderBasTable(rows);
+
+    renderBasKpis(confirmedAllRows, {
+      kpiEl: "#bas-conf-kpis",
+      boLabel: "Confirmed back orders",
+      boSub: "Confirmed only · same product + suffix",
+    });
+    renderBasInsights(confirmedAllRows, {
+      insightEl: "#bas-conf-insights",
+      boWord: "Confirmed BO",
+    });
+    renderBasTable(confirmedRows, {
+      tableEl: "#bas-conf-table",
+      footEl: "#bas-conf-foot",
+      boColHeader: "Confirmed BO",
+    });
   }
 
   function renderBoDashboard(d) {

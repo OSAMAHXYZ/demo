@@ -2947,3 +2947,17 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-insight-list li {
   margin-bottom: 6px;
 }
+
+.bas-conf-block {
+  margin-top: 20px;
+  border-top: 3px solid rgba(11, 58, 102, 0.12);
+  padding-top: 4px;
+}
+
+.bas-conf-block .bo-kpis {
+  margin: 12px 0 16px;
+}
+
+.bas-conf-block .bo-insights {
+  margin-bottom: 16px;
+}
