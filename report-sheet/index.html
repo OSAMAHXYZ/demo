@@ -10,6 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js"></script>
+  <script src="allocation-plan-data.js"></script>
   <link rel="stylesheet" href="dashboard.css" />
 
 </head>
@@ -551,6 +552,50 @@
         </div>
       </div>
 
+      <!-- PANEL: BO & Allocation & Stock gap -->
+      <div class="panel-section" id="panel-boallocstock" style="display:none">
+        <div class="bo-empty card" id="bas-empty">
+          <h2>BO &amp; Allocation &amp; Stock</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Compare ESAL allocation plan (E-Sales) against back orders with the same product and suffix — see if allocation is above or below demand.
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Set allocation numbers in <a href="admin.html">Admin</a> → tab <b>3 · Allocation Plan</b></li>
+            <li>Upload slot <b>1 · Back Order</b> for BO counts</li>
+            <li>Optionally upload <b>RTL Stock</b> / <b>Stock Central</b> for stock column</li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
+          </ol>
+        </div>
+
+        <div id="bas-dash" class="bo-dash" hidden>
+          <div class="bo-toolbar" id="bas-toolbar">
+            <input id="bas-search" type="search" placeholder="Search product / SFX / segment…" />
+            <select id="bas-f-seg"><option value="">All segments</option></select>
+            <select id="bas-f-product"><option value="">All products</option></select>
+            <select id="bas-f-status">
+              <option value="">All gap status</option>
+              <option value="above">Above (allocation &gt; BO)</option>
+              <option value="below">Below (BO &gt; allocation)</option>
+              <option value="match">On track (equal)</option>
+            </select>
+            <button type="button" id="bas-clear-filters" class="btn">Clear filters</button>
+          </div>
+
+          <div class="bo-kpis" id="bas-kpis"></div>
+
+          <div class="bo-insights card" id="bas-insights"></div>
+
+          <article class="card">
+            <div class="pbi-viz-head">
+              <h2>Allocation vs Back Orders · product + suffix</h2>
+              <span class="hint">Gap = Allocation − BO · green = above plan · red = below plan</span>
+            </div>
+            <div class="table-wrap" id="bas-table"></div>
+            <p class="foot" id="bas-foot"></p>
+          </article>
+        </div>
+      </div>
+
       <!-- PANEL: Stock & BO Dashboard -->
       <div class="panel-section" id="panel-dashboard" style="display:none">
         <div class="kpis" id="kpis"></div>
@@ -630,6 +675,9 @@
   const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
   const WORKING_DAYS_KEY = Store.WORKING_DAYS_KEY;
   const WORKING_DAYS_PUSH_KEY = Store.WORKING_DAYS_PUSH_KEY;
+  const ALLOCATION_PLAN_KEY = Store.ALLOCATION_PLAN_KEY;
+  const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
+  const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
   const DEFAULT_EMPLOYEE_NAMES = [
     "Samaher Abdulmoghni Al Amri",
     "Haneen Talal Aqeel Al Madani",
@@ -850,26 +898,59 @@
     }
   }
 
+  function defaultAllocationValues() {
+    const map = {};
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind === "leaf") map[r.id] = Number(r.defaultVal) || 0;
+    });
+    return map;
+  }
+
+  function loadAllocationValues() {
+    const defaults = defaultAllocationValues();
+    try {
+      const raw = localStorage.getItem(ALLOCATION_PLAN_KEY);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      const saved = parsed && parsed.values ? parsed.values : parsed;
+      if (!saved || typeof saved !== "object") return defaults;
+      ALLOCATION_ROWS.forEach((r) => {
+        if (r.kind !== "leaf") return;
+        if (saved[r.id] != null) defaults[r.id] = Math.max(0, Number(saved[r.id]) || 0);
+      });
+      return defaults;
+    } catch {
+      return defaults;
+    }
+  }
+
   let employeeTargets = loadEmployeeTargets();
   let accessoriesSettled = loadAccessoriesSettled();
   let workingDays = loadWorkingDays();
+  let allocationValues = loadAllocationValues();
   let activeNav = "dashboard";
 
   function refreshTargetsFromAdmin() {
     employeeTargets = loadEmployeeTargets();
     accessoriesSettled = loadAccessoriesSettled();
     workingDays = loadWorkingDays();
+    allocationValues = loadAllocationValues();
   }
 
   function applyLiveTargets(reason) {
     refreshTargetsFromAdmin();
-    if (!window._data || !hasSalesReportInputs()) return false;
-    window._data = data();
-    window._srRowsByKey = Object.fromEntries((window._data.salesReport.rows || []).map((r) => [r._key, r]));
-    renderSalesReportKpis(window._data.salesReport);
-    refreshSalesSelection();
-    setStatus(reason || "Targets updated live", "ok");
-    return true;
+    if (!window._data) return false;
+    let updated = false;
+    if (hasSalesReportInputs()) {
+      window._data = data();
+      window._srRowsByKey = Object.fromEntries((window._data.salesReport.rows || []).map((r) => [r._key, r]));
+      renderSalesReportKpis(window._data.salesReport);
+      refreshSalesSelection();
+      updated = true;
+    }
+    if (window._data) renderBoAllocStockDashboard(window._data);
+    if (updated) setStatus(reason || "Targets updated live", "ok");
+    return updated;
   }
 
   function adminTargetMap() {
@@ -3377,6 +3458,7 @@
   const PANEL_DEFS = [
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
+    { id: "boallocstock", label: "BO&ALLOCATION&STOCK" },
     { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
@@ -5736,6 +5818,219 @@
     });
   }
 
+  /* ——— BO & Allocation & Stock gap dashboard ——— */
+  let basView = { search: "", seg: "", product: "", status: "" };
+
+  function allocProductKey(p) {
+    return upperTrim(p).replace(/\s+/g, " ");
+  }
+
+  function allocSfxParts(sfx) {
+    const full = upperTrim(sfx);
+    if (!full) return [];
+    const parts = full.split(/[/,&]+|\s+\/\s+/).map((s) => s.trim()).filter(Boolean);
+    return [...new Set([full, ...parts])];
+  }
+
+  function allocCompact(s) {
+    return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function productMatchesAlloc(boProduct, allocProduct) {
+    const b = allocProductKey(boProduct);
+    const a = allocProductKey(allocProduct);
+    if (!a || !b || b === "—") return false;
+    if (b === a) return true;
+    const bC = allocCompact(b);
+    const aC = allocCompact(a);
+    if (bC === aC) return true;
+    if (b.includes(a) || a.includes(b)) return true;
+    if (aC.length >= 4 && bC.includes(aC)) return true;
+    if (bC.length >= 4 && aC.includes(bC)) return true;
+    return false;
+  }
+
+  function suffixMatchesAlloc(boSuffix, allocSfx) {
+    const b = upperTrim(boSuffix);
+    if (!b || b === "—") return false;
+    return allocSfxParts(allocSfx).some((v) => {
+      if (v === b) return true;
+      const vC = allocCompact(v);
+      const bC = allocCompact(b);
+      if (vC && bC && (vC === bC || bC.includes(vC) || vC.includes(bC))) return true;
+      return false;
+    });
+  }
+
+  function buildBasRows(d) {
+    const bos = d.bos || [];
+    const stockRows = [...(d.rtl || []), ...(d.central || [])];
+    const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
+    return leaves.map((row) => {
+      const allocation = Number(allocationValues[row.id]) || 0;
+      const boCount = bos.filter((bo) =>
+        productMatchesAlloc(bo.product, row.product) && suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx)
+      ).length;
+      const stockCount = stockRows.filter((s) =>
+        productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx)
+      ).length;
+      const gap = allocation - boCount;
+      const status = gap > 0 ? "above" : gap < 0 ? "below" : "match";
+      return {
+        id: row.id,
+        seg: row.seg,
+        product: row.product,
+        sfx: row.sfx,
+        allocation,
+        boCount,
+        stockCount,
+        gap,
+        status,
+        netCover: allocation + stockCount - boCount,
+      };
+    });
+  }
+
+  function basGapLabel(status) {
+    if (status === "above") return "Above";
+    if (status === "below") return "Below";
+    return "On track";
+  }
+
+  function basGapBadge(status, gap) {
+    const cls = status === "above" ? "ok" : status === "below" ? "bad" : "warn";
+    const sign = gap > 0 ? "+" : "";
+    return `<span class="badge ${cls}">${basGapLabel(status)} (${sign}${formatNumber(gap)})</span>`;
+  }
+
+  function renderBasKpis(rows) {
+    const el = $("#bas-kpis");
+    if (!el) return;
+    const totalAlloc = rows.reduce((s, r) => s + r.allocation, 0);
+    const totalBo = rows.reduce((s, r) => s + r.boCount, 0);
+    const totalStock = rows.reduce((s, r) => s + r.stockCount, 0);
+    const totalGap = totalAlloc - totalBo;
+    const below = rows.filter((r) => r.status === "below").length;
+    const above = rows.filter((r) => r.status === "above").length;
+    el.innerHTML = [
+      { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
+      { label: "Matched back orders", val: formatNumber(totalBo), sub: "Same product + suffix" },
+      { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
+      { label: "Overall gap", val: (totalGap > 0 ? "+" : "") + formatNumber(totalGap), sub: totalGap >= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap >= 0 ? "ok" : "bad" },
+      { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
+    ].map((k) => `
+      <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+        <div class="lbl">${k.label}</div>
+        <div class="val">${k.val}</div>
+        <div class="sub">${k.sub}</div>
+      </article>
+    `).join("");
+  }
+
+  function renderBasInsights(rows) {
+    const el = $("#bas-insights");
+    if (!el) return;
+    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => a.gap - b.gap).slice(0, 5);
+    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => b.gap - a.gap).slice(0, 5);
+    const belowHtml = below.length
+      ? `<ul class="bas-insight-list">${below.map((r) =>
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — BO ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${formatNumber(r.gap)}</span></li>`
+      ).join("")}</ul>`
+      : `<p class="foot" style="margin:0">No suffixes where BO exceeds allocation.</p>`;
+    const aboveHtml = above.length
+      ? `<ul class="bas-insight-list">${above.map((r) =>
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs BO ${formatNumber(r.boCount)} <span class="badge ok">+${formatNumber(r.gap)}</span></li>`
+      ).join("")}</ul>`
+      : `<p class="foot" style="margin:0">No surplus allocation rows.</p>`;
+    el.innerHTML = `
+      <div class="bas-insight-grid">
+        <div><h3 class="bas-insight-title bad">Shortfall · BO above allocation</h3>${belowHtml}</div>
+        <div><h3 class="bas-insight-title ok">Surplus · allocation above BO</h3>${aboveHtml}</div>
+      </div>`;
+  }
+
+  function filteredBasRows(allRows) {
+    const q = basView.search.trim().toLowerCase();
+    return allRows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (basView.status && r.status !== basView.status) return false;
+      if (q) {
+        const hay = `${r.seg} ${r.product} ${r.sfx}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderBasTable(rows) {
+    const el = $("#bas-table");
+    const foot = $("#bas-foot");
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = `<p class="foot" style="padding:16px">No rows match filters.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+    const sorted = [...rows].sort((a, b) => {
+      if (a.status === "below" && b.status !== "below") return -1;
+      if (b.status === "below" && a.status !== "below") return 1;
+      return a.gap - b.gap;
+    });
+    el.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>Seg</th><th>Product</th><th>SFX</th>
+        <th>Allocation</th><th>Back Orders</th><th>Stock</th>
+        <th>Gap</th><th>Status</th><th>Plan + Stock − BO</th>
+      </tr></thead>
+      <tbody>${sorted.map((r) => {
+        const rowCls = r.status === "below" ? "bas-row-below" : r.status === "above" ? "bas-row-above" : "";
+        const gapCls = r.gap > 0 ? "bas-gap-pos" : r.gap < 0 ? "bas-gap-neg" : "";
+        return `<tr class="${rowCls}">
+          <td>${escapeHtml(r.seg)}</td>
+          <td>${escapeHtml(r.product)}</td>
+          <td>${escapeHtml(r.sfx)}</td>
+          <td class="num">${formatNumber(r.allocation)}</td>
+          <td class="num">${formatNumber(r.boCount)}</td>
+          <td class="num">${formatNumber(r.stockCount)}</td>
+          <td class="num ${gapCls}">${r.gap > 0 ? "+" : ""}${formatNumber(r.gap)}</td>
+          <td>${basGapBadge(r.status, r.gap)}</td>
+          <td class="num">${r.netCover >= 0 ? "+" : ""}${formatNumber(r.netCover)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+    if (foot) {
+      const below = rows.filter((r) => r.status === "below").length;
+      foot.textContent = `${formatNumber(rows.length)} product/suffix rows · ${formatNumber(below)} below allocation plan`;
+    }
+  }
+
+  function renderBoAllocStockDashboard(d) {
+    const empty = $("#bas-empty");
+    const dash = $("#bas-dash");
+    const hasData = hasBackOrder() || hasStockFiles() || Object.values(allocationValues).some((v) => Number(v) > 0);
+    if (!hasData) {
+      if (empty) empty.hidden = false;
+      if (dash) dash.hidden = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (dash) dash.hidden = false;
+
+    const allRows = buildBasRows(d);
+    const segs = [...new Set(allRows.map((r) => r.seg))].sort();
+    const products = [...new Set(allRows.map((r) => r.product))].sort((a, b) => a.localeCompare(b));
+    fillBoSelect("#bas-f-seg", new Set(segs), basView.seg, "All segments");
+    fillBoSelect("#bas-f-product", new Set(products), basView.product, "All products");
+    if ($("#bas-f-status")) $("#bas-f-status").value = basView.status || "";
+    if ($("#bas-search")) $("#bas-search").value = basView.search || "";
+
+    const rows = filteredBasRows(allRows);
+    renderBasKpis(allRows);
+    renderBasInsights(allRows);
+    renderBasTable(rows);
+  }
+
   function renderBoDashboard(d) {
     const empty = $("#bo-empty");
     const dash = $("#bo-dash");
@@ -6406,6 +6701,7 @@
     renderKpis(d);
     renderCharts(d);
     renderBoDashboard(d);
+    renderBoAllocStockDashboard(d);
     renderStockDashboard();
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
@@ -6509,7 +6805,7 @@
   }
 
   window.addEventListener("storage", (e) => {
-    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY) {
+    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY || e.key === ALLOCATION_PLAN_KEY || e.key === ALLOCATION_PLAN_PUSH_KEY) {
       maybeApplyPushedTargets("Targets pushed — live update");
     }
     if (e.key === DATA_PUSH_KEY) {
@@ -6674,6 +6970,36 @@
       boView.car = "";
       boView.product = "";
       refreshBoFromFilters();
+    });
+  }
+
+  function refreshBasFromFilters() {
+    if (window._data) renderBoAllocStockDashboard(window._data);
+  }
+  const basSearchEl = $("#bas-search");
+  if (basSearchEl) {
+    basSearchEl.addEventListener("input", (e) => {
+      basView.search = e.target.value;
+      refreshBasFromFilters();
+    });
+  }
+  [
+    ["#bas-f-seg", "seg"],
+    ["#bas-f-product", "product"],
+    ["#bas-f-status", "status"],
+  ].forEach(([sel, key]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      basView[key] = e.target.value;
+      refreshBasFromFilters();
+    });
+  });
+  const basClearEl = $("#bas-clear-filters");
+  if (basClearEl) {
+    basClearEl.addEventListener("click", () => {
+      basView = { search: "", seg: "", product: "", status: "" };
+      refreshBasFromFilters();
     });
   }
 

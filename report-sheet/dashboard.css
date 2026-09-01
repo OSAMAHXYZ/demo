@@ -2867,3 +2867,83 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
 }
+
+/* BO & Allocation & Stock dashboard */
+.bas-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.bas-table th,
+.bas-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  text-align: left;
+}
+
+.bas-table th {
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.bas-table td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 600;
+}
+
+.bas-table tr.bas-row-below {
+  background: rgba(200, 30, 44, 0.06);
+}
+
+.bas-table tr.bas-row-above {
+  background: rgba(13, 148, 136, 0.05);
+}
+
+.bas-gap-pos {
+  color: #0d9488;
+}
+
+.bas-gap-neg {
+  color: #c81e2c;
+}
+
+.bas-insight-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .bas-insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bas-insight-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.bas-insight-title.ok {
+  color: #0d9488;
+}
+
+.bas-insight-title.bad {
+  color: #c81e2c;
+}
+
+.bas-insight-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.bas-insight-list li {
+  margin-bottom: 6px;
+}
