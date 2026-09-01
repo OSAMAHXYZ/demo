@@ -98,6 +98,11 @@
             <input id="accessories-settled" type="number" min="0" step="1" placeholder="e.g. 120000" title="Total accessories pool distributed by target share" />
             <span class="hint">Distributed as (settled ÷ total target) × each employee target · Col H sales deduct from vehicle target</span>
           </div>
+          <div class="admin-accessories-settled">
+            <label for="working-days">Working days (month)</label>
+            <input id="working-days" type="number" min="1" step="1" placeholder="e.g. 22" title="Sales working days used for daily target pace" />
+            <span class="hint">Daily base = target ÷ working days · shortfall from yesterday adds to today’s required proforma</span>
+          </div>
           <div class="target-grid" id="target-grid"></div>
         </div>
       </div>
@@ -113,6 +118,8 @@
   const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
   const ACCESSORIES_SETTLED_KEY = Store.ACCESSORIES_SETTLED_KEY;
   const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
+  const WORKING_DAYS_KEY = Store.WORKING_DAYS_KEY;
+  const WORKING_DAYS_PUSH_KEY = Store.WORKING_DAYS_PUSH_KEY;
   const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 
   const SLOT_DEFS = [
@@ -205,6 +212,16 @@
     }
   }
 
+  function loadWorkingDays() {
+    try {
+      const raw = localStorage.getItem(WORKING_DAYS_KEY);
+      if (!raw) return 22;
+      return Math.max(1, Number(JSON.parse(raw).days) || 22);
+    } catch {
+      return 22;
+    }
+  }
+
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
@@ -284,6 +301,10 @@
     const settledEl = $("#accessories-settled");
     if (settledEl && document.activeElement !== settledEl) {
       settledEl.value = String(loadAccessoriesSettled() || "");
+    }
+    const workingDaysEl = $("#working-days");
+    if (workingDaysEl && document.activeElement !== workingDaysEl) {
+      workingDaysEl.value = String(loadWorkingDays() || 22);
     }
     const q = targetSearch.trim().toLowerCase();
     const totalTarget = employeeTargets.reduce((s, e) => s + effectiveTarget(e), 0);
@@ -406,6 +427,10 @@
       localStorage.setItem(ACCESSORIES_SETTLED_KEY, JSON.stringify({ amount: settledAmount, at: targetStamp.at }));
       localStorage.setItem(ACCESSORIES_SETTLED_PUSH_KEY, JSON.stringify({ amount: settledAmount, at: targetStamp.at }));
 
+      const workingDays = Math.max(1, Number($("#working-days").value) || 22);
+      localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
+      localStorage.setItem(WORKING_DAYS_PUSH_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
+
       const filesBySlot = {};
       SLOT_DEFS.forEach((d) => {
         const s = slots[d.id];
@@ -421,6 +446,8 @@
         targetsAt: targetStamp.at,
         accessoriesSettled: settledAmount,
         accessoriesSettledAt: targetStamp.at,
+        workingDays,
+        workingDaysAt: targetStamp.at,
       });
 
       renderTargetsPanel();

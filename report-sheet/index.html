@@ -211,6 +211,15 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
                 </div>
               </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
+                <div class="pbi-viz-head">
+                  <h2>Daily · Ach % today</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-dailyach" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div>
+                </div>
+              </article>
               <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
                 <div class="pbi-viz-head">
                   <h2>Proforma · Prior month vs Today</h2>
@@ -239,6 +248,18 @@
                 </div>
               </article>
             </div>
+
+            <article class="card pbi-daily-target" id="sr-daily-target-card">
+              <div class="pbi-viz-head">
+                <div>
+                  <h2>Daily target pace · today</h2>
+                  <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
+                </div>
+              </div>
+              <div class="sr-daily-target-wrap" id="sr-daily-target-body">
+                <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
+              </div>
+            </article>
 
             <article class="card pbi-detail" id="sr-detail-card">
               <div class="pbi-detail-head">
@@ -607,6 +628,8 @@
   const DATA_PUSH_KEY = Store.DATA_PUSH_KEY;
   const ACCESSORIES_SETTLED_KEY = Store.ACCESSORIES_SETTLED_KEY;
   const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
+  const WORKING_DAYS_KEY = Store.WORKING_DAYS_KEY;
+  const WORKING_DAYS_PUSH_KEY = Store.WORKING_DAYS_PUSH_KEY;
   const DEFAULT_EMPLOYEE_NAMES = [
     "Samaher Abdulmoghni Al Amri",
     "Haneen Talal Aqeel Al Madani",
@@ -817,13 +840,25 @@
     }
   }
 
+  function loadWorkingDays() {
+    try {
+      const raw = localStorage.getItem(WORKING_DAYS_KEY);
+      if (!raw) return 22;
+      return Math.max(1, Number(JSON.parse(raw).days) || 22);
+    } catch {
+      return 22;
+    }
+  }
+
   let employeeTargets = loadEmployeeTargets();
   let accessoriesSettled = loadAccessoriesSettled();
+  let workingDays = loadWorkingDays();
   let activeNav = "dashboard";
 
   function refreshTargetsFromAdmin() {
     employeeTargets = loadEmployeeTargets();
     accessoriesSettled = loadAccessoriesSettled();
+    workingDays = loadWorkingDays();
   }
 
   function applyLiveTargets(reason) {
@@ -2290,6 +2325,139 @@
     });
   }
 
+  function proformaDayIndex(date, live) {
+    if (!date) return null;
+    const d = parseDate(date);
+    if (!d) return null;
+    if (live.filterMode === "custom" && live.rangeFrom && live.rangeTo) {
+      const from = startOfDay(live.rangeFrom).getTime();
+      const to = startOfDay(live.rangeTo).getTime();
+      const t = startOfDay(d).getTime();
+      if (t < from || t > to) return null;
+      return Math.round((t - from) / 86400000) + 1;
+    }
+    if (toYyyymm(d) !== live.monthKey) return null;
+    return d.getDate();
+  }
+
+  function todayWorkingDayIndex(live, workDays) {
+    const elapsed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
+    return Math.max(1, Math.min(elapsed, Math.max(1, workDays)));
+  }
+
+  function buildEmployeeDailyProforma(live, prevMonthKey) {
+    const byKey = new Map();
+    (slots.sales.rows || []).forEach((r) => {
+      if (hasDeliveryDate(r)) return;
+      const pd = r.proformaDate;
+      if (!pd || !salesPeriodMatch(pd, live, "month", prevMonthKey)) return;
+      const dayIndex = proformaDayIndex(pd, live);
+      if (!dayIndex) return;
+      const key = nameKey(r.salesman);
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, new Map());
+      const dayMap = byKey.get(key);
+      dayMap.set(dayIndex, (dayMap.get(dayIndex) || 0) + 1);
+    });
+    return byKey;
+  }
+
+  function roundDaily(n) {
+    return Math.round(Number(n) * 10) / 10;
+  }
+
+  /**
+   * Daily pace with carry-forward: if yesterday needed 5 and got 4, today needs 6.
+   */
+  function computeDailyTargetPace(monthTarget, workDays, dailyMap, todayIndex, onVacation) {
+    const todayAchieved = (dailyMap && dailyMap.get(todayIndex)) || 0;
+    if (onVacation) {
+      return {
+        baseDaily: 0,
+        carryShortfall: 0,
+        todayTarget: 0,
+        todayAchieved,
+        todayAchPct: null,
+        onTrack: true,
+        workingDay: todayIndex,
+      };
+    }
+    if (monthTarget <= 0 || workDays <= 0) {
+      return {
+        baseDaily: 0,
+        carryShortfall: 0,
+        todayTarget: 0,
+        todayAchieved,
+        todayAchPct: null,
+        onTrack: false,
+        workingDay: todayIndex,
+      };
+    }
+    const baseDaily = monthTarget / workDays;
+    let carry = 0;
+    for (let d = 1; d < todayIndex; d += 1) {
+      const dayTarget = baseDaily + carry;
+      const achieved = (dailyMap && dailyMap.get(d)) || 0;
+      carry = Math.max(0, dayTarget - achieved);
+    }
+    const todayTarget = baseDaily + carry;
+    const todayAchPct = todayTarget > 0 ? todayAchieved / todayTarget : null;
+    return {
+      baseDaily,
+      carryShortfall: carry,
+      todayTarget,
+      todayAchieved,
+      todayAchPct,
+      onTrack: todayAchPct != null && todayAchPct >= 1,
+      workingDay: todayIndex,
+    };
+  }
+
+  function buildDailyTargetReport(rows, live, workDays, dailyProformaByKey) {
+    const todayIndex = todayWorkingDayIndex(live, workDays);
+    const enriched = rows.map((r) => {
+      const key = r._key;
+      const dayMap = dailyProformaByKey.get(key) || new Map();
+      const pace = computeDailyTargetPace(
+        rowTargetNum(r),
+        workDays,
+        dayMap,
+        todayIndex,
+        !!r._vacation
+      );
+      return {
+        ...r,
+        "Daily Base": pace.baseDaily ? roundDaily(pace.baseDaily) : 0,
+        "Daily Carry": roundDaily(pace.carryShortfall),
+        "Daily Need": roundDaily(pace.todayTarget),
+        "Daily Achieved": pace.todayAchieved,
+        "Daily Ach %": pace.todayAchPct == null
+          ? (r._vacation ? "—" : "0%")
+          : pct1(pace.todayAchPct),
+        _dailyBase: pace.baseDaily,
+        _dailyCarry: pace.carryShortfall,
+        _dailyNeed: pace.todayTarget,
+        _dailyAchieved: pace.todayAchieved,
+        _dailyAchPct: pace.todayAchPct,
+        _dailyOnTrack: pace.onTrack,
+      };
+    });
+    const active = enriched.filter((r) => !r._vacation && rowTargetNum(r) > 0);
+    const onTrack = active.filter((r) => r._dailyOnTrack).length;
+    return {
+      workingDays: workDays,
+      todayWorkingDay: todayIndex,
+      rows: enriched,
+      totals: {
+        onTrack,
+        active: active.length,
+        avgAchPct: active.length
+          ? active.reduce((s, r) => s + (r._dailyAchPct || 0), 0) / active.length
+          : null,
+      },
+    };
+  }
+
   function buildSalesReport(bos, sales, cancelled) {
     const CANCEL_TARGET = 0.30;
     const calendarLive = todayKeys();
@@ -2675,28 +2843,31 @@
 
     const accessories = buildAccessoriesMetrics(live, prevMonthKey);
     const rowsWithAcc = applyAccessoriesToReportRows(rows, accessories);
+    const dailyProformaByKey = buildEmployeeDailyProforma(live, prevMonthKey);
+    const dailyTarget = buildDailyTargetReport(rowsWithAcc, live, workingDays, dailyProformaByKey);
+    const rowsFinal = dailyTarget.rows;
 
-    const totProformaDay = rowsWithAcc.reduce((s, r) => s + r["Proforma (Day)"], 0);
-    const totProformaMonth = rowsWithAcc.reduce((s, r) => s + r["Proforma (Month)"], 0);
-    const totProformaPrev = rowsWithAcc.reduce((s, r) => s + r["Proforma (Prev)"], 0);
-    const totDeliveryDay = rowsWithAcc.reduce((s, r) => s + r["Delivery (Day)"], 0);
-    const totDeliveryMonth = rowsWithAcc.reduce((s, r) => s + r["Delivery (Month)"], 0);
-    const totDeliveryPrev = rowsWithAcc.reduce((s, r) => s + r["Delivery (Prev)"], 0);
-    const totTarget = rowsWithAcc.reduce((s, r) => s + (Number(r._targetNum) || 0), 0);
+    const totProformaDay = rowsFinal.reduce((s, r) => s + r["Proforma (Day)"], 0);
+    const totProformaMonth = rowsFinal.reduce((s, r) => s + r["Proforma (Month)"], 0);
+    const totProformaPrev = rowsFinal.reduce((s, r) => s + r["Proforma (Prev)"], 0);
+    const totDeliveryDay = rowsFinal.reduce((s, r) => s + r["Delivery (Day)"], 0);
+    const totDeliveryMonth = rowsFinal.reduce((s, r) => s + r["Delivery (Month)"], 0);
+    const totDeliveryPrev = rowsFinal.reduce((s, r) => s + r["Delivery (Prev)"], 0);
+    const totTarget = rowsFinal.reduce((s, r) => s + (Number(r._targetNum) || 0), 0);
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
     const totProfPlusDel = totProformaMonth + totDeliveryMonth;
-    const totVsnd = rowsWithAcc.reduce((s, r) => s + r.VSND, 0);
+    const totVsnd = rowsFinal.reduce((s, r) => s + r.VSND, 0);
     const totDelVsnd = totProformaMonth; // Del+VSND = Proforma
     const totDelVsndDay = totProformaDay;
-    const totCancelled = rowsWithAcc.reduce((s, r) => s + r["Cancelled BOs"], 0);
-    const totCancelledDay = rowsWithAcc.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
+    const totCancelled = rowsFinal.reduce((s, r) => s + r["Cancelled BOs"], 0);
+    const totCancelledDay = rowsFinal.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
     const monthCancelBase = totDeliveryMonth + totCancelled;
     const dayCancelBase = totDeliveryDay + totCancelledDay;
     const daysPassed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
     const daysRemaining = Math.max(0, daysInMonth - daysPassed);
 
     return {
-      rows: rowsWithAcc,
+      rows: rowsFinal,
       live,
       daysInMonth,
       daysPassed,
@@ -2705,6 +2876,7 @@
       prevMonthLabel,
       diag,
       accessories,
+      dailyTarget,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
@@ -4150,6 +4322,7 @@
     renderPbiKpis(sr);
     renderCancelPctPanel(sr);
     renderSalesReportCharts(sr);
+    renderDailyTargetPanel(sr);
     renderSelectedDetail(sr);
     renderSalesReportTable(sr);
     const hint = $("#sr-live-hint");
@@ -4279,6 +4452,9 @@
         <div class="emp-stat"><div class="k">Acc Ach%</div><div class="v">${escapeHtml(row["Acc Ach %"] || "—")}</div></div>
         <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
+        <div class="emp-stat${row._dailyOnTrack ? " is-ok" : row._vacation ? "" : " is-behind"}"><div class="k">Daily need today</div><div class="v">${row._vacation ? "VACATION" : formatNumber(row["Daily Need"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Today proforma</div><div class="v">${formatNumber(row["Daily Achieved"] ?? row["Proforma (Day)"] ?? 0)}</div></div>
+        <div class="emp-stat${row._dailyOnTrack ? " is-ok" : row._vacation ? "" : " is-behind"}"><div class="k">Daily Ach%</div><div class="v">${escapeHtml(row["Daily Ach %"] || "—")}</div></div>
       </div>
       ${accRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Accessories rows · Col F/G/H (${formatNumber(accRawRows.length)})</h4>${renderCancelledFileTableHtml(accRawRows)}` : ""}
       ${cancelRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Cancelled BO rows · all Excel columns (${formatNumber(cancelRawRows.length)})</h4>${renderCancelledFileTableHtml(cancelRawRows)}` : ""}
@@ -4382,6 +4558,146 @@
       max: Math.max(1, dayDel, dayProf),
       legend: false,
     });
+  }
+
+  function renderDailyAchChart(sr, rows, opts) {
+    const dt = sr.dailyTarget || {};
+    const workDays = dt.workingDays || workingDays;
+    if (!workDays) {
+      setChartEmptyState(
+        "chart-sr-dailyach",
+        "Set working days in Admin → Employees & Targets, then Push to live."
+      );
+      return;
+    }
+
+    clearChartEmptyState("chart-sr-dailyach");
+
+    const dailyRows = rows
+      .filter((r) => !r._vacation && rowTargetNum(r) > 0)
+      .map((r) => ({
+        row: r,
+        pct: r._dailyAchPct != null ? r._dailyAchPct * 100 : 0,
+        need: r._dailyNeed || 0,
+        got: r._dailyAchieved || 0,
+      }))
+      .filter((x) => x.need > 0 || x.got > 0)
+      .sort((a, b) => b.pct - a.pct);
+
+    if (!dailyRows.length) {
+      setChartEmptyState(
+        "chart-sr-dailyach",
+        `Working day ${dt.todayWorkingDay || "—"} of ${workDays} · no proforma yet today (Col P).`
+      );
+      return;
+    }
+
+    const single = !!(opts && opts.single) || dailyRows.length === 1;
+    const labels = single
+      ? ["This employee"]
+      : dailyRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
+    const empKeys = dailyRows.map((x) => x.row._key);
+    const horizontal = !single && dailyRows.length > 1;
+    const pctVals = dailyRows.map((x) => x.pct);
+    const colors = pctVals.map((n) =>
+      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)"
+    );
+
+    if (single) {
+      const r = dailyRows[0];
+      upsertChart("chart-sr-dailyach", "doughnut", ["Daily Ach %", "Remaining"], [
+        Math.min(100, r.pct),
+        Math.max(0, 100 - r.pct),
+      ]);
+      return;
+    }
+
+    upsertChart("chart-sr-dailyach", "bar", labels, pctVals, {
+      horizontal,
+      clickable: dailyRows.length > 1,
+      empKeys,
+      label: "Daily Ach % today",
+      backgroundColor: colors,
+      max: 120,
+      showValues: true,
+      valueSuffix: "%",
+    });
+  }
+
+  function renderDailyTargetPanel(sr) {
+    const body = $("#sr-daily-target-body");
+    const sub = $("#sr-daily-target-sub");
+    if (!body) return;
+
+    const dt = sr.dailyTarget || {};
+    const workDays = dt.workingDays || workingDays;
+    const todayWd = dt.todayWorkingDay || todayWorkingDayIndex(sr.live || todayKeys(), workDays);
+    const live = sr.live || todayKeys();
+
+    if (sub) {
+      sub.textContent = `Working day ${todayWd} of ${workDays} · ${live.label || ""} · base = target ÷ ${workDays} · carry adds missed proforma to today`;
+    }
+
+    const prev = srView.selectedKey;
+    srView.selectedKey = "";
+    let rows = chartRowsForMode(sr.rows || []);
+    srView.selectedKey = prev;
+
+    const list = rows
+      .filter((r) => !r._vacation && rowTargetNum(r) > 0)
+      .slice()
+      .sort((a, b) => (b._dailyAchPct || 0) - (a._dailyAchPct || 0));
+
+    if (!workDays) {
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>`;
+      return;
+    }
+
+    if (!list.length) {
+      body.innerHTML = `<p class="foot" style="margin:0;padding:8px 0">No active targets (vacation or zero target).</p>`;
+      return;
+    }
+
+    const onTrack = list.filter((r) => r._dailyOnTrack).length;
+    body.innerHTML = `
+      <div class="sr-daily-summary">
+        <div class="sr-daily-stat"><span>On track today</span><b class="${onTrack === list.length ? "is-ok" : ""}">${onTrack} / ${list.length}</b></div>
+        <div class="sr-daily-stat"><span>Working days</span><b>${workDays}</b></div>
+        <div class="sr-daily-stat"><span>Today (working day)</span><b>${todayWd}</b></div>
+      </div>
+      <div class="sr-daily-table-wrap">
+        <table class="sr-daily-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Base/day</th>
+              <th>Carry</th>
+              <th>Need today</th>
+              <th>Proforma today</th>
+              <th>Ach %</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((r) => {
+              const ok = !!r._dailyOnTrack;
+              const statusCls = ok ? "daily-flag is-ok" : "daily-flag is-behind";
+              const statusTxt = ok ? "GREEN" : "BEHIND";
+              return `<tr class="emp-row${ok ? " is-on-track" : " is-behind"}" data-emp-key="${escapeHtml(r._key)}">
+                <td class="tl">${escapeHtml(shortEmpLabel(r["Sales Employee"]))}</td>
+                <td class="num">${formatNumber(r["Daily Base"] || 0)}</td>
+                <td class="num">${formatNumber(r["Daily Carry"] || 0)}</td>
+                <td class="num"><b>${formatNumber(r["Daily Need"] || 0)}</b></td>
+                <td class="num">${formatNumber(r["Daily Achieved"] ?? 0)}</td>
+                <td class="num">${escapeHtml(r["Daily Ach %"] || "0%")}</td>
+                <td><span class="${statusCls}">${statusTxt}</span></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on Col P proforma (undelivered)</p>
+    `;
   }
 
   function renderAccessoriesChart(sr, rows, opts) {
@@ -4539,6 +4855,7 @@
         Number((r.month || r)["Cancelled BOs"]) || 0,
       ], { backgroundColor: "rgba(200, 30, 44, 0.8)" });
       renderAccessoriesChart(sr, rows, { single: true });
+      renderDailyAchChart(sr, rows, { single: true });
       return;
     }
 
@@ -4713,6 +5030,7 @@
       );
     }
     renderAccessoriesChart(sr, rows, { single: false });
+    renderDailyAchChart(sr, rows, { single: false });
   }
   function exportTelesalesSchedule() {
     const sr = window._data && window._data.salesReport;
@@ -6191,7 +6509,7 @@
   }
 
   window.addEventListener("storage", (e) => {
-    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY) {
+    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY) {
       maybeApplyPushedTargets("Targets pushed — live update");
     }
     if (e.key === DATA_PUSH_KEY) {
