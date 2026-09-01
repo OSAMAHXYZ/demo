@@ -760,24 +760,51 @@
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
-      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
       return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
         const row = parsed[i] || {};
         const savedName = String(row.name || "").trim();
         const name = !savedName || isPlaceholderName(savedName)
           ? DEFAULT_EMPLOYEES[i].name
           : savedName;
+        const metaNote = employeeMeta(name).note || "";
+        const vacation = row.vacation != null
+          ? !!row.vacation
+          : /vacation/i.test(String(row.note || metaNote));
         return {
           id: i + 1,
           name,
           target: Math.max(0, Number(row.target) || 0),
+          vacation,
         };
       });
     } catch {
-      return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
     }
+  }
+
+  function effectiveEmployeeTarget(e) {
+    return e && e.vacation ? 0 : Math.max(0, Number(e.target) || 0);
+  }
+
+  function rowTargetNum(r) {
+    if (!r) return 0;
+    if (r._targetNum != null) return Number(r._targetNum) || 0;
+    const t = r.Target;
+    return typeof t === "number" ? t : (Number(t) || 0);
+  }
+
+  function rowTargetLabel(r) {
+    return r && r._vacation ? "VACATION" : formatNumber(rowTargetNum(r));
+  }
+
+  function isEmployeeOnVacation(name) {
+    const key = nameKey(name);
+    if (!key) return false;
+    const hit = employeeTargets.find((e) => nameKey(e.name) === key);
+    return hit ? !!hit.vacation : false;
   }
 
   function loadAccessoriesSettled() {
@@ -814,10 +841,9 @@
     const map = new Map();
     employeeTargets.forEach((e) => {
       const key = nameKey(e.name);
-      if (key) map.set(key, e.target);
-      // Also index raw lowercase so old saves still hit
+      if (key) map.set(key, { target: effectiveEmployeeTarget(e), vacation: !!e.vacation });
       const raw = normalizeNameLoose(e.name);
-      if (raw && !map.has(raw)) map.set(raw, e.target);
+      if (raw && !map.has(raw)) map.set(raw, { target: effectiveEmployeeTarget(e), vacation: !!e.vacation });
     });
     return map;
   }
@@ -826,9 +852,8 @@
     const key = nameKey(name);
     if (!key) return fallback || 0;
     const map = adminTargetMap();
-    if (map.has(key)) return map.get(key);
-    const loose = normalizeNameLoose(name);
-    if (map.has(loose)) return map.get(loose);
+    const entry = map.get(key) || map.get(normalizeNameLoose(name));
+    if (entry) return entry.vacation ? 0 : entry.target;
     return fallback || 0;
   }
 
@@ -2136,7 +2161,7 @@
 
   function buildAccessoriesMetrics(live, prevMonthKey) {
     const settled = accessoriesSettled;
-    const totalAdminTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
+    const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
     const soldByKey = new Map();
     (slots.accessories.rows || []).forEach((r) => {
       if (!salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey)) return;
@@ -2149,7 +2174,7 @@
     employeeTargets.forEach((e) => {
       const key = nameKey(e.name);
       if (!key) return;
-      const adminTarget = Number(e.target) || 0;
+      const adminTarget = effectiveEmployeeTarget(e);
       const quota = totalAdminTarget > 0 && settled > 0 ? (settled / totalAdminTarget) * adminTarget : 0;
       const sold = soldByKey.get(key) || 0;
       const achPct = quota > 0 ? sold / quota : null;
@@ -2193,7 +2218,7 @@
   function applyAccessoriesToReportRows(rows, acc) {
     const merged = rows.map((r) => {
       const m = acc.byKey.get(r._key) || {
-        quota: 0, sold: 0, achPct: null, netTarget: r.Target, adminTarget: r.Target,
+        quota: 0, sold: 0, achPct: null, netTarget: rowTargetNum(r), adminTarget: rowTargetNum(r),
       };
       const accAchPct = m.achPct;
       return {
@@ -2344,10 +2369,13 @@
       };
     }
 
-    // Seed 29 admin employees + their targets
+    // Seed admin employees + their targets
     employeeTargets.forEach((e) => {
       const p = ensure(e.name);
-      if (p) p.target = Number(e.target) || 0;
+      if (!p) return;
+      p.vacation = !!e.vacation;
+      p.target = effectiveEmployeeTarget(e);
+      if (p.vacation) p.note = "VACATION";
     });
 
     // Sales Raw: Col P = proforma, Col V = delivery.
@@ -2361,6 +2389,11 @@
 
       const adminT = resolveAdminTarget(name, 0);
       if (adminT > 0) p.target = adminT;
+      if (isEmployeeOnVacation(name)) {
+        p.vacation = true;
+        p.target = 0;
+        p.note = "VACATION";
+      }
 
       const plantVal = cellToString(r.plant || r.Plant || "").trim();
       const codeVal = cellToString(r.salesmanCode || r.code || "").trim();
@@ -2515,8 +2548,31 @@
     // Proforma = count Col P in current month · Delivery = count Col V in current month
     // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma
     // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
-    const makeBlock = (proforma, delivery, target, cancelledCount, note) => {
+    const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
       const delPlusVsnd = proforma; // Del+VSND mirrors Proforma
+      if (onVacation) {
+        return {
+          Proforma: proforma,
+          Delivery: delivery,
+          Target: "VACATION",
+          "Ach%": "0%",
+          "Del+VSND": delPlusVsnd,
+          "Ach% (Sales)": "0%",
+          Diff: 0,
+          "Cancelled BOs": cancelledCount,
+          "Cancellation %": "0%",
+          "Can. Target 30%": "30%",
+          "Gap +/-": "0%",
+          Notes: note || "VACATION",
+          _deliveryAch: 0,
+          _salesAch: 0,
+          _cancelPct: 0,
+          _gap: 0,
+          _diff: 0,
+          _targetNum: 0,
+          _vacation: true,
+        };
+      }
       const deliveryAch = target ? delivery / target : 0;
       const salesAch = target ? delPlusVsnd / target : 0;
       const diff = target - delPlusVsnd;
@@ -2541,6 +2597,8 @@
         _cancelPct: cancelPct,
         _gap: gap,
         _diff: diff,
+        _targetNum: target,
+        _vacation: false,
       };
     };
 
@@ -2560,21 +2618,23 @@
     });
 
     const rows = ordered.filter(Boolean).map((p) => {
+      const onVacation = !!p.vacation;
+      const target = onVacation ? 0 : (p.target || 0);
+      const note = onVacation ? "VACATION" : (p.note || "");
       // Day sheet = same formulas as month, but Col P / Col V filtered to today
-      const monthBlock = makeBlock(p.proformaMonth, p.deliveryMonth, p.target, p.cancelledBOs, p.note);
-      const dayBlock = makeBlock(p.proformaDay, p.deliveryDay, p.target, p.cancelledDay, p.note);
+      const monthBlock = makeBlock(p.proformaMonth, p.deliveryMonth, target, p.cancelledBOs, note, onVacation);
+      const dayBlock = makeBlock(p.proformaDay, p.deliveryDay, target, p.cancelledDay, note, onVacation);
       const prof = p.proformaMonth;
       const del = p.deliveryMonth;
-      const target = p.target || 0;
       const profPlusDel = prof + del;
-      const delPct = target ? del / target : null;
-      const profDelPct = target ? profPlusDel / target : null;
+      const delPct = onVacation ? 0 : (target ? del / target : null);
+      const profDelPct = onVacation ? 0 : (target ? profPlusDel / target : null);
       return {
         No: 0,
         Plant: p.plant || "—",
         Salesman: p.salesmanCode || "",
         "Sales Employee": p.salesman,
-        Notes: p.note || "",
+        Notes: note,
         VSND: p.vsnd,
         "Proforma (Day)": p.proformaDay,
         "Proforma (Month)": p.proformaMonth,
@@ -2582,13 +2642,15 @@
         "Delivery (Day)": p.deliveryDay,
         "Delivery (Month)": p.deliveryMonth,
         "Delivery (Prev)": p.deliveryPrev,
-        "Day Target": p.target,
-        Target: p.target,
+        "Day Target": onVacation ? "VACATION" : target,
+        Target: onVacation ? "VACATION" : target,
         "Prof+Del": profPlusDel,
-        "Del %": delPct == null ? "#DIV/0!" : pct1(delPct),
-        "Prof+Del %": profDelPct == null ? "#DIV/0!" : pct1(profDelPct),
+        "Del %": onVacation ? "0%" : (delPct == null ? "#DIV/0!" : pct1(delPct)),
+        "Prof+Del %": onVacation ? "0%" : (profDelPct == null ? "#DIV/0!" : pct1(profDelPct)),
         _delPct: delPct,
         _profDelPct: profDelPct,
+        _vacation: onVacation,
+        _targetNum: target,
         // Month fields (default / backward compatible)
         ...monthBlock,
         Proforma: monthBlock.Proforma,
@@ -2616,7 +2678,7 @@
     const totDeliveryDay = rowsWithAcc.reduce((s, r) => s + r["Delivery (Day)"], 0);
     const totDeliveryMonth = rowsWithAcc.reduce((s, r) => s + r["Delivery (Month)"], 0);
     const totDeliveryPrev = rowsWithAcc.reduce((s, r) => s + r["Delivery (Prev)"], 0);
-    const totTarget = rowsWithAcc.reduce((s, r) => s + r.Target, 0);
+    const totTarget = rowsWithAcc.reduce((s, r) => s + (Number(r._targetNum) || 0), 0);
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
     const totProfPlusDel = totProformaMonth + totDeliveryMonth;
     const totVsnd = rowsWithAcc.reduce((s, r) => s + r.VSND, 0);
@@ -3477,6 +3539,10 @@
       let cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" || h === "Sales Employee" || h === "Notes" ? "tl" : "num");
       if (col.divide) cls += " col-divide";
       if (h === "Notes") cls += " note";
+      if (h === "Target" && r._vacation) {
+        val = `<span class="xl-vacation">VACATION</span>`;
+        cls = "tl note";
+      }
       if (DIV0_KEYS.has(h) && String(raw) === "#DIV/0!") {
         val = `<span class="xl-div0">#DIV/0!</span>`;
         cls = (col.divide ? "col-divide " : "") + "num";
@@ -4143,7 +4209,7 @@
         { lab: "Proforma MTD", val: formatNumber(pro) },
         { lab: "Prof+Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)) },
         { lab: "Del %", val: escapeHtml(String(r["Del %"] ?? "—")) },
-        { lab: "Target", val: formatNumber(r.Target) },
+        { lab: "Target", val: r._vacation ? "VACATION" : formatNumber(rowTargetNum(r)) },
         { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
         { lab: "Today Prof", val: formatNumber(r["Proforma (Day)"] || d.Proforma) },
       ];
@@ -4202,8 +4268,8 @@
         <div class="emp-stat"><div class="k">Day Delivery</div><div class="v">${formatNumber(day.Delivery)}</div></div>
         <div class="emp-stat"><div class="k">Month Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
         <div class="emp-stat"><div class="k">Month Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
-        <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
-        <div class="emp-stat"><div class="k">Adjusted target</div><div class="v">${formatNumber(row["Adjusted Target"] ?? month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Target</div><div class="v">${row._vacation ? "VACATION" : formatNumber(rowTargetNum(row))}</div></div>
+        <div class="emp-stat"><div class="k">Adjusted target</div><div class="v">${formatNumber(row["Adjusted Target"] ?? (row._vacation ? 0 : rowTargetNum(row)))}</div></div>
         <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(row["Acc Target"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(row["Acc Achieved"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Acc Ach%</div><div class="v">${escapeHtml(row["Acc Ach %"] || "—")}</div></div>
@@ -4228,7 +4294,7 @@
       (Number(r["Proforma (Month)"]) || 0) * 2 +
       (Number(r["Delivery (Day)"]) || 0) * 2 +
       (Number(r["Proforma (Day)"]) || 0) +
-      (Number(r.Target) || 0) * 0.01;
+      (rowTargetNum(r)) * 0.01;
 
     if (mode === "all") return base;
     if (mode === "top12") {
@@ -4241,7 +4307,7 @@
       (Number(r["Proforma (Day)"]) || 0) > 0
     );
     if (active.length) return active.slice().sort((a, b) => score(b) - score(a));
-    return base.slice().sort((a, b) => (Number(b.Target) || 0) - (Number(a.Target) || 0)).slice(0, 12);
+    return base.slice().sort((a, b) => (rowTargetNum(b)) - (rowTargetNum(a))).slice(0, 12);
   }
 
   function setChartEmptyState(canvasId, message) {
@@ -4409,7 +4475,7 @@
       upsertChart("chart-sr", "bar", ["Delivery", "Proforma", "Target"], [
         Number(r["Delivery (Month)"]) || 0,
         Number(r["Proforma (Month)"]) || 0,
-        Number(r.Target) || 0,
+        rowTargetNum(r),
       ], {
         backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(100, 116, 139, 0.75)", "rgba(11, 58, 102, 0.8)"],
       });
@@ -4424,7 +4490,7 @@
         [
           Number(r["Delivery (Month)"]) || 0,
           Math.max(0, (Number(r["Proforma (Month)"]) || 0) - (Number(r["Delivery (Month)"]) || 0)),
-          Math.max(0, (Number(r.Target) || 0) - (Number(r["Proforma (Month)"]) || 0)),
+          Math.max(0, rowTargetNum(r) - (Number(r["Proforma (Month)"]) || 0)),
         ]
       );
       const oneCancel = parsePct(r["Cancellation %"] || r["Cancel %"]) || 0;
@@ -4492,7 +4558,7 @@
         },
         {
           label: "Target",
-          data: rows.map((r) => Number(r.Target) || 0),
+          data: rows.map((r) => rowTargetNum(r)),
           backgroundColor: "rgba(11, 58, 102, 0.8)",
           borderWidth: 0,
           borderRadius: 5,
@@ -4693,7 +4759,7 @@
         r.No,
         r["Sales Employee"],
         r.Salesman || "",
-        r.Target || 0,
+        r._vacation ? "VACATION" : rowTargetNum(r),
         r["Proforma (Month)"] || 0,
         r["Delivery (Month)"] || 0,
         r["Prof+Del"] || 0,
@@ -4749,7 +4815,7 @@
       const plant = String(r.Plant || "—").trim() || "—";
       if (!plantMap.has(plant)) plantMap.set(plant, { target: 0, del: 0, prof: 0 });
       const p = plantMap.get(plant);
-      p.target += Number(r.Target) || 0;
+      p.target += rowTargetNum(r);
       p.del += Number(r["Delivery (Month)"]) || 0;
       p.prof += Number(r["Proforma (Month)"]) || 0;
     });

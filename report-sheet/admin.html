@@ -208,34 +208,58 @@
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
-      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
       return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
         const row = parsed[i] || {};
         const savedName = String(row.name || "").trim();
         const name = !savedName || isPlaceholderName(savedName)
           ? DEFAULT_EMPLOYEES[i].name
           : savedName;
+        const metaNote = (() => {
+          const key = String(name).trim().toLowerCase().replace(/\s+/g, " ");
+          const meta = {
+            "samaher abdulmoghni al amri": "Vacation",
+            "haneen talal aqeel al madani": "Vacation",
+            "not assigned": "Vacation",
+          };
+          return meta[key] || "";
+        })();
+        const vacation = row.vacation != null
+          ? !!row.vacation
+          : /vacation/i.test(String(row.note || metaNote));
         return {
           id: i + 1,
           name,
           target: Math.max(0, Number(row.target) || 0),
+          vacation,
         };
       });
     } catch {
-      return DEFAULT_EMPLOYEES.map((e) => ({ ...e }));
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
     }
+  }
+
+  function effectiveTarget(e) {
+    return e && e.vacation ? 0 : Math.max(0, Number(e.target) || 0);
   }
 
   function collectTargetsFromForm() {
     return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
       const nameEl = document.querySelector(`[data-emp-name="${i}"]`);
       const targetEl = document.querySelector(`[data-emp-target="${i}"]`);
+      const vacEl = document.querySelector(`[data-emp-vacation="${i}"]`);
+      const onVacation = vacEl ? vacEl.checked : !!employeeTargets[i]?.vacation;
+      const prev = employeeTargets[i] || {};
+      const typedTarget = Math.max(0, Number(targetEl ? targetEl.value : prev.target) || 0);
       return {
         id: i + 1,
-        name: (nameEl ? nameEl.value : employeeTargets[i]?.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
-        target: Math.max(0, Number(targetEl ? targetEl.value : employeeTargets[i]?.target) || 0),
+        name: (nameEl ? nameEl.value : prev.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
+        vacation: onVacation,
+        target: onVacation
+          ? Math.max(0, Number(prev.target) || typedTarget)
+          : typedTarget,
       };
     });
   }
@@ -243,8 +267,8 @@
   function renderAdminKpis() {
     const loaded = SLOT_DEFS.filter((d) => slots[d.id].buffer).length;
     const hasSales = !!slots.sales.buffer;
-    const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
-    const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
+    const totalTarget = employeeTargets.reduce((s, e) => s + effectiveTarget(e), 0);
+    const filled = employeeTargets.filter((e) => effectiveTarget(e) > 0).length;
     const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
     $("#admin-kpis").innerHTML = `
       <div class="pbi-kpi"><div class="lab">Files loaded</div><div class="val">${loaded}<span style="font-size:.75rem;font-weight:600;color:var(--muted)"> / ${SLOT_DEFS.length}</span></div></div>
@@ -262,8 +286,8 @@
       settledEl.value = String(loadAccessoriesSettled() || "");
     }
     const q = targetSearch.trim().toLowerCase();
-    const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
-    const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
+    const totalTarget = employeeTargets.reduce((s, e) => s + effectiveTarget(e), 0);
+    const filled = employeeTargets.filter((e) => effectiveTarget(e) > 0).length;
     const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
     $("#target-summary").innerHTML = `
       <div class="admin-side-stat"><span>Employees</span><b>${EMPLOYEE_COUNT}</b></div>
@@ -273,10 +297,15 @@
     `;
     $("#target-grid").innerHTML = employeeTargets.map((e, i) => {
       const hidden = q && !String(e.name).toLowerCase().includes(q) ? ' style="display:none"' : "";
-      return `<div class="target-row"${hidden}>
+      const onVac = !!e.vacation;
+      return `<div class="target-row${onVac ? " is-vacation" : ""}"${hidden}>
         <div class="idx">${e.id}</div>
         <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name)}" placeholder="Employee name" />
-        <input data-emp-target="${i}" type="number" min="0" step="1" value="${e.target || 0}" title="Monthly target" />
+        <label class="target-vacation" title="Target counts as 0 · shows VACATION on report">
+          <input data-emp-vacation="${i}" type="checkbox"${onVac ? " checked" : ""} />
+          <span>Vacation</span>
+        </label>
+        <input data-emp-target="${i}" type="number" min="0" step="1" value="${onVac ? 0 : (e.target || 0)}" title="Monthly target"${onVac ? " disabled" : ""} />
       </div>`;
     }).join("");
     $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · match Excel names · then Push to live`;
@@ -369,7 +398,7 @@
       localStorage.setItem(TARGETS_KEY, JSON.stringify(employeeTargets));
       const targetStamp = {
         at: Date.now(),
-        total: employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0),
+        total: employeeTargets.reduce((s, e) => s + effectiveTarget(e), 0),
       };
       localStorage.setItem(TARGETS_PUSH_KEY, JSON.stringify(targetStamp));
 
@@ -424,7 +453,13 @@
   });
   $("#bulk-apply-btn").addEventListener("click", () => {
     const n = Math.max(0, Number($("#bulk-target").value) || 0);
-    document.querySelectorAll("[data-emp-target]").forEach((el) => { el.value = String(n); });
+    document.querySelectorAll("[data-emp-target]").forEach((el) => {
+      const i = el.getAttribute("data-emp-target");
+      const vacEl = document.querySelector(`[data-emp-vacation="${i}"]`);
+      if (vacEl && vacEl.checked) return;
+      el.value = String(n);
+      el.disabled = false;
+    });
     employeeTargets = collectTargetsFromForm();
     renderAdminKpis();
     setStatus("Bulk value applied — click Push to live", "busy");
@@ -441,7 +476,25 @@
   $("#push-btn").addEventListener("click", pushToLive);
   $("#push-btn-2").addEventListener("click", pushToLive);
   $("#clear-files-btn").addEventListener("click", clearFiles);
-  $("#target-grid").addEventListener("change", () => {
+  $("#target-grid").addEventListener("change", (e) => {
+    const vac = e.target.closest("[data-emp-vacation]");
+    if (vac) {
+      const i = vac.getAttribute("data-emp-vacation");
+      const targetEl = document.querySelector(`[data-emp-target="${i}"]`);
+      const row = vac.closest(".target-row");
+      if (vac.checked) {
+        if (targetEl) {
+          targetEl.value = "0";
+          targetEl.disabled = true;
+        }
+        if (row) row.classList.add("is-vacation");
+      } else if (targetEl) {
+        targetEl.disabled = false;
+        const prev = employeeTargets[Number(i)];
+        if (prev && Number(prev.target) > 0) targetEl.value = String(prev.target);
+        if (row) row.classList.remove("is-vacation");
+      }
+    }
     employeeTargets = collectTargetsFromForm();
     renderAdminKpis();
     setStatus("Changes pending — click Push to live", "busy");

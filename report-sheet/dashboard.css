@@ -1730,7 +1730,7 @@ tr.emp-row:hover td {
 
 .target-row {
   display: grid;
-  grid-template-columns: 36px 1fr 88px;
+  grid-template-columns: 36px 1fr auto 88px;
   gap: 8px;
   align-items: center;
   background: var(--surface);
@@ -1744,6 +1744,42 @@ tr.emp-row:hover td {
 .target-row:hover {
   border-color: #c5d4e3;
   box-shadow: var(--shadow-hover);
+}
+
+.target-row.is-vacation {
+  border-color: #cbd5e1;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.target-vacation {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.target-vacation input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--navy);
+}
+
+.target-row.is-vacation input[data-emp-target] {
+  color: var(--muted);
+  background: #eef2f7;
+}
+
+.xl-table td .xl-vacation,
+.xl-table td.note:has(.xl-vacation) {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #64748b;
 }
 
 .target-row .idx {
