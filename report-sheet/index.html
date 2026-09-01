@@ -554,7 +554,8 @@
 
       <!-- PANEL: BO & Allocation & Stock gap -->
       <div class="panel-section" id="panel-boallocstock" style="display:none">
-        <div class="bo-empty card" id="bas-empty">
+        <div class="bo-empty card bas-empty" id="bas-empty">
+          <div class="bas-empty-icon" aria-hidden="true"></div>
           <h2>BO &amp; Allocation &amp; Stock</h2>
           <p style="color:var(--muted);margin:0 0 12px">
             Compare ESAL allocation plan (E-Sales) against back orders with the same product and suffix — see if allocation is above or below demand.
@@ -563,13 +564,22 @@
             <li>Set allocation numbers in <a href="admin.html">Admin</a> → tab <b>3 · Allocation Plan</b></li>
             <li>Upload slot <b>1 · Back Order</b> for BO counts</li>
             <li>Upload slot <b>2 · RTL Stock</b> for monthly collection tracker (Col J age)</li>
+            <li>Upload <b>Sales Raw</b> for Delivered / Proforma status on matched VINs</li>
             <li>Optionally upload <b>Stock Central</b> for stock column in gap tables</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
           </ol>
         </div>
 
-        <div id="bas-dash" class="bo-dash" hidden>
-          <div class="bo-toolbar" id="bas-toolbar">
+        <div id="bas-dash" class="bo-dash bas-dash" hidden>
+          <div class="bas-hero card">
+            <div class="bas-hero-text">
+              <p class="bas-hero-eyebrow">Allocation control tower</p>
+              <h2 class="bas-hero-title">Plan · Back orders · RTL collection</h2>
+              <p class="bas-hero-sub">Compare E-Sales targets with live BO demand and daily RTL arrivals · green = headroom · red = shortfall</p>
+            </div>
+          </div>
+
+          <div class="bo-toolbar bas-toolbar" id="bas-toolbar">
             <input id="bas-search" type="search" placeholder="Search product / SFX / segment…" />
             <select id="bas-f-seg"><option value="">All segments</option></select>
             <select id="bas-f-product"><option value="">All products</option></select>
@@ -582,49 +592,104 @@
             <button type="button" id="bas-clear-filters" class="btn">Clear filters</button>
           </div>
 
-          <div class="bo-kpis" id="bas-kpis"></div>
+          <div class="bas-legend" aria-hidden="true">
+            <span class="bas-legend-item is-above"><i></i>Above plan</span>
+            <span class="bas-legend-item is-below"><i></i>Below plan</span>
+            <span class="bas-legend-item is-track"><i></i>On track</span>
+            <span class="bas-legend-item is-late"><i></i>Late in RTL</span>
+          </div>
 
-          <div class="bo-insights card" id="bas-insights"></div>
+          <div class="bo-kpis bas-kpi-row" id="bas-kpis"></div>
 
-          <article class="card">
-            <div class="pbi-viz-head">
-              <h2>Allocation vs All Back Orders · product + suffix</h2>
-              <span class="hint">Gap = Allocation − BO · green = above plan · red = below plan</span>
+          <div class="bo-insights card bas-insights-panel" id="bas-insights"></div>
+
+          <article class="card bas-section-card bas-section-all">
+            <div class="bas-section-head">
+              <span class="bas-section-badge">1</span>
+              <div class="pbi-viz-head">
+                <h2>All back orders vs allocation</h2>
+                <span class="hint">Gap = Allocation − BO · matched by product + suffix</span>
+              </div>
             </div>
-            <div class="table-wrap" id="bas-table"></div>
-            <p class="foot" id="bas-foot"></p>
+            <div class="table-wrap bas-table-wrap" id="bas-table"></div>
+            <p class="foot bas-foot" id="bas-foot"></p>
           </article>
 
-          <article class="card bas-conf-block">
-            <div class="pbi-viz-head">
-              <h2>Allocation vs Confirmed Back Orders · product + suffix</h2>
-              <span class="hint">Same comparison · only confirmed / allocated BO rows · Gap = Allocation − Confirmed BO</span>
+          <article class="card bas-section-card bas-section-conf bas-conf-block">
+            <div class="bas-section-head">
+              <span class="bas-section-badge">2</span>
+              <div class="pbi-viz-head">
+                <h2>Confirmed back orders vs allocation</h2>
+                <span class="hint">Only confirmed / allocated BO rows</span>
+              </div>
             </div>
-            <div class="bo-kpis" id="bas-conf-kpis"></div>
-            <div class="bo-insights card" id="bas-conf-insights"></div>
-            <div class="table-wrap" id="bas-conf-table"></div>
-            <p class="foot" id="bas-conf-foot"></p>
+            <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-conf-kpis"></div>
+            <div class="bo-insights bas-insights-panel bas-insights-nested" id="bas-conf-insights"></div>
+            <div class="table-wrap bas-table-wrap" id="bas-conf-table"></div>
+            <p class="foot bas-foot" id="bas-conf-foot"></p>
           </article>
 
-          <article class="card bas-month-block" id="bas-month-section">
-            <div class="pbi-viz-head">
-              <h2>Monthly RTL collection vs allocation plan</h2>
-              <span class="hint" id="bas-month-hint">RTL Col J age · collected date = today − age · age 0 = arrived today · age ≥ 1 = late in stock</span>
+          <article class="card bas-section-card bas-section-month bas-month-block" id="bas-month-section">
+            <div class="bas-section-head">
+              <span class="bas-section-badge is-teal">3</span>
+              <div class="pbi-viz-head">
+                <h2>Monthly RTL collection</h2>
+                <span class="hint" id="bas-month-hint">RTL Col J · collected date = today − age</span>
+              </div>
             </div>
-            <div class="bo-kpis" id="bas-month-kpis"></div>
-            <div class="bas-day-strip-wrap">
-              <div class="bas-day-strip" id="bas-day-strip"></div>
+            <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
+
+            <div class="bas-day-panel">
+              <p class="bas-day-panel-label">Daily arrivals · days 1–30</p>
+              <div class="bas-day-strip-wrap">
+                <div class="bas-day-strip" id="bas-day-strip"></div>
+              </div>
             </div>
-            <div class="table-wrap bas-month-table-wrap" id="bas-month-table"></div>
-            <p class="foot" id="bas-month-foot"></p>
 
-            <h3 class="bas-subhead">Age 0 · collected today</h3>
-            <div class="table-wrap" id="bas-age0-table"></div>
+            <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="bas-month-table"></div>
+            <p class="foot bas-foot" id="bas-month-foot"></p>
 
-            <h3 class="bas-subhead">Late · still in RTL (age ≥ 1)</h3>
-            <div class="table-wrap" id="bas-late-table"></div>
+            <div class="bas-mini-grid">
+              <div class="bas-mini-section bas-mini-ok">
+                <h3 class="bas-subhead">Age 0 · collected today</h3>
+                <div class="table-wrap bas-table-wrap" id="bas-age0-table"></div>
+              </div>
+              <div class="bas-mini-section bas-mini-late">
+                <h3 class="bas-subhead">Late · still in RTL (age ≥ 1)</h3>
+                <div class="table-wrap bas-table-wrap" id="bas-late-table"></div>
+              </div>
+            </div>
 
-            <div class="bas-day-sections" id="bas-day-sections"></div>
+            <div class="bas-day-panel bas-day-panel-list">
+              <p class="bas-day-panel-label">Day-by-day breakdown</p>
+              <div class="bas-day-sections" id="bas-day-sections"></div>
+            </div>
+          </article>
+
+          <article class="card bas-section-card bas-section-alloc" id="bas-alloc-section">
+            <div class="bas-section-head">
+              <span class="bas-section-badge is-violet">4</span>
+              <div class="pbi-viz-head">
+                <h2>Matched &amp; allocated vehicles</h2>
+                <span class="hint">Confirmed BO matched to stock VIN · sales status from Sales Raw</span>
+              </div>
+            </div>
+            <div class="bas-alloc-toolbar">
+              <select id="bas-alloc-f-status">
+                <option value="">All sales status</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Proforma">Proforma</option>
+                <option value="NA">NA · not in sales</option>
+              </select>
+              <select id="bas-alloc-f-source">
+                <option value="">All stock sources</option>
+                <option value="RTL">RTL Stock</option>
+                <option value="Central">Central Stock</option>
+              </select>
+            </div>
+            <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-alloc-kpis"></div>
+            <div class="table-wrap bas-table-wrap" id="bas-alloc-table"></div>
+            <p class="foot bas-foot" id="bas-alloc-foot"></p>
           </article>
         </div>
       </div>
@@ -5853,6 +5918,7 @@
 
   /* ——— BO & Allocation & Stock gap dashboard ——— */
   let basView = { search: "", seg: "", product: "", status: "" };
+  let basAllocView = { salesStatus: "", source: "" };
 
   function allocProductKey(p) {
     return upperTrim(p).replace(/\s+/g, " ");
@@ -5980,9 +6046,10 @@
       ).join("")}</ul>`
       : `<p class="foot" style="margin:0">No surplus allocation rows.</p>`;
     el.innerHTML = `
+      <h2 class="bas-insights-heading">Gap highlights</h2>
       <div class="bas-insight-grid">
-        <div><h3 class="bas-insight-title bad">Shortfall · ${boWord} above allocation</h3>${belowHtml}</div>
-        <div><h3 class="bas-insight-title ok">Surplus · allocation above ${boWord}</h3>${aboveHtml}</div>
+        <div class="bas-insight-card is-below"><h3 class="bas-insight-title bad">Shortfall · ${boWord} above allocation</h3>${belowHtml}</div>
+        <div class="bas-insight-card is-above"><h3 class="bas-insight-title ok">Surplus · allocation above ${boWord}</h3>${aboveHtml}</div>
       </div>`;
   }
 
@@ -6085,6 +6152,7 @@
       boColHeader: "Confirmed BO",
     });
     renderBasMonthlyCollection(d);
+    renderBasAllocatedVehicles(d);
   }
 
   function basMonthContext(today) {
@@ -6392,7 +6460,7 @@
             </table>`
           : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : "No cars collected this day"}</p>`;
         sectionsHtml += `<details class="bas-day-detail"${openAttr}>
-          <summary class="${summaryCls}">Day ${day} · ${dateLabel} · ${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</summary>
+          <summary class="${summaryCls}"><span class="bas-day-summary-num">Day ${day}</span><span class="bas-day-summary-date">${dateLabel}</span><span class="bas-day-summary-count">${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</span></summary>
           ${body}
         </details>`;
       }
@@ -6916,6 +6984,177 @@
     return out;
   }
 
+  function buildSalesVinLookup() {
+    const byVin = new Map();
+    (slots.sales.rows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(cellToString(r.vin));
+      if (!vin || vin.length < 11) return;
+      const entry = {
+        delivered: hasDeliveryDate(r),
+        proformaDate: r.proformaDate,
+        deliveryDate: r.deliveryDate,
+        salesman: resolveSalesmanName(r.salesman),
+      };
+      const prev = byVin.get(vin);
+      if (!prev) {
+        byVin.set(vin, entry);
+        return;
+      }
+      if (entry.delivered && !prev.delivered) byVin.set(vin, entry);
+    });
+    return byVin;
+  }
+
+  function vinSalesStatusForLookup(vin, salesLookup) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const s = salesLookup.get(key);
+    if (!s) return { label: "NA", cls: "na" };
+    if (s.delivered) return { label: "Delivered", cls: "ok" };
+    if (s.proformaDate && parseDate(s.proformaDate)) return { label: "Proforma", cls: "warn" };
+    return { label: "NA", cls: "na" };
+  }
+
+  function buildBasAllocatedVehicles() {
+    if (!hasBackOrder()) return [];
+    const allMatched = buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || []);
+    const salesLookup = buildSalesVinLookup();
+
+    return allMatched
+      .filter((r) => isConfirmedFlag(r["Confirm Flag"]))
+      .map((r) => {
+        const leaf = matchRtlToAllocLeaf({ product: r.Product, suffix: r["Alj Suffix"] });
+        const salesSt = vinSalesStatusForLookup(r.VIN, salesLookup);
+        const key = extractVinValue(r.VIN) || upperTrim(r.VIN);
+        const sales = salesLookup.get(key);
+        return {
+          seg: leaf ? leaf.seg : "—",
+          product: leaf ? leaf.product : r.Product,
+          sfx: leaf ? leaf.sfx : r["Alj Suffix"],
+          planMatch: !!leaf,
+          boNumber: r["Back Order Number"],
+          vin: r.VIN,
+          source: r.Source,
+          confirm: r["Confirm Flag"],
+          salesStatus: salesSt.label,
+          salesStatusCls: salesSt.cls,
+          proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
+          deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
+          salesman: r["Salesman Name"],
+          salesSalesman: sales && sales.salesman ? sales.salesman : "—",
+          location: r["Current Location"],
+          ageing: r["Allocation Ageing"],
+          year: r["Model Year"],
+          ext: r["Exterior Color"],
+          int: r["Interior Color"],
+        };
+      });
+  }
+
+  function filteredBasAllocatedRows(rows) {
+    const q = basView.search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (basAllocView.salesStatus && r.salesStatus !== basAllocView.salesStatus) return false;
+      if (basAllocView.source && r.source !== basAllocView.source) return false;
+      if (q) {
+        const hay = `${r.seg} ${r.product} ${r.sfx} ${r.vin} ${r.boNumber} ${r.salesman}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderBasAllocatedVehicles(d) {
+    const section = $("#bas-alloc-section");
+    if (!section) return;
+
+    const needsBo = !hasBackOrder();
+    const needsStock = !hasStockFiles();
+    if (needsBo || needsStock) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+
+    if ($("#bas-alloc-f-status")) $("#bas-alloc-f-status").value = basAllocView.salesStatus || "";
+    if ($("#bas-alloc-f-source")) $("#bas-alloc-f-source").value = basAllocView.source || "";
+
+    const allRows = buildBasAllocatedVehicles();
+    const rows = filteredBasAllocatedRows(allRows);
+
+    const delivered = allRows.filter((r) => r.salesStatus === "Delivered").length;
+    const proforma = allRows.filter((r) => r.salesStatus === "Proforma").length;
+    const na = allRows.filter((r) => r.salesStatus === "NA").length;
+    const planMatched = allRows.filter((r) => r.planMatch).length;
+
+    const kpiEl = $("#bas-alloc-kpis");
+    if (kpiEl) {
+      kpiEl.innerHTML = [
+        { label: "Allocated matches", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
+        { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
+        { label: "Delivered", val: formatNumber(delivered), sub: "Col V set in Sales Raw", cls: delivered ? "ok" : "" },
+        { label: "Proforma", val: formatNumber(proforma), sub: "Proforma only · not delivered", cls: proforma ? "warn" : "" },
+        { label: "NA", val: formatNumber(na), sub: "VIN not found in Sales Raw", cls: na ? "bad" : "ok" },
+      ].map((k) => `
+        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+          <div class="lbl">${k.label}</div>
+          <div class="val">${k.val}</div>
+          <div class="sub">${k.sub}</div>
+        </article>
+      `).join("");
+    }
+
+    const tableEl = $("#bas-alloc-table");
+    const footEl = $("#bas-alloc-foot");
+    if (!tableEl) return;
+
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to stock VIN yet · check BO confirm flag and stock files."}</p>`;
+      if (footEl) footEl.textContent = "0 rows";
+      return;
+    }
+
+    const sorted = [...rows].sort((a, b) => {
+      const order = { Delivered: 0, Proforma: 1, NA: 2 };
+      return (order[a.salesStatus] ?? 3) - (order[b.salesStatus] ?? 3);
+    });
+
+    tableEl.innerHTML = `<table class="bas-table bas-alloc-table">
+      <thead><tr>
+        <th>Seg</th><th>Product</th><th>SFX</th><th>BO #</th><th>VIN</th>
+        <th>Stock</th><th>Age</th><th>Location</th>
+        <th>Sales status</th><th>Proforma</th><th>Delivery</th>
+        <th>BO salesman</th><th>Confirm</th>
+      </tr></thead>
+      <tbody>${sorted.map((r) => {
+        const rowCls = r.salesStatus === "Delivered" ? "bas-row-above" : r.salesStatus === "Proforma" ? "bas-row-warn" : "bas-row-below";
+        const badgeCls = r.salesStatusCls === "ok" ? "ok" : r.salesStatusCls === "warn" ? "warn" : "na";
+        return `<tr class="${rowCls}">
+          <td>${escapeHtml(r.seg)}</td>
+          <td>${escapeHtml(r.product)}</td>
+          <td>${escapeHtml(r.sfx)}</td>
+          <td>${escapeHtml(r.boNumber || "—")}</td>
+          <td class="bas-vin">${escapeHtml(r.vin || "—")}</td>
+          <td>${escapeHtml(r.source || "—")}</td>
+          <td class="num">${escapeHtml(String(r.ageing || "—"))}</td>
+          <td>${escapeHtml(r.location || "—")}</td>
+          <td><span class="badge ${badgeCls}">${escapeHtml(r.salesStatus)}</span></td>
+          <td>${escapeHtml(r.proformaDate)}</td>
+          <td>${escapeHtml(r.deliveryDate)}</td>
+          <td>${escapeHtml(r.salesman || "—")}</td>
+          <td><span class="badge ok">Allocated</span></td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+
+    if (footEl) {
+      const hasSales = hasSalesRaw();
+      footEl.textContent = `${formatNumber(rows.length)} allocated VIN matches` +
+        (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status (otherwise NA)");
+    }
+  }
+
   function uniqueMatchedField(rows, field) {
     const set = new Set();
     rows.forEach((r) => {
@@ -7368,6 +7607,25 @@
   if (basClearEl) {
     basClearEl.addEventListener("click", () => {
       basView = { search: "", seg: "", product: "", status: "" };
+      basAllocView = { salesStatus: "", source: "" };
+      refreshBasFromFilters();
+    });
+  }
+
+  function refreshBasAllocFromFilters() {
+    if (window._data) renderBasAllocatedVehicles(window._data);
+  }
+  const basAllocStatusEl = $("#bas-alloc-f-status");
+  if (basAllocStatusEl) {
+    basAllocStatusEl.addEventListener("change", (e) => {
+      basAllocView.salesStatus = e.target.value;
+      refreshBasFromFilters();
+    });
+  }
+  const basAllocSourceEl = $("#bas-alloc-f-source");
+  if (basAllocSourceEl) {
+    basAllocSourceEl.addEventListener("change", (e) => {
+      basAllocView.source = e.target.value;
       refreshBasFromFilters();
     });
   }
