@@ -11,6 +11,8 @@
   const ACCESSORIES_SETTLED_PUSH_KEY = "toyota_admin_accessories_settled_push_v1";
   const WORKING_DAYS_KEY = "toyota_admin_working_days_v1";
   const WORKING_DAYS_PUSH_KEY = "toyota_admin_working_days_push_v1";
+  const ALLOCATION_PLAN_KEY = "toyota_admin_allocation_plan_v1";
+  const ALLOCATION_PLAN_PUSH_KEY = "toyota_admin_allocation_plan_push_v1";
   const CHANNEL = "toyota_targets_live";
 
   const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories"];
@@ -125,6 +127,8 @@
     ACCESSORIES_SETTLED_PUSH_KEY,
     WORKING_DAYS_KEY,
     WORKING_DAYS_PUSH_KEY,
+    ALLOCATION_PLAN_KEY,
+    ALLOCATION_PLAN_PUSH_KEY,
     CHANNEL,
     saveWorkbookFiles,
     loadWorkbookFiles,

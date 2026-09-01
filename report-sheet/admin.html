@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="dashboard.css" />
   <script src="data-store.js"></script>
+  <script src="allocation-plan-data.js"></script>
 </head>
 <body class="admin-page">
   <header class="page-hero">
@@ -45,6 +46,7 @@
     <div class="admin-bar" id="nav-bar">
       <button type="button" class="tab active" data-admin-panel="uploads" id="tab-uploads">1 · Excel Uploads</button>
       <button type="button" class="tab" data-admin-panel="targets" id="tab-targets">2 · Employees &amp; Targets</button>
+      <button type="button" class="tab" data-admin-panel="allocation" id="tab-allocation">3 · Allocation Plan</button>
       <span class="hint">Same look as Live Dashboard · Push when ready</span>
     </div>
 
@@ -108,6 +110,24 @@
       </div>
     </section>
 
+    <section class="admin-panel" id="panel-allocation" hidden>
+      <div class="xl-toolbar admin-toolbar">
+        <button type="button" class="btn-primary" id="push-btn-3">Push to live</button>
+        <span class="hint">Edit E-Sales only · product &amp; segment totals calculate automatically</span>
+      </div>
+
+      <div class="card admin-section-card admin-allocation-card">
+        <div class="pbi-viz-head">
+          <h2>ESAL · Allocation Plan</h2>
+          <span class="admin-section-tag">Seg · Product · SFX · E-Sales</span>
+        </div>
+        <div class="allocation-plan-wrap" id="allocation-plan-wrap">
+          <p class="foot" style="margin:0;padding:12px 0">Loading allocation plan…</p>
+        </div>
+        <p class="foot" id="allocation-foot"></p>
+      </div>
+    </section>
+
     <footer class="page-foot">Admin only · Data stays in this browser · Live: <a href="index.html">report-sheet/index.html</a></footer>
   </div>
 
@@ -120,7 +140,12 @@
   const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
   const WORKING_DAYS_KEY = Store.WORKING_DAYS_KEY;
   const WORKING_DAYS_PUSH_KEY = Store.WORKING_DAYS_PUSH_KEY;
+  const ALLOCATION_PLAN_KEY = Store.ALLOCATION_PLAN_KEY;
+  const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
   const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+
+  const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
+  let allocationValues = loadAllocationValues();
 
   const SLOT_DEFS = [
     { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
@@ -222,6 +247,150 @@
     }
   }
 
+  function defaultAllocationValues() {
+    const map = {};
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind === "leaf") map[r.id] = Math.max(0, Number(r.defaultVal) || 0);
+    });
+    return map;
+  }
+
+  function loadAllocationValues() {
+    const defaults = defaultAllocationValues();
+    try {
+      const raw = localStorage.getItem(ALLOCATION_PLAN_KEY);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      const saved = parsed && parsed.values ? parsed.values : parsed;
+      if (!saved || typeof saved !== "object") return defaults;
+      ALLOCATION_ROWS.forEach((r) => {
+        if (r.kind !== "leaf") return;
+        if (saved[r.id] != null) defaults[r.id] = Math.max(0, Number(saved[r.id]) || 0);
+      });
+      return defaults;
+    } catch {
+      return defaults;
+    }
+  }
+
+  function sumLeaves(filterFn) {
+    return ALLOCATION_ROWS
+      .filter((r) => r.kind === "leaf" && filterFn(r))
+      .reduce((s, r) => s + (Number(allocationValues[r.id]) || 0), 0);
+  }
+
+  function allocationDisplayValue(row) {
+    if (row.kind === "leaf") return Number(allocationValues[row.id]) || 0;
+    if (row.kind === "product-total") return sumLeaves((r) => r.groupKey === row.groupKey);
+    if (row.kind === "seg-total") return sumLeaves((r) => r.segKey === row.segKey);
+    if (row.kind === "grand-total") return sumLeaves(() => true);
+    return 0;
+  }
+
+  function collectAllocationFromForm() {
+    const next = { ...allocationValues };
+    document.querySelectorAll("[data-alloc-id]").forEach((el) => {
+      const id = el.getAttribute("data-alloc-id");
+      if (!id) return;
+      next[id] = Math.max(0, Number(el.value) || 0);
+    });
+    return next;
+  }
+
+  function updateAllocationTotalsDom() {
+    document.querySelectorAll("[data-alloc-total]").forEach((el) => {
+      const id = el.getAttribute("data-alloc-total");
+      const row = ALLOCATION_ROWS.find((r) => r.id === id);
+      if (!row) return;
+      el.textContent = formatNumber(allocationDisplayValue(row));
+    });
+    const foot = $("#allocation-foot");
+    const grandRow = ALLOCATION_ROWS.find((r) => r.kind === "grand-total");
+    const grand = grandRow ? allocationDisplayValue(grandRow) : 0;
+    if (foot) {
+      foot.textContent = `Grand total E-Sales: ${formatNumber(grand)} · click Push to live when ready`;
+    }
+    const kpiEl = $("#admin-kpis");
+    if (kpiEl && !kpiEl.querySelector("[data-alloc-kpi]")) {
+      renderAdminKpis();
+    } else {
+      const allocKpi = document.querySelector("[data-alloc-kpi] .val");
+      if (allocKpi) allocKpi.textContent = formatNumber(grand);
+    }
+  }
+
+  function buildAllocationTableHtml() {
+    let html = `<table class="allocation-plan-table">
+      <thead>
+        <tr class="alloc-head-title"><th colspan="4">ESAL</th></tr>
+        <tr class="alloc-head-cols">
+          <th>Seg</th><th>PRODUCT</th><th>SFX</th><th>E-Sales</th>
+        </tr>
+      </thead><tbody>`;
+
+    let i = 0;
+    while (i < ALLOCATION_ROWS.length) {
+      const row = ALLOCATION_ROWS[i];
+      if (row.kind === "grand-total") {
+        html += `<tr class="alloc-row is-grand-total is-total">
+          <td class="alloc-seg"></td>
+          <td class="alloc-product alloc-total-label">${escapeHtml(row.product)}</td>
+          <td class="alloc-sfx"></td>
+          <td class="alloc-esales alloc-total-val" data-alloc-total="${escapeHtml(row.id)}">${formatNumber(allocationDisplayValue(row))}</td>
+        </tr>`;
+        i += 1;
+        continue;
+      }
+
+      if (row.segKey && row.kind === "leaf") {
+        const segKey = row.segKey;
+        const blockEnd = ALLOCATION_ROWS.findIndex((r, idx) => idx > i && r.kind === "seg-total" && r.segKey === segKey);
+        const end = blockEnd >= 0 ? blockEnd + 1 : i + 1;
+        const block = ALLOCATION_ROWS.slice(i, end);
+        const rowspan = block.length;
+        let currentProduct = "";
+        block.forEach((r, bi) => {
+          const isLeaf = r.kind === "leaf";
+          const cls = [
+            "alloc-row",
+            isLeaf ? "is-leaf" : "is-total",
+            r.kind === "product-total" ? "is-product-total" : "",
+            r.kind === "seg-total" ? "is-seg-total" : "",
+          ].filter(Boolean).join(" ");
+          const segTd = bi === 0 ? `<td class="alloc-seg" rowspan="${rowspan}">${escapeHtml(r.seg)}</td>` : "";
+          let productTd = "";
+          if (!isLeaf) {
+            productTd = `<td class="alloc-product alloc-total-label">${escapeHtml(r.product)}</td>`;
+            currentProduct = "";
+          } else if (r.product !== currentProduct) {
+            productTd = `<td class="alloc-product">${escapeHtml(r.product)}</td>`;
+            currentProduct = r.product;
+          } else {
+            productTd = `<td class="alloc-product alloc-cont"></td>`;
+          }
+          const sfxTd = isLeaf ? `<td class="alloc-sfx">${escapeHtml(r.sfx)}</td>` : `<td class="alloc-sfx"></td>`;
+          const esalesTd = isLeaf
+            ? `<td class="alloc-esales"><input type="number" min="0" step="1" data-alloc-id="${escapeHtml(r.id)}" value="${Number(allocationValues[r.id]) || 0}" /></td>`
+            : `<td class="alloc-esales alloc-total-val" data-alloc-total="${escapeHtml(r.id)}">${formatNumber(allocationDisplayValue(r))}</td>`;
+          html += `<tr class="${cls}">${segTd}${productTd}${sfxTd}${esalesTd}</tr>`;
+        });
+        i = end;
+        continue;
+      }
+      i += 1;
+    }
+
+    html += "</tbody></table>";
+    return html;
+  }
+
+  function renderAllocationPanel() {
+    const wrap = $("#allocation-plan-wrap");
+    if (!wrap) return;
+    wrap.innerHTML = buildAllocationTableHtml();
+    updateAllocationTotalsDom();
+  }
+
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
@@ -287,6 +456,8 @@
     const totalTarget = employeeTargets.reduce((s, e) => s + effectiveTarget(e), 0);
     const filled = employeeTargets.filter((e) => effectiveTarget(e) > 0).length;
     const named = employeeTargets.filter((e) => e.name && !isPlaceholderName(e.name) && e.name !== "Not assigned").length;
+    const allocGrand = ALLOCATION_ROWS.find((r) => r.kind === "grand-total");
+    const allocTotal = allocGrand ? allocationDisplayValue(allocGrand) : 0;
     $("#admin-kpis").innerHTML = `
       <div class="pbi-kpi"><div class="lab">Files loaded</div><div class="val">${loaded}<span style="font-size:.75rem;font-weight:600;color:var(--muted)"> / ${SLOT_DEFS.length}</span></div></div>
       <div class="pbi-kpi"><div class="lab">Sales Raw</div><div class="val">${hasSales ? "Ready" : "Missing"}</div></div>
@@ -294,6 +465,7 @@
       <div class="pbi-kpi"><div class="lab">Named</div><div class="val">${named}</div></div>
       <div class="pbi-kpi"><div class="lab">Targets set</div><div class="val">${filled}</div></div>
       <div class="pbi-kpi"><div class="lab">Total target</div><div class="val">${formatNumber(totalTarget)}</div></div>
+      <div class="pbi-kpi" data-alloc-kpi><div class="lab">Allocation E-Sales</div><div class="val">${formatNumber(allocTotal)}</div></div>
     `;
   }
 
@@ -367,12 +539,14 @@
   function showAdminPanel(which) {
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
-    const isTargets = which === "targets";
-    uploads.hidden = isTargets;
-    targets.hidden = !isTargets;
+    const allocation = $("#panel-allocation");
+    uploads.hidden = which !== "uploads";
+    targets.hidden = which !== "targets";
+    if (allocation) allocation.hidden = which !== "allocation";
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.adminPanel === which);
     });
+    if (which === "allocation") renderAllocationPanel();
   }
 
   async function onFileChosen(slotId, file) {
@@ -431,6 +605,10 @@
       localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
       localStorage.setItem(WORKING_DAYS_PUSH_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
 
+      allocationValues = collectAllocationFromForm();
+      localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values: allocationValues, at: targetStamp.at }));
+      localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at: targetStamp.at }));
+
       const filesBySlot = {};
       SLOT_DEFS.forEach((d) => {
         const s = slots[d.id];
@@ -448,9 +626,11 @@
         accessoriesSettledAt: targetStamp.at,
         workingDays,
         workingDaysAt: targetStamp.at,
+        allocationAt: targetStamp.at,
       });
 
       renderTargetsPanel();
+      renderAllocationPanel();
       const srOk = dataStamp.hasSales;
       setStatus(
         srOk
@@ -502,7 +682,15 @@
   });
   $("#push-btn").addEventListener("click", pushToLive);
   $("#push-btn-2").addEventListener("click", pushToLive);
+  $("#push-btn-3").addEventListener("click", pushToLive);
   $("#clear-files-btn").addEventListener("click", clearFiles);
+  $("#allocation-plan-wrap").addEventListener("input", (e) => {
+    const input = e.target.closest("[data-alloc-id]");
+    if (!input) return;
+    allocationValues = collectAllocationFromForm();
+    updateAllocationTotalsDom();
+    setStatus("Allocation updated — click Push to live", "busy");
+  });
   $("#target-grid").addEventListener("change", (e) => {
     const vac = e.target.closest("[data-emp-vacation]");
     if (vac) {
@@ -534,6 +722,7 @@
 
   showAdminPanel("uploads");
   renderTargetsPanel();
+  renderAllocationPanel();
   hydrateFromStore().then(renderSlots);
 })();
 </script>

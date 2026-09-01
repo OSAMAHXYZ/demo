@@ -2593,17 +2593,16 @@ body.admin-page .grid-5 {
 }
 
 body.admin-page #panel-targets[hidden],
-body.admin-page #panel-uploads[hidden] {
+body.admin-page #panel-uploads[hidden],
+body.admin-page #panel-allocation[hidden] {
   display: none !important;
 }
 
-body.admin-page #panel-targets:not([hidden]) {
+body.admin-page #panel-targets:not([hidden]),
+body.admin-page #panel-uploads:not([hidden]),
+body.admin-page #panel-allocation:not([hidden]) {
   display: block !important;
   animation: fadeUp 0.28s ease;
-}
-
-body.admin-page #panel-uploads:not([hidden]) {
-  display: block !important;
 }
 
 @media (max-width: 960px) {
@@ -2733,4 +2732,138 @@ body.admin-page #panel-uploads:not([hidden]) {
 
 .emp-stat.is-behind .v {
   color: #b91c1c;
+}
+
+/* ——— Allocation plan (Admin) ——— */
+.admin-allocation-card {
+  overflow: hidden;
+}
+
+.allocation-plan-wrap {
+  overflow: auto;
+  max-height: min(72vh, 920px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.allocation-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  background: #fff;
+}
+
+.allocation-plan-table th,
+.allocation-plan-table td {
+  border: 1px solid #e4ebf2;
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.allocation-plan-table .alloc-head-title th {
+  background: var(--navy);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 12px;
+}
+
+.allocation-plan-table .alloc-head-cols th {
+  background: #edf3f9;
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.allocation-plan-table .alloc-head-title th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.allocation-plan-table .alloc-head-cols th {
+  top: 41px;
+}
+
+.allocation-plan-table .alloc-seg {
+  background: #f8fafc;
+  font-weight: 800;
+  color: var(--navy);
+  text-align: center;
+  vertical-align: top;
+  min-width: 48px;
+}
+
+.allocation-plan-table .alloc-product {
+  text-align: left;
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.allocation-plan-table .alloc-product.alloc-cont {
+  color: transparent;
+}
+
+.allocation-plan-table .alloc-sfx {
+  text-align: left;
+  min-width: 120px;
+}
+
+.allocation-plan-table .alloc-esales {
+  text-align: center;
+  min-width: 88px;
+}
+
+.allocation-plan-table .alloc-esales input {
+  width: 72px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.allocation-plan-table .alloc-esales input:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px rgba(11, 58, 102, 0.12);
+}
+
+.allocation-plan-table .alloc-row.is-total td {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
+.allocation-plan-table .alloc-row.is-product-total .alloc-total-label {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.allocation-plan-table .alloc-row.is-seg-total .alloc-total-label {
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.allocation-plan-table .alloc-row.is-grand-total td {
+  background: var(--navy);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.allocation-plan-table .alloc-row.is-grand-total .alloc-total-val {
+  font-size: 1rem;
+}
+
+.allocation-plan-table .alloc-total-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
 }
