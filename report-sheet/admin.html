@@ -93,6 +93,11 @@
             <h2>Employees · monthly targets</h2>
             <span class="admin-section-tag">Edit · then Push</span>
           </div>
+          <div class="admin-accessories-settled">
+            <label for="accessories-settled">Accessories settled (SAR)</label>
+            <input id="accessories-settled" type="number" min="0" step="1" placeholder="e.g. 120000" title="Total accessories pool distributed by target share" />
+            <span class="hint">Distributed as (settled ÷ total target) × each employee target · Col H sales deduct from vehicle target</span>
+          </div>
           <div class="target-grid" id="target-grid"></div>
         </div>
       </div>
@@ -106,6 +111,8 @@
   const Store = window.ReportSheetStore;
   const TARGETS_KEY = Store.TARGETS_KEY;
   const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
+  const ACCESSORIES_SETTLED_KEY = Store.ACCESSORIES_SETTLED_KEY;
+  const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
   const ACCEPT = ".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 
   const SLOT_DEFS = [
@@ -114,6 +121,7 @@
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A / P / V" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I = VIN required · count all rows by salesman (duplicates included)" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Col F = date · Col G = salesman · Col H = amount (deducted from target)" },
   ];
 
   const DEFAULT_EMPLOYEE_NAMES = [
@@ -187,6 +195,16 @@
     return "unknown";
   }
 
+  function loadAccessoriesSettled() {
+    try {
+      const raw = localStorage.getItem(ACCESSORIES_SETTLED_KEY);
+      if (!raw) return 0;
+      return Math.max(0, Number(JSON.parse(raw).amount) || 0);
+    } catch {
+      return 0;
+    }
+  }
+
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
@@ -239,6 +257,10 @@
   }
 
   function renderTargetsPanel() {
+    const settledEl = $("#accessories-settled");
+    if (settledEl && document.activeElement !== settledEl) {
+      settledEl.value = String(loadAccessoriesSettled() || "");
+    }
     const q = targetSearch.trim().toLowerCase();
     const totalTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
     const filled = employeeTargets.filter((e) => Number(e.target) > 0).length;
@@ -351,6 +373,10 @@
       };
       localStorage.setItem(TARGETS_PUSH_KEY, JSON.stringify(targetStamp));
 
+      const settledAmount = Math.max(0, Number($("#accessories-settled").value) || 0);
+      localStorage.setItem(ACCESSORIES_SETTLED_KEY, JSON.stringify({ amount: settledAmount, at: targetStamp.at }));
+      localStorage.setItem(ACCESSORIES_SETTLED_PUSH_KEY, JSON.stringify({ amount: settledAmount, at: targetStamp.at }));
+
       const filesBySlot = {};
       SLOT_DEFS.forEach((d) => {
         const s = slots[d.id];
@@ -364,6 +390,8 @@
         hasSales: dataStamp.hasSales,
         hasCancelled: dataStamp.hasCancelled,
         targetsAt: targetStamp.at,
+        accessoriesSettled: settledAmount,
+        accessoriesSettledAt: targetStamp.at,
       });
 
       renderTargetsPanel();

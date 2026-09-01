@@ -7,9 +7,11 @@
   const DATA_PUSH_KEY = "toyota_admin_workbook_push_v1";
   const TARGETS_KEY = "toyota_admin_employee_targets_v1";
   const TARGETS_PUSH_KEY = "toyota_admin_employee_targets_push_v1";
+  const ACCESSORIES_SETTLED_KEY = "toyota_admin_accessories_settled_v1";
+  const ACCESSORIES_SETTLED_PUSH_KEY = "toyota_admin_accessories_settled_push_v1";
   const CHANNEL = "toyota_targets_live";
 
-  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled"];
+  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories"];
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -117,6 +119,8 @@
     DATA_PUSH_KEY,
     TARGETS_KEY,
     TARGETS_PUSH_KEY,
+    ACCESSORIES_SETTLED_KEY,
+    ACCESSORIES_SETTLED_PUSH_KEY,
     CHANNEL,
     saveWorkbookFiles,
     loadWorkbookFiles,

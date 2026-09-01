@@ -202,6 +202,15 @@
                   <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
                 </div>
               </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-accessories">
+                <div class="pbi-viz-head">
+                  <h2>Accessories · Ach %</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
+                </div>
+              </article>
               <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
                 <div class="pbi-viz-head">
                   <h2>Proforma · Prior month vs Today</h2>
@@ -588,13 +597,16 @@
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
-    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I = VIN required · count all rows by salesman (duplicates included)" },
+    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Col F date · Col G salesman · Col H amount" },
   ];
 
   const Store = window.ReportSheetStore;
   const TARGETS_KEY = Store.TARGETS_KEY;
   const TARGETS_PUSH_KEY = Store.TARGETS_PUSH_KEY;
   const DATA_PUSH_KEY = Store.DATA_PUSH_KEY;
+  const ACCESSORIES_SETTLED_KEY = Store.ACCESSORIES_SETTLED_KEY;
+  const ACCESSORIES_SETTLED_PUSH_KEY = Store.ACCESSORIES_SETTLED_PUSH_KEY;
   const DEFAULT_EMPLOYEE_NAMES = [
     "Samaher Abdulmoghni Al Amri",
     "Haneen Talal Aqeel Al Madani",
@@ -768,11 +780,23 @@
     }
   }
 
+  function loadAccessoriesSettled() {
+    try {
+      const raw = localStorage.getItem(ACCESSORIES_SETTLED_KEY);
+      if (!raw) return 0;
+      return Math.max(0, Number(JSON.parse(raw).amount) || 0);
+    } catch {
+      return 0;
+    }
+  }
+
   let employeeTargets = loadEmployeeTargets();
+  let accessoriesSettled = loadAccessoriesSettled();
   let activeNav = "dashboard";
 
   function refreshTargetsFromAdmin() {
     employeeTargets = loadEmployeeTargets();
+    accessoriesSettled = loadAccessoriesSettled();
   }
 
   function applyLiveTargets(reason) {
@@ -1348,6 +1372,101 @@
     return rows;
   }
 
+  /**
+   * Accessories Excel:
+   *   Col F = date
+   *   Col G = salesman name
+   *   Col H = amount (deducted from vehicle target; summed for Ach%)
+   */
+  function parseAmount(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const s = String(v ?? "").replace(/,/g, "").trim();
+    if (!s) return 0;
+    const n = parseFloat(s.replace(/[^\d.\-]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function accessoriesRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /accessor/i.test(n)) ||
+      names.find((n) => /sales|retail/i.test(n)) ||
+      names[0];
+    if (!workbook.Sheets[preferred]) return [];
+
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
+      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
+    });
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const markers = ["salesman", "sales employee", "advisor", "date", "amount", "accessories", "accessory"];
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = markers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 2) break;
+    }
+
+    let idxF = colLetterToIndex("F");
+    let idxG = colLetterToIndex("G");
+    let idxH = colLetterToIndex("H");
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+
+    const headerSalesman = findHeaderIdx([
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
+      (n) => n === "advisor" || n === "consultant" || n.includes("salesman"),
+    ]);
+    const headerDate = findHeaderIdx([
+      (n) => n.includes("date") || n === "order date" || n === "transaction date",
+    ]);
+    const headerAmount = findHeaderIdx([
+      (n) => n.includes("accessor") || n === "amount" || n.includes("amount") || n === "total" || n === "value",
+    ]);
+    if (headerSalesman >= 0) idxG = headerSalesman;
+    if (headerDate >= 0) idxF = headerDate;
+    if (headerAmount >= 0) idxH = headerAmount;
+
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxH + 1, idxG + 1, idxF + 1);
+
+    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = padCells(matrix[r] || [], width);
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+
+      const amount = parseAmount(line[idxH]);
+      if (!amount) continue;
+
+      const salesman = resolveSalesmanName(cellToString(line[idxG]).trim());
+      if (!salesman) continue;
+
+      const obj = {
+        salesman,
+        amount,
+        accessoryDate: parseDate(line[idxF]),
+        _sheet: preferred,
+        __cells: line,
+        __headers: uniqueHeaders,
+      };
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
+  }
+
   function colLetterToIndex(letter) {
     let n = 0;
     const s = String(letter || "").toUpperCase().replace(/[^A-Z]/g, "");
@@ -1660,6 +1779,7 @@
   function rowsForSlot(id, workbook) {
     if (id === "backorder") return backorderRows(workbook);
     if (id === "cancelled") return cancelledBoRows(workbook);
+    if (id === "accessories") return accessoriesRows(workbook);
     if (id === "sales") return salesRawRows(workbook);
     return sheetRows(workbook, workbook.SheetNames[0]);
   }
@@ -2014,6 +2134,131 @@
     else setStatus("Ready · Refresh from Admin", "ok");
   }
 
+  function buildAccessoriesMetrics(live, prevMonthKey) {
+    const settled = accessoriesSettled;
+    const totalAdminTarget = employeeTargets.reduce((s, e) => s + (Number(e.target) || 0), 0);
+    const soldByKey = new Map();
+    (slots.accessories.rows || []).forEach((r) => {
+      if (!salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey)) return;
+      const key = nameKey(r.salesman);
+      if (!key) return;
+      soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
+    });
+
+    const byKey = new Map();
+    employeeTargets.forEach((e) => {
+      const key = nameKey(e.name);
+      if (!key) return;
+      const adminTarget = Number(e.target) || 0;
+      const quota = totalAdminTarget > 0 && settled > 0 ? (settled / totalAdminTarget) * adminTarget : 0;
+      const sold = soldByKey.get(key) || 0;
+      const achPct = quota > 0 ? sold / quota : null;
+      byKey.set(key, {
+        salesman: e.name,
+        adminTarget,
+        quota,
+        sold,
+        achPct,
+        netTarget: Math.max(0, adminTarget - sold),
+      });
+      soldByKey.delete(key);
+    });
+    soldByKey.forEach((sold, key) => {
+      const fromFile = (slots.accessories.rows || []).find((r) => nameKey(r.salesman) === key);
+      byKey.set(key, {
+        salesman: fromFile ? fromFile.salesman : key,
+        adminTarget: 0,
+        quota: 0,
+        sold,
+        achPct: null,
+        netTarget: 0,
+      });
+    });
+
+    const totSold = [...byKey.values()].reduce((s, x) => s + x.sold, 0);
+    const totQuota = [...byKey.values()].reduce((s, x) => s + x.quota, 0);
+    return {
+      settled,
+      totalAdminTarget,
+      byKey,
+      totals: {
+        sold: totSold,
+        quota: totQuota,
+        achPct: totQuota > 0 ? totSold / totQuota : null,
+      },
+      hasFile: !!(slots.accessories.rows && slots.accessories.rows.length),
+    };
+  }
+
+  function applyAccessoriesToReportRows(rows, acc) {
+    const merged = rows.map((r) => {
+      const m = acc.byKey.get(r._key) || {
+        quota: 0, sold: 0, achPct: null, netTarget: r.Target, adminTarget: r.Target,
+      };
+      const accAchPct = m.achPct;
+      return {
+        ...r,
+        "Acc Target": m.quota,
+        "Acc Achieved": m.sold,
+        "Acc Ach %": accAchPct == null ? (m.quota ? "0%" : "—") : pct1(accAchPct),
+        "Adjusted Target": m.netTarget,
+        _accQuota: m.quota,
+        _accSold: m.sold,
+        _accAchPct: accAchPct,
+        _accNetTarget: m.netTarget,
+      };
+    });
+
+    const existing = new Set(merged.map((r) => r._key));
+    acc.byKey.forEach((m, key) => {
+      if (existing.has(key) || !m.sold) return;
+      merged.push({
+        No: 0,
+        Plant: "—",
+        Salesman: "",
+        "Sales Employee": m.salesman || key,
+        Notes: "",
+        VSND: 0,
+        "Proforma (Day)": 0,
+        "Proforma (Month)": 0,
+        "Proforma (Prev)": 0,
+        "Delivery (Day)": 0,
+        "Delivery (Month)": 0,
+        "Delivery (Prev)": 0,
+        Target: m.adminTarget,
+        "Day Target": m.adminTarget,
+        "Prof+Del": 0,
+        "Del %": "#DIV/0!",
+        "Prof+Del %": "#DIV/0!",
+        _delPct: null,
+        _profDelPct: null,
+        Proforma: 0,
+        Delivery: 0,
+        "Acc Target": m.quota,
+        "Acc Achieved": m.sold,
+        "Acc Ach %": m.achPct == null ? "0%" : pct1(m.achPct),
+        "Adjusted Target": m.netTarget,
+        _accQuota: m.quota,
+        _accSold: m.sold,
+        _accAchPct: m.achPct,
+        _accNetTarget: m.netTarget,
+        day: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
+        month: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
+        _vins: [],
+        _records: [],
+        _key: key,
+      });
+    });
+    return merged.map((r, i) => ({ ...r, No: i + 1 }));
+  }
+
+  function accessoriesRawRowsForSalesman(key, live, prevMonthKey) {
+    return (slots.accessories.rows || []).filter((r) => {
+      if (nameKey(r.salesman) !== key) return false;
+      return salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey);
+    });
+  }
+
   function buildSalesReport(bos, sales, cancelled) {
     const CANCEL_TARGET = 0.30;
     const calendarLive = todayKeys();
@@ -2362,27 +2607,30 @@
       };
     }).map((r, i) => ({ ...r, No: i + 1 }));
 
-    const totProformaDay = rows.reduce((s, r) => s + r["Proforma (Day)"], 0);
-    const totProformaMonth = rows.reduce((s, r) => s + r["Proforma (Month)"], 0);
-    const totProformaPrev = rows.reduce((s, r) => s + r["Proforma (Prev)"], 0);
-    const totDeliveryDay = rows.reduce((s, r) => s + r["Delivery (Day)"], 0);
-    const totDeliveryMonth = rows.reduce((s, r) => s + r["Delivery (Month)"], 0);
-    const totDeliveryPrev = rows.reduce((s, r) => s + r["Delivery (Prev)"], 0);
-    const totTarget = rows.reduce((s, r) => s + r.Target, 0);
+    const accessories = buildAccessoriesMetrics(live, prevMonthKey);
+    const rowsWithAcc = applyAccessoriesToReportRows(rows, accessories);
+
+    const totProformaDay = rowsWithAcc.reduce((s, r) => s + r["Proforma (Day)"], 0);
+    const totProformaMonth = rowsWithAcc.reduce((s, r) => s + r["Proforma (Month)"], 0);
+    const totProformaPrev = rowsWithAcc.reduce((s, r) => s + r["Proforma (Prev)"], 0);
+    const totDeliveryDay = rowsWithAcc.reduce((s, r) => s + r["Delivery (Day)"], 0);
+    const totDeliveryMonth = rowsWithAcc.reduce((s, r) => s + r["Delivery (Month)"], 0);
+    const totDeliveryPrev = rowsWithAcc.reduce((s, r) => s + r["Delivery (Prev)"], 0);
+    const totTarget = rowsWithAcc.reduce((s, r) => s + r.Target, 0);
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
     const totProfPlusDel = totProformaMonth + totDeliveryMonth;
-    const totVsnd = rows.reduce((s, r) => s + r.VSND, 0);
+    const totVsnd = rowsWithAcc.reduce((s, r) => s + r.VSND, 0);
     const totDelVsnd = totProformaMonth; // Del+VSND = Proforma
     const totDelVsndDay = totProformaDay;
-    const totCancelled = rows.reduce((s, r) => s + r["Cancelled BOs"], 0);
-    const totCancelledDay = rows.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
+    const totCancelled = rowsWithAcc.reduce((s, r) => s + r["Cancelled BOs"], 0);
+    const totCancelledDay = rowsWithAcc.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
     const monthCancelBase = totDeliveryMonth + totCancelled;
     const dayCancelBase = totDeliveryDay + totCancelledDay;
     const daysPassed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
     const daysRemaining = Math.max(0, daysInMonth - daysPassed);
 
     return {
-      rows,
+      rows: rowsWithAcc,
       live,
       daysInMonth,
       daysPassed,
@@ -2390,6 +2638,7 @@
       prevMonthKey,
       prevMonthLabel,
       diag,
+      accessories,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
@@ -2417,6 +2666,10 @@
         cancelledDay: totCancelledDay,
         cancelPct: monthCancelBase ? totCancelled / monthCancelBase : 0,
         cancelPctDay: dayCancelBase ? totCancelledDay / dayCancelBase : 0,
+        accSold: accessories.totals.sold,
+        accQuota: accessories.totals.quota,
+        accAchPct: accessories.totals.achPct,
+        accSettled: accessories.settled,
       },
     };
   }
@@ -3935,11 +4188,12 @@
     const month = row.month || row;
     const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
     const cancelRawRows = cancelledRawRowsForSalesman(key);
+    const accRawRows = accessoriesRawRowsForSalesman(key, live, sr.prevMonthKey);
     const records = row._records || [];
 
     if (title) title.textContent = row["Sales Employee"] || "Employee";
     if (sub) {
-      sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Sales Raw · ${formatNumber(cancelRawRows.length)} Cancelled BO`;
+      sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Sales Raw · ${formatNumber(cancelRawRows.length)} Cancelled BO · ${formatNumber(accRawRows.length)} Accessories`;
     }
 
     body.innerHTML = `
@@ -3949,9 +4203,14 @@
         <div class="emp-stat"><div class="k">Month Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
         <div class="emp-stat"><div class="k">Month Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
         <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Adjusted target</div><div class="v">${formatNumber(row["Adjusted Target"] ?? month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(row["Acc Target"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(row["Acc Achieved"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc Ach%</div><div class="v">${escapeHtml(row["Acc Ach %"] || "—")}</div></div>
         <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
       </div>
+      ${accRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Accessories rows · Col F/G/H (${formatNumber(accRawRows.length)})</h4>${renderCancelledFileTableHtml(accRawRows)}` : ""}
       ${cancelRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Cancelled BO rows · all Excel columns (${formatNumber(cancelRawRows.length)})</h4>${renderCancelledFileTableHtml(cancelRawRows)}` : ""}
       <h4 style="margin:${cancelRawRows.length ? "14px" : "8px"} 0 6px;font-size:.9rem">Sales Raw rows for this name</h4>
       ${renderEmployeeRawTable(rawRows)}
@@ -4055,6 +4314,78 @@
     });
   }
 
+  function renderAccessoriesChart(sr, rows, opts) {
+    const acc = sr.accessories || {};
+    const settled = acc.settled || 0;
+    const hasFile = acc.hasFile;
+
+    if (!hasFile) {
+      setChartEmptyState(
+        "chart-sr-accessories",
+        "Upload Accessories Excel in Admin (slot 6 · Col F date · Col G salesman · Col H amount), then Push to live."
+      );
+      return;
+    }
+    if (!settled) {
+      setChartEmptyState(
+        "chart-sr-accessories",
+        "Set Accessories settled (SAR) in Admin → Employees & Targets, then Push to live."
+      );
+      return;
+    }
+
+    clearChartEmptyState("chart-sr-accessories");
+
+    const accRows = rows
+      .map((r) => ({
+        row: r,
+        pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
+        quota: r._accQuota || 0,
+        sold: r._accSold || 0,
+      }))
+      .filter((x) => x.quota > 0 || x.sold > 0)
+      .sort((a, b) => b.pct - a.pct);
+
+    if (!accRows.length) {
+      setChartEmptyState(
+        "chart-sr-accessories",
+        "No accessories amounts in the selected date period (Col F)."
+      );
+      return;
+    }
+
+    const single = !!(opts && opts.single) || accRows.length === 1;
+    const labels = single
+      ? ["This employee"]
+      : accRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
+    const empKeys = accRows.map((x) => x.row._key);
+    const horizontal = !single && accRows.length > 1;
+    const pctVals = accRows.map((x) => x.pct);
+    const accColors = pctVals.map((n) =>
+      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)"
+    );
+
+    if (single) {
+      const r = accRows[0];
+      upsertChart("chart-sr-accessories", "doughnut", ["Ach %", "Remaining"], [
+        Math.min(100, r.pct),
+        Math.max(0, 100 - r.pct),
+      ]);
+      return;
+    }
+
+    upsertChart("chart-sr-accessories", "bar", labels, pctVals, {
+      horizontal,
+      clickable: accRows.length > 1,
+      empKeys,
+      label: "Accessories Ach %",
+      backgroundColor: accColors,
+      max: 120,
+      showValues: true,
+      valueSuffix: "%",
+    });
+  }
+
   function renderSalesReportCharts(sr) {
     const rows = chartRowsForMode(sr.rows || []);
     if (!rows.length) return;
@@ -4137,6 +4468,7 @@
       upsertChart("chart-sr-cancelcount", "bar", ["Cancelled BOs"], [
         Number((r.month || r)["Cancelled BOs"]) || 0,
       ], { backgroundColor: "rgba(200, 30, 44, 0.8)" });
+      renderAccessoriesChart(sr, rows, { single: true });
       return;
     }
 
@@ -4310,6 +4642,7 @@
         }
       );
     }
+    renderAccessoriesChart(sr, rows, { single: false });
   }
   function exportTelesalesSchedule() {
     const sr = window._data && window._data.salesReport;
@@ -4373,7 +4706,9 @@
         "", "", "",
         "", "", "",
         "",
-        "", "", "",
+        r["Acc Target"] || 0,
+        r["Acc Achieved"] || 0,
+        r["Acc Ach %"] || "",
         "", "",
       ]);
     });
@@ -4394,7 +4729,9 @@
       "", "", "",
       "", "", "",
       "",
-      "", "", "",
+      t.accQuota || 0,
+      t.accSold || 0,
+      t.accAchPct != null ? (t.accAchPct * 100).toFixed(1) + "%" : "",
       "", "",
     ]);
 
@@ -4432,7 +4769,7 @@
     aoa.push([]);
     aoa.push(["Notes"]);
     aoa.push(["Schedule built from Sales Raw (Col A/P/V) + Admin targets."]);
-    aoa.push(["Lead Time / NPS / PSFU / Accessories / Lead Management columns are reserved (no source file yet)."]);
+    aoa.push(["Lead Time / NPS / PSFU / Lead Management columns are reserved (no source file yet). Accessories from Admin slot 6 + settled SAR."]);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -5784,7 +6121,7 @@
   }
 
   window.addEventListener("storage", (e) => {
-    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY) {
+    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY) {
       maybeApplyPushedTargets("Targets pushed — live update");
     }
     if (e.key === DATA_PUSH_KEY) {

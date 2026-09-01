@@ -1695,6 +1695,39 @@ tr.emp-row:hover td {
   gap: 10px;
 }
 
+.admin-accessories-settled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.admin-accessories-settled label {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.admin-accessories-settled input {
+  width: min(160px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+}
+
+.admin-accessories-settled .hint {
+  flex: 1 1 220px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .target-row {
   display: grid;
   grid-template-columns: 36px 1fr 88px;
