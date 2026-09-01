@@ -936,6 +936,12 @@
     if (!Number.isFinite(n)) return "—";
     return new Intl.NumberFormat().format(n);
   }
+  function pct1(n) {
+    return (Number(n) * 100).toFixed(1) + "%";
+  }
+  function pct0(n) {
+    return Math.round(Number(n) * 100) + "%";
+  }
   function formatBytes(n) {
     if (n < 1024) return n + " B";
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
@@ -2541,8 +2547,6 @@
 
     const daysInMonth = live.daysInMonth
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
-    const pct1 = (n) => (n * 100).toFixed(1) + "%";
-    const pct0 = (n) => Math.round(n * 100) + "%";
 
     // Excel Month-to-Date formulas:
     // Proforma = count Col P in current month · Delivery = count Col V in current month
