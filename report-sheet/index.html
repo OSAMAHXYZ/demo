@@ -1316,6 +1316,59 @@
       monthKey: toYyyymm(local),
       dayKey: toYyyymmdd(local),
       label: cellToString(local),
+      source: "calendar",
+    };
+  }
+
+  /** When calendar month has no Col P/V dates, use the latest month found in Sales Raw. */
+  function detectSalesReportLive(salesRows, calendarLive) {
+    const monthCounts = new Map();
+    const dayCounts = new Map();
+
+    (salesRows || []).forEach((r) => {
+      [r.proformaDate, r.deliveryDate].forEach((d) => {
+        if (!d) return;
+        const ym = toYyyymm(d);
+        const yd = toYyyymmdd(d);
+        if (ym) monthCounts.set(ym, (monthCounts.get(ym) || 0) + 1);
+        if (yd) dayCounts.set(yd, (dayCounts.get(yd) || 0) + 1);
+      });
+    });
+
+    if (!monthCounts.size) {
+      return { ...calendarLive, source: "calendar", noFileDates: true };
+    }
+
+    if ((monthCounts.get(calendarLive.monthKey) || 0) > 0) {
+      return { ...calendarLive, source: "calendar" };
+    }
+
+    let reportMonthKey = "";
+    monthCounts.forEach((count, ym) => {
+      if (!reportMonthKey || ym > reportMonthKey) reportMonthKey = ym;
+    });
+
+    let reportDayKey = "";
+    dayCounts.forEach((count, yd) => {
+      if (yd.startsWith(reportMonthKey) && yd > reportDayKey) reportDayKey = yd;
+    });
+
+    const yy = Number(reportMonthKey.slice(0, 4));
+    const mm = Number(reportMonthKey.slice(4, 6)) - 1;
+    const dd = reportDayKey ? Number(reportDayKey.slice(6, 8)) : 1;
+    const refDate = new Date(yy, mm, dd);
+
+    const monthLabel = refDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+    return {
+      now: refDate,
+      monthKey: reportMonthKey,
+      dayKey: reportDayKey || toYyyymmdd(refDate),
+      label: cellToString(refDate),
+      source: "file",
+      reportMonthLabel: monthLabel,
+      calendarMonthKey: calendarLive.monthKey,
+      calendarDayKey: calendarLive.dayKey,
+      calendarLabel: calendarLive.label,
     };
   }
 
@@ -1744,7 +1797,9 @@
 
   function buildSalesReport(bos, sales, cancelled) {
     const CANCEL_TARGET = 0.30;
-    const live = todayKeys();
+    const calendarLive = todayKeys();
+    const salesRows = slots.sales.rows || [];
+    const live = detectSalesReportLive(salesRows, calendarLive);
     const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
     const prevMonthKey = toYyyymm(prevDate);
     const prevMonthLabel = prevDate.toLocaleString("en-US", { month: "long" });
@@ -1827,9 +1882,8 @@
     });
 
     // Live SUMPRODUCT from Sales Raw Data:
-    // Proforma = COUNT where TRIM(A)=name AND TEXT(P,"yyyymm")=current month / today
-    // Delivery = COUNT where TRIM(A)=name AND TEXT(V,"yyyymm")=current month / today
-    const salesRows = slots.sales.rows || [];
+    // Proforma = COUNT where TRIM(A)=name AND TEXT(P,"yyyymm")=report month / day
+    // Delivery = COUNT where TRIM(A)=name AND TEXT(V,"yyyymm")=report month / day
     salesRows.forEach((r) => {
       const name = cellToString(r.salesman).trim();
       if (!name) return;
@@ -1905,6 +1959,10 @@
       today: live.label,
       monthKey: live.monthKey,
       dayKey: live.dayKey,
+      source: live.source || "calendar",
+      reportMonthLabel: live.reportMonthLabel || "",
+      calendarMonthKey: live.calendarMonthKey || calendarLive.monthKey,
+      calendarLabel: live.calendarLabel || calendarLive.label,
     };
     salesRows.forEach((r) => {
       if (r.proformaDate) {
@@ -3010,14 +3068,24 @@
     const live = sr.live || todayKeys();
     const hint = $("#sr-live-hint");
     if (hint) {
-      hint.textContent = `As of ${live.label} · Col P=Proforma · Col V=Delivery · current month/day only · Target=Admin · Del+VSND=Proforma`;
+      const periodNote = live.source === "file"
+        ? `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file (calendar ${live.calendarMonthKey || ""} had no dates)`
+        : "Current calendar month/day";
+      hint.textContent = `Col P=Proforma · Col V=Delivery · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
     }
     const dayTitle = $("#sr-day-title");
-    if (dayTitle) dayTitle.textContent = `Day to Date · ${live.label}`;
+    if (dayTitle) {
+      dayTitle.textContent = live.source === "file"
+        ? `Latest day in file · ${live.label}`
+        : `Day to Date · ${live.label}`;
+    }
     const monthTitle = $("#sr-month-title");
     if (monthTitle) {
-      const monthLabel = (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
-      monthTitle.textContent = `Month to Date · ${monthLabel}`;
+      const monthLabel = live.reportMonthLabel
+        || (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
+      monthTitle.textContent = live.source === "file"
+        ? `Month from file · ${monthLabel}`
+        : `Month to Date · ${monthLabel}`;
     }
 
     const diag = sr.diag || {};
@@ -3034,14 +3102,26 @@
           Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
           parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
           parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
-          Matching <b>today (${escapeHtml(diag.today || live.label)})</b>:
+          Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
           Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
           Delivery <b>${formatNumber(diag.dayDelivery || 0)}</b>.
-          Matching <b>this month (${escapeHtml(diag.monthKey || live.monthKey)})</b>:
+          Matching <b>report month (${escapeHtml(diag.monthKey || live.monthKey)})</b>:
           Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>,
           Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>.
           ${samples ? `<br>Sample dates found in file: ${escapeHtml(samples)}` : "<br>No readable dates found in Col P/V — check those columns contain dates."}
-          <br><span style="font-weight:500">Day to Date only counts rows dated today. Scroll to Month to Date for current-month totals. Ach%/Diff still calculate from Target even when Proforma/Delivery are 0.</span>
+          <br><span style="font-weight:500">If your file has older dates than today, the dashboard auto-uses the latest month in the file. Upload a file with current-month dates, or refresh after Admin push.</span>
+        `;
+      } else if (diag.source === "file" && diag.salesRows > 0) {
+        diagEl.style.display = "block";
+        diagEl.className = "banner load show ok";
+        diagEl.innerHTML = `
+          <b>Using dates from your uploaded file:</b>
+          Showing <b>${escapeHtml(diag.reportMonthLabel || diag.monthKey)}</b>
+          (latest month in Sales Raw).
+          Calendar month <b>${escapeHtml(diag.calendarMonthKey || "")}</b> had no matching Col P/V dates.
+          Day snapshot: <b>${escapeHtml(diag.today || live.label)}</b>
+          · Proforma MTD <b>${formatNumber(diag.monthProforma || 0)}</b>
+          · Delivery MTD <b>${formatNumber(diag.monthDelivery || 0)}</b>.
         `;
       } else if (diagEl) {
         diagEl.style.display = "none";
@@ -3052,12 +3132,15 @@
     const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
     const monthRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "month")));
 
+    const dayFoot = live.source === "file"
+      ? `${formatNumber(dayRows.length)} employees · Col P/V filtered to latest day in file (${live.label})`
+      : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma`;
     renderXlTable(
       dayRows,
       buildTotalsObj(sr, "day"),
       "#sr-day-table-wrap",
       "#sr-day-table-foot",
-      `${formatNumber(dayRows.length)} employees · same formulas as month · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma`
+      dayFoot
     );
     renderXlTable(
       monthRows,
@@ -3546,13 +3629,15 @@
       }
     }
     if (!dayDel && !dayProf) {
+      const live = (sr && sr.live) || todayKeys();
+      const dayRef = live.source === "file" ? `report day (${live.label})` : "today";
       setChartEmptyState(
         "chart-sr-day",
-        "No Delivery or Proforma dated today (Col P / Col V = today’s date)."
+        `No Delivery or Proforma dated ${dayRef} (Col P / Col V).`
       );
       return;
     }
-    upsertChart("chart-sr-day", "bar", ["Delivery today", "Proforma today"], [dayDel, dayProf], {
+    upsertChart("chart-sr-day", "bar", ["Delivery (day)", "Proforma (day)"], [dayDel, dayProf], {
       backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
       max: Math.max(1, dayDel, dayProf),
       legend: false,
