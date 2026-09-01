@@ -562,7 +562,8 @@
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Set allocation numbers in <a href="admin.html">Admin</a> → tab <b>3 · Allocation Plan</b></li>
             <li>Upload slot <b>1 · Back Order</b> for BO counts</li>
-            <li>Optionally upload <b>RTL Stock</b> / <b>Stock Central</b> for stock column</li>
+            <li>Upload slot <b>2 · RTL Stock</b> for monthly collection tracker (Col J age)</li>
+            <li>Optionally upload <b>Stock Central</b> for stock column in gap tables</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
           </ol>
         </div>
@@ -603,6 +604,27 @@
             <div class="bo-insights card" id="bas-conf-insights"></div>
             <div class="table-wrap" id="bas-conf-table"></div>
             <p class="foot" id="bas-conf-foot"></p>
+          </article>
+
+          <article class="card bas-month-block" id="bas-month-section">
+            <div class="pbi-viz-head">
+              <h2>Monthly RTL collection vs allocation plan</h2>
+              <span class="hint" id="bas-month-hint">RTL Col J age · collected date = today − age · age 0 = arrived today · age ≥ 1 = late in stock</span>
+            </div>
+            <div class="bo-kpis" id="bas-month-kpis"></div>
+            <div class="bas-day-strip-wrap">
+              <div class="bas-day-strip" id="bas-day-strip"></div>
+            </div>
+            <div class="table-wrap bas-month-table-wrap" id="bas-month-table"></div>
+            <p class="foot" id="bas-month-foot"></p>
+
+            <h3 class="bas-subhead">Age 0 · collected today</h3>
+            <div class="table-wrap" id="bas-age0-table"></div>
+
+            <h3 class="bas-subhead">Late · still in RTL (age ≥ 1)</h3>
+            <div class="table-wrap" id="bas-late-table"></div>
+
+            <div class="bas-day-sections" id="bas-day-sections"></div>
           </article>
         </div>
       </div>
@@ -6062,6 +6084,320 @@
       footEl: "#bas-conf-foot",
       boColHeader: "Confirmed BO",
     });
+    renderBasMonthlyCollection(d);
+  }
+
+  function basMonthContext(today) {
+    const ref = today || new Date();
+    const y = ref.getFullYear();
+    const m = ref.getMonth();
+    const monthLabel = ref.toLocaleString("en", { month: "long", year: "numeric" });
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const todayDay = ref.getDate();
+    return { y, m, monthLabel, daysInMonth, todayDay, today: ref };
+  }
+
+  function inferCollectionDateFromAge(age, today) {
+    if (age == null || !Number.isFinite(age) || age < 0) return null;
+    const ref = today || new Date();
+    const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+    d.setDate(d.getDate() - Math.floor(age));
+    return d;
+  }
+
+  function matchRtlToAllocLeaf(rtlRow) {
+    for (const leaf of ALLOCATION_ROWS) {
+      if (leaf.kind !== "leaf") continue;
+      if (productMatchesAlloc(rtlRow.product, leaf.product) && suffixMatchesAlloc(rtlRow.suffix, leaf.sfx)) {
+        return leaf;
+      }
+    }
+    return null;
+  }
+
+  function buildBasMonthlyData() {
+    const ctx = basMonthContext();
+    const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
+    const matched = [];
+
+    rtlRows.forEach((car) => {
+      const leaf = matchRtlToAllocLeaf(car);
+      if (!leaf) return;
+      const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
+      if (!collDate) return;
+      if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+
+      const age = car.ageing == null ? null : Math.floor(car.ageing);
+      matched.push({
+        ...car,
+        seg: leaf.seg,
+        allocProduct: leaf.product,
+        allocSfx: leaf.sfx,
+        leafId: leaf.id,
+        allocation: Number(allocationValues[leaf.id]) || 0,
+        collectionDate: collDate,
+        collectionDay: collDate.getDate(),
+        collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        isTodayArrival: age === 0,
+        isLate: age != null && age >= 1,
+        age,
+      });
+    });
+
+    const byLeaf = new Map();
+    ALLOCATION_ROWS.forEach((leaf) => {
+      if (leaf.kind !== "leaf") return;
+      byLeaf.set(leaf.id, {
+        id: leaf.id,
+        seg: leaf.seg,
+        product: leaf.product,
+        sfx: leaf.sfx,
+        allocation: Number(allocationValues[leaf.id]) || 0,
+        dayCounts: Array(31).fill(0),
+        mtd: 0,
+        late: 0,
+        age0: 0,
+        cars: [],
+      });
+    });
+
+    matched.forEach((car) => {
+      const row = byLeaf.get(car.leafId);
+      if (!row) return;
+      row.mtd += 1;
+      if (car.collectionDay >= 1 && car.collectionDay <= 30) row.dayCounts[car.collectionDay] += 1;
+      if (car.isLate) row.late += 1;
+      if (car.isTodayArrival) row.age0 += 1;
+      row.cars.push(car);
+    });
+
+    const dayTotals = Array(31).fill(0);
+    matched.forEach((car) => {
+      if (car.collectionDay >= 1 && car.collectionDay <= 30) dayTotals[car.collectionDay] += 1;
+    });
+
+    const rows = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0);
+    return { ctx, rows, matched, dayTotals };
+  }
+
+  function filteredBasMonthlyRows(rows) {
+    const q = basView.search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (basView.seg && r.seg !== basView.seg) return false;
+      if (basView.product && r.product !== basView.product) return false;
+      if (q) {
+        const hay = `${r.seg} ${r.product} ${r.sfx}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderBasMonthlyCollection(d) {
+    const section = $("#bas-month-section");
+    if (!section) return;
+
+    if (!slotHasRows("rtl")) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+
+    const { ctx, rows, matched, dayTotals } = buildBasMonthlyData();
+    const hint = $("#bas-month-hint");
+    if (hint) {
+      hint.textContent = `${ctx.monthLabel} · RTL Col J · collected = today − age · today is day ${ctx.todayDay}`;
+    }
+
+    const filteredRows = filteredBasMonthlyRows(rows);
+    const filteredMatched = matched.filter((car) => {
+      const row = rows.find((r) => r.id === car.leafId);
+      if (!row) return false;
+      return filteredRows.some((fr) => fr.id === row.id);
+    });
+
+    const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
+    const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
+    const age0Total = filteredMatched.filter((c) => c.isTodayArrival).length;
+    const lateTotal = filteredMatched.filter((c) => c.isLate).length;
+    const gap = planTotal - mtdTotal;
+
+    const kpiEl = $("#bas-month-kpis");
+    if (kpiEl) {
+      kpiEl.innerHTML = [
+        { label: "Month", val: ctx.monthLabel, sub: `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
+        { label: "Age 0 today", val: formatNumber(age0Total), sub: "collected today · RTL", cls: age0Total ? "ok" : "" },
+        { label: "Collected MTD", val: formatNumber(mtdTotal), sub: "matched to allocation plan", cls: "ok" },
+        { label: "Plan total", val: formatNumber(planTotal), sub: "E-Sales allocation" },
+        { label: "MTD gap", val: (gap > 0 ? "+" : "") + formatNumber(gap), sub: gap >= 0 ? "Plan above collected" : "Collected above plan", cls: gap >= 0 ? "warn" : "ok" },
+        { label: "Late in RTL", val: formatNumber(lateTotal), sub: "age ≥ 1 · not cleared yet", cls: lateTotal ? "bad" : "ok" },
+      ].map((k) => `
+        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+          <div class="lbl">${k.label}</div>
+          <div class="val">${escapeHtml(String(k.val))}</div>
+          <div class="sub">${k.sub}</div>
+        </article>
+      `).join("");
+    }
+
+    const stripEl = $("#bas-day-strip");
+    if (stripEl) {
+      let stripHtml = "";
+      for (let day = 1; day <= 30; day += 1) {
+        const count = dayTotals[day] || 0;
+        const isToday = day === ctx.todayDay;
+        const isFuture = day > ctx.todayDay;
+        const cls = [
+          "bas-day-pill",
+          isToday ? "is-today" : "",
+          isFuture ? "is-future" : "",
+          count ? "has-cars" : "",
+        ].filter(Boolean).join(" ");
+        stripHtml += `<div class="${cls}" title="Day ${day} · ${count} car${count === 1 ? "" : "s"}">
+          <span class="bas-day-num">${day}</span>
+          <span class="bas-day-count">${count || "—"}</span>
+        </div>`;
+      }
+      stripEl.innerHTML = stripHtml;
+    }
+
+    const tableEl = $("#bas-month-table");
+    const footEl = $("#bas-month-foot");
+    if (tableEl) {
+      if (!filteredRows.length) {
+        tableEl.innerHTML = `<p class="foot" style="padding:16px">No allocation plan rows match filters.</p>`;
+      } else {
+        const dayHeaders = Array.from({ length: 30 }, (_, i) => {
+          const day = i + 1;
+          const cls = day === ctx.todayDay ? "bas-day-col is-today" : day > ctx.todayDay ? "bas-day-col is-future" : "bas-day-col";
+          return `<th class="${cls}">${day}</th>`;
+        }).join("");
+        const body = filteredRows.map((r) => {
+          const rowGap = r.allocation - r.mtd;
+          const gapCls = rowGap > 0 ? "bas-gap-pos" : rowGap < 0 ? "bas-gap-neg" : "";
+          const dayCells = Array.from({ length: 30 }, (_, i) => {
+            const day = i + 1;
+            const n = r.dayCounts[day] || 0;
+            const cls = day === ctx.todayDay ? "is-today" : "";
+            return `<td class="num bas-day-cell ${cls}${n ? " has-val" : ""}">${n || ""}</td>`;
+          }).join("");
+          return `<tr>
+            <td>${escapeHtml(r.seg)}</td>
+            <td>${escapeHtml(r.product)}</td>
+            <td>${escapeHtml(r.sfx)}</td>
+            <td class="num">${formatNumber(r.allocation)}</td>
+            ${dayCells}
+            <td class="num"><b>${formatNumber(r.mtd)}</b></td>
+            <td class="num ${gapCls}">${rowGap > 0 ? "+" : ""}${formatNumber(rowGap)}</td>
+            <td class="num">${formatNumber(r.late)}</td>
+          </tr>`;
+        }).join("");
+        const totals = filteredRows.reduce((acc, r) => {
+          acc.mtd += r.mtd;
+          acc.alloc += r.allocation;
+          acc.late += r.late;
+          for (let d = 1; d <= 30; d += 1) acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
+          return acc;
+        }, { mtd: 0, alloc: 0, late: 0, days: {} });
+        const totalDayCells = Array.from({ length: 30 }, (_, i) => {
+          const day = i + 1;
+          const n = totals.days[day] || 0;
+          return `<td class="num"><b>${n || ""}</b></td>`;
+        }).join("");
+        const totalGap = totals.alloc - totals.mtd;
+        tableEl.innerHTML = `<table class="bas-table bas-month-grid">
+          <thead><tr>
+            <th>Seg</th><th>Product</th><th>SFX</th><th>Plan</th>
+            ${dayHeaders}
+            <th>MTD</th><th>Gap</th><th>Late</th>
+          </tr></thead>
+          <tbody>${body}
+          <tr class="bas-row-total">
+            <td colspan="3"><b>Total</b></td>
+            <td class="num"><b>${formatNumber(totals.alloc)}</b></td>
+            ${totalDayCells}
+            <td class="num"><b>${formatNumber(totals.mtd)}</b></td>
+            <td class="num"><b>${totalGap > 0 ? "+" : ""}${formatNumber(totalGap)}</b></td>
+            <td class="num"><b>${formatNumber(totals.late)}</b></td>
+          </tr>
+          </tbody>
+        </table>`;
+      }
+      if (footEl) {
+        footEl.textContent = `${formatNumber(filteredMatched.length)} RTL units matched to plan · ${formatNumber(age0Total)} age 0 today · scroll for days 1–30`;
+      }
+    }
+
+    const age0El = $("#bas-age0-table");
+    if (age0El) {
+      const age0Cars = filteredMatched.filter((c) => c.isTodayArrival).sort((a, b) => a.allocProduct.localeCompare(b.allocProduct));
+      if (!age0Cars.length) {
+        age0El.innerHTML = `<p class="foot" style="padding:12px">No age-0 cars today matching the allocation plan.</p>`;
+      } else {
+        age0El.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Collected</th><th>Location</th></tr></thead>
+          <tbody>${age0Cars.map((c) => `<tr class="bas-row-above">
+            <td>${escapeHtml(c.allocProduct)}</td>
+            <td>${escapeHtml(c.allocSfx)}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td class="num">${formatNumber(c.age)}</td>
+            <td>${escapeHtml(c.collectionLabel)}</td>
+            <td>${escapeHtml(c.location || "—")}</td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const lateEl = $("#bas-late-table");
+    if (lateEl) {
+      const lateCars = filteredMatched.filter((c) => c.isLate).sort((a, b) => (b.age || 0) - (a.age || 0));
+      if (!lateCars.length) {
+        lateEl.innerHTML = `<p class="foot" style="padding:12px">No late cars (all matched RTL units have age 0).</p>`;
+      } else {
+        lateEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Collected</th><th>Status</th><th>Location</th></tr></thead>
+          <tbody>${lateCars.map((c) => `<tr class="bas-row-below">
+            <td>${escapeHtml(c.allocProduct)}</td>
+            <td>${escapeHtml(c.allocSfx)}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td class="num bas-gap-neg">${formatNumber(c.age)}d</td>
+            <td>${escapeHtml(c.collectionLabel)}</td>
+            <td><span class="badge bad">Late · ${formatNumber(c.age)}d in RTL</span></td>
+            <td>${escapeHtml(c.location || "—")}</td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const daySectionsEl = $("#bas-day-sections");
+    if (daySectionsEl) {
+      let sectionsHtml = "";
+      for (let day = 1; day <= 30; day += 1) {
+        const dayCars = filteredMatched.filter((c) => c.collectionDay === day);
+        const isToday = day === ctx.todayDay;
+        const isFuture = day > ctx.todayDay;
+        const openAttr = isToday && dayCars.length ? " open" : "";
+        const summaryCls = isToday ? "bas-day-summary is-today" : isFuture ? "bas-day-summary is-future" : "bas-day-summary";
+        const dateLabel = new Date(ctx.y, ctx.m, day).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+        const body = dayCars.length
+          ? `<table class="bas-table bas-day-inner">
+              <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Late?</th></tr></thead>
+              <tbody>${dayCars.map((c) => `<tr class="${c.isLate ? "bas-row-below" : "bas-row-above"}">
+                <td>${escapeHtml(c.allocProduct)}</td>
+                <td>${escapeHtml(c.allocSfx)}</td>
+                <td>${escapeHtml(c.vin || "—")}</td>
+                <td class="num">${formatNumber(c.age)}</td>
+                <td>${c.isLate ? `<span class="badge bad">Late · ${formatNumber(c.age)}d</span>` : `<span class="badge ok">Age 0 · new</span>`}</td>
+              </tr>`).join("")}</tbody>
+            </table>`
+          : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : "No cars collected this day"}</p>`;
+        sectionsHtml += `<details class="bas-day-detail"${openAttr}>
+          <summary class="${summaryCls}">Day ${day} · ${dateLabel} · ${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</summary>
+          ${body}
+        </details>`;
+      }
+      daySectionsEl.innerHTML = sectionsHtml;
+    }
   }
 
   function renderBoDashboard(d) {

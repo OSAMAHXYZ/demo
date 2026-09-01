@@ -2961,3 +2961,149 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-conf-block .bo-insights {
   margin-bottom: 16px;
 }
+
+.bas-month-block {
+  margin-top: 20px;
+  border-top: 3px solid rgba(13, 148, 136, 0.25);
+  padding-top: 4px;
+}
+
+.bas-month-block .bo-kpis {
+  margin: 12px 0 16px;
+}
+
+.bas-subhead {
+  margin: 20px 0 10px;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.bas-day-strip-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+}
+
+.bas-day-strip {
+  display: flex;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.bas-day-pill {
+  flex: 0 0 52px;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e2e8f0);
+  background: #fff;
+  font-size: 0.78rem;
+}
+
+.bas-day-pill.is-today {
+  border-color: #0b3a66;
+  background: rgba(11, 58, 102, 0.08);
+  box-shadow: 0 0 0 2px rgba(11, 58, 102, 0.15);
+}
+
+.bas-day-pill.is-future {
+  opacity: 0.45;
+}
+
+.bas-day-pill.has-cars .bas-day-count {
+  color: #0d9488;
+  font-weight: 800;
+}
+
+.bas-day-num {
+  display: block;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.bas-day-count {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  margin-top: 2px;
+}
+
+.bas-month-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.bas-month-grid .bas-day-col {
+  min-width: 28px;
+  text-align: center;
+  font-size: 0.72rem;
+  padding: 6px 4px;
+}
+
+.bas-month-grid .bas-day-col.is-today {
+  background: rgba(11, 58, 102, 0.1);
+  font-weight: 800;
+}
+
+.bas-month-grid .bas-day-col.is-future {
+  opacity: 0.5;
+}
+
+.bas-month-grid .bas-day-cell {
+  min-width: 28px;
+  text-align: center;
+  font-size: 0.8rem;
+  padding: 6px 4px;
+}
+
+.bas-month-grid .bas-day-cell.is-today {
+  background: rgba(11, 58, 102, 0.06);
+}
+
+.bas-month-grid .bas-day-cell.has-val {
+  font-weight: 700;
+  color: #0d9488;
+}
+
+.bas-month-grid .bas-row-total td {
+  background: rgba(11, 58, 102, 0.04);
+  border-top: 2px solid rgba(11, 58, 102, 0.15);
+}
+
+.bas-day-sections {
+  margin-top: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.bas-day-detail {
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 8px;
+  padding: 0 12px 8px;
+  background: #fff;
+}
+
+.bas-day-summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 600;
+  font-size: 0.88rem;
+  list-style: none;
+}
+
+.bas-day-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bas-day-summary.is-today {
+  color: #0b3a66;
+}
+
+.bas-day-summary.is-future {
+  opacity: 0.55;
+}
+
+.bas-day-inner {
+  margin-top: 4px;
+}
