@@ -570,7 +570,7 @@
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
-    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I = VIN required · count by salesman name" },
+    { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I = VIN required · count all rows by salesman (duplicates included)" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -1629,7 +1629,6 @@
 
   function mapCancelled(rows) {
     const get = buildFieldGetter(rows[0] || {});
-    const seen = new Set();
     const out = [];
     (rows || []).forEach((r, i) => {
       // Prefer Col I VIN already extracted by cancelledBoRows
@@ -1638,9 +1637,8 @@
       if (!vin && Array.isArray(r.__cells)) {
         vin = extractVinValue(r.__cells[colLetterToIndex("I")]);
       }
-      // Count only when VIN is available (Col I rule)
-      if (!vin || seen.has(vin)) return;
-      seen.add(vin);
+      // Count every row where Col I has a VIN (duplicates included)
+      if (!vin) return;
 
       const salesman = cellToString(r.salesman || get(r, "salesman")).trim();
       if (!salesman) return;
@@ -1666,7 +1664,7 @@
 
   /**
    * Cancelled BOs = rows from Cancelled Excel where Col I has a VIN,
-   * counted under the salesman name on that row (unique VIN).
+   * counted under the salesman name on that row (duplicates included).
    */
   function resolveCancelledList() {
     const rows = slots.cancelled.rows || [];
@@ -1730,7 +1728,7 @@
     const sales = slotHasRows("sales");
     const cancelled = slotHasRows("cancelled");
     if (sales && cancelled) {
-      el.textContent = "Sales + Cancelled BOs · count by name only when Col I has a VIN.";
+      el.textContent = "Sales + Cancelled BOs · count all rows when Col I has a VIN (duplicates included).";
     } else if (sales) {
       el.textContent = "Sales Raw loaded · building Sales Report (Cancelled BOs optional · Col I = VIN).";
     } else if (cancelled) {
@@ -2027,7 +2025,7 @@
       const deliveryAch = target ? delivery / target : 0;
       const salesAch = target ? delPlusVsnd / target : 0;
       const diff = target - delPlusVsnd;
-      const cancelBase = proforma + delivery + cancelledCount;
+      const cancelBase = delivery + cancelledCount;
       const cancelPct = cancelBase ? cancelledCount / cancelBase : null;
       const gap = cancelPct == null ? null : CANCEL_TARGET - cancelPct;
       return {
@@ -2128,8 +2126,8 @@
     const totDelVsndDay = totProformaDay;
     const totCancelled = rows.reduce((s, r) => s + r["Cancelled BOs"], 0);
     const totCancelledDay = rows.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
-    const monthCancelBase = totProformaMonth + totDeliveryMonth + totCancelled;
-    const dayCancelBase = totProformaDay + totDeliveryDay + totCancelledDay;
+    const monthCancelBase = totDeliveryMonth + totCancelled;
+    const dayCancelBase = totDeliveryDay + totCancelledDay;
     const daysPassed = live.now.getDate();
     const daysRemaining = Math.max(0, daysInMonth - daysPassed);
 
@@ -2202,7 +2200,7 @@
       { label: "Matched ≥80%", value: matched, sub: "recommended VIN", tab: "matches" },
       { label: "Avg BO aging", value: avgAge, sub: "days", tab: "backorder" },
       { label: "Sales rows", value: d.sales.length, sub: salesAmt ? formatNumber(salesAmt) : "raw records", tab: "sales" },
-      { label: "Cancelled BOs", value: d.cancelled.length, sub: "Col I VIN · by salesman name", tab: "cancelled" },
+      { label: "Cancelled BOs", value: d.cancelled.length, sub: "Col I VIN · all rows · duplicates included", tab: "cancelled" },
     ];
     $("#kpis").innerHTML = cards.map((c) => `
       <button class="kpi" data-tab="${c.tab}">
@@ -2963,7 +2961,7 @@
       const totDelivery = t.deliveryDay || 0;
       const totTarget = t.dayTarget || 0;
       const totDelVsnd = t.delVsndDay || 0;
-      const cancelBase = (t.proformaDay || 0) + totDelivery + (t.cancelledDay || 0);
+      const cancelBase = totDelivery + (t.cancelledDay || 0);
       return {
         No: "",
         Plant: "TOTAL",
@@ -2986,7 +2984,7 @@
     const totDelivery = t.deliveryMonth || 0;
     const totTarget = t.target || 0;
     const totDelVsnd = t.delVsnd || 0;
-    const cancelBase = (t.proformaMonth || 0) + totDelivery + (t.cancelled || 0);
+    const cancelBase = totDelivery + (t.cancelled || 0);
     return {
       No: "",
       Plant: "TOTAL",
@@ -3326,12 +3324,11 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  /** Cancel% = Cancelled ÷ (Delivery + Proforma + Cancelled) */
-  function cancelPctRatio(cancelled, delivery, proforma) {
+  /** Cancel% = Cancelled ÷ (Delivery + Cancelled) */
+  function cancelPctRatio(cancelled, delivery) {
     const c = Number(cancelled) || 0;
     const d = Number(delivery) || 0;
-    const p = Number(proforma) || 0;
-    const base = d + p + c;
+    const base = d + c;
     if (!base) return null;
     return c / base;
   }
@@ -3342,7 +3339,6 @@
     const t = sr.totals || {};
     let cancelled = t.cancelled || 0;
     let delivery = t.deliveryMonth || 0;
-    let proforma = t.proformaMonth || 0;
     let scope = "Team MTD";
 
     if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
@@ -3350,11 +3346,10 @@
       const m = row.month || row;
       cancelled = Number(m["Cancelled BOs"]) || 0;
       delivery = Number(m.Delivery) || 0;
-      proforma = Number(m.Proforma) || 0;
       scope = shortEmpLabel(row["Sales Employee"] || "Employee");
     }
 
-    const ratio = cancelPctRatio(cancelled, delivery, proforma);
+    const ratio = cancelPctRatio(cancelled, delivery);
     const pct = ratio == null ? null : Math.round(ratio * 1000) / 10; // 1 decimal
     const over = pct != null && pct > 30;
     const empty = pct == null;
@@ -3368,7 +3363,7 @@
 
     el.innerHTML = `
       <p class="cancel-pct-formula">
-        ${escapeHtml(scope)} · Cancel % = Cancelled ÷ (Delivery + Proforma + Cancelled) × 100
+        ${escapeHtml(scope)} · Cancel % = Cancelled ÷ (Delivery + Cancelled) × 100
         · Target &lt; 30%
       </p>
       <div class="cancel-pct-row">
@@ -3379,7 +3374,6 @@
         <div class="cancel-pct-parts">
           <div class="cancel-pct-part"><span class="lab">Cancelled</span><span class="val">${formatNumber(cancelled)}</span></div>
           <div class="cancel-pct-part"><span class="lab">Delivery</span><span class="val">${formatNumber(delivery)}</span></div>
-          <div class="cancel-pct-part"><span class="lab">Proforma</span><span class="val">${formatNumber(proforma)}</span></div>
         </div>
         <span class="cancel-pct-status">${escapeHtml(status)}</span>
       </div>
@@ -3476,7 +3470,7 @@
       const cancelN = Number(m["Cancelled BOs"]) || 0;
       const del = Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
       const pro = Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
-      const ratio = cancelPctRatio(cancelN, del, pro);
+      const ratio = cancelPctRatio(cancelN, del);
       const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
       const cancelOver = ratio != null && ratio * 100 > 30;
       cards = [
@@ -3489,7 +3483,7 @@
         { lab: "Today Prof", val: formatNumber(r["Proforma (Day)"] || d.Proforma) },
       ];
     } else {
-      const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0, t.proformaMonth || 0);
+      const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0);
       const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
       const cancelOver = ratio != null && ratio * 100 > 30;
       cards = [
@@ -3881,7 +3875,7 @@
     if (!cancelRows.length) {
       setChartEmptyState(
         "chart-sr-cancelcount",
-        "No cancelled BOs yet. Upload Cancelled BOs Excel in Admin — counted only when Col I has a VIN, by salesman name."
+        "No cancelled BOs yet. Upload Cancelled BOs Excel in Admin — every row with a VIN in Col I counts (duplicates included), by salesman name."
       );
     } else {
       upsertChart(

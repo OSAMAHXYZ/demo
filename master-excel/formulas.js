@@ -184,11 +184,11 @@
     }
 
     /**
-     * Cancellation % = Cancelled ÷ (Proforma + Delivery + Cancelled)
+     * Cancellation % = Cancelled ÷ (Delivery + Cancelled)
      */
-    cancellationPct(cancelled, proforma, delivery) {
+    cancellationPct(cancelled, delivery) {
       const c = this.toNumber(cancelled);
-      const base = this.toNumber(proforma) + this.toNumber(delivery) + c;
+      const base = this.toNumber(delivery) + c;
       if (!base) return null;
       return c / base;
     }
@@ -227,7 +227,7 @@
       const deliveryAch = this.deliveryAch(d, t);
       const salesAch = this.salesAch(p, t);
       const diff = this.salesDiff(t, p);
-      const cancelPct = this.cancellationPct(cancelled, p, d);
+      const cancelPct = this.cancellationPct(cancelled, d);
       const gap = this.cancelGap(cancelPct);
 
       return {
@@ -413,7 +413,7 @@
           id: "isCancelledVin",
           area: "Cancelled BO",
           formula: "Cancelled Excel · Col I has VIN → count under salesman name",
-          notes: "Unique VIN · skip rows with empty Col I",
+          notes: "All rows with Col I VIN · duplicates included · skip empty Col I",
         },
         {
           id: "delPlusVsnd",
@@ -438,7 +438,7 @@
         {
           id: "cancellationPct",
           area: "Sales",
-          formula: "Cancel% = Cancelled ÷ (Proforma + Delivery + Cancelled)",
+          formula: "Cancel% = Cancelled ÷ (Delivery + Cancelled)",
         },
         {
           id: "cancelGap",
