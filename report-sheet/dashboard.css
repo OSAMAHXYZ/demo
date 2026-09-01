@@ -2939,6 +2939,50 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: #d8e2ec;
 }
 
+.bas-toolbar-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.bas-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.bas-date-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  background: #fff;
+}
+
+.bas-date-hint {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+#bas-date-preset,
+#bas-toolbar select {
+  min-width: 148px;
+}
+
+.sr-date-custom {
+  display: none;
+}
+
+.bas-date-custom {
+  display: none;
+}
+
 .bas-legend {
   display: flex;
   flex-wrap: wrap;

@@ -86,21 +86,24 @@
         </div>
         <div class="sr-date-bar xl-toolbar" id="sr-date-bar">
           <span class="sr-date-label">Report period</span>
-          <select id="sr-date-mode" title="Auto uses calendar or latest month in file">
-            <option value="auto">Auto</option>
-            <option value="custom">Custom dates</option>
+          <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
+            <option value="today">Today</option>
+            <option value="this_month">This month (MTD)</option>
+            <option value="last_month">Last month</option>
+            <option value="all">All dates</option>
+            <option value="custom">Custom range</option>
           </select>
-          <label class="sr-date-field">
+          <label class="sr-date-field sr-date-custom">
             <span>From</span>
             <input type="date" id="sr-date-from" />
           </label>
-          <label class="sr-date-field">
+          <label class="sr-date-field sr-date-custom">
             <span>To</span>
             <input type="date" id="sr-date-to" />
           </label>
           <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
-          <button type="button" id="sr-date-reset" class="btn">Reset</button>
-          <span class="hint sr-date-hint" id="sr-date-hint">Auto · calendar or latest month in Sales Raw</span>
+          <button type="button" id="sr-date-reset" class="btn">Reset to today</button>
+          <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
         </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
@@ -580,6 +583,24 @@
           </div>
 
           <div class="bo-toolbar bas-toolbar" id="bas-toolbar">
+            <select id="bas-date-preset" title="Same date filter as Sales Dashboard">
+              <option value="today">Today</option>
+              <option value="this_month">This month (MTD)</option>
+              <option value="last_month">Last month</option>
+              <option value="all">All dates</option>
+              <option value="custom">Custom range</option>
+            </select>
+            <label class="bas-date-field bas-date-custom">
+              <span>From</span>
+              <input type="date" id="bas-date-from" />
+            </label>
+            <label class="bas-date-field bas-date-custom">
+              <span>To</span>
+              <input type="date" id="bas-date-to" />
+            </label>
+            <button type="button" id="bas-date-apply" class="btn">Apply dates</button>
+            <span class="bas-date-hint hint" id="bas-date-hint"></span>
+            <span class="bas-toolbar-divider" aria-hidden="true"></span>
             <input id="bas-search" type="search" placeholder="Search product / SFX / segment…" />
             <select id="bas-f-seg"><option value="">All segments</option></select>
             <select id="bas-f-product"><option value="">All products</option></select>
@@ -1831,19 +1852,29 @@
     return { min, max };
   }
 
-  function resolveSalesReportPeriod(salesRows, dateFilter) {
+  function prevRangeFor(from, to) {
+    const spanDays = Math.max(1, Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1);
+    const prevTo = new Date(from.getFullYear(), from.getMonth(), from.getDate() - 1);
+    const prevFrom = new Date(prevTo.getFullYear(), prevTo.getMonth(), prevTo.getDate() - (spanDays - 1));
+    return { prevFrom, prevTo };
+  }
+
+  function resolveGlobalDatePeriod(salesRows, filter) {
+    const preset = (filter && filter.preset) || "today";
     const calendarLive = todayKeys();
-    const mode = dateFilter && dateFilter.mode === "custom" ? "custom" : "auto";
-    if (mode === "custom" && dateFilter.from && dateFilter.to) {
-      const from = parseIsoDateInput(dateFilter.from);
-      const to = parseIsoDateInput(dateFilter.to);
+    const today = startOfDay(new Date());
+    const bounds = salesDateBounds(salesRows || []);
+    const fmt = (d) => d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const fmtMonth = (d) => d.toLocaleString("en-US", { month: "long", year: "numeric" });
+
+    if (preset === "custom" && filter.from && filter.to) {
+      const from = parseIsoDateInput(filter.from);
+      const to = parseIsoDateInput(filter.to);
       if (from && to && startOfDay(from).getTime() <= startOfDay(to).getTime()) {
         const sameDay = startOfDay(from).getTime() === startOfDay(to).getTime();
-        const fmt = (d) => d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
         const rangeLabel = sameDay ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
         const spanDays = Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1;
-        const prevTo = new Date(from.getFullYear(), from.getMonth(), from.getDate() - 1);
-        const prevFrom = new Date(prevTo.getFullYear(), prevTo.getMonth(), prevTo.getDate() - (spanDays - 1));
+        const { prevFrom, prevTo } = prevRangeFor(from, to);
         return {
           now: to,
           monthKey: toYyyymm(to),
@@ -1851,6 +1882,7 @@
           label: cellToString(to),
           source: "custom",
           filterMode: "custom",
+          preset: "custom",
           rangeFrom: from,
           rangeTo: to,
           rangeLabel,
@@ -1860,20 +1892,133 @@
           daysInMonth: spanDays,
           daysPassed: spanDays,
           daysRemaining: 0,
+          dayUsesRange: !sameDay,
           prevRangeFrom: prevFrom,
           prevRangeTo: prevTo,
           prevMonthLabel: `${fmt(prevFrom)} – ${fmt(prevTo)}`,
         };
       }
     }
-    const auto = detectSalesReportLive(salesRows, calendarLive);
+
+    if (preset === "last_month") {
+      const monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      const dim = monthEnd.getDate();
+      const prevStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+      const prevEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0);
+      return {
+        now: monthEnd,
+        monthKey: toYyyymm(monthEnd),
+        dayKey: toYyyymmdd(monthEnd),
+        label: cellToString(monthEnd),
+        source: "preset",
+        filterMode: "preset",
+        preset: "last_month",
+        rangeFrom: monthStart,
+        rangeTo: monthEnd,
+        rangeLabel: fmtMonth(monthStart),
+        reportMonthLabel: fmtMonth(monthStart),
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: dim,
+        daysPassed: dim,
+        daysRemaining: 0,
+        dayUsesRange: true,
+        prevRangeFrom: prevStart,
+        prevRangeTo: prevEnd,
+        prevMonthLabel: fmtMonth(prevStart),
+      };
+    }
+
+    if (preset === "all") {
+      const from = bounds.min ? startOfDay(bounds.min) : today;
+      const to = bounds.max ? startOfDay(bounds.max) : today;
+      const spanDays = Math.max(1, Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1);
+      const { prevFrom, prevTo } = prevRangeFor(from, to);
+      return {
+        now: to,
+        monthKey: toYyyymm(to),
+        dayKey: toYyyymmdd(to),
+        label: cellToString(to),
+        source: "preset",
+        filterMode: "preset",
+        preset: "all",
+        rangeFrom: from,
+        rangeTo: to,
+        rangeLabel: `${fmt(from)} – ${fmt(to)}`,
+        reportMonthLabel: "All dates in file",
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: spanDays,
+        daysPassed: spanDays,
+        daysRemaining: 0,
+        dayUsesRange: true,
+        prevRangeFrom: prevFrom,
+        prevRangeTo: prevTo,
+        prevMonthLabel: `${fmt(prevFrom)} – ${fmt(prevTo)}`,
+      };
+    }
+
+    if (preset === "this_month") {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const dim = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      return {
+        now: today,
+        monthKey: toYyyymm(today),
+        dayKey: toYyyymmdd(today),
+        label: cellToString(today),
+        source: "preset",
+        filterMode: "preset",
+        preset: "this_month",
+        rangeFrom: monthStart,
+        rangeTo: today,
+        rangeLabel: `MTD · ${fmtMonth(today)}`,
+        reportMonthLabel: fmtMonth(today),
+        calendarMonthKey: calendarLive.monthKey,
+        calendarLabel: calendarLive.label,
+        daysInMonth: dim,
+        daysPassed: today.getDate(),
+        daysRemaining: Math.max(0, dim - today.getDate()),
+        dayUsesRange: true,
+        prevRangeFrom: prevStart,
+        prevRangeTo: prevEnd,
+        prevMonthLabel: fmtMonth(prevStart),
+      };
+    }
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const dim = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
     return {
-      ...auto,
-      filterMode: "auto",
-      rangeFrom: null,
-      rangeTo: null,
-      rangeLabel: auto.reportMonthLabel || auto.monthKey,
+      now: today,
+      monthKey: toYyyymm(today),
+      dayKey: toYyyymmdd(today),
+      label: cellToString(today),
+      source: "preset",
+      filterMode: "preset",
+      preset: "today",
+      rangeFrom: monthStart,
+      rangeTo: today,
+      rangeLabel: fmt(today),
+      reportMonthLabel: fmtMonth(today),
+      calendarMonthKey: calendarLive.monthKey,
+      calendarLabel: calendarLive.label,
+      daysInMonth: dim,
+      daysPassed: today.getDate(),
+      daysRemaining: Math.max(0, dim - today.getDate()),
+      dayUsesRange: false,
+      prevRangeFrom: prevStart,
+      prevRangeTo: prevEnd,
+      prevMonthLabel: fmtMonth(prevStart),
     };
+  }
+
+  function resolveSalesReportPeriod(salesRows, dateFilter) {
+    const filter = dateFilter || globalDateFilter;
+    return resolveGlobalDatePeriod(salesRows, filter);
   }
 
   function hasDeliveryDate(r) {
@@ -1890,10 +2035,18 @@
     return null;
   }
 
+  function salesDateInActivePeriod(d, live) {
+    if (!d || !live || !live.rangeFrom || !live.rangeTo) return false;
+    return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+  }
+
   function salesPeriodMatch(d, live, period, prevMonthKey) {
     if (!d) return false;
-    if (live.filterMode === "custom" && live.rangeFrom && live.rangeTo) {
-      if (period === "day") return sameCalendarDay(d, live.rangeTo);
+    if ((live.filterMode === "custom" || live.filterMode === "preset") && live.rangeFrom && live.rangeTo) {
+      if (period === "day") {
+        if (live.dayUsesRange) return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+        return sameCalendarDay(d, live.rangeTo);
+      }
       if (period === "month") return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
       if (period === "prev" && live.prevRangeFrom && live.prevRangeTo) {
         return dateInRangeInclusive(d, live.prevRangeFrom, live.prevRangeTo);
@@ -2641,11 +2794,8 @@
     const CANCEL_TARGET = 0.30;
     const calendarLive = todayKeys();
     const salesRows = slots.sales.rows || [];
-    const live = resolveSalesReportPeriod(salesRows, {
-      mode: srView.dateMode,
-      from: srView.dateFrom,
-      to: srView.dateTo,
-    });
+    const live = resolveGlobalDatePeriod(salesRows, globalDateFilter);
+    window._globalLivePeriod = live;
     const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
     const prevMonthKey = toYyyymm(prevDate);
     const prevMonthLabel = live.prevMonthLabel
@@ -3776,34 +3926,155 @@
     ).join("");
   }
 
+  const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
   const SR_DATE_FILTER_KEY = "toyota_sr_date_filter_v1";
 
-  function loadSrDateFilter() {
+  function loadGlobalDateFilter() {
     try {
-      const raw = localStorage.getItem(SR_DATE_FILTER_KEY);
-      if (!raw) return { dateMode: "auto", dateFrom: "", dateTo: "" };
-      const parsed = JSON.parse(raw);
-      return {
-        dateMode: parsed.mode === "custom" ? "custom" : "auto",
-        dateFrom: String(parsed.from || ""),
-        dateTo: String(parsed.to || ""),
-      };
-    } catch {
-      return { dateMode: "auto", dateFrom: "", dateTo: "" };
-    }
+      const raw = localStorage.getItem(GLOBAL_DATE_FILTER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const preset = String(parsed.preset || "today");
+        const valid = ["today", "this_month", "last_month", "all", "custom"];
+        return {
+          preset: valid.includes(preset) ? preset : "today",
+          from: String(parsed.from || ""),
+          to: String(parsed.to || ""),
+        };
+      }
+      const legacy = localStorage.getItem(SR_DATE_FILTER_KEY);
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (parsed.mode === "custom") {
+          return { preset: "custom", from: String(parsed.from || ""), to: String(parsed.to || "") };
+        }
+      }
+    } catch { /* ignore */ }
+    return { preset: "today", from: "", to: "" };
   }
 
-  function saveSrDateFilter() {
+  function saveGlobalDateFilter() {
     try {
-      localStorage.setItem(SR_DATE_FILTER_KEY, JSON.stringify({
-        mode: srView.dateMode,
-        from: srView.dateFrom,
-        to: srView.dateTo,
-      }));
+      localStorage.setItem(GLOBAL_DATE_FILTER_KEY, JSON.stringify(globalDateFilter));
     } catch { /* ignore */ }
   }
 
-  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", ...loadSrDateFilter() };
+  let globalDateFilter = loadGlobalDateFilter();
+
+  function loadSrDateFilter() {
+    return globalDateFilter;
+  }
+
+  function saveSrDateFilter() {
+    saveGlobalDateFilter();
+  }
+
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "" };
+
+  function globalDatePresetLabel(preset) {
+    if (preset === "today") return "Today";
+    if (preset === "this_month") return "This month (MTD)";
+    if (preset === "last_month") return "Last month";
+    if (preset === "all") return "All dates";
+    if (preset === "custom") return "Custom range";
+    return preset;
+  }
+
+  function syncGlobalDateControls(live) {
+    const preset = globalDateFilter.preset || "today";
+    const custom = preset === "custom";
+    ["#sr-date-preset", "#bas-date-preset"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.value = preset;
+    });
+    ["#sr-date-from", "#bas-date-from"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.value = globalDateFilter.from || "";
+      el.disabled = !custom;
+    });
+    ["#sr-date-to", "#bas-date-to"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.value = globalDateFilter.to || "";
+      el.disabled = !custom;
+    });
+    const applySr = $("#sr-date-apply");
+    const applyBas = $("#bas-date-apply");
+    if (applySr) applySr.disabled = !custom;
+    if (applyBas) applyBas.disabled = !custom;
+
+    const bounds = salesDateBounds(slots.sales.rows || []);
+    ["#sr-date-from", "#sr-date-to", "#bas-date-from", "#bas-date-to"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      if (bounds.min) el.min = toIsoDateInput(bounds.min);
+      if (bounds.max) el.max = toIsoDateInput(bounds.max);
+    });
+
+    const hintText = live
+      ? `${globalDatePresetLabel(preset)} · ${live.rangeLabel || ""}`
+      : globalDatePresetLabel(preset);
+    const srHint = $("#sr-date-hint");
+    const basHint = $("#bas-date-hint");
+    if (srHint) {
+      srHint.textContent = preset === "today"
+        ? `Today · day = today · month = MTD${live && live.rangeLabel ? " · " + live.rangeLabel : ""}`
+        : hintText;
+    }
+    if (basHint) basHint.textContent = hintText;
+
+    document.querySelectorAll(".sr-date-custom, .bas-date-custom").forEach((el) => {
+      el.style.display = custom ? "" : "none";
+    });
+  }
+
+  function applyGlobalDateFilter(reason) {
+    const preset = ($("#sr-date-preset") && $("#sr-date-preset").value)
+      || ($("#bas-date-preset") && $("#bas-date-preset").value)
+      || globalDateFilter.preset
+      || "today";
+    globalDateFilter.preset = preset;
+    if (preset === "custom") {
+      globalDateFilter.from = ($("#sr-date-from") && $("#sr-date-from").value || $("#bas-date-from") && $("#bas-date-from").value || "").trim();
+      globalDateFilter.to = ($("#sr-date-to") && $("#sr-date-to").value || $("#bas-date-to") && $("#bas-date-to").value || "").trim();
+      const from = parseIsoDateInput(globalDateFilter.from);
+      const to = parseIsoDateInput(globalDateFilter.to);
+      if (!from || !to) {
+        setStatus("Select both From and To dates", "err");
+        return;
+      }
+      if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
+        setStatus("From date must be on or before To date", "err");
+        return;
+      }
+    } else {
+      globalDateFilter.from = "";
+      globalDateFilter.to = "";
+    }
+    saveGlobalDateFilter();
+    if (window._data) {
+      if (hasSalesReportInputs()) rebuildSalesReport();
+      else if (hasSalesRaw()) {
+        window._data = data();
+        window._globalLivePeriod = window._data.salesReport && window._data.salesReport.live;
+      }
+      renderBoAllocStockDashboard(window._data);
+    }
+    syncGlobalDateControls(window._globalLivePeriod);
+    setStatus(reason || `Date filter · ${globalDatePresetLabel(globalDateFilter.preset)}`, "ok");
+  }
+
+  function resetGlobalDateFilter() {
+    globalDateFilter = { preset: "today", from: "", to: "" };
+    saveGlobalDateFilter();
+    if (window._data) {
+      if (hasSalesReportInputs()) rebuildSalesReport();
+      renderBoAllocStockDashboard(window._data);
+    }
+    syncGlobalDateControls(window._globalLivePeriod);
+    setStatus("Date filter reset to Today", "ok");
+  }
 
   const SR_COLS = [
     { key: "No", label: "No" },
@@ -4047,10 +4318,10 @@
     const hint = $("#sr-live-hint");
     if (hint) {
       let periodNote;
-      if (live.filterMode === "custom") {
-        periodNote = `Custom range ${live.rangeLabel || ""}`;
+      if (live.filterMode === "custom" || live.filterMode === "preset") {
+        periodNote = `${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${live.rangeLabel || ""}`;
       } else if (live.source === "file") {
-        periodNote = `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file (calendar ${live.calendarMonthKey || ""} had no dates)`;
+        periodNote = `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file`;
       } else {
         periodNote = "Current calendar month/day";
       }
@@ -4058,10 +4329,10 @@
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
-      if (live.filterMode === "custom") {
-        dayTitle.textContent = `End date · ${live.label}`;
-      } else if (live.source === "file") {
-        dayTitle.textContent = `Latest day in file · ${live.label}`;
+      if (live.preset === "today") {
+        dayTitle.textContent = `Day to Date · ${live.label}`;
+      } else if (live.filterMode === "custom" || live.dayUsesRange) {
+        dayTitle.textContent = `Period · ${live.rangeLabel || live.label}`;
       } else {
         dayTitle.textContent = `Day to Date · ${live.label}`;
       }
@@ -4070,10 +4341,10 @@
     if (monthTitle) {
       const monthLabel = live.reportMonthLabel
         || (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
-      if (live.filterMode === "custom") {
+      if (live.preset === "today" || live.preset === "this_month") {
+        monthTitle.textContent = `Month to Date · ${monthLabel}`;
+      } else if (live.filterMode === "custom" || live.filterMode === "preset") {
         monthTitle.textContent = `Selected period · ${monthLabel}`;
-      } else if (live.source === "file") {
-        monthTitle.textContent = `Month from file · ${monthLabel}`;
       } else {
         monthTitle.textContent = `Month to Date · ${monthLabel}`;
       }
@@ -4387,44 +4658,9 @@
   }
 
   function syncSrDateControls(sr) {
-    const modeEl = $("#sr-date-mode");
-    const fromEl = $("#sr-date-from");
-    const toEl = $("#sr-date-to");
-    const applyBtn = $("#sr-date-apply");
-    const hintEl = $("#sr-date-hint");
     const bar = $("#sr-date-bar");
-    if (!modeEl || !fromEl || !toEl) return;
     if (bar) bar.style.display = hasSalesReportInputs() ? "" : "none";
-
-    modeEl.value = srView.dateMode === "custom" ? "custom" : "auto";
-    fromEl.value = srView.dateFrom || "";
-    toEl.value = srView.dateTo || "";
-    const custom = srView.dateMode === "custom";
-    fromEl.disabled = !custom;
-    toEl.disabled = !custom;
-    if (applyBtn) applyBtn.disabled = !custom;
-
-    const bounds = salesDateBounds(slots.sales.rows || []);
-    if (bounds.min) {
-      const minIso = toIsoDateInput(bounds.min);
-      fromEl.min = minIso;
-      toEl.min = minIso;
-    }
-    if (bounds.max) {
-      const maxIso = toIsoDateInput(bounds.max);
-      fromEl.max = maxIso;
-      toEl.max = maxIso;
-    }
-
-    if (hintEl) {
-      if (sr && sr.live && sr.live.filterMode === "custom") {
-        hintEl.textContent = `Custom · ${sr.live.rangeLabel || ""}`;
-      } else if (bounds.min && bounds.max) {
-        hintEl.textContent = `Auto · file dates ${cellToString(bounds.min)} – ${cellToString(bounds.max)}`;
-      } else {
-        hintEl.textContent = "Auto · calendar or latest month in Sales Raw";
-      }
-    }
+    syncGlobalDateControls(sr && sr.live ? sr.live : window._globalLivePeriod);
   }
 
   function rebuildSalesReport() {
@@ -4438,33 +4674,11 @@
   }
 
   function applySrDateFilter() {
-    srView.dateMode = $("#sr-date-mode").value === "custom" ? "custom" : "auto";
-    srView.dateFrom = ($("#sr-date-from").value || "").trim();
-    srView.dateTo = ($("#sr-date-to").value || "").trim();
-    if (srView.dateMode === "custom") {
-      const from = parseIsoDateInput(srView.dateFrom);
-      const to = parseIsoDateInput(srView.dateTo);
-      if (!from || !to) {
-        setStatus("Select both From and To dates", "err");
-        return;
-      }
-      if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
-        setStatus("From date must be on or before To date", "err");
-        return;
-      }
-    }
-    saveSrDateFilter();
-    rebuildSalesReport();
-    setStatus(srView.dateMode === "custom" ? "Report updated for selected dates" : "Report using auto dates", "ok");
+    applyGlobalDateFilter("Sales report updated for selected dates");
   }
 
   function resetSrDateFilter() {
-    srView.dateMode = "auto";
-    srView.dateFrom = "";
-    srView.dateTo = "";
-    saveSrDateFilter();
-    rebuildSalesReport();
-    setStatus("Date filter reset to Auto", "ok");
+    resetGlobalDateFilter();
   }
 
   function selectEmployee(key) {
@@ -6155,8 +6369,10 @@
     renderBasAllocatedVehicles(d);
   }
 
-  function basMonthContext(today) {
-    const ref = today || new Date();
+  function basMonthContext(refDate) {
+    const ref = refDate
+      || (window._globalLivePeriod && window._globalLivePeriod.now)
+      || new Date();
     const y = ref.getFullYear();
     const m = ref.getMonth();
     const monthLabel = ref.toLocaleString("en", { month: "long", year: "numeric" });
@@ -6167,7 +6383,9 @@
 
   function inferCollectionDateFromAge(age, today) {
     if (age == null || !Number.isFinite(age) || age < 0) return null;
-    const ref = today || new Date();
+    const ref = today
+      || (window._globalLivePeriod && window._globalLivePeriod.now)
+      || new Date();
     const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
     d.setDate(d.getDate() - Math.floor(age));
     return d;
@@ -7005,12 +7223,17 @@
     return byVin;
   }
 
-  function vinSalesStatusForLookup(vin, salesLookup) {
+  function vinSalesStatusForLookup(vin, salesLookup, live) {
     const key = extractVinValue(vin) || upperTrim(vin);
     const s = salesLookup.get(key);
     if (!s) return { label: "NA", cls: "na" };
-    if (s.delivered) return { label: "Delivered", cls: "ok" };
-    if (s.proformaDate && parseDate(s.proformaDate)) return { label: "Proforma", cls: "warn" };
+    const period = live || window._globalLivePeriod;
+    if (s.delivered && salesDateInActivePeriod(s.deliveryDate, period)) {
+      return { label: "Delivered", cls: "ok" };
+    }
+    if (!s.delivered && s.proformaDate && parseDate(s.proformaDate) && salesDateInActivePeriod(s.proformaDate, period)) {
+      return { label: "Proforma", cls: "warn" };
+    }
     return { label: "NA", cls: "na" };
   }
 
@@ -7018,12 +7241,13 @@
     if (!hasBackOrder()) return [];
     const allMatched = buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || []);
     const salesLookup = buildSalesVinLookup();
+    const live = window._globalLivePeriod;
 
     return allMatched
       .filter((r) => isConfirmedFlag(r["Confirm Flag"]))
       .map((r) => {
         const leaf = matchRtlToAllocLeaf({ product: r.Product, suffix: r["Alj Suffix"] });
-        const salesSt = vinSalesStatusForLookup(r.VIN, salesLookup);
+        const salesSt = vinSalesStatusForLookup(r.VIN, salesLookup, live);
         const key = extractVinValue(r.VIN) || upperTrim(r.VIN);
         const sales = salesLookup.get(key);
         return {
@@ -7318,6 +7542,8 @@
       refreshSalesSelection();
     } else {
       clearSalesReportUi();
+      window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+      syncGlobalDateControls(window._globalLivePeriod);
     }
     renderTabs();
     renderTable(d);
@@ -7454,26 +7680,30 @@
     srView.chartMode = e.target.value || "active";
     if (window._data && hasSalesReportInputs()) refreshSalesSelection();
   });
-  $("#sr-date-mode").addEventListener("change", (e) => {
-    const custom = e.target.value === "custom";
-    const fromEl = $("#sr-date-from");
-    const toEl = $("#sr-date-to");
-    const applyBtn = $("#sr-date-apply");
-    if (fromEl) fromEl.disabled = !custom;
-    if (toEl) toEl.disabled = !custom;
-    if (applyBtn) applyBtn.disabled = !custom;
-    if (custom && !srView.dateFrom && !srView.dateTo) {
-      const bounds = salesDateBounds(slots.sales.rows || []);
-      if (bounds.min) srView.dateFrom = toIsoDateInput(bounds.min);
-      if (bounds.max) {
-        srView.dateTo = toIsoDateInput(bounds.max);
-        if (fromEl) fromEl.value = srView.dateFrom;
-        if (toEl) toEl.value = srView.dateTo;
-      }
+  function onDatePresetChange(preset) {
+    globalDateFilter.preset = preset;
+    if (preset !== "custom") {
+      applyGlobalDateFilter();
+      return;
     }
-  });
+    const bounds = salesDateBounds(slots.sales.rows || []);
+    if (!globalDateFilter.from && bounds.min) globalDateFilter.from = toIsoDateInput(bounds.min);
+    if (!globalDateFilter.to && bounds.max) globalDateFilter.to = toIsoDateInput(bounds.max);
+    syncGlobalDateControls(window._globalLivePeriod);
+  }
+
+  const srDatePreset = $("#sr-date-preset");
+  if (srDatePreset) {
+    srDatePreset.addEventListener("change", (e) => onDatePresetChange(e.target.value));
+  }
+  const basDatePreset = $("#bas-date-preset");
+  if (basDatePreset) {
+    basDatePreset.addEventListener("change", (e) => onDatePresetChange(e.target.value));
+  }
   $("#sr-date-apply").addEventListener("click", applySrDateFilter);
   $("#sr-date-reset").addEventListener("click", resetSrDateFilter);
+  const basDateApply = $("#bas-date-apply");
+  if (basDateApply) basDateApply.addEventListener("click", () => applyGlobalDateFilter());
   $("#sr-clear-sel").addEventListener("click", clearEmployeeFilter);
   $("#sr-filter-clear").addEventListener("click", clearEmployeeFilter);
   $("#sr-name-list").addEventListener("click", (e) => {
