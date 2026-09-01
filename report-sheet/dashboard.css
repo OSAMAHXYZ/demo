@@ -2052,6 +2052,47 @@ footer.page-foot {
   font-weight: 500;
 }
 
+.sr-date-bar {
+  margin-top: -6px;
+  gap: 10px;
+}
+
+.sr-date-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.sr-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sr-date-field input[type="date"] {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface);
+}
+
+.sr-date-field input[type="date"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sr-date-hint {
+  margin-inline-start: auto;
+  font-size: 0.76rem;
+}
+
 .xl-kpi {
   display: grid;
   grid-template-columns: repeat(7, minmax(120px, 1fr));

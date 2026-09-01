@@ -83,6 +83,24 @@
           <button type="button" id="sr-csv-btn" class="btn-primary">Export Excel Schedule</button>
           <span class="hint" id="sr-live-hint">Click a name to filter this page to that person only</span>
         </div>
+        <div class="sr-date-bar xl-toolbar" id="sr-date-bar">
+          <span class="sr-date-label">Report period</span>
+          <select id="sr-date-mode" title="Auto uses calendar or latest month in file">
+            <option value="auto">Auto</option>
+            <option value="custom">Custom dates</option>
+          </select>
+          <label class="sr-date-field">
+            <span>From</span>
+            <input type="date" id="sr-date-from" />
+          </label>
+          <label class="sr-date-field">
+            <span>To</span>
+            <input type="date" id="sr-date-to" />
+          </label>
+          <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
+          <button type="button" id="sr-date-reset" class="btn">Reset</button>
+          <span class="hint sr-date-hint" id="sr-date-hint">Auto · calendar or latest month in Sales Raw</span>
+        </div>
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
         <div class="pbi-page" id="sr-pbi-page">
@@ -614,7 +632,11 @@
   const EMPLOYEE_NAME_ALIASES = {
     "Samaher Abdulmoghni Al Amri": ["Samaher Al Amri"],
     "Haneen Talal Aqeel Al Madani": ["Haneen Al Madani"],
-    "Not assigned": ["API-BATCH", "API BATCH", "Api-Batch"],
+    "Not assigned": [
+      "API-BATCH", "API BATCH", "Api-Batch", "Api Batch",
+      "API-PATCH", "API PATCH", "Api-Patch", "Api Patch",
+      "Not Assigned", "NOT ASSIGNED", "Unassigned", "unassigned",
+    ],
     "Wasim Kathem Awad": ["Wasim Awad"],
     "Ahmed Saleh Ahmed Binmahfoodh": ["Ahmed Binmahfoodh"],
     "Ghina Assad Alameer": ["Ghina Assad Salem Alameer Assa", "Ghina Alameer"],
@@ -684,6 +706,14 @@
     const loose = normalizeNameLoose(name);
     if (!loose) return null;
     if (NAME_IDENTITY_MAP.has(loose)) return NAME_IDENTITY_MAP.get(loose);
+    if (loose === "not assigned" || loose === "unassigned") {
+      const canon = "Not assigned";
+      return { canonical: canon, key: normalizeNameLoose(canon) };
+    }
+    if (/^api[\s\-_]*(batch|patch)$/.test(loose)) {
+      const canon = "Not assigned";
+      return { canonical: canon, key: normalizeNameLoose(canon) };
+    }
     return {
       canonical: String(name || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, ""),
       key: loose,
@@ -698,6 +728,12 @@
   function resolveDisplayName(v) {
     const id = resolveEmployeeIdentity(v);
     return id ? id.canonical : String(v || "").trim();
+  }
+
+  /** Normalize salesman from any Excel file to canonical admin name (aliases apply everywhere). */
+  function resolveSalesmanName(v) {
+    const resolved = resolveDisplayName(v);
+    return resolved || String(v ?? "").trim();
   }
 
   function employeeMeta(name) {
@@ -1249,7 +1285,7 @@
     const idxI = colLetterToIndex("I");
     let idxSalesman = colLetterToIndex("A");
     const headerRow = matrix[headerIdx] || [];
-    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
     const headerSalesman = findHeaderIdx([
       (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
@@ -1273,17 +1309,25 @@
       (n) => n === "order date" || n === "bo date" || n === "date",
     ]);
 
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxI + 1, idxSalesman + 1);
+
     const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
     const rows = [];
     for (let r = start; r < matrix.length; r += 1) {
-      const line = matrix[r] || [];
+      const line = padCells(matrix[r] || [], width);
       if (line.every((c) => cellToString(c).trim() === "")) continue;
 
       // Col I must contain a VIN — otherwise do not count
       const vin = extractVinValue(line[idxI]);
       if (!vin) continue;
 
-      const salesman = cellToString(line[idxSalesman]).trim();
+      const salesman = resolveSalesmanName(cellToString(line[idxSalesman]).trim());
       if (!salesman) continue;
 
       const obj = {
@@ -1295,8 +1339,10 @@
         cancelDate: headerDate >= 0 ? parseDate(line[headerDate]) : null,
         _sheet: preferred,
         _colI: true,
+        __cells: line,
+        __headers: uniqueHeaders,
       };
-      headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
       rows.push(obj);
     }
     return rows;
@@ -1372,6 +1418,132 @@
     };
   }
 
+  function parseIsoDateInput(s) {
+    if (!s) return null;
+    const m = String(s).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function toIsoDateInput(d) {
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function sameCalendarDay(a, b) {
+    if (!a || !b) return false;
+    const da = a instanceof Date ? a : parseDate(a);
+    const db = b instanceof Date ? b : parseDate(b);
+    if (!(da instanceof Date) || !(db instanceof Date) || Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+    return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+  }
+
+  function dateInRangeInclusive(d, from, to) {
+    if (!d || !from || !to) return false;
+    const dt = d instanceof Date ? d : parseDate(d);
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return false;
+    const t = startOfDay(dt).getTime();
+    return t >= startOfDay(from).getTime() && t <= startOfDay(to).getTime();
+  }
+
+  function salesDateBounds(salesRows) {
+    let min = null;
+    let max = null;
+    (salesRows || []).forEach((r) => {
+      [r.proformaDate, r.deliveryDate].forEach((d) => {
+        if (!d) return;
+        const dt = d instanceof Date ? d : parseDate(d);
+        if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return;
+        const day = startOfDay(dt);
+        if (!min || day < min) min = day;
+        if (!max || day > max) max = day;
+      });
+    });
+    return { min, max };
+  }
+
+  function resolveSalesReportPeriod(salesRows, dateFilter) {
+    const calendarLive = todayKeys();
+    const mode = dateFilter && dateFilter.mode === "custom" ? "custom" : "auto";
+    if (mode === "custom" && dateFilter.from && dateFilter.to) {
+      const from = parseIsoDateInput(dateFilter.from);
+      const to = parseIsoDateInput(dateFilter.to);
+      if (from && to && startOfDay(from).getTime() <= startOfDay(to).getTime()) {
+        const sameDay = startOfDay(from).getTime() === startOfDay(to).getTime();
+        const fmt = (d) => d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const rangeLabel = sameDay ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+        const spanDays = Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1;
+        const prevTo = new Date(from.getFullYear(), from.getMonth(), from.getDate() - 1);
+        const prevFrom = new Date(prevTo.getFullYear(), prevTo.getMonth(), prevTo.getDate() - (spanDays - 1));
+        return {
+          now: to,
+          monthKey: toYyyymm(to),
+          dayKey: toYyyymmdd(to),
+          label: cellToString(to),
+          source: "custom",
+          filterMode: "custom",
+          rangeFrom: from,
+          rangeTo: to,
+          rangeLabel,
+          reportMonthLabel: rangeLabel,
+          calendarMonthKey: calendarLive.monthKey,
+          calendarLabel: calendarLive.label,
+          daysInMonth: spanDays,
+          daysPassed: spanDays,
+          daysRemaining: 0,
+          prevRangeFrom: prevFrom,
+          prevRangeTo: prevTo,
+          prevMonthLabel: `${fmt(prevFrom)} – ${fmt(prevTo)}`,
+        };
+      }
+    }
+    const auto = detectSalesReportLive(salesRows, calendarLive);
+    return {
+      ...auto,
+      filterMode: "auto",
+      rangeFrom: null,
+      rangeTo: null,
+      rangeLabel: auto.reportMonthLabel || auto.monthKey,
+    };
+  }
+
+  function hasDeliveryDate(r) {
+    const d = r && r.deliveryDate;
+    if (d == null || d === "") return false;
+    if (d instanceof Date) return !Number.isNaN(d.getTime());
+    return !!parseDate(d);
+  }
+
+  /** Delivered cars (Col V set) never count as Proforma; Delivery when V is in period. */
+  function salesActivityKind(r, live, period, prevMonthKey) {
+    if (salesPeriodMatch(r.deliveryDate, live, period, prevMonthKey)) return "delivery";
+    if (!hasDeliveryDate(r) && salesPeriodMatch(r.proformaDate, live, period, prevMonthKey)) return "proforma";
+    return null;
+  }
+
+  function salesPeriodMatch(d, live, period, prevMonthKey) {
+    if (!d) return false;
+    if (live.filterMode === "custom" && live.rangeFrom && live.rangeTo) {
+      if (period === "day") return sameCalendarDay(d, live.rangeTo);
+      if (period === "month") return dateInRangeInclusive(d, live.rangeFrom, live.rangeTo);
+      if (period === "prev" && live.prevRangeFrom && live.prevRangeTo) {
+        return dateInRangeInclusive(d, live.prevRangeFrom, live.prevRangeTo);
+      }
+      return false;
+    }
+    const ym = toYyyymm(d);
+    const yd = toYyyymmdd(d);
+    if (period === "month") return ym === live.monthKey;
+    if (period === "day") return yd === live.dayKey;
+    if (period === "prev") return ym === prevMonthKey;
+    return false;
+  }
+
   /** Sales Raw / Rowdata: Col A = salesman, Col P = proforma date, Col V = delivery date */
   function salesRawRows(workbook) {
     const names = workbook.SheetNames || [];
@@ -1433,7 +1605,7 @@
       const asText = line.map((c) => normHeader(c));
       if (HEADER_MARKERS.filter((m) => asText.some((c) => c === m || c.includes(m))).length >= 3) continue;
 
-      const salesman = cellToString(line[idxA]).trim();
+      const salesman = resolveSalesmanName(cellToString(line[idxA]).trim());
       if (!salesman) continue;
 
       const obj = {
@@ -1572,7 +1744,7 @@
         id: i,
         boNumber: cellToString(get(r, "boNumber")),
         customer: cellToString(get(r, "customer")),
-        salesman: cellToString(get(r, "salesman")),
+        salesman: resolveSalesmanName(get(r, "salesman")),
         product: product || "—",
         category,
         year: cellToString(get(r, "year")),
@@ -1615,7 +1787,7 @@
       const get = buildFieldGetter(r);
       return {
         id: i,
-        salesman: cellToString(r.salesman || get(r, "salesman") || "").trim(),
+        salesman: resolveSalesmanName(r.salesman || get(r, "salesman")),
         product: cellToString(r.product || r.Product || r.model || r.Model || get(r, "product") || ""),
         vin: cellToString(r.vin || r.VIN || ""),
         amount: toNumber(r.amount != null ? r.amount : get(r, "amount")),
@@ -1640,7 +1812,7 @@
       // Count every row where Col I has a VIN (duplicates included)
       if (!vin) return;
 
-      const salesman = cellToString(r.salesman || get(r, "salesman")).trim();
+      const salesman = resolveSalesmanName(r.salesman || get(r, "salesman"));
       if (!salesman) return;
 
       out.push({
@@ -1666,6 +1838,55 @@
    * Cancelled BOs = rows from Cancelled Excel where Col I has a VIN,
    * counted under the salesman name on that row (duplicates included).
    */
+  function allCancelledRawRows() {
+    const get = buildFieldGetter((slots.cancelled.rows || [])[0] || {});
+    return (slots.cancelled.rows || []).filter((r) => {
+      let vin = extractVinValue(r.vin);
+      if (!vin) vin = extractVinValue(get(r, "vin"));
+      if (!vin && Array.isArray(r.__cells)) vin = extractVinValue(r.__cells[colLetterToIndex("I")]);
+      return !!vin;
+    });
+  }
+
+  function cancelledRawRowsForSalesman(key) {
+    const get = buildFieldGetter((slots.cancelled.rows || [])[0] || {});
+    return allCancelledRawRows().filter((r) => {
+      const salesman = resolveSalesmanName(r.salesman || get(r, "salesman"));
+      return salesman && nameKey(salesman) === key;
+    });
+  }
+
+  function renderCancelledFileTableHtml(rawRows, limit) {
+    const max = limit != null ? limit : MAX_ROWS;
+    if (!rawRows.length) {
+      return `<p class="foot" style="padding:12px">No cancelled BO rows to show.</p>`;
+    }
+    const sample = rawRows[0];
+    const cols = boFileColumns(sample);
+    const showCount = Math.min(rawRows.length, max);
+    const colCount = cols.length;
+    const overflow = rawRows.length > showCount
+      ? `<p class="foot">Showing ${formatNumber(showCount)} of ${formatNumber(rawRows.length)} rows · ${colCount} columns</p>`
+      : `<p class="foot">${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"} · ${colCount} columns</p>`;
+    return `<div class="emp-raw-wrap bo-car-rows-wrap">
+      <table class="bo-table stock-file-table">
+        <thead><tr>${cols.map((c) =>
+          `<th title="Column ${c.letter}">${escapeHtml(c.label)}<span class="stock-col-letter">${c.letter}</span></th>`
+        ).join("")}</tr></thead>
+        <tbody>${rawRows.slice(0, showCount).map((r) => `
+          <tr>${cols.map((c) =>
+            `<td>${escapeHtml(cellToString(boFileCell(r, c)))}</td>`
+          ).join("")}</tr>`
+        ).join("")}</tbody>
+        <tfoot><tr class="bo-total-row">
+          <td><b>TOTAL</b></td>
+          <td colspan="${Math.max(1, colCount - 1)}"><b>${formatNumber(rawRows.length)} row${rawRows.length === 1 ? "" : "s"}</b></td>
+        </tr></tfoot>
+      </table>
+      ${overflow}
+    </div>`;
+  }
+
   function resolveCancelledList() {
     const rows = slots.cancelled.rows || [];
     if (!rows.length) return [];
@@ -1797,10 +2018,15 @@
     const CANCEL_TARGET = 0.30;
     const calendarLive = todayKeys();
     const salesRows = slots.sales.rows || [];
-    const live = detectSalesReportLive(salesRows, calendarLive);
+    const live = resolveSalesReportPeriod(salesRows, {
+      mode: srView.dateMode,
+      from: srView.dateFrom,
+      to: srView.dateTo,
+    });
     const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
     const prevMonthKey = toYyyymm(prevDate);
-    const prevMonthLabel = prevDate.toLocaleString("en-US", { month: "long" });
+    const prevMonthLabel = live.prevMonthLabel
+      || prevDate.toLocaleString("en-US", { month: "long" });
     const byPerson = new Map();
 
     const ensure = (name) => {
@@ -1879,9 +2105,9 @@
       if (p) p.target = Number(e.target) || 0;
     });
 
-    // Live SUMPRODUCT from Sales Raw Data:
-    // Proforma = COUNT where TRIM(A)=name AND TEXT(P,"yyyymm")=report month / day
-    // Delivery = COUNT where TRIM(A)=name AND TEXT(V,"yyyymm")=report month / day
+    // Sales Raw: Col P = proforma, Col V = delivery.
+    // Delivered (Col V set) → Delivery when V in period; never Proforma.
+    // Undelivered → Proforma when P in period.
     salesRows.forEach((r) => {
       const name = cellToString(r.salesman).trim();
       if (!name) return;
@@ -1899,23 +2125,39 @@
       const flags = {
         proformaMonth: false,
         proformaDay: false,
+        proformaPrev: false,
         deliveryMonth: false,
         deliveryDay: false,
+        deliveryPrev: false,
       };
-      if (r.proformaDate) {
-        const ym = toYyyymm(r.proformaDate);
-        const yd = toYyyymmdd(r.proformaDate);
-        if (ym === live.monthKey) { p.proformaMonth += 1; flags.proformaMonth = true; }
-        if (ym === prevMonthKey) { p.proformaPrev += 1; flags.proformaPrev = true; }
-        if (yd === live.dayKey) { p.proformaDay += 1; flags.proformaDay = true; }
+
+      const monthKind = salesActivityKind(r, live, "month", prevMonthKey);
+      if (monthKind === "delivery") {
+        p.deliveryMonth += 1;
+        flags.deliveryMonth = true;
+      } else if (monthKind === "proforma") {
+        p.proformaMonth += 1;
+        flags.proformaMonth = true;
       }
-      if (r.deliveryDate) {
-        const ym = toYyyymm(r.deliveryDate);
-        const yd = toYyyymmdd(r.deliveryDate);
-        if (ym === live.monthKey) { p.deliveryMonth += 1; flags.deliveryMonth = true; }
-        if (ym === prevMonthKey) { p.deliveryPrev += 1; flags.deliveryPrev = true; }
-        if (yd === live.dayKey) { p.deliveryDay += 1; flags.deliveryDay = true; }
+
+      const prevKind = salesActivityKind(r, live, "prev", prevMonthKey);
+      if (prevKind === "delivery") {
+        p.deliveryPrev += 1;
+        flags.deliveryPrev = true;
+      } else if (prevKind === "proforma") {
+        p.proformaPrev += 1;
+        flags.proformaPrev = true;
       }
+
+      const dayKind = salesActivityKind(r, live, "day", prevMonthKey);
+      if (dayKind === "delivery") {
+        p.deliveryDay += 1;
+        flags.deliveryDay = true;
+      } else if (dayKind === "proforma") {
+        p.proformaDay += 1;
+        flags.proformaDay = true;
+      }
+
       p.totalOrders += 1;
 
       // Keep detailed raw rows for proforma/delivery (month or day) for the click drawer
@@ -1958,6 +2200,8 @@
       monthKey: live.monthKey,
       dayKey: live.dayKey,
       source: live.source || "calendar",
+      filterMode: live.filterMode || "auto",
+      rangeLabel: live.rangeLabel || "",
       reportMonthLabel: live.reportMonthLabel || "",
       calendarMonthKey: live.calendarMonthKey || calendarLive.monthKey,
       calendarLabel: live.calendarLabel || calendarLive.label,
@@ -1965,20 +2209,22 @@
     salesRows.forEach((r) => {
       if (r.proformaDate) {
         diag.withProformaDate += 1;
-        const ym = toYyyymm(r.proformaDate);
-        const yd = toYyyymmdd(r.proformaDate);
-        if (ym === live.monthKey) diag.monthProforma += 1;
-        if (yd === live.dayKey) diag.dayProforma += 1;
-        if (diag.sampleProforma.length < 5) diag.sampleProforma.push(cellToString(r.proformaDate) || ym || "(unparsed)");
+        if (diag.sampleProforma.length < 5) {
+          diag.sampleProforma.push(cellToString(r.proformaDate) || toYyyymm(r.proformaDate) || "(unparsed)");
+        }
       }
       if (r.deliveryDate) {
         diag.withDeliveryDate += 1;
-        const ym = toYyyymm(r.deliveryDate);
-        const yd = toYyyymmdd(r.deliveryDate);
-        if (ym === live.monthKey) diag.monthDelivery += 1;
-        if (yd === live.dayKey) diag.dayDelivery += 1;
-        if (diag.sampleDelivery.length < 5) diag.sampleDelivery.push(cellToString(r.deliveryDate) || ym || "(unparsed)");
+        if (diag.sampleDelivery.length < 5) {
+          diag.sampleDelivery.push(cellToString(r.deliveryDate) || toYyyymm(r.deliveryDate) || "(unparsed)");
+        }
       }
+      const monthKind = salesActivityKind(r, live, "month", prevMonthKey);
+      if (monthKind === "delivery") diag.monthDelivery += 1;
+      else if (monthKind === "proforma") diag.monthProforma += 1;
+      const dayKind = salesActivityKind(r, live, "day", prevMonthKey);
+      if (dayKind === "delivery") diag.dayDelivery += 1;
+      else if (dayKind === "proforma") diag.dayProforma += 1;
     });
 
     // VSND fallback from open BOs without VIN (not in Excel formula, keep for report)
@@ -2004,15 +2250,19 @@
     cancelled.forEach((c) => {
       const p = ensure(c.salesman);
       if (!p) return;
-      p.cancelledBOs += 1;
       const cancelDate = parseDate(c.date) || (c.date instanceof Date ? c.date : null);
-      const cancelDay = toYyyymmdd(cancelDate);
-      if (cancelDay && cancelDay === live.dayKey) p.cancelledDay += 1;
+      if (live.filterMode === "custom") {
+        if (salesPeriodMatch(cancelDate, live, "month", prevMonthKey)) p.cancelledBOs += 1;
+      } else {
+        p.cancelledBOs += 1;
+      }
+      if (salesPeriodMatch(cancelDate, live, "day", prevMonthKey)) p.cancelledDay += 1;
       const adminT = resolveAdminTarget(c.salesman, 0);
       if (adminT > 0) p.target = adminT;
     });
 
-    const daysInMonth = new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
+    const daysInMonth = live.daysInMonth
+      || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
     const pct1 = (n) => (n * 100).toFixed(1) + "%";
     const pct0 = (n) => Math.round(n * 100) + "%";
 
@@ -2128,7 +2378,7 @@
     const totCancelledDay = rows.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
     const monthCancelBase = totDeliveryMonth + totCancelled;
     const dayCancelBase = totDeliveryDay + totCancelledDay;
-    const daysPassed = live.now.getDate();
+    const daysPassed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
     const daysRemaining = Math.max(0, daysInMonth - daysPassed);
 
     return {
@@ -2761,6 +3011,34 @@
   }
 
   function renderTable(d) {
+    if (view.tab === "cancelled") {
+      let rawRows = allCancelledRawRows();
+      const q = view.search.trim().toLowerCase();
+      if (q) {
+        rawRows = rawRows.filter((r) =>
+          Object.keys(r).some((k) => {
+            if (String(k).startsWith("_")) return false;
+            return String(cellToString(r[k])).toLowerCase().includes(q);
+          })
+        );
+      }
+      if (!rawRows.length) {
+        $("#table-wrap").innerHTML = `<p class="foot" style="padding:16px">No cancelled BO rows · upload Cancelled BOs in Admin (Col I = VIN).</p>`;
+        $("#table-foot").textContent = "0 rows";
+        window._exportRows = [];
+        return;
+      }
+      $("#table-wrap").innerHTML = renderCancelledFileTableHtml(rawRows);
+      $("#table-foot").textContent = `${formatNumber(rawRows.length)} cancelled rows · all Excel columns · duplicates included`;
+      window._exportRows = rawRows.map((r) => {
+        const cols = boFileColumns(r);
+        const out = {};
+        cols.forEach((c) => { out[c.label] = cellToString(boFileCell(r, c)); });
+        return out;
+      });
+      return;
+    }
+
     let rows = rowsForTab(d, view.tab);
     const q = view.search.trim().toLowerCase();
     if (q) {
@@ -2827,7 +3105,34 @@
     ).join("");
   }
 
-  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "" };
+  const SR_DATE_FILTER_KEY = "toyota_sr_date_filter_v1";
+
+  function loadSrDateFilter() {
+    try {
+      const raw = localStorage.getItem(SR_DATE_FILTER_KEY);
+      if (!raw) return { dateMode: "auto", dateFrom: "", dateTo: "" };
+      const parsed = JSON.parse(raw);
+      return {
+        dateMode: parsed.mode === "custom" ? "custom" : "auto",
+        dateFrom: String(parsed.from || ""),
+        dateTo: String(parsed.to || ""),
+      };
+    } catch {
+      return { dateMode: "auto", dateFrom: "", dateTo: "" };
+    }
+  }
+
+  function saveSrDateFilter() {
+    try {
+      localStorage.setItem(SR_DATE_FILTER_KEY, JSON.stringify({
+        mode: srView.dateMode,
+        from: srView.dateFrom,
+        to: srView.dateTo,
+      }));
+    } catch { /* ignore */ }
+  }
+
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", ...loadSrDateFilter() };
 
   const SR_COLS = [
     { key: "No", label: "No" },
@@ -3066,24 +3371,37 @@
     const live = sr.live || todayKeys();
     const hint = $("#sr-live-hint");
     if (hint) {
-      const periodNote = live.source === "file"
-        ? `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file (calendar ${live.calendarMonthKey || ""} had no dates)`
-        : "Current calendar month/day";
-      hint.textContent = `Col P=Proforma · Col V=Delivery · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      let periodNote;
+      if (live.filterMode === "custom") {
+        periodNote = `Custom range ${live.rangeLabel || ""}`;
+      } else if (live.source === "file") {
+        periodNote = `Showing ${live.reportMonthLabel || live.monthKey} from uploaded file (calendar ${live.calendarMonthKey || ""} had no dates)`;
+      } else {
+        periodNote = "Current calendar month/day";
+      }
+      hint.textContent = `Col P=Proforma (undelivered only) · Col V=Delivery · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
-      dayTitle.textContent = live.source === "file"
-        ? `Latest day in file · ${live.label}`
-        : `Day to Date · ${live.label}`;
+      if (live.filterMode === "custom") {
+        dayTitle.textContent = `End date · ${live.label}`;
+      } else if (live.source === "file") {
+        dayTitle.textContent = `Latest day in file · ${live.label}`;
+      } else {
+        dayTitle.textContent = `Day to Date · ${live.label}`;
+      }
     }
     const monthTitle = $("#sr-month-title");
     if (monthTitle) {
       const monthLabel = live.reportMonthLabel
         || (live.now || new Date()).toLocaleString("en-US", { month: "long", year: "numeric" });
-      monthTitle.textContent = live.source === "file"
-        ? `Month from file · ${monthLabel}`
-        : `Month to Date · ${monthLabel}`;
+      if (live.filterMode === "custom") {
+        monthTitle.textContent = `Selected period · ${monthLabel}`;
+      } else if (live.source === "file") {
+        monthTitle.textContent = `Month from file · ${monthLabel}`;
+      } else {
+        monthTitle.textContent = `Month to Date · ${monthLabel}`;
+      }
     }
 
     const diag = sr.diag || {};
@@ -3109,6 +3427,17 @@
           ${samples ? `<br>Sample dates found in file: ${escapeHtml(samples)}` : "<br>No readable dates found in Col P/V — check those columns contain dates."}
           <br><span style="font-weight:500">If your file has older dates than today, the dashboard auto-uses the latest month in the file. Upload a file with current-month dates, or refresh after Admin push.</span>
         `;
+      } else if (diag.filterMode === "custom" && diag.salesRows > 0) {
+        diagEl.style.display = "block";
+        diagEl.className = "banner load show ok";
+        diagEl.innerHTML = `
+          <b>Custom date range:</b>
+          Showing <b>${escapeHtml(diag.rangeLabel || "")}</b>
+          · Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>
+          · Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>
+          · End-day Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>
+          · End-day Delivery <b>${formatNumber(diag.dayDelivery || 0)}</b>.
+        `;
       } else if (diag.source === "file" && diag.salesRows > 0) {
         diagEl.style.display = "block";
         diagEl.className = "banner load show ok";
@@ -3130,9 +3459,11 @@
     const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
     const monthRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "month")));
 
-    const dayFoot = live.source === "file"
-      ? `${formatNumber(dayRows.length)} employees · Col P/V filtered to latest day in file (${live.label})`
-      : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma`;
+    const dayFoot = live.filterMode === "custom"
+      ? `${formatNumber(dayRows.length)} employees · Col P/V on end date (${live.label})`
+      : live.source === "file"
+        ? `${formatNumber(dayRows.length)} employees · Col P/V filtered to latest day in file (${live.label})`
+        : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma`;
     renderXlTable(
       dayRows,
       buildTotalsObj(sr, "day"),
@@ -3145,7 +3476,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P (month) · Delivery=Col V (month) · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P (period, excludes delivered) · Delivery=Col V (period) · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -3380,6 +3711,87 @@
     `;
   }
 
+  function syncSrDateControls(sr) {
+    const modeEl = $("#sr-date-mode");
+    const fromEl = $("#sr-date-from");
+    const toEl = $("#sr-date-to");
+    const applyBtn = $("#sr-date-apply");
+    const hintEl = $("#sr-date-hint");
+    const bar = $("#sr-date-bar");
+    if (!modeEl || !fromEl || !toEl) return;
+    if (bar) bar.style.display = hasSalesReportInputs() ? "" : "none";
+
+    modeEl.value = srView.dateMode === "custom" ? "custom" : "auto";
+    fromEl.value = srView.dateFrom || "";
+    toEl.value = srView.dateTo || "";
+    const custom = srView.dateMode === "custom";
+    fromEl.disabled = !custom;
+    toEl.disabled = !custom;
+    if (applyBtn) applyBtn.disabled = !custom;
+
+    const bounds = salesDateBounds(slots.sales.rows || []);
+    if (bounds.min) {
+      const minIso = toIsoDateInput(bounds.min);
+      fromEl.min = minIso;
+      toEl.min = minIso;
+    }
+    if (bounds.max) {
+      const maxIso = toIsoDateInput(bounds.max);
+      fromEl.max = maxIso;
+      toEl.max = maxIso;
+    }
+
+    if (hintEl) {
+      if (sr && sr.live && sr.live.filterMode === "custom") {
+        hintEl.textContent = `Custom · ${sr.live.rangeLabel || ""}`;
+      } else if (bounds.min && bounds.max) {
+        hintEl.textContent = `Auto · file dates ${cellToString(bounds.min)} – ${cellToString(bounds.max)}`;
+      } else {
+        hintEl.textContent = "Auto · calendar or latest month in Sales Raw";
+      }
+    }
+  }
+
+  function rebuildSalesReport() {
+    if (!window._data || !hasSalesReportInputs()) return;
+    const fresh = data();
+    window._data = fresh;
+    window._srRowsByKey = Object.fromEntries((fresh.salesReport.rows || []).map((r) => [r._key, r]));
+    renderSalesReportKpis(fresh.salesReport);
+    syncSrDateControls(fresh.salesReport);
+    refreshSalesSelection();
+  }
+
+  function applySrDateFilter() {
+    srView.dateMode = $("#sr-date-mode").value === "custom" ? "custom" : "auto";
+    srView.dateFrom = ($("#sr-date-from").value || "").trim();
+    srView.dateTo = ($("#sr-date-to").value || "").trim();
+    if (srView.dateMode === "custom") {
+      const from = parseIsoDateInput(srView.dateFrom);
+      const to = parseIsoDateInput(srView.dateTo);
+      if (!from || !to) {
+        setStatus("Select both From and To dates", "err");
+        return;
+      }
+      if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
+        setStatus("From date must be on or before To date", "err");
+        return;
+      }
+    }
+    saveSrDateFilter();
+    rebuildSalesReport();
+    setStatus(srView.dateMode === "custom" ? "Report updated for selected dates" : "Report using auto dates", "ok");
+  }
+
+  function resetSrDateFilter() {
+    srView.dateMode = "auto";
+    srView.dateFrom = "";
+    srView.dateTo = "";
+    saveSrDateFilter();
+    rebuildSalesReport();
+    setStatus("Date filter reset to Auto", "ok");
+  }
+
   function selectEmployee(key) {
     if (!key) {
       clearEmployeeFilter();
@@ -3522,10 +3934,13 @@
     const day = row.day || {};
     const month = row.month || row;
     const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
+    const cancelRawRows = cancelledRawRowsForSalesman(key);
     const records = row._records || [];
 
     if (title) title.textContent = row["Sales Employee"] || "Employee";
-    if (sub) sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Excel rows`;
+    if (sub) {
+      sub.textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · ${formatNumber(rawRows.length)} Sales Raw · ${formatNumber(cancelRawRows.length)} Cancelled BO`;
+    }
 
     body.innerHTML = `
       <div class="emp-stat-grid">
@@ -3534,9 +3949,11 @@
         <div class="emp-stat"><div class="k">Month Proforma</div><div class="v">${formatNumber(month.Proforma)}</div></div>
         <div class="emp-stat"><div class="k">Month Delivery</div><div class="v">${formatNumber(month.Delivery)}</div></div>
         <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(month.Target)}</div></div>
+        <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
       </div>
-      <h4 style="margin:8px 0 6px;font-size:.9rem">Excel rows for this name only</h4>
+      ${cancelRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Cancelled BO rows · all Excel columns (${formatNumber(cancelRawRows.length)})</h4>${renderCancelledFileTableHtml(cancelRawRows)}` : ""}
+      <h4 style="margin:${cancelRawRows.length ? "14px" : "8px"} 0 6px;font-size:.9rem">Sales Raw rows for this name</h4>
       ${renderEmployeeRawTable(rawRows)}
       ${renderVinSection("Proforma / Delivery counted this month", records.filter((r) => r.flags?.proformaMonth || r.flags?.deliveryMonth))}
     `;
@@ -3773,11 +4190,11 @@
 
     const t = sr.totals || {};
     upsertChart("chart-sr-overview", "doughnut",
-      ["Delivery", "Proforma", "Remaining to target"],
+      ["Delivery", "Proforma (not delivered)", "Remaining to target"],
       [
         t.deliveryMonth || 0,
-        Math.max(0, (t.proformaMonth || 0) - (t.deliveryMonth || 0)),
-        Math.max(0, (t.target || 0) - (t.proformaMonth || 0)),
+        t.proformaMonth || 0,
+        Math.max(0, (t.target || 0) - (t.deliveryMonth || 0)),
       ]
     );
 
@@ -5036,7 +5453,7 @@
         ext,
         int: intc,
         key: matchKey(product, suffix, year, ext, intc),
-        salesman: cellToString(getBo(r, "salesman")),
+        salesman: resolveSalesmanName(getBo(r, "salesman")),
         boNumber: cellToString(getBo(r, "boNumber")),
         orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
         orderTs: orderDate ? orderDate.getTime() : idx,
@@ -5268,6 +5685,7 @@
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
       renderSalesReportKpis(d.salesReport);
+      syncSrDateControls(d.salesReport);
       refreshSalesSelection();
     } else {
       clearSalesReportUi();
@@ -5407,6 +5825,26 @@
     srView.chartMode = e.target.value || "active";
     if (window._data && hasSalesReportInputs()) refreshSalesSelection();
   });
+  $("#sr-date-mode").addEventListener("change", (e) => {
+    const custom = e.target.value === "custom";
+    const fromEl = $("#sr-date-from");
+    const toEl = $("#sr-date-to");
+    const applyBtn = $("#sr-date-apply");
+    if (fromEl) fromEl.disabled = !custom;
+    if (toEl) toEl.disabled = !custom;
+    if (applyBtn) applyBtn.disabled = !custom;
+    if (custom && !srView.dateFrom && !srView.dateTo) {
+      const bounds = salesDateBounds(slots.sales.rows || []);
+      if (bounds.min) srView.dateFrom = toIsoDateInput(bounds.min);
+      if (bounds.max) {
+        srView.dateTo = toIsoDateInput(bounds.max);
+        if (fromEl) fromEl.value = srView.dateFrom;
+        if (toEl) toEl.value = srView.dateTo;
+      }
+    }
+  });
+  $("#sr-date-apply").addEventListener("click", applySrDateFilter);
+  $("#sr-date-reset").addEventListener("click", resetSrDateFilter);
   $("#sr-clear-sel").addEventListener("click", clearEmployeeFilter);
   $("#sr-filter-clear").addEventListener("click", clearEmployeeFilter);
   $("#sr-name-list").addEventListener("click", (e) => {
