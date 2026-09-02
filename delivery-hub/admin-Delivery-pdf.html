@@ -1426,6 +1426,187 @@
         .dn-stat--memo { --dn-accent: #f59e0b; }
         .dn-stat--showroom { --dn-accent: #f472b6; }
         .dn-stat--month { --dn-accent: #94a3b8; }
+        .dn-stat--raw { --dn-accent: #6366f1; }
+        .dn-stat--gap { --dn-accent: #ef4444; }
+        .dn-stat.is-clickable {
+            cursor: pointer;
+        }
+        .dn-stat.is-clickable:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .raw-gap-section {
+            margin: 0 0 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(239, 68, 68, 0.08)), #0f172a;
+            overflow: hidden;
+        }
+        .raw-gap-section.is-open {
+            border-color: rgba(239, 68, 68, 0.35);
+        }
+        .raw-gap-summary {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0;
+            width: 100%;
+            border: 0;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            text-align: inherit;
+            color: inherit;
+        }
+        .raw-gap-summary:focus-visible {
+            outline: 2px solid rgba(99, 102, 241, 0.8);
+            outline-offset: -2px;
+        }
+        .raw-gap-stat {
+            padding: 16px 18px;
+            border-inline-end: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .raw-gap-stat:last-child { border-inline-end: 0; }
+        .raw-gap-stat .lab {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .raw-gap-stat .val {
+            display: block;
+            font-size: 1.75rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            color: #f8fafc;
+        }
+        .raw-gap-stat .hint {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.72rem;
+            color: #64748b;
+        }
+        .raw-gap-stat--raw .val { color: #a5b4fc; }
+        .raw-gap-stat--delivered .val { color: #34d399; }
+        .raw-gap-stat--gap .val { color: #f87171; }
+        .raw-gap-stat--action .val {
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            padding-top: 8px;
+        }
+        .raw-gap-panel {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 14px 16px 16px;
+            background: rgba(0, 0, 0, 0.18);
+        }
+        .raw-gap-panel[hidden] { display: none; }
+        .raw-gap-panel__head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .raw-gap-panel__head h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #e2e8f0;
+        }
+        .raw-gap-panel__head p {
+            margin: 4px 0 0;
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .raw-gap-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .raw-gap-toolbar input,
+        .raw-gap-toolbar select {
+            min-height: 34px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(15, 23, 42, 0.8);
+            color: #e2e8f0;
+            padding: 0 10px;
+            font-size: 0.82rem;
+        }
+        .raw-gap-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .raw-gap-chip {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: #cbd5e1;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.72rem;
+            cursor: pointer;
+        }
+        .raw-gap-chip.is-active {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: rgba(99, 102, 241, 0.5);
+            color: #e0e7ff;
+        }
+        .raw-gap-table-wrap {
+            max-height: 420px;
+            overflow: auto;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .raw-gap-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .raw-gap-table th,
+        .raw-gap-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            text-align: start;
+        }
+        .raw-gap-table th {
+            position: sticky;
+            top: 0;
+            background: #0b1220;
+            color: #94a3b8;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .raw-gap-table td.num { text-align: end; font-variant-numeric: tabular-nums; }
+        .raw-gap-table .hub-vin {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.78rem;
+        }
+        .raw-gap-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .raw-gap-badge--not_uploaded { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .raw-gap-badge--no_queue { background: rgba(245,158,11,0.2); color: #fcd34d; }
+        .raw-gap-badge--not_assigned { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+        .raw-gap-badge--no_delivery_note { background: rgba(59,130,246,0.2); color: #93c5fd; }
+        .raw-gap-badge--in_progress { background: rgba(14,165,233,0.2); color: #7dd3fc; }
+        .raw-gap-badge--not_delivered { background: rgba(148,163,184,0.2); color: #cbd5e1; }
+        @media (max-width: 900px) {
+            .raw-gap-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .raw-gap-stat:nth-child(2) { border-inline-end: 0; }
+            .raw-gap-stat { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        }
 
         .dn-vin-card {
             margin-bottom: 12px;
@@ -1965,6 +2146,70 @@
                     </label>
                 </div>
                 <div class="dn-mgmt__stats" id="dnStatsBar"></div>
+            </section>
+            <section class="raw-gap-section" id="rawGapSection" aria-label="Raw data gap">
+                <button type="button" class="raw-gap-summary" id="rawGapToggle" aria-expanded="false" aria-controls="rawGapPanel">
+                    <div class="raw-gap-stat raw-gap-stat--raw">
+                        <span class="lab">Raw Total · Col P</span>
+                        <strong class="val" id="rawGapTotal">0</strong>
+                        <span class="hint" id="rawGapPeriodHint">Proforma month</span>
+                    </div>
+                    <div class="raw-gap-stat raw-gap-stat--delivered">
+                        <span class="lab">Delivered · تم الترحيل</span>
+                        <strong class="val" id="rawGapDelivered">0</strong>
+                        <span class="hint">In system</span>
+                    </div>
+                    <div class="raw-gap-stat raw-gap-stat--gap">
+                        <span class="lab">Gap · الفجوة</span>
+                        <strong class="val" id="rawGapCount">0</strong>
+                        <span class="hint" id="rawGapRateHint">Not delivered</span>
+                    </div>
+                    <div class="raw-gap-stat raw-gap-stat--action">
+                        <span class="lab">Details</span>
+                        <strong class="val" id="rawGapToggleLabel">Click to list cars ▾</strong>
+                        <span class="hint">VIN · status · assignee</span>
+                    </div>
+                </button>
+                <div class="raw-gap-panel" id="rawGapPanel" hidden>
+                    <div class="raw-gap-panel__head">
+                        <div>
+                            <h3>Not delivered — cars in raw data without delivery</h3>
+                            <p id="rawGapPanelMeta">Cars with Proforma date (Col P) in the selected month but not marked delivered</p>
+                        </div>
+                        <div class="raw-gap-toolbar">
+                            <input type="search" id="rawGapSearch" placeholder="Search VIN, product, customer…" autocomplete="off" aria-label="Search gap cars">
+                            <select id="rawGapStatusFilter" aria-label="Filter by gap reason">
+                                <option value="all">All reasons</option>
+                                <option value="not_uploaded">Not in system</option>
+                                <option value="no_queue">Not on queue</option>
+                                <option value="not_assigned">Not assigned</option>
+                                <option value="no_delivery_note">No delivery note</option>
+                                <option value="in_progress">In progress</option>
+                                <option value="not_delivered">Other not delivered</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="raw-gap-chips" id="rawGapChips"></div>
+                    <div class="raw-gap-table-wrap">
+                        <table class="raw-gap-table">
+                            <thead>
+                                <tr>
+                                    <th>VIN / الشاسية</th>
+                                    <th>Product</th>
+                                    <th>Customer</th>
+                                    <th>Proforma (P)</th>
+                                    <th>Reason</th>
+                                    <th>Assigned</th>
+                                    <th>Queue</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rawGapTableBody">
+                                <tr><td colspan="8" class="hub-empty">No gap cars in this period</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
             <div class="admin-overview-row">
             <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
@@ -2678,6 +2923,10 @@
         let _userDashCount = 0;
         let _vinLookup = null;
         let userDashSearch = '';
+        let rawGapPanelOpen = false;
+        let rawGapSearch = '';
+        let rawGapStatusFilter = 'all';
+        let _lastRawGapData = null;
         const UNASSIGNED_USER = 'غير معيّن';
         /** Warehouse deliveries show under this label — not as a transport company. */
         const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
@@ -2740,6 +2989,7 @@
             initPremiumFilterToolbar();
             initPdfBrowserControls();
             initDnMonthFilter();
+            initRawGapControls();
             document.getElementById('userDashSearch')?.addEventListener('input', (e) => {
                 userDashSearch = e.target.value || '';
                 renderUserDashboard();
@@ -4735,6 +4985,7 @@
 
             if (isAdminPaneActive('overview')) {
                 renderDnStatsBar();
+                renderRawDeliveryGap();
                 renderVinHistoryPanel();
                 renderLastMonthsFolders();
                 renderDeliveredOfTotalChart();
@@ -4817,6 +5068,285 @@
             return stats;
         }
 
+        /** Period for raw-vs-delivered gap: Proforma date (Sales Raw column P) vs admin month filter. */
+        function getProformaGapPeriod() {
+            const mk = adminMonthFilter;
+            if (mk && mk !== 'all') {
+                const parts = mk.split('-').map(Number);
+                const y = parts[0];
+                const m = parts[1];
+                if (y && m) {
+                    const from = `${mk}-01`;
+                    const lastDay = new Date(y, m, 0).getDate();
+                    const to = `${mk}-${String(lastDay).padStart(2, '0')}`;
+                    return {
+                        from,
+                        to,
+                        monthKey: mk,
+                        label: monthLabelAr(mk)
+                    };
+                }
+            }
+            const { from, to } = getTrackFilter();
+            return {
+                from,
+                to,
+                monthKey: '',
+                label: from || to
+                    ? `${trackDatePresetLabel(trackDatePreset)} · ${from || '…'} → ${to || '…'}`
+                    : 'All dates'
+            };
+        }
+
+        function classifyRawGapStatus(vin, v, q, hasDraft, inInventory) {
+            if (!inInventory) {
+                return {
+                    status: 'not_uploaded',
+                    statusLabel: 'Not in system',
+                    statusAr: 'غير موجود في النظام'
+                };
+            }
+            if (!q) {
+                return {
+                    status: 'no_queue',
+                    statusLabel: 'Not on queue',
+                    statusAr: 'غير مضاف للقائمة'
+                };
+            }
+            if ((q.status === 'available' || !q.assignedTo) && q.agentStatus !== 'delivered' && q.agentStatus !== 'display') {
+                return {
+                    status: 'not_assigned',
+                    statusLabel: 'Not assigned',
+                    statusAr: 'غير مسند لمنسق'
+                };
+            }
+            if (!hasDraft) {
+                return {
+                    status: 'no_delivery_note',
+                    statusLabel: 'No delivery note',
+                    statusAr: 'بدون مذكرة تسليم'
+                };
+            }
+            if (q.agentStatus && q.agentStatus !== 'delivered') {
+                const label = String(q.statusLabel || q.agentStatus || '').replace(/_/g, ' ');
+                return {
+                    status: 'in_progress',
+                    statusLabel: label || 'In progress',
+                    statusAr: q.statusLabel || 'قيد التنفيذ'
+                };
+            }
+            return {
+                status: 'not_delivered',
+                statusLabel: 'Not delivered',
+                statusAr: 'لم يُرحَّل'
+            };
+        }
+
+        /** Compare raw inventory (Proforma / Col P) vs delivered queue rows for the active month. */
+        function computeRawDeliveryGap() {
+            const period = getProformaGapPeriod();
+            const { from, to } = period;
+            if (!_vinLookup) rebuildVinLookup();
+            const { queueByVin } = _vinLookup;
+
+            const draftVinSet = new Set();
+            (allDrafts || []).forEach((d) => {
+                draftVinList(d).forEach((vin) => draftVinSet.add(vin));
+            });
+
+            const inventoryVinSet = new Set();
+            (allVehicles || []).forEach((v) => {
+                const vin = normVinKey(v.vin);
+                if (vin) inventoryVinSet.add(vin);
+            });
+
+            const rawInPeriod = [];
+            (allVehicles || []).forEach((v) => {
+                const iso = vehicleDateIso(v, 'proforma');
+                if (!iso) return;
+                if (from && iso < from) return;
+                if (to && iso > to) return;
+                rawInPeriod.push({ v, iso });
+            });
+
+            let delivered = 0;
+            const gapRows = [];
+
+            rawInPeriod.forEach(({ v, iso }) => {
+                const vin = normVinKey(v.vin);
+                if (!vin) return;
+                const q = queueByVin.get(vin);
+                const hasDraft = draftVinSet.has(vin);
+                const inInventory = inventoryVinSet.has(vin);
+                const isDelivered = Boolean(q && q.agentStatus === 'delivered');
+
+                if (isDelivered) {
+                    delivered += 1;
+                    return;
+                }
+
+                const meta = classifyRawGapStatus(vin, v, q, hasDraft, inInventory);
+                gapRows.push({
+                    vin,
+                    product: v.product || v.model || '—',
+                    plate: v.plate || '—',
+                    customerName: v.customerName || '—',
+                    proformaDate: iso,
+                    assignedTo: q ? String(q.entryAgent || q.assignedTo || '').trim() || '—' : '—',
+                    queueStatus: q ? String(q.statusLabel || q.agentStatus || q.status || '—') : '—',
+                    hasDraft: hasDraft ? 'Yes' : 'No',
+                    ...meta
+                });
+            });
+
+            gapRows.sort((a, b) => a.status.localeCompare(b.status) || a.vin.localeCompare(b.vin));
+
+            const rawTotal = rawInPeriod.length;
+            const gap = gapRows.length;
+            const rate = rawTotal ? Math.round((delivered / rawTotal) * 1000) / 10 : 0;
+
+            return {
+                rawTotal,
+                delivered,
+                gap,
+                rate,
+                period,
+                rows: gapRows,
+                noProformaInPeriod: (allVehicles || []).length > 0 && !rawTotal
+            };
+        }
+
+        function rawGapStatusBadgeClass(status) {
+            return `raw-gap-badge raw-gap-badge--${String(status || 'not_delivered').replace(/[^a-z0-9_]/gi, '_')}`;
+        }
+
+        function renderRawGapTableBody(data) {
+            const tbody = document.getElementById('rawGapTableBody');
+            if (!tbody) return;
+            const q = String(rawGapSearch || '').trim().toLowerCase();
+            const statusFilter = rawGapStatusFilter || 'all';
+            let rows = (data && data.rows) ? data.rows.slice() : [];
+            if (statusFilter !== 'all') rows = rows.filter((r) => r.status === statusFilter);
+            if (q) {
+                rows = rows.filter((r) => [
+                    r.vin, r.product, r.customerName, r.plate, r.assignedTo, r.statusLabel, r.statusAr
+                ].join(' ').toLowerCase().includes(q));
+            }
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="hub-empty">${data && data.gap ? 'No cars match this filter' : 'No gap — all raw cars in this period are delivered'}</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = rows.map((r) => `<tr>
+                <td class="hub-vin">${escapeHtml(r.vin)}</td>
+                <td>${escapeHtml(r.product)}</td>
+                <td>${escapeHtml(r.customerName)}</td>
+                <td>${escapeHtml(r.proformaDate)}</td>
+                <td><span class="${rawGapStatusBadgeClass(r.status)}" title="${escapeHtml(r.statusLabel)}">${escapeHtml(r.statusAr)}</span></td>
+                <td>${escapeHtml(r.assignedTo)}</td>
+                <td>${escapeHtml(r.queueStatus)}</td>
+                <td>${escapeHtml(r.hasDraft)}</td>
+            </tr>`).join('');
+        }
+
+        function renderRawGapChips(data) {
+            const host = document.getElementById('rawGapChips');
+            if (!host || !data) return;
+            const counts = new Map();
+            (data.rows || []).forEach((r) => {
+                counts.set(r.status, (counts.get(r.status) || 0) + 1);
+            });
+            const labels = {
+                not_uploaded: 'Not in system',
+                no_queue: 'Not on queue',
+                not_assigned: 'Not assigned',
+                no_delivery_note: 'No delivery note',
+                in_progress: 'In progress',
+                not_delivered: 'Not delivered'
+            };
+            const chips = [['all', 'All', data.gap || 0], ...Array.from(counts.entries()).map(([k, n]) => [k, labels[k] || k, n])];
+            host.innerHTML = chips.map(([key, label, n]) => {
+                const active = (rawGapStatusFilter || 'all') === key ? ' is-active' : '';
+                return `<button type="button" class="raw-gap-chip${active}" data-gap-status="${escapeHtml(key)}">${escapeHtml(label)} · ${n}</button>`;
+            }).join('');
+            host.querySelectorAll('[data-gap-status]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    rawGapStatusFilter = btn.dataset.gapStatus || 'all';
+                    const sel = document.getElementById('rawGapStatusFilter');
+                    if (sel) sel.value = rawGapStatusFilter;
+                    renderRawGapChips(data);
+                    renderRawGapTableBody(data);
+                });
+            });
+        }
+
+        function renderRawDeliveryGap() {
+            try {
+            const data = computeRawDeliveryGap();
+            _lastRawGapData = data;
+
+            const totalEl = document.getElementById('rawGapTotal');
+            const deliveredEl = document.getElementById('rawGapDelivered');
+            const gapEl = document.getElementById('rawGapCount');
+            const rateHint = document.getElementById('rawGapRateHint');
+            const periodHint = document.getElementById('rawGapPeriodHint');
+            const toggleLabel = document.getElementById('rawGapToggleLabel');
+            const panelMeta = document.getElementById('rawGapPanelMeta');
+            const section = document.getElementById('rawGapSection');
+            const toggle = document.getElementById('rawGapToggle');
+            const panel = document.getElementById('rawGapPanel');
+
+            if (totalEl) totalEl.textContent = String(data.rawTotal);
+            if (deliveredEl) deliveredEl.textContent = String(data.delivered);
+            if (gapEl) gapEl.textContent = String(data.gap);
+            if (rateHint) {
+                rateHint.textContent = data.rawTotal
+                    ? `${data.rate}% delivered · ${data.gap} not delivered`
+                    : (data.noProformaInPeriod ? 'No Proforma (Col P) dates in period' : 'No raw cars in period');
+            }
+            if (periodHint) periodHint.textContent = data.period.label || 'Proforma month';
+            if (toggleLabel) {
+                toggleLabel.textContent = rawGapPanelOpen
+                    ? `Hide list · ${data.gap} cars ▴`
+                    : (data.gap ? `Click to list ${data.gap} cars ▾` : 'Click to view details ▾');
+            }
+            if (panelMeta) {
+                panelMeta.textContent = data.noProformaInPeriod
+                    ? `No Proforma dates (column P) found for ${data.period.label}. Re-upload Sales Raw or check column P.`
+                    : `${data.gap} of ${data.rawTotal} cars with Proforma in ${data.period.label} are not delivered — compare raw upload vs system.`;
+            }
+            if (section) section.classList.toggle('is-open', rawGapPanelOpen && data.gap > 0);
+            if (toggle) toggle.setAttribute('aria-expanded', rawGapPanelOpen ? 'true' : 'false');
+            if (panel) panel.hidden = !rawGapPanelOpen;
+
+            renderRawGapChips(data);
+            renderRawGapTableBody(data);
+            } catch (err) {
+                console.error('[raw gap]', err);
+            }
+        }
+
+        function initRawGapControls() {
+            const toggle = document.getElementById('rawGapToggle');
+            toggle?.addEventListener('click', () => {
+                rawGapPanelOpen = !rawGapPanelOpen;
+                renderRawDeliveryGap();
+                if (rawGapPanelOpen) {
+                    document.getElementById('rawGapPanel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+            let searchTimer = null;
+            document.getElementById('rawGapSearch')?.addEventListener('input', (e) => {
+                rawGapSearch = e.target.value || '';
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => renderRawGapTableBody(_lastRawGapData), 120);
+            });
+            document.getElementById('rawGapStatusFilter')?.addEventListener('change', (e) => {
+                rawGapStatusFilter = e.target.value || 'all';
+                renderRawGapChips(_lastRawGapData);
+                renderRawGapTableBody(_lastRawGapData);
+            });
+        }
+
         function populateDnMonthFilter() {
             const sel = document.getElementById('dnMonthFilter');
             if (!sel) return;
@@ -4850,7 +5380,11 @@
             const host = document.getElementById('dnStatsBar');
             if (!host) return;
             const s = computeClientDnStats(filteredDrafts());
+            const gapData = computeRawDeliveryGap();
             const cards = [
+                { cls: 'dn-stat--raw', label: 'Raw Col P', value: gapData.rawTotal, title: 'Cars in raw data with Proforma date (column P) in selected month' },
+                { cls: 'dn-stat--delivery', label: 'Delivered', value: gapData.delivered, title: 'Delivered in system for that raw scope' },
+                { cls: 'dn-stat--gap is-clickable', label: 'Gap', value: gapData.gap, title: 'Click Raw Gap section below to list each car', click: 'rawGap' },
                 { cls: 'dn-stat--notes', label: 'Delivery Notes', value: s.deliveryNotes },
                 { cls: 'dn-stat--vins', label: 'Unique VINs', value: s.uniqueVins },
                 { cls: 'dn-stat--display', label: 'Display', value: s.display },
@@ -4863,11 +5397,25 @@
                 { cls: 'dn-stat--month', label: 'Last Month', value: s.lastMonth }
             ];
             host.innerHTML = cards.map((c) => `
-                <article class="dn-stat ${c.cls}">
+                <article class="dn-stat ${c.cls}"${c.title ? ` title="${escapeHtml(c.title)}"` : ''}${c.click ? ` data-gap-open="1" role="button" tabindex="0"` : ''}>
                     <span>${c.label}</span>
                     <b>${c.value}</b>
                 </article>
             `).join('');
+            host.querySelectorAll('[data-gap-open]').forEach((el) => {
+                const open = () => {
+                    rawGapPanelOpen = true;
+                    renderRawDeliveryGap();
+                    document.getElementById('rawGapSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                };
+                el.addEventListener('click', open);
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        open();
+                    }
+                });
+            });
         }
 
         function renderVinHistoryPanel() {

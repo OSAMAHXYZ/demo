@@ -1270,6 +1270,50 @@ function parseVehiclesFromRows(rows) {
   return found;
 }
 
+/** Sales Raw column P (0-based index 15) = Proforma Date when header name is missing. */
+function extractVinFromArrayLine(headerRow, line) {
+  const headers = Array.isArray(headerRow) ? headerRow : [];
+  const cells = Array.isArray(line) ? line : [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = normalizeHeader(String(headers[i] || ''));
+    if (!h) continue;
+    const isVinCol = VIN_ALIASES.some((a) => {
+      const alias = normalizeHeader(a);
+      return alias && (h === alias || h.includes(alias) || alias.includes(h));
+    });
+    if (isVinCol) {
+      const v = normVin(String(cells[i] || ''));
+      if (v) return v;
+    }
+  }
+  for (const cell of cells) {
+    const v = normVin(String(cell || ''));
+    if (v && v.length >= 11) return v;
+  }
+  return '';
+}
+
+function backfillProformaColumnP(wb, sheetName, vehicles) {
+  const sheet = wb && wb.Sheets ? wb.Sheets[sheetName] : null;
+  if (!sheet || !Array.isArray(vehicles) || !vehicles.length) return;
+  const rowsArr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  if (!rowsArr.length) return;
+  const headerRow = rowsArr[0] || [];
+  const byVin = new Map(vehicles.map((v) => [normVin(v.vin), v]));
+  const COL_P = 15;
+  for (let i = 1; i < rowsArr.length; i++) {
+    const line = rowsArr[i];
+    const vin = extractVinFromArrayLine(headerRow, line);
+    if (!vin) continue;
+    const veh = byVin.get(vin);
+    if (!veh || veh.proformaDate) continue;
+    const raw = line[COL_P];
+    if (raw != null && String(raw).trim() !== '') {
+      veh.proformaDate = normalizeExcelDate(raw);
+    }
+  }
+}
+
 function isShowroomExportRow(row) {
   const deliveryType = String(pickCol(row, [
     'delivery type', 'delivery mode', 'نوع التسليم', 'section', 'القسم', 'flag'
@@ -1437,6 +1481,7 @@ function parseSalesFromWorkbook(wb, filename) {
       preferred = name;
       rows = sheetRowsData;
       vehicles = found;
+      backfillProformaColumnP(wb, name, vehicles);
       headers = Object.keys(sheetRowsData[0] || {});
       break;
     }
@@ -1453,6 +1498,7 @@ function parseSalesFromWorkbook(wb, filename) {
           preferred = name;
           rows = sheetRowsData;
           vehicles = found;
+          backfillProformaColumnP(wb, name, vehicles);
           headers = Object.keys(sheetRowsData[0] || {});
           break;
         }

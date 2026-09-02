@@ -681,6 +681,48 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   color: var(--hc-text) !important;
 }
 
+.admin-light .raw-gap-section {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(239, 68, 68, 0.05)), #fff !important;
+  border-color: var(--hc-line) !important;
+}
+
+.admin-light .raw-gap-stat .val {
+  color: var(--hc-text) !important;
+}
+
+.admin-light .raw-gap-stat--raw .val { color: #4f46e5 !important; }
+.admin-light .raw-gap-stat--delivered .val { color: #059669 !important; }
+.admin-light .raw-gap-stat--gap .val { color: #dc2626 !important; }
+
+.admin-light .raw-gap-panel {
+  background: #f8fafc !important;
+  border-top-color: var(--hc-line) !important;
+}
+
+.admin-light .raw-gap-table th {
+  background: #f1f5f9 !important;
+  color: var(--hc-muted) !important;
+}
+
+.admin-light .raw-gap-toolbar input,
+.admin-light .raw-gap-toolbar select {
+  background: #fff !important;
+  border-color: var(--hc-line) !important;
+  color: var(--hc-text) !important;
+}
+
+.admin-light .raw-gap-chip {
+  background: #fff !important;
+  border-color: var(--hc-line) !important;
+  color: var(--hc-muted) !important;
+}
+
+.admin-light .raw-gap-chip.is-active {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #4338ca !important;
+}
+
 /* Pane chrome */
 .admin-light .admin-nav {
   display: none !important; /* moved into sidebar */
