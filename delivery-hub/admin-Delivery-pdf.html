@@ -1608,6 +1608,370 @@
             .raw-gap-stat { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
         }
 
+        /* —— Management KPI dashboard —— */
+        .mgmt-dash {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin: 0 0 16px;
+        }
+        .mgmt-score {
+            display: grid;
+            grid-template-columns: minmax(220px, 280px) 1fr;
+            gap: 16px;
+            align-items: stretch;
+            padding: 18px 20px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background:
+                radial-gradient(120% 140% at 0% 0%, rgba(46,196,182,0.18), transparent 55%),
+                radial-gradient(100% 120% at 100% 0%, rgba(108,92,231,0.16), transparent 50%),
+                #0f172a;
+        }
+        .mgmt-score__main {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+        }
+        .mgmt-score__eyebrow {
+            margin: 0;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+        .mgmt-score__value {
+            margin: 0;
+            font-size: clamp(2.4rem, 4vw, 3.2rem);
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+        .mgmt-score__value span {
+            font-size: 0.45em;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        .mgmt-score__status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            width: fit-content;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .mgmt-score__status.is-excellent { background: rgba(34,197,94,0.18); color: #86efac; }
+        .mgmt-score__status.is-ontrack { background: rgba(46,196,182,0.18); color: #5eead4; }
+        .mgmt-score__status.is-warn { background: rgba(245,158,11,0.18); color: #fcd34d; }
+        .mgmt-score__status.is-critical { background: rgba(239,68,68,0.18); color: #fca5a5; }
+        .mgmt-score__breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            align-content: center;
+        }
+        .mgmt-score__part {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .mgmt-score__part .lab { display: block; font-size: 0.68rem; color: #94a3b8; margin-bottom: 4px; }
+        .mgmt-score__part .val { display: block; font-size: 1.05rem; font-weight: 800; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+        .mgmt-score__part .w { display: block; font-size: 0.68rem; color: #64748b; margin-top: 2px; }
+
+        .mgmt-kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+        .mgmt-kpi {
+            border: 1px solid rgba(255,255,255,0.1);
+            background: #0f172a;
+            border-radius: 14px;
+            padding: 14px 14px 12px;
+            cursor: pointer;
+            text-align: start;
+            color: inherit;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .mgmt-kpi:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.22); }
+        .mgmt-kpi__top {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        .mgmt-kpi__name {
+            margin: 0;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #cbd5e1;
+            line-height: 1.3;
+        }
+        .mgmt-kpi__badge {
+            flex-shrink: 0;
+            font-size: 0.68rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .mgmt-kpi__badge.is-green { background: rgba(34,197,94,0.18); color: #86efac; }
+        .mgmt-kpi__badge.is-yellow { background: rgba(245,158,11,0.18); color: #fcd34d; }
+        .mgmt-kpi__badge.is-red { background: rgba(239,68,68,0.18); color: #fca5a5; }
+        .mgmt-kpi__pct {
+            margin: 0;
+            font-size: 1.7rem;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+        .mgmt-kpi__meta {
+            margin: 6px 0 0;
+            font-size: 0.72rem;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+        .mgmt-kpi__target {
+            margin-top: 8px;
+            font-size: 0.68rem;
+            color: #64748b;
+        }
+        .mgmt-kpi.is-lower .mgmt-kpi__pct { color: #fbbf24; }
+
+        .mgmt-actions {
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: #0f172a;
+            padding: 14px 16px;
+        }
+        .mgmt-actions__head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: baseline;
+            margin-bottom: 12px;
+        }
+        .mgmt-actions__head h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #f1f5f9;
+        }
+        .mgmt-actions__head p {
+            margin: 0;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+        .mgmt-action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+        }
+        .mgmt-action {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            cursor: pointer;
+            text-align: start;
+            color: inherit;
+        }
+        .mgmt-action:hover { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); }
+        .mgmt-action.is-ok { opacity: 0.55; }
+        .mgmt-action.is-ok:hover { opacity: 0.85; border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); }
+        .mgmt-action__count {
+            font-size: 1.35rem;
+            font-weight: 900;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+        }
+        .mgmt-action__label { font-size: 0.78rem; color: #cbd5e1; font-weight: 600; }
+        .mgmt-action__cta { font-size: 0.7rem; color: #7dd3fc; margin-top: 4px; }
+
+        .mgmt-progress-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+            gap: 12px;
+        }
+        .mgmt-achieve, .mgmt-lead {
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: #0f172a;
+            padding: 16px 18px;
+        }
+        .mgmt-achieve__eyebrow, .mgmt-lead__eyebrow {
+            margin: 0;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #94a3b8;
+        }
+        .mgmt-achieve__ratio {
+            margin: 8px 0 4px;
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            font-weight: 900;
+            color: #f8fafc;
+            letter-spacing: -0.03em;
+            font-variant-numeric: tabular-nums;
+        }
+        .mgmt-achieve__pct {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #2EC4B6;
+        }
+        .mgmt-achieve__bar {
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            overflow: hidden;
+            margin: 10px 0 8px;
+        }
+        .mgmt-achieve__bar > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #6C5CE7, #2EC4B6);
+            transition: width 0.35s ease;
+        }
+        .mgmt-achieve__meta, .mgmt-lead__meta {
+            margin: 0;
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .mgmt-lead__buckets {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin: 12px 0 10px;
+        }
+        .mgmt-lead__bucket {
+            padding: 10px 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.04);
+            text-align: center;
+        }
+        .mgmt-lead__bucket b {
+            display: block;
+            font-size: 1.2rem;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+        }
+        .mgmt-lead__bucket span {
+            display: block;
+            font-size: 0.68rem;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .mgmt-perf-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .mgmt-perf {
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: #0f172a;
+            padding: 14px 14px 10px;
+            min-width: 0;
+        }
+        .mgmt-perf--full { grid-column: 1 / -1; }
+        .mgmt-perf__head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .mgmt-perf__head h3 {
+            margin: 0;
+            font-size: 0.92rem;
+            color: #f1f5f9;
+        }
+        .mgmt-perf__head span {
+            font-size: 0.72rem;
+            color: #94a3b8;
+        }
+        .mgmt-table-wrap {
+            overflow: auto;
+            max-height: 320px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .mgmt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+        .mgmt-table th, .mgmt-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            text-align: start;
+            white-space: nowrap;
+        }
+        .mgmt-table th {
+            position: sticky;
+            top: 0;
+            background: #0b1220;
+            color: #94a3b8;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            z-index: 1;
+        }
+        .mgmt-table td.num { text-align: end; font-variant-numeric: tabular-nums; }
+        .mgmt-table tr[data-mgmt-click] { cursor: pointer; }
+        .mgmt-table tr[data-mgmt-click]:hover td { background: rgba(255,255,255,0.04); }
+        .mgmt-status {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .mgmt-status.is-green { background: rgba(34,197,94,0.18); color: #86efac; }
+        .mgmt-status.is-yellow { background: rgba(245,158,11,0.18); color: #fcd34d; }
+        .mgmt-status.is-red { background: rgba(239,68,68,0.18); color: #fca5a5; }
+
+        .mgmt-drill {
+            border-radius: 16px;
+            border: 1px solid rgba(99,102,241,0.35);
+            background: linear-gradient(180deg, rgba(99,102,241,0.1), transparent), #0f172a;
+            padding: 14px 16px;
+        }
+        .mgmt-drill[hidden] { display: none; }
+        .mgmt-drill__head {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .mgmt-drill__head h3 { margin: 0; font-size: 0.95rem; color: #e2e8f0; }
+        .mgmt-drill__head p { margin: 4px 0 0; font-size: 0.75rem; color: #94a3b8; }
+
+        @media (max-width: 980px) {
+            .mgmt-score { grid-template-columns: 1fr; }
+            .mgmt-progress-row, .mgmt-perf-grid { grid-template-columns: 1fr; }
+            .mgmt-lead__buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
         .dn-vin-card {
             margin-bottom: 12px;
             padding: 14px 16px;
@@ -2130,9 +2494,149 @@
 
         <div class="admin-pane is-active" data-pane="overview" id="pane-overview">
             <div class="admin-pane-head">
-                <h2>نظرة عامة</h2>
-                <p>مؤشرات سريعة · تقدم الترحيل · إحصاءات الشهر</p>
+                <h2>نظرة عامة · Management KPIs</h2>
+                <p>Am I on target? · Why not? · Who/what to act on · يتبع فلاتر الشهر والتاريخ</p>
             </div>
+
+            <section class="mgmt-dash" id="mgmtDash" aria-label="Delivery management KPIs">
+                <article class="mgmt-score" id="mgmtScoreCard">
+                    <div class="mgmt-score__main">
+                        <p class="mgmt-score__eyebrow">Delivery Admin Score</p>
+                        <p class="mgmt-score__value" id="mgmtScoreValue">0 <span>/ 100</span></p>
+                        <span class="mgmt-score__status is-critical" id="mgmtScoreStatus">Critical</span>
+                    </div>
+                    <div class="mgmt-score__breakdown" id="mgmtScoreBreakdown"></div>
+                </article>
+
+                <div class="mgmt-kpi-row" id="mgmtKpiRow" aria-label="KPI cards"></div>
+
+                <section class="mgmt-actions" aria-label="Action required">
+                    <div class="mgmt-actions__head">
+                        <h3>Action Required · إجراءات مطلوبة</h3>
+                        <p id="mgmtActionsHint">Click a card to open the VIN list</p>
+                    </div>
+                    <div class="mgmt-action-grid" id="mgmtActionGrid"></div>
+                </section>
+
+                <div class="mgmt-progress-row">
+                    <article class="mgmt-achieve" id="mgmtAchieveCard">
+                        <p class="mgmt-achieve__eyebrow">Delivery Achievement · DELIVERED / TOTAL DUE</p>
+                        <div class="mgmt-achieve__ratio">
+                            <span id="mgmtAchieveDone">0</span> / <span id="mgmtAchieveDue">0</span>
+                            <span class="mgmt-achieve__pct" id="mgmtAchievePct">0%</span>
+                        </div>
+                        <div class="mgmt-achieve__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                            <span id="mgmtAchieveBar"></span>
+                        </div>
+                        <p class="mgmt-achieve__meta" id="mgmtAchieveMeta">Target ≥ 95%</p>
+                    </article>
+                    <article class="mgmt-lead" id="mgmtLeadCard">
+                        <p class="mgmt-lead__eyebrow">Lead Time · Invoice → Delivery Note</p>
+                        <div class="mgmt-lead__buckets" id="mgmtLeadBuckets"></div>
+                        <p class="mgmt-lead__meta" id="mgmtLeadMeta">Average · Median · % within 1 / 2 / 3+ days</p>
+                    </article>
+                </div>
+
+                <div class="mgmt-perf-grid">
+                    <section class="mgmt-perf" aria-label="Coordinator performance">
+                        <div class="mgmt-perf__head">
+                            <h3>Coordinator Performance · المنسقين</h3>
+                            <span>Click row to filter</span>
+                        </div>
+                        <div class="mgmt-table-wrap">
+                            <table class="mgmt-table">
+                                <thead>
+                                    <tr>
+                                        <th>Coordinator</th>
+                                        <th class="num">Assigned</th>
+                                        <th class="num">Delivered</th>
+                                        <th class="num">Ach %</th>
+                                        <th class="num">Avg LT</th>
+                                        <th class="num">3+ Days</th>
+                                        <th class="num">No DN</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mgmtCoordBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="mgmt-perf" aria-label="Transporter performance">
+                        <div class="mgmt-perf__head">
+                            <h3>Transporter Performance · الشركات</h3>
+                            <span>Target ≥ 95%</span>
+                        </div>
+                        <div class="mgmt-table-wrap">
+                            <table class="mgmt-table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th class="num">Total</th>
+                                        <th class="num">Delivered</th>
+                                        <th class="num">Pending</th>
+                                        <th class="num">Ach %</th>
+                                        <th class="num">Avg LT</th>
+                                        <th class="num">3+ Days</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mgmtCompanyBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="mgmt-perf mgmt-perf--full" aria-label="City performance">
+                        <div class="mgmt-perf__head">
+                            <h3>City Performance · المدن / الفروع</h3>
+                            <span>Target ≥ 95%</span>
+                        </div>
+                        <div class="mgmt-table-wrap">
+                            <table class="mgmt-table">
+                                <thead>
+                                    <tr>
+                                        <th>City</th>
+                                        <th class="num">Total</th>
+                                        <th class="num">Delivered</th>
+                                        <th class="num">Pending</th>
+                                        <th class="num">Ach %</th>
+                                        <th class="num">3+ Days</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mgmtCityBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="mgmt-drill" id="mgmtDrillPanel" hidden aria-live="polite">
+                    <div class="mgmt-drill__head">
+                        <div>
+                            <h3 id="mgmtDrillTitle">Drill-down</h3>
+                            <p id="mgmtDrillMeta">VIN records for the selected KPI</p>
+                        </div>
+                        <button type="button" class="hub-btn hub-btn--sm" id="mgmtDrillClose">Close</button>
+                    </div>
+                    <div class="mgmt-table-wrap" style="max-height:380px">
+                        <table class="mgmt-table">
+                            <thead>
+                                <tr>
+                                    <th>VIN</th>
+                                    <th>Model</th>
+                                    <th>Invoice</th>
+                                    <th>Delivery Note</th>
+                                    <th class="num">Lead</th>
+                                    <th>Coordinator</th>
+                                    <th>Company</th>
+                                    <th>City</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mgmtDrillBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
             <section class="dn-mgmt" id="dnMonthBar" aria-label="Delivery Management">
                 <div class="dn-mgmt__head">
                     <div>
@@ -2927,6 +3431,8 @@
         let rawGapSearch = '';
         let rawGapStatusFilter = 'all';
         let _lastRawGapData = null;
+        let _mgmtKpiBundle = null;
+        let _mgmtDrillKey = '';
         const UNASSIGNED_USER = 'غير معيّن';
         /** Warehouse deliveries show under this label — not as a transport company. */
         const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
@@ -2990,6 +3496,7 @@
             initPdfBrowserControls();
             initDnMonthFilter();
             initRawGapControls();
+            initMgmtDashboardControls();
             document.getElementById('userDashSearch')?.addEventListener('input', (e) => {
                 userDashSearch = e.target.value || '';
                 renderUserDashboard();
@@ -4986,6 +5493,7 @@
             setNavCount('navCountUsers', _userDashCount);
 
             if (isAdminPaneActive('overview')) {
+                renderMgmtDashboard();
                 renderDnStatsBar();
                 renderRawDeliveryGap();
                 renderVinHistoryPanel();
@@ -5255,6 +5763,748 @@
                 gap: legacy.remaining,
                 source: 'legacy'
             };
+        }
+
+        /* ─── Management KPI engine (reuses raw gap + lead-time helpers) ─── */
+        const MGMT_TARGETS = {
+            achievement: 95,
+            day1: 90,
+            dnCompletion: 98,
+            aging3: 5,
+            unassigned: 0,
+            avgLead: 1.5,
+            coordAchievement: 95,
+            companyAchievement: 95,
+            cityAchievement: 95
+        };
+
+        function pctRound(n, d) {
+            if (!d) return 0;
+            return Math.round((n / d) * 1000) / 10;
+        }
+
+        function avgNumbers(list) {
+            const nums = (list || []).filter((n) => typeof n === 'number' && !Number.isNaN(n));
+            if (!nums.length) return null;
+            return Math.round((nums.reduce((s, n) => s + n, 0) / nums.length) * 10) / 10;
+        }
+
+        function medianNumbers(list) {
+            const nums = (list || []).filter((n) => typeof n === 'number' && !Number.isNaN(n)).sort((a, b) => a - b);
+            if (!nums.length) return null;
+            const mid = Math.floor(nums.length / 2);
+            return nums.length % 2 ? nums[mid] : Math.round(((nums[mid - 1] + nums[mid]) / 2) * 10) / 10;
+        }
+
+        function kpiStatusHigher(actual, target) {
+            if (actual >= target) return { tone: 'green', label: 'On Target', icon: '🟢' };
+            if (actual >= target - 5) return { tone: 'yellow', label: 'Warning', icon: '🟡' };
+            return { tone: 'red', label: 'Critical', icon: '🔴' };
+        }
+
+        function kpiStatusLower(actual, target) {
+            if (actual <= target) return { tone: 'green', label: 'On Target', icon: '🟢' };
+            if (actual <= target + 2) return { tone: 'yellow', label: 'Warning', icon: '🟡' };
+            return { tone: 'red', label: 'Critical', icon: '🔴' };
+        }
+
+        /** Invoice → DN lead-time rows for all drafts in the active month/filter scope. */
+        function buildScopeLeadTimeRows() {
+            const byVin = vehicleByVin();
+            const map = new Map();
+            const drafts = draftsForProformaGapPeriod();
+            drafts.forEach((d) => {
+                draftVinList(d).forEach((vinRaw) => {
+                    const vin = normVinKey(vinRaw);
+                    if (!vin) return;
+                    const vehicle = findVehicleForVin(byVin, vin);
+                    const noteDate = draftEventIso(d) || String(vehicle?.deliveryNoteDate || '').slice(0, 10);
+                    const invoiceDate = String(vehicle?.invoiceDate || '').slice(0, 10);
+                    const existing = map.get(vin);
+                    if (!existing || (noteDate && noteDate > (existing.deliveryNoteDate || ''))) {
+                        const days = daysBetweenIso(invoiceDate, noteDate);
+                        map.set(vin, {
+                            vin,
+                            product: d.product || d.model || vehicle?.product || vehicle?.model || '',
+                            invoiceDate: invoiceDate || '',
+                            deliveryNoteDate: noteDate || '',
+                            days,
+                            bucket: leadTimeBucket(days),
+                            coordinator: userLabelFromDraft(d),
+                            company: draftCompanyName(d) || draftCompanyLabel(d) || '',
+                            city: draftBranchLabel(d) || String((d.payload || {}).branch_to || '').trim(),
+                            status: isWarehouseAdminDraft(d) ? 'Warehouse' : (isShowroomAdminDraft(d) ? 'Showroom' : 'Delivered')
+                        });
+                    }
+                });
+            });
+            return Array.from(map.values());
+        }
+
+        function enrichGapRowForDrill(row) {
+            if (!_vinLookup) rebuildVinLookup();
+            const byVin = vehicleByVin();
+            const vehicle = findVehicleForVin(byVin, row.vin);
+            const invoiceDate = String(vehicle?.invoiceDate || '').slice(0, 10);
+            const noteDate = String(vehicle?.deliveryNoteDate || '').slice(0, 10);
+            const days = daysBetweenIso(invoiceDate, noteDate);
+            return {
+                vin: row.vin,
+                product: row.product || vehicle?.product || vehicle?.model || '',
+                invoiceDate,
+                deliveryNoteDate: noteDate,
+                days,
+                bucket: leadTimeBucket(days),
+                coordinator: row.assignedTo || '—',
+                company: row.customerName || vehicle?.customerName || '—',
+                city: vehicle?.location || '—',
+                status: row.statusAr || row.statusLabel || row.queueStatus || '—'
+            };
+        }
+
+        function buildDataQualityIssues(progress, gapData, leadRows) {
+            const issues = [];
+            const seenVin = new Set();
+            const dupes = new Set();
+            (allVehicles || []).forEach((v) => {
+                const vin = normVinKey(v.vin);
+                if (!vin) {
+                    issues.push({
+                        vin: '—',
+                        product: v.product || v.model || '',
+                        invoiceDate: String(v.invoiceDate || '').slice(0, 10),
+                        deliveryNoteDate: String(v.deliveryNoteDate || '').slice(0, 10),
+                        days: null,
+                        coordinator: '—',
+                        company: v.customerName || '—',
+                        city: v.location || '—',
+                        status: 'Missing VIN'
+                    });
+                    return;
+                }
+                if (seenVin.has(vin)) dupes.add(vin);
+                else seenVin.add(vin);
+            });
+            dupes.forEach((vin) => {
+                const v = (allVehicles || []).find((x) => normVinKey(x.vin) === vin);
+                issues.push({
+                    vin,
+                    product: v?.product || v?.model || '',
+                    invoiceDate: String(v?.invoiceDate || '').slice(0, 10),
+                    deliveryNoteDate: String(v?.deliveryNoteDate || '').slice(0, 10),
+                    days: null,
+                    coordinator: '—',
+                    company: v?.customerName || '—',
+                    city: v?.location || '—',
+                    status: 'Duplicate VIN'
+                });
+            });
+
+            (leadRows || []).forEach((r) => {
+                if (!r.invoiceDate) {
+                    issues.push({ ...r, status: 'Missing Invoice Date' });
+                } else if (!r.deliveryNoteDate) {
+                    issues.push({ ...r, status: 'Missing Delivery Note Date' });
+                } else if (r.days == null) {
+                    issues.push({ ...r, status: 'Invalid dates' });
+                }
+            });
+
+            (gapData.rows || []).forEach((r) => {
+                if (r.status === 'not_assigned' || r.status === 'no_queue') {
+                    issues.push(enrichGapRowForDrill(r));
+                    issues[issues.length - 1].status = r.statusAr || 'Unassigned';
+                }
+            });
+
+            // Delivery notes without matching VIN in inventory
+            draftsForProformaGapPeriod().forEach((d) => {
+                draftVinList(d).forEach((vin) => {
+                    if (!vin) return;
+                    const hit = (allVehicles || []).some((v) => normVinKey(v.vin) === vin);
+                    if (!hit) {
+                        issues.push({
+                            vin,
+                            product: d.product || d.model || '',
+                            invoiceDate: '',
+                            deliveryNoteDate: draftEventIso(d) || '',
+                            days: null,
+                            coordinator: userLabelFromDraft(d),
+                            company: draftCompanyName(d) || '—',
+                            city: draftBranchLabel(d) || '—',
+                            status: 'DN without matching VIN'
+                        });
+                    }
+                });
+            });
+
+            const universe = Math.max(
+                (allVehicles || []).length,
+                (leadRows || []).length,
+                progress.total || 0,
+                1
+            );
+            const uniqueIssues = [];
+            const keySet = new Set();
+            issues.forEach((row) => {
+                const key = `${row.vin}|${row.status}`;
+                if (keySet.has(key)) return;
+                keySet.add(key);
+                uniqueIssues.push(row);
+            });
+            const accuracy = Math.max(0, Math.round((1 - uniqueIssues.length / universe) * 1000) / 10);
+            return { issues: uniqueIssues, accuracy, universe };
+        }
+
+        function buildMgmtKpiBundle() {
+            const progress = rawAssignedDeliveredStats();
+            const gapData = computeRawDeliveryGap();
+            const leadRows = buildScopeLeadTimeRows();
+            const lt = leadTimeStats(leadRows);
+            const measuredDays = leadRows.filter((r) => r.days != null).map((r) => r.days);
+            const avgLead = avgNumbers(measuredDays);
+            const medLead = medianNumbers(measuredDays);
+
+            const achievement = progress.total ? progress.pct : 0;
+            const day1Pct = lt.measured ? pctRound(lt.day1, lt.measured) : 0;
+            const day2Pct = lt.measured ? pctRound(lt.day1 + lt.day2, lt.measured) : 0;
+            const aging3Pct = lt.measured ? pctRound(lt.day3plus, lt.measured) : 0;
+            const dnCompletion = progress.total ? progress.pct : 0;
+
+            const unassignedRows = (gapData.rows || []).filter((r) =>
+                r.status === 'not_assigned' || r.status === 'no_queue' || r.status === 'not_uploaded'
+            );
+            const noDnRows = (gapData.rows || []).filter((r) =>
+                r.status === 'no_delivery_note' || r.status === 'not_delivered' || r.status === 'no_queue' || r.status === 'not_uploaded'
+            );
+            const inProgressRows = (gapData.rows || []).filter((r) => r.status === 'in_progress' || r.status === 'not_assigned');
+            const agingRows = leadRows.filter((r) => r.bucket === '3plus');
+            const missingDateRows = leadRows.filter((r) => r.days == null);
+
+            const unassignedCount = unassignedRows.length;
+            const unassignedPct = progress.total ? pctRound(unassignedCount, progress.total) : 0;
+
+            const dq = buildDataQualityIssues(progress, gapData, leadRows);
+
+            const agingScore = (() => {
+                if (!lt.measured) return 100;
+                if (aging3Pct <= MGMT_TARGETS.aging3) return 100;
+                return Math.max(0, Math.round(100 - (aging3Pct - MGMT_TARGETS.aging3) * 8));
+            })();
+
+            const parts = {
+                achievement: Math.min(100, achievement),
+                day1: Math.min(100, day1Pct),
+                dn: Math.min(100, dnCompletion),
+                aging: agingScore,
+                accuracy: Math.min(100, dq.accuracy)
+            };
+            const score = Math.round(
+                parts.achievement * 0.30
+                + parts.day1 * 0.25
+                + parts.dn * 0.20
+                + parts.aging * 0.15
+                + parts.accuracy * 0.10
+            );
+
+            let scoreBand = 'critical';
+            let scoreLabel = 'Critical';
+            if (score >= 95) { scoreBand = 'excellent'; scoreLabel = 'Excellent'; }
+            else if (score >= 90) { scoreBand = 'ontrack'; scoreLabel = 'On Track'; }
+            else if (score >= 80) { scoreBand = 'warn'; scoreLabel = 'Needs Attention'; }
+
+            // Coordinator performance (reuse submitted/delivered + lead times)
+            const coordBase = buildUserDashboardRows();
+            const leadByCoord = new Map();
+            leadRows.forEach((r) => {
+                const name = r.coordinator || UNASSIGNED_USER;
+                if (!leadByCoord.has(name)) leadByCoord.set(name, []);
+                leadByCoord.get(name).push(r);
+            });
+            const noDnByCoord = new Map();
+            (gapData.rows || []).forEach((r) => {
+                const name = r.assignedTo && r.assignedTo !== '—' ? r.assignedTo : UNASSIGNED_USER;
+                if (!noDnByCoord.has(name)) noDnByCoord.set(name, 0);
+                noDnByCoord.set(name, noDnByCoord.get(name) + 1);
+            });
+            const coordinators = coordBase.map((c) => {
+                const ltRows = leadByCoord.get(c.name) || [];
+                const stats = leadTimeStats(ltRows);
+                const avg = avgNumbers(ltRows.filter((r) => r.days != null).map((r) => r.days));
+                const agingPct = stats.measured ? pctRound(stats.day3plus, stats.measured) : 0;
+                const queueOpen = c.pending + c.inStock + c.ready;
+                const deliveredNotes = c.submitted;
+                const assignedTotal = Math.max(
+                    deliveredNotes + (noDnByCoord.get(c.name) || 0),
+                    deliveredNotes,
+                    c.delivered + queueOpen
+                );
+                const achPct = assignedTotal ? pctRound(deliveredNotes, assignedTotal) : 0;
+                const withoutDn = Math.max(0, assignedTotal - deliveredNotes);
+                const stAch = kpiStatusHigher(achPct, MGMT_TARGETS.coordAchievement);
+                const stAging = kpiStatusLower(agingPct, MGMT_TARGETS.aging3);
+                const stLead = avg == null || avg <= MGMT_TARGETS.avgLead
+                    ? { tone: 'green' }
+                    : (avg <= MGMT_TARGETS.avgLead + 0.5 ? { tone: 'yellow' } : { tone: 'red' });
+                const tone = [stAch.tone, stAging.tone, stLead.tone].includes('red')
+                    ? 'red'
+                    : ([stAch.tone, stAging.tone, stLead.tone].includes('yellow') ? 'yellow' : 'green');
+                return {
+                    name: c.name,
+                    assigned: assignedTotal,
+                    delivered: deliveredNotes,
+                    achievement: achPct,
+                    avgLead: avg,
+                    aging3: stats.day3plus,
+                    withoutDn,
+                    statusTone: tone,
+                    statusIcon: tone === 'green' ? '🟢' : (tone === 'yellow' ? '🟡' : '🔴')
+                };
+            }).sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name, 'ar'));
+
+            // Company performance from drafts + lead time
+            const companies = [];
+            const companyNames = new Set();
+            draftsForProformaGapPeriod().forEach((d) => {
+                if (isWarehouseAdminDraft(d) || isShowroomAdminDraft(d)) return;
+                const name = draftCompanyName(d);
+                if (name) companyNames.add(name);
+            });
+            companyNames.forEach((name) => {
+                const ltRows = companyLeadTimeRows(name).map((r) => {
+                    const full = leadRows.find((x) => x.vin === r.vin);
+                    return full || r;
+                });
+                // Prefer scoped lead rows filtered by company
+                const scoped = leadRows.filter((r) => r.company === name);
+                const use = scoped.length ? scoped : ltRows;
+                const stats = leadTimeStats(use);
+                const total = use.length || tallyField(
+                    draftsForProformaGapPeriod().filter((d) => draftMatchesCompanyKey(d, name)),
+                    () => 'x'
+                ).reduce((s, r) => s + r.count, 0);
+                const draftCars = draftsForProformaGapPeriod()
+                    .filter((d) => draftMatchesCompanyKey(d, name))
+                    .reduce((s, d) => s + draftCarWeight(d), 0);
+                const delivered = draftCars;
+                // Pending from gap rows matching company name loosely via customerName — better: queue by deliveryCompany
+                let pending = 0;
+                (allQueue || []).forEach((q) => {
+                    const c = String(q.deliveryCompany || q.company || '').trim();
+                    if (c !== name) return;
+                    if (q.agentStatus !== 'delivered') pending += 1;
+                });
+                const due = Math.max(delivered + pending, delivered, total);
+                const achPct = due ? pctRound(delivered, due) : 0;
+                const avg = avgNumbers(use.filter((r) => r.days != null).map((r) => r.days));
+                const st = kpiStatusHigher(achPct, MGMT_TARGETS.companyAchievement);
+                companies.push({
+                    name,
+                    total: due,
+                    delivered,
+                    pending,
+                    achievement: achPct,
+                    avgLead: avg,
+                    aging3: stats.day3plus,
+                    statusTone: st.tone,
+                    statusIcon: st.icon
+                });
+            });
+            companies.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'ar'));
+
+            // City performance
+            const cityMap = new Map();
+            leadRows.forEach((r) => {
+                const city = String(r.city || '').trim();
+                if (!city || city === '-' || city === 'المستودع') return;
+                if (!cityMap.has(city)) cityMap.set(city, { name: city, delivered: 0, pending: 0, aging3: 0, days: [] });
+                const row = cityMap.get(city);
+                row.delivered += 1;
+                if (r.bucket === '3plus') row.aging3 += 1;
+                if (r.days != null) row.days.push(r.days);
+            });
+            (allQueue || []).forEach((q) => {
+                if (q.agentStatus === 'delivered') return;
+                const city = String(q.location || '').trim();
+                if (!city) return;
+                if (!cityMap.has(city)) cityMap.set(city, { name: city, delivered: 0, pending: 0, aging3: 0, days: [] });
+                cityMap.get(city).pending += 1;
+            });
+            const cities = Array.from(cityMap.values()).map((c) => {
+                const total = c.delivered + c.pending;
+                const achPct = total ? pctRound(c.delivered, total) : 0;
+                const st = kpiStatusHigher(achPct, MGMT_TARGETS.cityAchievement);
+                return {
+                    name: c.name,
+                    total,
+                    delivered: c.delivered,
+                    pending: c.pending,
+                    achievement: achPct,
+                    aging3: c.aging3,
+                    statusTone: st.tone,
+                    statusIcon: st.icon
+                };
+            }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'ar'));
+
+            const weakCompanies = companies.filter((c) => c.achievement < MGMT_TARGETS.companyAchievement);
+            const weakCities = cities.filter((c) => c.achievement < MGMT_TARGETS.cityAchievement);
+
+            const kpis = {
+                achievement: {
+                    key: 'achievement',
+                    name: 'Delivery Achievement',
+                    nameAr: 'إنجاز الترحيل',
+                    actual: achievement,
+                    target: MGMT_TARGETS.achievement,
+                    delivered: progress.delivered,
+                    due: progress.total,
+                    remaining: progress.gap ?? progress.remaining,
+                    status: kpiStatusHigher(achievement, MGMT_TARGETS.achievement),
+                    lowerIsBetter: false
+                },
+                day1: {
+                    key: 'day1',
+                    name: '≤ 1 Day Delivery',
+                    nameAr: 'خلال يوم واحد',
+                    actual: day1Pct,
+                    target: MGMT_TARGETS.day1,
+                    count: lt.day1,
+                    measured: lt.measured,
+                    status: kpiStatusHigher(day1Pct, MGMT_TARGETS.day1),
+                    lowerIsBetter: false
+                },
+                dn: {
+                    key: 'dn',
+                    name: 'Delivery Note Completion',
+                    nameAr: 'اكتمال المذكرات',
+                    actual: dnCompletion,
+                    target: MGMT_TARGETS.dnCompletion,
+                    delivered: progress.delivered,
+                    due: progress.total,
+                    status: kpiStatusHigher(dnCompletion, MGMT_TARGETS.dnCompletion),
+                    lowerIsBetter: false
+                },
+                aging3: {
+                    key: 'aging3',
+                    name: '3+ Day Aging',
+                    nameAr: 'تأخير 3+ أيام',
+                    actual: aging3Pct,
+                    target: MGMT_TARGETS.aging3,
+                    count: lt.day3plus,
+                    measured: lt.measured,
+                    status: kpiStatusLower(aging3Pct, MGMT_TARGETS.aging3),
+                    lowerIsBetter: true
+                },
+                unassigned: {
+                    key: 'unassigned',
+                    name: 'Unassigned Vehicles',
+                    nameAr: 'غير مسند',
+                    actual: unassignedPct,
+                    target: MGMT_TARGETS.unassigned,
+                    count: unassignedCount,
+                    due: progress.total,
+                    status: unassignedCount <= 0
+                        ? { tone: 'green', label: 'On Target', icon: '🟢' }
+                        : (unassignedPct <= 2
+                            ? { tone: 'yellow', label: 'Warning', icon: '🟡' }
+                            : { tone: 'red', label: 'Critical', icon: '🔴' }),
+                    lowerIsBetter: true
+                },
+                accuracy: {
+                    key: 'accuracy',
+                    name: 'Data Accuracy',
+                    nameAr: 'دقة البيانات',
+                    actual: dq.accuracy,
+                    target: 98,
+                    count: dq.issues.length,
+                    status: kpiStatusHigher(dq.accuracy, 98),
+                    lowerIsBetter: false
+                }
+            };
+
+            const drill = {
+                aging3: agingRows,
+                noDn: noDnRows.map(enrichGapRowForDrill),
+                unassigned: unassignedRows.map(enrichGapRowForDrill),
+                inProgress: inProgressRows.map(enrichGapRowForDrill),
+                missingDates: missingDateRows,
+                day1: leadRows.filter((r) => r.bucket === '1'),
+                accuracy: dq.issues,
+                companiesBelow: weakCompanies.flatMap((c) => leadRows.filter((r) => r.company === c.name)),
+                citiesBelow: weakCities.flatMap((c) => leadRows.filter((r) => r.city === c.name)),
+                achievementGap: (gapData.rows || []).map(enrichGapRowForDrill)
+            };
+
+            return {
+                progress,
+                gapData,
+                leadRows,
+                lt,
+                avgLead,
+                medLead,
+                day1Pct,
+                day2Pct,
+                aging3Pct,
+                score,
+                scoreBand,
+                scoreLabel,
+                parts,
+                kpis,
+                coordinators,
+                companies,
+                cities,
+                weakCompanies,
+                weakCities,
+                drill,
+                actions: [
+                    { key: 'aging3', count: agingRows.length, label: 'Vehicles > 3 Days', cta: 'View VINs' },
+                    { key: 'noDn', count: noDnRows.length, label: 'Without Delivery Note', cta: 'View VINs' },
+                    { key: 'unassigned', count: unassignedCount, label: 'Unassigned Vehicles', cta: 'View VINs' },
+                    { key: 'inProgress', count: inProgressRows.length, label: 'Vehicles In Progress', cta: 'View VINs' },
+                    { key: 'companiesBelow', count: weakCompanies.length, label: 'Transport Cos Below Target', cta: 'View records' },
+                    { key: 'citiesBelow', count: weakCities.length, label: 'Cities Below Target', cta: 'View records' },
+                    { key: 'missingDates', count: missingDateRows.length, label: 'VINs With Missing Dates', cta: 'View VINs' },
+                    { key: 'accuracy', count: dq.issues.length, label: 'Data Quality Issues', cta: 'View issues' }
+                ]
+            };
+        }
+
+        function openMgmtDrill(key, title, rows) {
+            _mgmtDrillKey = key || '';
+            const panel = document.getElementById('mgmtDrillPanel');
+            const titleEl = document.getElementById('mgmtDrillTitle');
+            const metaEl = document.getElementById('mgmtDrillMeta');
+            const tbody = document.getElementById('mgmtDrillBody');
+            if (!panel || !tbody) return;
+            const list = Array.isArray(rows) ? rows : [];
+            if (titleEl) titleEl.textContent = title || 'Drill-down';
+            if (metaEl) metaEl.textContent = `${list.length} record(s) · follows current month / filters`;
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">No matching records</td></tr>';
+            } else {
+                tbody.innerHTML = list.slice(0, 500).map((r) => {
+                    const daysText = r.days == null ? '—' : String(r.days);
+                    return `<tr>
+                        <td class="hub-vin">${escapeHtml(r.vin || '—')}</td>
+                        <td>${escapeHtml(r.product || '—')}</td>
+                        <td>${escapeHtml(r.invoiceDate || '—')}</td>
+                        <td>${escapeHtml(r.deliveryNoteDate || '—')}</td>
+                        <td class="num">${escapeHtml(daysText)}</td>
+                        <td>${escapeHtml(r.coordinator || '—')}</td>
+                        <td>${escapeHtml(r.company || '—')}</td>
+                        <td>${escapeHtml(r.city || '—')}</td>
+                        <td>${escapeHtml(r.status || '—')}</td>
+                    </tr>`;
+                }).join('');
+            }
+            panel.hidden = false;
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function renderMgmtDashboard() {
+            try {
+            const b = buildMgmtKpiBundle();
+            _mgmtKpiBundle = b;
+
+            const scoreEl = document.getElementById('mgmtScoreValue');
+            const statusEl = document.getElementById('mgmtScoreStatus');
+            const breakdown = document.getElementById('mgmtScoreBreakdown');
+            if (scoreEl) scoreEl.innerHTML = `${b.score} <span>/ 100</span>`;
+            if (statusEl) {
+                statusEl.textContent = b.scoreLabel;
+                statusEl.className = `mgmt-score__status is-${b.scoreBand}`;
+            }
+            if (breakdown) {
+                breakdown.innerHTML = [
+                    { lab: 'Achievement', val: `${b.parts.achievement}%`, w: '30%' },
+                    { lab: '≤1 Day', val: `${b.parts.day1}%`, w: '25%' },
+                    { lab: 'DN Completion', val: `${b.parts.dn}%`, w: '20%' },
+                    { lab: 'Aging Score', val: `${b.parts.aging}`, w: '15%' },
+                    { lab: 'Data Accuracy', val: `${b.parts.accuracy}%`, w: '10%' }
+                ].map((p) => `<div class="mgmt-score__part"><span class="lab">${p.lab}</span><span class="val">${p.val}</span><span class="w">Weight ${p.w}</span></div>`).join('');
+            }
+
+            const kpiHost = document.getElementById('mgmtKpiRow');
+            if (kpiHost) {
+                const order = ['achievement', 'day1', 'dn', 'aging3', 'unassigned', 'accuracy'];
+                kpiHost.innerHTML = order.map((key) => {
+                    const k = b.kpis[key];
+                    const lower = k.lowerIsBetter ? ' is-lower' : '';
+                    let meta = '';
+                    if (key === 'achievement' || key === 'dn') {
+                        meta = `${k.delivered || 0} / ${k.due || 0} · remaining ${k.remaining ?? Math.max(0, (k.due || 0) - (k.delivered || 0))}`;
+                    } else if (key === 'day1' || key === 'aging3') {
+                        meta = `${k.count || 0} of ${k.measured || 0} measured`;
+                    } else if (key === 'unassigned') {
+                        meta = `${k.count || 0} vehicles · ${k.actual}% of due`;
+                    } else if (key === 'accuracy') {
+                        meta = `${k.count || 0} issues`;
+                    }
+                    return `<button type="button" class="mgmt-kpi${lower}" data-mgmt-kpi="${key}">
+                        <div class="mgmt-kpi__top">
+                            <p class="mgmt-kpi__name">${escapeHtml(k.name)}<br><span style="font-weight:500;color:#94a3b8">${escapeHtml(k.nameAr || '')}</span></p>
+                            <span class="mgmt-kpi__badge is-${k.status.tone}">${k.status.icon} ${k.status.label}</span>
+                        </div>
+                        <p class="mgmt-kpi__pct">${k.actual}%</p>
+                        <p class="mgmt-kpi__meta">${escapeHtml(meta)}</p>
+                        <div class="mgmt-kpi__target">Target ${k.lowerIsBetter ? '≤' : '≥'} ${k.target}%</div>
+                    </button>`;
+                }).join('');
+                kpiHost.querySelectorAll('[data-mgmt-kpi]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const key = btn.dataset.mgmtKpi;
+                        const map = {
+                            achievement: ['achievementGap', 'Delivery Achievement — gap vehicles'],
+                            day1: ['day1', '≤ 1 Day Delivery — measured VINs'],
+                            dn: ['noDn', 'Delivery Note Completion — missing DN'],
+                            aging3: ['aging3', '3+ Day Aging'],
+                            unassigned: ['unassigned', 'Unassigned Vehicles'],
+                            accuracy: ['accuracy', 'Data Accuracy issues']
+                        };
+                        const pair = map[key];
+                        if (!pair) return;
+                        openMgmtDrill(pair[0], pair[1], b.drill[pair[0]]);
+                    });
+                });
+            }
+
+            const actionHost = document.getElementById('mgmtActionGrid');
+            if (actionHost) {
+                actionHost.innerHTML = b.actions.map((a) => {
+                    const ok = a.count <= 0;
+                    return `<button type="button" class="mgmt-action${ok ? ' is-ok' : ''}" data-mgmt-action="${a.key}">
+                        <span class="mgmt-action__count">${a.count}</span>
+                        <span class="mgmt-action__label">${escapeHtml(a.label)}</span>
+                        <span class="mgmt-action__cta">${ok ? 'All clear' : a.cta}</span>
+                    </button>`;
+                }).join('');
+                actionHost.querySelectorAll('[data-mgmt-action]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const key = btn.dataset.mgmtAction;
+                        const action = b.actions.find((x) => x.key === key);
+                        openMgmtDrill(key, action?.label || key, b.drill[key] || []);
+                        if (key === 'companiesBelow' && b.weakCompanies[0]) {
+                            showCompanyRecords(b.weakCompanies[0].name);
+                        }
+                    });
+                });
+            }
+
+            const done = document.getElementById('mgmtAchieveDone');
+            const due = document.getElementById('mgmtAchieveDue');
+            const pct = document.getElementById('mgmtAchievePct');
+            const bar = document.getElementById('mgmtAchieveBar');
+            const meta = document.getElementById('mgmtAchieveMeta');
+            if (done) done.textContent = String(b.progress.delivered || 0);
+            if (due) due.textContent = String(b.progress.total || 0);
+            if (pct) pct.textContent = `${b.progress.pct || 0}%`;
+            if (bar) bar.style.width = `${Math.min(100, b.progress.pct || 0)}%`;
+            if (meta) {
+                const rem = b.progress.gap ?? b.progress.remaining ?? 0;
+                const period = b.progress.period?.label || '';
+                meta.textContent = `Target ≥ 95% · Remaining ${rem} vehicles${period ? ` · ${period}` : ''}`;
+            }
+
+            const buckets = document.getElementById('mgmtLeadBuckets');
+            const leadMeta = document.getElementById('mgmtLeadMeta');
+            if (buckets) {
+                buckets.innerHTML = [
+                    { lab: '1 Day', val: b.lt.day1 },
+                    { lab: '2 Days', val: b.lt.day2 },
+                    { lab: '3+ Days', val: b.lt.day3plus },
+                    { lab: 'Missing Data', val: b.lt.missing }
+                ].map((x) => `<div class="mgmt-lead__bucket"><b>${x.val}</b><span>${x.lab}</span></div>`).join('');
+            }
+            if (leadMeta) {
+                leadMeta.textContent = `Avg ${b.avgLead == null ? '—' : b.avgLead + 'd'} · Median ${b.medLead == null ? '—' : b.medLead + 'd'} · ≤1d ${b.day1Pct}% · ≤2d ${b.day2Pct}% · 3+ ${b.aging3Pct}%`;
+            }
+
+            const coordBody = document.getElementById('mgmtCoordBody');
+            if (coordBody) {
+                if (!b.coordinators.length) {
+                    coordBody.innerHTML = '<tr><td colspan="8" class="hub-empty">No coordinator data in period</td></tr>';
+                } else {
+                    coordBody.innerHTML = b.coordinators.map((r) => `<tr data-mgmt-click="coord" data-name="${escapeHtml(r.name)}">
+                        <td>${escapeHtml(r.name)}</td>
+                        <td class="num">${r.assigned}</td>
+                        <td class="num">${r.delivered}</td>
+                        <td class="num">${r.achievement}%</td>
+                        <td class="num">${r.avgLead == null ? '—' : r.avgLead + 'd'}</td>
+                        <td class="num">${r.aging3}</td>
+                        <td class="num">${r.withoutDn}</td>
+                        <td><span class="mgmt-status is-${r.statusTone}">${r.statusIcon}</span></td>
+                    </tr>`).join('');
+                }
+            }
+
+            const companyBody = document.getElementById('mgmtCompanyBody');
+            if (companyBody) {
+                if (!b.companies.length) {
+                    companyBody.innerHTML = '<tr><td colspan="8" class="hub-empty">No company data in period</td></tr>';
+                } else {
+                    companyBody.innerHTML = b.companies.slice(0, 40).map((r) => `<tr data-mgmt-click="company" data-name="${escapeHtml(r.name)}">
+                        <td>${escapeHtml(r.name)}</td>
+                        <td class="num">${r.total}</td>
+                        <td class="num">${r.delivered}</td>
+                        <td class="num">${r.pending}</td>
+                        <td class="num">${r.achievement}%</td>
+                        <td class="num">${r.avgLead == null ? '—' : r.avgLead + 'd'}</td>
+                        <td class="num">${r.aging3}</td>
+                        <td><span class="mgmt-status is-${r.statusTone}">${r.statusIcon}</span></td>
+                    </tr>`).join('');
+                }
+            }
+
+            const cityBody = document.getElementById('mgmtCityBody');
+            if (cityBody) {
+                if (!b.cities.length) {
+                    cityBody.innerHTML = '<tr><td colspan="7" class="hub-empty">No city data in period</td></tr>';
+                } else {
+                    cityBody.innerHTML = b.cities.slice(0, 40).map((r) => `<tr data-mgmt-click="city" data-name="${escapeHtml(r.name)}">
+                        <td>${escapeHtml(r.name)}</td>
+                        <td class="num">${r.total}</td>
+                        <td class="num">${r.delivered}</td>
+                        <td class="num">${r.pending}</td>
+                        <td class="num">${r.achievement}%</td>
+                        <td class="num">${r.aging3}</td>
+                        <td><span class="mgmt-status is-${r.statusTone}">${r.statusIcon}</span></td>
+                    </tr>`).join('');
+                }
+            }
+
+            document.querySelectorAll('#mgmtDash [data-mgmt-click]').forEach((row) => {
+                row.addEventListener('click', () => {
+                    const kind = row.dataset.mgmtClick;
+                    const name = row.dataset.name;
+                    if (!name) return;
+                    if (kind === 'coord') {
+                        selectUserDashboard(name);
+                        showAdminPane('users');
+                    } else if (kind === 'company') {
+                        showCompanyRecords(name);
+                        showAdminPane('analytics');
+                        openFold('xferDashSection', { scroll: true });
+                    } else if (kind === 'city') {
+                        openMgmtDrill('city', `City — ${name}`, (b.leadRows || []).filter((r) => r.city === name));
+                    }
+                });
+            });
+
+            if (_mgmtDrillKey && b.drill[_mgmtDrillKey]) {
+                const action = b.actions.find((x) => x.key === _mgmtDrillKey);
+                openMgmtDrill(_mgmtDrillKey, action?.label || _mgmtDrillKey, b.drill[_mgmtDrillKey]);
+            }
+            } catch (err) {
+                console.error('[mgmt dashboard]', err);
+            }
+        }
+
+        function initMgmtDashboardControls() {
+            document.getElementById('mgmtDrillClose')?.addEventListener('click', () => {
+                _mgmtDrillKey = '';
+                const panel = document.getElementById('mgmtDrillPanel');
+                if (panel) panel.hidden = true;
+            });
         }
 
         function rawGapStatusBadgeClass(status) {
