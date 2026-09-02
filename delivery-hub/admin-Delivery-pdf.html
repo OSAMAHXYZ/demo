@@ -2157,7 +2157,7 @@
                     <div class="raw-gap-stat raw-gap-stat--delivered">
                         <span class="lab">Delivered · تم الترحيل</span>
                         <strong class="val" id="rawGapDelivered">0</strong>
-                        <span class="hint">In system</span>
+                        <span class="hint">with delivery note</span>
                     </div>
                     <div class="raw-gap-stat raw-gap-stat--gap">
                         <span class="lab">Gap · الفجوة</span>
@@ -2227,9 +2227,9 @@
                         <span id="deliveredTotalBarFill"></span>
                     </div>
                     <div class="saas-hero__stats">
-                        <div><b id="deliveredTotalDone">0</b><span>تم الترحيل</span></div>
-                        <div><b id="deliveredTotalRemaining">0</b><span>متبقي</span></div>
-                        <div><b id="deliveredTotalAll">0</b><span>الإجمالي</span></div>
+                        <div><b id="deliveredTotalDone">0</b><span>تم الترحيل · Delivered</span></div>
+                        <div><b id="deliveredTotalRemaining">0</b><span>الفجوة · Gap</span></div>
+                        <div><b id="deliveredTotalAll">0</b><span>مُسند · Assigned</span></div>
                     </div>
                 </div>
                 <div class="pct-donut-wrap" id="deliveredTotalDonut" hidden></div>
@@ -2237,7 +2237,7 @@
             <aside class="admin-highlight-card" id="monthHighlightCard" aria-label="ملخص الشهر">
                 <div>
                     <strong id="monthHighlightValue">0</strong>
-                    <span>مذكرات هذا النطاق</span>
+                    <span id="monthHighlightLabel">delivered · تم الترحيل</span>
                 </div>
                 <svg class="spark" viewBox="0 0 120 36" fill="none" aria-hidden="true">
                     <path d="M0 28 C18 26 22 10 36 14 C50 18 54 30 68 24 C82 18 90 6 104 10 C112 12 116 16 120 14" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
@@ -3504,7 +3504,7 @@
         function renderPremiumKpis() {
             const host = document.getElementById('premiumKpiGrid');
             if (!host) return;
-            const progress = deliveredOfTotalStats();
+            const progress = rawAssignedDeliveredStats();
             const warehouse = warehouseDeliveredStats();
             const drafts = filteredDrafts();
             const vehicles = filteredVehicleList();
@@ -3520,10 +3520,12 @@
                     .map((d) => String((d.payload || {}).branch_to || '').trim())
                     .filter((n) => n && n !== '-' && n !== 'المستودع')
             ).size;
+            const assignedLabel = progress.source === 'raw' ? 'مُسند · Assigned' : 'إجمالي المركبات';
+            const assignedVal = progress.source === 'raw' ? progress.assigned : vehicles.length;
             const cards = [
-                { label: 'إجمالي المركبات', value: vehicles.length, trend: 'ضمن النطاق الحالي', accent: '#6C5CE7', soft: '#eeebff', icon: '▣' },
-                { label: 'تم الترحيل', value: progress.delivered, trend: `${progress.pct}% من الإجمالي`, accent: '#2EC4B6', soft: '#e6faf7', icon: '✓' },
-                { label: 'متبقي', value: progress.remaining, trend: 'قيد التنفيذ', accent: '#FF8A4C', soft: '#fff1e8', icon: '◷' },
+                { label: assignedLabel, value: assignedVal, trend: progress.source === 'raw' ? (progress.period?.label || 'Col P month') : 'ضمن النطاق الحالي', accent: '#6C5CE7', soft: '#eeebff', icon: '▣' },
+                { label: 'تم الترحيل · Delivered', value: progress.delivered, trend: `${progress.pct}% delivered`, accent: '#2EC4B6', soft: '#e6faf7', icon: '✓' },
+                { label: 'الفجوة · Gap', value: progress.gap ?? progress.remaining, trend: 'without delivery note', accent: '#FF8A4C', soft: '#fff1e8', icon: '◷' },
                 { label: 'سيارات العرض', value: (allShowroomParking || []).length, trend: 'موقف SR', accent: '#F472B6', soft: '#fce7f3', icon: '✚' }
             ];
             // Keep secondary metrics available for logic/tooltips via data attributes
@@ -5142,7 +5144,23 @@
             };
         }
 
-        /** Compare raw inventory (Proforma / Col P) vs delivered queue rows for the active month. */
+        /** Delivery notes for the same month as the raw Proforma (Col P) scope. */
+        function draftsForProformaGapPeriod() {
+            const period = getProformaGapPeriod();
+            if (period.monthKey && period.monthKey !== 'all') {
+                return (allDrafts || []).filter((d) => draftMonthKey(d) === period.monthKey);
+            }
+            const { from, to } = period;
+            if (from || to) {
+                return (allDrafts || []).filter((d) => {
+                    const iso = draftEventIso(d);
+                    return Boolean(iso && isoInRange(iso, from, to));
+                });
+            }
+            return filteredDrafts();
+        }
+
+        /** Compare raw inventory (Proforma / Col P) vs delivery notes for the active month. */
         function computeRawDeliveryGap() {
             const period = getProformaGapPeriod();
             const { from, to } = period;
@@ -5150,7 +5168,7 @@
             const { queueByVin } = _vinLookup;
 
             const draftVinSet = new Set();
-            (allDrafts || []).forEach((d) => {
+            draftsForProformaGapPeriod().forEach((d) => {
                 draftVinList(d).forEach((vin) => draftVinSet.add(vin));
             });
 
@@ -5178,9 +5196,8 @@
                 const q = queueByVin.get(vin);
                 const hasDraft = draftVinSet.has(vin);
                 const inInventory = inventoryVinSet.has(vin);
-                const isDelivered = Boolean(q && q.agentStatus === 'delivered');
 
-                if (isDelivered) {
+                if (hasDraft) {
                     delivered += 1;
                     return;
                 }
@@ -5194,7 +5211,7 @@
                     proformaDate: iso,
                     assignedTo: q ? String(q.entryAgent || q.assignedTo || '').trim() || '—' : '—',
                     queueStatus: q ? String(q.statusLabel || q.agentStatus || q.status || '—') : '—',
-                    hasDraft: hasDraft ? 'Yes' : 'No',
+                    hasDraft: 'No',
                     ...meta
                 });
             });
@@ -5213,6 +5230,30 @@
                 period,
                 rows: gapRows,
                 noProformaInPeriod: (allVehicles || []).length > 0 && !rawTotal
+            };
+        }
+
+        /** Hero + KPI progress: raw assigned (Col P) vs delivery notes in the same month. */
+        function rawAssignedDeliveredStats() {
+            const gapData = computeRawDeliveryGap();
+            if (gapData.rawTotal > 0) {
+                return {
+                    delivered: gapData.delivered,
+                    total: gapData.rawTotal,
+                    assigned: gapData.rawTotal,
+                    pct: gapData.rate,
+                    remaining: gapData.gap,
+                    gap: gapData.gap,
+                    period: gapData.period,
+                    source: 'raw'
+                };
+            }
+            const legacy = deliveredOfTotalStats();
+            return {
+                ...legacy,
+                assigned: legacy.total,
+                gap: legacy.remaining,
+                source: 'legacy'
             };
         }
 
@@ -5383,7 +5424,7 @@
             const gapData = computeRawDeliveryGap();
             const cards = [
                 { cls: 'dn-stat--raw', label: 'Raw Col P', value: gapData.rawTotal, title: 'Cars in raw data with Proforma date (column P) in selected month' },
-                { cls: 'dn-stat--delivery', label: 'Delivered', value: gapData.delivered, title: 'Delivered in system for that raw scope' },
+                { cls: 'dn-stat--delivery', label: 'Delivered', value: gapData.delivered, title: 'Raw cars with a delivery note in the selected month' },
                 { cls: 'dn-stat--gap is-clickable', label: 'Gap', value: gapData.gap, title: 'Click Raw Gap section below to list each car', click: 'rawGap' },
                 { cls: 'dn-stat--notes', label: 'Delivery Notes', value: s.deliveryNotes },
                 { cls: 'dn-stat--vins', label: 'Unique VINs', value: s.uniqueVins },
@@ -6374,7 +6415,7 @@
         }
 
         function renderDeliveredOfTotalChart() {
-            const stats = deliveredOfTotalStats();
+            const stats = rawAssignedDeliveredStats();
             const doneEl = document.getElementById('deliveredTotalDone');
             const allEl = document.getElementById('deliveredTotalAll');
             const pctEl = document.getElementById('deliveredTotalPct');
@@ -6383,28 +6424,33 @@
             const donutEl = document.getElementById('deliveredTotalDonut');
 
             if (doneEl) doneEl.textContent = String(stats.delivered);
-            if (allEl) allEl.textContent = String(stats.total);
+            if (allEl) allEl.textContent = String(stats.assigned ?? stats.total);
             const remEl = document.getElementById('deliveredTotalRemaining');
-            if (remEl) remEl.textContent = String(stats.remaining);
+            if (remEl) remEl.textContent = String(stats.gap ?? stats.remaining);
             if (pctEl) pctEl.textContent = `${stats.pct}%`;
             if (barEl) barEl.style.width = `${Math.min(100, stats.pct)}%`;
             const highlight = document.getElementById('monthHighlightValue');
             if (highlight) {
-                const n = (typeof filteredDrafts === 'function' ? filteredDrafts() : []).length;
+                const n = stats.source === 'raw' ? stats.delivered : (typeof filteredDrafts === 'function' ? filteredDrafts() : []).length;
                 highlight.textContent = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
             }
             const heroBar = document.querySelector('#heroProgressCard .saas-hero__bar');
             if (heroBar) heroBar.setAttribute('aria-valuenow', String(stats.pct));
             if (capEl) {
-                const { type } = getTrackFilter();
-                const scope =
-                    type === 'proforma' ? 'نطاق البروفورما'
-                        : type === 'invoice' ? 'نطاق الفاتورة'
-                            : hasActiveTrackFilter() ? 'نطاق مذكرة الترحيل'
-                                : 'كل البيانات';
-                capEl.innerHTML = stats.total
-                    ? `<strong>${stats.delivered}</strong> مُرحَّلة من أصل <strong>${stats.total}</strong> (${scope}) · متبقي <strong>${stats.remaining}</strong>`
-                    : 'لا توجد بيانات في النطاق الحالي';
+                if (stats.source === 'raw' && stats.total) {
+                    const periodLabel = stats.period?.label || 'selected month';
+                    capEl.innerHTML = `<strong>${stats.delivered}</strong> delivered of <strong>${stats.assigned ?? stats.total}</strong> assigned (${periodLabel}) · gap <strong>${stats.gap ?? stats.remaining}</strong>`;
+                } else if (stats.total) {
+                    const { type } = getTrackFilter();
+                    const scope =
+                        type === 'proforma' ? 'نطاق البروفورما'
+                            : type === 'invoice' ? 'نطاق الفاتورة'
+                                : hasActiveTrackFilter() ? 'نطاق مذكرة الترحيل'
+                                    : 'كل البيانات';
+                    capEl.innerHTML = `<strong>${stats.delivered}</strong> مُرحَّلة من أصل <strong>${stats.total}</strong> (${scope}) · متبقي <strong>${stats.remaining}</strong>`;
+                } else {
+                    capEl.textContent = 'لا توجد بيانات في النطاق الحالي';
+                }
             }
 
             // Hero replaces the old delivered-total donut; keep call soft if element hidden
