@@ -1203,12 +1203,58 @@ function rowToVehicle(row) {
 function isDeliveryExportWorkbook(wb, filename) {
   const names = (wb.SheetNames || []).map((n) => normalizeHeader(n));
   const fileHint = normalizeHeader(filename || '');
-  if (fileHint.includes('delivery export') || fileHint.includes('admin export')) return true;
+  if (/delivery[\s_-]*export|admin[\s_-]*export|تصدير|archive|أرشيف/i.test(fileHint)) return true;
   return names.some((n) =>
     n.includes('vehicle inventory')
     || n.includes('print draft')
     || n.includes('coordinator queue')
+    || (n.includes('سجل') && n.includes('مركبات'))
+    || n.includes('مسودات')
+    || (n.includes('قائمة') && (n.includes('شاس') || n.includes('coordinator')))
   );
+}
+
+function finishRestoreExport(buffer, filename, res) {
+  const parsed = parseSalesWorkbook(buffer, filename || 'delivery_export.xlsx');
+  const fileLooksExport = /delivery[\s_-]*export|admin[\s_-]*export|تصدير|archive|أرشيف/i.test(String(filename || ''));
+  const hasDrafts = Array.isArray(parsed.drafts) && parsed.drafts.length > 0;
+  const hasQueue = Array.isArray(parsed.queue) && parsed.queue.length > 0;
+  const fullArchive = Boolean(parsed.isExport || fileLooksExport || hasDrafts || hasQueue);
+
+  if (!parsed.vehicles.length && !hasDrafts) {
+    return res.status(400).json({
+      error: 'الملف لا يحتوي على مركبات أو مسودات. استخدم delivery_export_….xlsx من تصدير اللوحة، أو ارفع Sales Raw من زر «رفع Sales Raw».'
+    });
+  }
+
+  if (!fullArchive && !fileLooksExport) {
+    const refresh = applyParsedInventory(parsed, { replaceDrafts: false, replaceQueue: false });
+    persistAndBroadcast();
+    return res.json({
+      ok: true,
+      mode: 'inventory_only',
+      imported: parsed.vehicles.length,
+      draftsImported: (parsed.drafts || []).length,
+      queueImported: (parsed.queue || []).length,
+      sheetName: parsed.sheetName,
+      filename: parsed.filename,
+      queueRefreshed: refresh.total,
+      note: 'تم استيراد المركبات فقط — لاستيراد المسودات والقائمة استخدم ملف delivery_export'
+    });
+  }
+
+  const refresh = applyParsedInventory(parsed, { replaceDrafts: true, replaceQueue: true });
+  persistAndBroadcast();
+  return res.json({
+    ok: true,
+    mode: 'full',
+    imported: parsed.vehicles.length,
+    draftsImported: (parsed.drafts || []).length,
+    queueImported: (parsed.queue || []).length,
+    sheetName: parsed.sheetName,
+    filename: parsed.filename,
+    queueRefreshed: refresh.total
+  });
 }
 
 function parseVehiclesFromRows(rows) {
@@ -1398,6 +1444,23 @@ function parseSalesFromWorkbook(wb, filename) {
   }
 
   if (!vehicles.length) {
+    if (isDeliveryExportWorkbook(wb, filename)) {
+      for (const name of wb.SheetNames || []) {
+        const sheetRowsData = sheetRows(wb, name);
+        if (!sheetRowsData.length) continue;
+        const found = parseVehiclesFromRows(sheetRowsData);
+        if (found.length) {
+          preferred = name;
+          rows = sheetRowsData;
+          vehicles = found;
+          headers = Object.keys(sheetRowsData[0] || {});
+          break;
+        }
+      }
+    }
+  }
+
+  if (!vehicles.length) {
     const headerHint = headers.length ? ` · الأعمدة: ${headers.slice(0, 12).join(' | ')}` : '';
     throw new Error(`لم يتم العثور على أرقام شاسيه في الملف${headerHint}`);
   }
@@ -1413,8 +1476,12 @@ function parseSalesFromWorkbook(wb, filename) {
   };
 
   if (result.isExport) {
-    const draftsSheet = findSheetName(wb, ['print drafts', 'print draft', 'drafts', 'مسودات الطباعة', 'مسودات']);
-    const queueSheet = findSheetName(wb, ['coordinator queue', 'queue', 'قائمة الشاسيه', 'القائمة']);
+    const draftsSheet = findSheetName(wb, [
+      'print drafts', 'print draft', 'drafts', 'مسودات الطباعة', 'مسودات', 'print'
+    ]);
+    const queueSheet = findSheetName(wb, [
+      'coordinator queue', 'queue', 'قائمة الشاسيه', 'القائمة', 'coordinator'
+    ]);
     if (draftsSheet) result.drafts = parsePrintDraftsFromRows(sheetRows(wb, draftsSheet));
     if (queueSheet) result.queue = parseQueueFromRows(sheetRows(wb, queueSheet));
   } else {
@@ -1675,6 +1742,21 @@ function getDeliveryCheckPdfBuffer() {
 
 // ——— HTTP app ———
 const app = express();
+
+/** Binary upload — avoids base64 JSON bloat (Railway/proxy size limits). Must be before express.json. */
+app.post('/api/delivery-inventory/restore-export-bin', express.raw({ limit: '80mb', type: '*/*' }), (req, res) => {
+  try {
+    const filename = decodeURIComponent(String(req.headers['x-filename'] || 'delivery_export.xlsx'));
+    if (!req.body || !Buffer.isBuffer(req.body) || !req.body.length) {
+      return res.status(400).json({ error: 'ملف التصدير مطلوب' });
+    }
+    return finishRestoreExport(req.body, filename, res);
+  } catch (err) {
+    console.error('[restore-export-bin]', err);
+    return res.status(500).json({ error: err.message || 'فشل استيراد الأرشيف' });
+  }
+});
+
 app.use(express.json({ limit: '80mb' }));
 
 app.post('/api/delivery-coordinator/auth', (req, res) => {
@@ -2019,29 +2101,7 @@ app.post('/api/delivery-inventory/restore-export', (req, res) => {
     const { fileData, filename } = req.body || {};
     if (!fileData) return res.status(400).json({ error: 'ملف التصدير مطلوب' });
     const buffer = parseDataUrl(fileData);
-    const parsed = parseSalesWorkbook(buffer, filename || 'delivery_export.xlsx');
-    const fileLooksExport = /delivery[_\s-]?export/i.test(String(filename || ''));
-    const fullArchive = Boolean(parsed.isExport || fileLooksExport);
-
-    if (!fullArchive) {
-      return res.status(400).json({
-        error: 'هذا ليس ملف تصدير اللوحة. استخدم delivery_export_….xlsx (أوراق Vehicle Inventory / Print Drafts / Coordinator Queue). لرفع Sales Raw استخدم صفحة المنسق.'
-      });
-    }
-    if (!parsed.vehicles.length && !(parsed.drafts || []).length) {
-      return res.status(400).json({ error: 'الملف لا يحتوي على مركبات أو مسودات' });
-    }
-    const refresh = applyParsedInventory(parsed, { replaceDrafts: true, replaceQueue: true });
-    persistAndBroadcast();
-    res.json({
-      ok: true,
-      imported: parsed.vehicles.length,
-      draftsImported: (parsed.drafts || []).length,
-      queueImported: (parsed.queue || []).length,
-      sheetName: parsed.sheetName,
-      filename: parsed.filename,
-      queueRefreshed: refresh.total
-    });
+    return finishRestoreExport(buffer, filename || 'delivery_export.xlsx', res);
   } catch (err) {
     console.error('[restore-export]', err);
     res.status(500).json({ error: err.message || 'فشل استيراد الأرشيف' });

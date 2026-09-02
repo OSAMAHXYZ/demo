@@ -1804,8 +1804,8 @@
                     <div>
                         <strong>رفع بيانات آخر الأيام</strong>
                         <p>
-                            <b>أرشيف</b> = ملف <code>delivery_export_*.xlsx</code> الذي صدّرته سابقاً (يستبدل البيانات) ·
-                            <b>Sales Raw</b> = ملف المبيعات الخام لتحديث المخزون والتواريخ
+                            <b>أرشيف</b> = ملف <code>delivery_export_*.xlsx</code> من تصدير اللوحة ·
+                            <b>Sales Raw</b> = زر «رفع Sales Raw» فقط · أي Excel فيه VIN يُقبل
                         </p>
                     </div>
                     <div class="admin-upload-banner__actions">
@@ -2774,6 +2774,35 @@
             });
         }
 
+        async function postArchiveFile(file) {
+            const buffer = await file.arrayBuffer();
+            let res = await fetch('/api/delivery-inventory/restore-export-bin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-Filename': encodeURIComponent(file.name || 'delivery_export.xlsx')
+                },
+                body: buffer
+            });
+            if (res.status === 404) {
+                const readerResult = await readFileAsDataUrl(file);
+                res = await fetch('/api/delivery-inventory/restore-export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileData: readerResult, filename: file.name })
+                });
+            }
+            const text = await res.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (_) {
+                throw new Error(res.status === 413
+                    ? 'الملف كبير جداً — جرّب ملفاً أصغر أو قسّم البيانات'
+                    : `فشل الاستيراد (HTTP ${res.status})`);
+            }
+            if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
+            return data;
+        }
+
         async function restoreExportFile(file) {
             if (!file) {
                 setRestoreStatus('اختر ملف Excel أولاً', 'err');
@@ -2787,31 +2816,19 @@
             setRestoreStatus('جاري استيراد الأرشيف…');
             pauseLiveSync();
             try {
-                setRestoreStatus('جاري قراءة الملف…');
-                const readerResult = await readFileAsDataUrl(file);
-                setRestoreStatus('جاري رفع البيانات للخادم…');
-                const res = await fetch('/api/delivery-inventory/restore-export', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileData: readerResult, filename: file.name })
-                });
-                const text = await res.text();
-                let data = {};
-                try { data = text ? JSON.parse(text) : {}; } catch (_) {
-                    throw new Error(res.status === 413
-                        ? 'الملف كبير جداً للخادم'
-                        : `فشل الاستيراد (HTTP ${res.status})`);
-                }
-                if (!res.ok) throw new Error(data.error || 'فشل الاستيراد');
+                setRestoreStatus(`جاري رفع ${file.name} (${Math.round(file.size / 1024)} KB)…`);
+                const data = await postArchiveFile(file);
                 const meta = document.getElementById('restoreExportMeta');
                 if (meta) {
                     meta.textContent = `${file.name} · ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة`;
                 }
+                const modeNote = data.mode === 'inventory_only'
+                    ? ' · مركبات فقط (المسودات/القائمة لم تُستبدَل)'
+                    : '';
                 setRestoreStatus(
-                    `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} في القائمة`,
+                    `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة${modeNote}`,
                     'ok'
                 );
-                setRestoreStatus('جاري تحديث اللوحة…');
                 await loadDashboard({ force: true });
                 if (data.draftsImported) openFold('draftsSection', { scroll: true });
                 else openFold('inventorySection', { scroll: true });
