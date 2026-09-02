@@ -2226,7 +2226,7 @@
         <div class="admin-pane" data-pane="users" id="pane-users">
             <div class="admin-pane-head">
                 <h2>المنسقين</h2>
-                <p>عدد السيارات لكل مستخدم · يتبع فلتر التاريخ أعلى الصفحة</p>
+                <p>Submitted vs Delivered · مقارنة المُسلَّم وتم الترحيل لكل منسق</p>
             </div>
             <section class="dh-user-dash saas-card" aria-label="User dashboard">
                 <div class="pbi-page">
@@ -2237,6 +2237,35 @@
                         <div class="pbi-name-list" id="userDashNameList"></div>
                     </aside>
                     <div class="pbi-canvas">
+                        <article class="dh-coord-compare saas-card" id="userDashCompare" aria-label="Submitted vs delivered comparison">
+                            <div class="dh-coord-compare__head">
+                                <div>
+                                    <h2>Submitted vs Delivered</h2>
+                                    <p class="dh-coord-compare__sub">مقارنة السيارات المُسلَّمة (مذكرات) مع تم الترحيل · يتبع فلتر التاريخ</p>
+                                </div>
+                                <span class="dh-user-period" id="userDashComparePeriod"></span>
+                            </div>
+                            <div class="dh-coord-compare__totals">
+                                <div class="dh-coord-compare__stat is-submitted">
+                                    <span class="lab">Submitted · مُسلَّم</span>
+                                    <strong id="userDashCompareSubmitted">0</strong>
+                                    <span class="hint">cars on delivery notes</span>
+                                </div>
+                                <div class="dh-coord-compare__meter">
+                                    <div class="dh-coord-compare__rate" id="userDashCompareRate">0%</div>
+                                    <div class="dh-coord-compare__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                                        <span id="userDashCompareBarDelivered"></span>
+                                    </div>
+                                    <span class="dh-coord-compare__gap" id="userDashCompareGap">—</span>
+                                </div>
+                                <div class="dh-coord-compare__stat is-delivered">
+                                    <span class="lab">Delivered · تم الترحيل</span>
+                                    <strong id="userDashCompareDelivered">0</strong>
+                                    <span class="hint">marked delivered on queue</span>
+                                </div>
+                            </div>
+                            <div id="userDashCompareChart" class="dh-coord-compare__chart"></div>
+                        </article>
                         <div class="pbi-filter-bar" id="userDashFilterBar" hidden>
                             <span>Filtered to <strong id="userDashFilterName"></strong></span>
                             <button type="button" id="userDashClearSel">Clear filter</button>
@@ -2253,19 +2282,21 @@
                             <article class="card pbi-viz saas-section pbi-viz--wide">
                                 <div class="pbi-viz-head">
                                     <h2>Summary by user</h2>
-                                    <span class="dh-user-period">Click a row to filter</span>
+                                    <span class="dh-user-period">Submitted = cars on notes · Delivered = queue status</span>
                                 </div>
                                 <div class="xl-table-wrap">
                                     <table class="xl-table dh-user-table">
                                         <thead>
                                             <tr>
                                                 <th class="tl">User / المنسق</th>
-                                                <th class="num">Cars</th>
-                                                <th class="num">Notes</th>
+                                                <th class="num">Submitted</th>
                                                 <th class="num">Delivered</th>
+                                                <th class="num">Pending</th>
+                                                <th class="num">Rate %</th>
+                                                <th class="num">Notes</th>
                                                 <th class="num">In stock</th>
                                                 <th class="num">Ready</th>
-                                                <th class="num">Pending</th>
+                                                <th class="num">Waiting</th>
                                                 <th class="num">Share %</th>
                                             </tr>
                                         </thead>
@@ -3413,6 +3444,71 @@
             });
         }
 
+        function renderSubmittedDeliveredChart(el, rows) {
+            if (!el) return;
+            const top = (rows || [])
+                .filter((r) => r.submitted > 0 || r.delivered > 0)
+                .slice(0, 12);
+            if (!top.length) {
+                el.innerHTML = '<div class="saas-empty">لا توجد بيانات للمقارنة في هذه الفترة</div>';
+                return;
+            }
+            renderApex(el, {
+                chart: {
+                    type: 'bar',
+                    height: Math.max(220, top.length * 36),
+                    toolbar: { show: false },
+                    background: 'transparent',
+                    fontFamily: 'Inter, Tajawal, sans-serif',
+                    animations: { enabled: true, speed: 400 }
+                },
+                theme: { mode: 'light' },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                        borderRadius: 4,
+                        barHeight: '72%',
+                        dataLabels: { position: 'top' }
+                    }
+                },
+                colors: ['#6C5CE7', '#2EC4B6'],
+                dataLabels: {
+                    enabled: true,
+                    offsetX: 6,
+                    style: { colors: ['#64748B'], fontSize: '10px', fontWeight: 700 }
+                },
+                grid: {
+                    borderColor: 'rgba(15,23,42,0.08)',
+                    strokeDashArray: 3,
+                    xaxis: { lines: { show: true } },
+                    yaxis: { lines: { show: false } },
+                    padding: { left: 8, right: 20 }
+                },
+                series: [
+                    { name: 'Submitted', data: top.map((r) => r.submitted) },
+                    { name: 'Delivered', data: top.map((r) => r.delivered) }
+                ],
+                xaxis: {
+                    categories: top.map((r) => r.name),
+                    labels: { style: { colors: '#64748B', fontSize: '11px' } }
+                },
+                yaxis: {
+                    labels: { style: { colors: '#64748B', fontSize: '11px' } }
+                },
+                legend: {
+                    position: 'top',
+                    horizontalAlign: 'right',
+                    fontSize: '12px',
+                    labels: { colors: '#64748B' }
+                },
+                tooltip: {
+                    shared: true,
+                    intersect: false,
+                    y: { formatter: (val) => `${val} cars` }
+                }
+            });
+        }
+
         function renderHorizontalBars(el, rows, color) {
             if (!el) return;
             if (!rows.length) {
@@ -4033,7 +4129,7 @@
         }
 
         function userLabelFromQueue(q) {
-            return String(q?.assignedTo || '').trim() || UNASSIGNED_USER;
+            return String(q?.entryAgent || q?.assignedTo || '').trim() || UNASSIGNED_USER;
         }
 
         function escapeHtml(value) {
@@ -5924,6 +6020,7 @@
                 if (!map.has(name)) {
                     map.set(name, {
                         name,
+                        submitted: 0,
                         cars: 0,
                         notes: 0,
                         delivered: 0,
@@ -5938,7 +6035,7 @@
             drafts.forEach((d) => {
                 const row = ensure(userLabelFromDraft(d));
                 row.notes += 1;
-                row.cars += draftCarWeight(d);
+                row.submitted += draftCarWeight(d);
             });
 
             queue.forEach((q) => {
@@ -5951,7 +6048,12 @@
             });
 
             return Array.from(map.values())
-                .sort((a, b) => b.cars - a.cars || b.delivered - a.delivered || a.name.localeCompare(b.name, 'ar'));
+                .map((r) => {
+                    const gap = Math.max(0, r.submitted - r.delivered);
+                    const rate = r.submitted ? Math.round((r.delivered / r.submitted) * 1000) / 10 : (r.delivered ? 100 : 0);
+                    return { ...r, cars: r.submitted, gap, rate };
+                })
+                .sort((a, b) => b.submitted - a.submitted || b.delivered - a.delivered || a.name.localeCompare(b.name, 'ar'));
         }
 
         function userDashPeriodLabel() {
@@ -6009,7 +6111,7 @@
                         const active = selected === r.name ? ' active' : '';
                         return `<button type="button" class="pbi-name${active}" data-user-name="${escapeHtml(r.name)}">
                             <span class="nm">${escapeHtml(r.name)}</span>
-                            <span class="meta">${r.cars} cars · ${r.delivered} delivered · ${r.notes} notes</span>
+                            <span class="meta">${r.submitted} submitted · ${r.delivered} delivered · ${r.notes} notes</span>
                         </button>`;
                     }).join('') || '<p class="dh-user-empty">No users match search.</p>';
                     nameList.querySelectorAll('[data-user-name]').forEach((btn) => {
@@ -6018,30 +6120,55 @@
                 }
             }
 
-            const totalCars = rowsAll.reduce((s, r) => s + r.cars, 0);
+            const totalSubmitted = rowsAll.reduce((s, r) => s + r.submitted, 0);
             const totalDelivered = rowsAll.reduce((s, r) => s + r.delivered, 0);
-            const totalPending = rowsAll.reduce((s, r) => s + r.pending + r.inStock + r.ready, 0);
+            const totalGap = Math.max(0, totalSubmitted - totalDelivered);
+            const totalRate = totalSubmitted ? Math.round((totalDelivered / totalSubmitted) * 1000) / 10 : (totalDelivered ? 100 : 0);
             const totalNotes = rowsAll.reduce((s, r) => s + r.notes, 0);
             const focus = selected ? rowsAll.find((r) => r.name === selected) : null;
+
+            const comparePeriod = document.getElementById('userDashComparePeriod');
+            if (comparePeriod) comparePeriod.textContent = userDashPeriodLabel();
+            const cmpSubmitted = document.getElementById('userDashCompareSubmitted');
+            const cmpDelivered = document.getElementById('userDashCompareDelivered');
+            const cmpRate = document.getElementById('userDashCompareRate');
+            const cmpGap = document.getElementById('userDashCompareGap');
+            const cmpBar = document.getElementById('userDashCompareBarDelivered');
+            const cmpScope = focus || { submitted: totalSubmitted, delivered: totalDelivered, gap: totalGap, rate: totalRate };
+            if (cmpSubmitted) cmpSubmitted.textContent = String(cmpScope.submitted);
+            if (cmpDelivered) cmpDelivered.textContent = String(cmpScope.delivered);
+            if (cmpRate) cmpRate.textContent = `${cmpScope.rate}%`;
+            if (cmpBar) cmpBar.style.width = `${Math.min(100, cmpScope.rate)}%`;
+            if (cmpGap) {
+                cmpGap.textContent = cmpScope.gap > 0
+                    ? `${cmpScope.gap} pending · ${cmpScope.submitted - cmpScope.gap} matched`
+                    : cmpScope.submitted
+                        ? 'All submitted cars are delivered'
+                        : 'No submissions in this period';
+            }
+            renderSubmittedDeliveredChart(
+                document.getElementById('userDashCompareChart'),
+                focus ? [focus] : rowsAll
+            );
 
             const kpiHost = document.getElementById('userDashKpis');
             if (kpiHost) {
                 const cards = focus
                     ? [
-                        { lab: 'Cars', val: focus.cars, ok: true },
+                        { lab: 'Submitted', val: focus.submitted, ok: true },
                         { lab: 'Delivered', val: focus.delivered, ok: true },
-                        { lab: 'Pending', val: focus.pending + focus.inStock + focus.ready },
+                        { lab: 'Pending gap', val: focus.gap },
+                        { lab: 'Delivery rate', val: `${focus.rate}%`, ok: true },
                         { lab: 'Delivery notes', val: focus.notes },
-                        { lab: 'Share of cars', val: totalCars ? `${Math.round((focus.cars / totalCars) * 1000) / 10}%` : '0%' },
-                        { lab: 'Share delivered', val: totalDelivered ? `${Math.round((focus.delivered / totalDelivered) * 1000) / 10}%` : '0%' }
+                        { lab: 'Share submitted', val: totalSubmitted ? `${Math.round((focus.submitted / totalSubmitted) * 1000) / 10}%` : '0%' }
                     ]
                     : [
                         { lab: 'Coordinators', val: rowsAll.length },
-                        { lab: 'Total cars', val: totalCars, ok: true },
-                        { lab: 'Delivered', val: totalDelivered, ok: true },
-                        { lab: 'In queue', val: totalPending },
-                        { lab: 'Delivery notes', val: totalNotes },
-                        { lab: 'Avg cars / user', val: rowsAll.length ? Math.round((totalCars / rowsAll.length) * 10) / 10 : 0 }
+                        { lab: 'Total submitted', val: totalSubmitted, ok: true },
+                        { lab: 'Total delivered', val: totalDelivered, ok: true },
+                        { lab: 'Pending gap', val: totalGap },
+                        { lab: 'Delivery rate', val: `${totalRate}%`, ok: true },
+                        { lab: 'Delivery notes', val: totalNotes }
                     ];
                 kpiHost.innerHTML = cards.map((c) => `
                     <div class="pbi-kpi${c.ok ? ' is-ok' : ''}">
@@ -6052,8 +6179,8 @@
             }
 
             const chartRows = (focus ? [focus] : rowsAll)
-                .filter((r) => r.cars > 0)
-                .map((r) => ({ name: r.name, count: r.cars }));
+                .filter((r) => r.submitted > 0)
+                .map((r) => ({ name: r.name, count: r.submitted }));
             renderHorizontalBars(
                 document.getElementById('userDashChart'),
                 chartRows,
@@ -6063,16 +6190,19 @@
             const tbody = document.getElementById('userDashTableBody');
             if (tbody) {
                 if (!rowsAll.length) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد بيانات مستخدمين في هذه الفترة</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="hub-empty">لا توجد بيانات مستخدمين في هذه الفترة</td></tr>';
                 } else {
                 tbody.innerHTML = rowsAll.map((r) => {
-                    const share = totalCars ? Math.round((r.cars / totalCars) * 1000) / 10 : 0;
+                    const share = totalSubmitted ? Math.round((r.submitted / totalSubmitted) * 1000) / 10 : 0;
                     const active = selected === r.name ? ' is-active' : '';
+                    const rateClass = r.rate >= 90 ? ' is-good' : (r.rate >= 50 ? ' is-mid' : ' is-low');
                     return `<tr class="emp-row dh-user-row${active}" data-user-name="${escapeHtml(r.name)}" tabindex="0" role="button">
                         <td class="tl"><span class="emp-name">${escapeHtml(r.name)}</span></td>
-                        <td class="num"><strong>${r.cars}</strong></td>
-                        <td class="num">${r.notes}</td>
+                        <td class="num"><strong>${r.submitted}</strong></td>
                         <td class="num">${r.delivered}</td>
+                        <td class="num">${r.gap}</td>
+                        <td class="num${rateClass}">${r.rate}%</td>
+                        <td class="num">${r.notes}</td>
                         <td class="num">${r.inStock}</td>
                         <td class="num">${r.ready}</td>
                         <td class="num">${r.pending}</td>
