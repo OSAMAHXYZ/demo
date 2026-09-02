@@ -8,8 +8,8 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
-    <link rel="stylesheet" href="admin-saas.css?v=20260825c">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260825f">
+    <link rel="stylesheet" href="admin-saas.css?v=20260902b">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260902b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1758,6 +1758,7 @@
                 <nav class="admin-sidebar__nav" id="adminNav" aria-label="أقسام لوحة الإدارة">
                     <button type="button" class="admin-nav__btn is-active" data-pane-target="overview"><span class="nav-ico">OV</span>نظرة عامة</button>
                     <button type="button" class="admin-nav__btn" data-pane-target="analytics"><span class="nav-ico">TR</span>لوحة النقل <span class="nav-count" id="navCountXfer"></span></button>
+                    <button type="button" class="admin-nav__btn" data-pane-target="users"><span class="nav-ico">US</span>المنسقين <span class="nav-count" id="navCountUsers"></span></button>
                     <button type="button" class="admin-nav__btn" data-pane-target="pdfs"><span class="nav-ico">PDF</span>ملفات PDF <span class="nav-count" id="navCountPdfs"></span></button>
                     <button type="button" class="admin-nav__btn" data-pane-target="queue"><span class="nav-ico">Q</span>القائمة <span class="nav-count" id="navCountQueue"></span></button>
                     <button type="button" class="admin-nav__btn" data-pane-target="yard"><span class="nav-ico">SR</span>العرض والمخزون <span class="nav-count" id="navCountYard"></span></button>
@@ -1846,15 +1847,28 @@
                 </div>
 
                 <div class="ft-date-inline" id="ftDateControl" aria-label="Delivery note date range">
-                    <label class="ft-date-inline__field">
-                        <span>Start date</span>
-                        <input type="date" id="ftDateFromUi" lang="en" aria-label="Start date">
+                    <label class="ft-date-preset-wrap">
+                        <span>Period</span>
+                        <select class="ft-native ft-date-preset" id="ftDatePreset" title="Quick date filter — applies instantly">
+                            <option value="today" selected>Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="last_7">Last 7 days</option>
+                            <option value="this_month">This month (MTD)</option>
+                            <option value="last_month">Last month</option>
+                            <option value="all">All dates</option>
+                            <option value="custom">Custom range</option>
+                        </select>
                     </label>
-                    <label class="ft-date-inline__field">
-                        <span>End date</span>
-                        <input type="date" id="ftDateToUi" lang="en" aria-label="End date">
-                    </label>
-                    <button type="button" class="ft-btn ft-btn--ghost" id="ftDateToday" title="Today">Today</button>
+                    <div class="ft-date-custom" id="ftDateCustomFields" hidden>
+                        <label class="ft-date-inline__field">
+                            <span>From</span>
+                            <input type="date" id="ftDateFromUi" lang="en" aria-label="Start date">
+                        </label>
+                        <label class="ft-date-inline__field">
+                            <span>To</span>
+                            <input type="date" id="ftDateToUi" lang="en" aria-label="End date">
+                        </label>
+                    </div>
                 </div>
 
                 <div class="ft-control" id="ftCompanyControl" data-ft-select="company">
@@ -2207,6 +2221,62 @@
                 </div>
             </div>
         </section>
+        </div>
+
+        <div class="admin-pane" data-pane="users" id="pane-users">
+            <div class="admin-pane-head">
+                <h2>المنسقين</h2>
+                <p>عدد السيارات لكل مستخدم · يتبع فلتر التاريخ أعلى الصفحة</p>
+            </div>
+            <section class="dh-user-dash saas-card" aria-label="User dashboard">
+                <div class="pbi-page">
+                    <aside class="pbi-slicer card">
+                        <h2>Coordinators</h2>
+                        <p class="pbi-slicer-hint">اضغط اسمًا لتصفية اللوحة · اضغط مرة أخرى للإلغاء</p>
+                        <input type="search" class="dh-user-search" id="userDashSearch" placeholder="Search user…" autocomplete="off" aria-label="Search coordinators">
+                        <div class="pbi-name-list" id="userDashNameList"></div>
+                    </aside>
+                    <div class="pbi-canvas">
+                        <div class="pbi-filter-bar" id="userDashFilterBar" hidden>
+                            <span>Filtered to <strong id="userDashFilterName"></strong></span>
+                            <button type="button" id="userDashClearSel">Clear filter</button>
+                        </div>
+                        <div class="pbi-kpis dh-user-kpis" id="userDashKpis"></div>
+                        <div class="pbi-visuals dh-user-visuals">
+                            <article class="card pbi-viz saas-section">
+                                <div class="pbi-viz-head">
+                                    <h2>Cars per coordinator</h2>
+                                    <span class="dh-user-period" id="userDashPeriodLabel"></span>
+                                </div>
+                                <div id="userDashChart" class="dh-user-chart"></div>
+                            </article>
+                            <article class="card pbi-viz saas-section pbi-viz--wide">
+                                <div class="pbi-viz-head">
+                                    <h2>Summary by user</h2>
+                                    <span class="dh-user-period">Click a row to filter</span>
+                                </div>
+                                <div class="xl-table-wrap">
+                                    <table class="xl-table dh-user-table">
+                                        <thead>
+                                            <tr>
+                                                <th class="tl">User / المنسق</th>
+                                                <th class="num">Cars</th>
+                                                <th class="num">Notes</th>
+                                                <th class="num">Delivered</th>
+                                                <th class="num">In stock</th>
+                                                <th class="num">Ready</th>
+                                                <th class="num">Pending</th>
+                                                <th class="num">Share %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="userDashTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <div class="admin-pane" data-pane="pdfs" id="pane-pdfs">
@@ -2570,23 +2640,82 @@
         let allShowroomParking = [];
         let showroomParkingOccupancy = null;
         let lastDashboard = null;
+        let dashboardLoading = false;
+        let dashboardLoadSeq = 0;
+        let refreshDashboardTimer = null;
+        let _cachedDraftCount = -1;
+        let _userDashCount = 0;
+        let _vinLookup = null;
+        let userDashSearch = '';
+        const UNASSIGNED_USER = 'غير معيّن';
         /** Warehouse deliveries show under this label — not as a transport company. */
         const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية';
         /** Showroom cars (ياسين) — flagged separately in admin. */
         const SHOWROOM_SPECIAL_NAME = 'سيارات عرض الصالة';
         const SHOWROOM_AGENT = 'ياسين';
 
+        function onLiveSync() {
+            if (!adminAuthed || dashboardLoading) return;
+            return loadDashboard({ quiet: true });
+        }
+
+        function pauseLiveSync() {
+            if (window.DeliveryHubLive) DeliveryHubLive.stop();
+        }
+
+        function resumeLiveSync() {
+            if (!adminAuthed || !window.DeliveryHubLive) return;
+            DeliveryHubLive.start(onLiveSync, { pollMs: 45000, minRefreshGapMs: 25000 });
+        }
+
+        function isAdminPaneActive(paneId) {
+            const pane = document.querySelector(`.admin-pane[data-pane="${paneId}"]`);
+            return Boolean(pane && pane.classList.contains('is-active'));
+        }
+
+        function rebuildVinLookup() {
+            const draftByVin = new Map();
+            const queueByVin = new Map();
+            (allDrafts || []).forEach((d) => {
+                draftVinList(d).forEach((vin) => {
+                    if (!draftByVin.has(vin)) draftByVin.set(vin, d);
+                });
+            });
+            (allQueue || []).forEach((q) => {
+                const vin = normVinKey(q.vin);
+                if (vin) queueByVin.set(vin, q);
+            });
+            _vinLookup = { draftByVin, queueByVin };
+        }
+
+        function countCoordinatorsQuick() {
+            const set = new Set();
+            filteredDrafts({ coordinator: false }).forEach((d) => {
+                if (isWarehouseAdminDraft(d) || isShowroomAdminDraft(d)) return;
+                const name = userLabelFromDraft(d);
+                if (name && name !== UNASSIGNED_USER) set.add(name);
+            });
+            filteredQueue({ coordinator: false }).forEach((q) => {
+                const name = userLabelFromQueue(q);
+                if (name && name !== UNASSIGNED_USER) set.add(name);
+            });
+            return set.size;
+        }
+
         function unlockAdmin() {
             adminAuthed = true;
             document.getElementById('adminGate').classList.add('hidden');
             document.getElementById('adminApp').classList.remove('hidden');
+            initPremiumFilterToolbar();
+            initPdfBrowserControls();
+            initDnMonthFilter();
+            document.getElementById('userDashSearch')?.addEventListener('input', (e) => {
+                userDashSearch = e.target.value || '';
+                renderUserDashboard();
+            });
+            document.getElementById('userDashClearSel')?.addEventListener('click', clearUserDashboardSelection);
             loadDashboard().catch((err) => setUploadStatus(err.message, 'err'));
-            if (window.DeliveryHubLive) {
-                DeliveryHubLive.start(() => {
-                    if (!adminAuthed) return;
-                    return loadDashboard();
-                });
-            }
+            resumeLiveSync();
         }
 
         function lockAdmin() {
@@ -2656,8 +2785,11 @@
                 return;
             }
             setRestoreStatus('جاري استيراد الأرشيف…');
+            pauseLiveSync();
             try {
+                setRestoreStatus('جاري قراءة الملف…');
                 const readerResult = await readFileAsDataUrl(file);
+                setRestoreStatus('جاري رفع البيانات للخادم…');
                 const res = await fetch('/api/delivery-inventory/restore-export', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2679,11 +2811,14 @@
                     `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} في القائمة`,
                     'ok'
                 );
-                await loadDashboard();
+                setRestoreStatus('جاري تحديث اللوحة…');
+                await loadDashboard({ force: true });
                 if (data.draftsImported) openFold('draftsSection', { scroll: true });
                 else openFold('inventorySection', { scroll: true });
             } catch (err) {
                 setRestoreStatus(err.message || 'فشل الاستيراد', 'err');
+            } finally {
+                resumeLiveSync();
             }
         }
 
@@ -2693,6 +2828,7 @@
                 return;
             }
             setRestoreStatus(`جاري رفع Sales Raw: ${file.name}…`);
+            pauseLiveSync();
             try {
                 const readerResult = await readFileAsDataUrl(file);
                 const res = await fetch('/api/delivery-inventory/upload', {
@@ -2706,10 +2842,12 @@
                     `تم رفع Sales Raw · ${data.imported || 0} صف · حدّثت القائمة من البيانات الجديدة`,
                     'ok'
                 );
-                await loadDashboard();
+                await loadDashboard({ force: true });
                 showAdminPane('overview');
             } catch (err) {
                 setRestoreStatus(err.message || 'فشل رفع Sales Raw', 'err');
+            } finally {
+                resumeLiveSync();
             }
         }
 
@@ -2760,13 +2898,7 @@
             // Charts in newly visible panes need a size refresh
             requestAnimationFrame(() => {
                 window.dispatchEvent(new Event('resize'));
-                if (id === 'analytics' && typeof renderTransferDashboard === 'function') {
-                    try {
-                        renderTransferDashboard(
-                            typeof filteredDrafts === 'function' ? filteredDrafts() : (allDrafts || [])
-                        );
-                    } catch (_) { /* ignore */ }
-                }
+                if (adminAuthed) refreshTransferDashboard();
             });
         }
 
@@ -2818,6 +2950,7 @@
             setFoldCount('inventoryFoldCount', vehicleCount);
             setFoldCount('productsFoldCount', productCount);
             setNavCount('navCountXfer', draftCount);
+            setNavCount('navCountUsers', _userDashCount || countCoordinatorsQuick());
             setNavCount('navCountPdfs', draftCount);
             setNavCount('navCountQueue', queueCount);
             setNavCount('navCountYard', yardCount);
@@ -3674,17 +3807,20 @@
             const chips = [];
             const { type, from, to } = getTrackFilter();
             if (from || to) {
+                const presetLabel = trackDatePresetLabel(trackDatePreset);
+                const rangeLabel = from === to ? from : `${from || '…'} → ${to || '…'}`;
                 chips.push({
                     key: 'date',
-                    label: `${type === 'invoice' ? 'Invoice' : 'DN'} ${from || '…'} → ${to || '…'}`,
-                    clear: () => {
-                        document.getElementById('trackDateFrom').value = '';
-                        document.getElementById('trackDateTo').value = '';
-                        document.getElementById('ftDateFromUi').value = '';
-                        document.getElementById('ftDateToUi').value = '';
-                        syncDateControlsFromNatives();
-                        applyTrackFilter();
-                    }
+                    label: trackDatePreset === 'custom'
+                        ? `${type === 'invoice' ? 'Invoice' : 'DN'} ${rangeLabel}`
+                        : `${presetLabel}${from && to && from !== to ? ` · ${rangeLabel}` : from ? ` · ${from}` : ''}`,
+                    clear: () => applyTrackDatePreset('today')
+                });
+            } else if (trackDatePreset === 'all') {
+                chips.push({
+                    key: 'date',
+                    label: 'All dates',
+                    clear: () => applyTrackDatePreset('today')
                 });
             }
             if (type === 'invoice') {
@@ -3757,9 +3893,14 @@
         }
 
         function initPremiumFilterToolbar() {
+            initTrackDateFromStorage();
             syncDateControlsFromNatives();
             renderAllFtSelects();
             renderFilterChips();
+
+            document.getElementById('ftDatePreset')?.addEventListener('change', (e) => {
+                applyTrackDatePreset(e.target.value || 'today');
+            });
 
             document.querySelectorAll('[data-ft-select] .ft-control__trigger').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
@@ -3786,23 +3927,22 @@
 
             const dateControl = document.getElementById('ftDateControl');
             const syncAndApplyDates = () => {
+                trackDatePreset = 'custom';
+                const presetSel = document.getElementById('ftDatePreset');
+                if (presetSel) presetSel.value = 'custom';
+                syncTrackDateCustomVisibility();
                 pushDatesToNatives();
+                saveTrackDateFilter();
                 renderFilterChips();
                 applyTrackFilter();
             };
             document.getElementById('ftDateFromUi')?.addEventListener('change', syncAndApplyDates);
             document.getElementById('ftDateToUi')?.addEventListener('change', syncAndApplyDates);
+            document.getElementById('ftDateFromUi')?.addEventListener('input', syncAndApplyDates);
+            document.getElementById('ftDateToUi')?.addEventListener('input', syncAndApplyDates);
             document.getElementById('ftDateFromUi')?.addEventListener('click', (e) => e.stopPropagation());
             document.getElementById('ftDateToUi')?.addEventListener('click', (e) => e.stopPropagation());
             dateControl?.addEventListener('click', (e) => e.stopPropagation());
-            document.getElementById('ftDateToday')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const today = getSaudiTodayIso();
-                document.getElementById('ftDateFromUi').value = today;
-                document.getElementById('ftDateToUi').value = today;
-                syncAndApplyDates();
-            });
 
             document.getElementById('ftMoreBtn')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3862,6 +4002,14 @@
         let managedCompanies = [];
         let managedCities = [];
 
+        function userLabelFromDraft(d) {
+            return String(d?.assignedTo || d?.entryAgent || '').trim() || UNASSIGNED_USER;
+        }
+
+        function userLabelFromQueue(q) {
+            return String(q?.assignedTo || '').trim() || UNASSIGNED_USER;
+        }
+
         function escapeHtml(value) {
             return String(value || '')
                 .replace(/&/g, '&amp;')
@@ -3876,6 +4024,123 @@
                 month: '2-digit',
                 day: '2-digit'
             }).format(new Date());
+        }
+
+        const TRACK_DATE_FILTER_KEY = 'toyota_delivery_track_date_v1';
+        let trackDatePreset = 'today';
+
+        function trackDatePresetLabel(preset) {
+            const labels = {
+                today: 'Today',
+                yesterday: 'Yesterday',
+                last_7: 'Last 7 days',
+                this_month: 'This month (MTD)',
+                last_month: 'Last month',
+                all: 'All dates',
+                custom: 'Custom range'
+            };
+            return labels[preset] || preset || 'Today';
+        }
+
+        function loadTrackDateFilter() {
+            try {
+                const raw = localStorage.getItem(TRACK_DATE_FILTER_KEY);
+                if (raw) return JSON.parse(raw);
+            } catch (_) { /* ignore */ }
+            return { preset: 'today', from: '', to: '' };
+        }
+
+        function saveTrackDateFilter() {
+            try {
+                const { from, to } = getTrackFilter();
+                localStorage.setItem(TRACK_DATE_FILTER_KEY, JSON.stringify({
+                    preset: trackDatePreset,
+                    from,
+                    to
+                }));
+            } catch (_) { /* ignore */ }
+        }
+
+        function addDaysIso(iso, delta) {
+            const parts = String(iso || '').split('-').map(Number);
+            if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return iso;
+            const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + delta, 12, 0, 0));
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Riyadh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(d);
+        }
+
+        function resolveTrackDatePeriod(preset) {
+            const key = preset || trackDatePreset || 'today';
+            const today = getSaudiTodayIso();
+            const [y, m] = today.split('-').map(Number);
+            if (key === 'today') return { from: today, to: today };
+            if (key === 'yesterday') {
+                const yd = addDaysIso(today, -1);
+                return { from: yd, to: yd };
+            }
+            if (key === 'last_7') return { from: addDaysIso(today, -6), to: today };
+            if (key === 'this_month') {
+                return { from: `${y}-${String(m).padStart(2, '0')}-01`, to: today };
+            }
+            if (key === 'last_month') {
+                const ly = m === 1 ? y - 1 : y;
+                const lm = m === 1 ? 12 : m - 1;
+                const monthStr = `${ly}-${String(lm).padStart(2, '0')}`;
+                const lastDay = new Date(ly, lm, 0).getDate();
+                return {
+                    from: `${monthStr}-01`,
+                    to: `${monthStr}-${String(lastDay).padStart(2, '0')}`
+                };
+            }
+            if (key === 'all') return { from: '', to: '' };
+            return {
+                from: String(document.getElementById('ftDateFromUi')?.value || '').trim(),
+                to: String(document.getElementById('ftDateToUi')?.value || '').trim()
+            };
+        }
+
+        function syncTrackDateCustomVisibility() {
+            const customEl = document.getElementById('ftDateCustomFields');
+            if (customEl) customEl.hidden = trackDatePreset !== 'custom';
+        }
+
+        function applyTrackDatePreset(preset, opts = {}) {
+            trackDatePreset = preset || 'today';
+            const sel = document.getElementById('ftDatePreset');
+            if (sel && sel.value !== trackDatePreset) sel.value = trackDatePreset;
+            syncTrackDateCustomVisibility();
+            const { from, to } = resolveTrackDatePeriod(trackDatePreset);
+            ['trackDateFrom', 'ftDateFromUi'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = from;
+            });
+            ['trackDateTo', 'ftDateToUi'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = to;
+            });
+            if (!opts.skipSave) saveTrackDateFilter();
+            if (!opts.skipApply) {
+                renderFilterChips();
+                applyTrackFilter();
+            }
+        }
+
+        function initTrackDateFromStorage() {
+            const saved = loadTrackDateFilter();
+            trackDatePreset = saved.preset || 'today';
+            const sel = document.getElementById('ftDatePreset');
+            if (sel) sel.value = trackDatePreset;
+            if (trackDatePreset === 'custom') {
+                const fromUi = document.getElementById('ftDateFromUi');
+                const toUi = document.getElementById('ftDateToUi');
+                if (fromUi) fromUi.value = saved.from || '';
+                if (toUi) toUi.value = saved.to || '';
+            }
+            applyTrackDatePreset(trackDatePreset, { skipSave: true, skipApply: true });
         }
 
         function draftEventIso(d) {
@@ -4069,7 +4334,9 @@
 
         function dateScopedDrafts() {
             const legacy = getXferDateFilter();
-            let list = (allDrafts || []).filter(matchesAdminMonth);
+            let list = hasActiveTrackFilter() || trackDatePreset === 'all'
+                ? (allDrafts || [])
+                : (allDrafts || []).filter(matchesAdminMonth);
             if (legacy) {
                 list = list.filter((d) => draftEventIso(d) === legacy);
             }
@@ -4110,15 +4377,18 @@
             return set;
         }
 
-        function filteredDrafts() {
+        function filteredDrafts(opts = {}) {
             let list = dateScopedDrafts();
             if (selectedCompany) {
                 list = list.filter((d) => draftMatchesCompanyKey(d, selectedCompany));
             }
+            if (opts.coordinator !== false && uiFilters.coordinator) {
+                list = list.filter((d) => userLabelFromDraft(d) === uiFilters.coordinator);
+            }
             return list;
         }
 
-        function filteredQueue() {
+        function filteredQueue(opts = {}) {
             let queue;
             const vins = scopedVinSet();
             if (!vins) queue = allQueue || [];
@@ -4129,11 +4399,16 @@
             if (companyVins) {
                 queue = queue.filter((q) => companyVins.has(normVinKey(q.vin)));
             }
+            if (opts.coordinator !== false && uiFilters.coordinator) {
+                queue = queue.filter((q) => userLabelFromQueue(q) === uiFilters.coordinator);
+            }
             return queue;
         }
 
         function vehiclesFromVinSet(vins) {
             const byVin = vehicleByVin();
+            if (!_vinLookup) rebuildVinLookup();
+            const { draftByVin, queueByVin } = _vinLookup;
             const list = [];
             (vins || new Set()).forEach((vin) => {
                 const v = byVin.get(vin);
@@ -4141,8 +4416,8 @@
                     list.push(v);
                     return;
                 }
-                const draft = (allDrafts || []).find((d) => normVinKey(d.vin) === vin);
-                const q = (allQueue || []).find((item) => normVinKey(item.vin) === vin);
+                const draft = draftByVin.get(vin);
+                const q = queueByVin.get(vin);
                 list.push({
                     vin,
                     product: draft?.product || q?.product || '',
@@ -4248,12 +4523,16 @@
             const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
 
             if (!from && !to) {
-                meta.innerHTML = `Showing <strong>all</strong> · <strong>${(allVehicles || []).length}</strong> vehicles · <strong>${(allDrafts || []).length}</strong> drafts · queue <strong>${(allQueue || []).length}</strong> (delivered <strong>${(allQueue || []).filter((q) => q.agentStatus === 'delivered').length}</strong>)${searchBit}${companyBit} · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                const presetLabel = trackDatePresetLabel(trackDatePreset);
+                meta.innerHTML = `Showing <strong>all</strong> · <strong>${(allVehicles || []).length}</strong> vehicles · <strong>${(allDrafts || []).length}</strong> drafts · queue <strong>${(allQueue || []).length}</strong> (delivered <strong>${(allQueue || []).filter((q) => q.agentStatus === 'delivered').length}</strong>)${searchBit}${companyBit} · period <strong>${presetLabel}</strong> · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 updateCompanyFilterChip();
                 renderFilterChips();
                 return;
             }
-            meta.innerHTML = `${showing}${searchBit}${companyBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
+            const presetBit = trackDatePreset !== 'custom'
+                ? ` · <strong>${escapeHtml(trackDatePresetLabel(trackDatePreset))}</strong>`
+                : '';
+            meta.innerHTML = `${showing}${searchBit}${companyBit}${presetBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
                 <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> 
                 (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
             updateCompanyFilterChip();
@@ -4285,7 +4564,6 @@
         }
 
         function updateXferDateLabel() {
-            updateTrackFilterMeta();
             const label = document.getElementById('xferDateLabel');
             if (!label) return;
             const date = getXferDateFilter();
@@ -4293,13 +4571,20 @@
         }
 
         function refreshTransferDashboard() {
+            if (!adminAuthed) return;
+            if (refreshDashboardTimer) clearTimeout(refreshDashboardTimer);
+            refreshDashboardTimer = setTimeout(() => {
+                refreshDashboardTimer = null;
+                refreshTransferDashboardImpl();
+            }, 80);
+        }
+
+        function refreshTransferDashboardImpl() {
+            try {
             applyDeliveryNoteDateBounds();
             updateXferDateLabel();
             pruneStaleUiFilters();
-            populateDnMonthFilter();
-            renderDnStatsBar();
-            renderVinHistoryPanel();
-            renderLastMonthsFolders();
+            populateDnMonthFilterIfNeeded();
             const draftsBase = filteredDrafts();
             const queueBase = filteredQueue();
             if (selectedCompany && !draftsBase.some((d) => draftMatchesCompanyKey(d, selectedCompany))) {
@@ -4322,19 +4607,42 @@
             const vehicles = searchQ
                 ? applyDisplayFilters(searchSystemVehicles(searchQ), 'vehicle')
                 : applyDisplayFilters(filteredVehicleList(), 'vehicle');
-            renderTransferDashboard(searchQ ? drafts : filteredDrafts());
-            renderTable(vehicles);
-            renderQueueTable(queue);
+
+            _userDashCount = countCoordinatorsQuick();
+            setNavCount('navCountUsers', _userDashCount);
+
+            if (isAdminPaneActive('overview')) {
+                renderDnStatsBar();
+                renderVinHistoryPanel();
+                renderLastMonthsFolders();
+                renderDeliveredOfTotalChart();
+            }
+            if (isAdminPaneActive('analytics')) {
+                renderTransferDashboard(searchQ ? drafts : filteredDrafts());
+            }
+            if (isAdminPaneActive('users')) {
+                renderUserDashboard();
+            }
+            if (isAdminPaneActive('pdfs') || searchQ) {
+                renderAllPdfsBrowser(drafts);
+            }
+            if (isAdminPaneActive('queue') || searchQ) {
+                renderQueueTable(queue);
+                renderQueueStats(computeQueueStats(queue));
+                setFoldCount('queueStatsFoldCount', queue.length);
+            }
             const warehouseDrafts = drafts.filter(isWarehouseAdminDraft);
-            const memoDrafts = drafts.filter((d) => !isWarehouseAdminDraft(d));
-            renderAllPdfsBrowser(drafts);
-            renderWarehouseDraftsTable(warehouseDrafts);
-            renderQueueStats(computeQueueStats(queue));
-            setFoldCount('queueStatsFoldCount', queue.length);
+            if (isAdminPaneActive('pdfs') || isAdminPaneActive('yard') || searchQ) {
+                renderWarehouseDraftsTable(warehouseDrafts);
+            }
+            if (isAdminPaneActive('overview') || searchQ) {
+                renderTable(vehicles);
+                setFoldCount('inventoryFoldCount', vehicles.length);
+            }
+
             setFoldCount('draftsFoldCount', drafts.length);
             setFoldCount('warehouseDraftsFoldCount', warehouseDrafts.length);
             setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
-            setFoldCount('inventoryFoldCount', vehicles.length);
             if (searchQ) {
                 openFold('inventorySection');
                 openFold('queueSection');
@@ -4345,6 +4653,16 @@
             renderFilterChips();
             syncDateControlsFromNatives();
             updateTrackFilterMeta();
+            } catch (err) {
+                console.error('[admin refresh]', err);
+            }
+        }
+
+        function populateDnMonthFilterIfNeeded() {
+            const n = (allDrafts || []).length;
+            if (n === _cachedDraftCount) return;
+            _cachedDraftCount = n;
+            populateDnMonthFilter();
         }
 
         function computeClientDnStats(drafts) {
@@ -5569,6 +5887,189 @@
             else highlightSelectedCompany();
         }
 
+        /** Cars / notes / queue status per coordinator within the active date filter. */
+        function buildUserDashboardRows() {
+            const drafts = filteredDrafts({ coordinator: false })
+                .filter((d) => !isWarehouseAdminDraft(d) && !isShowroomAdminDraft(d));
+            const queue = filteredQueue({ coordinator: false });
+            const map = new Map();
+
+            const ensure = (name) => {
+                if (!map.has(name)) {
+                    map.set(name, {
+                        name,
+                        cars: 0,
+                        notes: 0,
+                        delivered: 0,
+                        pending: 0,
+                        inStock: 0,
+                        ready: 0
+                    });
+                }
+                return map.get(name);
+            };
+
+            drafts.forEach((d) => {
+                const row = ensure(userLabelFromDraft(d));
+                row.notes += 1;
+                row.cars += draftCarWeight(d);
+            });
+
+            queue.forEach((q) => {
+                const row = ensure(userLabelFromQueue(q));
+                const st = q.agentStatus || '';
+                if (st === 'delivered') row.delivered += 1;
+                else if (st === 'in_stock') row.inStock += 1;
+                else if (st === 'ready_for_delivery') row.ready += 1;
+                else row.pending += 1;
+            });
+
+            return Array.from(map.values())
+                .sort((a, b) => b.cars - a.cars || b.delivered - a.delivered || a.name.localeCompare(b.name, 'ar'));
+        }
+
+        function userDashPeriodLabel() {
+            const { from, to } = getTrackFilter();
+            if (from && to && from === to) return `${trackDatePresetLabel(trackDatePreset)} · ${from}`;
+            if (from || to) {
+                return `${trackDatePresetLabel(trackDatePreset)} · ${from || '…'} → ${to || '…'}`;
+            }
+            return trackDatePresetLabel(trackDatePreset);
+        }
+
+        function selectUserDashboard(name) {
+            const next = String(name || '').trim();
+            if (!next || next === UNASSIGNED_USER) return;
+            uiFilters.coordinator = uiFilters.coordinator === next ? '' : next;
+            renderAllFtSelects();
+            renderFilterChips();
+            refreshTransferDashboard();
+        }
+
+        function clearUserDashboardSelection() {
+            if (!uiFilters.coordinator) return;
+            uiFilters.coordinator = '';
+            renderAllFtSelects();
+            renderFilterChips();
+            refreshTransferDashboard();
+        }
+
+        function renderUserDashboard() {
+            try {
+            const rowsAll = buildUserDashboardRows();
+            _userDashCount = rowsAll.length;
+            setNavCount('navCountUsers', rowsAll.length);
+
+            const periodEl = document.getElementById('userDashPeriodLabel');
+            if (periodEl) periodEl.textContent = userDashPeriodLabel();
+
+            const selected = String(uiFilters.coordinator || '').trim();
+            const q = String(userDashSearch || '').trim().toLowerCase();
+            const rows = q
+                ? rowsAll.filter((r) => r.name.toLowerCase().includes(q))
+                : rowsAll;
+
+            const filterBar = document.getElementById('userDashFilterBar');
+            const filterName = document.getElementById('userDashFilterName');
+            if (filterBar) filterBar.hidden = !selected;
+            if (filterName) filterName.textContent = selected || '';
+
+            const nameList = document.getElementById('userDashNameList');
+            if (nameList) {
+                if (!rowsAll.length) {
+                    nameList.innerHTML = '<p class="dh-user-empty">لا توجد بيانات في هذه الفترة</p>';
+                } else {
+                    nameList.innerHTML = rows.map((r) => {
+                        const active = selected === r.name ? ' active' : '';
+                        return `<button type="button" class="pbi-name${active}" data-user-name="${escapeHtml(r.name)}">
+                            <span class="nm">${escapeHtml(r.name)}</span>
+                            <span class="meta">${r.cars} cars · ${r.delivered} delivered · ${r.notes} notes</span>
+                        </button>`;
+                    }).join('') || '<p class="dh-user-empty">No users match search.</p>';
+                    nameList.querySelectorAll('[data-user-name]').forEach((btn) => {
+                        btn.addEventListener('click', () => selectUserDashboard(btn.dataset.userName));
+                    });
+                }
+            }
+
+            const totalCars = rowsAll.reduce((s, r) => s + r.cars, 0);
+            const totalDelivered = rowsAll.reduce((s, r) => s + r.delivered, 0);
+            const totalPending = rowsAll.reduce((s, r) => s + r.pending + r.inStock + r.ready, 0);
+            const totalNotes = rowsAll.reduce((s, r) => s + r.notes, 0);
+            const focus = selected ? rowsAll.find((r) => r.name === selected) : null;
+
+            const kpiHost = document.getElementById('userDashKpis');
+            if (kpiHost) {
+                const cards = focus
+                    ? [
+                        { lab: 'Cars', val: focus.cars, ok: true },
+                        { lab: 'Delivered', val: focus.delivered, ok: true },
+                        { lab: 'Pending', val: focus.pending + focus.inStock + focus.ready },
+                        { lab: 'Delivery notes', val: focus.notes },
+                        { lab: 'Share of cars', val: totalCars ? `${Math.round((focus.cars / totalCars) * 1000) / 10}%` : '0%' },
+                        { lab: 'Share delivered', val: totalDelivered ? `${Math.round((focus.delivered / totalDelivered) * 1000) / 10}%` : '0%' }
+                    ]
+                    : [
+                        { lab: 'Coordinators', val: rowsAll.length },
+                        { lab: 'Total cars', val: totalCars, ok: true },
+                        { lab: 'Delivered', val: totalDelivered, ok: true },
+                        { lab: 'In queue', val: totalPending },
+                        { lab: 'Delivery notes', val: totalNotes },
+                        { lab: 'Avg cars / user', val: rowsAll.length ? Math.round((totalCars / rowsAll.length) * 10) / 10 : 0 }
+                    ];
+                kpiHost.innerHTML = cards.map((c) => `
+                    <div class="pbi-kpi${c.ok ? ' is-ok' : ''}">
+                        <div class="lab">${c.lab}</div>
+                        <div class="val">${c.val}</div>
+                    </div>
+                `).join('');
+            }
+
+            const chartRows = (focus ? [focus] : rowsAll)
+                .filter((r) => r.cars > 0)
+                .map((r) => ({ name: r.name, count: r.cars }));
+            renderHorizontalBars(
+                document.getElementById('userDashChart'),
+                chartRows,
+                '#6C5CE7'
+            );
+
+            const tbody = document.getElementById('userDashTableBody');
+            if (tbody) {
+                if (!rowsAll.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد بيانات مستخدمين في هذه الفترة</td></tr>';
+                } else {
+                tbody.innerHTML = rowsAll.map((r) => {
+                    const share = totalCars ? Math.round((r.cars / totalCars) * 1000) / 10 : 0;
+                    const active = selected === r.name ? ' is-active' : '';
+                    return `<tr class="emp-row dh-user-row${active}" data-user-name="${escapeHtml(r.name)}" tabindex="0" role="button">
+                        <td class="tl"><span class="emp-name">${escapeHtml(r.name)}</span></td>
+                        <td class="num"><strong>${r.cars}</strong></td>
+                        <td class="num">${r.notes}</td>
+                        <td class="num">${r.delivered}</td>
+                        <td class="num">${r.inStock}</td>
+                        <td class="num">${r.ready}</td>
+                        <td class="num">${r.pending}</td>
+                        <td class="num">${share}%</td>
+                    </tr>`;
+                }).join('');
+                tbody.querySelectorAll('[data-user-name]').forEach((row) => {
+                    const open = () => selectUserDashboard(row.dataset.userName);
+                    row.addEventListener('click', open);
+                    row.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            open();
+                        }
+                    });
+                });
+                }
+            }
+            } catch (err) {
+                console.error('[user dashboard]', err);
+            }
+        }
+
         function renderTransferDashboard(drafts) {
             const list = Array.isArray(drafts) ? drafts : filteredDrafts();
             const navList = dateScopedDrafts();
@@ -5703,34 +6204,18 @@
 
         document.getElementById('btnTrackApply')?.addEventListener('click', () => {
             pushDatesToNatives();
+            saveTrackDateFilter();
             applyTrackFilter();
         });
         document.getElementById('btnTrackToday')?.addEventListener('click', () => {
-            const today = getSaudiTodayIso();
-            document.getElementById('trackDateFrom').value = today;
-            document.getElementById('trackDateTo').value = today;
-            const fromUi = document.getElementById('ftDateFromUi');
-            const toUi = document.getElementById('ftDateToUi');
-            if (fromUi) fromUi.value = today;
-            if (toUi) toUi.value = today;
-            syncDateControlsFromNatives();
-            applyTrackFilter();
+            applyTrackDatePreset('today');
         });
         document.getElementById('btnTrackClear')?.addEventListener('click', () => {
-            document.getElementById('trackDateFrom').value = '';
-            document.getElementById('trackDateTo').value = '';
             document.getElementById('trackDateType').value = 'delivery_note';
             document.getElementById('xferDateFilter').value = '';
-            const fromUi = document.getElementById('ftDateFromUi');
-            const toUi = document.getElementById('ftDateToUi');
-            const typeUi = document.getElementById('ftDateTypeUi');
-            if (fromUi) fromUi.value = '';
-            if (toUi) toUi.value = '';
-            if (typeUi) typeUi.value = 'delivery_note';
             selectedCompany = '';
             uiFilters = { search: '', branch: '', status: '', coordinator: '' };
-            const typeEl = document.getElementById('trackDateType');
-            if (typeEl) typeEl.value = 'delivery_note';
+            const typeUi = document.getElementById('ftDateTypeUi');
             if (typeUi) typeUi.value = 'delivery_note';
             applyDeliveryNoteDateBounds();
             const ftSearch = document.getElementById('ftSearchInput');
@@ -5738,10 +6223,8 @@
             if (ftSearch) ftSearch.value = '';
             if (legacySearch) legacySearch.value = '';
             document.getElementById('ftSearchClear')?.classList.remove('is-visible');
-            syncDateControlsFromNatives();
             renderAllFtSelects();
-            renderFilterChips();
-            applyTrackFilter();
+            applyTrackDatePreset('today');
         });
         document.getElementById('trackDateType')?.addEventListener('change', () => {
             updateTrackFilterHint();
@@ -5867,35 +6350,49 @@
             if (e.key === 'Enter') addManagedOption('cities', 'newCityInput', 'cityOptionsStatus');
         });
 
-        async function loadDashboard() {
-            const [invRes, queueRes] = await Promise.all([
-                fetch('/api/delivery-inventory'),
-                fetch('/api/delivery-coordinator/queue?admin=1')
-            ]);
-            const data = await invRes.json();
-            const queueData = await queueRes.json();
-            if (!invRes.ok) throw new Error(data.error || 'فشل تحميل البيانات');
-            allVehicles = data.vehicles || [];
-            lastDashboard = data.dashboard || null;
-            renderStats(data.dashboard);
-            if (queueRes.ok) {
-                allQueue = queueData.queue || [];
-                allDrafts = queueData.drafts || [];
-                allShowroomParking = queueData.showroomParking || [];
-                showroomParkingOccupancy = queueData.showroomParkingOccupancy || null;
-            } else {
-                allQueue = [];
-                allDrafts = [];
-                allShowroomParking = [];
-                showroomParkingOccupancy = null;
+        async function loadDashboard(opts = {}) {
+            if (dashboardLoading && !opts.force) return;
+            dashboardLoading = true;
+            const seq = ++dashboardLoadSeq;
+            if (!opts.quiet) setUploadStatus('جاري تحميل البيانات…', '');
+            try {
+                const [invRes, queueRes] = await Promise.all([
+                    fetch('/api/delivery-inventory'),
+                    fetch('/api/delivery-coordinator/queue?admin=1')
+                ]);
+                if (seq !== dashboardLoadSeq) return;
+                const data = await invRes.json();
+                const queueData = await queueRes.json();
+                if (!invRes.ok) throw new Error(data.error || 'فشل تحميل البيانات');
+                allVehicles = data.vehicles || [];
+                lastDashboard = data.dashboard || null;
+                renderStats(data.dashboard);
+                if (queueRes.ok) {
+                    allQueue = queueData.queue || [];
+                    allDrafts = queueData.drafts || [];
+                    allShowroomParking = queueData.showroomParking || [];
+                    showroomParkingOccupancy = queueData.showroomParkingOccupancy || null;
+                } else {
+                    allQueue = [];
+                    allDrafts = [];
+                    allShowroomParking = [];
+                    showroomParkingOccupancy = null;
+                }
+                _cachedDraftCount = -1;
+                _vinLookup = null;
+                rebuildVinLookup();
+                fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
+                loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
+                renderShowroomParkingTable();
+                updateFoldCounts();
+                refreshTransferDashboard();
+                syncRestoreMetaFromDashboard();
+            } catch (err) {
+                if (!opts.quiet) setUploadStatus(err.message, 'err');
+                throw err;
+            } finally {
+                dashboardLoading = false;
             }
-            // Backfill archived delivery-note files for admin (non-blocking)
-            fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
-            loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
-            renderShowroomParkingTable();
-            updateFoldCounts();
-            refreshTransferDashboard();
-            syncRestoreMetaFromDashboard();
         }
 
         function bindDraftActionButtons(tbody) {
@@ -6247,10 +6744,6 @@
             updateTrackFilterMeta();
             setUploadStatus('تم مسح البيانات', 'ok');
         });
-
-        initPremiumFilterToolbar();
-        initPdfBrowserControls();
-        initDnMonthFilter();
     </script>
     <script src="delivery-hub-live.js"></script>
 </body>
