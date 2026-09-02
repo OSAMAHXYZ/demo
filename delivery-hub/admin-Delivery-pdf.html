@@ -2829,7 +2829,7 @@
                     `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة${modeNote}`,
                     'ok'
                 );
-                await loadDashboard({ force: true });
+                await loadDashboard({ force: true, quiet: true });
                 if (data.draftsImported) openFold('draftsSection', { scroll: true });
                 else openFold('inventorySection', { scroll: true });
             } catch (err) {
@@ -3016,9 +3016,17 @@
         } catch (_) { /* ignore */ }
 
         function setUploadStatus(msg, type) {
+            const cls = 'hub-status' + (type ? ` ${type}` : '');
             const el = document.getElementById('uploadStatus');
-            el.textContent = msg || '';
-            el.className = 'hub-status' + (type ? ` ${type}` : '');
+            if (el) {
+                el.textContent = msg || '';
+                el.className = cls;
+            }
+            const top = document.getElementById('adminUploadStatus');
+            if (top) {
+                top.textContent = msg || '';
+                top.className = cls;
+            }
         }
 
         function excelStamp() {
@@ -3496,6 +3504,7 @@
 
         function renderTable(list) {
             const tbody = document.getElementById('tableBody');
+            if (!tbody) return;
             if (!list.length) {
                 tbody.innerHTML = '<tr><td colspan="9" class="hub-empty">لا توجد نتائج</td></tr>';
                 return;
@@ -6668,8 +6677,10 @@
         }
 
         function renderQueueStats(stats) {
+            const host = document.getElementById('queueStats');
+            if (!host) return;
             const s = stats || {};
-            document.getElementById('queueStats').innerHTML = `
+            host.innerHTML = `
                 <div class="hub-stat"><span>قائمة المنسق</span><b>${s.total || 0}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>Waiting for delivery</span><b>${s.available || 0}</b></div>
                 <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${s.in_stock || 0}</b></div>
@@ -6691,6 +6702,7 @@
 
         function renderQueueTable(queue) {
             const tbody = document.getElementById('queueBody');
+            if (!tbody) return;
             if (!queue.length) {
                 tbody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد شاسيه — أضف من صفحة المنسق</td></tr>';
                 return;
