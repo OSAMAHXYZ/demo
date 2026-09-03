@@ -54,23 +54,22 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   min-height: 100vh;
 }
 
-/* —— Layout: sidebar + main (scroll forced by page shell) —— */
+/* —— Layout: fixed sidebar; page shell (#adminApp) scrolls —— */
 .admin-light .admin-layout {
-  display: grid;
-  grid-template-columns: var(--hc-sidebar) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  align-items: stretch;
-  min-height: 100vh;
-  height: 100%;
-  overflow: hidden;
+  display: block;
+  min-height: 100%;
+  height: auto;
+  overflow: visible;
 }
 
 .admin-light .admin-sidebar {
-  position: relative;
+  position: fixed;
+  left: 0;
   top: 0;
-  align-self: stretch;
-  height: 100%;
-  max-height: none;
+  bottom: 0;
+  width: var(--hc-sidebar);
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   padding: 22px 18px;
   background: var(--hc-surface);

@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260903a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903e">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903f">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2002,13 +2002,14 @@
             .admin-filters-sticky { top: 0; }
         }
 
-        /* —— FORCE SCROLL: fixed app shell, main column scrolls —— */
+        /* —— FORCE SCROLL v2: #adminApp scrolls, sidebar fixed —— */
         html.admin-scroll-lock,
-        html.admin-scroll-lock body.delivery-hub.admin-console.admin-light {
+        html.admin-scroll-lock body {
             height: 100% !important;
             max-height: 100% !important;
             overflow: hidden !important;
             overscroll-behavior: none !important;
+            touch-action: manipulation !important;
         }
         body.delivery-hub.admin-console.admin-light #adminApp.hub-shell {
             position: fixed !important;
@@ -2019,62 +2020,82 @@
             max-height: 100dvh !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
+            overflow-x: hidden !important;
+            overflow-y: scroll !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior: contain !important;
+            touch-action: pan-y !important;
             animation: none !important;
             transform: none !important;
             z-index: 20 !important;
             background: #000 !important;
+            scrollbar-gutter: stable;
         }
         body.delivery-hub.admin-console.admin-light #adminApp.hub-shell.hidden {
             display: none !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-layout {
-            height: 100% !important;
-            max-height: 100% !important;
-            min-height: 0 !important;
-            overflow: hidden !important;
-            display: grid !important;
-            grid-template-columns: var(--hc-sidebar, 248px) minmax(0, 1fr) !important;
-            grid-template-rows: minmax(0, 1fr) !important;
-            align-items: stretch !important;
+            display: block !important;
+            width: 100% !important;
+            min-height: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            grid-template-columns: none !important;
+            grid-template-rows: none !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-sidebar {
-            position: relative !important;
-            top: auto !important;
-            align-self: stretch !important;
-            height: 100% !important;
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: var(--hc-sidebar, 248px) !important;
+            height: 100vh !important;
+            height: 100dvh !important;
             max-height: none !important;
+            align-self: auto !important;
             overflow: hidden !important;
+            z-index: 40 !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-sidebar__nav {
             overflow: auto !important;
             overscroll-behavior: contain !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-main {
+            display: block !important;
+            width: auto !important;
             min-width: 0 !important;
-            min-height: 0 !important;
-            height: 100% !important;
-            max-height: 100% !important;
-            overflow-x: hidden !important;
-            overflow-y: scroll !important;
-            -webkit-overflow-scrolling: touch !important;
-            overscroll-behavior: contain !important;
-            touch-action: pan-y !important;
+            min-height: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            margin-left: var(--hc-sidebar, 248px) !important;
+            overflow: visible !important;
+            padding: 18px 22px 48px !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-workspace {
+            display: block !important;
             height: auto !important;
             max-height: none !important;
             overflow: visible !important;
         }
+        body.delivery-hub.admin-console.admin-light .admin-pane {
+            display: block !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
         @media (max-width: 900px) {
-            body.delivery-hub.admin-console.admin-light .admin-layout {
-                grid-template-columns: 1fr !important;
-                grid-template-rows: auto minmax(0, 1fr) !important;
-            }
             body.delivery-hub.admin-console.admin-light .admin-sidebar {
+                position: sticky !important;
+                left: auto !important;
+                top: 0 !important;
+                bottom: auto !important;
+                width: 100% !important;
                 height: auto !important;
-                max-height: none !important;
-                overflow: visible !important;
+                z-index: 40 !important;
+            }
+            body.delivery-hub.admin-console.admin-light .admin-main {
+                margin-left: 0 !important;
+                padding: 12px !important;
             }
         }
 
@@ -3234,45 +3255,84 @@
 
         function forceAdminScrollShell() {
             document.documentElement.classList.add('admin-scroll-lock');
+            document.body.classList.add('admin-scroll-lock');
             const app = document.getElementById('adminApp');
             const layout = app?.querySelector('.admin-layout');
             const main = app?.querySelector('.admin-main');
             const sidebar = app?.querySelector('.admin-sidebar');
+            const clearBox = (el) => {
+                if (!el) return;
+                ['height', 'max-height', 'min-height', 'overflow', 'overflow-x', 'overflow-y',
+                    'grid-template-rows', 'grid-template-columns', 'align-items', 'display',
+                    'position', 'top', 'left', 'bottom', 'right', 'margin-left', 'width', 'inset'
+                ].forEach((p) => el.style.removeProperty(p));
+            };
+            clearBox(app);
+            clearBox(layout);
+            clearBox(main);
+            clearBox(sidebar);
+
+            document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+            document.documentElement.style.setProperty('height', '100%', 'important');
+            document.body.style.setProperty('overflow', 'hidden', 'important');
+            document.body.style.setProperty('height', '100%', 'important');
+
             if (app) {
                 app.style.setProperty('position', 'fixed', 'important');
                 app.style.setProperty('inset', '0', 'important');
                 app.style.setProperty('width', '100%', 'important');
                 app.style.setProperty('height', '100%', 'important');
                 app.style.setProperty('max-height', '100dvh', 'important');
-                app.style.setProperty('overflow', 'hidden', 'important');
                 app.style.setProperty('margin', '0', 'important');
                 app.style.setProperty('padding', '0', 'important');
+                app.style.setProperty('overflow-x', 'hidden', 'important');
+                app.style.setProperty('overflow-y', 'scroll', 'important');
+                app.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+                app.style.setProperty('overscroll-behavior', 'contain', 'important');
+                app.style.setProperty('touch-action', 'pan-y', 'important');
                 app.style.setProperty('transform', 'none', 'important');
                 app.style.setProperty('animation', 'none', 'important');
+                app.style.setProperty('z-index', '20', 'important');
             }
             if (layout) {
-                layout.style.setProperty('height', '100%', 'important');
-                layout.style.setProperty('max-height', '100%', 'important');
-                layout.style.setProperty('min-height', '0', 'important');
-                layout.style.setProperty('overflow', 'hidden', 'important');
-                layout.style.setProperty('display', 'grid', 'important');
-                layout.style.setProperty('grid-template-rows', 'minmax(0, 1fr)', 'important');
-                layout.style.setProperty('align-items', 'stretch', 'important');
+                layout.style.setProperty('display', 'block', 'important');
+                layout.style.setProperty('height', 'auto', 'important');
+                layout.style.setProperty('max-height', 'none', 'important');
+                layout.style.setProperty('min-height', '100%', 'important');
+                layout.style.setProperty('overflow', 'visible', 'important');
             }
             if (sidebar) {
-                sidebar.style.setProperty('position', 'relative', 'important');
-                sidebar.style.setProperty('height', '100%', 'important');
+                sidebar.style.setProperty('position', 'fixed', 'important');
+                sidebar.style.setProperty('left', '0', 'important');
+                sidebar.style.setProperty('top', '0', 'important');
+                sidebar.style.setProperty('bottom', '0', 'important');
+                sidebar.style.setProperty('width', '248px', 'important');
+                sidebar.style.setProperty('height', '100dvh', 'important');
                 sidebar.style.setProperty('overflow', 'hidden', 'important');
+                sidebar.style.setProperty('z-index', '40', 'important');
             }
             if (main) {
-                main.style.setProperty('min-height', '0', 'important');
-                main.style.setProperty('height', '100%', 'important');
-                main.style.setProperty('max-height', '100%', 'important');
-                main.style.setProperty('overflow-x', 'hidden', 'important');
-                main.style.setProperty('overflow-y', 'scroll', 'important');
-                main.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
-                main.style.setProperty('overscroll-behavior', 'contain', 'important');
-                main.style.setProperty('touch-action', 'pan-y', 'important');
+                main.style.setProperty('display', 'block', 'important');
+                main.style.setProperty('margin-left', '248px', 'important');
+                main.style.setProperty('height', 'auto', 'important');
+                main.style.setProperty('max-height', 'none', 'important');
+                main.style.setProperty('min-height', '100%', 'important');
+                main.style.setProperty('overflow', 'visible', 'important');
+            }
+            // Ensure wheel/trackpad always moves the app scroller
+            if (!window.__adminScrollWheelBound) {
+                window.__adminScrollWheelBound = true;
+                const onWheel = (e) => {
+                    if (!adminAuthed) return;
+                    const shell = document.getElementById('adminApp');
+                    if (!shell || shell.classList.contains('hidden')) return;
+                    if (e.target.closest?.('.admin-sidebar__nav, .ft-panel, .hub-table-wrap, .xl-table-wrap, .ops-schedule-wrap, .raw-gap-table-wrap')) {
+                        return;
+                    }
+                    shell.scrollTop += e.deltaY;
+                    e.preventDefault();
+                };
+                document.addEventListener('wheel', onWheel, { passive: false, capture: true });
             }
         }
 
@@ -3294,12 +3354,19 @@
             loadDashboard().catch((err) => setUploadStatus(err.message, 'err'));
             resumeLiveSync();
             requestAnimationFrame(forceAdminScrollShell);
-            setTimeout(forceAdminScrollShell, 250);
+            setTimeout(forceAdminScrollShell, 100);
+            setTimeout(forceAdminScrollShell, 500);
+            setTimeout(forceAdminScrollShell, 1500);
         }
 
         function lockAdmin() {
             adminAuthed = false;
             document.documentElement.classList.remove('admin-scroll-lock');
+            document.body.classList.remove('admin-scroll-lock');
+            document.documentElement.style.removeProperty('overflow');
+            document.documentElement.style.removeProperty('height');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('height');
             document.getElementById('adminApp').classList.add('hidden');
             document.getElementById('adminGate').classList.remove('hidden');
             document.getElementById('adminPassword').value = '';
