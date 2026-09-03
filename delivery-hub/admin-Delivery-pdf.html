@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260903a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903a">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -1987,7 +1987,7 @@
         }
         .admin-filters-sticky {
             position: sticky;
-            top: 148px;
+            top: 0;
             z-index: 35;
         }
         @media (max-width: 900px) {
@@ -1999,7 +1999,7 @@
                 scrollbar-width: thin;
             }
             .admin-nav__btn { white-space: nowrap; flex: 0 0 auto; }
-            .admin-filters-sticky { top: 72px; }
+            .admin-filters-sticky { top: 0; }
         }
     </style>
 </head>
@@ -3808,7 +3808,16 @@
                 apexChartsByEl.delete(el);
             }
             el.innerHTML = '';
-            const chart = new ApexCharts(el, options);
+            const opts = options || {};
+            const chart = new ApexCharts(el, {
+                ...opts,
+                theme: { ...(opts.theme || {}), mode: 'dark' },
+                chart: {
+                    ...(opts.chart || {}),
+                    background: 'transparent',
+                    foreColor: '#94a3b8'
+                }
+            });
             chart.render();
             apexChartsByEl.set(el, chart);
         }

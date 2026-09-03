@@ -59,13 +59,18 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   display: grid;
   grid-template-columns: var(--hc-sidebar) minmax(0, 1fr);
   min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .admin-light .admin-sidebar {
-  position: sticky;
+  position: relative;
   top: 0;
-  align-self: start;
-  height: 100vh;
+  align-self: stretch;
+  height: auto;
+  max-height: 100%;
+  overflow: hidden;
   padding: 22px 18px;
   background: var(--hc-surface);
   border-inline-end: 1px solid var(--hc-line);
@@ -225,6 +230,13 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 
 .admin-light .admin-main {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 18px 22px 40px;
   display: grid;
   gap: 16px;
@@ -783,12 +795,16 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 @media (max-width: 900px) {
   .admin-light .admin-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
   }
   .admin-light .admin-sidebar {
-    position: sticky;
+    position: relative;
     top: 0;
     height: auto;
     max-height: none;
+    overflow: visible;
     border-inline-end: 0;
     border-bottom: 1px solid var(--hc-line);
     padding: 12px;
@@ -1085,30 +1101,46 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   }
 }
 
-/* —— Dark admin (keep layout, invert surfaces) —— */
+/* —— True black admin —— */
+html {
+  height: 100%;
+}
 body.delivery-hub.admin-console.admin-light {
-  --hc-bg: #0b1120;
-  --hc-surface: #111827;
+  --hc-bg: #000000;
+  --hc-surface: #0a0a0a;
   --hc-primary: #6c5ce7;
   --hc-primary-soft: rgba(108, 92, 231, 0.18);
   --hc-text: #f1f5f9;
   --hc-muted: #94a3b8;
   --hc-line: rgba(255, 255, 255, 0.1);
-  --hc-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  --saas-bg: #0b1120;
-  --saas-card: #111827;
-  --saas-card-2: #0f172a;
+  --hc-shadow: none;
+  --saas-bg: #000000;
+  --saas-card: #0a0a0a;
+  --saas-card-2: #111111;
   --saas-text: #f1f5f9;
   --saas-muted: #94a3b8;
   --saas-border: rgba(255, 255, 255, 0.1);
-  --hub-bg: #0b1120;
+  --hub-bg: #000000;
   --hub-text: #f1f5f9;
   --hub-muted: #94a3b8;
   --hub-line: rgba(255, 255, 255, 0.1);
-  --hub-card: #111827;
-  --hub-stat: #0f172a;
+  --hub-card: #0a0a0a;
+  --hub-stat: #111111;
   color: #f1f5f9 !important;
-  background: #0b1120 !important;
+  background: #000000 !important;
+  background-image: none !important;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden !important;
+}
+
+.admin-light #adminApp.hub-shell,
+.admin-light .hub-shell,
+.admin-light .saas-shell {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden !important;
+  background: #000 !important;
 }
 
 .admin-light .admin-sidebar,
@@ -1122,19 +1154,23 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .pbi-slicer,
 .admin-light .pbi-viz,
 .admin-light .dh-user-dash,
-.admin-light .raw-gap-section {
-  background: #111827 !important;
+.admin-light .raw-gap-section,
+.admin-light .dh-user-dash .pbi-slicer,
+.admin-light .dh-user-dash .pbi-viz,
+.admin-light .dh-user-dash .pbi-kpi,
+.admin-light .dh-user-dash .pbi-name {
+  background: #0a0a0a !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   color: #e2e8f0 !important;
   box-shadow: none !important;
 }
 
 .admin-light .admin-sidebar {
-  background: #0c1222 !important;
+  background: #000000 !important;
 }
 
 .admin-light .admin-topbar {
-  background: rgba(12, 18, 34, 0.92) !important;
+  background: rgba(0, 0, 0, 0.94) !important;
 }
 
 .admin-light .admin-sidebar__brand strong,
@@ -1142,7 +1178,11 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .dn-mgmt__title,
 .admin-light .saas-hero h2,
 .admin-light .saas-kpi__value,
-.admin-light .ops-board__head h2 {
+.admin-light .ops-board__head h2,
+.admin-light .dh-user-dash .pbi-viz-head h2,
+.admin-light .dh-user-dash .pbi-slicer h2,
+.admin-light .dh-user-dash .emp-name,
+.admin-light .dh-user-dash .pbi-name .nm {
   color: #f8fafc !important;
 }
 
@@ -1150,7 +1190,9 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .admin-pane-head p,
 .admin-light .dn-mgmt__sub,
 .admin-light .saas-kpi__label,
-.admin-light .ops-board__head p {
+.admin-light .ops-board__head p,
+.admin-light .dh-user-period,
+.admin-light .dh-user-dash .pbi-slicer-hint {
   color: #94a3b8 !important;
 }
 
@@ -1170,8 +1212,9 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light select,
 .admin-light input[type="search"],
 .admin-light input[type="date"],
-.admin-light input[type="text"] {
-  background: #0f172a !important;
+.admin-light input[type="text"],
+.admin-light input[type="password"] {
+  background: #111111 !important;
   color: #e2e8f0 !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
@@ -1181,7 +1224,7 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .hub-stat,
 .admin-light .saas-hero,
 .admin-light .admin-highlight-card {
-  background: #0f172a !important;
+  background: #111111 !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -1198,8 +1241,9 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .hub-table th,
 .admin-light .ops-table th,
 .admin-light .xl-table th,
-.admin-light .raw-gap-table th {
-  background: #0b1220 !important;
+.admin-light .raw-gap-table th,
+.admin-light .dh-user-dash .xl-table th {
+  background: #000000 !important;
   color: #94a3b8 !important;
 }
 
@@ -1207,8 +1251,12 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .ops-company-wrap,
 .admin-light .raw-gap-table-wrap,
 .admin-light .hub-table-wrap,
-.admin-light .xl-table-wrap {
-  background: #0b1220 !important;
+.admin-light .xl-table-wrap,
+.admin-light .dh-user-dash .xl-table-wrap,
+.admin-light .dh-user-chart,
+.admin-light .apexcharts-canvas,
+.admin-light .apexcharts-svg {
+  background: #000000 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
@@ -1219,27 +1267,58 @@ body.delivery-hub.admin-console.admin-light {
 
 .admin-light .saas-btn--sm,
 .admin-light .saas-btn--ghost {
-  background: #1e293b !important;
+  background: #1a1a1a !important;
   color: #e2e8f0 !important;
 }
 
 .admin-light .admin-upload-banner {
-  background:
-    radial-gradient(420px 120px at 100% 0%, rgba(108, 92, 231, 0.16), transparent 60%),
-    #111827 !important;
+  background: #0a0a0a !important;
   border-color: rgba(108, 92, 231, 0.28) !important;
 }
 
 .admin-light .admin-upload-banner code {
-  background: #1e293b !important;
+  background: #1a1a1a !important;
   color: #c4b5fd;
 }
 
 .admin-light .pbi-name,
 .admin-light .pbi-kpi,
 .admin-light .dh-coord-compare {
-  background: #0f172a !important;
+  background: #111111 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
   color: #e2e8f0 !important;
+}
+
+.admin-light .dh-user-dash .pbi-name:hover {
+  background: #1a1a1a !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.admin-light .dh-user-dash .pbi-name.active {
+  background: rgba(108, 92, 231, 0.2) !important;
+  border-color: rgba(108, 92, 231, 0.45) !important;
+}
+
+/* Login gate — full black */
+.admin-light #adminGate {
+  background: #000000 !important;
+}
+.admin-light .admin-gate-card {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8) !important;
+}
+.admin-light .admin-gate-card h2 { color: #ffffff !important; }
+.admin-light .admin-gate-card p,
+.admin-light .admin-gate-card label { color: #94a3b8 !important; }
+.admin-light .admin-gate-card input {
+  background: #111111 !important;
+  color: #f8fafc !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.admin-light .admin-filters-sticky {
+  top: 0;
 }
 
