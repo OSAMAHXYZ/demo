@@ -54,22 +54,24 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   min-height: 100vh;
 }
 
-/* —— Layout: sidebar + main —— */
+/* —— Layout: sidebar + main (page scrolls; sidebar sticks) —— */
 .admin-light .admin-layout {
   display: grid;
   grid-template-columns: var(--hc-sidebar) minmax(0, 1fr);
+  align-items: start;
   min-height: 100vh;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
+  height: auto;
+  overflow: visible;
 }
 
 .admin-light .admin-sidebar {
-  position: relative;
+  position: sticky;
   top: 0;
-  align-self: stretch;
-  height: auto;
-  max-height: 100%;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   overflow: hidden;
   padding: 22px 18px;
   background: var(--hc-surface);
@@ -230,13 +232,9 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 
 .admin-light .admin-main {
   min-width: 0;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   padding: 18px 22px 40px;
   display: grid;
   gap: 16px;
@@ -795,12 +793,11 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 @media (max-width: 900px) {
   .admin-light .admin-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    height: 100vh;
-    height: 100dvh;
+    height: auto;
+    overflow: visible;
   }
   .admin-light .admin-sidebar {
-    position: relative;
+    position: sticky;
     top: 0;
     height: auto;
     max-height: none;
@@ -1103,7 +1100,9 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 
 /* —— True black admin —— */
 html {
-  height: 100%;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 body.delivery-hub.admin-console.admin-light {
   --hc-bg: #000000;
@@ -1129,18 +1128,32 @@ body.delivery-hub.admin-console.admin-light {
   color: #f1f5f9 !important;
   background: #000000 !important;
   background-image: none !important;
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100vh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 .admin-light #adminApp.hub-shell,
 .admin-light .hub-shell,
 .admin-light .saas-shell {
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
   background: #000 !important;
+}
+
+.admin-light .admin-layout {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.admin-light .admin-main {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 .admin-light .admin-sidebar,

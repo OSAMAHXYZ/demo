@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260903a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903b">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2000,6 +2000,40 @@
             }
             .admin-nav__btn { white-space: nowrap; flex: 0 0 auto; }
             .admin-filters-sticky { top: 0; }
+        }
+
+        /* Force page scroll — do not trap overflow in nested shells */
+        html {
+            height: auto !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+        }
+        body.delivery-hub.admin-console.admin-light {
+            height: auto !important;
+            max-height: none !important;
+            min-height: 100vh;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+        }
+        body.delivery-hub.admin-console.admin-light #adminApp.hub-shell,
+        body.delivery-hub.admin-console.admin-light .admin-layout,
+        body.delivery-hub.admin-console.admin-light .admin-main,
+        body.delivery-hub.admin-console.admin-light .admin-workspace {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-sidebar {
+            position: sticky !important;
+            top: 0 !important;
+            align-self: start !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            max-height: 100vh !important;
+            overflow: hidden !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-sidebar__nav {
+            overflow: auto !important;
         }
     </style>
 </head>
