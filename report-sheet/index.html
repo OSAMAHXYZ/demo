@@ -2715,7 +2715,8 @@
       if (!pd || !salesPeriodMatch(pd, live, "month", prevMonthKey)) return;
       const dayIndex = proformaDayIndex(pd, live);
       if (!dayIndex) return;
-      const key = nameKey(r.salesman);
+      const name = rosterSalesmanName(r.salesman);
+      const key = nameKey(name);
       if (!key) return;
       if (!byKey.has(key)) byKey.set(key, new Map());
       const dayMap = byKey.get(key);
