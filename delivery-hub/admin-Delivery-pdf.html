@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260903a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903d">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903e">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2002,38 +2002,80 @@
             .admin-filters-sticky { top: 0; }
         }
 
-        /* Force page scroll — do not trap overflow in nested shells */
-        html {
-            height: auto !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
+        /* —— FORCE SCROLL: fixed app shell, main column scrolls —— */
+        html.admin-scroll-lock,
+        html.admin-scroll-lock body.delivery-hub.admin-console.admin-light {
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            overscroll-behavior: none !important;
         }
-        body.delivery-hub.admin-console.admin-light {
-            height: auto !important;
+        body.delivery-hub.admin-console.admin-light #adminApp.hub-shell {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none !important;
+            max-height: 100dvh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            animation: none !important;
+            transform: none !important;
+            z-index: 20 !important;
+            background: #000 !important;
+        }
+        body.delivery-hub.admin-console.admin-light #adminApp.hub-shell.hidden {
+            display: none !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-layout {
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: grid !important;
+            grid-template-columns: var(--hc-sidebar, 248px) minmax(0, 1fr) !important;
+            grid-template-rows: minmax(0, 1fr) !important;
+            align-items: stretch !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-sidebar {
+            position: relative !important;
+            top: auto !important;
+            align-self: stretch !important;
+            height: 100% !important;
             max-height: none !important;
-            min-height: 100vh;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
+            overflow: hidden !important;
         }
-        body.delivery-hub.admin-console.admin-light #adminApp.hub-shell,
-        body.delivery-hub.admin-console.admin-light .admin-layout,
-        body.delivery-hub.admin-console.admin-light .admin-main,
+        body.delivery-hub.admin-console.admin-light .admin-sidebar__nav {
+            overflow: auto !important;
+            overscroll-behavior: contain !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-main {
+            min-width: 0 !important;
+            min-height: 0 !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow-x: hidden !important;
+            overflow-y: scroll !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior: contain !important;
+            touch-action: pan-y !important;
+        }
         body.delivery-hub.admin-console.admin-light .admin-workspace {
             height: auto !important;
             max-height: none !important;
             overflow: visible !important;
         }
-        body.delivery-hub.admin-console.admin-light .admin-sidebar {
-            position: sticky !important;
-            top: 0 !important;
-            align-self: start !important;
-            height: 100vh !important;
-            height: 100dvh !important;
-            max-height: 100vh !important;
-            overflow: hidden !important;
-        }
-        body.delivery-hub.admin-console.admin-light .admin-sidebar__nav {
-            overflow: auto !important;
+        @media (max-width: 900px) {
+            body.delivery-hub.admin-console.admin-light .admin-layout {
+                grid-template-columns: 1fr !important;
+                grid-template-rows: auto minmax(0, 1fr) !important;
+            }
+            body.delivery-hub.admin-console.admin-light .admin-sidebar {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
         }
 
         /* Kill leftover light chart/card surfaces */
@@ -3190,10 +3232,55 @@
             return set.size;
         }
 
+        function forceAdminScrollShell() {
+            document.documentElement.classList.add('admin-scroll-lock');
+            const app = document.getElementById('adminApp');
+            const layout = app?.querySelector('.admin-layout');
+            const main = app?.querySelector('.admin-main');
+            const sidebar = app?.querySelector('.admin-sidebar');
+            if (app) {
+                app.style.setProperty('position', 'fixed', 'important');
+                app.style.setProperty('inset', '0', 'important');
+                app.style.setProperty('width', '100%', 'important');
+                app.style.setProperty('height', '100%', 'important');
+                app.style.setProperty('max-height', '100dvh', 'important');
+                app.style.setProperty('overflow', 'hidden', 'important');
+                app.style.setProperty('margin', '0', 'important');
+                app.style.setProperty('padding', '0', 'important');
+                app.style.setProperty('transform', 'none', 'important');
+                app.style.setProperty('animation', 'none', 'important');
+            }
+            if (layout) {
+                layout.style.setProperty('height', '100%', 'important');
+                layout.style.setProperty('max-height', '100%', 'important');
+                layout.style.setProperty('min-height', '0', 'important');
+                layout.style.setProperty('overflow', 'hidden', 'important');
+                layout.style.setProperty('display', 'grid', 'important');
+                layout.style.setProperty('grid-template-rows', 'minmax(0, 1fr)', 'important');
+                layout.style.setProperty('align-items', 'stretch', 'important');
+            }
+            if (sidebar) {
+                sidebar.style.setProperty('position', 'relative', 'important');
+                sidebar.style.setProperty('height', '100%', 'important');
+                sidebar.style.setProperty('overflow', 'hidden', 'important');
+            }
+            if (main) {
+                main.style.setProperty('min-height', '0', 'important');
+                main.style.setProperty('height', '100%', 'important');
+                main.style.setProperty('max-height', '100%', 'important');
+                main.style.setProperty('overflow-x', 'hidden', 'important');
+                main.style.setProperty('overflow-y', 'scroll', 'important');
+                main.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+                main.style.setProperty('overscroll-behavior', 'contain', 'important');
+                main.style.setProperty('touch-action', 'pan-y', 'important');
+            }
+        }
+
         function unlockAdmin() {
             adminAuthed = true;
             document.getElementById('adminGate').classList.add('hidden');
             document.getElementById('adminApp').classList.remove('hidden');
+            forceAdminScrollShell();
             initPremiumFilterToolbar();
             initPdfBrowserControls();
             initDnMonthFilter();
@@ -3206,10 +3293,13 @@
             document.getElementById('userDashClearSel')?.addEventListener('click', clearUserDashboardSelection);
             loadDashboard().catch((err) => setUploadStatus(err.message, 'err'));
             resumeLiveSync();
+            requestAnimationFrame(forceAdminScrollShell);
+            setTimeout(forceAdminScrollShell, 250);
         }
 
         function lockAdmin() {
             adminAuthed = false;
+            document.documentElement.classList.remove('admin-scroll-lock');
             document.getElementById('adminApp').classList.add('hidden');
             document.getElementById('adminGate').classList.remove('hidden');
             document.getElementById('adminPassword').value = '';
@@ -3870,7 +3960,10 @@
                 chart: {
                     ...(opts.chart || {}),
                     background: 'transparent',
-                    foreColor: '#94a3b8'
+                    foreColor: '#94a3b8',
+                    zoom: { enabled: false },
+                    selection: { enabled: false },
+                    toolbar: { show: false, ...(opts.chart && opts.chart.toolbar ? opts.chart.toolbar : {}) }
                 }
             });
             chart.render();
