@@ -4827,8 +4827,9 @@
       clearEmployeeFilter();
       return;
     }
+    const resolved = nameKey(key) || key;
     // Toggle off if same name clicked again
-    srView.selectedKey = srView.selectedKey === key ? "" : key;
+    srView.selectedKey = srView.selectedKey === resolved || srView.selectedKey === key ? "" : resolved;
     refreshSalesSelection();
   }
 
