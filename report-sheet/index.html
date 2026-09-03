@@ -997,6 +997,23 @@
     return hit ? !!hit.vacation : false;
   }
 
+  /** Only admin roster employees appear as named rows; everyone else rolls into Not assigned. */
+  function isRosterEmployee(name) {
+    const key = nameKey(name);
+    if (!key) return false;
+    return employeeTargets.some((e) => nameKey(e.name) === key);
+  }
+
+  function rosterSalesmanName(name) {
+    const raw = cellToString(name).trim();
+    if (!raw) return "";
+    if (isRosterEmployee(raw)) {
+      const id = resolveEmployeeIdentity(raw);
+      return (id && id.canonical) || raw;
+    }
+    return "Not assigned";
+  }
+
   function loadAccessoriesSettled() {
     try {
       const raw = localStorage.getItem(ACCESSORIES_SETTLED_KEY);
@@ -2896,8 +2913,9 @@
 
     // Sales Raw: Col P = proforma, Col V = delivery (independent Excel counts).
     // Proforma when P in period · Delivery when V in period · both can apply.
+    // Names not on the admin roster roll into "Not assigned" (no extra named rows).
     salesRows.forEach((r) => {
-      const name = cellToString(r.salesman).trim();
+      const name = rosterSalesmanName(r.salesman);
       if (!name) return;
       const p = ensure(name);
       if (!p) return;
@@ -3020,10 +3038,12 @@
 
     // VSND fallback from open BOs without VIN (not in Excel formula, keep for report)
     bos.forEach((b) => {
-      const p = ensure(b.salesman);
+      const name = rosterSalesmanName(b.salesman);
+      if (!name) return;
+      const p = ensure(name);
       if (!p) return;
       if (!b.vin) p.vsnd += 1;
-      const adminT = resolveAdminTarget(b.salesman, 0);
+      const adminT = resolveAdminTarget(name, 0);
       if (adminT > 0) p.target = adminT;
       const vin = extractVinValue(b.vin);
       if (vin && !p.vinSet.has(vin)) {
@@ -3039,7 +3059,9 @@
     });
 
     cancelled.forEach((c) => {
-      const p = ensure(c.salesman);
+      const name = rosterSalesmanName(c.salesman);
+      if (!name) return;
+      const p = ensure(name);
       if (!p) return;
       const cancelDate = parseDate(c.date) || (c.date instanceof Date ? c.date : null);
       if (live.filterMode === "custom") {
@@ -3048,7 +3070,7 @@
       p.cancelledBOs += 1;
       }
       if (salesPeriodMatch(cancelDate, live, "day", prevMonthKey)) p.cancelledDay += 1;
-      const adminT = resolveAdminTarget(c.salesman, 0);
+      const adminT = resolveAdminTarget(name, 0);
       if (adminT > 0) p.target = adminT;
     });
 
@@ -3113,7 +3135,7 @@
       };
     };
 
-    // Prefer admin employee order, then any extra names from files
+    // Official admin roster only — do not list extra names from Sales Raw
     const ordered = [];
     const seen = new Set();
     employeeTargets.forEach((e) => {
@@ -3121,11 +3143,6 @@
       if (!key || seen.has(key)) return;
       seen.add(key);
       ordered.push(byPerson.get(key));
-    });
-    byPerson.forEach((p, key) => {
-      if (seen.has(key)) return;
-      seen.add(key);
-      ordered.push(p);
     });
 
     const rows = ordered.filter(Boolean).map((p) => {
