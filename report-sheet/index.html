@@ -882,27 +882,122 @@
 
   function normalizeNameLoose(v) {
     return String(v ?? "")
+      .normalize("NFKC")
+      .replace(/[ـ]/g, "")
       .trim()
-      .replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, "")
+      .replace(/^[\s\-–—._|,;:]+|[\s\-–—._|,;:]+$/g, "")
       .toLowerCase()
-      .replace(/\s+/g, " ");
+      .replace(/[^a-z0-9\u0600-\u06ff\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  /** aliasKey → { canonical, key } */
-  const NAME_IDENTITY_MAP = (() => {
-    const map = new Map();
-    const add = (alias, canonical) => {
-      const a = normalizeNameLoose(alias);
-      const key = normalizeNameLoose(canonical);
-      if (!a || !key) return;
-      map.set(a, { canonical, key });
+  function nameTokens(v) {
+    return normalizeNameLoose(v).split(" ").filter((t) => t && t !== "al" && t !== "bin" && t !== "ibn");
+  }
+
+  /** aliasKey → { canonical, key } — rebuilt when targets refresh */
+  let NAME_IDENTITY_MAP = new Map();
+  let ROSTER_KEYS = new Set();
+
+  function addNameIdentity(map, alias, canonical) {
+    const a = normalizeNameLoose(alias);
+    const key = normalizeNameLoose(canonical);
+    if (!a || !key) return;
+    // Prefer first registration; do not let weaker aliases overwrite
+    if (!map.has(a)) map.set(a, { canonical, key });
+  }
+
+  function rosterCanonicalNames() {
+    const names = [];
+    const seen = new Set();
+    const add = (n) => {
+      const c = String(n || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, "");
+      const k = normalizeNameLoose(c);
+      if (!c || !k || seen.has(k)) return;
+      seen.add(k);
+      names.push(c);
     };
-    DEFAULT_EMPLOYEE_NAMES.forEach((canon) => {
-      add(canon, canon);
-      (EMPLOYEE_NAME_ALIASES[canon] || []).forEach((alias) => add(alias, canon));
+    DEFAULT_EMPLOYEE_NAMES.forEach(add);
+    (typeof employeeTargets !== "undefined" && employeeTargets ? employeeTargets : []).forEach((e) => add(e && e.name));
+    return names;
+  }
+
+  function rebuildNameIdentityMap() {
+    const map = new Map();
+    const rosterKeys = new Set();
+    const roster = rosterCanonicalNames();
+    roster.forEach((canon) => {
+      const key = normalizeNameLoose(canon);
+      rosterKeys.add(key);
+      addNameIdentity(map, canon, canon);
+      const parts = normalizeNameLoose(canon).split(" ").filter(Boolean);
+      if (parts.length >= 2) {
+        addNameIdentity(map, `${parts[0]} ${parts[parts.length - 1]}`, canon);
+      }
+      if (parts.length >= 3) {
+        addNameIdentity(map, `${parts[0]} ${parts[parts.length - 2]} ${parts[parts.length - 1]}`, canon);
+      }
+      const aliasList = EMPLOYEE_NAME_ALIASES[canon]
+        || EMPLOYEE_NAME_ALIASES[Object.keys(EMPLOYEE_NAME_ALIASES).find((k) => normalizeNameLoose(k) === key)]
+        || [];
+      aliasList.forEach((alias) => addNameIdentity(map, alias, canon));
     });
-    return map;
-  })();
+    // Keep explicit alias table even if saved target names differ slightly
+    Object.keys(EMPLOYEE_NAME_ALIASES).forEach((canon) => {
+      addNameIdentity(map, canon, canon);
+      rosterKeys.add(normalizeNameLoose(canon));
+      (EMPLOYEE_NAME_ALIASES[canon] || []).forEach((alias) => addNameIdentity(map, alias, canon));
+    });
+    [
+      ["not assigned", "Not assigned"],
+      ["unassigned", "Not assigned"],
+      ["api-batch", "Not assigned"],
+      ["api batch", "Not assigned"],
+      ["api-patch", "Not assigned"],
+      ["api patch", "Not assigned"],
+    ].forEach(([alias, canon]) => addNameIdentity(map, alias, canon));
+    rosterKeys.add(normalizeNameLoose("Not assigned"));
+    NAME_IDENTITY_MAP = map;
+    ROSTER_KEYS = rosterKeys;
+  }
+
+  function scoreNameMatch(inputLoose, candidateLoose) {
+    if (!inputLoose || !candidateLoose) return 0;
+    if (inputLoose === candidateLoose) return 100;
+    const a = inputLoose.split(" ").filter(Boolean);
+    const b = candidateLoose.split(" ").filter(Boolean);
+    if (!a.length || !b.length) return 0;
+    const significant = (toks) => toks.filter((t) => t !== "al" && t !== "bin" && t !== "ibn" && t.length > 1);
+    const sa = significant(a);
+    const sb = significant(b);
+    if (!sa.length || !sb.length) return 0;
+
+    const tokenHit = (t, pool) => pool.some((u) => u === t || (t.length >= 3 && (u.startsWith(t) || t.startsWith(u))));
+    const aInB = sa.every((t) => tokenHit(t, sb));
+    const bInA = sb.every((t) => tokenHit(t, sa));
+    if (aInB && sa.length >= 2) return 85 + Math.min(10, sa.length);
+    if (bInA && sb.length >= 2) return 80 + Math.min(10, sb.length);
+
+    const firstOk = tokenHit(sa[0], [sb[0]]);
+    const lastOk = tokenHit(sa[sa.length - 1], [sb[sb.length - 1]]);
+    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2) return 72;
+    return 0;
+  }
+
+  function fuzzyMatchRoster(loose) {
+    if (!loose || loose.split(" ").filter(Boolean).length < 2) return null;
+    const scored = [];
+    rosterCanonicalNames().forEach((canon) => {
+      if (normalizeNameLoose(canon) === "not assigned") return;
+      const score = scoreNameMatch(loose, normalizeNameLoose(canon));
+      if (score >= 72) scored.push({ canonical: canon, key: normalizeNameLoose(canon), score });
+    });
+    if (!scored.length) return null;
+    scored.sort((a, b) => b.score - a.score || b.canonical.length - a.canonical.length);
+    if (scored.length > 1 && scored[0].score - scored[1].score < 8) return null;
+    return { canonical: scored[0].canonical, key: scored[0].key };
+  }
 
   function resolveEmployeeIdentity(name) {
     const loose = normalizeNameLoose(name);
@@ -916,9 +1011,16 @@
       const canon = "Not assigned";
       return { canonical: canon, key: normalizeNameLoose(canon) };
     }
+    const fuzzy = fuzzyMatchRoster(loose);
+    if (fuzzy) {
+      // Cache so later filters hit instantly
+      NAME_IDENTITY_MAP.set(loose, fuzzy);
+      return fuzzy;
+    }
     return {
       canonical: String(name || "").trim().replace(/^[\s\-–—._]+|[\s\-–—._]+$/g, ""),
       key: loose,
+      unmatched: true,
     };
   }
 
@@ -936,6 +1038,10 @@
   function resolveSalesmanName(v) {
     const resolved = resolveDisplayName(v);
     return resolved || String(v ?? "").trim();
+  }
+
+  function isRosterKey(key) {
+    return !!key && ROSTER_KEYS.has(key);
   }
 
   function employeeMeta(name) {
@@ -999,18 +1105,15 @@
 
   /** Only admin roster employees appear as named rows; everyone else rolls into Not assigned. */
   function isRosterEmployee(name) {
-    const key = nameKey(name);
-    if (!key) return false;
-    return employeeTargets.some((e) => nameKey(e.name) === key);
+    const id = resolveEmployeeIdentity(name);
+    return !!(id && isRosterKey(id.key) && !id.unmatched);
   }
 
   function rosterSalesmanName(name) {
-    const raw = cellToString(name).trim();
+    const raw = String(name ?? "").trim();
     if (!raw) return "";
-    if (isRosterEmployee(raw)) {
-      const id = resolveEmployeeIdentity(raw);
-      return (id && id.canonical) || raw;
-    }
+    const id = resolveEmployeeIdentity(raw);
+    if (id && isRosterKey(id.key) && !id.unmatched) return id.canonical;
     return "Not assigned";
   }
 
@@ -1061,6 +1164,7 @@
   }
 
   let employeeTargets = loadEmployeeTargets();
+  rebuildNameIdentityMap();
   let accessoriesSettled = loadAccessoriesSettled();
   let workingDays = loadWorkingDays();
   let allocationValues = loadAllocationValues();
@@ -1068,6 +1172,7 @@
 
   function refreshTargetsFromAdmin() {
     employeeTargets = loadEmployeeTargets();
+    rebuildNameIdentityMap();
     accessoriesSettled = loadAccessoriesSettled();
     workingDays = loadWorkingDays();
     allocationValues = loadAllocationValues();
@@ -4126,16 +4231,24 @@
   function filterSrRows(baseRows) {
     let rows = baseRows.slice();
     if (srView.selectedKey) {
-      rows = rows.filter((r) => r._key === srView.selectedKey);
+      const sel = nameKey(srView.selectedKey) || srView.selectedKey;
+      rows = rows.filter((r) => r._key === sel || r._key === srView.selectedKey);
     }
     const q = srView.search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter((r) =>
-        String(r["Sales Employee"]).toLowerCase().includes(q) ||
-        String(r.Plant).toLowerCase().includes(q) ||
-        String(r.Salesman).toLowerCase().includes(q) ||
-        String(r.Notes || "").toLowerCase().includes(q)
-      );
+      const qKey = normalizeNameLoose(q);
+      rows = rows.filter((r) => {
+        const emp = String(r["Sales Employee"] || "");
+        const plant = String(r.Plant || "");
+        const code = String(r.Salesman || "");
+        const notes = String(r.Notes || "");
+        return emp.toLowerCase().includes(q)
+          || plant.toLowerCase().includes(q)
+          || code.toLowerCase().includes(q)
+          || notes.toLowerCase().includes(q)
+          || normalizeNameLoose(emp).includes(qKey)
+          || (r._key && String(r._key).includes(qKey));
+      });
     }
     if (srView.filter) {
       rows = rows.filter((r) => {
