@@ -1085,3 +1085,161 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   }
 }
 
+/* —— Dark admin (keep layout, invert surfaces) —— */
+body.delivery-hub.admin-console.admin-light {
+  --hc-bg: #0b1120;
+  --hc-surface: #111827;
+  --hc-primary: #6c5ce7;
+  --hc-primary-soft: rgba(108, 92, 231, 0.18);
+  --hc-text: #f1f5f9;
+  --hc-muted: #94a3b8;
+  --hc-line: rgba(255, 255, 255, 0.1);
+  --hc-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --saas-bg: #0b1120;
+  --saas-card: #111827;
+  --saas-card-2: #0f172a;
+  --saas-text: #f1f5f9;
+  --saas-muted: #94a3b8;
+  --saas-border: rgba(255, 255, 255, 0.1);
+  --hub-bg: #0b1120;
+  --hub-text: #f1f5f9;
+  --hub-muted: #94a3b8;
+  --hub-line: rgba(255, 255, 255, 0.1);
+  --hub-card: #111827;
+  --hub-stat: #0f172a;
+  color: #f1f5f9 !important;
+  background: #0b1120 !important;
+}
+
+.admin-light .admin-sidebar,
+.admin-light .admin-topbar,
+.admin-light .saas-card,
+.admin-light .hub-section,
+.admin-light .dn-mgmt,
+.admin-light .ops-board,
+.admin-light .admin-upload-banner,
+.admin-light .ft-shell,
+.admin-light .pbi-slicer,
+.admin-light .pbi-viz,
+.admin-light .dh-user-dash,
+.admin-light .raw-gap-section {
+  background: #111827 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.admin-light .admin-sidebar {
+  background: #0c1222 !important;
+}
+
+.admin-light .admin-topbar {
+  background: rgba(12, 18, 34, 0.92) !important;
+}
+
+.admin-light .admin-sidebar__brand strong,
+.admin-light .admin-pane-head h2,
+.admin-light .dn-mgmt__title,
+.admin-light .saas-hero h2,
+.admin-light .saas-kpi__value,
+.admin-light .ops-board__head h2 {
+  color: #f8fafc !important;
+}
+
+.admin-light .admin-sidebar__brand span,
+.admin-light .admin-pane-head p,
+.admin-light .dn-mgmt__sub,
+.admin-light .saas-kpi__label,
+.admin-light .ops-board__head p {
+  color: #94a3b8 !important;
+}
+
+.admin-light .admin-nav__btn {
+  color: #94a3b8 !important;
+  background: transparent !important;
+}
+
+.admin-light .admin-nav__btn.is-active {
+  color: #fff !important;
+  background: rgba(108, 92, 231, 0.22) !important;
+}
+
+.admin-light .ft-input,
+.admin-light .ft-native,
+.admin-light .hub-input,
+.admin-light select,
+.admin-light input[type="search"],
+.admin-light input[type="date"],
+.admin-light input[type="text"] {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.admin-light .saas-kpi,
+.admin-light .dn-stat,
+.admin-light .hub-stat,
+.admin-light .saas-hero,
+.admin-light .admin-highlight-card {
+  background: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.admin-light .saas-kpi__value,
+.admin-light .dn-stat b,
+.admin-light .hub-stat b,
+.admin-light .saas-hero__pct,
+.admin-light table,
+.admin-light th,
+.admin-light td {
+  color: #e2e8f0 !important;
+}
+
+.admin-light .hub-table th,
+.admin-light .ops-table th,
+.admin-light .xl-table th,
+.admin-light .raw-gap-table th {
+  background: #0b1220 !important;
+  color: #94a3b8 !important;
+}
+
+.admin-light .ops-schedule-wrap,
+.admin-light .ops-company-wrap,
+.admin-light .raw-gap-table-wrap,
+.admin-light .hub-table-wrap,
+.admin-light .xl-table-wrap {
+  background: #0b1220 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-light .saas-btn,
+.admin-light .hub-btn {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.admin-light .saas-btn--sm,
+.admin-light .saas-btn--ghost {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-light .admin-upload-banner {
+  background:
+    radial-gradient(420px 120px at 100% 0%, rgba(108, 92, 231, 0.16), transparent 60%),
+    #111827 !important;
+  border-color: rgba(108, 92, 231, 0.28) !important;
+}
+
+.admin-light .admin-upload-banner code {
+  background: #1e293b !important;
+  color: #c4b5fd;
+}
+
+.admin-light .pbi-name,
+.admin-light .pbi-kpi,
+.admin-light .dh-coord-compare {
+  background: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
