@@ -410,7 +410,7 @@
               <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-salestype"></canvas></div></div>
             </article>
 
-            <article class="card">
+        <article class="card">
               <h2>Sales type analysis</h2>
               <div class="table-wrap" id="bo-salestype-table"></div>
             </article>
@@ -634,7 +634,7 @@
             </div>
             <div class="table-wrap bas-table-wrap" id="bas-table"></div>
             <p class="foot bas-foot" id="bas-foot"></p>
-          </article>
+        </article>
 
           <article class="card bas-section-card bas-section-conf bas-conf-block">
             <div class="bas-section-head">
@@ -1875,7 +1875,7 @@
         const rangeLabel = sameDay ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
         const spanDays = Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1;
         const { prevFrom, prevTo } = prevRangeFor(from, to);
-        return {
+    return {
           now: to,
           monthKey: toYyyymm(to),
           dayKey: toYyyymmdd(to),
@@ -2028,10 +2028,24 @@
     return !!parseDate(d);
   }
 
-  /** Delivered cars (Col V set) never count as Proforma; Delivery when V is in period. */
+  /**
+   * Excel Sales Raw rules (independent counts):
+   * - Proforma = Col P date falls in the selected period
+   * - Delivery = Col V date falls in the selected period
+   * A row can count for both when P and V are both in range.
+   */
+  function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
+    return salesPeriodMatch(r && r.proformaDate, live, period, prevMonthKey);
+  }
+
+  function salesIsDeliveryInPeriod(r, live, period, prevMonthKey) {
+    return salesPeriodMatch(r && r.deliveryDate, live, period, prevMonthKey);
+  }
+
+  /** Prefer delivery label when both match; used only for single-tag displays. */
   function salesActivityKind(r, live, period, prevMonthKey) {
-    if (salesPeriodMatch(r.deliveryDate, live, period, prevMonthKey)) return "delivery";
-    if (!hasDeliveryDate(r) && salesPeriodMatch(r.proformaDate, live, period, prevMonthKey)) return "proforma";
+    if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) return "delivery";
+    if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) return "proforma";
     return null;
   }
 
@@ -2304,15 +2318,15 @@
     return rows.map((r, i) => {
       const get = buildFieldGetter(r);
       return {
-        id: i,
+      id: i,
         salesman: resolveSalesmanName(r.salesman || get(r, "salesman")),
         product: cellToString(r.product || r.Product || r.model || r.Model || get(r, "product") || ""),
-        vin: cellToString(r.vin || r.VIN || ""),
+      vin: cellToString(r.vin || r.VIN || ""),
         amount: toNumber(r.amount != null ? r.amount : get(r, "amount")),
         qty: toNumber(r.qty != null ? r.qty : get(r, "qty")) || 1,
-        proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
-        deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
-        date: r.proformaDate ? cellToString(r.proformaDate) : (r.deliveryDate ? cellToString(r.deliveryDate) : ""),
+      proformaDate: r.proformaDate ? cellToString(r.proformaDate) : "",
+      deliveryDate: r.deliveryDate ? cellToString(r.deliveryDate) : "",
+      date: r.proformaDate ? cellToString(r.proformaDate) : (r.deliveryDate ? cellToString(r.deliveryDate) : ""),
       };
     });
   }
@@ -2334,7 +2348,7 @@
       if (!salesman) return;
 
       out.push({
-        id: i,
+      id: i,
         boNumber: cellToString(r.boNumber || get(r, "boNumber")),
         product: cellToString(r.product || get(r, "product")),
         salesman,
@@ -2680,7 +2694,6 @@
   function buildEmployeeDailyProforma(live, prevMonthKey) {
     const byKey = new Map();
     (slots.sales.rows || []).forEach((r) => {
-      if (hasDeliveryDate(r)) return;
       const pd = r.proformaDate;
       if (!pd || !salesPeriodMatch(pd, live, "month", prevMonthKey)) return;
       const dayIndex = proformaDayIndex(pd, live);
@@ -2881,9 +2894,8 @@
       if (p.vacation) p.note = "VACATION";
     });
 
-    // Sales Raw: Col P = proforma, Col V = delivery.
-    // Delivered (Col V set) → Delivery when V in period; never Proforma.
-    // Undelivered → Proforma when P in period.
+    // Sales Raw: Col P = proforma, Col V = delivery (independent Excel counts).
+    // Proforma when P in period · Delivery when V in period · both can apply.
     salesRows.forEach((r) => {
       const name = cellToString(r.salesman).trim();
       if (!name) return;
@@ -2912,31 +2924,31 @@
         deliveryPrev: false,
       };
 
-      const monthKind = salesActivityKind(r, live, "month", prevMonthKey);
-      if (monthKind === "delivery") {
-        p.deliveryMonth += 1;
-        flags.deliveryMonth = true;
-      } else if (monthKind === "proforma") {
+      if (salesIsProformaInPeriod(r, live, "month", prevMonthKey)) {
         p.proformaMonth += 1;
         flags.proformaMonth = true;
       }
+      if (salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) {
+        p.deliveryMonth += 1;
+        flags.deliveryMonth = true;
+      }
 
-      const prevKind = salesActivityKind(r, live, "prev", prevMonthKey);
-      if (prevKind === "delivery") {
-        p.deliveryPrev += 1;
-        flags.deliveryPrev = true;
-      } else if (prevKind === "proforma") {
+      if (salesIsProformaInPeriod(r, live, "prev", prevMonthKey)) {
         p.proformaPrev += 1;
         flags.proformaPrev = true;
       }
+      if (salesIsDeliveryInPeriod(r, live, "prev", prevMonthKey)) {
+        p.deliveryPrev += 1;
+        flags.deliveryPrev = true;
+      }
 
-      const dayKind = salesActivityKind(r, live, "day", prevMonthKey);
-      if (dayKind === "delivery") {
-        p.deliveryDay += 1;
-        flags.deliveryDay = true;
-      } else if (dayKind === "proforma") {
+      if (salesIsProformaInPeriod(r, live, "day", prevMonthKey)) {
         p.proformaDay += 1;
         flags.proformaDay = true;
+      }
+      if (salesIsDeliveryInPeriod(r, live, "day", prevMonthKey)) {
+        p.deliveryDay += 1;
+        flags.deliveryDay = true;
       }
 
       p.totalOrders += 1;
@@ -3000,12 +3012,10 @@
           diag.sampleDelivery.push(cellToString(r.deliveryDate) || toYyyymm(r.deliveryDate) || "(unparsed)");
         }
       }
-      const monthKind = salesActivityKind(r, live, "month", prevMonthKey);
-      if (monthKind === "delivery") diag.monthDelivery += 1;
-      else if (monthKind === "proforma") diag.monthProforma += 1;
-      const dayKind = salesActivityKind(r, live, "day", prevMonthKey);
-      if (dayKind === "delivery") diag.dayDelivery += 1;
-      else if (dayKind === "proforma") diag.dayProforma += 1;
+      if (salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) diag.monthDelivery += 1;
+      if (salesIsProformaInPeriod(r, live, "month", prevMonthKey)) diag.monthProforma += 1;
+      if (salesIsDeliveryInPeriod(r, live, "day", prevMonthKey)) diag.dayDelivery += 1;
+      if (salesIsProformaInPeriod(r, live, "day", prevMonthKey)) diag.dayProforma += 1;
     });
 
     // VSND fallback from open BOs without VIN (not in Excel formula, keep for report)
@@ -3035,7 +3045,7 @@
       if (live.filterMode === "custom") {
         if (salesPeriodMatch(cancelDate, live, "month", prevMonthKey)) p.cancelledBOs += 1;
       } else {
-        p.cancelledBOs += 1;
+      p.cancelledBOs += 1;
       }
       if (salesPeriodMatch(cancelDate, live, "day", prevMonthKey)) p.cancelledDay += 1;
       const adminT = resolveAdminTarget(c.salesman, 0);
@@ -7537,7 +7547,7 @@
     renderStockDashboard();
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
-      renderSalesReportKpis(d.salesReport);
+    renderSalesReportKpis(d.salesReport);
       syncSrDateControls(d.salesReport);
       refreshSalesSelection();
     } else {
