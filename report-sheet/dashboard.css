@@ -3061,16 +3061,27 @@ body.admin-page #panel-allocation:not([hidden]) {
 
 .bas-section-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 14px;
   margin-bottom: 14px;
-  padding-bottom: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+  text-align: center;
+  background: linear-gradient(180deg, #f7fbfe, #fff);
+  border-radius: 12px;
 }
 
 .bas-section-head .pbi-viz-head {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 0;
+  text-align: center;
 }
 
 .bas-section-head .pbi-viz-head h2 {
@@ -3079,6 +3090,15 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 800;
   color: var(--navy);
   letter-spacing: -0.02em;
+}
+
+.bas-section-head .pbi-viz-head .hint {
+  display: block;
+  max-width: 56ch;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .bas-section-badge {
@@ -3362,6 +3382,75 @@ body.admin-page #panel-allocation:not([hidden]) {
   box-shadow: 0 0 0 2px rgba(77, 163, 224, 0.35);
 }
 
+.bas-retail-panel {
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #c7e7f5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f3fbff, #fff);
+}
+
+.bas-retail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bas-retail-title h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+.bas-retail-title .hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.bas-retail-total-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid #99d6ef;
+  background: linear-gradient(145deg, #e8f7fd, #fff);
+  box-shadow: 0 4px 12px rgba(11, 42, 74, 0.06);
+}
+
+.bas-retail-total-lab {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bas-retail-total-val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.bas-retail-table .bas-vin {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .bas-day-pill.is-future {
   opacity: 0.42;
   background: #f8fafc;
@@ -3610,6 +3699,11 @@ body.admin-page #panel-allocation:not([hidden]) {
   .bas-section-head {
     flex-direction: column;
     gap: 10px;
+    text-align: center;
+  }
+
+  .bas-section-head .pbi-viz-head {
+    align-items: center;
   }
 
   .bas-hero {

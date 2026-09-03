@@ -88,7 +88,7 @@
           <span class="sr-date-label">Report period</span>
           <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
             <option value="today">Today</option>
-            <option value="this_month">This month (MTD)</option>
+            <option value="this_month">This month (1st → today)</option>
             <option value="last_month">Last month</option>
             <option value="all">All dates</option>
             <option value="custom">Custom range</option>
@@ -585,7 +585,7 @@
           <div class="bo-toolbar bas-toolbar" id="bas-toolbar">
             <select id="bas-date-preset" title="Same date filter as Sales Dashboard">
               <option value="today">Today</option>
-              <option value="this_month">This month (MTD)</option>
+              <option value="this_month">This month (1st → today)</option>
               <option value="last_month">Last month</option>
               <option value="all">All dates</option>
               <option value="custom">Custom range</option>
@@ -667,6 +667,21 @@
               </div>
             </div>
 
+            <div class="bas-retail-panel" id="bas-retail-panel">
+              <div class="bas-retail-head">
+                <div class="bas-retail-title">
+                  <h3>Retail Electronic Sales</h3>
+                  <span class="hint">Search Area Desc = Retail Electronic Sales · RTL stock</span>
+                </div>
+                <div class="bas-retail-total-card" id="bas-retail-total-card">
+                  <span class="bas-retail-total-lab">Total</span>
+                  <span class="bas-retail-total-val" id="bas-retail-total">0</span>
+                </div>
+              </div>
+              <div class="table-wrap bas-table-wrap" id="bas-retail-table"></div>
+              <p class="foot bas-foot" id="bas-retail-foot"></p>
+            </div>
+
             <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="bas-month-table"></div>
             <p class="foot bas-foot" id="bas-month-foot"></p>
 
@@ -700,6 +715,7 @@
                 <option value="">All sales status</option>
                 <option value="Delivered">Delivered</option>
                 <option value="Proforma">Proforma</option>
+                <option value="Outside period">Outside period</option>
                 <option value="NA">NA · not in sales</option>
               </select>
               <select id="bas-alloc-f-source">
@@ -841,26 +857,32 @@
     ],
     "Wasim Kathem Awad": ["Wasim Awad"],
     "Ahmed Saleh Ahmed Binmahfoodh": ["Ahmed Binmahfoodh"],
-    "Ghina Assad Alameer": ["Ghina Assad Salem Alameer Assa", "Ghina Alameer"],
-    "Amjad Ahmed Alwafi": ["Amjad Alwafi"],
-    "Ghadeer Abdulhadi Attia Altayyari": ["Ghadeer Altayyari"],
-    "Maryam Salah Abdulrahman Tabakh": ["Maryam Tabakh"],
+    "Ghina Assad Alameer": ["Ghina Assad Salem Alameer Assa", "Ghina Alameer", "Ghina Assad Alameer Assa"],
+    "Amjad Ahmed Alwafi": ["Amjad Alwafi", "Amjad Ahmed Al Wafi"],
+    "Ghadeer Abdulhadi Attia Altayyari": [
+      "Ghadeer Altayyari",
+      "Ghadaer Abdulhadi Attia Altayyari",
+      "Ghadaer Altayyari",
+      "Ghadeer Abdulhadi Altayyari",
+      "Ghadaer Abdulhadi Altayyari",
+    ],
+    "Maryam Salah Abdulrahman Tabakh": ["Maryam Tabakh", "Maryam Salah Tabakh"],
     "Muteb Abdullah Nasser Al Shehri": ["Muteb Al Shehri"],
-    "Mansuor Ali Al Qahtani": ["Mansuor Al Qahtani"],
+    "Mansuor Ali Al Qahtani": ["Mansuor Al Qahtani", "Mansour Ali Al Qahtani", "Mansour Al Qahtani"],
     "Ahmed Mahmoud Yousef Al Fitni": ["Ahmed Al Fitni"],
     "Mohammed Abkar Mohammed Abkar Negry": ["Mohammed Negry"],
-    "Mohammed Al Khateeb": ["Mohammed Al Khateeb"],
+    "Mohammed Al Khateeb": ["Mohammed Al Khateeb", "Mohammad Al Khateeb"],
     "Mohsen Zuhair Ali Al Attas": ["Mohsen Al Attas"],
-    "Fatmah Mohammed Alasseri": ["fatmah al asseri", "Fatmah Alasseri", "Fatmah Al Asseri"],
-    "Essa Meraizeeq Almutairy": ["Essa Almutairy"],
-    "Moath Khalel Al Hjoouj": ["Moath Al Hjoouj"],
+    "Fatmah Mohammed Alasseri": ["fatmah al asseri", "Fatmah Alasseri", "Fatmah Al Asseri", "Fatimah Mohammed Alasseri"],
+    "Essa Meraizeeq Almutairy": ["Essa Almutairy", "Essa Meraizeeq Al Mutairy"],
+    "Moath Khalel Al Hjoouj": ["Moath Al Hjoouj", "Moath Khalel Al Hjouj"],
     "Khulood Abdulmajeed Albaloushi": ["Khulood Abdulmajeed Ghulam Alb", "Khulood Albaloushi"],
     "Raoum Fahad Samkari": ["Raoum Samkari"],
     "Alawiyyah Rafi Saad Al Shehri": ["Alawiyyah Al Shehri"],
     "Manal Moshref Almalki": ["Manal Almalki"],
     "Lujen Sami Saeed Bazhair": ["Lujen Bazhair"],
     "Muhannad Abdullah Makdour Minyawi": ["Muhannad Minyawi"],
-    "Maqbool Omar Ashour": ["Maqbool Ashour", "Maqbool Omar Ashour -"],
+    "Maqbool Omar Ashour": ["Maqbool Ashour", "Maqbool Omar Ashour -", "Maqbool Omar Ashour-"],
     "Tawdod Al Sharef": ["- Tawdod Al Sharef", "Tawdod Al Sharef -"],
     "Ali Muharraq A Alharbi": ["Ali Alharbi", "Ali Muharraq A Alharbi -"],
   };
@@ -973,7 +995,37 @@
     const sb = significant(b);
     if (!sa.length || !sb.length) return 0;
 
-    const tokenHit = (t, pool) => pool.some((u) => u === t || (t.length >= 3 && (u.startsWith(t) || t.startsWith(u))));
+    const almostEqual = (x, y) => {
+      if (x === y) return true;
+      if (!x || !y) return false;
+      if (x.length >= 3 && (y.startsWith(x) || x.startsWith(y))) return true;
+      // 1-edit typo tolerance (Ghadaer ↔ Ghadeer)
+      const la = x.length;
+      const lb = y.length;
+      if (Math.abs(la - lb) > 1 || Math.min(la, lb) < 4) return false;
+      let i = 0;
+      let j = 0;
+      let edits = 0;
+      while (i < la && j < lb) {
+        if (x[i] === y[j]) {
+          i += 1;
+          j += 1;
+          continue;
+        }
+        edits += 1;
+        if (edits > 1) return false;
+        if (la > lb) i += 1;
+        else if (lb > la) j += 1;
+        else {
+          i += 1;
+          j += 1;
+        }
+      }
+      edits += (la - i) + (lb - j);
+      return edits <= 1;
+    };
+
+    const tokenHit = (t, pool) => pool.some((u) => almostEqual(t, u));
     const aInB = sa.every((t) => tokenHit(t, sb));
     const bInA = sb.every((t) => tokenHit(t, sa));
     if (aInB && sa.length >= 2) return 85 + Math.min(10, sa.length);
@@ -981,7 +1033,9 @@
 
     const firstOk = tokenHit(sa[0], [sb[0]]);
     const lastOk = tokenHit(sa[sa.length - 1], [sb[sb.length - 1]]);
-    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2) return 72;
+    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2) return 78;
+    // Same first+last with middle typos / extra tokens
+    if (firstOk && lastOk && Math.min(sa.length, sb.length) >= 2) return 74;
     return 0;
   }
 
@@ -1109,12 +1163,19 @@
     return !!(id && isRosterKey(id.key) && !id.unmatched);
   }
 
+  /** Map Sales Raw names onto the roster when possible; keep real unmatched names visible. */
   function rosterSalesmanName(name) {
     const raw = String(name ?? "").trim();
     if (!raw) return "";
+    const loose = normalizeNameLoose(raw);
+    if (!loose) return "";
+    if (loose === "not assigned" || loose === "unassigned" || /^api[\s\-_]*(batch|patch)$/.test(loose)) {
+      return "Not assigned";
+    }
     const id = resolveEmployeeIdentity(raw);
     if (id && isRosterKey(id.key) && !id.unmatched) return id.canonical;
-    return "Not assigned";
+    // Show unmatched people under their own name so every salesman is displayed
+    return (id && id.canonical) || raw;
   }
 
   function loadAccessoriesSettled() {
@@ -1257,6 +1318,8 @@
     salesType: ["sales type", "payment type", "finance type", "deal type", "type of sale", "sale type", "payment method"],
     sfx: ["sfx", "grade", "alj suffix", "tmc suffix", "suffix", "variant", "trim"],
     agingDays: ["aging", "aging days", "age days", "days aging", "bo aging"],
+    searchAreaDesc: ["search area desc", "search area description", "vehicle search area desc", "search area"],
+    vehicleSearchArea: ["vehicle search area", "veh search area"],
   };
 
   const HEADER_MARKERS = [
@@ -1863,7 +1926,7 @@
   }
 
   function todayKeys(now = new Date()) {
-    const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const local = saudiToday(now);
     return {
       now: local,
       monthKey: toYyyymm(local),
@@ -1871,6 +1934,18 @@
       label: cellToString(local),
       source: "calendar",
     };
+  }
+
+  /** Business calendar is Asia/Riyadh (not the browser timezone). */
+  function saudiToday(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Riyadh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+    const pick = (t) => Number((parts.find((p) => p.type === t) || {}).value);
+    return new Date(pick("year"), pick("month") - 1, pick("day"));
   }
 
   /** When calendar month has no Col P/V dates, use the latest month found in Sales Raw. */
@@ -1984,7 +2059,7 @@
   function resolveGlobalDatePeriod(salesRows, filter) {
     const preset = (filter && filter.preset) || "today";
     const calendarLive = todayKeys();
-    const today = startOfDay(new Date());
+    const today = saudiToday();
     const bounds = salesDateBounds(salesRows || []);
     const fmt = (d) => d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const fmtMonth = (d) => d.toLocaleString("en-US", { month: "long", year: "numeric" });
@@ -2086,6 +2161,7 @@
       const dim = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
       const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      const rangeLabel = `${fmt(monthStart)} – ${fmt(today)}`;
       return {
         now: today,
         monthKey: toYyyymm(today),
@@ -2096,14 +2172,14 @@
         preset: "this_month",
         rangeFrom: monthStart,
         rangeTo: today,
-        rangeLabel: `MTD · ${fmtMonth(today)}`,
-        reportMonthLabel: fmtMonth(today),
+        rangeLabel,
+        reportMonthLabel: `${fmtMonth(today)} · ${monthStart.getDate()}–${today.getDate()}`,
         calendarMonthKey: calendarLive.monthKey,
         calendarLabel: calendarLive.label,
         daysInMonth: dim,
         daysPassed: today.getDate(),
         daysRemaining: Math.max(0, dim - today.getDate()),
-        dayUsesRange: true,
+        dayUsesRange: false,
         prevRangeFrom: prevStart,
         prevRangeTo: prevEnd,
         prevMonthLabel: fmtMonth(prevStart),
@@ -2152,12 +2228,53 @@
 
   /**
    * Excel Sales Raw rules (independent counts):
-   * - Proforma = Col P date falls in the selected period
-   * - Delivery = Col V date falls in the selected period
+   * - Proforma = Col P date in period
+   *   OR Secondary Status = Pro-forma Invoice Cr (open proforma pipeline)
+   * - Delivery = Col V date in period
    * A row can count for both when P and V are both in range.
    */
+  function getSalesSecondaryStatus(r) {
+    if (!r) return "";
+    if (r.secondaryStatus != null && String(r.secondaryStatus).trim() !== "") {
+      return cellToString(r.secondaryStatus).trim();
+    }
+    const keys = Object.keys(r);
+    for (let i = 0; i < keys.length; i += 1) {
+      const n = normHeader(keys[i]);
+      if (n === "secondary status" || n === "secondary status desc" || n === "2nd status") {
+        const v = cellToString(r[keys[i]]).trim();
+        if (v) return v;
+      }
+    }
+    if (Array.isArray(r.__cells) && r.__cells.length > 7) {
+      return cellToString(r.__cells[7]).trim();
+    }
+    return "";
+  }
+
+  function isOpenProformaStatus(r) {
+    const s = normHeader(getSalesSecondaryStatus(r));
+    if (!s) return false;
+    if (s.includes("dio completed") || s.includes("delivery completed") || s.includes("delivered")) return false;
+    return s.includes("proforma") || s.includes("pro forma") || s.includes("pro-forma");
+  }
+
   function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
-    return salesPeriodMatch(r && r.proformaDate, live, period, prevMonthKey);
+    if (salesPeriodMatch(r && r.proformaDate, live, period, prevMonthKey)) return true;
+    // Open "Pro-forma Invoice Cr" rows (Col H / Secondary Status) — same rows you see filtered in Excel
+    if (!isOpenProformaStatus(r)) return false;
+    if (period === "prev") return false;
+    if (period === "day") {
+      // Day view: status-only rows count only when Day uses the full selected range
+      return !!(live && live.dayUsesRange);
+    }
+    if (period === "month") {
+      const preset = (live && live.preset) || "";
+      // Include open proforma pipeline for this month / today / all (matches Excel status filter)
+      if (preset === "last_month") return false;
+      return true;
+    }
+    return false;
   }
 
   function salesIsDeliveryInPeriod(r, live, period, prevMonthKey) {
@@ -2242,9 +2359,14 @@
       (n) => n.includes("delivery") && n.includes("date"),
       (n) => n === "delivery" || n === "delivery date" || n === "delivered date",
     ]);
+    const headerSecondary = findHeaderIdx([
+      (n) => n === "secondary status" || n === "secondary status desc",
+      (n) => n.includes("secondary") && n.includes("status"),
+    ]);
     if (headerSalesman >= 0) idxA = headerSalesman;
     if (headerProforma >= 0) idxP = headerProforma;
     if (headerDelivery >= 0) idxV = headerDelivery;
+    const idxSecondary = headerSecondary >= 0 ? headerSecondary : colLetterToIndex("H");
 
     // Excel Rowdata formulas start at row 2 → skip header row (index 0+)
     const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
@@ -2267,8 +2389,10 @@
         salesmanCode: "",
         proformaDate: parseDate(line[idxP]),
         deliveryDate: parseDate(line[idxV]),
+        secondaryStatus: cellToString(line[idxSecondary]).trim(),
         vin: "",
         _sheet: preferred,
+        __cells: line,
       };
       headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
 
@@ -2344,13 +2468,26 @@
     // Confirmed
     if (/^(y|yes|c|1|true|confirmed|confirm|allocated|alloc|مؤكد)$/i.test(s)) return true;
     if (/^conf(irmed)?$/i.test(s)) return true;
+    if (/\b(confirmed|allocated|مؤكد)\b/.test(s)) return true;
     return false;
   }
 
-  /** Back Order confirmation: Col H first, then header match. */
+  /** True when a cell looks like a confirm flag (not an exterior color code). */
+  function looksLikeConfirmValue(v) {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (!s) return false;
+    if (/^(y|yes|n|no|nc|c|0|1|true|false)$/i.test(s)) return true;
+    if (/conf|alloc|pending|waiting|open|مؤكد|غير/.test(s)) return true;
+    return false;
+  }
+
+  /**
+   * Back Order confirmation:
+   * 1) Confirm / allocation header or alias
+   * 2) Col H only when the value looks like a confirm flag (some BO files put it in H)
+   * Never treat exterior color codes in H as confirm.
+   */
   function boConfirmRaw(row, get) {
-    const colH = cellByLetter(row, "H");
-    if (cellToString(colH).trim() !== "") return colH;
     const letter = findHeaderLetter(row, [
       (n) => n === "confirm flag" || n === "confirm" || n === "confirmation",
       (n) => n.includes("confirm") && !n.includes("not"),
@@ -2362,7 +2499,16 @@
     }
     const fromAlias = get(row, "confirm");
     if (cellToString(fromAlias).trim() !== "") return fromAlias;
-    return get(row, "status");
+    const colH = cellByLetter(row, "H");
+    if (looksLikeConfirmValue(colH)) return colH;
+    const status = get(row, "status");
+    if (looksLikeConfirmValue(status)) return status;
+    return status;
+  }
+
+  function ensureGlobalLivePeriod() {
+    window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+    return window._globalLivePeriod;
   }
 
   function inferSalesType(raw, paid) {
@@ -2797,12 +2943,14 @@
     if (!date) return null;
     const d = parseDate(date);
     if (!d) return null;
-    if (live.filterMode === "custom" && live.rangeFrom && live.rangeTo) {
-      const from = startOfDay(live.rangeFrom).getTime();
-      const to = startOfDay(live.rangeTo).getTime();
-      const t = startOfDay(d).getTime();
-      if (t < from || t > to) return null;
-      return Math.round((t - from) / 86400000) + 1;
+    if (live.filterMode === "custom" || live.preset === "this_month" || live.preset === "last_month") {
+      if (live.rangeFrom && live.rangeTo) {
+        const from = startOfDay(live.rangeFrom).getTime();
+        const to = startOfDay(live.rangeTo).getTime();
+        const t = startOfDay(d).getTime();
+        if (t < from || t > to) return null;
+        return Math.round((t - from) / 86400000) + 1;
+      }
     }
     if (toYyyymm(d) !== live.monthKey) return null;
     return d.getDate();
@@ -3106,6 +3254,7 @@
     const diag = {
       salesRows: salesRows.length,
       withProformaDate: 0,
+      withProformaStatus: 0,
       withDeliveryDate: 0,
       monthProforma: 0,
       monthDelivery: 0,
@@ -3124,6 +3273,7 @@
       calendarLabel: live.calendarLabel || calendarLive.label,
     };
     salesRows.forEach((r) => {
+      if (isOpenProformaStatus(r)) diag.withProformaStatus += 1;
       if (r.proformaDate) {
         diag.withProformaDate += 1;
         if (diag.sampleProforma.length < 5) {
@@ -3241,7 +3391,7 @@
       };
     };
 
-    // Official admin roster only — do not list extra names from Sales Raw
+    // Official admin roster first, then any other Sales Raw people with activity
     const ordered = [];
     const seen = new Set();
     employeeTargets.forEach((e) => {
@@ -3249,6 +3399,14 @@
       if (!key || seen.has(key)) return;
       seen.add(key);
       ordered.push(byPerson.get(key));
+    });
+    byPerson.forEach((p, key) => {
+      if (!key || seen.has(key)) return;
+      const hasActivity = (p.proformaMonth || 0) + (p.deliveryMonth || 0)
+        + (p.proformaDay || 0) + (p.deliveryDay || 0) + (p.cancelledBOs || 0) > 0;
+      if (!hasActivity) return;
+      seen.add(key);
+      ordered.push(p);
     });
 
     const rows = ordered.filter(Boolean).map((p) => {
@@ -4106,7 +4264,7 @@
 
   function globalDatePresetLabel(preset) {
     if (preset === "today") return "Today";
-    if (preset === "this_month") return "This month (MTD)";
+    if (preset === "this_month") return "This month (1st → today)";
     if (preset === "last_month") return "Last month";
     if (preset === "all") return "All dates";
     if (preset === "custom") return "Custom range";
@@ -4151,11 +4309,25 @@
     const srHint = $("#sr-date-hint");
     const basHint = $("#bas-date-hint");
     if (srHint) {
-      srHint.textContent = preset === "today"
-        ? `Today · day = today · month = MTD${live && live.rangeLabel ? " · " + live.rangeLabel : ""}`
-        : hintText;
+      if (preset === "this_month") {
+        srHint.textContent = live && live.rangeLabel
+          ? `This month · ${live.rangeLabel} (1st through today)`
+          : "This month · 1st through today";
+      } else if (preset === "today") {
+        srHint.textContent = `Today · day = today · month = MTD${live && live.rangeLabel ? " · " + live.rangeLabel : ""}`;
+      } else {
+        srHint.textContent = hintText;
+      }
     }
-    if (basHint) basHint.textContent = hintText;
+    if (basHint) {
+      if (preset === "this_month") {
+        basHint.textContent = live && live.rangeLabel
+          ? `This month · ${live.rangeLabel} (1st through today)`
+          : "This month · 1st through today";
+      } else {
+        basHint.textContent = hintText;
+      }
+    }
 
     document.querySelectorAll(".sr-date-custom, .bas-date-custom").forEach((el) => {
       el.style.display = custom ? "" : "none";
@@ -4186,11 +4358,14 @@
       globalDateFilter.to = "";
     }
     saveGlobalDateFilter();
+    window._globalLivePeriod = ensureGlobalLivePeriod();
     if (window._data) {
       if (hasSalesReportInputs()) rebuildSalesReport();
       else if (hasSalesRaw()) {
         window._data = data();
-        window._globalLivePeriod = window._data.salesReport && window._data.salesReport.live;
+        window._globalLivePeriod = window._data.salesReport && window._data.salesReport.live
+          ? window._data.salesReport.live
+          : ensureGlobalLivePeriod();
       }
       renderBoAllocStockDashboard(window._data);
     }
@@ -4466,7 +4641,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Col P=Proforma (undelivered only) · Col V=Delivery · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col P date or Secondary Status “Pro-forma Invoice” · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
@@ -4504,6 +4679,7 @@
           <b>Why Proforma/Delivery look empty:</b>
           Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
           parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
+          Secondary Status Pro-forma: <b>${formatNumber(diag.withProformaStatus || 0)}</b> ·
           parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
           Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
           Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
@@ -4563,7 +4739,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P (period, excludes delivered) · Delivery=Col V (period) · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period OR Secondary Status Pro-forma Invoice · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -6512,15 +6688,20 @@
   }
 
   function basMonthContext(refDate) {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
     const ref = refDate
-      || (window._globalLivePeriod && window._globalLivePeriod.now)
-      || new Date();
+      || (live && live.now)
+      || saudiToday();
     const y = ref.getFullYear();
     const m = ref.getMonth();
     const monthLabel = ref.toLocaleString("en", { month: "long", year: "numeric" });
     const daysInMonth = new Date(y, m + 1, 0).getDate();
-    const todayDay = ref.getDate();
-    return { y, m, monthLabel, daysInMonth, todayDay, today: ref };
+    // For This month / Today: only count through today (MTD), not future days
+    let todayDay = ref.getDate();
+    if (live && live.rangeTo && (live.preset === "this_month" || live.preset === "today")) {
+      todayDay = Math.min(todayDay, live.rangeTo.getDate());
+    }
+    return { y, m, monthLabel, daysInMonth, todayDay, today: ref, live };
   }
 
   function inferCollectionDateFromAge(age, today) {
@@ -6634,7 +6815,11 @@
     const { ctx, rows, matched, dayTotals } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
-      hint.textContent = `${ctx.monthLabel} · RTL Col J · collected = today − age · today is day ${ctx.todayDay}`;
+      const live = ctx.live || window._globalLivePeriod;
+      const rangeNote = live && (live.preset === "this_month" || live.preset === "today")
+        ? ` · MTD 1–${ctx.todayDay}`
+        : "";
+      hint.textContent = `${ctx.monthLabel}${rangeNote} · RTL Col J · collected = today − age · today is day ${ctx.todayDay}`;
     }
 
     const filteredRows = filteredBasMonthlyRows(rows);
@@ -6688,6 +6873,8 @@
       }
       stripEl.innerHTML = stripHtml;
     }
+
+    renderRetailElectronicSalesPanel(ctx);
 
     const tableEl = $("#bas-month-table");
     const footEl = $("#bas-month-foot");
@@ -6909,6 +7096,7 @@
     return (rows || []).map((r, i) => {
       const ageingRaw = cellByLetter(r, "J");
       const ageingNum = toNumber(ageingRaw);
+      const get = buildFieldGetter(r);
       return {
         id: `${source}-${i}`,
         source,
@@ -6922,9 +7110,85 @@
         usage: stockCol(r, "K") || "—",
         location: stockCol(r, "M") || stockCol(r, "N", "location") || "—",
         status: stockCol(r, "D") || stockCol(r, "L", "status"),
+        searchAreaDesc: cellToString(get(r, "searchAreaDesc") || get(r, "vehicleSearchArea")).trim(),
         _raw: r,
       };
     });
+  }
+
+  function isRetailElectronicSales(desc) {
+    const s = normHeader(desc || "");
+    if (!s) return false;
+    return s === "retail electronic sales" || s.includes("retail electronic sales");
+  }
+
+  function buildRetailElectronicSalesCars(ctx) {
+    const today = (ctx && ctx.today) || saudiToday();
+    return mapStockInv(slots.rtl.rows || [], "RTL")
+      .filter((car) => isRetailElectronicSales(car.searchAreaDesc))
+      .map((car) => {
+        const collDate = inferCollectionDateFromAge(car.ageing, today);
+        const leaf = matchRtlToAllocLeaf(car);
+        return {
+          ...car,
+          seg: leaf ? leaf.seg : "—",
+          collectionDate: collDate,
+          collectionDay: collDate ? collDate.getDate() : null,
+          collectionLabel: collDate
+            ? collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+            : "—",
+          age: car.ageing == null ? null : Math.floor(car.ageing),
+        };
+      })
+      .sort((a, b) => {
+        const aa = a.age == null ? 9999 : a.age;
+        const bb = b.age == null ? 9999 : b.age;
+        return aa - bb || String(a.product).localeCompare(String(b.product));
+      });
+  }
+
+  function renderRetailElectronicSalesPanel(ctx) {
+    const panel = $("#bas-retail-panel");
+    const tableEl = $("#bas-retail-table");
+    const footEl = $("#bas-retail-foot");
+    const totalEl = $("#bas-retail-total");
+    if (!panel || !tableEl) return;
+
+    const cars = buildRetailElectronicSalesCars(ctx);
+    if (totalEl) totalEl.textContent = formatNumber(cars.length);
+
+    if (!cars.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">No RTL cars with Search Area Desc = Retail Electronic Sales.</p>`;
+      if (footEl) footEl.textContent = "0 cars";
+      return;
+    }
+
+    const age0 = cars.filter((c) => c.age === 0).length;
+    const late = cars.filter((c) => c.age != null && c.age >= 1).length;
+
+    tableEl.innerHTML = `<table class="bas-table bas-retail-table">
+      <thead><tr>
+        <th>Seg</th><th>Product</th><th>SFX</th><th>VIN</th>
+        <th>Age</th><th>Collected</th><th>Location</th><th>Search Area Desc</th>
+      </tr></thead>
+      <tbody>${cars.map((c) => {
+        const ageCls = c.age === 0 ? "bas-gap-pos" : c.age != null && c.age >= 1 ? "bas-gap-neg" : "";
+        return `<tr>
+          <td>${escapeHtml(c.seg || "—")}</td>
+          <td>${escapeHtml(c.product || "—")}</td>
+          <td>${escapeHtml(c.suffix || "—")}</td>
+          <td class="bas-vin">${escapeHtml(c.vin || "—")}</td>
+          <td class="num ${ageCls}">${c.age == null ? "—" : formatNumber(c.age)}</td>
+          <td>${escapeHtml(c.collectionLabel || "—")}</td>
+          <td>${escapeHtml(c.location || "—")}</td>
+          <td>${escapeHtml(c.searchAreaDesc || "—")}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+
+    if (footEl) {
+      footEl.textContent = `${formatNumber(cars.length)} cars · Retail Electronic Sales · age 0: ${formatNumber(age0)} · late: ${formatNumber(late)}`;
+    }
   }
 
   function allStockInv() {
@@ -7246,10 +7510,11 @@
     };
   }
 
-  function buildMatchedCars(boRows, rtlRows, centralRows) {
+  function buildMatchedCars(boRows, rtlRows, centralRows, opts = {}) {
     const getBo = buildFieldGetter(boRows[0] || {});
     const getRtl = buildFieldGetter(rtlRows[0] || {});
     const getCen = buildFieldGetter(centralRows[0] || {});
+    const confirmedOnly = !!opts.confirmedOnly;
 
     const matchKey = (product, suffix, year, ext, intc) =>
       [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
@@ -7262,6 +7527,7 @@
       const intc = cellToString(getBo(r, "int") || cellByLetter(r, "I"));
       const orderRaw = getBo(r, "orderDate");
       const orderDate = parseDate(orderRaw);
+      const confirm = cellToString(boConfirmRaw(r, getBo));
       return {
         idx,
         product,
@@ -7274,10 +7540,10 @@
         boNumber: cellToString(getBo(r, "boNumber")),
         orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
         orderTs: orderDate ? orderDate.getTime() : idx,
-        confirm: cellToString(boConfirmRaw(r, getBo)),
+        confirm,
         custGroup: cellToString(getBo(r, "salesType") || getBo(r, "custGroup")),
       };
-    });
+    }).filter((bo) => !confirmedOnly || isConfirmedFlag(bo.confirm));
 
     const mapStock = (rows, get, source) =>
       (rows || []).map((r, idx) => {
@@ -7368,22 +7634,38 @@
   function vinSalesStatusForLookup(vin, salesLookup, live) {
     const key = extractVinValue(vin) || upperTrim(vin);
     const s = salesLookup.get(key);
-    if (!s) return { label: "NA", cls: "na" };
-    const period = live || window._globalLivePeriod;
-    if (s.delivered && salesDateInActivePeriod(s.deliveryDate, period)) {
-      return { label: "Delivered", cls: "ok" };
+    if (!s) return { label: "NA", cls: "na", inPeriod: false };
+    const period = live || window._globalLivePeriod || ensureGlobalLivePeriod();
+    const hasRange = !!(period && period.rangeFrom && period.rangeTo);
+    const delIn = hasRange
+      ? salesDateInActivePeriod(s.deliveryDate, period)
+      : !!(s.delivered && s.deliveryDate);
+    const proIn = hasRange
+      ? !!(s.proformaDate && parseDate(s.proformaDate) && salesDateInActivePeriod(s.proformaDate, period))
+      : !!(s.proformaDate && parseDate(s.proformaDate));
+
+    // Period-aware: Col V in range → Delivered; else Col P in range → Proforma
+    if (delIn) return { label: "Delivered", cls: "ok", inPeriod: true };
+    if (proIn) return { label: "Proforma", cls: "warn", inPeriod: true };
+    if (hasRange && period.preset !== "all") {
+      return { label: "Outside period", cls: "na", inPeriod: false };
     }
-    if (!s.delivered && s.proformaDate && parseDate(s.proformaDate) && salesDateInActivePeriod(s.proformaDate, period)) {
-      return { label: "Proforma", cls: "warn" };
-    }
-    return { label: "NA", cls: "na" };
+    if (s.delivered) return { label: "Delivered", cls: "ok", inPeriod: true };
+    if (s.proformaDate && parseDate(s.proformaDate)) return { label: "Proforma", cls: "warn", inPeriod: true };
+    return { label: "NA", cls: "na", inPeriod: false };
   }
 
   function buildBasAllocatedVehicles() {
     if (!hasBackOrder()) return [];
-    const allMatched = buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || []);
+    const live = ensureGlobalLivePeriod();
+    // Match confirmed BOs only so unconfirmed rows do not consume stock VINs
+    const allMatched = buildMatchedCars(
+      rawBoRows(),
+      slots.rtl.rows || [],
+      slots.central.rows || [],
+      { confirmedOnly: true }
+    );
     const salesLookup = buildSalesVinLookup();
-    const live = window._globalLivePeriod;
 
     return allMatched
       .filter((r) => isConfirmedFlag(r["Confirm Flag"]))
@@ -7403,6 +7685,7 @@
           confirm: r["Confirm Flag"],
           salesStatus: salesSt.label,
           salesStatusCls: salesSt.cls,
+          inPeriod: !!salesSt.inPeriod,
           proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
           deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
           salesman: r["Salesman Name"],
@@ -7443,6 +7726,9 @@
     }
     section.hidden = false;
 
+    const live = ensureGlobalLivePeriod();
+    syncGlobalDateControls(live);
+
     if ($("#bas-alloc-f-status")) $("#bas-alloc-f-status").value = basAllocView.salesStatus || "";
     if ($("#bas-alloc-f-source")) $("#bas-alloc-f-source").value = basAllocView.source || "";
 
@@ -7451,22 +7737,33 @@
 
     const delivered = allRows.filter((r) => r.salesStatus === "Delivered").length;
     const proforma = allRows.filter((r) => r.salesStatus === "Proforma").length;
+    const outside = allRows.filter((r) => r.salesStatus === "Outside period").length;
     const na = allRows.filter((r) => r.salesStatus === "NA").length;
     const planMatched = allRows.filter((r) => r.planMatch).length;
+    const inPeriod = allRows.filter((r) => r.inPeriod).length;
+
+    const periodSub = live && live.rangeLabel
+      ? live.rangeLabel
+      : (live && live.reportMonthLabel) || "selected period";
+
+    const headHint = section.querySelector(".bas-section-head .hint");
+    if (headHint) {
+      headHint.textContent = `Confirmed BO ↔ stock VIN · Sales status uses ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
+    }
 
     const kpiEl = $("#bas-alloc-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Allocated matches", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
         { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
-        { label: "Delivered", val: formatNumber(delivered), sub: "Col V set in Sales Raw", cls: delivered ? "ok" : "" },
-        { label: "Proforma", val: formatNumber(proforma), sub: "Proforma only · not delivered", cls: proforma ? "warn" : "" },
-        { label: "NA", val: formatNumber(na), sub: "VIN not found in Sales Raw", cls: na ? "bad" : "ok" },
+        { label: "Delivered", val: formatNumber(delivered), sub: `Col V in ${periodSub}`, cls: delivered ? "ok" : "" },
+        { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub} · not delivered`, cls: proforma ? "warn" : "" },
+        { label: "In period", val: formatNumber(inPeriod), sub: `${formatNumber(outside)} outside · ${formatNumber(na)} NA`, cls: inPeriod ? "ok" : "" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
           <div class="lbl">${k.label}</div>
           <div class="val">${k.val}</div>
-          <div class="sub">${k.sub}</div>
+          <div class="sub">${escapeHtml(k.sub)}</div>
         </article>
       `).join("");
     }
@@ -7482,8 +7779,8 @@
     }
 
     const sorted = [...rows].sort((a, b) => {
-      const order = { Delivered: 0, Proforma: 1, NA: 2 };
-      return (order[a.salesStatus] ?? 3) - (order[b.salesStatus] ?? 3);
+      const order = { Delivered: 0, Proforma: 1, "Outside period": 2, NA: 3 };
+      return (order[a.salesStatus] ?? 4) - (order[b.salesStatus] ?? 4);
     });
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table">
@@ -7516,8 +7813,8 @@
 
     if (footEl) {
       const hasSales = hasSalesRaw();
-      footEl.textContent = `${formatNumber(rows.length)} allocated VIN matches` +
-        (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status (otherwise NA)");
+      footEl.textContent = `${formatNumber(rows.length)} of ${formatNumber(allRows.length)} allocated VIN matches · ${periodSub}` +
+        (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
 
