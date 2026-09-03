@@ -723,56 +723,6 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   color: #4338ca !important;
 }
 
-.admin-light .mgmt-score,
-.admin-light .mgmt-kpi,
-.admin-light .mgmt-actions,
-.admin-light .mgmt-achieve,
-.admin-light .mgmt-lead,
-.admin-light .mgmt-perf,
-.admin-light .mgmt-drill {
-  background: #fff !important;
-  border-color: var(--hc-line) !important;
-}
-
-.admin-light .mgmt-score {
-  background:
-    radial-gradient(120% 140% at 0% 0%, rgba(46,196,182,0.12), transparent 55%),
-    radial-gradient(100% 120% at 100% 0%, rgba(108,92,231,0.1), transparent 50%),
-    #fff !important;
-}
-
-.admin-light .mgmt-score__value,
-.admin-light .mgmt-kpi__pct,
-.admin-light .mgmt-achieve__ratio,
-.admin-light .mgmt-action__count,
-.admin-light .mgmt-lead__bucket b,
-.admin-light .mgmt-perf__head h3,
-.admin-light .mgmt-actions__head h3,
-.admin-light .mgmt-drill__head h3 {
-  color: var(--hc-text) !important;
-}
-
-.admin-light .mgmt-score__part,
-.admin-light .mgmt-action,
-.admin-light .mgmt-lead__bucket {
-  background: #f8fafc !important;
-  border-color: var(--hc-line) !important;
-}
-
-.admin-light .mgmt-table th {
-  background: #f1f5f9 !important;
-  color: var(--hc-muted) !important;
-}
-
-.admin-light .mgmt-table-wrap {
-  border-color: var(--hc-line) !important;
-}
-
-.admin-light .mgmt-kpi__name,
-.admin-light .mgmt-action__label {
-  color: var(--hc-text) !important;
-}
-
 /* Pane chrome */
 .admin-light .admin-nav {
   display: none !important; /* moved into sidebar */
