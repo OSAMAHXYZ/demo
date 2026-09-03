@@ -922,10 +922,10 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light .pdf-browser,
 .admin-light .last-months-detail,
 .admin-light .company-filter-chip {
-  background: #fff !important;
+  background: var(--hc-surface) !important;
   border-color: var(--hc-line) !important;
   color: var(--hc-text) !important;
-  box-shadow: var(--hc-shadow) !important;
+  box-shadow: none !important;
 }
 
 .admin-light .xfer-dash-row,
@@ -933,7 +933,7 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light .queue-vin-row,
 .admin-light .options-list button,
 .admin-light .hub-chips > * {
-  background: #f8f9fc !important;
+  background: var(--hc-stat) !important;
   border-color: var(--hc-line) !important;
   color: var(--hc-text) !important;
 }
@@ -941,15 +941,18 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light .xfer-dash-row.is-active,
 .admin-light .xfer-account-item.is-active {
   background: var(--hc-primary-soft) !important;
-  border-color: #ddd6fe !important;
+  border-color: rgba(235, 10, 30, 0.35) !important;
 }
 
 .admin-light .xfer-dash-bar,
 .admin-light .pct-donut-wrap,
 .admin-light .invoice-status-chart,
 .admin-light .xfer-trend-chart,
-.admin-light .xfer-city-chart {
-  background: #fafbff !important;
+.admin-light .xfer-city-chart,
+.admin-light .dh-user-chart,
+.admin-light .ops-board__chart-el {
+  background: var(--hc-stat) !important;
+  border: 1px solid var(--hc-line) !important;
   border-radius: 14px;
 }
 
@@ -962,7 +965,7 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light input[type="text"],
 .admin-light input[type="password"],
 .admin-light textarea {
-  background: #fff !important;
+  background: var(--hc-stat) !important;
   color: var(--hc-text) !important;
   border: 1px solid var(--hc-line) !important;
   border-radius: 12px !important;
@@ -971,7 +974,7 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light .ft-panel,
 .admin-light .ft-more__panel,
 .admin-light .ft-control__trigger {
-  background: #fff !important;
+  background: var(--hc-surface) !important;
   color: var(--hc-text) !important;
   border-color: var(--hc-line) !important;
 }
@@ -989,9 +992,9 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light .pdf-type-badge--warehouse { background: #e0f2fe !important; color: #0369a1 !important; }
 
 .admin-light .hub-stat {
-  background: #fff !important;
+  background: var(--hc-surface) !important;
   border: 1px solid var(--hc-line) !important;
-  box-shadow: var(--hc-shadow) !important;
+  box-shadow: none !important;
 }
 .admin-light .hub-stat span { color: var(--hc-muted) !important; }
 .admin-light .hub-stat b { color: var(--hc-text) !important; }
@@ -1000,8 +1003,8 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 .admin-light #restoreExportMeta { color: var(--hc-muted) !important; }
 
 .admin-light .hub-upload {
-  background: #f8f9fc !important;
-  border: 1px dashed #c7cbe0 !important;
+  background: var(--hc-stat) !important;
+  border: 1px dashed var(--hc-line) !important;
   color: var(--hc-text) !important;
 }
 
@@ -1013,9 +1016,9 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   padding: 4px 2px 8px !important;
 }
 .admin-light .admin-topbar__search {
-  background: #fff !important;
+  background: var(--hc-surface) !important;
   border: 1px solid var(--hc-line) !important;
-  box-shadow: var(--hc-shadow);
+  box-shadow: none;
 }
 .admin-light .admin-topbar__actions .saas-btn--sm {
   padding: 8px 12px !important;
@@ -1028,7 +1031,7 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   margin-bottom: 4px !important;
 }
 .admin-light .ft-toolbar {
-  background: #f8f9fc !important;
+  background: var(--hc-stat) !important;
   box-shadow: none !important;
 }
 
@@ -1107,8 +1110,9 @@ html {
 body.delivery-hub.admin-console.admin-light {
   --hc-bg: #000000;
   --hc-surface: #0a0a0a;
-  --hc-primary: #6c5ce7;
-  --hc-primary-soft: rgba(108, 92, 231, 0.18);
+  --hc-primary: #EB0A1E;
+  --hc-primary-soft: rgba(235, 10, 30, 0.16);
+  --hc-primary-deep: #c40818;
   --hc-text: #f1f5f9;
   --hc-muted: #94a3b8;
   --hc-line: rgba(255, 255, 255, 0.1);
@@ -1116,6 +1120,7 @@ body.delivery-hub.admin-console.admin-light {
   --saas-bg: #000000;
   --saas-card: #0a0a0a;
   --saas-card-2: #111111;
+  --saas-primary: #EB0A1E;
   --saas-text: #f1f5f9;
   --saas-muted: #94a3b8;
   --saas-border: rgba(255, 255, 255, 0.1);
@@ -1125,6 +1130,7 @@ body.delivery-hub.admin-console.admin-light {
   --hub-line: rgba(255, 255, 255, 0.1);
   --hub-card: #0a0a0a;
   --hub-stat: #111111;
+  --tot-primary: #EB0A1E;
   color: #f1f5f9 !important;
   background: #000000 !important;
   background-image: none !important;
@@ -1216,7 +1222,7 @@ body.delivery-hub.admin-console.admin-light {
 
 .admin-light .admin-nav__btn.is-active {
   color: #fff !important;
-  background: rgba(108, 92, 231, 0.22) !important;
+  background: rgba(235, 10, 30, 0.2) !important;
 }
 
 .admin-light .ft-input,
@@ -1236,8 +1242,13 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .dn-stat,
 .admin-light .hub-stat,
 .admin-light .saas-hero,
-.admin-light .admin-highlight-card {
-  background: #111111 !important;
+.admin-light .admin-highlight-card,
+.admin-light .pct-chart-card,
+.admin-light .xfer-dash-card,
+.admin-light .xfer-mosaic-cell,
+.admin-light .saas-section,
+.admin-light .options-manage-card {
+  background: #0a0a0a !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -1247,7 +1258,9 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .saas-hero__pct,
 .admin-light table,
 .admin-light th,
-.admin-light td {
+.admin-light td,
+.admin-light .saas-section__head h3,
+.admin-light .pct-chart-card h3 {
   color: #e2e8f0 !important;
 }
 
@@ -1267,10 +1280,25 @@ body.delivery-hub.admin-console.admin-light {
 .admin-light .xl-table-wrap,
 .admin-light .dh-user-dash .xl-table-wrap,
 .admin-light .dh-user-chart,
+.admin-light .xfer-trend-chart,
+.admin-light .xfer-city-chart,
+.admin-light .pct-donut-wrap,
+.admin-light .invoice-status-chart,
+.admin-light .ops-board__chart-el,
 .admin-light .apexcharts-canvas,
-.admin-light .apexcharts-svg {
+.admin-light .apexcharts-svg,
+.admin-light .apexcharts-inner {
   background: #000000 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-light .saas-empty,
+.admin-light .xfer-dash-empty {
+  color: #94a3b8 !important;
+  background: transparent !important;
+  padding: 36px 20px !important;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
 }
 
 .admin-light .saas-btn,
@@ -1284,14 +1312,23 @@ body.delivery-hub.admin-console.admin-light {
   color: #e2e8f0 !important;
 }
 
+.admin-light .saas-btn--primary,
+.admin-light .hub-btn--primary,
+.admin-light .admin-sidebar__cta {
+  background: #EB0A1E !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 10px 24px rgba(235, 10, 30, 0.28) !important;
+}
+
 .admin-light .admin-upload-banner {
   background: #0a0a0a !important;
-  border-color: rgba(108, 92, 231, 0.28) !important;
+  border-color: rgba(235, 10, 30, 0.28) !important;
 }
 
 .admin-light .admin-upload-banner code {
   background: #1a1a1a !important;
-  color: #c4b5fd;
+  color: #fecaca;
 }
 
 .admin-light .pbi-name,
@@ -1308,8 +1345,23 @@ body.delivery-hub.admin-console.admin-light {
 }
 
 .admin-light .dh-user-dash .pbi-name.active {
-  background: rgba(108, 92, 231, 0.2) !important;
-  border-color: rgba(108, 92, 231, 0.45) !important;
+  background: rgba(235, 10, 30, 0.18) !important;
+  border-color: rgba(235, 10, 30, 0.4) !important;
+}
+
+.admin-light .xfer-dash-row.is-active,
+.admin-light .xfer-account-item.is-active,
+.admin-light .last-months-folder.is-active {
+  background: rgba(235, 10, 30, 0.14) !important;
+  border-color: rgba(235, 10, 30, 0.35) !important;
+}
+
+.admin-light .apexcharts-text tspan,
+.admin-light .apexcharts-legend-text,
+.admin-light .apexcharts-yaxis text,
+.admin-light .apexcharts-xaxis text {
+  fill: #94a3b8 !important;
+  color: #94a3b8 !important;
 }
 
 /* Login gate — full black */

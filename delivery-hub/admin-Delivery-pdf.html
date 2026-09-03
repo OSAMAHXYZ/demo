@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260903a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903c">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903d">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2035,6 +2035,27 @@
         body.delivery-hub.admin-console.admin-light .admin-sidebar__nav {
             overflow: auto !important;
         }
+
+        /* Kill leftover light chart/card surfaces */
+        body.delivery-hub.admin-console.admin-light .pct-chart-card,
+        body.delivery-hub.admin-console.admin-light .xfer-dash-card,
+        body.delivery-hub.admin-console.admin-light .xfer-mosaic-cell,
+        body.delivery-hub.admin-console.admin-light .saas-section,
+        body.delivery-hub.admin-console.admin-light .xfer-trend-chart,
+        body.delivery-hub.admin-console.admin-light .xfer-city-chart,
+        body.delivery-hub.admin-console.admin-light .pct-donut-wrap,
+        body.delivery-hub.admin-console.admin-light .dh-user-chart,
+        body.delivery-hub.admin-console.admin-light .ops-board__chart-el,
+        body.delivery-hub.admin-console.admin-light .apexcharts-canvas,
+        body.delivery-hub.admin-console.admin-light .apexcharts-svg {
+            background: #000 !important;
+            box-shadow: none !important;
+        }
+        body.delivery-hub.admin-console.admin-light .saas-empty,
+        body.delivery-hub.admin-console.admin-light .xfer-dash-empty {
+            color: #94a3b8 !important;
+            background: transparent !important;
+        }
     </style>
 </head>
 <body class="delivery-hub admin-console admin-light">
@@ -3811,10 +3832,10 @@
             const assignedLabel = progress.source === 'raw' ? 'مُسند · Assigned' : 'إجمالي المركبات';
             const assignedVal = progress.source === 'raw' ? progress.assigned : vehicles.length;
             const cards = [
-                { label: assignedLabel, value: assignedVal, trend: progress.source === 'raw' ? (progress.period?.label || 'Col P month') : 'ضمن النطاق الحالي', accent: '#6C5CE7', soft: '#eeebff', icon: '▣' },
-                { label: 'تم الترحيل · Delivered', value: progress.delivered, trend: `${progress.pct}% delivered`, accent: '#2EC4B6', soft: '#e6faf7', icon: '✓' },
-                { label: 'الفجوة · Gap', value: progress.gap ?? progress.remaining, trend: 'without delivery note', accent: '#FF8A4C', soft: '#fff1e8', icon: '◷' },
-                { label: 'سيارات العرض', value: (allShowroomParking || []).length, trend: 'موقف SR', accent: '#F472B6', soft: '#fce7f3', icon: '✚' }
+                { label: assignedLabel, value: assignedVal, trend: progress.source === 'raw' ? (progress.period?.label || 'Col P month') : 'ضمن النطاق الحالي', accent: '#EB0A1E', soft: 'rgba(235,10,30,0.15)', icon: '▣' },
+                { label: 'تم الترحيل · Delivered', value: progress.delivered, trend: `${progress.pct}% delivered`, accent: '#2EC4B6', soft: 'rgba(46,196,182,0.15)', icon: '✓' },
+                { label: 'الفجوة · Gap', value: progress.gap ?? progress.remaining, trend: 'without delivery note', accent: '#FF8A4C', soft: 'rgba(255,138,76,0.15)', icon: '◷' },
+                { label: 'سيارات العرض', value: (allShowroomParking || []).length, trend: 'موقف SR', accent: '#F472B6', soft: 'rgba(244,114,182,0.15)', icon: '✚' }
             ];
             // Keep secondary metrics available for logic/tooltips via data attributes
             host.dataset.warehouse = String(warehouse.count);
