@@ -214,6 +214,10 @@
                 <div class="chart-scroll">
                   <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
                 </div>
+                <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
+                  <h3 class="acc-remain-title">Remaining to accessories target</h3>
+                  <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
+                </div>
               </article>
               <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
                 <div class="pbi-viz-head">
@@ -823,7 +827,7 @@
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
-    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Col F date · Col G salesman · Col H amount" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "First sheet · Col F date · Col G salesman · Col H amount" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -1848,10 +1852,11 @@
   }
 
   /**
-   * Accessories Excel:
+   * Accessories Excel (slot 6) — always first sheet:
    *   Col F = date
    *   Col G = salesman name
-   *   Col H = amount (deducted from vehicle target; summed for Ach%)
+   *   Col H = amount (accessories achieved)
+   * Ach% = amount ÷ accessories target (settled pool share, else employee monthly target)
    */
   function parseAmount(v) {
     if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -1864,10 +1869,8 @@
   function accessoriesRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    const preferred =
-      names.find((n) => /accessor/i.test(n)) ||
-      names.find((n) => /sales|retail/i.test(n)) ||
-      names[0];
+    // Always read the first sheet (as uploaded)
+    const preferred = names[0];
     if (!workbook.Sheets[preferred]) return [];
 
     const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
@@ -2800,12 +2803,24 @@
     else setStatus("Ready · Refresh from Admin", "ok");
   }
 
+  function accessoriesInPeriod(r, live, prevMonthKey) {
+    if (!r) return false;
+    // "All dates" / no range: include every row (even if Col F date is blank)
+    if (live && (live.preset === "all" || live.filterMode === "all")) return true;
+    if (!r.accessoryDate) {
+      // Undated rows still count toward the open month view
+      return !!(live && (live.preset === "this_month" || live.preset === "today" || !live.preset));
+    }
+    return salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey);
+  }
+
   function buildAccessoriesMetrics(live, prevMonthKey) {
     const settled = accessoriesSettled;
     const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
+    const useSettledPool = settled > 0 && totalAdminTarget > 0;
     const soldByKey = new Map();
     (slots.accessories.rows || []).forEach((r) => {
-      if (!salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey)) return;
+      if (!accessoriesInPeriod(r, live, prevMonthKey)) return;
       const key = nameKey(r.salesman);
       if (!key) return;
       soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
@@ -2816,16 +2831,20 @@
       const key = nameKey(e.name);
       if (!key) return;
       const adminTarget = effectiveEmployeeTarget(e);
-      const quota = totalAdminTarget > 0 && settled > 0 ? (settled / totalAdminTarget) * adminTarget : 0;
+      // Accessories target: settled pool share, else employee's monthly target
+      const quota = useSettledPool
+        ? (settled / totalAdminTarget) * adminTarget
+        : adminTarget;
       const sold = soldByKey.get(key) || 0;
-      const achPct = quota > 0 ? sold / quota : null;
+      const remaining = Math.max(0, quota - sold);
       byKey.set(key, {
         salesman: e.name,
         adminTarget,
         quota,
         sold,
-        achPct,
-        netTarget: Math.max(0, adminTarget - sold),
+        achPct: quota > 0 ? sold / quota : null,
+        remaining,
+        netTarget: remaining,
       });
       soldByKey.delete(key);
     });
@@ -2837,6 +2856,7 @@
         quota: 0,
         sold,
         achPct: null,
+        remaining: 0,
         netTarget: 0,
       });
     });
@@ -2846,6 +2866,7 @@
     return {
       settled,
       totalAdminTarget,
+      useSettledPool,
       byKey,
       totals: {
         sold: totSold,
@@ -2867,10 +2888,12 @@
         "Acc Target": m.quota,
         "Acc Achieved": m.sold,
         "Acc Ach %": accAchPct == null ? (m.quota ? "0%" : "—") : pct1(accAchPct),
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         "Adjusted Target": m.netTarget,
         _accQuota: m.quota,
         _accSold: m.sold,
         _accAchPct: accAchPct,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         _accNetTarget: m.netTarget,
       };
     });
@@ -2903,10 +2926,12 @@
         "Acc Target": m.quota,
         "Acc Achieved": m.sold,
         "Acc Ach %": m.achPct == null ? "0%" : pct1(m.achPct),
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         "Adjusted Target": m.netTarget,
         _accQuota: m.quota,
         _accSold: m.sold,
         _accAchPct: m.achPct,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         _accNetTarget: m.netTarget,
         day: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
         month: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
@@ -2921,7 +2946,7 @@
   function accessoriesRawRowsForSalesman(key, live, prevMonthKey) {
     return (slots.accessories.rows || []).filter((r) => {
       if (nameKey(r.salesman) !== key) return false;
-      return salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey);
+      return accessoriesInPeriod(r, live, prevMonthKey);
     });
   }
 
@@ -5318,6 +5343,7 @@
         <div class="emp-stat"><div class="k">Adjusted target</div><div class="v">${formatNumber(row["Adjusted Target"] ?? (row._vacation ? 0 : rowTargetNum(row)))}</div></div>
         <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(row["Acc Target"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(row["Acc Achieved"] || 0)}</div></div>
+        <div class="emp-stat"><div class="k">Acc remaining</div><div class="v">${formatNumber(row["Acc Remaining"] ?? row._accRemaining ?? 0)}</div></div>
         <div class="emp-stat"><div class="k">Acc Ach%</div><div class="v">${escapeHtml(row["Acc Ach %"] || "—")}</div></div>
         <div class="emp-stat"><div class="k">Cancelled BOs</div><div class="v">${formatNumber(month["Cancelled BOs"] || 0)}</div></div>
         <div class="emp-stat"><div class="k">Ach%</div><div class="v">${escapeHtml(month["Ach%"] || "—")}</div></div>
@@ -5571,20 +5597,15 @@
 
   function renderAccessoriesChart(sr, rows, opts) {
     const acc = sr.accessories || {};
-    const settled = acc.settled || 0;
     const hasFile = acc.hasFile;
+    const remainWrap = $("#acc-remain-wrap");
+    const remainTable = $("#acc-remain-table");
 
     if (!hasFile) {
+      if (remainWrap) remainWrap.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
-        "Upload Accessories Excel in Admin (slot 6 · Col F date · Col G salesman · Col H amount), then Push to live."
-      );
-      return;
-    }
-    if (!settled) {
-      setChartEmptyState(
-        "chart-sr-accessories",
-        "Set Accessories settled (SAR) in Admin → Employees & Targets, then Push to live."
+        "Upload Accessories Excel in Admin (slot 6 · first sheet · Col F date · Col G salesman · Col H amount), then Push to live."
       );
       return;
     }
@@ -5592,21 +5613,55 @@
     clearChartEmptyState("chart-sr-accessories");
 
     const accRows = rows
-      .map((r) => ({
-        row: r,
-        pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
-        quota: r._accQuota || 0,
-        sold: r._accSold || 0,
-      }))
+      .map((r) => {
+        const quota = Number(r._accQuota) || 0;
+        const sold = Number(r._accSold) || 0;
+        const remaining = r._accRemaining != null
+          ? Math.max(0, Number(r._accRemaining) || 0)
+          : Math.max(0, quota - sold);
+        return {
+          row: r,
+          pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
+          quota,
+          sold,
+          remaining,
+        };
+      })
       .filter((x) => x.quota > 0 || x.sold > 0)
-      .sort((a, b) => b.pct - a.pct);
+      .sort((a, b) => b.remaining - a.remaining || b.pct - a.pct);
 
     if (!accRows.length) {
+      if (remainWrap) remainWrap.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
-        "No accessories amounts in the selected date period (Col F)."
+        "No accessories amounts / targets for this period. Set employee targets (or Accessories settled) in Admin, check Col F dates, then Push."
       );
       return;
+    }
+
+    if (remainWrap && remainTable) {
+      remainWrap.hidden = false;
+      remainTable.innerHTML = `<table class="acc-remain-table">
+        <thead><tr>
+          <th>Advisor</th>
+          <th class="num">Acc Target</th>
+          <th class="num">Achieved</th>
+          <th class="num">Ach %</th>
+          <th class="num">Remaining</th>
+        </tr></thead>
+        <tbody>${accRows.map((x) => {
+          const name = x.row["Sales Employee"] || x.row.Salesman || "—";
+          const done = x.remaining <= 0 && x.quota > 0;
+          const remCls = done ? "acc-rem-done" : x.remaining > 0 ? "acc-rem-open" : "";
+          return `<tr class="${done ? "is-done" : ""}" data-emp-key="${escapeHtml(x.row._key || "")}">
+            <td><button type="button" class="bo-link acc-remain-name" data-emp-key="${escapeHtml(x.row._key || "")}">${escapeHtml(name)}</button></td>
+            <td class="num">${formatNumber(x.quota)}</td>
+            <td class="num">${formatNumber(x.sold)}</td>
+            <td class="num">${x.row["Acc Ach %"] || (x.quota ? pct1(x.sold / x.quota) : "—")}</td>
+            <td class="num ${remCls}"><b>${done ? "0 · done" : formatNumber(x.remaining)}</b></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
     }
 
     const single = !!(opts && opts.single) || accRows.length === 1;
@@ -5927,7 +5982,7 @@
       "Lead Time", "NPS", "PSFU%",
       "Lead Mgmt MTD Dist.", "Lead Mgmt MTD Cont.", "Lead Mgmt MTD %",
       "NPS Prospect",
-      "Acc Target", "Acc Achieved", "Acc Ach %",
+      "Acc Target", "Acc Achieved", "Acc Ach %", "Acc Remaining",
       "Del Quest", "Del Employee",
     ]);
     // Sub header
@@ -5939,7 +5994,7 @@
       "", "", "",
       "", "", "",
       "",
-      "", "", "",
+      "", "", "", "",
       "", "",
     ]);
 
@@ -5966,6 +6021,7 @@
         r["Acc Target"] || 0,
         r["Acc Achieved"] || 0,
         r["Acc Ach %"] || "",
+        r["Acc Remaining"] ?? r._accRemaining ?? 0,
         "", "",
       ]);
     });
@@ -5989,6 +6045,7 @@
       t.accQuota || 0,
       t.accSold || 0,
       t.accAchPct != null ? (t.accAchPct * 100).toFixed(1) + "%" : "",
+      Math.max(0, (t.accQuota || 0) - (t.accSold || 0)),
       "", "",
     ]);
 
@@ -8429,6 +8486,11 @@
       e.preventDefault();
       openWideChart(expand.getAttribute("data-expand"));
       return;
+    }
+    const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
+    if (accName && accName.closest("#acc-remain-wrap")) {
+      const key = accName.getAttribute("data-emp-key");
+      if (key) selectEmployee(key);
     }
   });
   $("#sr-charts").addEventListener("dblclick", (e) => {

@@ -963,6 +963,88 @@ button:disabled {
   display: none !important;
 }
 
+.pbi-viz .acc-remain-wrap {
+  margin-top: 10px;
+  padding: 0 4px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.acc-remain-title {
+  margin: 10px 4px 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+}
+
+.acc-remain-table-wrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.acc-remain-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.acc-remain-table th,
+.acc-remain-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.acc-remain-table th {
+  position: sticky;
+  top: 0;
+  background: #f0f6fb;
+  color: var(--navy-2);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  z-index: 1;
+}
+
+.acc-remain-table th.num,
+.acc-remain-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.acc-remain-table tr.is-done {
+  background: var(--ok-bg);
+}
+
+.acc-rem-open {
+  color: #b45309;
+}
+
+.acc-rem-done {
+  color: #0f766e;
+}
+
+.acc-remain-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+  text-align: left;
+}
+
+.acc-remain-name:hover {
+  color: var(--sky);
+  text-decoration: underline;
+}
+
 .pbi-wide-numbers-title {
   margin: 0 0 10px;
   font-size: 0.78rem;

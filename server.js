@@ -31,6 +31,12 @@ const USER_ROLES = Object.freeze({
 const SHOWROOM_ADMIN_AGENT = 'showroom admin';
 const SHOWROOM_PARKING_SLOTS = Object.freeze(['SR-1', 'SR-2', 'SR-3', 'SR-4', 'SR-5', 'SR-6', 'SR-7']);
 const SHOWROOM_PARKING_LABEL = 'Showroom Cars';
+/** Yassin Automall / guest parking — 10 slots. */
+const YASSIN_PARKING_SLOTS = Object.freeze([
+  'YS-1', 'YS-2', 'YS-3', 'YS-4', 'YS-5',
+  'YS-6', 'YS-7', 'YS-8', 'YS-9', 'YS-10'
+]);
+const YASSIN_PARKING_LABEL = 'موقف ياسين · اوتومول';
 const WAREHOUSE_ZONE_CONFIG = Object.freeze({
   A: { total: 40, labelAr: 'استلام' },
   B: { total: 40, labelAr: 'جاهز للتسليم' },
@@ -70,7 +76,8 @@ function uniqueSorted(list) {
 function defaultOptions() {
   return {
     companies: uniqueSorted(DEFAULT_COMPANIES),
-    cities: uniqueSorted(DEFAULT_CITIES)
+    cities: uniqueSorted(DEFAULT_CITIES),
+    companyPhones: {}
   };
 }
 
@@ -82,6 +89,7 @@ const emptyStore = () => ({
   manualVehicles: [],
   warehouseStock: [],
   showroomParking: [],
+  yassinParking: [],
   options: defaultOptions(),
   meta: {
     filename: '',
@@ -115,6 +123,63 @@ function ensureOptions() {
   } else {
     store.options.cities = uniqueSorted(store.options.cities);
   }
+  if (!store.options.companyPhones || typeof store.options.companyPhones !== 'object') {
+    store.options.companyPhones = {};
+  }
+  // Ensure Automall city aliases exist for agents + Yassin board
+  const citySet = new Set((store.options.cities || []).map((c) => companyNameKey(c)));
+  ['اوتومول', 'الاوتومول'].forEach((c) => {
+    if (!citySet.has(companyNameKey(c))) {
+      store.options.cities = uniqueSorted([...(store.options.cities || []), c]);
+      citySet.add(companyNameKey(c));
+    }
+  });
+}
+
+function normalizeCompanyPhone(raw) {
+  let digits = String(raw || '').replace(/[^\d+]/g, '').trim();
+  if (!digits) return '';
+  if (digits.startsWith('+')) digits = digits.slice(1);
+  digits = digits.replace(/\D/g, '');
+  if (!digits) return '';
+  // Saudi local 05xxxxxxxx → 9665xxxxxxxx
+  if (digits.length === 10 && digits.startsWith('05')) digits = `966${digits.slice(1)}`;
+  else if (digits.length === 9 && digits.startsWith('5')) digits = `966${digits}`;
+  return digits;
+}
+
+function companyPhoneKey(name) {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getCompanyPhone(name) {
+  ensureOptions();
+  const key = companyPhoneKey(name);
+  if (!key) return '';
+  const map = store.options.companyPhones || {};
+  if (map[key]) return String(map[key]);
+  // Exact / case-insensitive name lookup
+  for (const [k, v] of Object.entries(map)) {
+    if (companyPhoneKey(k) === key) return String(v || '');
+  }
+  return '';
+}
+
+function setCompanyPhone(name, phone) {
+  ensureOptions();
+  const company = normalizeOptionName(name) || String(name || '').trim();
+  if (!company) return { ok: false, error: 'اسم الشركة مطلوب' };
+  const key = companyPhoneKey(company);
+  const normalized = normalizeCompanyPhone(phone);
+  if (!store.options.companyPhones || typeof store.options.companyPhones !== 'object') {
+    store.options.companyPhones = {};
+  }
+  // Drop stale keys for same company
+  for (const k of Object.keys(store.options.companyPhones)) {
+    if (companyPhoneKey(k) === key) delete store.options.companyPhones[k];
+  }
+  if (normalized) store.options.companyPhones[key] = normalized;
+  return { ok: true, company, phone: normalized || '' };
 }
 
 function loadStore() {
@@ -132,10 +197,15 @@ function loadStore() {
       manualVehicles: Array.isArray(parsed.manualVehicles) ? parsed.manualVehicles : [],
       warehouseStock: Array.isArray(parsed.warehouseStock) ? parsed.warehouseStock : [],
       showroomParking: Array.isArray(parsed.showroomParking) ? parsed.showroomParking : [],
+      yassinParking: Array.isArray(parsed.yassinParking) ? parsed.yassinParking : [],
       options: parsed.options && typeof parsed.options === 'object'
         ? {
             companies: Array.isArray(parsed.options.companies) ? parsed.options.companies : [],
-            cities: Array.isArray(parsed.options.cities) ? parsed.options.cities : []
+            cities: Array.isArray(parsed.options.cities) ? parsed.options.cities : [],
+            companyPhones:
+              parsed.options.companyPhones && typeof parsed.options.companyPhones === 'object'
+                ? parsed.options.companyPhones
+                : {}
           }
         : defaultOptions(),
       meta: {
@@ -190,6 +260,57 @@ function todayIsoRiyadh() {
     month: '2-digit',
     day: '2-digit'
   }).format(new Date());
+}
+
+function companyNameKey(name) {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function sameCompanyName(a, b) {
+  const ka = companyNameKey(a);
+  const kb = companyNameKey(b);
+  return Boolean(ka && kb && ka === kb);
+}
+
+/** Automall destination city (اوتومول / الاوتومول / …). */
+function isAutomallCity(raw) {
+  let s = String(raw || '').trim().toLowerCase();
+  if (!s) return false;
+  s = s.replace(/\s+/g, '').replace(/[ـ_]/g, '');
+  // strip leading ال
+  if (s.startsWith('ال')) s = s.slice(2);
+  if (s === 'اوتومول' || s === 'أوتومول' || s === 'اوتمول' || s === 'automall' || s === 'auto mall') {
+    return true;
+  }
+  return s.includes('اوتومول') || s.includes('أوتومول') || s.includes('automall');
+}
+
+const AUTOMALL_CITY_LABEL = 'اوتومول';
+
+/**
+ * When an agent prints with a different company than the coordinator assigned,
+ * move the VIN to the new company and record from → to for admin/coordinator labels.
+ */
+function applyAgentCompanyChange(vins, typedCompany, { warehouseDelivery = false, showroomDisplay = false } = {}) {
+  const to = String(typedCompany || '').trim();
+  if (!to || warehouseDelivery || showroomDisplay) return [];
+  const changes = [];
+  const nowIso = new Date().toISOString();
+  for (const vin of vins) {
+    const item = findQueueItem(vin);
+    if (!item) continue;
+    const from = String(item.deliveryCompany || item.company || '').trim();
+    const fromUnassigned = isUnassignedDeliveryCompany(item);
+    if (from && !fromUnassigned && !sameCompanyName(from, to)) {
+      item.companyChangedFrom = from;
+      item.companyChangedTo = to;
+      item.companyChangedAt = nowIso;
+      changes.push({ vin: item.vin || vin, from, to });
+    }
+    item.deliveryCompany = to;
+    item.company = to;
+  }
+  return changes;
 }
 
 function agentAutoBranch(username) {
@@ -543,6 +664,136 @@ function showroomParkingOccupancy() {
   };
 }
 
+function ensureYassinParking() {
+  if (!Array.isArray(store.yassinParking)) store.yassinParking = [];
+}
+
+function findYassinParkingInStock(vin) {
+  ensureYassinParking();
+  const key = normVin(vin);
+  if (!key) return null;
+  return store.yassinParking.find((e) => normVin(e.vin) === key && e.status === 'in') || null;
+}
+
+function normalizeYassinParkingSlot(raw) {
+  const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!s) return '';
+  if (YASSIN_PARKING_SLOTS.includes(s)) return s;
+  const m = s.match(/^(?:YS-?)?([1-9]|10)$/);
+  if (m) return `YS-${m[1]}`;
+  return '';
+}
+
+function guestInfoFromRaw(vin) {
+  const key = normVin(vin);
+  const veh = vehicleIndex().get(key) || {};
+  const guestName = String(veh.guestName || veh.customerName || '').trim();
+  const guestPhone = String(veh.guestPhone || veh.phone || '').trim();
+  return {
+    vin: key,
+    guestName: guestName === '#' ? '' : guestName,
+    guestPhone: guestPhone === '#' ? '' : guestPhone,
+    product: veh.product || veh.model || '',
+    model: veh.model || veh.product || '',
+    plate: veh.plate || '',
+    inRaw: Boolean(key && vehicleIndex().has(key))
+  };
+}
+
+function enrichYassinParkingEntry(entry) {
+  const vin = normVin(entry.vin);
+  const guest = guestInfoFromRaw(vin);
+  const queueItem = findQueueItem(vin);
+  return {
+    ...entry,
+    vin,
+    product: entry.product || guest.product || queueItem?.product || '',
+    model: entry.model || guest.model || '',
+    plate: entry.plate || guest.plate || queueItem?.plate || '',
+    guestName: entry.guestName || guest.guestName || '',
+    guestPhone: entry.guestPhone || guest.guestPhone || '',
+    carType: normalizeVehicleStatus(entry.carType) || entry.carType || '',
+    guestArrivalTime: entry.guestArrivalTime || '',
+    label: YASSIN_PARKING_LABEL,
+    section: 'yassin'
+  };
+}
+
+function yassinParkingOccupancy() {
+  ensureYassinParking();
+  const used = new Map(
+    store.yassinParking
+      .filter((e) => e.status === 'in')
+      .map((e) => [String(e.slot || '').toUpperCase(), enrichYassinParkingEntry(e)])
+  );
+  const slots = YASSIN_PARKING_SLOTS.map((slot) => ({
+    slot,
+    free: !used.has(slot),
+    entry: used.get(slot) || null
+  }));
+  return {
+    total: YASSIN_PARKING_SLOTS.length,
+    used: slots.filter((s) => !s.free).length,
+    free: slots.filter((s) => s.free).length,
+    slots,
+    label: YASSIN_PARKING_LABEL
+  };
+}
+
+/** Cars Yassin owns / manages for parking board. */
+function buildYassinCarsList() {
+  const seen = new Set();
+  const cars = [];
+  const pushCar = (base) => {
+    const vin = normVin(base.vin);
+    if (!vin || seen.has(vin)) return;
+    seen.add(vin);
+    const guest = guestInfoFromRaw(vin);
+    const parked = findYassinParkingInStock(vin)
+      || (store.yassinParking || []).find((e) => normVin(e.vin) === vin && e.status === 'display')
+      || null;
+    cars.push({
+      vin,
+      product: base.product || guest.product || '',
+      company: String(base.deliveryCompany || base.company || '').trim(),
+      assignedTo: base.assignedTo || '',
+      agentStatus: base.agentStatus || '',
+      status: base.status || '',
+      guestName: guest.guestName,
+      guestPhone: guest.guestPhone,
+      inRaw: guest.inRaw,
+      parked: Boolean(parked && parked.status === 'in'),
+      isDisplayOnly: Boolean(parked && parked.status === 'display'),
+      parkingSlot: parked?.slot || '',
+      carType: parked?.carType || base.vehicleStatus || '',
+      guestArrivalTime: parked?.guestArrivalTime || ''
+    });
+  };
+
+  for (const q of store.queue || []) {
+    if (String(q.assignedTo || '').trim() === SHOWROOM_AGENT) {
+      pushCar(enrichQueueItem(q));
+    }
+  }
+  for (const e of store.yassinParking || []) {
+    if (e.status === 'in' || e.status === 'display') {
+      pushCar({
+        vin: e.vin,
+        product: e.product,
+        assignedTo: e.stockedInBy || SHOWROOM_AGENT,
+        agentStatus: e.carType || '',
+        deliveryCompany: '',
+        vehicleStatus: e.carType
+      });
+    }
+  }
+  cars.sort((a, b) => {
+    if (a.parked !== b.parked) return a.parked ? -1 : 1;
+    return String(a.vin).localeCompare(String(b.vin));
+  });
+  return cars;
+}
+
 function findWarehouseInStock(vin) {
   ensureWarehouseStock();
   const key = normVin(vin);
@@ -871,8 +1122,15 @@ function enrichQueueItem(item) {
     imageUrl: item.imageUrl || veh?.imageUrl || '',
     customerName: item.customerName || veh?.customerName || '',
     phone: item.phone || veh?.phone || '',
+    guestName: item.guestName || veh?.guestName || veh?.customerName || '',
+    guestPhone: item.guestPhone || veh?.guestPhone || veh?.phone || '',
     deliveryCompany: item.deliveryCompany || item.company || '',
     company: item.deliveryCompany || item.company || '',
+    companyChangedFrom: item.companyChangedFrom || '',
+    companyChangedTo: item.companyChangedTo || '',
+    companyChangedAt: item.companyChangedAt || '',
+    plannedBranch: item.plannedBranch || '',
+    deliveryCity: item.deliveryCity || '',
     plannedDeliveryMode: normalizePlannedDeliveryMode(item.plannedDeliveryMode || item.deliveryType || '')
       || (item.deliveryMode === 'warehouse' && item.agentStatus !== 'delivered' ? 'warehouse' : '')
       || '',
@@ -1314,6 +1572,40 @@ function backfillProformaColumnP(wb, sheetName, vehicles) {
   }
 }
 
+/**
+ * Sales Raw: column O (index 14) = guest / customer name,
+ * column Y (index 24) = phone — used by Yassin parking board.
+ */
+function backfillGuestColumnsOY(wb, sheetName, vehicles) {
+  const sheet = wb && wb.Sheets ? wb.Sheets[sheetName] : null;
+  if (!sheet || !Array.isArray(vehicles) || !vehicles.length) return;
+  const rowsArr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  if (!rowsArr.length) return;
+  const headerRow = rowsArr[0] || [];
+  const byVin = new Map(vehicles.map((v) => [normVin(v.vin), v]));
+  const COL_O = 14; // guest name
+  const COL_Y = 24; // phone
+  for (let i = 1; i < rowsArr.length; i++) {
+    const line = rowsArr[i];
+    const vin = extractVinFromArrayLine(headerRow, line);
+    if (!vin) continue;
+    const veh = byVin.get(vin);
+    if (!veh) continue;
+    const guestRaw = line[COL_O];
+    const phoneRaw = line[COL_Y];
+    const guest = guestRaw != null ? String(guestRaw).trim() : '';
+    const phone = phoneRaw != null ? String(phoneRaw).trim() : '';
+    if (guest && guest !== '#') {
+      veh.guestName = guest;
+      if (!veh.customerName) veh.customerName = guest;
+    }
+    if (phone && phone !== '#') {
+      veh.guestPhone = phone;
+      if (!veh.phone) veh.phone = phone;
+    }
+  }
+}
+
 function isShowroomExportRow(row) {
   const deliveryType = String(pickCol(row, [
     'delivery type', 'delivery mode', 'نوع التسليم', 'section', 'القسم', 'flag'
@@ -1482,6 +1774,7 @@ function parseSalesFromWorkbook(wb, filename) {
       rows = sheetRowsData;
       vehicles = found;
       backfillProformaColumnP(wb, name, vehicles);
+      backfillGuestColumnsOY(wb, name, vehicles);
       headers = Object.keys(sheetRowsData[0] || {});
       break;
     }
@@ -1499,6 +1792,7 @@ function parseSalesFromWorkbook(wb, filename) {
           rows = sheetRowsData;
           vehicles = found;
           backfillProformaColumnP(wb, name, vehicles);
+          backfillGuestColumnsOY(wb, name, vehicles);
           headers = Object.keys(sheetRowsData[0] || {});
           break;
         }
@@ -2052,11 +2346,358 @@ app.post('/api/showroom-parking/stock-out', (req, res) => {
   });
 });
 
+function requireYassinAgent(req, res) {
+  const auth = authenticateAgent(req.body?.username || req.query?.username, req.body?.password || req.query?.password);
+  if (!auth.ok) {
+    res.status(401).json({ error: auth.error });
+    return null;
+  }
+  if (auth.username !== SHOWROOM_AGENT) {
+    res.status(403).json({ error: 'موقف الـ 10 أماكن متاح لياسين فقط' });
+    return null;
+  }
+  return auth;
+}
+
+app.get('/api/yassin-parking/board', (req, res) => {
+  const auth = requireYassinAgent(req, res);
+  if (!auth) return;
+  ensureYassinParking();
+  res.json({
+    occupancy: yassinParkingOccupancy(),
+    slots: [...YASSIN_PARKING_SLOTS],
+    label: YASSIN_PARKING_LABEL,
+    cars: buildYassinCarsList(),
+    parked: store.yassinParking
+      .filter((e) => e.status === 'in')
+      .map(enrichYassinParkingEntry)
+      .sort((a, b) => String(a.slot).localeCompare(String(b.slot), 'en'))
+  });
+});
+
+app.get('/api/yassin-parking/lookup-vin', (req, res) => {
+  const auth = requireYassinAgent(req, res);
+  if (!auth) return;
+  const vin = normVin(req.query?.vin || req.body?.vin);
+  if (!vin) return res.status(400).json({ error: 'رقم الشاسيه مطلوب' });
+  const guest = guestInfoFromRaw(vin);
+  if (!guest.inRaw) {
+    return res.status(404).json({
+      error: 'الشاسيه غير موجود في البيانات الخام',
+      ...guest
+    });
+  }
+  res.json({ ok: true, ...guest, parked: enrichYassinParkingEntry(findYassinParkingInStock(vin) || { vin }) });
+});
+
+app.post('/api/yassin-parking/assign', (req, res) => {
+  const auth = requireYassinAgent(req, res);
+  if (!auth) return;
+
+  const vin = normVin(req.body?.vin);
+  if (!vin || vin.length < 8) {
+    return res.status(400).json({ error: 'رقم الشاسيه غير صالح' });
+  }
+
+  const carType = normalizeVehicleStatus(req.body?.carType || req.body?.vehicleStatus || req.body?.type);
+  if (!carType) {
+    return res.status(400).json({ error: 'اختر نوع السيارة: عرض أو تسليم' });
+  }
+
+  const guest = guestInfoFromRaw(vin);
+  if (!guest.inRaw) {
+    return res.status(404).json({ error: 'تحقق من الشاسيه في البيانات الخام أولاً — VIN غير موجود' });
+  }
+
+  let slot = '';
+  let guestArrivalTime = String(req.body?.guestArrivalTime || req.body?.arrivalTime || req.body?.time || '').trim();
+
+  if (carType === 'delivery') {
+    slot = normalizeYassinParkingSlot(req.body?.slot);
+    if (!slot) {
+      return res.status(400).json({ error: 'لسيارة التسليم اختر موقفًا من الـ 10 أماكن' });
+    }
+    if (!guestArrivalTime) {
+      return res.status(400).json({ error: 'لسيارة التسليم اختر وقت حضور الضيف' });
+    }
+  } else {
+    // Display: parking optional
+    slot = normalizeYassinParkingSlot(req.body?.slot);
+    guestArrivalTime = guestArrivalTime || '';
+  }
+
+  ensureYassinParking();
+
+  // Free previous parking for this VIN if re-assigning
+  const existing = findYassinParkingInStock(vin);
+  if (existing) {
+    if (carType === 'display' && !slot) {
+      // Mark display without slot — release parking
+      existing.status = 'out';
+      existing.stockedOutAt = new Date().toISOString();
+      existing.stockedOutBy = auth.username;
+      existing.carType = 'display';
+      // Keep a lightweight "display" record without occupying a slot
+      const displayEntry = {
+        id: `ys_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        vin,
+        slot: '',
+        zone: 'YS',
+        status: 'display',
+        stockedInAt: new Date().toISOString(),
+        stockedOutAt: '',
+        stockedInBy: auth.username,
+        stockedOutBy: '',
+        product: guest.product,
+        model: guest.model,
+        plate: guest.plate,
+        guestName: guest.guestName,
+        guestPhone: guest.guestPhone,
+        carType: 'display',
+        guestArrivalTime: '',
+        section: 'yassin',
+        label: YASSIN_PARKING_LABEL
+      };
+      // Remove old display stubs for same VIN
+      store.yassinParking = store.yassinParking.filter(
+        (e) => !(normVin(e.vin) === vin && e.status === 'display')
+      );
+      store.yassinParking.push(displayEntry);
+      // Sync queue vehicleStatus
+      let q = findQueueItem(vin);
+      if (q) {
+        q.vehicleStatus = 'display';
+        q.agentStatus = 'display';
+        q.status = 'available';
+        q.assignedTo = auth.username;
+      }
+      persistAndBroadcast();
+      return res.json({
+        ok: true,
+        entry: enrichYassinParkingEntry(displayEntry),
+        occupancy: yassinParkingOccupancy(),
+        cars: buildYassinCarsList(),
+        guest
+      });
+    }
+    // Moving to new slot or updating
+    if (slot && String(existing.slot).toUpperCase() === slot) {
+      existing.carType = carType;
+      existing.guestArrivalTime = guestArrivalTime;
+      existing.guestName = guest.guestName;
+      existing.guestPhone = guest.guestPhone;
+      existing.product = guest.product || existing.product;
+      let q = findQueueItem(vin);
+      if (q) {
+        q.vehicleStatus = carType;
+        if (carType === 'display') {
+          q.agentStatus = 'display';
+          q.status = 'available';
+        } else {
+          q.assignedTo = auth.username;
+          if (!q.agentStatus || q.agentStatus === 'display') q.agentStatus = 'in_stock';
+          q.status = 'claimed';
+        }
+      }
+      persistAndBroadcast();
+      return res.json({
+        ok: true,
+        entry: enrichYassinParkingEntry(existing),
+        occupancy: yassinParkingOccupancy(),
+        cars: buildYassinCarsList(),
+        guest
+      });
+    }
+    existing.status = 'out';
+    existing.stockedOutAt = new Date().toISOString();
+    existing.stockedOutBy = auth.username;
+  }
+
+  // Clear previous display stubs
+  store.yassinParking = store.yassinParking.filter(
+    (e) => !(normVin(e.vin) === vin && e.status === 'display')
+  );
+
+  if (carType === 'display' && !slot) {
+    const displayEntry = {
+      id: `ys_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      vin,
+      slot: '',
+      zone: 'YS',
+      status: 'display',
+      stockedInAt: new Date().toISOString(),
+      stockedOutAt: '',
+      stockedInBy: auth.username,
+      stockedOutBy: '',
+      product: guest.product,
+      model: guest.model,
+      plate: guest.plate,
+      guestName: guest.guestName,
+      guestPhone: guest.guestPhone,
+      carType: 'display',
+      guestArrivalTime: '',
+      section: 'yassin',
+      label: YASSIN_PARKING_LABEL
+    };
+    store.yassinParking.push(displayEntry);
+    let q = findQueueItem(vin);
+    if (!q) {
+      q = enrichFromVehicle({
+        vin,
+        status: 'available',
+        agentStatus: 'display',
+        vehicleStatus: 'display',
+        assignedTo: auth.username,
+        assignedAt: new Date().toISOString(),
+        addedAt: new Date().toISOString(),
+        product: guest.product,
+        plate: guest.plate
+      }, vehicleIndex().get(vin) || {});
+      store.queue.push(q);
+    } else {
+      q.vehicleStatus = 'display';
+      q.agentStatus = 'display';
+      q.status = 'available';
+      q.assignedTo = auth.username;
+    }
+    persistAndBroadcast();
+    return res.json({
+      ok: true,
+      entry: enrichYassinParkingEntry(displayEntry),
+      occupancy: yassinParkingOccupancy(),
+      cars: buildYassinCarsList(),
+      guest
+    });
+  }
+
+  if (!slot) {
+    return res.status(400).json({ error: 'اختر موقفًا' });
+  }
+
+  const slotTaken = store.yassinParking.find(
+    (e) => e.status === 'in' && String(e.slot).toUpperCase() === slot
+  );
+  if (slotTaken && normVin(slotTaken.vin) !== vin) {
+    return res.status(409).json({
+      error: `الموقف ${slot} مشغول بالشاسيه ${slotTaken.vin}`,
+      code: 'slot_taken',
+      takenBy: slotTaken.vin
+    });
+  }
+
+  const now = new Date().toISOString();
+  const entry = {
+    id: `ys_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    vin,
+    slot,
+    zone: 'YS',
+    status: 'in',
+    stockedInAt: now,
+    stockedOutAt: '',
+    stockedInBy: auth.username,
+    stockedOutBy: '',
+    product: guest.product,
+    model: guest.model,
+    plate: guest.plate,
+    guestName: guest.guestName,
+    guestPhone: guest.guestPhone,
+    carType,
+    guestArrivalTime: carType === 'delivery' ? guestArrivalTime : (guestArrivalTime || ''),
+    section: 'yassin',
+    label: YASSIN_PARKING_LABEL
+  };
+  store.yassinParking.push(entry);
+
+  let qItem = findQueueItem(vin);
+  if (!qItem) {
+    qItem = enrichFromVehicle({
+      vin,
+      status: carType === 'display' ? 'available' : 'claimed',
+      agentStatus: carType === 'display' ? 'display' : 'in_stock',
+      vehicleStatus: carType,
+      assignedTo: auth.username,
+      assignedAt: now,
+      addedAt: now,
+      product: guest.product,
+      plate: guest.plate
+    }, vehicleIndex().get(vin) || {});
+    store.queue.push(qItem);
+  } else {
+    qItem.vehicleStatus = carType;
+    qItem.assignedTo = auth.username;
+    if (carType === 'display') {
+      qItem.agentStatus = 'display';
+      qItem.status = 'available';
+    } else {
+      qItem.status = 'claimed';
+      if (!qItem.agentStatus || qItem.agentStatus === 'display') qItem.agentStatus = 'in_stock';
+    }
+  }
+
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    entry: enrichYassinParkingEntry(entry),
+    occupancy: yassinParkingOccupancy(),
+    cars: buildYassinCarsList(),
+    guest
+  });
+});
+
+app.post('/api/yassin-parking/release', (req, res) => {
+  const auth = requireYassinAgent(req, res);
+  if (!auth) return;
+  const vin = normVin(req.body?.vin);
+  if (!vin) return res.status(400).json({ error: 'رقم الشاسيه مطلوب' });
+  ensureYassinParking();
+  let changed = false;
+  for (const e of store.yassinParking) {
+    if (normVin(e.vin) === vin && (e.status === 'in' || e.status === 'display')) {
+      e.status = 'out';
+      e.stockedOutAt = new Date().toISOString();
+      e.stockedOutBy = auth.username;
+      changed = true;
+    }
+  }
+  if (!changed) return res.status(404).json({ error: 'السيارة غير موجودة في موقف ياسين' });
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    occupancy: yassinParkingOccupancy(),
+    cars: buildYassinCarsList()
+  });
+});
+
 app.get('/api/delivery-options', (_req, res) => {
   ensureOptions();
   res.json({
     companies: store.options.companies,
-    cities: store.options.cities
+    cities: store.options.cities,
+    companyPhones: store.options.companyPhones || {}
+  });
+});
+
+app.put('/api/delivery-options/company-phone', (req, res) => {
+  const company = String(req.body?.company || req.body?.name || '').trim();
+  const phone = String(req.body?.phone || '').trim();
+  const result = setCompanyPhone(company, phone);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  // Ensure company exists in list when saving a phone
+  if (result.company) {
+    const exists = (store.options.companies || []).some(
+      (x) => String(x).toLowerCase() === result.company.toLowerCase()
+    );
+    if (!exists) {
+      store.options.companies = uniqueSorted([...(store.options.companies || []), result.company]);
+    }
+  }
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    company: result.company,
+    phone: result.phone,
+    companyPhones: store.options.companyPhones,
+    companies: store.options.companies
   });
 });
 
@@ -2404,6 +3045,156 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
   res.json({ queue });
 });
 
+function draftBranchTo(draft) {
+  return String((draft?.payload || {}).branch_to || draft?.location || '').trim();
+}
+
+function queueLooksAutomall(item) {
+  if (!item) return false;
+  if (isAutomallCity(item.plannedBranch)) return true;
+  if (isAutomallCity(item.deliveryCity)) return true;
+  if (isAutomallCity(item.location)) return true;
+  // Vehicle raw location / GT sometimes holds destination
+  const vin = normVin(item.vin);
+  const veh = vehicleIndex().get(vin);
+  if (veh && (isAutomallCity(veh.location) || isAutomallCity(veh.gt))) return true;
+  return false;
+}
+
+/** Yassin Automall board: printed memos to اوتومول + pending (unprinted) Automall cars. */
+function buildAutomallBoard() {
+  const printed = [];
+  const printedVinSet = new Set();
+
+  for (const draft of store.drafts || []) {
+    if (!isAutomallCity(draftBranchTo(draft))) continue;
+    const isDisplay = Boolean(draft.showroomDisplay) || isShowroomDraftPayload(draft.payload)
+      || normalizeVehicleStatus(draft.vehicleStatus || draft.payload?.vehicleStatus) === 'display';
+    if (isDisplay) continue;
+    const vins = collectDraftVins(draft.payload, [draft.vin, ...(Array.isArray(draft.vins) ? draft.vins : [])]);
+    vins.forEach((vin) => {
+      if (!vin) return;
+      printedVinSet.add(vin);
+      const q = findQueueItem(vin);
+      printed.push({
+        vin,
+        printed: true,
+        status: 'printed',
+        product: draft.product || draft.model || q?.product || '',
+        company: String(draft.payload?.company_rep || draft.customerName || q?.deliveryCompany || '').trim(),
+        city: AUTOMALL_CITY_LABEL,
+        assignedTo: draft.assignedTo || draft.entryAgent || '',
+        deliveryNoteNumber: draft.deliveryNoteNumber || draft.payload?.deliveryNoteNumber || '',
+        draftId: draft.id || '',
+        printedAt: draft.printedAt || '',
+        agentStatus: q?.agentStatus || 'delivered'
+      });
+    });
+  }
+
+  const pending = [];
+  const pendingSeen = new Set();
+
+  for (const raw of store.queue || []) {
+    const item = enrichQueueItem(raw);
+    const vin = normVin(item.vin);
+    if (!vin || pendingSeen.has(vin)) continue;
+    if (item.agentStatus === 'delivered') continue;
+    if (printedVinSet.has(vin)) continue;
+    if (!queueLooksAutomall(item)) continue;
+    pendingSeen.add(vin);
+    pending.push({
+      vin,
+      printed: false,
+      status: 'pending',
+      product: item.product || item.model || '',
+      company: String(item.deliveryCompany || item.company || '').trim(),
+      city: AUTOMALL_CITY_LABEL,
+      assignedTo: item.assignedTo || '',
+      agentStatus: item.agentStatus || item.status || '',
+      plannedBranch: item.plannedBranch || item.deliveryCity || item.location || AUTOMALL_CITY_LABEL,
+      draftId: '',
+      deliveryNoteNumber: ''
+    });
+  }
+
+  // Display Automall drafts still needing a delivery note
+  for (const draft of store.drafts || []) {
+    if (!isAutomallCity(draftBranchTo(draft))) continue;
+    const isDisplay = Boolean(draft.showroomDisplay) || isShowroomDraftPayload(draft.payload)
+      || normalizeVehicleStatus(draft.vehicleStatus || draft.payload?.vehicleStatus) === 'display';
+    if (!isDisplay) continue;
+    const vins = collectDraftVins(draft.payload, [draft.vin, ...(Array.isArray(draft.vins) ? draft.vins : [])]);
+    vins.forEach((vin) => {
+      if (!vin || pendingSeen.has(vin) || printedVinSet.has(vin)) return;
+      const q = findQueueItem(vin);
+      if (q && q.agentStatus === 'delivered') return;
+      pendingSeen.add(vin);
+      pending.push({
+        vin,
+        printed: false,
+        status: 'pending',
+        product: draft.product || draft.model || q?.product || '',
+        company: String(draft.payload?.company_rep || draft.customerName || q?.deliveryCompany || '').trim(),
+        city: AUTOMALL_CITY_LABEL,
+        assignedTo: draft.assignedTo || q?.assignedTo || '',
+        agentStatus: q?.agentStatus || 'display',
+        plannedBranch: AUTOMALL_CITY_LABEL,
+        draftId: draft.id || '',
+        deliveryNoteNumber: draft.deliveryNoteNumber || ''
+      });
+    });
+  }
+
+  printed.sort((a, b) => String(b.printedAt || '').localeCompare(String(a.printedAt || '')));
+  pending.sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+  return {
+    city: AUTOMALL_CITY_LABEL,
+    printed,
+    pending,
+    stats: {
+      printed: printed.length,
+      pending: pending.length,
+      total: printed.length + pending.length
+    }
+  };
+}
+
+app.get('/api/delivery-coordinator/automall-board', (req, res) => {
+  const username = String(req.query.username || '').trim();
+  const password = String(req.query.password || '');
+  if (username) {
+    const auth = authenticateAgent(username, password);
+    if (!auth.ok) return res.status(401).json({ error: auth.error });
+  }
+  res.json(buildAutomallBoard());
+});
+
+app.post('/api/delivery-coordinator/planned-branch', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  const vin = normVin(req.body?.vin);
+  const branch = String(req.body?.branch || req.body?.branch_to || req.body?.city || '').trim();
+  if (!vin) return res.status(400).json({ error: 'الشاسيه مطلوب' });
+  let item = findQueueItem(vin);
+  if (!item) {
+    const veh = vehicleIndex().get(vin);
+    item = enrichFromVehicle({
+      vin,
+      status: 'available',
+      agentStatus: '',
+      assignedTo: '',
+      addedAt: new Date().toISOString(),
+      plannedBranch: branch
+    }, veh || {});
+    store.queue.push(item);
+  } else {
+    item.plannedBranch = branch;
+  }
+  persistAndBroadcast();
+  res.json({ ok: true, item: enrichQueueItem(item), automall: isAutomallCity(branch) });
+});
+
 app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   if (!store.vehicles.length) {
     return res.status(400).json({ error: 'ارفع البيانات الخام (Excel) أولاً قبل إضافة الشاسيه' });
@@ -2726,10 +3517,40 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
 
   const primary = deliveredItems[0];
   const typedCompany = String(draftPayload.company_rep || '').trim();
-  const autoBranch = agentAutoBranch(auth.username);
-  if (autoBranch && !warehouseDelivery) {
-    draftPayload.branch_to = autoBranch;
+  const assignedCompanyHint = String(draftPayload.assigned_company || '').trim();
+  const companyChanges = applyAgentCompanyChange(vins, typedCompany, {
+    warehouseDelivery,
+    showroomDisplay
+  });
+  // Prefer queue-recorded change; fall back to form hint if queue had no prior company
+  let changeFrom = companyChanges[0]?.from || '';
+  let changeTo = companyChanges[0]?.to || '';
+  if (!changeFrom && assignedCompanyHint && typedCompany && !sameCompanyName(assignedCompanyHint, typedCompany)
+      && !warehouseDelivery && !showroomDisplay) {
+    changeFrom = assignedCompanyHint;
+    changeTo = typedCompany;
   }
+  if (changeFrom && changeTo) {
+    draftPayload.company_changed = true;
+    draftPayload.company_changed_from = changeFrom;
+    draftPayload.company_changed_to = changeTo;
+    draftPayload.company_changes = companyChanges.length
+      ? companyChanges
+      : vins.map((vin) => ({ vin, from: changeFrom, to: changeTo }));
+  }
+  const printedBranch = warehouseDelivery
+    ? (String(draftPayload.branch_to || '').trim() || 'المستودع')
+    : String(draftPayload.branch_to || '').trim();
+  // Stamp destination city on queue rows (Automall board + tracking)
+  for (const vin of vins) {
+    const item = findQueueItem(vin);
+    if (!item) continue;
+    if (printedBranch) {
+      item.deliveryCity = printedBranch;
+      item.plannedBranch = printedBranch;
+    }
+  }
+  // Do not force auto city — agent must choose branch_to on the form
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
     id,
@@ -2747,11 +3568,13 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     location: primary.location || '',
     showroomDisplay: Boolean(showroomDisplay),
     vehicleStatus,
+    companyChangedFrom: changeFrom || '',
+    companyChangedTo: changeTo || '',
     payload: {
       ...draftPayload,
       branch_to: warehouseDelivery
         ? (draftPayload.branch_to || 'المستودع')
-        : (autoBranch || draftPayload.branch_to || ''),
+        : (draftPayload.branch_to || ''),
       warehouse_group: warehouseDelivery,
       deliveryMode: showroomDisplay ? 'showroom' : (warehouseDelivery ? 'warehouse' : ''),
       showroom_display: Boolean(showroomDisplay),

@@ -8,7 +8,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
-    <link rel="stylesheet" href="admin-saas.css?v=20260903a">
+    <link rel="stylesheet" href="admin-saas.css?v=20260905a">
     <link rel="stylesheet" href="admin-hcare-light.css?v=20260903f">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
@@ -1858,12 +1858,225 @@
             gap: 14px;
         }
         .admin-pane {
-            display: grid;
-            gap: 14px;
+            display: none;
+            gap: 10px;
         }
         .admin-pane.is-active {
-            display: grid;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            animation: adminPaneIn 0.28s ease both;
         }
+        /* Single-screen charts cockpit — no page scroll for chart panes */
+        #pane-overview.is-active,
+        #pane-analytics.is-active {
+            max-height: calc(100dvh - 108px);
+            overflow: hidden;
+        }
+        .charts-cockpit {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 0;
+            flex: 1 1 auto;
+            overflow: hidden;
+        }
+        .charts-cockpit__strip {
+            flex: 0 0 auto;
+            display: grid;
+            gap: 8px;
+        }
+        .charts-cockpit__charts {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: minmax(0, 1fr);
+            gap: 8px;
+        }
+        .charts-cockpit__charts .ops-board__chart {
+            min-height: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 8px 10px;
+            margin: 0;
+        }
+        .charts-cockpit__charts .ops-board__chart h3 {
+            margin: 0 0 4px;
+            font-size: 0.72rem;
+            flex: 0 0 auto;
+        }
+        .charts-cockpit__charts .ops-board__chart-el {
+            flex: 1 1 auto;
+            min-height: 0 !important;
+            height: 100%;
+        }
+        .charts-cockpit__charts .ops-board__chart--wide {
+            grid-column: 1 / -1;
+        }
+        .charts-cockpit__details {
+            flex: 0 0 auto;
+            max-height: 22vh;
+            overflow: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(15,23,42,0.45);
+        }
+        .charts-cockpit__details[hidden] { display: none !important; }
+        .charts-cockpit__details-toggle {
+            flex: 0 0 auto;
+            align-self: flex-start;
+        }
+        .charts-cockpit .dn-mgmt {
+            margin: 0;
+            padding: 8px 12px;
+        }
+        .charts-cockpit .dn-mgmt__title { font-size: 0.92rem; margin: 0; }
+        .charts-cockpit .dn-mgmt__sub { display: none; }
+        .charts-cockpit .dn-mgmt__stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .charts-cockpit .raw-gap-section { margin: 0; }
+        .charts-cockpit .raw-gap-summary {
+            padding: 8px 10px;
+            gap: 8px;
+        }
+        .charts-cockpit .admin-overview-row {
+            margin: 0;
+            gap: 8px;
+        }
+        #pane-overview.charts-cockpit > .charts-cockpit__strip { order: 1; }
+        #pane-overview.charts-cockpit > .admin-overview-row {
+            order: 2;
+            flex: 0 0 auto;
+            max-height: 92px;
+            overflow: hidden;
+            grid-template-columns: 1fr;
+            margin: 0;
+        }
+        #pane-overview.charts-cockpit > .admin-overview-row .admin-overview-mid { display: none !important; }
+        #pane-overview.charts-cockpit > .admin-overview-row .saas-kpi-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        #pane-overview.charts-cockpit > #opsBoard { order: 3; }
+        #pane-overview.charts-cockpit > .hub-section.hub-fold { order: 4; display: none !important; }
+        .charts-cockpit .ops-board__head {
+            margin-bottom: 0;
+            padding: 0;
+        }
+        .charts-cockpit .ops-board__head h2 { font-size: 0.88rem; }
+        .charts-cockpit .ops-board__head p { font-size: 0.7rem; margin: 2px 0 0; }
+        .charts-cockpit .ops-board { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+
+        /* Analytics fit-screen mosaic */
+        #pane-analytics .hub-section--xfer {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            overflow: hidden;
+        }
+        #pane-analytics .hub-fold-body,
+        #pane-analytics .hub-fold-body-inner,
+        #pane-analytics .hub-fold-content {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #pane-analytics .xfer-dash-mosaic {
+            flex: 1 1 auto;
+            min-height: 0;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
+            gap: 8px;
+            overflow: hidden;
+        }
+        #pane-analytics .xfer-mosaic-span-2 {
+            grid-column: span 1;
+        }
+        #pane-analytics .xfer-branches-row {
+            grid-column: span 1;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #pane-analytics .xfer-mosaic-cell,
+        #pane-analytics .pct-chart-card,
+        #pane-analytics .saas-section {
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 8px 10px !important;
+        }
+        #pane-analytics .saas-section__head h3,
+        #pane-analytics .pct-chart-card h3 {
+            font-size: 0.78rem;
+            margin: 0 0 2px;
+        }
+        #pane-analytics .saas-section__head p,
+        #pane-analytics .pct-chart-sub {
+            font-size: 0.65rem;
+            margin: 0 0 4px;
+            opacity: 0.75;
+        }
+        #pane-analytics .xfer-trend-chart,
+        #pane-analytics .xfer-city-chart,
+        #pane-analytics .pct-donut-wrap {
+            flex: 1 1 auto;
+            min-height: 0 !important;
+            height: auto !important;
+        }
+        #pane-analytics .saas-company-list,
+        #pane-analytics .xfer-dash-list--compact {
+            flex: 1 1 auto;
+            max-height: none !important;
+            min-height: 0;
+            overflow: auto;
+        }
+        #pane-analytics #xferDetailsFold {
+            flex: 0 0 auto;
+            max-height: 0;
+            overflow: hidden;
+            margin: 0 !important;
+        }
+        #pane-analytics #xferDetailsFold.is-open {
+            max-height: 28vh;
+            overflow: auto;
+        }
+        #pane-analytics .admin-pane-head { margin-bottom: 4px; }
+        #pane-analytics .admin-pane-head h2 { font-size: 0.95rem; }
+        #pane-analytics .admin-pane-head p { font-size: 0.72rem; }
+        #pane-analytics .hub-fold-toggle { padding: 6px 10px; }
+        @media (max-width: 1100px) {
+            .charts-cockpit__charts {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto;
+            }
+            .charts-cockpit__charts .ops-board__chart--wide { grid-column: 1 / -1; }
+            #pane-analytics .xfer-dash-mosaic {
+                grid-template-columns: 1fr 1fr;
+                overflow: auto;
+            }
+            #pane-overview.is-active,
+            #pane-analytics.is-active {
+                max-height: none;
+                overflow: auto;
+            }
+        }
+        @media (max-width: 720px) {
+            .charts-cockpit__charts { grid-template-columns: 1fr; }
+            #pane-analytics .xfer-dash-mosaic { grid-template-columns: 1fr; }
+        }
+
         @keyframes adminPaneIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: none; }
@@ -1932,7 +2145,7 @@
         .ops-board__chart--wide {
             grid-column: 1 / -1;
         }
-        .ops-board__chart-el { min-height: 180px; }
+        .ops-board__chart-el { min-height: 0; }
         .ops-schedule-wrap, .ops-company-wrap {
             max-height: 340px;
             overflow: auto;
@@ -1974,6 +2187,19 @@
         .ops-user-badge.is-yassin { background: rgba(244,114,182,0.2); color: #f9a8d4; }
         .ops-user-badge.is-fadel { background: rgba(46,196,182,0.2); color: #5eead4; }
         .ops-user-badge.is-baraa { background: rgba(59,130,246,0.2); color: #93c5fd; }
+        .company-change-badge {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #fde68a;
+            background: rgba(245, 158, 11, 0.16);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            line-height: 1.35;
+            white-space: normal;
+        }
         @media (max-width: 980px) {
             .ops-board__charts { grid-template-columns: 1fr; }
             .ops-board__chart--wide { grid-column: auto; }
@@ -2079,9 +2305,23 @@
             overflow: visible !important;
         }
         body.delivery-hub.admin-console.admin-light .admin-pane {
-            display: block !important;
+            display: none !important;
             height: auto !important;
             overflow: visible !important;
+        }
+        body.delivery-hub.admin-console.admin-light .admin-pane.is-active {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        body.delivery-hub.admin-console.admin-light #pane-overview.is-active,
+        body.delivery-hub.admin-console.admin-light #pane-analytics.is-active {
+            max-height: calc(100dvh - 100px) !important;
+            overflow: hidden !important;
+        }
+        body.delivery-hub.admin-console.admin-light .charts-cockpit__charts .ops-board__chart-el,
+        body.delivery-hub.admin-console.admin-light #pane-analytics .xfer-trend-chart,
+        body.delivery-hub.admin-console.admin-light #pane-analytics .xfer-city-chart {
+            min-height: 0 !important;
         }
         @media (max-width: 900px) {
             body.delivery-hub.admin-console.admin-light .admin-sidebar {
@@ -2336,11 +2576,12 @@
 
         <div class="admin-workspace" id="adminWorkspace">
 
-        <div class="admin-pane is-active" data-pane="overview" id="pane-overview">
+        <div class="admin-pane is-active charts-cockpit" data-pane="overview" id="pane-overview">
             <div class="admin-pane-head">
                 <h2>نظرة عامة</h2>
                 <p>مؤشرات سريعة · تقدم الترحيل · إحصاءات الشهر</p>
             </div>
+            <div class="charts-cockpit__strip">
             <section class="dn-mgmt" id="dnMonthBar" aria-label="Delivery Management">
                 <div class="dn-mgmt__head">
                     <div>
@@ -2419,30 +2660,35 @@
                     </div>
                 </div>
             </section>
-            <section class="ops-board" id="opsBoard" aria-label="Delivery notes operations">
-                <div class="ops-board__head">
+            </div>
+
+            <section class="ops-board charts-cockpit__charts-wrap" id="opsBoard" aria-label="Delivery notes operations" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+                <div class="ops-board__head" style="flex:0 0 auto">
                     <div>
-                        <h2>مذكرات الترحيل · Charts & Schedule</h2>
-                        <p id="opsBoardPeriodHint">عدد المذكرات المنشأة · المستخدم (الفاضل / البراء / ياسين) · الشركات — يتبع فلتر الشهر</p>
+                        <h2>مذكرات الترحيل · Charts</h2>
+                        <p id="opsBoardPeriodHint">عدد المذكرات المنشأة · المستخدم · الشركات</p>
                     </div>
+                    <button type="button" class="hub-btn hub-btn--sm charts-cockpit__details-toggle" id="btnOpsTablesToggle" aria-expanded="false">الجداول ▾</button>
                 </div>
-                <div class="ops-board__charts">
+                <div class="ops-board__charts charts-cockpit__charts" style="margin:0">
                     <article class="ops-board__chart">
-                        <h3>Delivery notes created · عدد المذكرات</h3>
+                        <h3>Delivery notes · باليوم</h3>
                         <div id="opsNotesByDayChart" class="ops-board__chart-el"></div>
                     </article>
                     <article class="ops-board__chart">
                         <h3>By user · الفاضل / البراء / ياسين</h3>
                         <div id="opsNotesByUserChart" class="ops-board__chart-el"></div>
                     </article>
-                    <article class="ops-board__chart ops-board__chart--wide">
-                        <h3>By company · تم الترحيل لكل شركة</h3>
+                    <article class="ops-board__chart">
+                        <h3>By company · شركات</h3>
                         <div id="opsNotesByCompanyChart" class="ops-board__chart-el"></div>
                     </article>
                 </div>
-                <div style="margin-bottom:14px">
-                    <h3 style="margin:0 0 8px;font-size:0.9rem;color:#e2e8f0">Schedule · كل مذكرة ومن أُسندت إليه</h3>
-                    <div class="ops-schedule-wrap">
+                <div class="charts-cockpit__details" id="opsTablesPanel" hidden>
+                <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px;padding:10px">
+                <div>
+                    <h3 style="margin:0 0 8px;font-size:0.8rem;color:#e2e8f0">Schedule · كل مذكرة</h3>
+                    <div class="ops-schedule-wrap" style="max-height:18vh">
                         <table class="ops-table">
                             <thead>
                                 <tr>
@@ -2463,8 +2709,8 @@
                     </div>
                 </div>
                 <div>
-                    <h3 style="margin:0 0 8px;font-size:0.9rem;color:#e2e8f0">Company details · تفاصيل كل شركة</h3>
-                    <div class="ops-company-wrap">
+                    <h3 style="margin:0 0 8px;font-size:0.8rem;color:#e2e8f0">Company details</h3>
+                    <div class="ops-company-wrap" style="max-height:18vh">
                         <table class="ops-table">
                             <thead>
                                 <tr>
@@ -2481,8 +2727,10 @@
                         </table>
                     </div>
                 </div>
+                </div>
+                </div>
             </section>
-            <div class="admin-overview-row">
+            <div class="admin-overview-row" style="flex:0 0 auto">
             <div class="saas-kpi-grid" id="premiumKpiGrid" aria-label="مؤشرات سريعة"></div>
 
             <div class="admin-overview-mid">
@@ -3345,7 +3593,11 @@
             initPdfBrowserControls();
             initDnMonthFilter();
             initRawGapControls();
-            document.querySelectorAll('.admin-pane').forEach((pane) => pane.classList.add('is-active'));
+            document.querySelectorAll('.admin-pane').forEach((pane) => pane.classList.remove('is-active'));
+            const savedPane = (() => {
+                try { return sessionStorage.getItem('deliveryAdminPane') || 'overview'; } catch (_) { return 'overview'; }
+            })();
+            showAdminPane(savedPane, { openFolds: false, scroll: false });
             document.getElementById('userDashSearch')?.addEventListener('input', (e) => {
                 userDashSearch = e.target.value || '';
                 renderUserDashboard();
@@ -3558,23 +3810,63 @@
             if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         }
 
-        function showAdminPane(paneId, { openFolds = true } = {}) {
+        function showAdminPane(paneId, { openFolds = true, scroll = true } = {}) {
             const id = String(paneId || 'overview');
             document.querySelectorAll('[data-pane-target]').forEach((btn) => {
                 btn.classList.toggle('is-active', btn.dataset.paneTarget === id);
             });
             document.querySelectorAll('.admin-pane').forEach((pane) => {
-                pane.classList.add('is-active');
+                pane.classList.toggle('is-active', pane.dataset.pane === id);
             });
             const pane = document.querySelector(`.admin-pane[data-pane="${id}"]`);
-            if (openFolds) {
+            if (openFolds && id !== 'overview' && id !== 'analytics') {
                 pane?.querySelectorAll('[data-fold]').forEach((s) => setFoldOpen(s, true));
             }
+            // Keep analytics fold open for mosaic; leave details folded
+            if (id === 'analytics') {
+                const xfer = document.getElementById('xferDashSection');
+                if (xfer) setFoldOpen(xfer, true);
+                const details = document.getElementById('xferDetailsFold');
+                if (details) setFoldOpen(details, false);
+            }
             try { sessionStorage.setItem('deliveryAdminPane', id); } catch (_) { /* ignore */ }
-            pane?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (scroll && id !== 'overview' && id !== 'analytics') {
+                pane?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                const shell = document.getElementById('adminApp');
+                if (shell) shell.scrollTop = 0;
+            }
             requestAnimationFrame(() => {
                 window.dispatchEvent(new Event('resize'));
-                if (adminAuthed) refreshTransferDashboard();
+                if (adminAuthed) {
+                    refreshTransferDashboard();
+                    if (typeof renderOpsBoard === 'function') renderOpsBoard();
+                }
+                fitVisibleCharts();
+            });
+        }
+
+        function chartFitHeight(el, fallback = 160) {
+            if (!el) return fallback;
+            const rect = el.getBoundingClientRect();
+            const h = Math.floor(rect.height || el.clientHeight || 0);
+            if (h >= 90) return Math.max(110, Math.min(260, h - 4));
+            const parentH = Math.floor(el.parentElement?.getBoundingClientRect?.().height || 0);
+            if (parentH >= 120) return Math.max(110, Math.min(240, parentH - 28));
+            return fallback;
+        }
+
+        function fitVisibleCharts() {
+            document.querySelectorAll('.apexcharts-canvas').forEach((canvas) => {
+                const host = canvas.closest('.ops-board__chart-el, .xfer-trend-chart, .xfer-city-chart, .dh-user-chart, .invoice-status-chart');
+                if (!host) return;
+                try {
+                    // Apex stores chart id on parent
+                    const chartId = host.querySelector('.apexcharts-canvas')?.id;
+                    if (chartId && window.ApexCharts) {
+                        // no-op — heights set on next render
+                    }
+                } catch (_) { /* ignore */ }
             });
         }
 
@@ -4098,10 +4390,11 @@
                 return;
             }
             const maxCount = Math.max(...rows.map((r) => r.count), 0);
+            const h = chartFitHeight(el, 150);
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: 180,
+                    height: h,
                     toolbar: { show: false },
                     background: 'transparent',
                     fontFamily: 'Inter, Tajawal, sans-serif',
@@ -4246,10 +4539,11 @@
                 return;
             }
             const top = rows.slice(0, 10);
+            const h = chartFitHeight(el, Math.min(200, Math.max(140, top.length * 26)));
             renderApex(el, {
                 chart: {
                     type: 'bar',
-                    height: Math.max(170, top.length * 28),
+                    height: h,
                     toolbar: { show: false },
                     background: 'transparent',
                     fontFamily: 'Inter, Tajawal, sans-serif',
@@ -5968,6 +6262,21 @@
                 renderRawGapChips(_lastRawGapData);
                 renderRawGapTableBody(_lastRawGapData);
             });
+            document.getElementById('btnOpsTablesToggle')?.addEventListener('click', () => {
+                const panel = document.getElementById('opsTablesPanel');
+                const btn = document.getElementById('btnOpsTablesToggle');
+                if (!panel) return;
+                const open = panel.hasAttribute('hidden');
+                if (open) panel.removeAttribute('hidden');
+                else panel.setAttribute('hidden', '');
+                if (btn) {
+                    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    btn.textContent = open ? 'الجداول ▴' : 'الجداول ▾';
+                }
+                requestAnimationFrame(() => {
+                    if (typeof renderOpsBoard === 'function') renderOpsBoard();
+                });
+            });
         }
 
         function opsUserLabel(d) {
@@ -5994,6 +6303,8 @@
                 const company = isSh
                     ? SHOWROOM_SPECIAL_NAME
                     : (isWh ? WAREHOUSE_SPECIAL_NAME : (draftCompanyName(d) || p.company_rep || '—'));
+                const changeFrom = String(d.companyChangedFrom || p.company_changed_from || '').trim();
+                const changeTo = String(d.companyChangedTo || p.company_changed_to || company || '').trim();
                 return {
                     date: draftEventIso(d) || '',
                     printedAt: d.printedAt || '',
@@ -6002,6 +6313,8 @@
                     assignedTo: String(d.assignedTo || d.entryAgent || '').trim(),
                     type: isSh ? 'عرض / ياسين' : (isWh ? 'مستودع' : 'مذكرة'),
                     company,
+                    companyChangeFrom: changeFrom,
+                    companyChangeTo: (changeFrom && changeTo && changeFrom.toLowerCase() !== changeTo.toLowerCase()) ? changeTo : '',
                     city: isWh ? 'المستودع' : (draftBranchLabel(d) || p.branch_to || '—'),
                     cars: draftCarWeight(d),
                     vins: vins.join(', '),
@@ -6075,13 +6388,15 @@
                 if (!dayKeys.length) {
                     dayEl.innerHTML = '<div class="saas-empty">لا توجد مذكرات في الفترة</div>';
                 } else {
+                    const h = chartFitHeight(dayEl, 150);
                     renderApex(dayEl, {
-                        ...opsApexBase(210),
-                        chart: { ...opsApexBase(210).chart, type: 'bar' },
+                        ...opsApexBase(h),
+                        chart: { ...opsApexBase(h).chart, type: 'bar' },
                         plotOptions: { bar: { borderRadius: 5, columnWidth: '55%' } },
                         colors: ['#6C5CE7'],
                         series: [{ name: 'مذكرات', data: dayKeys.map((k) => byDay.get(k)) }],
-                        xaxis: { categories: dayKeys.map((k) => k.slice(5)), labels: { style: { colors: '#94a3b8' } } }
+                        xaxis: { categories: dayKeys.map((k) => k.slice(5)), labels: { style: { colors: '#94a3b8', fontSize: '10px' } } },
+                        dataLabels: { enabled: true, style: { fontSize: '10px', colors: ['#cbd5e1'] } }
                     });
                 }
             }
@@ -6099,30 +6414,34 @@
                 if (!userRows.length) {
                     userEl.innerHTML = '<div class="saas-empty">لا يوجد مستخدمون</div>';
                 } else {
+                    const h = chartFitHeight(userEl, 150);
                     renderApex(userEl, {
-                        ...opsApexBase(Math.max(180, userRows.length * 32)),
-                        chart: { ...opsApexBase(Math.max(180, userRows.length * 32)).chart, type: 'bar' },
+                        ...opsApexBase(h),
+                        chart: { ...opsApexBase(h).chart, type: 'bar' },
                         plotOptions: { bar: { horizontal: true, borderRadius: 5, barHeight: '68%' } },
                         colors: ['#2EC4B6'],
                         series: [{ name: 'مذكرات', data: userRows.map((r) => r.count) }],
-                        xaxis: { categories: userRows.map((r) => r.name), labels: { style: { colors: '#94a3b8' } } }
+                        xaxis: { categories: userRows.map((r) => r.name), labels: { style: { colors: '#94a3b8', fontSize: '10px' } } },
+                        dataLabels: { enabled: true, style: { fontSize: '10px', colors: ['#cbd5e1'] } }
                     });
                 }
             }
 
             const companyEl = document.getElementById('opsNotesByCompanyChart');
             if (companyEl) {
-                const top = companies.slice(0, 14);
+                const top = companies.slice(0, 10);
                 if (!top.length) {
                     companyEl.innerHTML = '<div class="saas-empty">لا توجد شركات</div>';
                 } else {
+                    const h = chartFitHeight(companyEl, 150);
                     renderApex(companyEl, {
-                        ...opsApexBase(Math.max(220, top.length * 28)),
-                        chart: { ...opsApexBase(Math.max(220, top.length * 28)).chart, type: 'bar' },
+                        ...opsApexBase(h),
+                        chart: { ...opsApexBase(h).chart, type: 'bar' },
                         plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '70%' } },
                         colors: ['#EB0A1E'],
                         series: [{ name: 'سيارات', data: top.map((r) => r.cars) }],
-                        xaxis: { categories: top.map((r) => r.company), labels: { style: { colors: '#94a3b8' } } }
+                        xaxis: { categories: top.map((r) => r.company), labels: { style: { colors: '#94a3b8', fontSize: '10px' } } },
+                        dataLabels: { enabled: true, style: { fontSize: '10px', colors: ['#cbd5e1'] } }
                     });
                 }
             }
@@ -6132,16 +6451,21 @@
                 if (!schedule.length) {
                     schedBody.innerHTML = '<tr><td colspan="8" class="hub-empty">لا توجد مذكرات في هذا الشهر</td></tr>';
                 } else {
-                    schedBody.innerHTML = schedule.map((r) => `<tr>
+                    schedBody.innerHTML = schedule.map((r) => {
+                        const changeBit = r.companyChangeFrom && r.companyChangeTo
+                            ? `<div><span class="company-change-badge">من «${escapeHtml(r.companyChangeFrom)}» → «${escapeHtml(r.companyChangeTo)}»</span></div>`
+                            : '';
+                        return `<tr>
                         <td>${escapeHtml(r.date || '—')}</td>
                         <td>${escapeHtml(r.dn || '—')}</td>
                         <td><span class="ops-user-badge${opsUserBadgeClass(r.user)}">${escapeHtml(r.user)}</span></td>
                         <td>${escapeHtml(r.type)}</td>
-                        <td>${escapeHtml(r.company)}</td>
+                        <td>${escapeHtml(r.company)}${changeBit}</td>
                         <td>${escapeHtml(r.city)}</td>
                         <td class="num">${r.cars}</td>
                         <td class="hub-vin">${escapeHtml(r.vins || '—')}</td>
-                    </tr>`).join('');
+                    </tr>`;
+                    }).join('');
                 }
             }
 
@@ -6435,6 +6759,21 @@
             return String(p.company_rep || p.customer_name || d.customerName || '').trim();
         }
 
+        function draftCompanyChangeHtml(d) {
+            const p = d.payload || {};
+            const from = String(d.companyChangedFrom || p.company_changed_from || '').trim();
+            const to = String(d.companyChangedTo || p.company_changed_to || draftCompanyName(d) || '').trim();
+            if (!from || !to || from.toLowerCase() === to.toLowerCase()) return '';
+            return `<span class="company-change-badge" title="غيّر الموظف الشركة عند الطباعة">من «${escapeHtml(from)}» → «${escapeHtml(to)}»</span>`;
+        }
+
+        function queueCompanyChangeHtml(item) {
+            const from = String(item?.companyChangedFrom || '').trim();
+            const to = String(item?.companyChangedTo || item?.deliveryCompany || item?.company || '').trim();
+            if (!from || !to || from.toLowerCase() === to.toLowerCase()) return '';
+            return `<span class="company-change-badge" title="غيّر الموظف الشركة عند الطباعة">من «${escapeHtml(from)}» → «${escapeHtml(to)}»</span>`;
+        }
+
         function isWarehouseAccountKey(key) {
             return String(key || '').trim() === WAREHOUSE_SPECIAL_NAME;
         }
@@ -6513,12 +6852,13 @@
                     : (isWarehouseAdminDraft(d)
                         ? ' <span class="pdf-type-badge pdf-type-badge--wh">مستودع</span>'
                         : '');
+                const changeBit = draftCompanyChangeHtml(d);
                 return `<tr>
                     <td>${escapeHtml(when)}${flag}</td>
                     <td class="hub-vin">${escapeHtml(d.vin || '—')}</td>
                     <td>${escapeHtml(d.product || d.model || '—')}</td>
                     <td>${escapeHtml(d.assignedTo || '—')}</td>
-                    <td>${escapeHtml(p.typed_company || p.customer_name || p.company_rep || '—')}</td>
+                    <td>${escapeHtml(p.typed_company || p.customer_name || p.company_rep || '—')}${changeBit ? `<div>${changeBit}</div>` : ''}</td>
                     <td>${escapeHtml(p.branch_to || '—')}</td>
                     <td style="white-space:nowrap">${canExport
                         ? `<button type="button" class="hub-btn hub-btn--sm" data-edit-draft="${escapeHtml(d.id)}">تعديل</button>
@@ -8091,7 +8431,7 @@
                         isSh
                             ? (SHOWROOM_SPECIAL_NAME + (p.typed_company || p.company_rep ? ` · ${p.typed_company || p.company_rep}` : ''))
                             : (draftCompanyLabel(d) || '—')
-                    )}</td>
+                    )}${!isSh && !isWh ? (() => { const bit = draftCompanyChangeHtml(d); return bit ? `<div>${bit}</div>` : ''; })() : ''}</td>
                     <td>${escapeHtml(draftBranchLabel(d) || (isWh ? 'المستودع' : '—'))}</td>
                     <td style="white-space:nowrap">
                         ${canExport
@@ -8200,9 +8540,11 @@
                 const delivered = item.agentStatus === 'delivered';
                 const label = item.statusLabel
                     || (delivered ? 'تم الترحيل' : 'Waiting for delivery');
+                const co = String(item.deliveryCompany || item.company || '').trim();
+                const changeBit = queueCompanyChangeHtml(item);
                 return `<tr class="${avail ? 'row-available' : ''}" data-vin="${item.vin}" data-available="${avail ? '1' : '0'}">
-                    <td class="hub-vin">${item.vin}</td>
-                    <td>${item.product || '—'}</td>
+                    <td class="hub-vin">${item.vin}${changeBit ? `<div>${changeBit}</div>` : ''}</td>
+                    <td>${item.product || '—'}${co ? `<div class="hub-meta">${escapeHtml(co)}</div>` : ''}</td>
                     <td>${item.gt || '—'}</td>
                     <td>${item.location || '—'}</td>
                     <td>${item.assignedTo || '—'}</td>
