@@ -3101,6 +3101,73 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: var(--muted);
 }
 
+.bas-table-filters {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #f5f9fc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  align-items: flex-end;
+}
+
+.bas-filter-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.bas-filter-label select {
+  min-width: 160px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bas-result-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.bas-result-strip:empty {
+  display: none;
+}
+
+.bas-result-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 88px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.bas-result-lab {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bas-result-chip strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
 .bas-section-badge {
   flex-shrink: 0;
   width: 34px;
@@ -3241,9 +3308,28 @@ body.admin-page #panel-allocation:not([hidden]) {
   white-space: nowrap;
 }
 
+.bas-table th.num,
 .bas-table td.num {
-  font-variant-numeric: tabular-nums;
   text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bas-table th .bas-th-lab {
+  display: block;
+}
+
+.bas-table th .bas-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bas-table td.num {
   font-weight: 600;
 }
 
@@ -3371,6 +3457,47 @@ body.admin-page #panel-allocation:not([hidden]) {
   transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
 }
 
+.bas-day-pill-split {
+  flex: 0 0 72px;
+  padding: 8px 6px 10px;
+}
+
+.bas-day-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.bas-day-part {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+}
+
+.bas-day-part-lab {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.bas-day-count-total {
+  color: var(--navy);
+}
+
+.bas-day-count-retail {
+  color: #0f766e;
+}
+
+.bas-day-pill.has-cars .bas-day-count-retail {
+  color: #0f766e;
+}
+
 .bas-day-pill:hover:not(.is-future) {
   transform: translateY(-2px);
   box-shadow: 0 6px 14px rgba(11, 42, 74, 0.08);
@@ -3457,8 +3584,15 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 .bas-day-pill.has-cars .bas-day-count {
-  color: var(--ok);
   font-weight: 800;
+}
+
+.bas-day-pill.has-cars .bas-day-count-total {
+  color: var(--navy);
+}
+
+.bas-day-pill.has-cars .bas-day-count-retail {
+  color: #0f766e;
 }
 
 .bas-day-num {
@@ -3473,9 +3607,10 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-day-count {
   display: block;
   font-variant-numeric: tabular-nums;
-  font-size: 1rem;
-  margin-top: 3px;
+  font-size: 0.92rem;
+  margin-top: 0;
   color: var(--navy);
+  line-height: 1.1;
 }
 
 .bas-month-table-wrap {
