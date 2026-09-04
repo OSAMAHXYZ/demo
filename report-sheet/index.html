@@ -629,7 +629,7 @@
               <span class="bas-section-badge">1</span>
               <div class="pbi-viz-head">
                 <h2>All back orders vs allocation</h2>
-                <span class="hint">Gap = Allocation − BO · matched by product + suffix</span>
+                <span class="hint">Gap = Allocation − BO · exact product + suffix match (qty summed)</span>
               </div>
             </div>
             <div class="table-wrap bas-table-wrap" id="bas-table"></div>
@@ -2227,54 +2227,16 @@
   }
 
   /**
-   * Excel Sales Raw rules (independent counts):
-   * - Proforma = Col P date in period
-   *   OR Secondary Status = Pro-forma Invoice Cr (open proforma pipeline)
-   * - Delivery = Col V date in period
-   * A row can count for both when P and V are both in range.
+   * Excel COUNTIFS equivalent for Proforma per employee:
+   *   =COUNTIFS(Rowdata!A:A, name, Rowdata!P:P, ">="&periodStart, Rowdata!V:V, "")
+   * - Col A = salesman
+   * - Col P date in selected period ( >= rangeFrom and <= rangeTo )
+   * - Col V delivery date must be blank (undelivered only)
+   * Delivery = Col V date in selected period (independent).
    */
-  function getSalesSecondaryStatus(r) {
-    if (!r) return "";
-    if (r.secondaryStatus != null && String(r.secondaryStatus).trim() !== "") {
-      return cellToString(r.secondaryStatus).trim();
-    }
-    const keys = Object.keys(r);
-    for (let i = 0; i < keys.length; i += 1) {
-      const n = normHeader(keys[i]);
-      if (n === "secondary status" || n === "secondary status desc" || n === "2nd status") {
-        const v = cellToString(r[keys[i]]).trim();
-        if (v) return v;
-      }
-    }
-    if (Array.isArray(r.__cells) && r.__cells.length > 7) {
-      return cellToString(r.__cells[7]).trim();
-    }
-    return "";
-  }
-
-  function isOpenProformaStatus(r) {
-    const s = normHeader(getSalesSecondaryStatus(r));
-    if (!s) return false;
-    if (s.includes("dio completed") || s.includes("delivery completed") || s.includes("delivered")) return false;
-    return s.includes("proforma") || s.includes("pro forma") || s.includes("pro-forma");
-  }
-
   function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
-    if (salesPeriodMatch(r && r.proformaDate, live, period, prevMonthKey)) return true;
-    // Open "Pro-forma Invoice Cr" rows (Col H / Secondary Status) — same rows you see filtered in Excel
-    if (!isOpenProformaStatus(r)) return false;
-    if (period === "prev") return false;
-    if (period === "day") {
-      // Day view: status-only rows count only when Day uses the full selected range
-      return !!(live && live.dayUsesRange);
-    }
-    if (period === "month") {
-      const preset = (live && live.preset) || "";
-      // Include open proforma pipeline for this month / today / all (matches Excel status filter)
-      if (preset === "last_month") return false;
-      return true;
-    }
-    return false;
+    if (!r || hasDeliveryDate(r)) return false;
+    return salesPeriodMatch(r.proformaDate, live, period, prevMonthKey);
   }
 
   function salesIsDeliveryInPeriod(r, live, period, prevMonthKey) {
@@ -2964,8 +2926,9 @@
   function buildEmployeeDailyProforma(live, prevMonthKey) {
     const byKey = new Map();
     (slots.sales.rows || []).forEach((r) => {
+      // Same as Excel: Col P in month AND Col V blank
+      if (!salesIsProformaInPeriod(r, live, "month", prevMonthKey)) return;
       const pd = r.proformaDate;
-      if (!pd || !salesPeriodMatch(pd, live, "month", prevMonthKey)) return;
       const dayIndex = proformaDayIndex(pd, live);
       if (!dayIndex) return;
       const name = rosterSalesmanName(r.salesman);
@@ -3165,9 +3128,9 @@
       if (p.vacation) p.note = "VACATION";
     });
 
-    // Sales Raw: Col P = proforma, Col V = delivery (independent Excel counts).
-    // Proforma when P in period · Delivery when V in period · both can apply.
-    // Names not on the admin roster roll into "Not assigned" (no extra named rows).
+    // Sales Raw Excel COUNTIFS:
+    // Proforma = Col A match · Col P in period · Col V blank
+    // Delivery = Col V in period
     salesRows.forEach((r) => {
       const name = rosterSalesmanName(r.salesman);
       if (!name) return;
@@ -3254,7 +3217,7 @@
     const diag = {
       salesRows: salesRows.length,
       withProformaDate: 0,
-      withProformaStatus: 0,
+      withProformaOpen: 0,
       withDeliveryDate: 0,
       monthProforma: 0,
       monthDelivery: 0,
@@ -3273,7 +3236,7 @@
       calendarLabel: live.calendarLabel || calendarLive.label,
     };
     salesRows.forEach((r) => {
-      if (isOpenProformaStatus(r)) diag.withProformaStatus += 1;
+      if (r.proformaDate && !hasDeliveryDate(r)) diag.withProformaOpen += 1;
       if (r.proformaDate) {
         diag.withProformaDate += 1;
         if (diag.sampleProforma.length < 5) {
@@ -3334,7 +3297,7 @@
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
 
     // Excel Month-to-Date formulas:
-    // Proforma = count Col P in current month · Delivery = count Col V in current month
+    // Proforma = COUNTIFS Col P in period & Col V blank · Delivery = Col V in period
     // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma
     // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
     const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
@@ -4641,7 +4604,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=Col P date or Secondary Status “Pro-forma Invoice” · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=COUNTIFS Col P in period & Col V blank · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
@@ -4679,7 +4642,7 @@
           <b>Why Proforma/Delivery look empty:</b>
           Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
           parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
-          Secondary Status Pro-forma: <b>${formatNumber(diag.withProformaStatus || 0)}</b> ·
+          open Proforma (P set, V blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
           parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
           Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
           Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
@@ -4739,7 +4702,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period OR Secondary Status Pro-forma Invoice · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period & Col V blank (Excel COUNTIFS) · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -6474,23 +6437,33 @@
     if (b === a) return true;
     const bC = allocCompact(b);
     const aC = allocCompact(a);
-    if (bC === aC) return true;
-    if (b.includes(a) || a.includes(b)) return true;
-    if (aC.length >= 4 && bC.includes(aC)) return true;
-    if (bC.length >= 4 && aC.includes(bC)) return true;
-    return false;
+    // RAV 4 ↔ RAV4 (spacing / punctuation only)
+    if (bC && aC && bC === aC) return true;
+    // "CAMRY HEV" may match plan CAMRY, but not when a longer plan product fits (e.g. COROLLA CR)
+    if (!b.startsWith(a + " ")) return false;
+    const longerHit = ALLOCATION_ROWS.some((r) => {
+      if (r.kind !== "leaf") return false;
+      const o = allocProductKey(r.product);
+      if (!o || o === a || o.length <= a.length) return false;
+      return b === o || b.startsWith(o + " ") || allocCompact(o) === bC;
+    });
+    return !longerHit;
   }
 
   function suffixMatchesAlloc(boSuffix, allocSfx) {
     const b = upperTrim(boSuffix);
     if (!b || b === "—") return false;
-    return allocSfxParts(allocSfx).some((v) => {
-      if (v === b) return true;
-      const vC = allocCompact(v);
-      const bC = allocCompact(b);
-      if (vC && bC && (vC === bC || bC.includes(vC) || vC.includes(bC))) return true;
-      return false;
-    });
+    const bC = allocCompact(b);
+    if (!bC) return false;
+    // Exact only on full sfx or slash-parts ("L1 / DSL" ↔ L1 or DSL). No substring (EE ≠ FREE).
+    return allocSfxParts(allocSfx).some((v) => allocCompact(v) === bC);
+  }
+
+  function basBoUnitCount(bo) {
+    const raw = (slots.backorder.rows || [])[bo.id];
+    if (!raw) return 1;
+    const qty = boQtyValue(raw);
+    return qty > 0 ? qty : 1;
   }
 
   function buildBasRows(d, opts = {}) {
@@ -6500,9 +6473,11 @@
     const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
     return leaves.map((row) => {
       const allocation = Number(allocationValues[row.id]) || 0;
-      const boCount = bos.filter((bo) =>
-        productMatchesAlloc(bo.product, row.product) && suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx)
-      ).length;
+      const boCount = bos.reduce((sum, bo) => {
+        if (!productMatchesAlloc(bo.product, row.product)) return sum;
+        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx)) return sum;
+        return sum + basBoUnitCount(bo);
+      }, 0);
       const stockCount = stockRows.filter((s) =>
         productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx)
       ).length;
@@ -7641,8 +7616,8 @@
       ? salesDateInActivePeriod(s.deliveryDate, period)
       : !!(s.delivered && s.deliveryDate);
     const proIn = hasRange
-      ? !!(s.proformaDate && parseDate(s.proformaDate) && salesDateInActivePeriod(s.proformaDate, period))
-      : !!(s.proformaDate && parseDate(s.proformaDate));
+      ? !!(s.proformaDate && parseDate(s.proformaDate) && !s.delivered && salesDateInActivePeriod(s.proformaDate, period))
+      : !!(s.proformaDate && parseDate(s.proformaDate) && !s.delivered);
 
     // Period-aware: Col V in range → Delivered; else Col P in range → Proforma
     if (delIn) return { label: "Delivered", cls: "ok", inPeriod: true };

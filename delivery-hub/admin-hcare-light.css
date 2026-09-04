@@ -230,14 +230,11 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 
 .admin-light .admin-main {
   min-width: 0;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  overflow-x: hidden;
-  overflow-y: scroll;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 18px 22px 40px;
+  margin-left: var(--hc-sidebar);
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 18px 22px 48px;
   display: grid;
   gap: 16px;
   align-content: start;
@@ -794,14 +791,16 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
 
 @media (max-width: 900px) {
   .admin-light .admin-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    height: 100%;
-    overflow: hidden;
+    display: block;
+    height: auto;
+    overflow: visible;
   }
   .admin-light .admin-sidebar {
-    position: relative;
+    position: sticky;
+    left: auto;
     top: 0;
+    bottom: auto;
+    width: 100%;
     height: auto;
     max-height: none;
     overflow: visible;
@@ -822,7 +821,10 @@ body.delivery-hub.admin-console.admin-light .saas-shell {
   }
   .admin-light .admin-sidebar__foot,
   .admin-light .admin-sidebar__cta { display: none; }
-  .admin-light .admin-main { padding: 12px; }
+  .admin-light .admin-main {
+    margin-left: 0;
+    padding: 12px;
+  }
   .admin-light .saas-kpi-grid,
   .admin-light .admin-overview-row .saas-kpi-grid {
     grid-template-columns: 1fr !important;
