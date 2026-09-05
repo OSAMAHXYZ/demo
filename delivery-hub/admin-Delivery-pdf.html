@@ -3839,10 +3839,10 @@
             requestAnimationFrame(() => {
                 window.dispatchEvent(new Event('resize'));
                 if (adminAuthed) {
-                    refreshTransferDashboard();
-                    if (typeof renderOpsBoard === 'function') renderOpsBoard();
+                    try { refreshTransferDashboard(); } catch (err) { console.error('[pane refresh]', err); }
+                    try { if (typeof renderOpsBoard === 'function') renderOpsBoard(); } catch (err) { console.error('[ops]', err); }
                 }
-                fitVisibleCharts();
+                try { fitVisibleCharts(); } catch (_) { /* ignore */ }
             });
         }
 
@@ -8215,8 +8215,8 @@
                     fetch('/api/delivery-coordinator/queue?admin=1')
                 ]);
                 if (seq !== dashboardLoadSeq) return;
-                const data = await invRes.json();
-                const queueData = await queueRes.json();
+                const data = await invRes.json().catch(() => ({}));
+                const queueData = await queueRes.json().catch(() => ({}));
                 if (!invRes.ok) throw new Error(data.error || 'فشل تحميل البيانات');
                 allVehicles = data.vehicles || [];
                 lastDashboard = data.dashboard || null;
@@ -8236,16 +8236,38 @@
                 _vinLookup = null;
                 rebuildVinLookup();
                 fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
-                loadManagedOptions().catch((err) => setUploadStatus(err.message, 'err'));
-                renderShowroomParkingTable();
-                updateFoldCounts();
-                refreshTransferDashboard();
-                syncRestoreMetaFromDashboard();
+                loadManagedOptions().catch(() => {});
+                try { renderShowroomParkingTable(); } catch (_) { /* ignore */ }
+                try { updateFoldCounts(); } catch (_) { /* ignore */ }
+                try { refreshTransferDashboard(); } catch (err) {
+                    console.error('[dashboard refresh]', err);
+                }
+                try { syncRestoreMetaFromDashboard(); } catch (_) { /* ignore */ }
+                if (!opts.quiet) {
+                    const nV = allVehicles.length;
+                    const nD = allDrafts.length;
+                    const nQ = allQueue.length;
+                    setUploadStatus(
+                        nV || nD || nQ
+                            ? `تم التحميل · ${nV} مركبة · ${nD} مسودة · ${nQ} قائمة`
+                            : 'لا توجد بيانات بعد — ارفع أرشيف delivery_export أو Sales Raw',
+                        nV || nD || nQ ? 'ok' : ''
+                    );
+                } else {
+                    // Quiet refresh still clears a stuck "loading…" banner
+                    const top = document.getElementById('adminUploadStatus');
+                    if (top && /جاري تحميل/.test(String(top.textContent || ''))) {
+                        top.textContent = '';
+                        top.className = 'hub-status';
+                    }
+                }
             } catch (err) {
-                if (!opts.quiet) setUploadStatus(err.message, 'err');
+                if (seq === dashboardLoadSeq && !opts.quiet) {
+                    setUploadStatus(err.message || 'فشل تحميل البيانات', 'err');
+                }
                 throw err;
             } finally {
-                dashboardLoading = false;
+                if (seq === dashboardLoadSeq) dashboardLoading = false;
             }
         }
 
