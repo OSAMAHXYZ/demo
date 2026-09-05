@@ -1361,6 +1361,43 @@ body.delivery-hub.admin-console.admin-light {
   display: inline-block;
 }
 
+.admin-light .ft-totals {
+  direction: ltr;
+}
+
+.admin-light .ft-total {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.admin-light .ft-total--cars {
+  border-color: rgba(59, 130, 246, 0.4) !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.admin-light .ft-total--notes {
+  border-color: rgba(235, 10, 30, 0.4) !important;
+  background: rgba(235, 10, 30, 0.1) !important;
+}
+
+.admin-light .ft-total--queue {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+
+.admin-light .ft-total__lab,
+.admin-light .ft-total__hint {
+  color: #94a3b8 !important;
+}
+
+.admin-light .ft-total__val {
+  color: #f8fafc !important;
+}
+
+.admin-light .ft-total--cars .ft-total__val { color: #93c5fd !important; }
+.admin-light .ft-total--notes .ft-total__val { color: #fda4af !important; }
+.admin-light .ft-total--queue .ft-total__val { color: #6ee7b7 !important; }
+
 .admin-light .admin-upload-banner {
   background: #0a0a0a !important;
   border-color: rgba(235, 10, 30, 0.28) !important;

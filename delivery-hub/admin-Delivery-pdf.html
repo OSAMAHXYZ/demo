@@ -8,8 +8,8 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
-    <link rel="stylesheet" href="admin-saas.css?v=20260905a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260905b">
+    <link rel="stylesheet" href="admin-saas.css?v=20260906a">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260906a">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2552,6 +2552,23 @@
             </div>
 
             <div class="ft-chips" id="filterChipsBar" aria-label="Active filters"></div>
+            <div class="ft-totals" id="ftPeriodTotals" aria-label="Period totals">
+                <div class="ft-total ft-total--cars">
+                    <span class="ft-total__lab">Cars submitted · سيارات المنسق</span>
+                    <strong class="ft-total__val" id="ftTotalCarsSubmitted">0</strong>
+                    <span class="ft-total__hint">VINs on delivery notes</span>
+                </div>
+                <div class="ft-total ft-total--notes">
+                    <span class="ft-total__lab">Delivery notes · مذكرات</span>
+                    <strong class="ft-total__val" id="ftTotalNotesCreated">0</strong>
+                    <span class="ft-total__hint">notes created in period</span>
+                </div>
+                <div class="ft-total ft-total--queue">
+                    <span class="ft-total__lab">On queue · بالقائمة</span>
+                    <strong class="ft-total__val" id="ftTotalQueue">0</strong>
+                    <span class="ft-total__hint" id="ftTotalQueueHint">delivered 0 · remaining 0</span>
+                </div>
+            </div>
             <p class="ft-meta admin-filter-meta" id="trackFilterMeta">Showing all records</p>
             <p class="hub-meta" id="trackFilterHint" hidden></p>
 
@@ -5739,6 +5756,22 @@
             }
         }
 
+        function updatePeriodTotals(draftsList, queueList) {
+            const notes = (draftsList || []).length;
+            const cars = (draftsList || []).reduce((sum, d) => sum + draftCarWeight(d), 0);
+            const queue = (queueList || []).length;
+            const delivered = (queueList || []).filter((q) => q.agentStatus === 'delivered').length;
+            const remaining = Math.max(0, queue - delivered);
+            const carsEl = document.getElementById('ftTotalCarsSubmitted');
+            const notesEl = document.getElementById('ftTotalNotesCreated');
+            const queueEl = document.getElementById('ftTotalQueue');
+            const queueHint = document.getElementById('ftTotalQueueHint');
+            if (carsEl) carsEl.textContent = String(cars);
+            if (notesEl) notesEl.textContent = String(notes);
+            if (queueEl) queueEl.textContent = String(queue);
+            if (queueHint) queueHint.textContent = `delivered ${delivered} · remaining ${remaining}`;
+        }
+
         function updateTrackFilterMeta() {
             const meta = document.getElementById('trackFilterMeta');
             if (!meta) return;
@@ -5746,14 +5779,18 @@
             const { type, from, to } = getTrackFilter();
             // Keep English labels here — Arabic inside LTR meta reverses ISO date ranges visually.
             const typeLabel = type === 'invoice' ? 'Invoice date' : 'Delivery note date';
-            const drafts = filteredDrafts().length;
+            const draftsList = filteredDrafts();
+            const drafts = draftsList.length;
+            const carsSubmitted = draftsList.reduce((sum, d) => sum + draftCarWeight(d), 0);
             const searchQ = String(uiFilters.search || '').trim();
             const vehiclesBase = searchQ ? searchSystemVehicles(searchQ) : filteredVehicleList();
             const vehiclesAll = vehiclesBase.length;
             const vehiclesShown = applyDisplayFilters(vehiclesBase, 'vehicle').length;
-            const queue = filteredQueue().length;
-            const delivered = filteredQueue().filter((q) => q.agentStatus === 'delivered').length;
+            const queueList = filteredQueue();
+            const queue = queueList.length;
+            const delivered = queueList.filter((q) => q.agentStatus === 'delivered').length;
             const still = queue - delivered;
+            updatePeriodTotals(draftsList, queueList);
             const withP = (allVehicles || []).filter((v) => v.proformaDate).length;
             const withI = (allVehicles || []).filter((v) => v.invoiceDate).length;
             const companyBit = selectedCompany
@@ -5768,10 +5805,11 @@
                 : '';
             const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
             const rangeHtml = `<span class="ft-date-range" dir="ltr">${escapeHtml(from || '…')} → ${escapeHtml(to || '…')}</span>`;
+            const totalsBit = ` · <strong>${carsSubmitted}</strong> cars submitted · <strong>${drafts}</strong> delivery notes`;
 
             if (!from && !to) {
                 const presetLabel = trackDatePresetLabel(trackDatePreset);
-                meta.innerHTML = `Showing <strong>all</strong> · <strong>${(allVehicles || []).length}</strong> vehicles · <strong>${(allDrafts || []).length}</strong> drafts · queue <strong>${(allQueue || []).length}</strong> (delivered <strong>${(allQueue || []).filter((q) => q.agentStatus === 'delivered').length}</strong>)${searchBit}${companyBit} · period <strong>${presetLabel}</strong> · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
+                meta.innerHTML = `Showing <strong>all</strong> · <strong>${(allVehicles || []).length}</strong> vehicles · <strong>${carsSubmitted}</strong> cars submitted · <strong>${drafts}</strong> delivery notes · queue <strong>${queue}</strong> (delivered <strong>${delivered}</strong>)${searchBit}${companyBit} · period <strong>${presetLabel}</strong> · Raw: Proforma <strong>${withP}</strong> / Invoice <strong>${withI}</strong>`;
                 updateCompanyFilterChip();
                 renderFilterChips();
                 return;
@@ -5779,7 +5817,7 @@
             const presetBit = trackDatePreset !== 'custom'
                 ? ` · <strong>${escapeHtml(trackDatePresetLabel(trackDatePreset))}</strong>`
                 : '';
-            meta.innerHTML = `${showing}${searchBit}${companyBit}${presetBit} · filter <strong>${typeLabel}</strong> ${rangeHtml} · <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
+            meta.innerHTML = `${showing}${searchBit}${companyBit}${presetBit} · filter <strong>${typeLabel}</strong> ${rangeHtml}${totalsBit} · queue <strong>${queue}</strong> (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
             updateCompanyFilterChip();
             renderFilterChips();
         }

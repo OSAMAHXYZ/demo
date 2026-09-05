@@ -1631,6 +1631,75 @@ body.admin-console tbody tr:hover {
   color: #f8fafc;
 }
 
+.ft-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  direction: ltr;
+}
+
+.ft-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  min-width: 0;
+}
+
+.ft-total--cars {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.ft-total--notes {
+  border-color: rgba(235, 10, 30, 0.35);
+  background: rgba(235, 10, 30, 0.08);
+}
+
+.ft-total--queue {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.ft-total__lab {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ft-total__val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-total--cars .ft-total__val { color: #93c5fd; }
+.ft-total--notes .ft-total__val { color: #fda4af; }
+.ft-total--queue .ft-total__val { color: #6ee7b7; }
+
+.ft-total__hint {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .ft-totals {
+    grid-template-columns: 1fr;
+  }
+}
+
 .ft-meta {
   margin: 10px 2px 0;
   font-size: 12px;
