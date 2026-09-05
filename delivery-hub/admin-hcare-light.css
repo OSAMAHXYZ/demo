@@ -1305,6 +1305,62 @@ body.delivery-hub.admin-console.admin-light {
   box-shadow: 0 10px 24px rgba(235, 10, 30, 0.28) !important;
 }
 
+/* True-black: earlier light-theme rules force white btn bg + --hc-text (now light) → invisible */
+.admin-light .ft-btn {
+  background: #1a1a1a !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: none !important;
+}
+.admin-light .ft-btn:hover {
+  background: #242424 !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #fff !important;
+}
+.admin-light .ft-btn--ghost,
+.admin-light .ft-btn--more {
+  background: #111111 !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+.admin-light .ft-btn--ghost:hover,
+.admin-light .ft-btn--more:hover,
+.admin-light .ft-btn--more.is-active {
+  background: #1a1a1a !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+.admin-light .ft-btn--primary {
+  background: #EB0A1E !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 10px 24px rgba(235, 10, 30, 0.28) !important;
+}
+.admin-light .ft-btn--primary:hover {
+  background: #c40818 !important;
+  color: #fff !important;
+}
+.admin-light .ft-toolbar {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.admin-light .ft-meta,
+.admin-light .admin-filter-meta {
+  color: #94a3b8 !important;
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate;
+}
+.admin-light .ft-meta strong,
+.admin-light .admin-filter-meta strong {
+  color: #f1f5f9 !important;
+}
+.admin-light .ft-date-range {
+  direction: ltr;
+  unicode-bidi: isolate;
+  display: inline-block;
+}
+
 .admin-light .admin-upload-banner {
   background: #0a0a0a !important;
   border-color: rgba(235, 10, 30, 0.28) !important;

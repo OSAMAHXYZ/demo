@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
     <link rel="stylesheet" href="admin-saas.css?v=20260905a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260903f">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260905b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -5744,11 +5744,8 @@
             if (!meta) return;
             updateTrackFilterHint();
             const { type, from, to } = getTrackFilter();
-            const typeLabel = type === 'proforma'
-                ? 'البروفورما (Raw)'
-                : type === 'invoice'
-                    ? 'الفاتورة (Raw)'
-                    : 'مذكرة الترحيل (مسودات)';
+            // Keep English labels here — Arabic inside LTR meta reverses ISO date ranges visually.
+            const typeLabel = type === 'invoice' ? 'Invoice date' : 'Delivery note date';
             const drafts = filteredDrafts().length;
             const searchQ = String(uiFilters.search || '').trim();
             const vehiclesBase = searchQ ? searchSystemVehicles(searchQ) : filteredVehicleList();
@@ -5770,6 +5767,7 @@
                 ? ` · VIN search <strong>${escapeHtml(searchQ)}</strong>`
                 : '';
             const showing = `Showing <strong>${vehiclesShown}</strong> of <strong>${vehiclesAll || (allVehicles || []).length}</strong> vehicles`;
+            const rangeHtml = `<span class="ft-date-range" dir="ltr">${escapeHtml(from || '…')} → ${escapeHtml(to || '…')}</span>`;
 
             if (!from && !to) {
                 const presetLabel = trackDatePresetLabel(trackDatePreset);
@@ -5781,9 +5779,7 @@
             const presetBit = trackDatePreset !== 'custom'
                 ? ` · <strong>${escapeHtml(trackDatePresetLabel(trackDatePreset))}</strong>`
                 : '';
-            meta.innerHTML = `${showing}${searchBit}${companyBit}${presetBit} · filter <strong>${typeLabel}</strong> ${from || '…'} → ${to || '…'} · 
-                <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> 
-                (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
+            meta.innerHTML = `${showing}${searchBit}${companyBit}${presetBit} · filter <strong>${typeLabel}</strong> ${rangeHtml} · <strong>${drafts}</strong> drafts · queue <strong>${queue}</strong> (delivered <strong>${delivered}</strong> · remaining <strong>${still}</strong>)`;
             updateCompanyFilterChip();
             renderFilterChips();
         }
