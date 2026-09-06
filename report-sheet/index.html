@@ -11,6 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
+  <script src="inventory-command-center.js"></script>
   <link rel="stylesheet" href="dashboard.css" />
 
 </head>
@@ -67,6 +68,156 @@
       <div class="tabs" id="panel-tabs" style="margin-bottom:16px"></div>
 
       <!-- PANEL: Sales Dashboard (Power BI–style one page) -->
+      <!-- PANEL: Inventory Command Center / Summary -->
+      <div class="panel-section" id="panel-summary" style="display:none">
+        <div class="icc-hero">
+          <div>
+            <p class="icc-eyebrow">Inventory Command Center</p>
+            <h2 class="icc-title">Vehicle Demand vs Stock Coverage</h2>
+            <p class="icc-sub">Which configurations have the highest demand pressure — and do we have enough stock to fulfill it?</p>
+          </div>
+          <div class="icc-hero-actions">
+            <div class="icc-mode-toggle" role="group" aria-label="Analysis mode">
+              <button type="button" class="icc-mode-btn active" data-icc-mode="coverage">Demand vs Coverage</button>
+              <button type="button" class="icc-mode-btn" data-icc-mode="ageing">Ageing vs Velocity</button>
+            </div>
+            <button type="button" class="btn" id="icc-reset">Reset filters</button>
+            <button type="button" class="btn-primary" id="icc-export">Export Excel</button>
+          </div>
+        </div>
+
+        <div class="icc-dq" id="icc-dq" aria-live="polite"></div>
+        <div class="bo-kpis icc-kpi-row" id="icc-kpis"></div>
+
+        <div class="icc-layout">
+          <aside class="icc-filters card" id="icc-filters">
+            <h3 class="icc-filters-title">Filters</h3>
+            <label class="icc-field">Drill level
+              <select id="icc-drill">
+                <option value="0">Product</option>
+                <option value="1">Product → Suffix</option>
+                <option value="2">+ Model Year</option>
+                <option value="3">+ Exterior</option>
+                <option value="4" selected>+ Interior (full config)</option>
+              </select>
+            </label>
+            <label class="icc-field">Search
+              <input id="icc-search" type="search" placeholder="Product / suffix / status…" />
+            </label>
+            <label class="icc-field">Product
+              <select id="icc-f-product"><option value="">All</option></select>
+            </label>
+            <label class="icc-field">Suffix
+              <select id="icc-f-suffix"><option value="">All</option></select>
+            </label>
+            <label class="icc-field">Model Year
+              <select id="icc-f-year"><option value="">All</option></select>
+            </label>
+            <label class="icc-field">Exterior
+              <select id="icc-f-ext"><option value="">All</option></select>
+            </label>
+            <label class="icc-field">Interior
+              <select id="icc-f-int"><option value="">All</option></select>
+            </label>
+            <label class="icc-field">Inventory Status
+              <select id="icc-f-status">
+                <option value="">All</option>
+                <option>Critical</option>
+                <option>At Risk</option>
+                <option>Balanced</option>
+                <option>Healthy</option>
+                <option>Overstock</option>
+              </select>
+            </label>
+            <label class="icc-field">Demand Status
+              <select id="icc-f-demand">
+                <option value="">All</option>
+                <option>High</option>
+                <option>Moderate</option>
+                <option>Low</option>
+              </select>
+            </label>
+            <label class="icc-field">Quadrant
+              <select id="icc-f-quadrant">
+                <option value="">All</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="FAST_MOVING">Fast Moving</option>
+                <option value="OVERSTOCK">Overstock / Slow</option>
+                <option value="WATCH">Watch</option>
+              </select>
+            </label>
+            <div class="icc-range-row">
+              <label class="icc-field">Ageing min
+                <input id="icc-age-min" type="number" min="0" step="1" placeholder="0" />
+              </label>
+              <label class="icc-field">Ageing max
+                <input id="icc-age-max" type="number" min="0" step="1" placeholder="999" />
+              </label>
+            </div>
+            <div class="icc-range-row">
+              <label class="icc-field">Coverage min
+                <input id="icc-cov-min" type="number" min="0" step="0.1" placeholder="0" />
+              </label>
+              <label class="icc-field">Coverage max
+                <input id="icc-cov-max" type="number" min="0" step="0.1" placeholder="5" />
+              </label>
+            </div>
+            <p class="foot icc-threshold-note" id="icc-threshold-note"></p>
+          </aside>
+
+          <div class="icc-main">
+            <article class="card icc-chart-card">
+              <div class="pbi-viz-head">
+                <h2 id="icc-chart-title">4-quadrant · Demand vs Stock Coverage</h2>
+                <span class="hint" id="icc-chart-hint">Bubble size = available stock · click bubble to inspect</span>
+              </div>
+              <div class="icc-quadrant-legend" id="icc-quad-legend">
+                <span class="icc-q icc-q-critical">Critical</span>
+                <span class="icc-q icc-q-fast">Fast moving</span>
+                <span class="icc-q icc-q-over">Overstock / slow</span>
+                <span class="icc-q icc-q-watch">Watch</span>
+              </div>
+              <div class="chart-box icc-chart-box"><canvas id="chart-icc-bubble"></canvas></div>
+            </article>
+
+            <article class="card icc-detail" id="icc-detail">
+              <h3>Vehicle Intelligence</h3>
+              <p class="foot" id="icc-detail-empty">Click a bubble or table row to inspect demand, stock, coverage, and recommended action.</p>
+              <div id="icc-detail-body" hidden></div>
+            </article>
+
+            <article class="card icc-insights" id="icc-insights">
+              <h2>Inventory Insights</h2>
+              <div class="icc-insight-grid" id="icc-insight-grid"></div>
+            </article>
+
+            <article class="card icc-table-card">
+              <div class="pbi-viz-head">
+                <h2>Vehicle configuration table</h2>
+                <span class="hint">Sort · filter · paginate · conditional status</span>
+              </div>
+              <div class="icc-table-toolbar">
+                <label>Sort
+                  <select id="icc-sort">
+                    <option value="demandPressure:desc">Demand pressure ↓</option>
+                    <option value="backOrders:desc">Back orders ↓</option>
+                    <option value="stockCoverage:asc">Coverage ↑</option>
+                    <option value="salesVelocity:desc">Velocity ↓</option>
+                    <option value="allocationAgeing:desc">Ageing ↓</option>
+                    <option value="availableStock:desc">Stock ↓</option>
+                    <option value="product:asc">Product A–Z</option>
+                  </select>
+                </label>
+                <span class="foot" id="icc-table-meta"></span>
+              </div>
+              <div class="table-wrap icc-table-wrap" id="icc-table"></div>
+              <div class="icc-pager" id="icc-pager"></div>
+              <p class="foot" id="icc-table-foot"></p>
+            </article>
+          </div>
+        </div>
+      </div>
+
       <div class="panel-section" id="panel-salesreport" style="display:none">
         <div class="xl-toolbar">
           <input id="sr-search" type="search" placeholder="Search employee…" />
@@ -2918,6 +3069,7 @@
         };
       }
       invalidateStockAvailabilityCache();
+      invalidateIccCache();
       const any = hasAnyPushedFiles();
       $("#run-btn").disabled = !any;
       $("#clear-btn").disabled = !any;
@@ -4154,6 +4306,7 @@
   }
 
   const PANEL_DEFS = [
+    { id: "summary", label: "Summary" },
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boallocstock", label: "BO&ALLOCATION&STOCK" },
@@ -4179,9 +4332,14 @@
     return hasSalesRaw();
   }
 
+  function hasSummaryInputs() {
+    return hasBackOrder() || hasStockFiles() || hasSalesRaw();
+  }
+
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "salesreport") return hasSalesReportInputs();
+      if (p.id === "summary") return hasSummaryInputs();
       // BO + Stock Dashboard always visible — empty state when BO file missing
       return true;
     });
@@ -4544,6 +4702,7 @@
     $("#panel-tabs").innerHTML = panels.map((p) =>
       `<button class="tab${p.id === activePanel ? " active" : ""}" data-panel="${p.id}">${p.label}</button>`
     ).join("");
+    if (panelId === "summary") renderSummaryDashboard();
   }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
@@ -4696,6 +4855,8 @@
           ? window._data.salesReport.live
           : ensureGlobalLivePeriod();
       }
+      invalidateIccCache();
+      if (hasSummaryInputs()) renderSummaryDashboard();
       renderBoAllocStockDashboard(window._data);
     }
     syncGlobalDateControls(window._globalLivePeriod);
@@ -4707,6 +4868,8 @@
     saveGlobalDateFilter();
     if (window._data) {
       if (hasSalesReportInputs()) rebuildSalesReport();
+      invalidateIccCache();
+      if (hasSummaryInputs()) renderSummaryDashboard();
       renderBoAllocStockDashboard(window._data);
     }
     syncGlobalDateControls(window._globalLivePeriod);
@@ -8525,6 +8688,553 @@
     renderStockDashboard();
   }
 
+  /* ——— Summary · Inventory Command Center ——— */
+  let iccCache = null;
+  let iccCacheKey = "";
+  let iccView = {
+    mode: "coverage",
+    drillLevel: 4,
+    search: "",
+    product: "",
+    suffix: "",
+    year: "",
+    ext: "",
+    int: "",
+    inventoryStatus: "",
+    demandStatus: "",
+    quadrant: "",
+    ageingMin: "",
+    ageingMax: "",
+    coverageMin: "",
+    coverageMax: "",
+    sort: "demandPressure:desc",
+    page: 0,
+    selectedId: "",
+    kpiFilter: "",
+  };
+
+  function iccPeriodDays() {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
+    if (live && live.rangeFrom && live.rangeTo) {
+      const a = live.rangeFrom.getTime ? live.rangeFrom.getTime() : new Date(live.rangeFrom).getTime();
+      const b = live.rangeTo.getTime ? live.rangeTo.getTime() : new Date(live.rangeTo).getTime();
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+        return Math.max(1, Math.round((b - a) / 86400000) + 1);
+      }
+    }
+    if (live && live.preset === "today") return 1;
+    if (live && live.preset === "this_month" && live.now) {
+      return Math.max(1, live.now.getDate());
+    }
+    return 0;
+  }
+
+  function iccSalesRowsForEngine() {
+    return (slots.sales.rows || []).map((r) => {
+      const get = buildFieldGetter(r);
+      return {
+        product: cellToString(r.product || r.Product || get(r, "product") || ""),
+        year: cellToString(r["Model Year"] || r.year || get(r, "year") || ""),
+        qty: toNumber(r.qty != null ? r.qty : get(r, "qty")) || 1,
+        proformaDate: r.proformaDate,
+        deliveryDate: r.deliveryDate,
+        vin: r.vin,
+      };
+    });
+  }
+
+  function iccAllocationLeaves() {
+    return ALLOCATION_ROWS.filter((r) => r.kind === "leaf").map((r) => ({
+      kind: "leaf",
+      product: r.product,
+      sfx: r.sfx,
+      allocation: Number(allocationValues[r.id]) || 0,
+    }));
+  }
+
+  function getInventoryCommandDataset() {
+    const ICC = window.InventoryCommandCenter;
+    if (!ICC) return null;
+    const key = [
+      (slots.backorder.rows || []).length,
+      (slots.rtl.rows || []).length,
+      (slots.central.rows || []).length,
+      (slots.sales.rows || []).length,
+      iccView.drillLevel,
+      iccPeriodDays(),
+      Object.values(allocationValues).reduce((s, v) => s + (Number(v) || 0), 0),
+    ].join("|");
+    if (iccCache && iccCacheKey === key) return iccCache;
+
+    const bos = mapBo(slots.backorder.rows || []).map((b) => {
+      const raw = (slots.backorder.rows || [])[b.id];
+      const qty = raw ? boQtyValue(raw) : 1;
+      return { ...b, qty: qty > 0 ? qty : 1 };
+    });
+    const rtl = mapStockInv(slots.rtl.rows || [], "RTL");
+    const central = mapStockInv(slots.central.rows || [], "Central");
+
+    iccCache = ICC.build({
+      boRows: bos,
+      rtlRows: rtl,
+      centralRows: central,
+      salesRows: iccSalesRowsForEngine(),
+      accessoryRows: slots.accessories.rows || [],
+      allocationLeaves: iccAllocationLeaves(),
+      periodDays: iccPeriodDays(),
+      drillLevel: Number(iccView.drillLevel) || 0,
+      helpers: {
+        extractVin: extractVinValue,
+        boQty: (r) => (r.qty > 0 ? r.qty : 1),
+      },
+    });
+    iccCacheKey = key;
+    return iccCache;
+  }
+
+  function invalidateIccCache() {
+    iccCache = null;
+    iccCacheKey = "";
+  }
+
+  function iccFiltersFromView() {
+    return {
+      search: iccView.search,
+      product: iccView.product,
+      suffix: iccView.suffix,
+      year: iccView.year,
+      ext: iccView.ext,
+      int: iccView.int,
+      inventoryStatus: iccView.inventoryStatus,
+      demandStatus: iccView.demandStatus,
+      quadrant: iccView.quadrant,
+      ageingMin: iccView.ageingMin,
+      ageingMax: iccView.ageingMax,
+      coverageMin: iccView.coverageMin,
+      coverageMax: iccView.coverageMax,
+    };
+  }
+
+  function iccApplyKpiFilter(rows) {
+    if (!iccView.kpiFilter) return rows;
+    if (iccView.kpiFilter === "critical") {
+      return rows.filter((r) => r.inventoryStatus === "Critical" || r.quadrant === "CRITICAL");
+    }
+    if (iccView.kpiFilter === "slow") {
+      return rows.filter((r) => r.quadrant === "OVERSTOCK" || r.inventoryStatus === "Overstock");
+    }
+    if (iccView.kpiFilter === "overstock") {
+      return rows.filter((r) => r.inventoryStatus === "Overstock");
+    }
+    return rows;
+  }
+
+  function iccSortRows(rows) {
+    const [field, dir] = String(iccView.sort || "demandPressure:desc").split(":");
+    const mul = dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let av = a[field];
+      let bv = b[field];
+      if (field === "stockCoverage") {
+        av = av == null ? Number.POSITIVE_INFINITY : av;
+        bv = bv == null ? Number.POSITIVE_INFINITY : bv;
+      }
+      if (typeof av === "string" || typeof bv === "string") {
+        return mul * String(av || "").localeCompare(String(bv || ""), undefined, { numeric: true });
+      }
+      av = Number(av);
+      bv = Number(bv);
+      if (!Number.isFinite(av)) av = dir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      if (!Number.isFinite(bv)) bv = dir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      return mul * (av - bv);
+    });
+  }
+
+  function fillIccSelect(sel, values, current, allLabel) {
+    const el = $(sel);
+    if (!el) return;
+    const list = [...values].filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    el.innerHTML = `<option value="">${escapeHtml(allLabel || "All")}</option>` +
+      list.map((v) => `<option value="${escapeHtml(v)}"${v === current ? " selected" : ""}>${escapeHtml(v)}</option>`).join("");
+    if (current && !list.includes(current)) el.value = "";
+  }
+
+  function renderIccDetail(row) {
+    const empty = $("#icc-detail-empty");
+    const body = $("#icc-detail-body");
+    if (!body) return;
+    if (!row) {
+      if (empty) empty.hidden = false;
+      body.hidden = true;
+      body.innerHTML = "";
+      return;
+    }
+    if (empty) empty.hidden = true;
+    body.hidden = false;
+    const cov = row.stockCoverageDisplay;
+    body.innerHTML = `
+      <div class="icc-detail-grid">
+        <div><span class="lab">Product</span><strong>${escapeHtml(row.product)}</strong></div>
+        <div><span class="lab">Suffix</span><strong>${escapeHtml(row.suffix)}</strong></div>
+        <div><span class="lab">Year</span><strong>${escapeHtml(row.year)}</strong></div>
+        <div><span class="lab">Ext / Int</span><strong>${escapeHtml(row.ext)} / ${escapeHtml(row.int)}</strong></div>
+        <div><span class="lab">Back Orders</span><strong>${formatNumber(row.backOrders)}</strong></div>
+        <div><span class="lab">Available Stock</span><strong>${formatNumber(row.availableStock)}</strong></div>
+        <div><span class="lab">E-Sales Stock</span><strong>${formatNumber(row.eSalesStock)}</strong></div>
+        <div><span class="lab">Sales / Velocity</span><strong>${formatNumber(row.sales)} · ${row.salesVelocity.toFixed(2)}/d</strong></div>
+        <div><span class="lab">Coverage</span><strong>${escapeHtml(String(cov))}</strong></div>
+        <div><span class="lab">Ageing</span><strong>${row.allocationAgeing == null ? "—" : Math.round(row.allocationAgeing) + "d"}</strong></div>
+        <div><span class="lab">Demand Pressure</span><strong>${row.demandPressure}</strong></div>
+        <div><span class="lab">Status</span><strong><span class="badge ${row.inventoryStatus === "Critical" ? "bad" : row.inventoryStatus === "Overstock" ? "warn" : "ok"}">${escapeHtml(row.inventoryStatus)}</span></strong></div>
+      </div>
+      <p class="icc-action"><b>Recommended:</b> ${escapeHtml(row.recommendedAction)}</p>
+      <p class="foot">Quadrant · ${escapeHtml(row.quadrant.replace(/_/g, " "))}</p>`;
+  }
+
+  function renderIccBubbleChart(dataset, filtered) {
+    const canvas = $("#chart-icc-bubble");
+    if (!canvas || !window.Chart || !window.InventoryCommandCenter) return;
+    const ICC = window.InventoryCommandCenter;
+    const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
+    const points = ICC.toChartPoints(filtered, mode, dataset.config);
+    const covSplit = dataset.kpis.coverageSplit;
+    const velSplit = dataset.kpis.velocitySplit;
+
+    const colors = {
+      CRITICAL: "rgba(200, 30, 44, 0.72)",
+      FAST_MOVING: "rgba(13, 148, 136, 0.72)",
+      OVERSTOCK: "rgba(180, 83, 9, 0.72)",
+      WATCH: "rgba(100, 116, 139, 0.65)",
+    };
+
+    if (charts["chart-icc-bubble"]) charts["chart-icc-bubble"].destroy();
+
+    const quadrantPlugin = {
+      id: "iccQuadrants",
+      beforeDraw(chart) {
+        if (mode !== "coverage") return;
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea || !scales.x || !scales.y) return;
+        const x0 = scales.x.getPixelForValue(0);
+        const xSplit = scales.x.getPixelForValue(Math.min(covSplit, scales.x.max));
+        const ySplit = scales.y.getPixelForValue(velSplit);
+        const { left, right, top, bottom } = chartArea;
+        const bands = [
+          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(200, 30, 44, 0.06)" }, // critical
+          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.06)" }, // fast
+          { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" }, // over
+          { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" }, // watch
+        ];
+        ctx.save();
+        bands.forEach((b) => {
+          ctx.fillStyle = b.c;
+          ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+        });
+        ctx.strokeStyle = "rgba(11, 58, 102, 0.35)";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xSplit, top);
+        ctx.lineTo(xSplit, bottom);
+        ctx.moveTo(left, ySplit);
+        ctx.lineTo(right, ySplit);
+        ctx.stroke();
+        ctx.restore();
+        void x0;
+      },
+    };
+
+    charts["chart-icc-bubble"] = new Chart(canvas, {
+      type: "bubble",
+      data: {
+        datasets: [{
+          label: "Vehicles",
+          data: points,
+          backgroundColor: points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderColor: "rgba(11, 58, 102, 0.35)",
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title(items) {
+                const m = items[0] && items[0].raw && items[0].raw.meta;
+                return m ? `${m.product} · ${m.suffix}` : "";
+              },
+              label(ctx) {
+                const m = ctx.raw && ctx.raw.meta;
+                if (!m) return "";
+                return [
+                  `Year ${m.year} · Ext ${m.ext} · Int ${m.int}`,
+                  `BO ${m.backOrders} · Stock ${m.availableStock} · E-Sales ${m.eSalesStock}`,
+                  `Sales ${m.sales} · Velocity ${m.salesVelocity.toFixed(2)}/d`,
+                  `Coverage ${m.stockCoverageDisplay} · Ageing ${m.allocationAgeing == null ? "—" : Math.round(m.allocationAgeing) + "d"}`,
+                  `Pressure ${m.demandPressure} · ${m.inventoryStatus}`,
+                  m.recommendedAction,
+                ];
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: mode === "ageing" ? "Allocation Ageing (days)" : "Stock Coverage (Available / BO)",
+              color: "#0b3a66",
+              font: { weight: "700", family: "'Manrope', sans-serif" },
+            },
+            grid: { color: "rgba(148, 163, 184, 0.18)" },
+            beginAtZero: true,
+          },
+          y: {
+            title: {
+              display: true,
+              text: "Sales Velocity (units / day)",
+              color: "#0b3a66",
+              font: { weight: "700", family: "'Manrope', sans-serif" },
+            },
+            grid: { color: "rgba(148, 163, 184, 0.18)" },
+            beginAtZero: true,
+          },
+        },
+        onClick(evt, elements) {
+          if (!elements.length) return;
+          const el = elements[0];
+          const pt = points[el.index];
+          if (!pt) return;
+          iccView.selectedId = pt.rowId;
+          const row = filtered.find((r) => r.id === pt.rowId);
+          renderIccDetail(row);
+          renderIccTable(dataset, filtered);
+        },
+      },
+      plugins: [quadrantPlugin],
+    });
+  }
+
+  function renderIccTable(dataset, filtered) {
+    const el = $("#icc-table");
+    const foot = $("#icc-table-foot");
+    const meta = $("#icc-table-meta");
+    const pager = $("#icc-pager");
+    if (!el) return;
+    const sorted = iccSortRows(filtered);
+    const pageSize = (dataset.config && dataset.config.pageSize) || 50;
+    const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+    if (iccView.page >= pages) iccView.page = 0;
+    const start = iccView.page * pageSize;
+    const pageRows = sorted.slice(start, start + pageSize);
+
+    if (!sorted.length) {
+      el.innerHTML = `<p class="foot" style="padding:16px">No configurations match the current filters. Push Back Order / RTL / Central / Sales from Admin.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      if (meta) meta.textContent = "";
+      if (pager) pager.innerHTML = "";
+      return;
+    }
+
+    const statusCls = (s) => {
+      if (s === "Critical") return "icc-st-critical";
+      if (s === "At Risk") return "icc-st-risk";
+      if (s === "Overstock") return "icc-st-over";
+      if (s === "Healthy") return "icc-st-ok";
+      return "icc-st-bal";
+    };
+
+    el.innerHTML = `<table class="bas-table icc-table">
+      <thead><tr>
+        <th>Product</th><th>Suffix</th><th>Year</th><th>Exterior</th><th>Interior</th>
+        <th class="num">BO</th><th class="num">Stock</th><th class="num">E-Sales</th><th class="num">Sales</th>
+        <th class="num">Velocity</th><th class="num">Coverage</th><th class="num">Ageing</th>
+        <th>Status</th><th>Action</th>
+      </tr></thead>
+      <tbody>${pageRows.map((r) => `
+        <tr class="${r.id === iccView.selectedId ? "icc-row-active" : ""} ${statusCls(r.inventoryStatus)}" data-icc-id="${escapeHtml(r.id)}">
+          <td>${escapeHtml(r.product)}</td>
+          <td>${escapeHtml(r.suffix)}</td>
+          <td>${escapeHtml(r.year)}</td>
+          <td>${escapeHtml(r.ext)}</td>
+          <td>${escapeHtml(r.int)}</td>
+          <td class="num">${formatNumber(r.backOrders)}</td>
+          <td class="num">${formatNumber(r.availableStock)}</td>
+          <td class="num">${formatNumber(r.eSalesStock)}</td>
+          <td class="num">${formatNumber(r.sales)}</td>
+          <td class="num">${r.salesVelocity.toFixed(2)}</td>
+          <td class="num">${escapeHtml(String(r.stockCoverageDisplay))}</td>
+          <td class="num">${r.allocationAgeing == null ? "—" : Math.round(r.allocationAgeing)}</td>
+          <td><span class="badge ${r.inventoryStatus === "Critical" ? "bad" : r.inventoryStatus === "Overstock" ? "warn" : "ok"}">${escapeHtml(r.inventoryStatus)}</span></td>
+          <td class="icc-action-cell">${escapeHtml(r.recommendedAction)}</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+
+    if (meta) meta.textContent = `${formatNumber(sorted.length)} configs · page ${iccView.page + 1}/${pages}`;
+    if (foot) foot.textContent = `Showing ${formatNumber(pageRows.length)} of ${formatNumber(sorted.length)} · drill level ${dataset.drillLevel}`;
+    if (pager) {
+      pager.innerHTML = `
+        <button type="button" class="btn" id="icc-page-prev" ${iccView.page <= 0 ? "disabled" : ""}>Prev</button>
+        <button type="button" class="btn" id="icc-page-next" ${iccView.page >= pages - 1 ? "disabled" : ""}>Next</button>`;
+      const prev = $("#icc-page-prev");
+      const next = $("#icc-page-next");
+      if (prev) prev.onclick = () => { iccView.page -= 1; renderSummaryDashboard(); };
+      if (next) next.onclick = () => { iccView.page += 1; renderSummaryDashboard(); };
+    }
+
+    el.querySelectorAll("tr[data-icc-id]").forEach((tr) => {
+      tr.addEventListener("click", () => {
+        iccView.selectedId = tr.getAttribute("data-icc-id");
+        const row = sorted.find((r) => r.id === iccView.selectedId);
+        renderIccDetail(row);
+        el.querySelectorAll("tr").forEach((x) => x.classList.remove("icc-row-active"));
+        tr.classList.add("icc-row-active");
+      });
+    });
+  }
+
+  function renderSummaryDashboard() {
+    const panel = $("#panel-summary");
+    if (!panel || !$("#icc-kpis")) return;
+    if (!hasSummaryInputs()) {
+      $("#icc-kpis").innerHTML = "";
+      const table = $("#icc-table");
+      if (table) {
+        table.innerHTML = `<p class="foot" style="padding:16px">Push <b>Back Orders</b>, <b>RTL / Central stock</b>, and/or <b>Sales Raw</b> from Admin to open the Inventory Command Center.</p>`;
+      }
+      return;
+    }
+
+    const dataset = getInventoryCommandDataset();
+    if (!dataset) {
+      $("#icc-kpis").innerHTML = `<p class="foot">Inventory engine failed to load.</p>`;
+      return;
+    }
+
+    const ICC = window.InventoryCommandCenter;
+    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
+    filtered = iccApplyKpiFilter(filtered);
+
+    const all = dataset.rows;
+    fillIccSelect("#icc-f-product", new Set(all.map((r) => r.product)), iccView.product, "All products");
+    fillIccSelect("#icc-f-suffix", new Set(all.map((r) => r.suffix).filter((x) => x && x !== "—")), iccView.suffix, "All suffixes");
+    fillIccSelect("#icc-f-year", new Set(all.map((r) => r.year).filter((x) => x && x !== "—")), iccView.year, "All years");
+    fillIccSelect("#icc-f-ext", new Set(all.map((r) => r.ext).filter((x) => x && x !== "—")), iccView.ext, "All exterior");
+    fillIccSelect("#icc-f-int", new Set(all.map((r) => r.int).filter((x) => x && x !== "—")), iccView.int, "All interior");
+
+    if ($("#icc-drill")) $("#icc-drill").value = String(iccView.drillLevel);
+    if ($("#icc-search")) $("#icc-search").value = iccView.search;
+    if ($("#icc-f-status")) $("#icc-f-status").value = iccView.inventoryStatus;
+    if ($("#icc-f-demand")) $("#icc-f-demand").value = iccView.demandStatus;
+    if ($("#icc-f-quadrant")) $("#icc-f-quadrant").value = iccView.quadrant;
+    if ($("#icc-sort")) $("#icc-sort").value = iccView.sort;
+    if ($("#icc-age-min")) $("#icc-age-min").value = iccView.ageingMin;
+    if ($("#icc-age-max")) $("#icc-age-max").value = iccView.ageingMax;
+    if ($("#icc-cov-min")) $("#icc-cov-min").value = iccView.coverageMin;
+    if ($("#icc-cov-max")) $("#icc-cov-max").value = iccView.coverageMax;
+
+    document.querySelectorAll(".icc-mode-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-icc-mode") === iccView.mode);
+    });
+
+    const title = $("#icc-chart-title");
+    const hint = $("#icc-chart-hint");
+    if (title) {
+      title.textContent = iccView.mode === "ageing"
+        ? "Inventory Ageing vs Sales Velocity"
+        : "4-quadrant · Demand vs Stock Coverage";
+    }
+    if (hint) {
+      hint.textContent = iccView.mode === "ageing"
+        ? "High ageing + low velocity = slow-moving · bubble size = stock"
+        : `X = Available÷BO · Y = sales/day · splits coverage ${dataset.kpis.coverageSplit.toFixed(2)} · velocity ${dataset.kpis.velocitySplit.toFixed(3)}`;
+    }
+    const note = $("#icc-threshold-note");
+    if (note) {
+      const c = dataset.config.coverage;
+      note.textContent = `Coverage bands: <${c.criticalMax} Critical · <${c.atRiskMax} At Risk · <${c.balancedMax} Balanced · ≥ Healthy/Overstock by velocity. Auto quadrant splits from data medians.`;
+    }
+
+    const k = dataset.kpis;
+    const kpiEl = $("#icc-kpis");
+    if (kpiEl) {
+      const cards = [
+        { id: "", label: "Total Back Orders", val: formatNumber(k.totalBackOrders), sub: "Open BO units" },
+        { id: "", label: "Available Stock", val: formatNumber(k.availableStock), sub: "RTL + Central VINs" },
+        { id: "", label: "Stock Coverage %", val: k.stockCoveragePct == null ? "n/a" : `${k.stockCoveragePct.toFixed(0)}%`, sub: "Stock ÷ BO", cls: k.stockCoveragePct != null && k.stockCoveragePct < 50 ? "bad" : "ok" },
+        { id: "", label: "Total Sales", val: formatNumber(k.totalSales), sub: `${k.periodDays}d period` },
+        { id: "", label: "Sales Velocity", val: k.salesVelocity.toFixed(2), sub: "Units / day" },
+        { id: "critical", label: "Critical Vehicles", val: formatNumber(k.criticalVehicles), sub: "Click to filter", cls: "bad" },
+        { id: "slow", label: "Slow Moving", val: formatNumber(k.slowMovingVehicles), sub: "Click to filter", cls: "warn" },
+        { id: "overstock", label: "Overstock", val: formatNumber(k.overstockVehicles), sub: "Click to filter", cls: "warn" },
+      ];
+      kpiEl.innerHTML = cards.map((c) => `
+        <button type="button" class="bo-kpi icc-kpi${c.cls ? " " + c.cls : ""}${iccView.kpiFilter === c.id && c.id ? " is-active" : ""}" data-icc-kpi="${c.id}">
+          <div class="lbl">${escapeHtml(c.label)}</div>
+          <div class="val">${c.val}</div>
+          <div class="sub">${escapeHtml(c.sub)}</div>
+        </button>`).join("");
+      kpiEl.querySelectorAll("[data-icc-kpi]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-icc-kpi") || "";
+          if (!id) return;
+          iccView.kpiFilter = iccView.kpiFilter === id ? "" : id;
+          iccView.page = 0;
+          renderSummaryDashboard();
+        });
+      });
+    }
+
+    const dq = dataset.dataQuality;
+    const dqEl = $("#icc-dq");
+    if (dqEl) {
+      dqEl.innerHTML = `
+        <span><b>Data quality</b></span>
+        <span>BO ${formatNumber(dq.sourceRows.backorder)}</span>
+        <span>RTL ${formatNumber(dq.sourceRows.rtl)}</span>
+        <span>Central ${formatNumber(dq.sourceRows.central)}</span>
+        <span>Sales ${formatNumber(dq.sourceRows.sales)}</span>
+        <span>Matched configs ${formatNumber(dq.matchedConfigs)}</span>
+        <span>BO w/o stock ${formatNumber(dq.unmatchedBoKeys)}</span>
+        <span>Dup VINs ${formatNumber(dq.duplicateVins)}</span>
+        <span>Missing product ${formatNumber(dq.missingProduct)}</span>`;
+    }
+
+    const insightEl = $("#icc-insight-grid");
+    if (insightEl) {
+      insightEl.innerHTML = (dataset.insights || []).map((block) => `
+        <div class="icc-insight-card">
+          <h4>${escapeHtml(block.title)}</h4>
+          <ul>${(block.items || []).slice(0, 5).map((t) => `<li>${escapeHtml(t)}</li>`).join("") || "<li>No signal</li>"}</ul>
+        </div>`).join("");
+    }
+
+    renderIccBubbleChart(dataset, filtered);
+    renderIccTable(dataset, filtered);
+
+    const selected = filtered.find((r) => r.id === iccView.selectedId) || dataset.rows.find((r) => r.id === iccView.selectedId);
+    renderIccDetail(selected || null);
+  }
+
+  function exportIccExcel() {
+    const dataset = getInventoryCommandDataset();
+    if (!dataset || !window.InventoryCommandCenter) {
+      setStatus("No Summary data to export", "err");
+      return;
+    }
+    const ICC = window.InventoryCommandCenter;
+    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
+    filtered = iccApplyKpiFilter(filtered);
+    const wb = XLSX.utils.book_new();
+    appendObjectSheet(wb, "Inventory Command Center", ICC.rowsToExcel(iccSortRows(filtered)));
+    appendObjectSheet(wb, "Data Quality", [dataset.dataQuality.sourceRows]);
+    downloadWorkbook(wb, `Inventory-Command-Center-${excelFileStamp()}`);
+    setStatus(`Summary exported · ${formatNumber(filtered.length)} configs`, "ok");
+  }
+
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
@@ -8550,6 +9260,8 @@
     renderBoDashboard(d);
     renderBoAllocStockDashboard(d);
     renderStockDashboard();
+    invalidateIccCache();
+    if (hasSummaryInputs()) renderSummaryDashboard();
     if (hasSalesReportInputs()) {
       window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
     renderSalesReportKpis(d.salesReport);
@@ -8710,6 +9422,84 @@
     if (!btn) return;
     switchPanel(btn.dataset.panel);
   });
+
+  function bindIccControls() {
+    const bindChange = (sel, key, rebuild) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("change", () => {
+        iccView[key] = el.value;
+        if (key === "drillLevel") {
+          iccView.drillLevel = Number(el.value) || 0;
+          invalidateIccCache();
+        }
+        iccView.page = 0;
+        if (rebuild !== false) renderSummaryDashboard();
+      });
+    };
+    const bindInput = (sel, key) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("input", () => {
+        iccView[key] = el.value;
+        iccView.page = 0;
+        renderSummaryDashboard();
+      });
+    };
+    bindChange("#icc-drill", "drillLevel");
+    bindInput("#icc-search", "search");
+    bindChange("#icc-f-product", "product");
+    bindChange("#icc-f-suffix", "suffix");
+    bindChange("#icc-f-year", "year");
+    bindChange("#icc-f-ext", "ext");
+    bindChange("#icc-f-int", "int");
+    bindChange("#icc-f-status", "inventoryStatus");
+    bindChange("#icc-f-demand", "demandStatus");
+    bindChange("#icc-f-quadrant", "quadrant");
+    bindChange("#icc-sort", "sort");
+    bindInput("#icc-age-min", "ageingMin");
+    bindInput("#icc-age-max", "ageingMax");
+    bindInput("#icc-cov-min", "coverageMin");
+    bindInput("#icc-cov-max", "coverageMax");
+
+    document.querySelectorAll(".icc-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        iccView.mode = btn.getAttribute("data-icc-mode") || "coverage";
+        renderSummaryDashboard();
+      });
+    });
+    const reset = $("#icc-reset");
+    if (reset) {
+      reset.addEventListener("click", () => {
+        iccView = {
+          mode: iccView.mode,
+          drillLevel: iccView.drillLevel,
+          search: "",
+          product: "",
+          suffix: "",
+          year: "",
+          ext: "",
+          int: "",
+          inventoryStatus: "",
+          demandStatus: "",
+          quadrant: "",
+          ageingMin: "",
+          ageingMax: "",
+          coverageMin: "",
+          coverageMax: "",
+          sort: "demandPressure:desc",
+          page: 0,
+          selectedId: "",
+          kpiFilter: "",
+        };
+        renderSummaryDashboard();
+      });
+    }
+    const exp = $("#icc-export");
+    if (exp) exp.addEventListener("click", exportIccExcel);
+  }
+  bindIccControls();
+
   $("#sr-search").addEventListener("input", (e) => {
     srView.search = e.target.value;
     if (window._data && hasSalesReportInputs()) refreshSalesSelection();
