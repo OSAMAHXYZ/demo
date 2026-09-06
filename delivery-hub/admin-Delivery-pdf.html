@@ -3895,6 +3895,8 @@
 
         function showAdminPane(paneId, { openFolds = true, scroll = true } = {}) {
             const id = String(paneId || 'overview');
+            const prevId = getActiveAdminPaneId();
+            const switching = prevId !== id;
             document.querySelectorAll('[data-pane-target]').forEach((btn) => {
                 btn.classList.toggle('is-active', btn.dataset.paneTarget === id);
             });
@@ -3913,15 +3915,18 @@
                 if (details) setFoldOpen(details, false);
             }
             try { sessionStorage.setItem('deliveryAdminPane', id); } catch (_) { /* ignore */ }
-            if (scroll && id !== 'overview' && id !== 'analytics') {
-                pane?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } else {
-                const shell = document.getElementById('adminApp');
-                if (shell) shell.scrollTop = 0;
+            // Only jump scroll when changing panes — never on filter refresh / openFold
+            if (scroll && switching) {
+                if (id !== 'overview' && id !== 'analytics') {
+                    pane?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    const shell = document.getElementById('adminApp');
+                    if (shell) shell.scrollTop = 0;
+                }
             }
             requestAnimationFrame(() => {
                 window.dispatchEvent(new Event('resize'));
-                if (adminAuthed) {
+                if (adminAuthed && switching) {
                     try { refreshTransferDashboard(); } catch (err) { console.error('[pane refresh]', err); }
                 }
                 try { fitVisibleCharts(); } catch (_) { /* ignore */ }
@@ -3961,10 +3966,11 @@
                 ? document.getElementById(sectionOrId)
                 : sectionOrId;
             const pane = paneForSection(section);
-            if (pane) showAdminPane(pane, { openFolds: false });
+            // Never reset scroll when merely opening a fold (filters / live refresh)
+            if (pane) showAdminPane(pane, { openFolds: false, scroll: false });
             setFoldOpen(section, true);
             if (scroll && section) {
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
 
@@ -6014,10 +6020,10 @@
             setFoldCount('warehouseDraftsFoldCount', warehouseDrafts.length);
             setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
             if (searchQ && (isAdminPaneActive('overview') || isAdminPaneActive('pdfs') || isAdminPaneActive('queue'))) {
-                openFold('inventorySection');
-                openFold('queueSection');
-                openFold('draftsSection');
-                openFold('warehouseDraftsSection');
+                setFoldOpen(document.getElementById('inventorySection'), true);
+                setFoldOpen(document.getElementById('queueSection'), true);
+                setFoldOpen(document.getElementById('draftsSection'), true);
+                setFoldOpen(document.getElementById('warehouseDraftsSection'), true);
             }
             renderAllFtSelects();
             renderFilterChips();
@@ -6864,14 +6870,15 @@
         }
 
         function applyTrackFilter() {
+            // Refresh in place — do not jump scroll to top of Transport Board
             refreshTransferDashboard();
-            openFold('xferDashSection');
-            openFold('queueStatsFold');
+            setFoldOpen(document.getElementById('xferDashSection'), true);
+            setFoldOpen(document.getElementById('queueStatsFold'), true);
             if (String(uiFilters.search || '').trim()) {
-                openFold('inventorySection', { scroll: true });
-                openFold('queueSection');
-                openFold('draftsSection');
-                openFold('warehouseDraftsSection');
+                setFoldOpen(document.getElementById('inventorySection'), true);
+                setFoldOpen(document.getElementById('queueSection'), true);
+                setFoldOpen(document.getElementById('draftsSection'), true);
+                setFoldOpen(document.getElementById('warehouseDraftsSection'), true);
             }
         }
 
