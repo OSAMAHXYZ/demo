@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -3511,6 +3511,7 @@
         let _cachedDraftCount = -1;
         let _userDashCount = 0;
         let _vinLookup = null;
+        let _lastQuietDashFp = '';
         let userDashSearch = '';
         let rawGapPanelOpen = false;
         let rawGapSearch = '';
@@ -3525,6 +3526,7 @@
 
         function onLiveSync() {
             if (!adminAuthed || dashboardLoading) return;
+            if (document.visibilityState === 'hidden') return;
             return loadDashboard({ quiet: true });
         }
 
@@ -3534,7 +3536,13 @@
 
         function resumeLiveSync() {
             if (!adminAuthed || !window.DeliveryHubLive) return;
-            DeliveryHubLive.start(onLiveSync, { pollMs: 60000, minRefreshGapMs: 55000 });
+            // Slow live sync — Transport Board charts are expensive to rebuild
+            DeliveryHubLive.start(onLiveSync, {
+                pollMs: 120000,
+                minRefreshGapMs: 90000,
+                debounceMs: 1200,
+                pollWhenConnected: false
+            });
         }
 
         function isAdminPaneActive(paneId) {
@@ -8369,13 +8377,33 @@
                 const data = await invRes.json().catch(() => ({}));
                 const queueData = await queueRes.json().catch(() => ({}));
                 if (!invRes.ok) throw new Error(data.error || 'فشل تحميل البيانات');
-                allVehicles = data.vehicles || [];
+
+                const nextVehicles = data.vehicles || [];
+                const nextQueue = queueRes.ok ? (queueData.queue || []) : [];
+                const nextDrafts = queueRes.ok ? (queueData.drafts || []) : [];
+                const nextShowroom = queueRes.ok ? (queueData.showroomParking || []) : [];
+
+                // Quiet live sync: skip DOM/chart rebuild when nothing meaningful changed
+                const quietFp = [
+                    nextVehicles.length,
+                    nextQueue.length,
+                    nextDrafts.length,
+                    nextShowroom.length,
+                    nextQueue.map((q) => `${q.vin || ''}:${q.status || ''}:${q.assignedTo || ''}`).join('|'),
+                    nextDrafts.map((d) => `${d.id || ''}:${d.printedAt || d.updatedAt || ''}:${d.assignedTo || ''}`).join('|')
+                ].join('::');
+                if (opts.quiet && quietFp === _lastQuietDashFp && allVehicles.length === nextVehicles.length) {
+                    return;
+                }
+                _lastQuietDashFp = quietFp;
+
+                allVehicles = nextVehicles;
                 lastDashboard = data.dashboard || null;
                 renderStats(data.dashboard);
                 if (queueRes.ok) {
-                    allQueue = queueData.queue || [];
-                    allDrafts = queueData.drafts || [];
-                    allShowroomParking = queueData.showroomParking || [];
+                    allQueue = nextQueue;
+                    allDrafts = nextDrafts;
+                    allShowroomParking = nextShowroom;
                     showroomParkingOccupancy = queueData.showroomParkingOccupancy || null;
                 } else {
                     allQueue = [];
