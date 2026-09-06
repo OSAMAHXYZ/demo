@@ -1779,7 +1779,8 @@
   function boAllocKey(row) {
     const get = buildFieldGetter(row);
     const product = upperTrim(get(row, "product") || cellByLetter(row, "B"));
-    const suffix = upperTrim(get(row, "suffix") || get(row, "sfx") || cellByLetter(row, "G"));
+    const rawSuffix = upperTrim(get(row, "suffix") || get(row, "sfx") || cellByLetter(row, "G"));
+    const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
     const year = String(get(row, "year") || cellByLetter(row, "F") || "").trim();
     const ext = colorKey(get(row, "ext") || cellByLetter(row, "H"));
     const int = colorKey(get(row, "int") || cellByLetter(row, "I"));
@@ -1792,7 +1793,8 @@
       (rows || []).forEach((r) => {
         const get = buildFieldGetter(r);
         const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
-        const suffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const rawSuffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
         const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
         const ext = colorKey(get(r, "ext") || cellByLetter(r, "H"));
         const int = colorKey(get(r, "int") || cellByLetter(r, "I"));
@@ -2645,7 +2647,8 @@
       const confirmRaw = boConfirmRaw(r, get);
       const confirmed = isConfirmedFlag(confirmRaw);
       const product = cellToString(get(r, "product"));
-      const suffix = cellToString(get(r, "sfx") || get(r, "suffix"));
+      const rawSuffix = cellToString(get(r, "sfx") || get(r, "suffix"));
+      const suffix = normalizeProductSuffix(product, rawSuffix);
       const paid = isPaid(get(r, "paid"));
       const salesType = inferSalesType(get(r, "salesType"), paid);
       const category = cellToString(get(r, "category")) || (product ? String(product).split(/\s+/)[0] : "—");
@@ -2679,18 +2682,22 @@
 
   function mapStock(rows, source) {
     const get = buildFieldGetter(rows[0] || {});
-    return rows.map((r, i) => ({
+    return rows.map((r, i) => {
+      const product = cellToString(get(r, "product"));
+      const suffix = normalizeProductSuffix(product, get(r, "suffix"));
+      return {
       id: source + "-" + i,
       source,
       vin: cellToString(get(r, "vin")),
-      product: cellToString(get(r, "product")),
+      product,
       year: cellToString(get(r, "year")),
-      suffix: cellToString(get(r, "suffix")),
+      suffix,
       ext: cellToString(get(r, "ext")),
       int: cellToString(get(r, "int")),
       location: cellToString(get(r, "location")),
       status: cellToString(get(r, "status")),
-    }));
+      };
+    });
   }
 
   function mapSales(rows) {
@@ -6821,6 +6828,23 @@
     return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
 
+  function isFortunerProduct(product) {
+    return allocCompact(product).includes("FORTUNER");
+  }
+
+  /** Fortuner grades are identified by the first two letters/digits (G2, G4, D4, …). */
+  function fortunerSuffixKey(sfx) {
+    const compact = allocCompact(sfx);
+    return compact ? compact.slice(0, 2) : "";
+  }
+
+  function normalizeProductSuffix(product, suffix) {
+    const s = cellToString(suffix).trim();
+    if (!s || s === "—") return s || "—";
+    if (!isFortunerProduct(product)) return s;
+    return fortunerSuffixKey(s) || s;
+  }
+
   function productMatchesAlloc(boProduct, allocProduct) {
     const b = allocProductKey(boProduct);
     const a = allocProductKey(allocProduct);
@@ -6841,11 +6865,20 @@
     return !longerHit;
   }
 
-  function suffixMatchesAlloc(boSuffix, allocSfx) {
+  function suffixMatchesAlloc(boSuffix, allocSfx, product) {
     const b = upperTrim(boSuffix);
     if (!b || b === "—") return false;
     const bC = allocCompact(b);
     if (!bC) return false;
+
+    // Fortuner: match by first two letters (G2 GX2 4X2 ↔ G2, G4 GX2 4X4 ↔ G4)
+    if (isFortunerProduct(product)) {
+      const bKey = fortunerSuffixKey(b);
+      if (!bKey) return false;
+      if (fortunerSuffixKey(allocSfx) === bKey) return true;
+      return allocSfxParts(allocSfx).some((v) => fortunerSuffixKey(v) === bKey);
+    }
+
     // Exact only on full sfx or slash-parts ("L1 / DSL" ↔ L1 or DSL). No substring (EE ≠ FREE).
     return allocSfxParts(allocSfx).some((v) => allocCompact(v) === bC);
   }
@@ -6866,11 +6899,11 @@
       const allocation = Number(allocationValues[row.id]) || 0;
       const boCount = bos.reduce((sum, bo) => {
         if (!productMatchesAlloc(bo.product, row.product)) return sum;
-        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx)) return sum;
+        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx, row.product || bo.product)) return sum;
         return sum + basBoUnitCount(bo);
       }, 0);
       const stockCount = stockRows.filter((s) =>
-        productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx)
+        productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx, row.product || s.product)
       ).length;
       const gap = allocation - boCount;
       const status = gap > 0 ? "above" : gap < 0 ? "below" : "match";
@@ -7126,7 +7159,7 @@
   function matchRtlToAllocLeaf(rtlRow) {
     for (const leaf of ALLOCATION_ROWS) {
       if (leaf.kind !== "leaf") continue;
-      if (productMatchesAlloc(rtlRow.product, leaf.product) && suffixMatchesAlloc(rtlRow.suffix, leaf.sfx)) {
+      if (productMatchesAlloc(rtlRow.product, leaf.product) && suffixMatchesAlloc(rtlRow.suffix, leaf.sfx, leaf.product || rtlRow.product)) {
         return leaf;
       }
     }
@@ -7558,12 +7591,14 @@
       const ageingRaw = cellByLetter(r, "J");
       const ageingNum = toNumber(ageingRaw);
       const get = buildFieldGetter(r);
+      const product = stockCol(r, "B", "product") || "—";
+      const suffix = normalizeProductSuffix(product, stockCol(r, "G", "suffix") || "—");
       return {
         id: `${source}-${i}`,
         source,
-        product: stockCol(r, "B", "product") || "—",
+        product,
         vin: extractVinValue(cellByLetter(r, "E")) || stockCol(r, "E", "vin"),
-        suffix: stockCol(r, "G", "suffix") || "—",
+        suffix,
         year: stockCol(r, "F", "year"),
         ext: stockCol(r, "H", "ext"),
         int: stockCol(r, "I", "int"),
@@ -7982,7 +8017,8 @@
 
     const bos = (boRows || []).map((r, idx) => {
       const product = upperTrim(getBo(r, "product") || cellByLetter(r, "B"));
-      const suffix = upperTrim(getBo(r, "suffix") || getBo(r, "sfx") || cellByLetter(r, "G"));
+      const rawSuffix = upperTrim(getBo(r, "suffix") || getBo(r, "sfx") || cellByLetter(r, "G"));
+      const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
       const year = String(getBo(r, "year") || cellByLetter(r, "F") || "").trim();
       const ext = cellToString(getBo(r, "ext") || cellByLetter(r, "H"));
       const intc = cellToString(getBo(r, "int") || cellByLetter(r, "I"));
@@ -8009,7 +8045,8 @@
     const mapStock = (rows, get, source) =>
       (rows || []).map((r, idx) => {
         const product = upperTrim(get(r, "product") || cellByLetter(r, "B"));
-        const suffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const rawSuffix = upperTrim(get(r, "suffix") || cellByLetter(r, "G"));
+        const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
         const year = String(get(r, "year") || cellByLetter(r, "F") || "").trim();
         const ext = cellToString(get(r, "ext") || cellByLetter(r, "H"));
         const intc = cellToString(get(r, "int") || cellByLetter(r, "I"));
