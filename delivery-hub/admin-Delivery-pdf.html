@@ -4104,6 +4104,9 @@
             const queueRows = allQueue.map((item) => {
                 const isWh = item.deliveryMode === 'warehouse'
                     || String(item.statusLabel || '').includes('المستودع');
+                const changeFrom = String(item.companyChangedFrom || '').trim();
+                const changeTo = String(item.companyChangedTo || '').trim();
+                const changeNote = queueCompanyChangeNote(item);
                 return {
                     'Chassis / VIN': item.vin || '',
                     Product: item.product || item.model || '',
@@ -4119,6 +4122,10 @@
                         : (item.statusLabel || 'Waiting for delivery'),
                     Plate: item.plate || '',
                     Customer: item.customerName || '',
+                    Company: item.deliveryCompany || item.company || '',
+                    'Company Changed From': changeFrom,
+                    'Company Changed To': changeTo,
+                    Notes: changeNote,
                     'Added At': item.addedAt || '',
                     'Assigned At': item.assignedAt || ''
                 };
@@ -4141,6 +4148,10 @@
                 ].map((v) => String(v || '').trim()).filter(Boolean);
                 const uniqueVins = [...new Set(vinList)];
                 const ownerName = p.warehouse?.owner_name || p.customer_name || p.company_rep || d.customerName || '';
+                const changeFrom = String(d.companyChangedFrom || p.company_changed_from || '').trim();
+                const changeTo = String(d.companyChangedTo || p.company_changed_to || '').trim();
+                const changeNote = draftCompanyChangeNote(d);
+                const remarks = mergeExportNotes(p.remarks || '', changeNote);
                 return {
                     'Delivery Note Number': draftDeliveryNoteNumber(d) || '',
                     'Delivery Note Date': draftEventIso(d) || '',
@@ -4163,12 +4174,15 @@
                     'Company Rep': isSh
                         ? (p.typed_company || p.company_rep || p.customer_name || '')
                         : (isWh ? ownerName : (p.customer_name || d.customerName || '')),
+                    'Company Changed From': changeFrom,
+                    'Company Changed To': changeTo,
                     'Branch To': isWh ? 'في المستودع' : (p.branch_to || ''),
                     'Branch From': p.branch_from || '',
                     Plate: p.plate || d.plate || '',
                     GT: p.gt || d.gt || '',
                     Location: p.location || d.location || '',
-                    Remarks: p.remarks || '',
+                    Remarks: remarks,
+                    Notes: remarks,
                     'Customer ID': p.customer_id || '',
                     Phone: p.phone || p.warehouse?.user_phone || ''
                 };
@@ -4234,7 +4248,8 @@
                             City: r.city,
                             Cars: r.cars,
                             VINs: r.vins,
-                            Product: r.product
+                            Product: r.product,
+                            Notes: r.notes || ''
                         }))
                         : [{ Date: '', 'DN Number': '', User: '', Company: '' }]
                 ),
@@ -4292,7 +4307,10 @@
                         Type: isSh ? 'عرض / ياسين' : (isWh ? 'مستودع' : 'مذكرة'),
                         City: isWh ? 'المستودع' : (draftBranchLabel(d) || p.branch_to || ''),
                         VIN: vin,
-                        Product: d.product || d.model || ''
+                        Product: d.product || d.model || '',
+                        Notes: mergeExportNotes(p.remarks || '', draftCompanyChangeNote(d)),
+                        'Company Changed From': String(d.companyChangedFrom || p.company_changed_from || '').trim(),
+                        'Company Changed To': String(d.companyChangedTo || p.company_changed_to || '').trim()
                     });
                 });
             });
@@ -6406,6 +6424,7 @@
                     : (isWh ? WAREHOUSE_SPECIAL_NAME : (draftCompanyName(d) || p.company_rep || '—'));
                 const changeFrom = String(d.companyChangedFrom || p.company_changed_from || '').trim();
                 const changeTo = String(d.companyChangedTo || p.company_changed_to || company || '').trim();
+                const changeNote = draftCompanyChangeNote(d);
                 return {
                     date: draftEventIso(d) || '',
                     printedAt: d.printedAt || '',
@@ -6420,6 +6439,7 @@
                     cars: draftCarWeight(d),
                     vins: vins.join(', '),
                     product: d.product || d.model || '',
+                    notes: mergeExportNotes(p.remarks || '', changeNote),
                     draftId: d.id || ''
                 };
             }).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.dn).localeCompare(String(a.dn)));
@@ -6858,6 +6878,31 @@
         function draftCompanyName(d) {
             const p = d.payload || {};
             return String(p.company_rep || p.customer_name || d.customerName || '').trim();
+        }
+
+        /** Plain-text company change for Excel Notes / Remarks. */
+        function draftCompanyChangeNote(d) {
+            const p = d.payload || {};
+            const from = String(d.companyChangedFrom || p.company_changed_from || '').trim();
+            const to = String(d.companyChangedTo || p.company_changed_to || draftCompanyName(d) || '').trim();
+            if (!from || !to || from.toLowerCase() === to.toLowerCase()) return '';
+            return `تم تغيير الشركة من «${from}» إلى «${to}»`;
+        }
+
+        function queueCompanyChangeNote(item) {
+            const from = String(item?.companyChangedFrom || '').trim();
+            const to = String(item?.companyChangedTo || item?.deliveryCompany || item?.company || '').trim();
+            if (!from || !to || from.toLowerCase() === to.toLowerCase()) return '';
+            return `تم تغيير الشركة من «${from}» إلى «${to}»`;
+        }
+
+        function mergeExportNotes(base, changeNote) {
+            const a = String(base || '').trim();
+            const b = String(changeNote || '').trim();
+            if (!b) return a;
+            if (!a) return b;
+            if (a.includes(b) || (b.includes('تم تغيير الشركة') && a.includes('تم تغيير الشركة'))) return a;
+            return `${a} | ${b}`;
         }
 
         function draftCompanyChangeHtml(d) {
