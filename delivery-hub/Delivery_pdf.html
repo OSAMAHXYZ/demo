@@ -6,7 +6,7 @@
     <title>مذكرة ترحيل — Delivery PDF</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="delivery-user-ui.css?v=20260825b">
+    <link rel="stylesheet" href="delivery-user-ui.css?v=20260906a">
     <style>
         :root {
             --tot-primary: #EB0A1E;
@@ -480,6 +480,8 @@
 
         .gate-wrap { max-width: 1200px; margin: 0 auto 120px; padding: 0 16px; }
         .gate-wrap.hidden, #agentWorkspace.hidden, #mainApp.hidden { display: none !important; }
+        #automallApp.hidden,
+        #manualEntryApp.hidden { display: none !important; }
 
         #gateLogin {
             position: fixed;
@@ -513,6 +515,22 @@
         .gate-card h2 {
             font-size: 1.2rem; font-weight: 800; color: #f8fafc;
             margin-bottom: 22px; text-align: center;
+        }
+        .gate-eyebrow {
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #fda4af;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .gate-lead {
+            margin: 0 0 18px;
+            color: #94a3b8;
+            font-size: 0.88rem;
+            line-height: 1.5;
+            text-align: center;
         }
         .gate-user { display: grid; gap: 16px; }
         .gate-user label {
@@ -1431,7 +1449,7 @@
             <section class="ws-section" id="displayFleetSection">
                 <div class="ws-section-head">
                     <h2>سيارات العرض — Display</h2>
-                    <span class="hint">من ياسين · اختر لإصدار مذكرة تسليم جديدة (يُسمح بتكرار الشاسيه)</span>
+                    <span class="hint">سيارات العرض · اختر لإصدار مذكرة تسليم جديدة</span>
                 </div>
                 <div class="fleet-grid" id="displayFleet"></div>
             </section>
@@ -2548,6 +2566,10 @@
         }
 
         function openAutomallBoard() {
+            if (!isShowroomAgent()) {
+                openWorkspace();
+                return;
+            }
             applyShowroomUi(false);
             const agent = getAgent();
             const as = document.getElementById('automallLoggedAs');
@@ -3392,14 +3414,16 @@
         }
 
         function showView(which) {
-            document.body.classList.toggle('workspace-mode', which === 'workspace' || which === 'automall');
-            document.getElementById('gateLogin').classList.toggle('hidden', which !== 'login');
-            document.getElementById('agentWorkspace').classList.toggle('hidden', which !== 'workspace');
-            document.getElementById('mainApp').classList.toggle('hidden', which !== 'app');
+            const yassin = typeof isShowroomAgent === 'function' && isShowroomAgent();
+            const view = (which === 'automall' && !yassin) ? 'workspace' : which;
+            document.body.classList.toggle('workspace-mode', view === 'workspace' || view === 'automall');
+            document.getElementById('gateLogin').classList.toggle('hidden', view !== 'login');
+            document.getElementById('agentWorkspace').classList.toggle('hidden', view !== 'workspace');
+            document.getElementById('mainApp').classList.toggle('hidden', view !== 'app');
             const manual = document.getElementById('manualEntryApp');
-            if (manual) manual.classList.toggle('hidden', which !== 'manual');
+            if (manual) manual.classList.toggle('hidden', view !== 'manual');
             const automall = document.getElementById('automallApp');
-            if (automall) automall.classList.toggle('hidden', which !== 'automall');
+            if (automall) automall.classList.toggle('hidden', view !== 'automall');
         }
 
         function fleetCardHtml(item, kind) {
@@ -3513,6 +3537,11 @@
             const available = workspaceQueue.filter((q) => q.status === 'available' && !isDisplayItem(q));
             const stock = mine.filter((q) => q.agentStatus === 'in_stock');
             const delivered = mine.filter((q) => q.agentStatus === 'delivered');
+            const yassinOnly = isShowroomAgent(agent);
+
+            // Automall / ياسين board is separate — never show it to other agents.
+            const automall = document.getElementById('automallApp');
+            if (automall && !yassinOnly) automall.classList.add('hidden');
 
             document.getElementById('wsStats').innerHTML = `
                 <div class="ws-stat ws-stat--avail"><span>متاح</span><b>${available.length}</b></div>
@@ -3520,6 +3549,13 @@
                 <div class="ws-stat"><span>عرض</span><b>${displayCars.length}</b></div>
                 <div class="ws-stat ws-stat--avail"><span>تم الترحيل</span><b>${delivered.length}</b></div>
             `;
+
+            const displayHint = document.querySelector('#displayFleetSection .ws-section-head .hint');
+            if (displayHint) {
+                displayHint.textContent = yassinOnly
+                    ? 'سيارات العرض · اختر لإصدار مذكرة تسليم جديدة (يُسمح بتكرار الشاسيه)'
+                    : 'سيارات العرض · اختر لإصدار مذكرة تسليم جديدة';
+            }
 
             const availEl = document.getElementById('availableFleet');
             if (!available.length) {
@@ -3575,7 +3611,7 @@
             const displayEl = document.getElementById('displayFleet');
             if (displayEl) {
                 if (!displayCars.length) {
-                    displayEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات عرض</strong>عندما يضيف ياسين بحالة «عرض» تظهر هنا</div>';
+                    displayEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات عرض</strong>عندما تُضاف بحالة «عرض» تظهر هنا</div>';
                 } else {
                     displayEl.innerHTML = displayCars.map((item) => fleetCardHtml(item, 'avail')).join('');
                     displayEl.querySelectorAll('.fleet-card').forEach((card) => {

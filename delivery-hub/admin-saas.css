@@ -1634,17 +1634,20 @@ body.admin-console tbody tr:hover {
 .ft-totals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
+  margin-top: 8px;
   direction: ltr;
 }
 
 .ft-total {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 0;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
   min-width: 0;
@@ -1672,14 +1675,19 @@ body.admin-console tbody tr:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .ft-total__val {
-  font-size: 1.45rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: #f8fafc;
-  line-height: 1.15;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .ft-total--cars .ft-total__val { color: #93c5fd; }
@@ -1692,6 +1700,8 @@ body.admin-console tbody tr:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  grid-column: 1;
+  grid-row: 2;
 }
 
 @media (max-width: 900px) {

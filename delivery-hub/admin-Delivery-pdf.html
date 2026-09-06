@@ -8,8 +8,8 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
-    <link rel="stylesheet" href="admin-saas.css?v=20260906a">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260906a">
+    <link rel="stylesheet" href="admin-saas.css?v=20260906b">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260906b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -431,6 +431,40 @@
             border-radius: 10px;
             border: 1px solid rgba(255,255,255,0.08);
             background: rgba(15, 23, 42, 0.45);
+        }
+        .options-item--company {
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .options-item__main {
+            flex: 1;
+            min-width: 140px;
+            display: grid;
+            gap: 6px;
+        }
+        .options-item__phone {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .options-item__phone input {
+            flex: 1;
+            min-width: 110px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(0,0,0,0.28);
+            color: #e2e8f0;
+            font: inherit;
+            font-size: 0.78rem;
+            direction: ltr;
+            text-align: left;
+        }
+        .options-item__actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
         }
         .options-item span {
             font-size: 0.84rem;
@@ -3374,6 +3408,7 @@
                         <div class="options-manage-grid">
                             <div class="options-manage-card">
                                 <h3>شركات النقل</h3>
+                                <p class="hub-hint" style="margin:0 0 10px">أرقام واتساب الشركات — المنسق يحفظ مرة واحدة؛ التعديل من هنا فقط</p>
                                 <div class="options-add-row">
                                     <input type="text" id="newCompanyInput" class="hub-input" placeholder="اسم الشركة الجديدة…" autocomplete="off">
                                     <button type="button" class="hub-btn hub-btn--primary" id="btnAddCompany">إضافة</button>
@@ -3482,11 +3517,17 @@
 
         function resumeLiveSync() {
             if (!adminAuthed || !window.DeliveryHubLive) return;
-            DeliveryHubLive.start(onLiveSync, { pollMs: 45000, minRefreshGapMs: 25000 });
+            DeliveryHubLive.start(onLiveSync, { pollMs: 60000, minRefreshGapMs: 55000 });
         }
 
         function isAdminPaneActive(paneId) {
-            return true;
+            const pane = document.querySelector(`.admin-pane[data-pane="${paneId}"]`);
+            return Boolean(pane?.classList.contains('is-active'));
+        }
+
+        function getActiveAdminPaneId() {
+            const pane = document.querySelector('.admin-pane.is-active');
+            return pane?.dataset?.pane || 'overview';
         }
 
         function rebuildVinLookup() {
@@ -3857,7 +3898,6 @@
                 window.dispatchEvent(new Event('resize'));
                 if (adminAuthed) {
                     try { refreshTransferDashboard(); } catch (err) { console.error('[pane refresh]', err); }
-                    try { if (typeof renderOpsBoard === 'function') renderOpsBoard(); } catch (err) { console.error('[ops]', err); }
                 }
                 try { fitVisibleCharts(); } catch (_) { /* ignore */ }
             });
@@ -5164,6 +5204,7 @@
         };
         let managedCompanies = [];
         let managedCities = [];
+        let managedCompanyPhones = {};
 
         function userLabelFromDraft(d) {
             return String(d?.assignedTo || d?.entryAgent || '').trim() || UNASSIGNED_USER;
@@ -5908,27 +5949,28 @@
             if (isAdminPaneActive('users')) {
                 renderUserDashboard();
             }
-            if (isAdminPaneActive('pdfs') || searchQ) {
+            if (isAdminPaneActive('pdfs') || (searchQ && isAdminPaneActive('pdfs'))) {
                 renderAllPdfsBrowser(drafts);
             }
-            if (isAdminPaneActive('queue') || searchQ) {
+            if (isAdminPaneActive('queue')) {
                 renderQueueTable(queue);
                 renderQueueStats(computeQueueStats(queue));
                 setFoldCount('queueStatsFoldCount', queue.length);
             }
             const warehouseDrafts = drafts.filter(isWarehouseAdminDraft);
-            if (isAdminPaneActive('pdfs') || isAdminPaneActive('yard') || searchQ) {
+            if (isAdminPaneActive('pdfs') || isAdminPaneActive('yard')) {
                 renderWarehouseDraftsTable(warehouseDrafts);
             }
-            if (isAdminPaneActive('overview') || searchQ) {
+            if (isAdminPaneActive('overview')) {
                 renderTable(vehicles);
                 setFoldCount('inventoryFoldCount', vehicles.length);
             }
 
+            // Always keep sticky filter totals / chips in sync (cheap)
             setFoldCount('draftsFoldCount', drafts.length);
             setFoldCount('warehouseDraftsFoldCount', warehouseDrafts.length);
             setFoldCount('xferFoldCount', searchQ ? drafts.length : filteredDrafts().length);
-            if (searchQ) {
+            if (searchQ && (isAdminPaneActive('overview') || isAdminPaneActive('pdfs') || isAdminPaneActive('queue'))) {
                 openFold('inventorySection');
                 openFold('queueSection');
                 openFold('draftsSection');
@@ -8140,6 +8182,29 @@
             el.className = 'hub-status' + (type ? ` ${type}` : '');
         }
 
+        function adminCompanyPhoneLookup(name) {
+            const key = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            if (!key) return '';
+            if (managedCompanyPhones[key]) return String(managedCompanyPhones[key]);
+            for (const [k, v] of Object.entries(managedCompanyPhones || {})) {
+                if (String(k).trim().toLowerCase().replace(/\s+/g, ' ') === key) return String(v || '');
+            }
+            return '';
+        }
+
+        async function saveAdminCompanyPhone(company, phoneRaw) {
+            const res = await fetch('/api/delivery-options/company-phone', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company, phone: phoneRaw, fromAdmin: true })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'فشل حفظ الرقم');
+            managedCompanyPhones = data.companyPhones || managedCompanyPhones;
+            if (Array.isArray(data.companies)) managedCompanies = data.companies;
+            return data;
+        }
+
         function renderOptionsList(listElId, items, kind) {
             const listEl = document.getElementById(listElId);
             if (!items.length) {
@@ -8148,11 +8213,43 @@
             }
             listEl.innerHTML = items.map((name) => {
                 const safe = escapeHtml(name);
+                if (kind === 'companies') {
+                    const phone = escapeHtml(adminCompanyPhoneLookup(name));
+                    return `<div class="options-item options-item--company">
+                        <div class="options-item__main">
+                            <span title="${safe}">${safe}</span>
+                            <div class="options-item__phone">
+                                <input type="tel" data-admin-phone="${safe}" value="${phone}" placeholder="05… واتساب" autocomplete="off">
+                                <button type="button" class="hub-btn hub-btn--sm hub-btn--primary" data-save-admin-phone="${safe}">حفظ الرقم</button>
+                            </div>
+                        </div>
+                        <div class="options-item__actions">
+                            <button type="button" class="hub-btn hub-btn--sm hub-btn--danger" data-remove-option="${safe}" data-kind="${kind}">حذف</button>
+                        </div>
+                    </div>`;
+                }
                 return `<div class="options-item">
                     <span title="${safe}">${safe}</span>
                     <button type="button" class="hub-btn hub-btn--sm hub-btn--danger" data-remove-option="${safe}" data-kind="${kind}">حذف</button>
                 </div>`;
             }).join('');
+            listEl.querySelectorAll('[data-save-admin-phone]').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const name = btn.dataset.saveAdminPhone;
+                    const row = btn.closest('.options-item');
+                    const input = row?.querySelector('[data-admin-phone]');
+                    btn.disabled = true;
+                    try {
+                        await saveAdminCompanyPhone(name, input?.value || '');
+                        setOptionStatus('companyOptionsStatus', `تم حفظ رقم «${name}»`, 'ok');
+                        renderOptionsList('companyOptionsList', managedCompanies, 'companies');
+                    } catch (err) {
+                        setOptionStatus('companyOptionsStatus', err.message || 'فشل حفظ الرقم', 'err');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+            });
             listEl.querySelectorAll('[data-remove-option]').forEach((btn) => {
                 btn.addEventListener('click', async () => {
                     const name = btn.dataset.removeOption;
@@ -8191,6 +8288,9 @@
             if (!res.ok) throw new Error(data.error || 'فشل تحميل القوائم');
             managedCompanies = data.companies || [];
             managedCities = data.cities || [];
+            managedCompanyPhones = data.companyPhones && typeof data.companyPhones === 'object'
+                ? data.companyPhones
+                : {};
             renderOptionsList('companyOptionsList', managedCompanies, 'companies');
             renderOptionsList('cityOptionsList', managedCities, 'cities');
         }
@@ -8269,9 +8369,13 @@
                 _cachedDraftCount = -1;
                 _vinLookup = null;
                 rebuildVinLookup();
-                fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
-                loadManagedOptions().catch(() => {});
-                try { renderShowroomParkingTable(); } catch (_) { /* ignore */ }
+                if (!opts.quiet) {
+                    fetch('/api/delivery-notes/archive-missing', { method: 'POST' }).catch(() => {});
+                    loadManagedOptions().catch(() => {});
+                }
+                if (!opts.quiet || isAdminPaneActive('yard')) {
+                    try { renderShowroomParkingTable(); } catch (_) { /* ignore */ }
+                }
                 try { updateFoldCounts(); } catch (_) { /* ignore */ }
                 try { refreshTransferDashboard(); } catch (err) {
                     console.error('[dashboard refresh]', err);

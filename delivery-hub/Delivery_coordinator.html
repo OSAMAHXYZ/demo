@@ -155,6 +155,25 @@
             direction: ltr;
             text-align: left;
         }
+        .company-board-phone-locked {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        .company-board-phone-locked strong {
+            font-size: .82rem;
+            font-weight: 700;
+            color: #a7f3d0;
+            direction: ltr;
+            text-align: left;
+            font-variant-numeric: tabular-nums;
+        }
+        .company-board-phone-locked span {
+            font-size: .68rem;
+            color: #64748b;
+            font-weight: 600;
+        }
         .hub-btn--wa {
             background: linear-gradient(145deg, #128C7E, #075E54) !important;
             border-color: transparent !important;
@@ -691,8 +710,35 @@
             });
         }
 
+        /** Cars still pending — exclude تم الترحيل from WhatsApp messages. */
+        function waItemsForCompany(company) {
+            return itemsForCompany(company).filter((q) => q.agentStatus !== 'delivered');
+        }
+
+        function formatWaDateTime(d = new Date()) {
+            try {
+                return new Intl.DateTimeFormat('ar-SA', {
+                    timeZone: 'Asia/Riyadh',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                }).format(d);
+            } catch {
+                return d.toLocaleString('ar-SA');
+            }
+        }
+
         function buildCompanyWhatsAppText(company, items) {
-            const lines = [`شركة: ${company}`, `عدد السيارات: ${items.length}`, ''];
+            const when = formatWaDateTime();
+            const lines = [
+                `شركة: ${company}`,
+                `التاريخ والوقت: ${when}`,
+                `عدد السيارات: ${items.length}`,
+                ''
+            ];
             items.forEach((item, i) => {
                 const vin = String(item.vin || '').trim().toUpperCase();
                 const product = String(item.product || item.model || '—').trim();
@@ -702,15 +748,20 @@
         }
 
         function openCompanyWhatsApp(company) {
-            const items = itemsForCompany(company);
+            const items = waItemsForCompany(company);
             if (!items.length) {
-                alert('لا توجد شاسيه مرسلة لهذه الشركة بعد');
+                const all = itemsForCompany(company);
+                if (all.length) {
+                    alert('كل سيارات هذه الشركة تم ترحيلها — لا يوجد ما يُرسل في واتساب');
+                } else {
+                    alert('لا توجد شاسيه مرسلة لهذه الشركة بعد');
+                }
                 return;
             }
-            const phoneRaw = boardPhoneDraft.get(company) || companyPhoneLookup(company);
+            const phoneRaw = companyPhoneLookup(company) || boardPhoneDraft.get(company) || '';
             const phone = normalizeWaPhone(phoneRaw);
             if (!phone) {
-                alert('أدخل رقم جوال الشركة أولاً ثم احفظه');
+                alert('أدخل رقم جوال الشركة أولاً ثم احفظه (مرة واحدة) — أو عدّله من لوحة الإدارة');
                 return;
             }
             const text = buildCompanyWhatsAppText(company, items);
@@ -720,6 +771,13 @@
 
         async function saveCompanyPhone(company, phoneRaw, statusEl) {
             const phone = String(phoneRaw || '').trim();
+            if (companyPhoneLookup(company)) {
+                if (statusEl) {
+                    statusEl.textContent = 'الرقم محفوظ — التعديل من لوحة الإدارة فقط';
+                    statusEl.className = 'company-board-status err';
+                }
+                return false;
+            }
             try {
                 const res = await fetch('/api/delivery-options/company-phone', {
                     method: 'PUT',
@@ -729,11 +787,12 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'فشل حفظ الرقم');
                 companyPhones = data.companyPhones || companyPhones;
-                boardPhoneDraft.set(company, data.phone || phone);
+                boardPhoneDraft.delete(company);
                 if (statusEl) {
                     statusEl.textContent = data.phone ? `تم حفظ الرقم · ${data.phone}` : 'تم مسح الرقم';
                     statusEl.className = 'company-board-status ok';
                 }
+                renderCompanyBoards();
                 return true;
             } catch (err) {
                 if (statusEl) {
@@ -841,7 +900,7 @@
             });
             wrap.querySelectorAll('[data-company-phone]').forEach((inp) => {
                 const company = inp.closest('.company-board')?.dataset?.company || '';
-                if (company) boardPhoneDraft.set(company, inp.value);
+                if (company && !companyPhoneLookup(company)) boardPhoneDraft.set(company, inp.value);
             });
 
             const boards = companyOptions.slice();
@@ -853,22 +912,31 @@
             wrap.innerHTML = boards.map((company) => {
                 const wh = isWarehouseCompany(company);
                 const count = countForCompany(company);
+                const waCount = waItemsForCompany(company).length;
                 const cached = boardPasteCache.get(company) || '';
-                const phoneVal = boardPhoneDraft.has(company)
-                    ? boardPhoneDraft.get(company)
-                    : companyPhoneLookup(company);
+                const savedPhone = companyPhoneLookup(company);
+                const phoneVal = savedPhone
+                    || (boardPhoneDraft.has(company) ? boardPhoneDraft.get(company) : '');
                 const esc = String(company).replace(/"/g, '&quot;');
+                const phoneRow = savedPhone
+                    ? `<div class="company-board-phone-row">
+                            <div class="company-board-phone-locked">
+                                <strong>${String(savedPhone).replace(/</g, '&lt;')}</strong>
+                                <span>محفوظ · التعديل من الإدارة فقط</span>
+                            </div>
+                        </div>`
+                    : `<div class="company-board-phone-row">
+                            <input type="tel" data-company-phone="${esc}" placeholder="جوال الشركة 05… (مرة واحدة)" value="${String(phoneVal || '').replace(/"/g, '&quot;')}" autocomplete="off">
+                            <button type="button" class="hub-btn hub-btn--sm" data-save-phone="${esc}">حفظ الرقم</button>
+                        </div>`;
                 return `<div class="company-board${wh ? ' company-board--warehouse' : ''}" data-company="${esc}" data-search="${esc.toLowerCase()}">
                     <div class="company-board-head">
                         <div class="company-board-name-wrap">
                             <div class="company-board-name-row">
                                 <div class="company-board-name">${company}${wh ? ' · مستودع' : ''}</div>
-                                <button type="button" class="hub-btn hub-btn--sm hub-btn--wa" data-wa-company="${esc}" title="واتساب — إرسال الشاسيه والمنتجات" ${count ? '' : 'disabled'}>واتساب</button>
+                                <button type="button" class="hub-btn hub-btn--sm hub-btn--wa" data-wa-company="${esc}" title="واتساب — بدون تم الترحيل · مع التاريخ والوقت" ${waCount ? '' : 'disabled'}>واتساب</button>
                             </div>
-                            <div class="company-board-phone-row">
-                                <input type="tel" data-company-phone="${esc}" placeholder="جوال الشركة 05…" value="${String(phoneVal || '').replace(/"/g, '&quot;')}" autocomplete="off">
-                                <button type="button" class="hub-btn hub-btn--sm" data-save-phone="${esc}">حفظ الرقم</button>
-                            </div>
+                            ${phoneRow}
                         </div>
                         <span class="company-board-count${count ? ' has-vins' : ''}">${count} في القائمة</span>
                     </div>
@@ -898,7 +966,7 @@
                     const board = btn.closest('.company-board');
                     const name = board?.dataset?.company || btn.dataset.waCompany || '';
                     const phoneInp = board?.querySelector('[data-company-phone]');
-                    if (phoneInp) boardPhoneDraft.set(name, phoneInp.value);
+                    if (phoneInp && !companyPhoneLookup(name)) boardPhoneDraft.set(name, phoneInp.value);
                     openCompanyWhatsApp(name);
                 });
             });
@@ -916,7 +984,7 @@
             wrap.querySelectorAll('[data-company-phone]').forEach((inp) => {
                 inp.addEventListener('change', () => {
                     const company = inp.closest('.company-board')?.dataset?.company || '';
-                    if (company) boardPhoneDraft.set(company, inp.value);
+                    if (company && !companyPhoneLookup(company)) boardPhoneDraft.set(company, inp.value);
                 });
             });
             fillAssignCompanySelect();
@@ -1094,7 +1162,8 @@
                         ? '<span class="hub-badge hub-badge--wh">مستودع</span>'
                         : '<span class="hub-badge hub-badge--memo-plan">ترحيل</span>');
                 const searchHay = `${g.company} ${g.items.map((i) => `${i.vin} ${i.product || ''}`).join(' ')}`.toLowerCase().replace(/"/g, '');
-                const waDisabled = g.unassigned || !g.items.length ? 'disabled' : '';
+                const waPending = g.items.filter((i) => i.agentStatus !== 'delivered').length;
+                const waDisabled = g.unassigned || !waPending ? 'disabled' : '';
                 const escCo = String(g.company).replace(/"/g, '&quot;');
                 return `<div class="queue-company${g.isWh ? ' queue-company--warehouse' : ''}${g.unassigned ? ' queue-company--unassigned' : ''}" data-q-company="${escCo}" data-search="${searchHay}">
                     <div class="queue-company-head">
@@ -1104,7 +1173,7 @@
                         </div>
                         <div class="queue-company-actions">
                             <span class="hub-meta">${g.items.length} سيارة</span>
-                            <button type="button" class="hub-btn hub-btn--sm hub-btn--wa" data-wa-queue-company="${escCo}" ${waDisabled} title="إرسال الشاسيه والمنتجات عبر واتساب">واتساب</button>
+                            <button type="button" class="hub-btn hub-btn--sm hub-btn--wa" data-wa-queue-company="${escCo}" ${waDisabled} title="واتساب — بدون تم الترحيل · مع التاريخ والوقت">واتساب</button>
                         </div>
                     </div>
                     <div class="queue-company-body">${rows}</div>
@@ -1422,7 +1491,7 @@
             const phone = String(phoneInput?.value || '').trim();
             if (!name) return;
             if (companyOptions.some((c) => c.toLowerCase() === name.toLowerCase())) {
-                if (phone) await saveCompanyPhone(name, phone);
+                if (phone && !companyPhoneLookup(name)) await saveCompanyPhone(name, phone);
                 input.value = '';
                 if (phoneInput) phoneInput.value = '';
                 renderCompanyBoards();

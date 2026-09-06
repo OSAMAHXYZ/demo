@@ -2680,6 +2680,17 @@ app.get('/api/delivery-options', (_req, res) => {
 app.put('/api/delivery-options/company-phone', (req, res) => {
   const company = String(req.body?.company || req.body?.name || '').trim();
   const phone = String(req.body?.phone || '').trim();
+  const fromAdmin = Boolean(req.body?.fromAdmin || req.body?.source === 'admin');
+  const existing = getCompanyPhone(company);
+  // Coordinator may set a number once; only admin can change/clear afterward.
+  if (existing && !fromAdmin) {
+    return res.status(403).json({
+      error: 'الرقم محفوظ مسبقاً — التعديل من لوحة الإدارة فقط',
+      company,
+      phone: existing,
+      companyPhones: store.options.companyPhones || {}
+    });
+  }
   const result = setCompanyPhone(company, phone);
   if (!result.ok) return res.status(400).json({ error: result.error });
   // Ensure company exists in list when saving a phone
