@@ -2318,15 +2318,12 @@
   }
 
   /**
-   * Excel COUNTIFS equivalent for Proforma per employee:
-   *   =COUNTIFS(Rowdata!A:A, name, Rowdata!P:P, ">="&periodStart, Rowdata!V:V, "")
-   * - Col A = salesman
-   * - Col P date in selected period ( >= rangeFrom and <= rangeTo )
-   * - Col V delivery date must be blank (undelivered only)
-   * Delivery = Col V date in selected period (independent).
+   * Proforma per employee: Col A = salesman, Col P date in selected period.
+   * Counts every proforma issued in the period — including rows that later got a delivery date.
+   * Delivery = Col V date in selected period (independent; same row can count for both).
    */
   function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
-    if (!r || hasDeliveryDate(r)) return false;
+    if (!r) return false;
     return salesPeriodMatch(r.proformaDate, live, period, prevMonthKey);
   }
 
@@ -3039,7 +3036,7 @@
   function buildEmployeeDailyProforma(live, prevMonthKey) {
     const byKey = new Map();
     (slots.sales.rows || []).forEach((r) => {
-      // Same as Excel: Col P in month AND Col V blank
+      // Col P proforma date in selected month (includes delivered rows)
       if (!salesIsProformaInPeriod(r, live, "month", prevMonthKey)) return;
       const pd = r.proformaDate;
       const dayIndex = proformaDayIndex(pd, live);
@@ -3241,8 +3238,8 @@
       if (p.vacation) p.note = "VACATION";
     });
 
-    // Sales Raw Excel COUNTIFS:
-    // Proforma = Col A match · Col P in period · Col V blank
+    // Sales Raw:
+    // Proforma = Col A match · Col P in period (includes delivered)
     // Delivery = Col V in period
     salesRows.forEach((r) => {
       const name = rosterSalesmanName(r.salesman);
@@ -3409,8 +3406,7 @@
     const daysInMonth = live.daysInMonth
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
 
-    // Excel Month-to-Date formulas:
-    // Proforma = COUNTIFS Col P in period & Col V blank · Delivery = Col V in period
+    // Proforma = Col P in period (all issued) · Delivery = Col V in period
     // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma
     // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
     const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
@@ -4887,7 +4883,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=COUNTIFS Col P in period & Col V blank · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col P in period (all issued) · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
@@ -4985,7 +4981,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period & Col V blank (Excel COUNTIFS) · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period (all issued) · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -5655,7 +5651,7 @@
           </tbody>
         </table>
       </div>
-      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on Col P proforma (undelivered)</p>
+      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on Col P proforma (all issued in month)</p>
     `;
   }
 
