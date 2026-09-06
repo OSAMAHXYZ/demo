@@ -16,7 +16,7 @@
     <div class="page-hero-inner">
       <div class="hero-brand">
         <h1>Admin Control</h1>
-        <p>Upload Excel · set targets · Push to live Sales Report</p>
+        <p>Upload Excel · set targets · Push to live (shared on all devices)</p>
       </div>
       <div class="hero-logo">
         <div class="co">Abdul Latif Jameel</div>
@@ -31,7 +31,7 @@
         <div class="mark">AD</div>
         <div>
           <h1>Admin Push</h1>
-          <p>Sales Raw drives Sales Report · Cancelled BOs file · Col I VIN required</p>
+          <p>Push saves to the server — every laptop on this URL sees the same live report</p>
         </div>
       </div>
       <div class="top-actions">
@@ -573,6 +573,15 @@
 
   async function hydrateFromStore() {
     try {
+      await Store.syncFromServer();
+      employeeTargets = loadEmployeeTargets();
+      allocationValues = loadAllocationValues();
+      renderTargetsPanel();
+      renderAllocationPanel();
+    } catch {
+      /* use local cache */
+    }
+    try {
       const payload = await Store.loadWorkbookFiles();
       if (!payload || !payload.files) return;
       Object.keys(payload.files).forEach((id) => {
@@ -587,7 +596,7 @@
 
   async function pushToLive() {
     showError("");
-    setStatus("Pushing…", "busy");
+    setStatus("Pushing to all devices…", "busy");
     try {
       employeeTargets = collectTargetsFromForm();
       localStorage.setItem(TARGETS_KEY, JSON.stringify(employeeTargets));
@@ -614,7 +623,22 @@
         const s = slots[d.id];
         if (s.buffer) filesBySlot[d.id] = { name: s.name, buffer: s.buffer };
       });
-      const dataStamp = await Store.saveWorkbookFiles(filesBySlot);
+
+      let serverAt = Date.now();
+      try {
+        const server = await Store.pushToServer({
+          targets: employeeTargets,
+          accessoriesSettled: settledAmount,
+          workingDays,
+          allocationValues,
+          filesBySlot,
+        });
+        serverAt = Number(server.at) || serverAt;
+      } catch (err) {
+        showError(`Server sync failed: ${err.message || err}. Saved on this browser only.`);
+      }
+
+      const dataStamp = await Store.saveWorkbookFiles(filesBySlot, { at: serverAt });
 
       Store.broadcast({
         type: "admin-pushed",
@@ -634,7 +658,7 @@
       const srOk = dataStamp.hasSales;
       setStatus(
         srOk
-          ? "Pushed to live — Sales Report can build"
+          ? "Pushed to live — all devices will update"
           : "Pushed to live — add Sales Raw for Sales Report",
         "ok"
       );
@@ -646,9 +670,10 @@
   async function clearFiles() {
     SLOT_DEFS.forEach((d) => { slots[d.id] = { name: "", buffer: null, size: 0 }; });
     try { await Store.clearWorkbookFiles(); } catch { /* ignore */ }
+    try { await Store.clearOnServer(); } catch { /* ignore */ }
     Store.broadcast({ type: "admin-cleared", at: Date.now() });
     renderSlots();
-    setStatus("Files cleared", "ok");
+    setStatus("Files cleared on server", "ok");
   }
 
   document.querySelectorAll("[data-admin-panel]").forEach((btn) => {

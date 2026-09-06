@@ -11,6 +11,12 @@ const Docxtemplater = require('docxtemplater');
 
 const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
+const REPORT_SHEET_DIR = path.join(ROOT, 'report-sheet-data');
+const REPORT_SHEET_META = path.join(REPORT_SHEET_DIR, 'meta.json');
+const REPORT_SHEET_FILES = path.join(REPORT_SHEET_DIR, 'files');
+const REPORT_SLOT_IDS = Object.freeze([
+  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories'
+]);
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
 const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
@@ -245,6 +251,71 @@ function broadcastHubUpdate() {
         /* ignore */
       }
     }
+  }
+}
+
+function ensureReportSheetDirs() {
+  if (!fs.existsSync(REPORT_SHEET_DIR)) fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
+  if (!fs.existsSync(REPORT_SHEET_FILES)) fs.mkdirSync(REPORT_SHEET_FILES, { recursive: true });
+}
+
+function defaultReportSheetMeta() {
+  return {
+    at: 0,
+    targetsAt: 0,
+    slots: [],
+    hasSales: false,
+    hasCancelled: false,
+    targets: [],
+    accessoriesSettled: 0,
+    workingDays: 22,
+    allocationValues: {},
+    fileNames: {}
+  };
+}
+
+function loadReportSheetMeta() {
+  ensureReportSheetDirs();
+  try {
+    if (!fs.existsSync(REPORT_SHEET_META)) return defaultReportSheetMeta();
+    const parsed = JSON.parse(fs.readFileSync(REPORT_SHEET_META, 'utf8'));
+    return { ...defaultReportSheetMeta(), ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+  } catch {
+    return defaultReportSheetMeta();
+  }
+}
+
+function saveReportSheetMeta(meta) {
+  ensureReportSheetDirs();
+  const tmp = `${REPORT_SHEET_META}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), 'utf8');
+  fs.renameSync(tmp, REPORT_SHEET_META);
+}
+
+function reportSheetFilePath(slot) {
+  const id = String(slot || '').trim().toLowerCase();
+  if (!REPORT_SLOT_IDS.includes(id)) return null;
+  return path.join(REPORT_SHEET_FILES, id);
+}
+
+function broadcastReportSheetUpdate(at) {
+  const payload = JSON.stringify({ type: 'report_sheet_updated', at: at || Date.now() });
+  for (const client of wsClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+function clearReportSheetFiles() {
+  ensureReportSheetDirs();
+  for (const id of REPORT_SLOT_IDS) {
+    const fp = reportSheetFilePath(id);
+    if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
   }
 }
 
@@ -2098,6 +2169,105 @@ app.post('/api/delivery-inventory/restore-export-bin', express.raw({ limit: '80m
 });
 
 app.use(express.json({ limit: '80mb' }));
+
+/** Shared Sales Report push — same snapshot for every laptop on this server. */
+app.get('/api/report-sheet/meta', (_req, res) => {
+  const meta = loadReportSheetMeta();
+  res.json({
+    at: meta.at || 0,
+    targetsAt: meta.targetsAt || meta.at || 0,
+    slots: Array.isArray(meta.slots) ? meta.slots : [],
+    hasSales: !!meta.hasSales,
+    hasCancelled: !!meta.hasCancelled,
+    targets: Array.isArray(meta.targets) ? meta.targets : [],
+    accessoriesSettled: Number(meta.accessoriesSettled) || 0,
+    workingDays: Math.max(1, Number(meta.workingDays) || 22),
+    allocationValues: meta.allocationValues && typeof meta.allocationValues === 'object'
+      ? meta.allocationValues
+      : {},
+    fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {}
+  });
+});
+
+app.get('/api/report-sheet/file/:slot', (req, res) => {
+  const fp = reportSheetFilePath(req.params.slot);
+  if (!fp || !fs.existsSync(fp)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  const meta = loadReportSheetMeta();
+  const slot = String(req.params.slot || '').trim().toLowerCase();
+  const name = (meta.fileNames && meta.fileNames[slot]) || `${slot}.xlsx`;
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('X-Report-Sheet-Name', encodeURIComponent(name));
+  res.setHeader('Cache-Control', 'no-store');
+  return res.sendFile(fp);
+});
+
+app.post('/api/report-sheet/push', (req, res) => {
+  try {
+    ensureReportSheetDirs();
+    const body = req.body || {};
+    const at = Date.now();
+    const filesIn = body.files && typeof body.files === 'object' ? body.files : {};
+    const fileNames = {};
+    const slots = [];
+
+    clearReportSheetFiles();
+
+    for (const id of REPORT_SLOT_IDS) {
+      const entry = filesIn[id];
+      if (!entry || !entry.base64) continue;
+      const buf = Buffer.from(String(entry.base64), 'base64');
+      if (!buf.length) continue;
+      const fp = reportSheetFilePath(id);
+      fs.writeFileSync(fp, buf);
+      const name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
+      fileNames[id] = name;
+      slots.push(id);
+    }
+
+    const meta = {
+      at,
+      targetsAt: at,
+      slots,
+      hasSales: slots.includes('sales'),
+      hasCancelled: slots.includes('cancelled'),
+      targets: Array.isArray(body.targets) ? body.targets : [],
+      accessoriesSettled: Math.max(0, Number(body.accessoriesSettled) || 0),
+      workingDays: Math.max(1, Number(body.workingDays) || 22),
+      allocationValues: body.allocationValues && typeof body.allocationValues === 'object'
+        ? body.allocationValues
+        : {},
+      fileNames
+    };
+    saveReportSheetMeta(meta);
+    broadcastReportSheetUpdate(at);
+    return res.json({
+      ok: true,
+      at,
+      slots,
+      hasSales: meta.hasSales,
+      hasCancelled: meta.hasCancelled
+    });
+  } catch (err) {
+    console.error('[report-sheet/push]', err);
+    return res.status(500).json({ error: err.message || 'Push failed' });
+  }
+});
+
+app.post('/api/report-sheet/clear', (_req, res) => {
+  try {
+    clearReportSheetFiles();
+    const meta = defaultReportSheetMeta();
+    meta.at = Date.now();
+    saveReportSheetMeta(meta);
+    broadcastReportSheetUpdate(meta.at);
+    return res.json({ ok: true, at: meta.at });
+  } catch (err) {
+    console.error('[report-sheet/clear]', err);
+    return res.status(500).json({ error: err.message || 'Clear failed' });
+  }
+});
 
 app.post('/api/delivery-coordinator/auth', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);

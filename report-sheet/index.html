@@ -780,7 +780,7 @@
         </article>
       </div>
     </section>
-    <footer class="page-foot">Live view · Excel &amp; targets from Admin Push · Abdul Latif Jameel MOTORS</footer>
+    <footer class="page-foot">Live view · shared from Admin Push on this server · Abdul Latif Jameel MOTORS</footer>
   </div>
 
   <div class="drawer-backdrop" id="emp-backdrop"></div>
@@ -2864,6 +2864,11 @@
   }
 
   async function hydrateSlotsFromAdmin() {
+    try {
+      await Store.syncFromServer();
+    } catch {
+      /* fall back to local IndexedDB */
+    }
     const payload = await Store.loadWorkbookFiles();
     SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
     if (!payload || !payload.files) {
@@ -2873,8 +2878,8 @@
       return false;
     }
     $("#load-banner").classList.add("show");
-    $("#load-banner").textContent = "Reading pushed workbooks…";
-    setStatus("Loading Admin Push…", "busy");
+    $("#load-banner").textContent = "Reading shared workbooks…";
+    setStatus("Loading from server…", "busy");
     try {
       for (const d of SLOT_DEFS) {
         const f = payload.files[d.id];
@@ -8432,24 +8437,52 @@
     setStatus("View cleared · Push again from Admin to reload");
   }
 
+  let lastPushAt = 0;
+  let lastDataPushAt = 0;
+  let liveSync = null;
+  try {
+    const stamp = JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}");
+    lastPushAt = Number(stamp.at) || 0;
+  } catch { /* ignore */ }
+  try {
+    lastDataPushAt = Number(Store.readDataPushStamp().at) || 0;
+  } catch { /* ignore */ }
+
+  let refreshInFlight = null;
   async function refreshFromAdmin(reason) {
+    if (refreshInFlight) {
+      try { await refreshInFlight; } catch { /* ignore */ }
+    }
     showError("");
-    try {
-      const ok = await hydrateSlotsFromAdmin();
-      if (!ok) {
-        clearAll();
-        setStatus(reason || "Waiting for Admin Push");
-        return;
+    refreshInFlight = (async () => {
+      try {
+        const ok = await hydrateSlotsFromAdmin();
+        if (!ok) {
+          clearAll();
+          setStatus(reason || "Waiting for Admin Push");
+          return;
+        }
+        buildDashboard();
+        if (reason) setStatus(reason, "ok");
+        else setStatus("Live — synced from server", "ok");
+        try {
+          lastDataPushAt = Number(Store.readDataPushStamp().at) || lastDataPushAt;
+          lastPushAt = Number(JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}").at) || lastPushAt;
+          if (liveSync && liveSync.setLastAt) liveSync.setLastAt(lastDataPushAt);
+        } catch { /* ignore */ }
+      } catch (err) {
+        showError(err.message || String(err));
       }
-      buildDashboard();
-      if (reason) setStatus(reason, "ok");
-    } catch (err) {
-      showError(err.message || String(err));
+    })();
+    try {
+      await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
     }
   }
 
   $("#clear-btn").addEventListener("click", clearAll);
-  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed from Admin"));
+  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed from server"));
   $("#csv-btn").addEventListener("click", exportCsv);
   const dashExcelBtn = $("#dash-excel-btn");
   if (dashExcelBtn) dashExcelBtn.addEventListener("click", exportStockBoDashboardExcel);
@@ -8466,16 +8499,6 @@
     if (btn.dataset.nav === "dashboard" && !window._data) return;
     switchNav(btn.dataset.nav);
   });
-
-  let lastPushAt = 0;
-  let lastDataPushAt = 0;
-  try {
-    const stamp = JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}");
-    lastPushAt = Number(stamp.at) || 0;
-  } catch { /* ignore */ }
-  try {
-    lastDataPushAt = Number(Store.readDataPushStamp().at) || 0;
-  } catch { /* ignore */ }
 
   function maybeApplyPushedTargets(reason) {
     let at = 0;
@@ -8527,14 +8550,15 @@
     bc.onmessage = (ev) => { onAdminPushMessage(ev); };
   }
   window.addEventListener("focus", () => {
-    maybeApplyPushedTargets();
-    const at = Number(Store.readDataPushStamp().at) || 0;
-    if (at && at !== lastDataPushAt) {
-      lastDataPushAt = at;
-      refreshFromAdmin();
-    }
+    refreshFromAdmin();
   });
 
+  if (Store.startLiveSync) {
+    liveSync = Store.startLiveSync((reason) => refreshFromAdmin(reason || "Live sync — Admin Push"), {
+      pollMs: 8000,
+      initialAt: lastDataPushAt,
+    });
+  }
   $("#panel-tabs").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-panel]");
     if (!btn) return;
