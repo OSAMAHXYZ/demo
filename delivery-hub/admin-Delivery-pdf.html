@@ -8216,6 +8216,8 @@
             const notesEl = document.getElementById('statusNotesGenerated');
             if (carsEl) carsEl.textContent = String(carsSubmitted);
             if (notesEl) notesEl.textContent = String(notesGenerated);
+            const notesHint = document.getElementById('statusNotesGeneratedHint');
+            if (notesHint) notesHint.textContent = `${carsSubmitted} سيارة على هذه المذكرات`;
 
             const statusSub = document.querySelector('.pct-chart-card--status .pct-chart-sub');
             if (statusSub) {
