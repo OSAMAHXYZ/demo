@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -8,8 +8,8 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <link rel="stylesheet" href="delivery-hub-theme.css?v=20260825c">
-    <link rel="stylesheet" href="admin-saas.css?v=20260906b">
-    <link rel="stylesheet" href="admin-hcare-light.css?v=20260906b">
+    <link rel="stylesheet" href="admin-saas.css?v=20260906c">
+    <link rel="stylesheet" href="admin-hcare-light.css?v=20260906c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     <style>
@@ -2384,10 +2384,27 @@
         body.delivery-hub.admin-console.admin-light .dh-user-chart,
         body.delivery-hub.admin-console.admin-light .ops-board__chart-el,
         body.delivery-hub.admin-console.admin-light .apexcharts-canvas,
-        body.delivery-hub.admin-console.admin-light .apexcharts-svg {
-            background: #000 !important;
+        body.delivery-hub.admin-console.admin-light .apexcharts-svg,
+        body.delivery-hub.admin-console.admin-light .saas-kpi,
+        body.delivery-hub.admin-console.admin-light .admin-overview-row .saas-kpi,
+        body.delivery-hub.admin-console.admin-light .dn-stat,
+        body.delivery-hub.admin-console.admin-light .raw-gap-section,
+        body.delivery-hub.admin-console.admin-light .raw-gap-panel,
+        body.delivery-hub.admin-console.admin-light .raw-gap-table-wrap,
+        body.delivery-hub.admin-console.admin-light .ops-board__chart,
+        body.delivery-hub.admin-console.admin-light .admin-sidebar__foot {
+            background: #0a0a0a !important;
             box-shadow: none !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+            color: #e2e8f0 !important;
         }
+        body.delivery-hub.admin-console.admin-light .raw-gap-table th {
+            background: #000 !important;
+            color: #94a3b8 !important;
+        }
+        body.delivery-hub.admin-console.admin-light .raw-gap-stat--raw .val { color: #93c5fd !important; }
+        body.delivery-hub.admin-console.admin-light .raw-gap-stat--delivered .val { color: #6ee7b7 !important; }
+        body.delivery-hub.admin-console.admin-light .raw-gap-stat--gap .val { color: #fca5a5 !important; }
         body.delivery-hub.admin-console.admin-light .saas-empty,
         body.delivery-hub.admin-console.admin-light .xfer-dash-empty {
             color: #94a3b8 !important;

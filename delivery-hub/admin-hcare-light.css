@@ -1464,3 +1464,202 @@ body.delivery-hub.admin-console.admin-light {
   top: 0;
 }
 
+/* —— True-black color pass: beat higher-specificity light-theme whites —— */
+.admin-light .admin-sidebar__foot {
+  background: #111111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #fda4af !important;
+  box-shadow: none !important;
+}
+.admin-light .admin-sidebar__foot strong {
+  color: #fecaca !important;
+}
+.admin-light .admin-sidebar__foot p {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+.admin-light .admin-nav__btn .nav-ico {
+  background: #1a1a1a !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+.admin-light .admin-nav__btn.is-active {
+  background: rgba(235, 10, 30, 0.28) !important;
+  color: #fff !important;
+  box-shadow: inset 3px 0 0 #EB0A1E;
+}
+.admin-light .admin-nav__btn.is-active .nav-ico {
+  background: rgba(235, 10, 30, 0.35) !important;
+  color: #fff !important;
+}
+.admin-light .admin-nav__btn .nav-count {
+  background: #1a1a1a !important;
+  color: #94a3b8 !important;
+}
+.admin-light .admin-nav__btn.is-active .nav-count {
+  background: rgba(235, 10, 30, 0.35) !important;
+  color: #fecaca !important;
+}
+
+.admin-light .saas-kpi,
+.admin-light .admin-overview-row .saas-kpi,
+.admin-light .charts-cockpit .saas-kpi {
+  background: #111111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  color: #e2e8f0 !important;
+}
+.admin-light .saas-kpi:hover,
+.admin-light .admin-overview-row .saas-kpi:hover {
+  border-color: rgba(235, 10, 30, 0.35) !important;
+  transform: none;
+}
+.admin-light .saas-kpi__value,
+.admin-light .admin-overview-row .saas-kpi__value {
+  color: #f8fafc !important;
+}
+.admin-light .saas-kpi__label,
+.admin-light .admin-overview-row .saas-kpi__label,
+.admin-light .saas-kpi__menu {
+  color: #94a3b8 !important;
+}
+.admin-light .saas-kpi__icon {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-light .dn-stat {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+.admin-light .dn-stat b {
+  color: #f8fafc !important;
+}
+.admin-light .dn-stat span,
+.admin-light .dn-mgmt__eyebrow,
+.admin-light .dn-mgmt__sub {
+  color: #94a3b8 !important;
+}
+
+.admin-light .raw-gap-section,
+.admin-light .charts-cockpit .raw-gap-section {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+.admin-light .raw-gap-summary {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+}
+.admin-light .raw-gap-stat .lab,
+.admin-light .raw-gap-stat .hint {
+  color: #94a3b8 !important;
+}
+.admin-light .raw-gap-stat .val {
+  color: #f8fafc !important;
+}
+.admin-light .raw-gap-stat--raw .val { color: #93c5fd !important; }
+.admin-light .raw-gap-stat--delivered .val { color: #6ee7b7 !important; }
+.admin-light .raw-gap-stat--gap .val { color: #fca5a5 !important; }
+.admin-light .raw-gap-stat--action .val { color: #e2e8f0 !important; }
+
+.admin-light .raw-gap-panel {
+  background: #050505 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+.admin-light .raw-gap-panel__head h3 {
+  color: #f8fafc !important;
+}
+.admin-light .raw-gap-panel__head p,
+.admin-light .raw-gap-table td {
+  color: #cbd5e1 !important;
+}
+.admin-light .raw-gap-table th {
+  background: #000000 !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.admin-light .raw-gap-table td {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  background: transparent !important;
+}
+.admin-light .raw-gap-table-wrap {
+  background: #000000 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.admin-light .raw-gap-toolbar input,
+.admin-light .raw-gap-toolbar select {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+}
+.admin-light .raw-gap-chip {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #94a3b8 !important;
+}
+.admin-light .raw-gap-chip.is-active {
+  background: rgba(235, 10, 30, 0.18) !important;
+  border-color: rgba(235, 10, 30, 0.4) !important;
+  color: #fecaca !important;
+}
+
+.admin-light .admin-overview-row .saas-hero,
+.admin-light .saas-hero {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-light .ops-board__chart,
+.admin-light .charts-cockpit__charts .ops-board__chart {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+.admin-light .ops-board__chart h3,
+.admin-light .charts-cockpit__charts .ops-board__chart h3 {
+  color: #e2e8f0 !important;
+}
+.admin-light .ops-board__chart-el,
+.admin-light .charts-cockpit__charts .ops-board__chart-el {
+  background: #000000 !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.admin-light .ft-chip {
+  background: rgba(235, 10, 30, 0.12) !important;
+  border-color: rgba(235, 10, 30, 0.28) !important;
+  color: #fecaca !important;
+}
+.admin-light .ft-chip--clear {
+  background: #1a1a1a !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-light .admin-topbar__search {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.admin-light .admin-topbar__search:focus-within {
+  background: #151515 !important;
+  border-color: rgba(235, 10, 30, 0.45) !important;
+}
+.admin-light .admin-topbar__search input {
+  color: #f1f5f9 !important;
+}
+.admin-light .admin-topbar__search input::placeholder {
+  color: #64748b !important;
+}
+
+.admin-light .hub-empty,
+.admin-light .saas-empty,
+.admin-light .raw-gap-table .hub-empty {
+  color: #94a3b8 !important;
+  background: transparent !important;
+}
+
