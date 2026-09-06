@@ -637,7 +637,7 @@
               <span class="bas-section-badge">1</span>
               <div class="pbi-viz-head">
                 <h2>All back orders vs allocation</h2>
-                <span class="hint">Gap = Allocation − BO · exact product + suffix match (qty summed)</span>
+                <span class="hint">Gap = BO − Allocation · exact product + suffix match (qty summed)</span>
               </div>
             </div>
             <div class="bo-toolbar bas-table-filters" id="bas-table-filters">
@@ -6905,8 +6905,9 @@
       const stockCount = stockRows.filter((s) =>
         productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx, row.product || s.product)
       ).length;
-      const gap = allocation - boCount;
-      const status = gap > 0 ? "above" : gap < 0 ? "below" : "match";
+      const gap = boCount - allocation;
+      // Gap = BO − Allocation: positive = shortfall (below plan), negative = surplus (above plan)
+      const status = gap > 0 ? "below" : gap < 0 ? "above" : "match";
       return {
         id: row.id,
         seg: row.seg,
@@ -6928,10 +6929,13 @@
     return "On track";
   }
 
+  function basFormatGap(gap) {
+    return (gap > 0 ? "+" : "") + formatNumber(gap);
+  }
+
   function basGapBadge(status, gap) {
     const cls = status === "above" ? "ok" : status === "below" ? "bad" : "warn";
-    const sign = gap > 0 ? "+" : "";
-    return `<span class="badge ${cls}">${basGapLabel(status)} (${sign}${formatNumber(gap)})</span>`;
+    return `<span class="badge ${cls}">${basGapLabel(status)} (${basFormatGap(gap)})</span>`;
   }
 
   function renderBasKpis(rows, opts = {}) {
@@ -6940,7 +6944,7 @@
     const totalAlloc = rows.reduce((s, r) => s + r.allocation, 0);
     const totalBo = rows.reduce((s, r) => s + r.boCount, 0);
     const totalStock = rows.reduce((s, r) => s + r.stockCount, 0);
-    const totalGap = totalAlloc - totalBo;
+    const totalGap = totalBo - totalAlloc;
     const below = rows.filter((r) => r.status === "below").length;
     const above = rows.filter((r) => r.status === "above").length;
     const boLabel = opts.boLabel || "Matched back orders";
@@ -6949,7 +6953,7 @@
       { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
       { label: boLabel, val: formatNumber(totalBo), sub: boSub },
       { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
-      { label: "Overall gap", val: (totalGap > 0 ? "+" : "") + formatNumber(totalGap), sub: totalGap >= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap >= 0 ? "ok" : "bad" },
+      { label: "Overall gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad" },
       { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
     ].map((k) => `
       <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
@@ -6964,16 +6968,16 @@
     const el = $(opts.insightEl || "#bas-insights");
     if (!el) return;
     const boWord = opts.boWord || "BO";
-    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => a.gap - b.gap).slice(0, 5);
-    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => b.gap - a.gap).slice(0, 5);
+    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 5);
+    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 5);
     const belowHtml = below.length
       ? `<ul class="bas-insight-list">${below.map((r) =>
-        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — ${boWord} ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${formatNumber(r.gap)}</span></li>`
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — ${boWord} ${formatNumber(r.boCount)} vs plan ${formatNumber(r.allocation)} <span class="badge bad">${basFormatGap(r.gap)}</span></li>`
       ).join("")}</ul>`
       : `<p class="foot" style="margin:0">No suffixes where ${boWord} exceeds allocation.</p>`;
     const aboveHtml = above.length
       ? `<ul class="bas-insight-list">${above.map((r) =>
-        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs ${boWord} ${formatNumber(r.boCount)} <span class="badge ok">+${formatNumber(r.gap)}</span></li>`
+        `<li><b>${escapeHtml(r.product)}</b> · ${escapeHtml(r.sfx)} — plan ${formatNumber(r.allocation)} vs ${boWord} ${formatNumber(r.boCount)} <span class="badge ok">${basFormatGap(r.gap)}</span></li>`
       ).join("")}</ul>`
       : `<p class="foot" style="margin:0">No surplus allocation rows.</p>`;
     el.innerHTML = `
@@ -7029,23 +7033,25 @@
     const sorted = [...rows].sort((a, b) => {
       if (a.status === "below" && b.status !== "below") return -1;
       if (b.status === "below" && a.status !== "below") return 1;
-      return a.gap - b.gap;
+      return b.gap - a.gap;
     });
     if (summaryEl) {
       const alloc = rows.reduce((s, r) => s + r.allocation, 0);
       const bo = rows.reduce((s, r) => s + r.boCount, 0);
       const stock = rows.reduce((s, r) => s + r.stockCount, 0);
-      const gap = alloc - bo;
+      const gap = bo - alloc;
       const cover = alloc + stock - bo;
       const carLabel = basView.product || "All cars";
       const sfxLabel = basView.sfx || "All suffixes";
+      // Positive gap (BO > plan) = shortfall red; negative = surplus green
+      const gapCls = gap > 0 ? "bas-gap-neg" : gap < 0 ? "bas-gap-pos" : "";
       summaryEl.innerHTML = `
         <div class="bas-result-chip"><span class="bas-result-lab">Car</span><strong>${escapeHtml(carLabel)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">Suffix</span><strong>${escapeHtml(sfxLabel)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">Allocation</span><strong>${formatNumber(alloc)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">${escapeHtml(boColHeader)}</span><strong>${formatNumber(bo)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">Stock</span><strong>${formatNumber(stock)}</strong></div>
-        <div class="bas-result-chip"><span class="bas-result-lab">Gap</span><strong class="${gap > 0 ? "bas-gap-pos" : gap < 0 ? "bas-gap-neg" : ""}">${gap > 0 ? "+" : ""}${formatNumber(gap)}</strong></div>
+        <div class="bas-result-chip"><span class="bas-result-lab">Gap</span><strong class="${gapCls}">${basFormatGap(gap)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">Plan + Stock − BO</span><strong class="${cover >= 0 ? "bas-gap-pos" : "bas-gap-neg"}">${cover >= 0 ? "+" : ""}${formatNumber(cover)}</strong></div>
         <div class="bas-result-chip"><span class="bas-result-lab">Rows</span><strong>${formatNumber(rows.length)}</strong></div>`;
     }
@@ -7057,13 +7063,13 @@
         <th class="num"><span class="bas-th-lab">Allocation</span></th>
         <th class="num"><span class="bas-th-lab">${boColHeader}</span></th>
         <th class="num"><span class="bas-th-lab">Stock</span></th>
-        <th class="num"><span class="bas-th-lab">Gap</span><span class="bas-th-sub">Alloc − BO</span></th>
+        <th class="num"><span class="bas-th-lab">Gap</span><span class="bas-th-sub">BO − Alloc</span></th>
         <th><span class="bas-th-lab">Status</span></th>
         <th class="num"><span class="bas-th-lab">Plan + Stock − BO</span></th>
       </tr></thead>
       <tbody>${sorted.map((r) => {
         const rowCls = r.status === "below" ? "bas-row-below" : r.status === "above" ? "bas-row-above" : "";
-        const gapCls = r.gap > 0 ? "bas-gap-pos" : r.gap < 0 ? "bas-gap-neg" : "";
+        const gapCls = r.gap > 0 ? "bas-gap-neg" : r.gap < 0 ? "bas-gap-pos" : "";
         const coverCls = r.netCover >= 0 ? "bas-gap-pos" : "bas-gap-neg";
         return `<tr class="${rowCls}">
           <td>${escapeHtml(r.seg)}</td>
@@ -7072,7 +7078,7 @@
           <td class="num">${formatNumber(r.allocation)}</td>
           <td class="num">${formatNumber(r.boCount)}</td>
           <td class="num">${formatNumber(r.stockCount)}</td>
-          <td class="num ${gapCls}">${r.gap > 0 ? "+" : ""}${formatNumber(r.gap)}</td>
+          <td class="num ${gapCls}">${basFormatGap(r.gap)}</td>
           <td>${basGapBadge(r.status, r.gap)}</td>
           <td class="num ${coverCls}">${r.netCover >= 0 ? "+" : ""}${formatNumber(r.netCover)}</td>
         </tr>`;
