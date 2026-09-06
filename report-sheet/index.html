@@ -827,7 +827,7 @@
     { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
-    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "First sheet · Col F date · Col G salesman · Col H amount" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "First sheet · Col D VIN → Sales Raw employee · Col L amount" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -1960,9 +1960,9 @@
 
   /**
    * Accessories Excel (slot 6) — always first sheet:
-   *   Col F = date
-   *   Col G = salesman name
-   *   Col H = amount (accessories achieved)
+   *   Col D = VIN (look up salesman in Sales Raw)
+   *   Col L = amount (accessories achieved)
+   * Optional date column (by header) for period filter; undated rows still count in MTD.
    * Ach% = amount ÷ accessories target (settled pool share, else employee monthly target)
    */
   function parseAmount(v) {
@@ -1987,7 +1987,7 @@
 
     let headerIdx = 0;
     let bestHits = -1;
-    const markers = ["salesman", "sales employee", "advisor", "date", "amount", "accessories", "accessory"];
+    const markers = ["vin", "chassis", "amount", "accessories", "accessory", "date"];
     const scanLimit = Math.min(matrix.length, 40);
     for (let i = 0; i < scanLimit; i += 1) {
       const cells = (matrix[i] || []).map((c) => normHeader(c));
@@ -1997,26 +1997,22 @@
       if (hits >= 2) break;
     }
 
-    let idxF = colLetterToIndex("F");
-    let idxG = colLetterToIndex("G");
-    let idxH = colLetterToIndex("H");
+    // Fixed letters per business rule: D = VIN, L = amount (headers only for optional date)
+    const idxD = colLetterToIndex("D");
+    const idxL = colLetterToIndex("L");
+    let idxDate = -1;
     const headerRow = matrix[headerIdx] || [];
     const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
 
-    const headerSalesman = findHeaderIdx([
-      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
-      (n) => n === "advisor" || n === "consultant" || n.includes("salesman"),
+    const headerVin = findHeaderIdx([
+      (n) => n === "vin" || n === "vin no" || n === "vin number" || n === "chassis",
+      (n) => n.includes("vin") || n.includes("chassis"),
     ]);
     const headerDate = findHeaderIdx([
       (n) => n.includes("date") || n === "order date" || n === "transaction date",
     ]);
-    const headerAmount = findHeaderIdx([
-      (n) => n.includes("accessor") || n === "amount" || n.includes("amount") || n === "total" || n === "value",
-    ]);
-    if (headerSalesman >= 0) idxG = headerSalesman;
-    if (headerDate >= 0) idxF = headerDate;
-    if (headerAmount >= 0) idxH = headerAmount;
+    if (headerDate >= 0) idxDate = headerDate;
 
     const seenHdr = {};
     const uniqueHeaders = headers.map((h) => {
@@ -2024,24 +2020,25 @@
       seenHdr[h] += 1;
       return `${h} (${seenHdr[h]})`;
     });
-    const width = Math.max(uniqueHeaders.length, idxH + 1, idxG + 1, idxF + 1);
+    const width = Math.max(uniqueHeaders.length, idxL + 1, idxD + 1, idxDate + 1);
 
-    const start = bestHits >= 1 || headerSalesman >= 0 ? headerIdx + 1 : 1;
+    const start = bestHits >= 1 || headerVin >= 0 ? headerIdx + 1 : 1;
     const rows = [];
     for (let r = start; r < matrix.length; r += 1) {
       const line = padCells(matrix[r] || [], width);
       if (line.every((c) => cellToString(c).trim() === "")) continue;
 
-      const amount = parseAmount(line[idxH]);
+      const vin = extractVinValue(line[idxD]);
+      if (!vin) continue;
+
+      const amount = parseAmount(line[idxL]);
       if (!amount) continue;
 
-      const salesman = resolveSalesmanName(cellToString(line[idxG]).trim());
-      if (!salesman) continue;
-
       const obj = {
-        salesman,
+        vin,
         amount,
-        accessoryDate: parseDate(line[idxF]),
+        salesman: "", // filled from Sales Raw VIN match at report time
+        accessoryDate: idxDate >= 0 ? parseDate(line[idxDate]) : null,
         _sheet: preferred,
         __cells: line,
         __headers: uniqueHeaders,
@@ -2050,6 +2047,27 @@
       rows.push(obj);
     }
     return rows;
+  }
+
+  /** VIN → salesman from Sales Raw (Col A employee · VIN on row). */
+  function salesVinEmployeeMap(salesRows) {
+    const map = new Map();
+    (salesRows || []).forEach((r) => {
+      const vin = extractVinValue(r && r.vin);
+      if (!vin) return;
+      const name = resolveSalesmanName(r.salesman);
+      if (!name) return;
+      // Prefer first non-empty; keep stable for duplicates
+      if (!map.has(vin)) map.set(vin, name);
+    });
+    return map;
+  }
+
+  function accessorySalesmanForRow(r, vinMap) {
+    if (!r) return "";
+    const vin = extractVinValue(r.vin);
+    if (vin && vinMap && vinMap.has(vin)) return vinMap.get(vin);
+    return resolveSalesmanName(r.salesman) || "";
   }
 
   function colLetterToIndex(letter) {
@@ -2927,11 +2945,20 @@
     const settled = accessoriesSettled;
     const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
     const useSettledPool = settled > 0 && totalAdminTarget > 0;
+    const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
     const soldByKey = new Map();
+    let matchedRows = 0;
+    let unmatchedVin = 0;
     (slots.accessories.rows || []).forEach((r) => {
       if (!accessoriesInPeriod(r, live, prevMonthKey)) return;
-      const key = nameKey(r.salesman);
-      if (!key) return;
+      const salesman = accessorySalesmanForRow(r, vinMap);
+      r.salesman = salesman; // keep detail tables / filters in sync
+      const key = nameKey(salesman);
+      if (!key) {
+        unmatchedVin += 1;
+        return;
+      }
+      matchedRows += 1;
       soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
     });
 
@@ -2977,6 +3004,8 @@
       totalAdminTarget,
       useSettledPool,
       byKey,
+      matchedRows,
+      unmatchedVin,
       totals: {
         sold: totSold,
         quota: totQuota,
@@ -3053,9 +3082,12 @@
   }
 
   function accessoriesRawRowsForSalesman(key, live, prevMonthKey) {
+    const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
     return (slots.accessories.rows || []).filter((r) => {
-      if (nameKey(r.salesman) !== key) return false;
-      return accessoriesInPeriod(r, live, prevMonthKey);
+      if (!accessoriesInPeriod(r, live, prevMonthKey)) return false;
+      const salesman = accessorySalesmanForRow(r, vinMap);
+      r.salesman = salesman;
+      return nameKey(salesman) === key;
     });
   }
 
@@ -5459,7 +5491,7 @@
         <div class="emp-stat"><div class="k">Today proforma</div><div class="v">${formatNumber(row["Daily Achieved"] ?? row["Proforma (Day)"] ?? 0)}</div></div>
         <div class="emp-stat${row._dailyOnTrack ? " is-ok" : row._vacation ? "" : " is-behind"}"><div class="k">Daily Ach%</div><div class="v">${escapeHtml(row["Daily Ach %"] || "—")}</div></div>
       </div>
-      ${accRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Accessories rows · Col F/G/H (${formatNumber(accRawRows.length)})</h4>${renderCancelledFileTableHtml(accRawRows)}` : ""}
+      ${accRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Accessories rows · Col D VIN / Col L amount (${formatNumber(accRawRows.length)})</h4>${renderCancelledFileTableHtml(accRawRows)}` : ""}
       ${cancelRawRows.length ? `<h4 style="margin:14px 0 6px;font-size:.9rem">Cancelled BO rows · all Excel columns (${formatNumber(cancelRawRows.length)})</h4>${renderCancelledFileTableHtml(cancelRawRows)}` : ""}
       <h4 style="margin:${cancelRawRows.length ? "14px" : "8px"} 0 6px;font-size:.9rem">Sales Raw rows for this name</h4>
       ${renderEmployeeRawTable(rawRows)}
@@ -5713,7 +5745,7 @@
       if (remainWrap) remainWrap.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
-        "Upload Accessories Excel in Admin (slot 6 · first sheet · Col F date · Col G salesman · Col H amount), then Push to live."
+        "Upload Accessories Excel in Admin (slot 6 · Col D VIN matched to Sales Raw employee · Col L amount), then Push to live."
       );
       return;
     }
@@ -5742,7 +5774,7 @@
       if (remainWrap) remainWrap.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
-        "No accessories amounts / targets for this period. Set employee targets (or Accessories settled) in Admin, check Col F dates, then Push."
+        "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, and employee targets (or Accessories settled) in Admin."
       );
       return;
     }
