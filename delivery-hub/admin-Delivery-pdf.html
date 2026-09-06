@@ -897,6 +897,52 @@
         .pct-status-pill--done b { color: #4ade80; }
         .pct-status-pill--pending { border-color: rgba(245, 158, 11, 0.35); }
         .pct-status-pill--pending b { color: #fbbf24; }
+        .pct-status-kpis {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 0 0 14px;
+        }
+        .pct-status-kpi {
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(0,0,0,0.28);
+        }
+        .pct-status-kpi span {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            line-height: 1.35;
+        }
+        .pct-status-kpi b {
+            display: block;
+            font-size: 1.55rem;
+            font-weight: 800;
+            color: #f8fafc;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+        .pct-status-kpi small {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.72rem;
+            color: #64748b;
+            font-weight: 600;
+        }
+        .pct-status-kpi--cars {
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+        .pct-status-kpi--cars b { color: #60a5fa; }
+        .pct-status-kpi--notes {
+            border-color: rgba(235, 10, 30, 0.4);
+        }
+        .pct-status-kpi--notes b { color: #fb7185; }
+        @media (max-width: 700px) {
+            .pct-status-kpis { grid-template-columns: 1fr; }
+        }
 
         /* Delivered / Total progress chart */
         .pct-chart-card--delivered-total {
@@ -2934,7 +2980,19 @@
 
                         <div class="pct-chart-card pct-chart-card--status saas-section xfer-mosaic-span-2" style="margin:0">
                             <h3>حالة الترحيل</h3>
-                            <p class="pct-chart-sub">تم الترحيل مقابل المتبقي — كل البيانات عند عدم اختيار تاريخ</p>
+                            <p class="pct-chart-sub">سيارات المنسق · مذكرات التسليم · تم الترحيل مقابل المتبقي</p>
+                            <div class="pct-status-kpis" id="statusCoordKpis" aria-label="Coordinator submitted cars and delivery notes">
+                                <div class="pct-status-kpi pct-status-kpi--cars">
+                                    <span>سيارات مقدمة من المنسق · Cars submitted</span>
+                                    <b id="statusCarsSubmitted">0</b>
+                                    <small>VINs على مذكرات التسليم ضمن الفترة</small>
+                                </div>
+                                <div class="pct-status-kpi pct-status-kpi--notes">
+                                    <span>مذكرات التسليم المنشأة · Delivery notes</span>
+                                    <b id="statusNotesGenerated">0</b>
+                                    <small id="statusNotesGeneratedHint">عدد المذكرات ضمن الفترة</small>
+                                </div>
+                            </div>
                             <div class="pct-chart-layout">
                                 <div class="pct-donut-wrap" id="statusPctDonut"></div>
                                 <div>
@@ -8150,15 +8208,25 @@
                 ? Math.round((deliveredRow.count / statusTotal) * 1000) / 10
                 : 0;
 
+            // Same totals as filter strip: coordinator cars on DNs + notes created
+            const statusDrafts = (typeof filteredDrafts === 'function' ? filteredDrafts() : list) || [];
+            const carsSubmitted = statusDrafts.reduce((sum, d) => sum + draftCarWeight(d), 0);
+            const notesGenerated = statusDrafts.length;
+            const carsEl = document.getElementById('statusCarsSubmitted');
+            const notesEl = document.getElementById('statusNotesGenerated');
+            if (carsEl) carsEl.textContent = String(carsSubmitted);
+            if (notesEl) notesEl.textContent = String(notesGenerated);
+
             const statusSub = document.querySelector('.pct-chart-card--status .pct-chart-sub');
             if (statusSub) {
-                statusSub.textContent = selectedCompany
+                const base = selectedCompany
                     ? `حالة الترحيل لشركة ${selectedCompany} فقط`
                     : type === 'delivery_note'
                         ? 'تم الترحيل مقابل المتبقي للمذكرات/القائمة في فترة تاريخ الترحيل'
                         : type === 'proforma'
                             ? 'حالة الترحيل لسيارات تاريخ البروفورما ضمن الفترة'
                             : 'حالة الترحيل لسيارات تاريخ الفاتورة ضمن الفترة';
+                statusSub.textContent = `${base} · ${carsSubmitted} سيارة مقدمة · ${notesGenerated} مذكرة`;
             }
 
             renderDeliveredOfTotalChart();
