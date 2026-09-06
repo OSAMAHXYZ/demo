@@ -734,7 +734,7 @@
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
-                <span class="hint">Confirmed BO matched to stock VIN · sales status from Sales Raw</span>
+                <span class="hint">Confirmed BO ↔ RTL/Central stock by product + suffix · full stock columns + matched BO</span>
               </div>
             </div>
             <div class="bas-alloc-toolbar">
@@ -8017,9 +8017,23 @@
     const getRtl = buildFieldGetter(rtlRows[0] || {});
     const getCen = buildFieldGetter(centralRows[0] || {});
     const confirmedOnly = !!opts.confirmedOnly;
+    // "productSuffix" = confirmed BO ↔ stock by product + suffix only (BAS allocated table)
+    // "full" = also require year + exterior/interior colors (Stock fulfillable table)
+    const matchMode = opts.matchMode === "productSuffix" ? "productSuffix" : "full";
 
-    const matchKey = (product, suffix, year, ext, intc) =>
+    const fullKey = (product, suffix, year, ext, intc) =>
       [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
+
+    const productSuffixKey = (product, suffix) => {
+      const p = allocCompact(product) || upperTrim(product);
+      const s = upperTrim(normalizeProductSuffix(product, suffix));
+      return `${p}|${s}`;
+    };
+
+    const makeKey = (product, suffix, year, ext, intc) =>
+      matchMode === "productSuffix"
+        ? productSuffixKey(product, suffix)
+        : fullKey(product, suffix, year, ext, intc);
 
     const bos = (boRows || []).map((r, idx) => {
       const product = upperTrim(getBo(r, "product") || cellByLetter(r, "B"));
@@ -8038,13 +8052,14 @@
         year,
         ext,
         int: intc,
-        key: matchKey(product, suffix, year, ext, intc),
+        key: makeKey(product, suffix, year, ext, intc),
         salesman: resolveSalesmanName(getBo(r, "salesman")),
         boNumber: cellToString(getBo(r, "boNumber")),
         orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
         orderTs: orderDate ? orderDate.getTime() : idx,
         confirm,
         custGroup: cellToString(getBo(r, "salesType") || getBo(r, "custGroup")),
+        _raw: r,
       };
     }).filter((bo) => !confirmedOnly || isConfirmedFlag(bo.confirm));
 
@@ -8068,7 +8083,8 @@
           source,
           location: cellToString(get(r, "location") || cellByLetter(r, "N") || cellByLetter(r, "M")),
           ageing: cellToString(cellByLetter(r, "J")),
-          key: matchKey(product, suffix, year, ext, intc),
+          key: makeKey(product, suffix, year, ext, intc),
+          _raw: r,
         };
       });
 
@@ -8097,18 +8113,22 @@
       out.push({
         "Back Order Number": bo.boNumber || "—",
         VIN: hit.vin,
-        Product: bo.product || "—",
-        "Alj Suffix": bo.suffix || "—",
-        "Model Year": bo.year || "—",
+        Product: hit.product || bo.product || "—",
+        "Alj Suffix": hit.suffix || bo.suffix || "—",
+        "Model Year": hit.year || bo.year || "—",
         "Salesman Name": bo.salesman || "—",
         "Order Date": bo.orderDate || "—",
         "Confirm Flag": bo.confirm || "—",
-        "Exterior Color": bo.ext || "—",
-        "Interior Color": bo.int || "—",
+        "Exterior Color": hit.ext || bo.ext || "—",
+        "Interior Color": hit.int || bo.int || "—",
         Source: hit.source,
         "Current Location": hit.location || "—",
         "Allocation Ageing": hit.ageing || "—",
         "Cust Group": bo.custGroup || "—",
+        "BO Product": bo.product || "—",
+        "BO Suffix": bo.suffix || "—",
+        _stockRaw: hit._raw || null,
+        _boRaw: bo._raw || null,
       });
     });
     return out;
@@ -8162,12 +8182,12 @@
   function buildBasAllocatedVehicles() {
     if (!hasBackOrder()) return [];
     const live = ensureGlobalLivePeriod();
-    // Match confirmed BOs only so unconfirmed rows do not consume stock VINs
+    // Confirmed BOs only · match RTL + Central stock by product + suffix (FIFO by order date)
     const allMatched = buildMatchedCars(
       rawBoRows(),
       slots.rtl.rows || [],
       slots.central.rows || [],
-      { confirmedOnly: true }
+      { confirmedOnly: true, matchMode: "productSuffix" }
     );
     const salesLookup = buildSalesVinLookup();
 
@@ -8184,6 +8204,8 @@
           sfx: leaf ? leaf.sfx : r["Alj Suffix"],
           planMatch: !!leaf,
           boNumber: r["Back Order Number"],
+          boProduct: r["BO Product"] || r.Product,
+          boSuffix: r["BO Suffix"] || r["Alj Suffix"],
           vin: r.VIN,
           source: r.Source,
           confirm: r["Confirm Flag"],
@@ -8199,8 +8221,22 @@
           year: r["Model Year"],
           ext: r["Exterior Color"],
           int: r["Interior Color"],
+          orderDate: r["Order Date"],
+          stockRaw: r._stockRaw || null,
         };
       });
+  }
+
+  function collectMatchedStockColumns(rows) {
+    const seen = new Map();
+    (rows || []).forEach((r) => {
+      if (!r.stockRaw) return;
+      boFileColumns(r.stockRaw).forEach((c) => {
+        const key = c.letter || c.label;
+        if (!seen.has(key)) seen.set(key, c);
+      });
+    });
+    return [...seen.values()];
   }
 
   function filteredBasAllocatedRows(rows) {
@@ -8212,7 +8248,7 @@
       if (basAllocView.salesStatus && r.salesStatus !== basAllocView.salesStatus) return false;
       if (basAllocView.source && r.source !== basAllocView.source) return false;
       if (q) {
-        const hay = `${r.seg} ${r.product} ${r.sfx} ${r.vin} ${r.boNumber} ${r.salesman}`.toLowerCase();
+        const hay = `${r.seg} ${r.product} ${r.sfx} ${r.vin} ${r.boNumber} ${r.salesman} ${r.boProduct} ${r.boSuffix}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -8246,6 +8282,8 @@
     const na = allRows.filter((r) => r.salesStatus === "NA").length;
     const planMatched = allRows.filter((r) => r.planMatch).length;
     const inPeriod = allRows.filter((r) => r.inPeriod).length;
+    const rtlCount = allRows.filter((r) => r.source === "RTL").length;
+    const centralCount = allRows.filter((r) => r.source === "Central").length;
 
     const periodSub = live && live.rangeLabel
       ? live.rangeLabel
@@ -8253,13 +8291,14 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `Confirmed BO ↔ stock VIN · Sales status uses ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
+      headHint.textContent = `Confirmed BO ↔ RTL/Central by product + suffix · ${formatNumber(rtlCount)} RTL · ${formatNumber(centralCount)} Central · sales status ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
-        { label: "Allocated matches", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
+        { label: "Matched vehicles", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
+        { label: "RTL / Central", val: `${formatNumber(rtlCount)} / ${formatNumber(centralCount)}`, sub: "Stock source split" },
         { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
         { label: "Delivered", val: formatNumber(delivered), sub: `Col V in ${periodSub}`, cls: delivered ? "ok" : "" },
         { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub} · not delivered`, cls: proforma ? "warn" : "" },
@@ -8278,47 +8317,79 @@
     if (!tableEl) return;
 
     if (!rows.length) {
-      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to stock VIN yet · check BO confirm flag and stock files."}</p>`;
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL/Central stock yet · check confirm flag, product, and suffix."}</p>`;
       if (footEl) footEl.textContent = "0 rows";
       return;
     }
 
     const sorted = [...rows].sort((a, b) => {
       const order = { Delivered: 0, Proforma: 1, "Outside period": 2, NA: 3 };
-      return (order[a.salesStatus] ?? 4) - (order[b.salesStatus] ?? 4);
+      const byStatus = (order[a.salesStatus] ?? 4) - (order[b.salesStatus] ?? 4);
+      if (byStatus) return byStatus;
+      return String(a.boNumber || "").localeCompare(String(b.boNumber || ""), undefined, { numeric: true });
     });
 
-    tableEl.innerHTML = `<table class="bas-table bas-alloc-table">
+    const stockCols = collectMatchedStockColumns(sorted);
+    const limit = Math.min(sorted.length, MAX_ROWS);
+    const show = sorted.slice(0, limit);
+
+    const leadHeads = [
+      { key: "bo", label: "Matched BO #" },
+      { key: "boProduct", label: "BO Product" },
+      { key: "boSuffix", label: "BO Suffix" },
+      { key: "salesman", label: "BO Salesman" },
+      { key: "orderDate", label: "Order Date" },
+      { key: "confirm", label: "Confirm" },
+      { key: "salesStatus", label: "Sales status" },
+      { key: "proforma", label: "Proforma" },
+      { key: "delivery", label: "Delivery" },
+      { key: "source", label: "Stock source" },
+      { key: "seg", label: "Plan Seg" },
+      { key: "planSfx", label: "Plan SFX" },
+    ];
+
+    tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
       <thead><tr>
-        <th>Seg</th><th>Product</th><th>SFX</th><th>BO #</th><th>VIN</th>
-        <th>Stock</th><th>Age</th><th>Location</th>
-        <th>Sales status</th><th>Proforma</th><th>Delivery</th>
-        <th>BO salesman</th><th>Confirm</th>
+        ${leadHeads.map((h) => `<th>${escapeHtml(h.label)}</th>`).join("")}
+        ${stockCols.map((c) =>
+          `<th title="Column ${escapeHtml(c.letter)}">${escapeHtml(c.label)}<span class="stock-col-letter">${escapeHtml(c.letter)}</span></th>`
+        ).join("")}
       </tr></thead>
-      <tbody>${sorted.map((r) => {
+      <tbody>${show.map((r) => {
         const rowCls = r.salesStatus === "Delivered" ? "bas-row-above" : r.salesStatus === "Proforma" ? "bas-row-warn" : "bas-row-below";
         const badgeCls = r.salesStatusCls === "ok" ? "ok" : r.salesStatusCls === "warn" ? "warn" : "na";
+        const leadCells = [
+          escapeHtml(r.boNumber || "—"),
+          escapeHtml(r.boProduct || "—"),
+          escapeHtml(r.boSuffix || "—"),
+          escapeHtml(r.salesman || "—"),
+          escapeHtml(r.orderDate || "—"),
+          `<span class="badge ok">Allocated</span>`,
+          `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus)}</span>`,
+          escapeHtml(r.proformaDate || "—"),
+          escapeHtml(r.deliveryDate || "—"),
+          escapeHtml(r.source || "—"),
+          escapeHtml(r.seg || "—"),
+          escapeHtml(r.sfx || "—"),
+        ];
+        const stockCells = stockCols.map((c) => {
+          const t = r.stockRaw ? cellToString(boFileCell(r.stockRaw, c)) : "";
+          return `<td title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
+        });
         return `<tr class="${rowCls}">
-          <td>${escapeHtml(r.seg)}</td>
-          <td>${escapeHtml(r.product)}</td>
-          <td>${escapeHtml(r.sfx)}</td>
-          <td>${escapeHtml(r.boNumber || "—")}</td>
-          <td class="bas-vin">${escapeHtml(r.vin || "—")}</td>
-          <td>${escapeHtml(r.source || "—")}</td>
-          <td class="num">${escapeHtml(String(r.ageing || "—"))}</td>
-          <td>${escapeHtml(r.location || "—")}</td>
-          <td><span class="badge ${badgeCls}">${escapeHtml(r.salesStatus)}</span></td>
-          <td>${escapeHtml(r.proformaDate)}</td>
-          <td>${escapeHtml(r.deliveryDate)}</td>
-          <td>${escapeHtml(r.salesman || "—")}</td>
-          <td><span class="badge ok">Allocated</span></td>
+          ${leadCells.map((html, i) => (i === 0 ? `<td class="bas-vin">${html}</td>` : `<td>${html}</td>`)).join("")}
+          ${stockCells.join("")}
         </tr>`;
       }).join("")}</tbody>
     </table>`;
 
     if (footEl) {
       const hasSales = hasSalesRaw();
-      footEl.textContent = `${formatNumber(rows.length)} of ${formatNumber(allRows.length)} allocated VIN matches · ${periodSub}` +
+      const colNote = stockCols.length ? ` · ${formatNumber(stockCols.length)} stock columns` : "";
+      footEl.textContent = (show.length < sorted.length
+        ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
+        : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
+        ` matched vehicles (confirmed BO ↔ product + suffix)${colNote} · ${periodSub}` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
