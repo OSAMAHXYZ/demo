@@ -15,44 +15,59 @@
   <link rel="stylesheet" href="dashboard.css" />
 
 </head>
-<body>
-  <header class="page-hero">
-    <div class="page-hero-inner">
-      <div class="hero-brand">
-        <h1>Sales Report Dashboard</h1>
-        <p>Live dashboard · scroll charts · Wide view · click name to filter</p>
-      </div>
-      <div class="hero-logo">
-        <div class="co">Abdul Latif Jameel</div>
-        <div class="motors">MOTORS</div>
-      </div>
-    </div>
-  </header>
-
-  <div class="shell">
-    <header class="top">
-      <div class="brand">
-        <div class="mark">SR</div>
-        <div>
-          <h1>Report Sheet</h1>
-          <p>Toyota Saudi Arabia · live page · upload on Admin only</p>
+<body class="live-app">
+  <div class="app-frame">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Dashboard navigation">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark">SR</div>
+        <div class="sidebar-brand-text">
+          <strong>Report Sheet</strong>
+          <span>ALJ Motors</span>
         </div>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
-      <div class="top-actions">
-        <span class="status" id="status">Waiting for Admin Push</span>
-        <span class="status ok" id="live-badge" title="Refreshes when Admin pushes">LIVE</span>
-        <a class="btn" href="admin.html">Admin · Upload &amp; Push</a>
-        <button type="button" id="clear-btn" disabled>Clear view</button>
-        <button type="button" class="btn-primary" id="run-btn" disabled>Refresh from Admin</button>
+
+      <nav class="sidebar-nav">
+        <p class="sidebar-section-label">Dashboards</p>
+        <div class="tabs sidebar-tabs" id="panel-tabs"></div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="admin-bar sidebar-admin-bar" id="nav-bar">
+          <button type="button" class="tab side-nav-item" data-nav="dashboard" id="nav-dashboard" disabled>
+            <span class="side-nav-icon" aria-hidden="true">◉</span>
+            <span class="side-nav-label">Live Dashboard</span>
+          </button>
+        </div>
+        <a class="side-nav-item side-nav-link" href="admin.html">
+          <span class="side-nav-icon" aria-hidden="true">⚙</span>
+          <span class="side-nav-label">Admin · Upload &amp; Push</span>
+        </a>
+        <p class="sidebar-hint">Upload Excel on Admin only</p>
       </div>
-    </header>
+    </aside>
 
-    <div class="admin-bar" id="nav-bar">
-      <button type="button" class="tab active" data-nav="dashboard" id="nav-dashboard" disabled>Live Dashboard</button>
-      <span class="hint">Sales · BO · Stock Allocation · Upload Excel on Admin</span>
-    </div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 
-    <section id="wait-section" class="card" style="margin-bottom:16px">
+    <div class="app-main">
+      <header class="app-topbar">
+        <div class="app-topbar-left">
+          <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu">☰</button>
+          <div class="app-topbar-titles">
+            <p class="app-topbar-eyebrow">Abdul Latif Jameel MOTORS</p>
+            <h1 class="app-page-title" id="app-page-title">Dashboard</h1>
+          </div>
+        </div>
+        <div class="top-actions app-topbar-actions">
+          <span class="status" id="status">Waiting for Admin Push</span>
+          <span class="status ok" id="live-badge" title="Refreshes when Admin pushes">LIVE</span>
+          <button type="button" id="clear-btn" disabled>Clear view</button>
+          <button type="button" class="btn-primary" id="run-btn" disabled>Refresh from Admin</button>
+        </div>
+      </header>
+
+      <div class="app-content">
+    <section id="wait-section" class="card wait-card" style="margin-bottom:16px">
       <h2>Waiting for Admin Push</h2>
       <p style="color:var(--muted);font-size:.9rem;margin:0 0 12px">
         Open <a href="admin.html">Admin</a>, upload Excel (<b>Sales Raw</b> for Sales Report), set targets, then click <b>Push to live</b>.
@@ -64,8 +79,7 @@
     </section>
 
     <section id="dashboard">
-      <!-- Panel tabs -->
-      <div class="tabs" id="panel-tabs" style="margin-bottom:16px"></div>
+      <!-- Panel tabs are rendered in the left sidebar (#panel-tabs) -->
 
       <!-- PANEL: Sales Dashboard (Power BI–style one page) -->
       <!-- PANEL: Inventory Command Center / Summary -->
@@ -932,7 +946,9 @@
       </div>
     </section>
     <footer class="page-foot">Live view · shared from Admin Push on this server · Abdul Latif Jameel MOTORS</footer>
-  </div>
+      </div><!-- /.app-content -->
+    </div><!-- /.app-main -->
+  </div><!-- /.app-frame -->
 
   <div class="drawer-backdrop" id="emp-backdrop"></div>
   <aside class="emp-drawer" id="emp-drawer" aria-hidden="true">
@@ -4699,9 +4715,25 @@
       const el = document.getElementById("panel-" + p.id);
       if (el) el.style.display = p.id === panelId ? "" : "none";
     });
+    const iconMap = {
+      summary: "▣",
+      salesreport: "▦",
+      bodashboard: "▤",
+      boallocstock: "▥",
+      stockdashboard: "◈",
+      dashboard: "◉",
+    };
     $("#panel-tabs").innerHTML = panels.map((p) =>
-      `<button class="tab${p.id === activePanel ? " active" : ""}" data-panel="${p.id}">${p.label}</button>`
+      `<button type="button" class="tab side-nav-item${p.id === activePanel ? " active" : ""}" data-panel="${p.id}" title="${escapeHtml(p.label)}">
+        <span class="side-nav-icon" aria-hidden="true">${iconMap[p.id] || "•"}</span>
+        <span class="side-nav-label">${escapeHtml(p.label)}</span>
+      </button>`
     ).join("");
+    const titleEl = $("#app-page-title");
+    if (titleEl) {
+      const cur = panels.find((p) => p.id === panelId);
+      titleEl.textContent = cur ? cur.label : "Dashboard";
+    }
     if (panelId === "summary") renderSummaryDashboard();
   }
 
@@ -9456,7 +9488,33 @@
     const btn = e.target.closest("[data-panel]");
     if (!btn) return;
     switchPanel(btn.dataset.panel);
+    document.body.classList.remove("sidebar-open");
+    const backdrop = $("#sidebar-backdrop");
+    if (backdrop) backdrop.hidden = true;
   });
+
+  (function bindSidebarChrome() {
+    const toggle = $("#sidebar-toggle");
+    const collapse = $("#sidebar-collapse");
+    const backdrop = $("#sidebar-backdrop");
+    if (toggle) {
+      toggle.addEventListener("click", () => {
+        document.body.classList.toggle("sidebar-open");
+        if (backdrop) backdrop.hidden = !document.body.classList.contains("sidebar-open");
+      });
+    }
+    if (collapse) {
+      collapse.addEventListener("click", () => {
+        document.body.classList.toggle("sidebar-collapsed");
+      });
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", () => {
+        document.body.classList.remove("sidebar-open");
+        backdrop.hidden = true;
+      });
+    }
+  })();
 
   function bindIccControls() {
     const bindChange = (sel, key, rebuild) => {
