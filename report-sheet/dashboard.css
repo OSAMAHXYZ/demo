@@ -4686,10 +4686,12 @@ body.admin-page #panel-allocation:not([hidden]) {
 
 /*  Tighter charts (all dashboards)  */
 .live-app .chart-box {
-  height: 220px;
+  min-height: 180px;
+  height: auto;
 }
 .live-app .chart-box.pbi-box {
-  height: 220px;
+  min-height: 180px;
+  height: auto;
 }
 .live-app .pbi-viz-head {
   margin-bottom: 4px;
@@ -4725,7 +4727,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   margin-top: 0;
 }
 .live-app .chart-scroll.is-scroll {
-  max-height: 260px;
+  max-height: 380px;
 }
 .live-app .icc-filters.card {
   overflow: hidden;
@@ -5329,13 +5331,15 @@ body.admin-page #panel-allocation:not([hidden]) {
   padding: 10px 12px !important;
 }
 
+/* Default only — JS sets inline height from label count so names never overlap */
 .live-app .chart-box,
 .live-app .chart-box.pbi-box {
-  height: 220px !important;
+  min-height: 180px;
+  height: auto;
 }
 
 .live-app .chart-scroll.is-scroll {
-  max-height: 260px !important;
+  max-height: 380px;
 }
 
 .live-app .card {
