@@ -4610,12 +4610,30 @@
   }
 
   function appendObjectSheet(wb, name, rows) {
-    const safe = String(name || "Sheet").replace(/[\\/?*[\]]/g, "-").slice(0, 31);
+    const used = wb._sheetNamesUsed || (wb._sheetNamesUsed = new Set());
+    let safe = String(name || "Sheet").replace(/[\\/?*[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 31);
+    if (!safe) safe = "Sheet";
+    let unique = safe;
+    let n = 2;
+    while (used.has(unique.toLowerCase())) {
+      const suffix = ` (${n})`;
+      unique = (safe.slice(0, Math.max(1, 31 - suffix.length)) + suffix).slice(0, 31);
+      n += 1;
+    }
+    used.add(unique.toLowerCase());
     if (!rows || !rows.length) {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["(no rows)"]]), safe);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["(no rows)"]]), unique);
       return;
     }
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), safe);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), unique);
+  }
+
+  function appendKpiSheet(wb, name, cards) {
+    appendObjectSheet(wb, name, (cards || []).map((k) => ({
+      Metric: k.label || k.lab || k.Metric || "",
+      Value: k.val != null ? k.val : (k.Value != null ? k.Value : ""),
+      Detail: k.sub || k.Detail || "",
+    })));
   }
 
   function downloadWorkbook(wb, fileName) {
@@ -4630,6 +4648,8 @@
       return;
     }
     const list = filteredBos(d);
+    const m = boMetrics(list);
+    const aggs = productAgg(list);
     const detail = list.map((b) => ({
       "BO Number": b.boNumber || "",
       Customer: b.customer || "",
@@ -4649,7 +4669,7 @@
       "Order Date": b.orderDate || "",
       VIN: b.vin || "",
     }));
-    const byProduct = productAgg(list).map((r) => ({
+    const byProduct = aggs.map((r) => ({
       Product: r.product,
       Category: r.category,
       "BO Total": r.total,
@@ -4661,7 +4681,7 @@
       "Over 60d": r.over60,
     }));
     const bySfx = [...groupBoBy(list, (b) => b.sfx || "—").entries()]
-      .map(([sfx, items]) => ({ SFX: sfx, ...boMetrics(items) }))
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
       .sort((a, b) => b.total - a.total)
       .map((r) => ({
         SFX: r.sfx,
@@ -4671,12 +4691,69 @@
         "Confirm %": `${(r.confirmPct * 100).toFixed(1)}%`,
         "Avg Aging": r.avgAging,
       }));
+    const bySalesType = [...groupBoBy(list, (b) => b.salesType || "—").entries()]
+      .map(([type, items]) => ({ type, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total)
+      .map((r) => ({
+        "Sales Type": r.type,
+        "BO Total": r.total,
+        Confirmed: r.confirmed,
+        "Not Confirmed": r.notConfirmed,
+        "Confirm %": `${(r.confirmPct * 100).toFixed(1)}%`,
+        "Avg Aging": r.avgAging,
+      }));
+    const strategic = STRATEGIC_PRODUCTS.map((name) => {
+      const items = list.filter((b) => productKeysEqual(b.product, name) || upperTrim(b.product).includes(upperTrim(name)));
+      const mm = boMetrics(items);
+      return {
+        Product: name,
+        "BO Total": mm.total,
+        Confirmed: mm.confirmed,
+        "Not Confirmed": mm.notConfirmed,
+        "Confirm %": mm.total ? `${(mm.confirmPct * 100).toFixed(1)}%` : "",
+        "Avg Aging": mm.avgAging,
+      };
+    });
+    const topBacklog = byProduct.slice(0, 10);
+    const insights = [];
+    if (aggs[0]) insights.push({ Insight: `Largest backlog: ${aggs[0].product}`, Value: aggs[0].total });
+    insights.push({ Insight: "Overall confirmation %", Value: `${(m.confirmPct * 100).toFixed(1)}%` });
+    insights.push({ Insight: "Orders >30 days", Value: m.over30 });
+    insights.push({ Insight: "Orders >60 days", Value: m.over60 });
+    insights.push({ Insight: "Average aging (days)", Value: m.avgAging });
+
     const wb = XLSX.utils.book_new();
-    appendObjectSheet(wb, "BO Detail", detail);
-    appendObjectSheet(wb, "By Product", byProduct);
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Back Orders", val: m.total, sub: "open orders" },
+      { label: "Confirmed", val: m.confirmed, sub: "allocated" },
+      { label: "Not Confirmed", val: m.notConfirmed, sub: "waiting allocation" },
+      { label: "Confirmation %", val: `${(m.confirmPct * 100).toFixed(1)}%`, sub: "confirmed ÷ total" },
+      { label: "Orders >30 Days", val: m.over30, sub: "aging risk" },
+      { label: "Orders >60 Days", val: m.over60, sub: "critical aging" },
+      { label: "Average Aging", val: m.avgAging, sub: "days" },
+    ]);
+    appendObjectSheet(wb, "Executive Insights", insights);
+    appendObjectSheet(wb, "Strategic Products", strategic);
+    appendObjectSheet(wb, "Each Product", byProduct);
+    appendObjectSheet(wb, "Top 10 Product Backlog", topBacklog);
+    appendObjectSheet(wb, "Confirmation by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      Confirmed: r.Confirmed,
+      "Not Confirmed": r["Not Confirmed"],
+      "Confirm %": r["Confirm %"],
+    })));
+    appendObjectSheet(wb, "Average Aging by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      "Avg Aging": r["Avg Aging"],
+      "Over 30d": r["Over 30d"],
+      "Over 60d": r["Over 60d"],
+      "BO Total": r["BO Total"],
+    })));
+    appendObjectSheet(wb, "Sales Type Confirmed vs Not", bySalesType);
     appendObjectSheet(wb, "By SFX", bySfx);
+    appendObjectSheet(wb, "BO Detail", detail);
     downloadWorkbook(wb, `BO-Dashboard-${excelFileStamp()}`);
-    setStatus(`BO Dashboard Excel exported · ${formatNumber(detail.length)} rows`, "ok");
+    setStatus(`BO Dashboard Excel exported · ${formatNumber(detail.length)} detail rows · section sheets`, "ok");
   }
 
   function exportStockDashboardExcel() {
@@ -4697,6 +4774,7 @@
       Usage: s.usage || "",
       Location: s.location || "",
       Status: s.status || "",
+      "Vehicle Search Area": s.searchAreaDesc || "",
     }));
     const byProduct = stockProductAgg(list).map((r) => ({
       Product: r.product,
@@ -4707,17 +4785,53 @@
       RTL: r.rtl,
       Central: r.central,
     }));
+    const rtl = list.filter((s) => s.source === "RTL").length;
+    const central = list.filter((s) => /central|e-sales/i.test(String(s.source || ""))).length;
+    const agingVals = list.map((s) => s.ageing).filter((n) => n != null && Number.isFinite(n));
+    const avgAge = agingVals.length ? Math.round(agingVals.reduce((a, b) => a + b, 0) / agingVals.length) : 0;
+
     const wb = XLSX.utils.book_new();
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Units", val: list.length, sub: "filtered stock" },
+      { label: "RTL", val: rtl, sub: "retail stock" },
+      { label: "Central / E-Sales", val: central, sub: "central stock" },
+      { label: "Products", val: byProduct.length, sub: "unique products" },
+      { label: "Avg Ageing", val: avgAge, sub: "days" },
+    ]);
+    const insights = [];
+    if (byProduct[0]) insights.push({ Insight: `Largest stock share: ${byProduct[0].Product}`, Value: byProduct[0].Units });
+    const highestAging = byProduct.slice().sort((a, b) => (b["Avg Ageing"] || 0) - (a["Avg Ageing"] || 0))[0];
+    if (highestAging) insights.push({ Insight: `Highest avg ageing: ${highestAging.Product}`, Value: `${highestAging["Avg Ageing"]} days` });
+    insights.push({ Insight: "Total inventory", Value: list.length });
+    insights.push({ Insight: "RTL / Central split", Value: `${rtl} / ${central}` });
+
     appendObjectSheet(wb, "Stock Inventory", detail);
-    appendObjectSheet(wb, "By Product", byProduct);
+    appendObjectSheet(wb, "Executive Insights", insights);
+    appendObjectSheet(wb, "Each Product", byProduct);
+    appendObjectSheet(wb, "Top 10 Product Stock", byProduct.slice(0, 10));
+    appendObjectSheet(wb, "Average Ageing by Product", byProduct.map((r) => ({
+      Product: r.Product,
+      "Avg Ageing": r["Avg Ageing"],
+      Units: r.Units,
+    })));
+    appendObjectSheet(wb, "RTL vs Central", byProduct.map((r) => ({
+      Product: r.Product,
+      RTL: r.RTL,
+      Central: r.Central,
+      Units: r.Units,
+    })));
     if (hasBackOrder()) {
       const matched = filteredMatchedAllocRows(
         buildMatchedCars(rawBoRows(), slots.rtl.rows || [], slots.central.rows || [])
       );
-      appendObjectSheet(wb, "Matched Fulfillable", matched);
+      appendObjectSheet(wb, "Matched Cars Fulfillable", matched.map((r) => {
+        const out = {};
+        MATCHED_CAR_COLS.forEach((h) => { out[h] = r[h] != null ? r[h] : ""; });
+        return out;
+      }));
     }
     downloadWorkbook(wb, `Stock-Dashboard-${excelFileStamp()}`);
-    setStatus(`Stock Dashboard Excel exported · ${formatNumber(detail.length)} units`, "ok");
+    setStatus(`Stock Dashboard Excel exported · ${formatNumber(detail.length)} units · section sheets`, "ok");
   }
 
   function basRowsToExcel(rows) {
@@ -4734,6 +4848,54 @@
     }));
   }
 
+  function basGapHighlightRows(rows, boWord) {
+    const below = rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 20);
+    const above = rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 20);
+    return [
+      ...below.map((r) => ({
+        Type: `Shortfall · ${boWord} above allocation`,
+        Product: r.product,
+        SFX: r.sfx,
+        Allocation: r.allocation,
+        "Back Orders": r.boCount,
+        Gap: r.gap,
+      })),
+      ...above.map((r) => ({
+        Type: `Surplus · allocation above ${boWord}`,
+        Product: r.product,
+        SFX: r.sfx,
+        Allocation: r.allocation,
+        "Back Orders": r.boCount,
+        Gap: r.gap,
+      })),
+    ];
+  }
+
+  function matchedAllocRowsToExcel(rows) {
+    return (rows || []).map((r) => ({
+      "BO Number": r.boNumber || "",
+      Product: r.product || "",
+      Salesman: r.salesman || "",
+      VIN: r.vin || "",
+      Score: r.matchScore != null ? r.matchScore : "",
+      Source: r.source || "",
+      Aging: r.ageing != null ? r.ageing : "",
+      Suffix: r.sfx || r.boSuffix || "",
+      "Stock Ext": r.stockExt || "",
+      "Stock Int": r.stockInt || "",
+      "Match Pair": r.matchPair != null ? r.matchPair : "",
+      "BO Ext": r.boExt || "",
+      "BO Int": r.boInt || "",
+      "Sales Status": r.salesStatus || "",
+      "Secondary Status": r.secondaryStatus || "",
+      "Primary Status": r.status || "",
+      "Allocated Location": r.location || "",
+      "Vehicle Search Area": r.vehicleSearchArea || "",
+      "Sharing Level": r.sharingLevel || "",
+      "Order Date": r.orderDate || "",
+    }));
+  }
+
   function exportBasDashboardExcel() {
     const d = window._data || data();
     const hasData = hasBackOrder() || hasStockFiles() || Object.values(allocationValues).some((v) => Number(v) > 0);
@@ -4741,13 +4903,75 @@
       setStatus("No Allocation / BO / Stock data to export", "err");
       return;
     }
-    const allRows = filteredBasRows(buildBasRows(d));
-    const confRows = filteredBasRows(buildBasRows(d, { confirmedOnly: true }));
+    const allBuilt = buildBasRows(d);
+    const confBuilt = buildBasRows(d, { confirmedOnly: true });
+    const allRows = filteredBasRows(allBuilt);
+    const confRows = filteredBasRows(confBuilt);
+
+    const totalAlloc = allRows.reduce((s, r) => s + r.allocation, 0);
+    const totalBo = allRows.reduce((s, r) => s + r.boCount, 0);
+    const totalStock = allRows.reduce((s, r) => s + r.stockCount, 0);
+    const totalGap = totalBo - totalAlloc;
+    const below = allRows.filter((r) => r.status === "below").length;
+    const above = allRows.filter((r) => r.status === "above").length;
+
     const wb = XLSX.utils.book_new();
-    appendObjectSheet(wb, "All BO vs Allocation", basRowsToExcel(allRows));
-    appendObjectSheet(wb, "Confirmed BO vs Alloc", basRowsToExcel(confRows));
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total allocation", val: totalAlloc, sub: "E-Sales plan" },
+      { label: "Matched back orders", val: totalBo, sub: "Same product + suffix" },
+      { label: "Available stock", val: totalStock, sub: "RTL + Central" },
+      { label: "Overall gap", val: totalGap, sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation" },
+      { label: "Suffixes below plan", val: below, sub: `${above} above` },
+    ]);
+    appendObjectSheet(wb, "Gap Highlights", basGapHighlightRows(allRows, "BO"));
+    appendObjectSheet(wb, "1 All BO vs Allocation", basRowsToExcel(allRows));
+    appendObjectSheet(wb, "2 Confirmed BO vs Alloc", basRowsToExcel(confRows));
+    appendObjectSheet(wb, "2 Confirmed Gap Highlights", basGapHighlightRows(confRows, "Confirmed BO"));
+
+    if (slotHasRows("rtl")) {
+      const { ctx, rows, matched } = buildBasMonthlyData();
+      const filteredRows = filteredBasMonthlyRows(rows);
+      const retailCars = buildRetailElectronicSalesCars(ctx);
+      appendObjectSheet(wb, "3 Monthly Collection Plan", filteredRows.map((r) => ({
+        Seg: r.seg || "",
+        Product: r.product || "",
+        SFX: r.sfx || "",
+        Allocation: r.allocation,
+        MTD: r.mtd,
+        Gap: (r.allocation || 0) - (r.mtd || 0),
+      })));
+      appendObjectSheet(wb, "3 Retail Electronic Sales", retailCars.map((c) => ({
+        Product: c.product || "",
+        VIN: c.vin || "",
+        Suffix: c.suffix || "",
+        Age: c.age != null ? c.age : "",
+        "Collection Date": c.collectionLabel || "",
+        "Search Area": c.searchAreaDesc || "",
+        Location: c.location || "",
+      })));
+      appendObjectSheet(wb, "3 Age 0 Today", matched.filter((c) => c.isTodayArrival).map((c) => ({
+        Product: c.product || c.allocProduct || "",
+        VIN: c.vin || "",
+        Suffix: c.suffix || c.allocSfx || "",
+        Age: c.age != null ? c.age : 0,
+        "Search Area": c.searchAreaDesc || "",
+        Location: c.location || "",
+      })));
+      appendObjectSheet(wb, "3 Late in RTL", matched.filter((c) => c.isLate).map((c) => ({
+        Product: c.product || c.allocProduct || "",
+        VIN: c.vin || "",
+        Suffix: c.suffix || c.allocSfx || "",
+        Age: c.age != null ? c.age : "",
+        "Search Area": c.searchAreaDesc || "",
+        Location: c.location || "",
+      })));
+    }
+
+    const allocList = filteredBasAllocatedRows(buildBasAllocatedVehicles());
+    appendObjectSheet(wb, "4 Matched Allocated Vehicles", matchedAllocRowsToExcel(allocList));
+
     downloadWorkbook(wb, `BO-Allocation-Stock-${excelFileStamp()}`);
-    setStatus(`Allocation Excel exported · ${formatNumber(allRows.length)} product/suffix rows`, "ok");
+    setStatus(`Allocation Excel exported · one sheet per section`, "ok");
   }
 
   function exportStockBoDashboardExcel() {
@@ -4770,7 +4994,7 @@
       appendObjectSheet(wb, t.label, rows);
     });
     downloadWorkbook(wb, `Stock-BO-Dashboard-${excelFileStamp()}`);
-    setStatus("Stock & BO Dashboard Excel exported", "ok");
+    setStatus("Stock & BO Dashboard Excel exported · sheet per section", "ok");
   }
 
   function switchPanel(panelId) {
@@ -6516,21 +6740,126 @@
       { wch: 10 }, { wch: 12 }, { wch: 10 },
       { wch: 10 }, { wch: 12 },
     ];
+    // Seed unique-name tracker used by appendObjectSheet
+    wb._sheetNamesUsed = new Set(["daily sales monitor"]);
     XLSX.utils.book_append_sheet(wb, ws, "Daily Sales Monitor");
 
-    // Second sheet: filtered day/month detail for transparency
-    const detail = [["Period", "No", "Plant", "Salesman", "Sales Employee", "Proforma", "Delivery", "Target", "Ach%", "Del+VSND", "Diff", "Cancelled BOs"]];
-    (window._srExportRows || []).forEach((r) => {
-      detail.push([
-        r.Period, r.No, r.Plant, r.Salesman, r["Sales Employee"],
-        r.Proforma, r.Delivery, r.Target, r["Ach%"], r["Del+VSND"], r.Diff, r["Cancelled BOs"],
-      ]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detail), "Day Month Detail");
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Target", val: t.target || 0, sub: "Admin monthly target" },
+      { label: "Delivery (Month)", val: t.deliveryMonth || 0, sub: "Col V MTD" },
+      { label: "Proforma (Month)", val: t.proformaMonth || 0, sub: "Col P MTD" },
+      { label: "Delivery Ach %", val: t.target ? `${((t.deliveryAch || 0) * 100).toFixed(1)}%` : "", sub: "Delivery ÷ Target" },
+      { label: "Prof+Del Ach %", val: t.target ? `${((t.profDelPct || 0) * 100).toFixed(1)}%` : "", sub: "(Prof+Del) ÷ Target" },
+      { label: "Cancelled BOs", val: t.cancelled || 0, sub: "Cancelled list" },
+      { label: "Working days", val: sr.daysInMonth || "", sub: `${sr.daysPassed || 0} passed · ${sr.daysRemaining || 0} left` },
+    ]);
 
-    const fileName = `Telesales-Daily-Sales-Monitor-${stamp.replace(/[^\d-]/g, "")}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    setStatus("Excel schedule exported", "ok");
+    const employeeRows = exportRows.map((r, i) => {
+      const m = r.month || r;
+      return {
+        "S.N.": i + 1,
+        "Sales Employee": r["Sales Employee"] || r.Salesman || "",
+        Plant: r.Plant || "",
+        Target: rowTargetNum(r),
+        "Delivery (Month)": Number(r["Delivery (Month)"]) || 0,
+        "Proforma (Month)": Number(r["Proforma (Month)"]) || 0,
+        "Prof+Del": (Number(r["Delivery (Month)"]) || 0) + (Number(r["Proforma (Month)"]) || 0),
+        "Ach %": parsePct(r["Ach%"]) != null ? `${parsePct(r["Ach%"])}%` : "",
+        "Delivery (Day)": Number(r["Delivery (Day)"]) || 0,
+        "Proforma (Day)": Number(r["Proforma (Day)"]) || 0,
+        "Cancelled BOs": Number(m["Cancelled BOs"]) || 0,
+        "Acc Target": r._accQuota != null ? r._accQuota : (r.accQuota || ""),
+        "Acc Achieved": r._accSold != null ? r._accSold : (r.accSold || ""),
+      };
+    });
+    appendObjectSheet(wb, "Employee Schedule", employeeRows);
+
+    const detailRows = (window._srExportRows || []).map((r) => ({
+      Period: r.Period,
+      No: r.No,
+      Plant: r.Plant,
+      Salesman: r.Salesman,
+      "Sales Employee": r["Sales Employee"],
+      Proforma: r.Proforma,
+      Delivery: r.Delivery,
+      Target: r.Target,
+      "Ach%": r["Ach%"],
+      "Del+VSND": r["Del+VSND"],
+      Diff: r.Diff,
+      "Cancelled BOs": r["Cancelled BOs"],
+    }));
+    appendObjectSheet(wb, "Day Month Detail", detailRows);
+
+    appendObjectSheet(wb, "By Plant", [...plantMap.entries()].map(([plant, p]) => ({
+      Plant: plant,
+      Target: p.target,
+      Proforma: p.prof,
+      Delivery: p.del,
+      "% Del": p.target ? `${((p.del / p.target) * 100).toFixed(1)}%` : "",
+    })));
+
+    const accRemain = (exportRows || [])
+      .map((r) => {
+        const target = Number(r._accQuota != null ? r._accQuota : r.accQuota) || 0;
+        const sold = Number(r._accSold != null ? r._accSold : r.accSold) || 0;
+        return {
+          Advisor: r["Sales Employee"] || r.Salesman || "",
+          "Acc Target": target,
+          Achieved: sold,
+          "Ach %": target ? `${((sold / target) * 100).toFixed(1)}%` : "",
+          Remaining: Math.max(0, target - sold),
+        };
+      })
+      .filter((r) => r["Acc Target"] || r.Achieved);
+    appendObjectSheet(wb, "Accessories Remaining", accRemain);
+
+    const cancelByEmp = exportRows
+      .map((r) => ({
+        Employee: r["Sales Employee"] || r.Salesman || "",
+        "Cancelled BOs": Number((r.month || r)["Cancelled BOs"]) || 0,
+      }))
+      .filter((r) => r["Cancelled BOs"] > 0)
+      .sort((a, b) => b["Cancelled BOs"] - a["Cancelled BOs"]);
+    appendObjectSheet(wb, "Cancelled BOs by Employee", cancelByEmp);
+
+    // Chart-section sheets (same names as Sales visuals)
+    appendObjectSheet(wb, "Delivery Proforma Target", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      Target: r.Target,
+      Delivery: r["Delivery (Month)"],
+      Proforma: r["Proforma (Month)"],
+    })));
+    appendObjectSheet(wb, "Ach Delivery vs Target", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      "Ach %": r["Ach %"],
+      Target: r.Target,
+      Delivery: r["Delivery (Month)"],
+    })));
+    appendObjectSheet(wb, "Day Delivery Proforma", employeeRows.map((r) => ({
+      Employee: r["Sales Employee"],
+      "Delivery (Day)": r["Delivery (Day)"],
+      "Proforma (Day)": r["Proforma (Day)"],
+    })));
+    appendObjectSheet(wb, "Cancellation Pct", exportRows.map((r) => ({
+      Employee: r["Sales Employee"] || r.Salesman || "",
+      "Cancellation %": r["Cancellation %"] || r["Cancel %"] || "",
+      "Cancelled BOs": Number((r.month || r)["Cancelled BOs"]) || 0,
+    })));
+    appendObjectSheet(wb, "Daily Ach today", exportRows.map((r) => {
+      const dayDel = Number(r["Delivery (Day)"]) || 0;
+      const tgt = rowTargetNum(r);
+      const days = Math.max(1, Number(sr.daysInMonth) || 30);
+      const dailyTgt = tgt / days;
+      return {
+        Employee: r["Sales Employee"] || r.Salesman || "",
+        "Delivery (Day)": dayDel,
+        "Daily target pace": dailyTgt ? Math.round(dailyTgt * 10) / 10 : "",
+        "Ach % today": dailyTgt ? `${((dayDel / dailyTgt) * 100).toFixed(1)}%` : "",
+      };
+    }));
+
+    downloadWorkbook(wb, `Sales-Dashboard-${excelFileStamp()}`);
+    setStatus("Sales Dashboard Excel exported · one sheet per section", "ok");
   }
 
   const STRATEGIC_PRODUCTS = ["CAMRY", "LC300", "RAV4", "RAV 4", "PRADO", "HILUX"];
@@ -9994,11 +10323,64 @@
     const ICC = window.InventoryCommandCenter;
     let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
     filtered = iccApplyKpiFilter(filtered);
+    const sorted = iccSortRows(filtered);
+    const k = dataset.kpis || {};
+
     const wb = XLSX.utils.book_new();
-    appendObjectSheet(wb, "Inventory Command Center", ICC.rowsToExcel(iccSortRows(filtered)));
-    appendObjectSheet(wb, "Data Quality", [dataset.dataQuality.sourceRows]);
-    downloadWorkbook(wb, `Inventory-Command-Center-${excelFileStamp()}`);
-    setStatus(`Summary exported · ${formatNumber(filtered.length)} configs`, "ok");
+    appendKpiSheet(wb, "KPIs", [
+      { label: "Total Back Orders", val: k.totalBackOrders, sub: "open BO demand" },
+      { label: "Available Stock", val: k.availableStock, sub: "RTL + Central" },
+      { label: "Stock Coverage %", val: k.stockCoveragePct != null ? `${Math.round(k.stockCoveragePct * 100)}%` : "", sub: "Available ÷ BO" },
+      { label: "Total Sales", val: k.totalSales, sub: "period sales" },
+      { label: "Sales Velocity", val: k.salesVelocity != null ? Number(k.salesVelocity).toFixed(2) : "", sub: "units / day" },
+      { label: "Need Focus", val: k.needFocus, sub: "BO > stock" },
+      { label: "Healthy", val: k.healthy, sub: "coverage ok" },
+      { label: "Slow Moving", val: k.slowMoving, sub: "overstock / slow" },
+      { label: "Overstock quadrant", val: k.overstockQuadrant, sub: "quadrant count" },
+    ].filter((x) => x.val !== undefined && x.val !== null));
+
+    appendObjectSheet(wb, "Inventory Command Center", ICC.rowsToExcel(sorted));
+
+    const insightRows = [];
+    (dataset.insights || []).forEach((block) => {
+      (block.items || []).forEach((item) => {
+        insightRows.push({ Section: block.title || "Insight", Detail: item });
+      });
+      if (!(block.items || []).length) {
+        insightRows.push({ Section: block.title || "Insight", Detail: "No signal" });
+      }
+    });
+    appendObjectSheet(wb, "Inventory Insights", insightRows);
+
+    const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
+    const points = ICC.toChartPoints(sorted, mode, dataset.config);
+    appendObjectSheet(wb, mode === "ageing" ? "Ageing vs Velocity Chart" : "Demand vs Coverage Chart", points.map((p) => ({
+      Product: (p.meta && p.meta.product) || "",
+      Suffix: (p.meta && p.meta.suffix) || "",
+      Year: (p.meta && p.meta.year) || "",
+      X: p.x,
+      Y: p.y,
+      Bubble: p.r,
+      Quadrant: (p.meta && p.meta.quadrant) || "",
+      "Back Orders": (p.meta && p.meta.backOrders) || "",
+      Stock: (p.meta && p.meta.availableStock) || "",
+      Velocity: (p.meta && p.meta.salesVelocity) || "",
+      Coverage: (p.meta && p.meta.stockCoverageDisplay) || "",
+    })));
+
+    appendObjectSheet(wb, "Data Quality", (() => {
+      const dq = dataset.dataQuality || {};
+      const src = dq.sourceRows || {};
+      return [
+        ...Object.entries(src).map(([k, v]) => ({ Metric: `Source · ${k}`, Value: v })),
+        { Metric: "Duplicate VINs", Value: dq.duplicateVins },
+        { Metric: "Missing product", Value: dq.missingProduct },
+        { Metric: "Missing suffix", Value: dq.missingSuffix },
+        { Metric: "Matched configs", Value: dq.matchedConfigs },
+      ];
+    })());
+    downloadWorkbook(wb, `Summary-Dashboard-${excelFileStamp()}`);
+    setStatus(`Summary Excel exported · ${formatNumber(filtered.length)} configs · section sheets`, "ok");
   }
 
   function buildDashboard() {
