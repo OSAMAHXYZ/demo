@@ -6,39 +6,40 @@
   <title>Sales Report Dashboard — Abdul Latif Jameel MOTORS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260907c" />
+  <link rel="stylesheet" href="dashboard.css?v=20260907t" />
 
 </head>
-<body class="live-app">
+<body class="live-app toyota-theme">
   <div class="app-frame">
     <aside class="app-sidebar" id="app-sidebar" aria-label="Dashboard navigation">
       <div class="sidebar-brand">
         <div class="sidebar-mark" aria-hidden="true">
-          <span class="sidebar-mark-alj">ALJ</span>
+          <img class="sidebar-toyota-logo" src="../images/logo/toyota.png" alt="" width="36" height="36" onerror="this.style.display='none';this.nextElementSibling.hidden=false" />
+          <span class="sidebar-mark-alj" hidden>T</span>
         </div>
         <div class="sidebar-brand-text">
-          <strong>ALJ Motors</strong>
-          <span>Report Sheet</span>
+          <strong>TOYOTA</strong>
+          <span>ALJ · Report Sheet</span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
 
       <nav class="sidebar-nav">
-        <p class="sidebar-section-label">Main menu</p>
+        <p class="sidebar-section-label">Dashboards</p>
         <div class="tabs sidebar-tabs" id="panel-tabs"></div>
       </nav>
 
       <div class="sidebar-footer">
         <a class="side-nav-item side-nav-link" href="admin.html">
           <span class="side-nav-icon" aria-hidden="true">⚙</span>
-          <span class="side-nav-label">Settings · Admin</span>
+          <span class="side-nav-label">Admin Push</span>
         </a>
         <div class="sidebar-user-card">
           <div class="sidebar-user-avatar" aria-hidden="true">O</div>
@@ -57,13 +58,13 @@
         <div class="app-topbar-left">
           <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu">☰</button>
           <div class="app-topbar-titles">
-            <p class="app-topbar-eyebrow" id="app-page-date"></p>
+            <p class="app-topbar-eyebrow" id="app-page-date">TOYOTA · ALJ MOTORS</p>
             <h1 class="app-page-title" id="app-page-title">Dashboard</h1>
           </div>
         </div>
         <div class="app-topbar-search" role="search">
           <span class="app-search-icon" aria-hidden="true">⌕</span>
-          <input type="search" id="global-search" placeholder="Search by product, VIN, salesman, or order…" autocomplete="off" />
+          <input type="search" id="global-search" placeholder="Search product, VIN, salesman…" autocomplete="off" />
           <kbd class="app-search-kbd">Ctrl K</kbd>
         </div>
         <div class="top-actions app-topbar-actions">
@@ -96,8 +97,8 @@
         <div class="icc-hero">
           <div>
             <p class="icc-eyebrow">Inventory Command Center</p>
-            <h2 class="icc-title">Vehicle Demand vs Stock Coverage</h2>
-            <p class="icc-sub">Which configurations have the highest demand pressure — and do we have enough stock to fulfill it?</p>
+            <h2 class="icc-title">Demand vs Stock</h2>
+            <p class="icc-sub">Simple figures: back orders, available stock, and coverage by configuration.</p>
           </div>
           <div class="icc-hero-actions">
             <div class="icc-mode-toggle" role="group" aria-label="Analysis mode">
@@ -3968,11 +3969,11 @@
       if (!cfg || !cfg.display) return;
       const { ctx } = chart;
       const suffix = cfg.suffix || "";
-      const fontFamily = cfg.fontFamily || "'Manrope', 'Segoe UI', sans-serif";
+      const fontFamily = cfg.fontFamily || "'Outfit', 'Segoe UI', sans-serif";
       const horizontal = chart.options.indexAxis === "y";
       ctx.save();
-      ctx.font = `700 12px ${fontFamily}`;
-      ctx.fillStyle = "#0b3a66";
+      ctx.font = `700 12px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
+      ctx.fillStyle = "#111111";
       ctx.textBaseline = "middle";
       chart.data.datasets.forEach((ds, di) => {
         if (ds.hidden) return;
@@ -3991,7 +3992,7 @@
             // Outside bar on the right; if clipped, draw inside the bar in white
             if (x + pad + tw <= maxX) {
               ctx.textAlign = "left";
-              ctx.fillStyle = "#0b3a66";
+              ctx.fillStyle = "#111111";
               ctx.fillText(text, x + pad, y);
             } else {
               ctx.textAlign = "right";
@@ -4000,7 +4001,7 @@
             }
           } else {
             ctx.textAlign = "center";
-            ctx.fillStyle = "#0b3a66";
+            ctx.fillStyle = "#111111";
             ctx.fillText(text, x, y - 10);
           }
         });
@@ -4013,8 +4014,9 @@
     const canvas = document.getElementById(id);
     if (!canvas) return;
     if (charts[id]) charts[id].destroy();
-    const colors = ["#0b3a66", "#c81e2c", "#0d9488", "#64748b", "#b45309", "#3b82f6", "#94a3b8", "#0f766e"];
-    const fontFamily = "'Manrope', 'Segoe UI', sans-serif";
+    const colors = ["#111111", "#eb0a1e", "#0f766e", "#6b7280", "#b45309", "#374151", "#9ca3af", "#c40718"];
+    const fontFamily = "'Outfit', 'Segoe UI', sans-serif";
+    const figureFont = "'Space Grotesk', 'Outfit', sans-serif";
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
     const empKeys = opts.empKeys || null;
@@ -4053,8 +4055,8 @@
     const softScale = {
       beginAtZero: true,
       ...(opts.max != null ? { suggestedMax: opts.max } : {}),
-      grid: { color: "rgba(148, 163, 184, 0.18)", drawBorder: false },
-      ticks: { precision: 0, color: "#64748b", font: { size: 11, family: fontFamily, weight: "600" } },
+      grid: { color: "rgba(17, 17, 17, 0.06)", drawBorder: false },
+      ticks: { precision: 0, color: "#6b7280", font: { size: 11, family: figureFont, weight: "600" } },
       border: { display: false },
     };
     const categoryScale = {
@@ -4062,7 +4064,7 @@
       ticks: {
         maxRotation: horizontal ? 0 : 40,
         autoSkip: false,
-        color: horizontal ? "#475569" : "#0b3a66",
+        color: horizontal ? "#374151" : "#111111",
         font: {
           size: horizontal ? 11 : 12,
           family: fontFamily,
@@ -4094,10 +4096,10 @@
         labels,
         datasets: (opts.datasets || [{
           data: values,
-          backgroundColor: type === "doughnut" ? colors : (opts.backgroundColor || "rgba(11, 58, 102, 0.85)"),
+          backgroundColor: type === "doughnut" ? colors : (opts.backgroundColor || "rgba(235, 10, 30, 0.88)"),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? "#fff" : undefined,
-          borderRadius: type === "bar" ? 5 : 0,
+          borderRadius: type === "bar" ? 4 : 0,
           ...datasetsExtra,
         }]).map((ds) => ({
           categoryPercentage: catPct,
@@ -4112,7 +4114,7 @@
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 350, easing: "easeOutQuart" },
+        animation: { duration: 320, easing: "easeOutQuart" },
         layout: {
           padding: {
             left: horizontal ? 2 : 4,
@@ -4154,6 +4156,7 @@
             display: showValues && type === "bar",
             suffix: valueSuffix,
             fontFamily,
+            figureFont,
           },
         },
         scales: type === "doughnut"
@@ -4800,9 +4803,10 @@
     const dateEl = $("#app-page-date");
     if (dateEl) {
       const now = new Date();
-      dateEl.textContent = now.toLocaleDateString("en-GB", {
-        weekday: "short", day: "numeric", month: "short", year: "numeric",
+      const d = now.toLocaleDateString("en-GB", {
+        weekday: "short", day: "numeric", month: "short",
       });
+      dateEl.textContent = `TOYOTA · ${d}`;
     }
     if (panelId === "summary") renderSummaryDashboard();
   }
@@ -5861,7 +5865,7 @@
       return;
     }
     upsertChart("chart-sr-day", "bar", ["Delivery (day)", "Proforma (day)"], [dayDel, dayProf], {
-      backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(13, 148, 136, 0.8)"],
+      backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(13, 148, 136, 0.8)"],
       max: Math.max(1, dayDel, dayProf),
       legend: false,
     });
@@ -5907,7 +5911,7 @@
     const horizontal = !single && dailyRows.length > 1;
     const pctVals = dailyRows.map((x) => x.pct);
     const colors = pctVals.map((n) =>
-      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)"
+      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)"
     );
 
     if (single) {
@@ -6084,7 +6088,7 @@
     const horizontal = !single && accRows.length > 1;
     const pctVals = accRows.map((x) => x.pct);
     const accColors = pctVals.map((n) =>
-      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)"
+      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)"
     );
 
     if (single) {
@@ -6123,7 +6127,7 @@
 
     const achColors = rows.map((r) => {
       const n = parsePct(r["Ach%"]) || 0;
-      return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(200, 30, 44, 0.82)";
+      return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)";
     });
 
     if (single) {
@@ -6133,7 +6137,7 @@
         Number(r["Proforma (Month)"]) || 0,
         rowTargetNum(r),
       ], {
-        backgroundColor: ["rgba(200, 30, 44, 0.85)", "rgba(100, 116, 139, 0.75)", "rgba(11, 58, 102, 0.8)"],
+        backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(100, 116, 139, 0.75)", "rgba(17, 17, 17, 0.85)"],
       });
       upsertChart("chart-sr-ach", "doughnut", ["Ach%", "Remaining"], [
         Math.min(100, parsePct(r["Ach%"]) || 0),
@@ -6157,7 +6161,7 @@
         showValues: true,
         valueSuffix: "%",
         backgroundColor: [
-          oneCancel > 30 ? "rgba(200, 30, 44, 0.85)" : "rgba(13, 148, 136, 0.8)",
+          oneCancel > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)",
           "rgba(100, 116, 139, 0.65)",
         ],
       });
@@ -6170,7 +6174,7 @@
         Number(r["Delivery (Month)"]) || 0,
         Number(r["Prof+Del"]) || 0,
       ], {
-        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(200, 30, 44, 0.85)", "rgba(11, 58, 102, 0.8)"],
+        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(235, 10, 30, 0.88)", "rgba(17, 17, 17, 0.85)"],
       });
       upsertChart("chart-sr-profdelpct", "doughnut", ["Prof+Del %", "Remaining"], [
         Math.min(100, (r._profDelPct || 0) * 100),
@@ -6181,7 +6185,7 @@
         Number(r["Proforma (Day)"]) || 0,
         Number(r["Delivery (Day)"]) || 0,
       ], {
-        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(13, 148, 136, 0.8)", "rgba(200, 30, 44, 0.85)"],
+        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(13, 148, 136, 0.8)", "rgba(235, 10, 30, 0.88)"],
       });
       upsertChart("chart-sr-pace", "doughnut",
         ["Days passed", "Days remaining"],
@@ -6189,7 +6193,7 @@
       );
       upsertChart("chart-sr-cancelcount", "bar", ["Cancelled BOs"], [
         Number((r.month || r)["Cancelled BOs"]) || 0,
-      ], { backgroundColor: "rgba(200, 30, 44, 0.8)" });
+      ], { backgroundColor: "rgba(235, 10, 30, 0.82)" });
       renderAccessoriesChart(sr, rows, { single: true });
       renderDailyAchChart(sr, rows, { single: true });
       return;
@@ -6202,7 +6206,7 @@
         {
           label: "Delivery",
           data: rows.map((r) => Number(r["Delivery (Month)"]) || 0),
-          backgroundColor: "rgba(200, 30, 44, 0.85)",
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -6216,7 +6220,7 @@
         {
           label: "Target",
           data: rows.map((r) => rowTargetNum(r)),
-          backgroundColor: "rgba(11, 58, 102, 0.8)",
+          backgroundColor: "rgba(17, 17, 17, 0.85)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -6264,7 +6268,7 @@
           label: "Cancel %",
           data: cancelPctVals,
           backgroundColor: cancelPctVals.map((v) =>
-            v > 30 ? "rgba(200, 30, 44, 0.85)" : "rgba(13, 148, 136, 0.8)"
+            v > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)"
           ),
           borderWidth: 0,
           borderRadius: 5,
@@ -6282,7 +6286,7 @@
     upsertChart("chart-sr-delpct", "bar", labels, rows.map((r) => (r._delPct || 0) * 100), {
       ...clickOpts,
       label: "Del %",
-      backgroundColor: "rgba(200, 30, 44, 0.8)",
+      backgroundColor: "rgba(235, 10, 30, 0.82)",
       max: 120,
       showValues: true,
       valueSuffix: "%",
@@ -6291,7 +6295,7 @@
     upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => Number(r["Prof+Del"]) || 0), {
       ...clickOpts,
       label: "Prof+Del",
-      backgroundColor: "rgba(11, 58, 102, 0.85)",
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
     });
 
     upsertChart("chart-sr-profdelpct", "bar", labels, rows.map((r) => (r._profDelPct || 0) * 100), {
@@ -6324,7 +6328,7 @@
         {
           label: "Today Del",
           data: rows.map((r) => Number(r["Delivery (Day)"]) || 0),
-          backgroundColor: "rgba(200, 30, 44, 0.85)",
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -6360,7 +6364,7 @@
           clickable: cancelRows.length > 1,
           empKeys: cancelRows.map((x) => x.row._key),
           label: "Cancelled BOs",
-          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
           max: Math.max(1, ...cancelRows.map((x) => x.count)),
         }
       );
@@ -6941,7 +6945,7 @@
     const topSfx = sfxRows.slice(0, 15);
     upsertChart("chart-bo-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
       horizontal: true,
-      backgroundColor: "rgba(11, 58, 102, 0.85)",
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
     });
     upsertChart("chart-bo-car-pay", "doughnut",
       ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0),
@@ -7006,7 +7010,7 @@
     const maxIdx = 0;
     upsertChart("chart-bo-backlog", "bar", labels, top.map((a) => a.total), {
       horizontal: true,
-      backgroundColor: top.map((_, i) => i === maxIdx ? "rgba(200, 30, 44, 0.9)" : "rgba(11, 58, 102, 0.8)"),
+      backgroundColor: top.map((_, i) => i === maxIdx ? "rgba(235, 10, 30, 0.9)" : "rgba(17, 17, 17, 0.85)"),
     });
 
     const confLabels = aggs.slice(0, 12).map((a) => a.product);
@@ -7023,7 +7027,7 @@
         {
           label: "Not Confirmed",
           data: aggs.slice(0, 12).map((a) => a.notConfirmed),
-          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
           borderWidth: 0,
           borderRadius: 4,
         },
@@ -7033,7 +7037,7 @@
     const agingRows = aggs.slice(0, 12);
     upsertChart("chart-bo-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
       horizontal: true,
-      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(200, 30, 44, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(235, 10, 30, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
     });
 
     const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
@@ -7052,7 +7056,7 @@
         {
           label: "Not Confirmed",
           data: typeRows.map((r) => r.notConfirmed),
-          backgroundColor: "rgba(200, 30, 44, 0.8)",
+          backgroundColor: "rgba(235, 10, 30, 0.82)",
           borderWidth: 0,
           borderRadius: 4,
         },
@@ -7065,12 +7069,12 @@
       .slice(0, 12);
     upsertChart("chart-bo-sfx", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => r.total), {
       horizontal: true,
-      backgroundColor: "rgba(11, 58, 102, 0.85)",
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
     });
     upsertChart("chart-bo-sfx-confirm", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => +(r.confirmPct * 100).toFixed(1)), {
       horizontal: true,
       max: 100,
-      backgroundColor: sfxRows.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(200, 30, 44, 0.85)"),
+      backgroundColor: sfxRows.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
     });
   }
 
@@ -8192,7 +8196,7 @@
     const topSfx = sfxRows.slice(0, 15);
     upsertChart("chart-stock-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
       horizontal: true,
-      backgroundColor: "rgba(11, 58, 102, 0.85)",
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
     });
 
     const locMap = new Map();
@@ -8211,12 +8215,12 @@
     const top = aggs.slice(0, 10);
     upsertChart("chart-stock-backlog", "bar", top.map((a) => a.product), top.map((a) => a.total), {
       horizontal: top.length > 6,
-      backgroundColor: "rgba(11, 58, 102, 0.85)",
+      backgroundColor: "rgba(17, 17, 17, 0.88)",
     });
     const agingRows = aggs.filter((a) => a.avgAging > 0).slice(0, 12);
     upsertChart("chart-stock-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
       horizontal: agingRows.length > 6,
-      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(200, 30, 44, 0.85)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(235, 10, 30, 0.88)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
     });
     const m = stockInvMetrics(list);
     upsertChart("chart-stock-source", "doughnut",
@@ -9439,7 +9443,7 @@
     }
 
     const colors = {
-      CRITICAL: "rgba(200, 30, 44, 0.72)",
+      CRITICAL: "rgba(235, 10, 30, 0.72)",
       FAST_MOVING: "rgba(13, 148, 136, 0.72)",
       OVERSTOCK: "rgba(180, 83, 9, 0.72)",
       WATCH: "rgba(100, 116, 139, 0.65)",
@@ -9460,7 +9464,7 @@
         const ySplit = scales.y.getPixelForValue(dataset.kpis.velocitySplit);
         const { left, right, top, bottom } = chartArea;
         const bands = [
-          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(200, 30, 44, 0.06)" },
+          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235, 10, 30, 0.06)" },
           { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.06)" },
           { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" },
           { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" },
@@ -9470,7 +9474,7 @@
           ctx.fillStyle = b.c;
           ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
         });
-        ctx.strokeStyle = "rgba(11, 58, 102, 0.35)";
+        ctx.strokeStyle = "rgba(17, 17, 17, 0.35)";
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.moveTo(xSplit, top);
@@ -9542,7 +9546,7 @@
             title: {
               display: true,
               text: mode === "ageing" ? "Allocation Ageing (days)" : "Stock Coverage (Available / BO)",
-              color: "#0b3a66",
+              color: "#111111",
               font: { weight: "700", family: "'Manrope', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
@@ -9553,7 +9557,7 @@
             title: {
               display: true,
               text: "Sales Velocity (units / day)",
-              color: "#0b3a66",
+              color: "#111111",
               font: { weight: "700", family: "'Manrope', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
