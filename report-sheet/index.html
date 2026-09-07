@@ -61,6 +61,7 @@
         <div class="top-actions app-topbar-actions">
           <span class="status" id="status">Waiting for Admin Push</span>
           <span class="status ok" id="live-badge" title="Refreshes when Admin pushes">LIVE</span>
+          <button type="button" class="btn theme-toggle" id="theme-toggle" title="Toggle dark mode" aria-pressed="false">Dark</button>
           <button type="button" id="clear-btn" disabled>Clear view</button>
           <button type="button" class="btn-primary" id="run-btn" disabled>Refresh from Admin</button>
         </div>
@@ -3906,14 +3907,14 @@
     const scroll = canvas.closest(".chart-scroll");
     if (!box) return;
     if (horizontal && labelCount > 1) {
-      const h = Math.max(240, labelCount * 40 + 56);
+      const h = Math.max(220, Math.min(520, labelCount * 34 + 48));
       box.style.height = h + "px";
       if (scroll) {
         scroll.classList.add("is-scroll");
-        scroll.style.maxHeight = "280px";
+        scroll.style.maxHeight = "320px";
       }
     } else {
-      box.style.height = "220px";
+      box.style.height = "260px";
       if (scroll) {
         scroll.classList.remove("is-scroll");
         scroll.style.maxHeight = "";
@@ -9017,14 +9018,16 @@
           label: "Vehicles",
           data: points,
           backgroundColor: points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
-          borderColor: "rgba(11, 58, 102, 0.35)",
-          borderWidth: 1,
+          borderColor: "rgba(11, 58, 102, 0.45)",
+          borderWidth: 1.25,
+          hoverBorderWidth: 2,
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
+        layout: { padding: { top: 4, right: 8, bottom: 2, left: 2 } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -9058,6 +9061,7 @@
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
             beginAtZero: true,
+            suggestedMax: mode === "coverage" ? 3.5 : undefined,
           },
           y: {
             title: {
@@ -9217,7 +9221,7 @@
     if (hint) {
       hint.textContent = iccView.mode === "ageing"
         ? "High ageing + low velocity = slow-moving · bubble size = stock"
-        : `X = Available÷BO · Y = sales/day · splits coverage ${dataset.kpis.coverageSplit.toFixed(2)} · velocity ${dataset.kpis.velocitySplit.toFixed(3)}`;
+        : `X = Available / BO · Y = Sales / day · Coverage split ${dataset.kpis.coverageSplit.toFixed(2)} · Velocity split ${dataset.kpis.velocitySplit.toFixed(2)}`;
     }
     const note = $("#icc-threshold-note");
     if (note) {
@@ -9512,6 +9516,32 @@
       backdrop.addEventListener("click", () => {
         document.body.classList.remove("sidebar-open");
         backdrop.hidden = true;
+      });
+    }
+  })();
+
+  (function bindThemeToggle() {
+    const KEY = "report_sheet_theme_v1";
+    const btn = $("#theme-toggle");
+    const apply = (mode) => {
+      const dark = mode === "dark";
+      document.body.classList.toggle("theme-dark", dark);
+      if (btn) {
+        btn.textContent = dark ? "Light" : "Dark";
+        btn.setAttribute("aria-pressed", dark ? "true" : "false");
+        btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      }
+      try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch { /* ignore */ }
+    };
+    let initial = "light";
+    try {
+      const saved = localStorage.getItem(KEY);
+      if (saved === "dark" || saved === "light") initial = saved;
+    } catch { /* ignore */ }
+    apply(initial);
+    if (btn) {
+      btn.addEventListener("click", () => {
+        apply(document.body.classList.contains("theme-dark") ? "light" : "dark");
       });
     }
   })();

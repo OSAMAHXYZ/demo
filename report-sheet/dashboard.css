@@ -4609,3 +4609,163 @@ body.admin-page #panel-allocation:not([hidden]) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* —— Tighter charts (all dashboards) —— */
+.live-app .chart-box {
+  height: 260px;
+}
+.live-app .chart-box.pbi-box {
+  height: 260px;
+}
+.live-app .pbi-viz-head {
+  margin-bottom: 6px;
+}
+.live-app .pbi-visuals,
+.live-app .sr-charts,
+.live-app .charts,
+.live-app .bo-car-charts {
+  gap: 10px;
+}
+.live-app .card {
+  padding: 12px 14px;
+}
+.live-app .card h2 {
+  margin: 0 0 8px;
+}
+.live-app .icc-chart-card .pbi-viz-head {
+  margin-bottom: 6px;
+  align-items: flex-start;
+  gap: 6px 12px;
+}
+.live-app .icc-chart-card .pbi-viz-head .hint {
+  max-width: 52ch;
+  line-height: 1.35;
+  text-align: right;
+}
+.live-app .icc-quadrant-legend {
+  margin: 0 0 4px;
+}
+.live-app .icc-chart-box {
+  height: 460px;
+  margin-top: 0;
+}
+.live-app .chart-scroll.is-scroll {
+  max-height: 320px;
+}
+.live-app .theme-toggle {
+  min-width: 64px;
+}
+
+/* —— Dark edition —— */
+.live-app.theme-dark {
+  --crm-bg: #0f172a;
+  --crm-sidebar: #111827;
+  --crm-sidebar-border: #1f2937;
+  --crm-text: #e5e7eb;
+  --crm-muted: #94a3b8;
+  --crm-accent: #93c5fd;
+  --crm-accent-soft: rgba(59, 130, 246, 0.16);
+  --crm-shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 28px rgba(0,0,0,.28);
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #243044;
+  --ink: #e5e7eb;
+  --muted: #94a3b8;
+  --line: #334155;
+  --navy: #93c5fd;
+  --navy-2: #60a5fa;
+  --sky-soft: rgba(59, 130, 246, 0.18);
+  color: var(--crm-text);
+  background: var(--crm-bg) !important;
+}
+.live-app.theme-dark .app-sidebar,
+.live-app.theme-dark .app-topbar,
+.live-app.theme-dark .card,
+.live-app.theme-dark .bo-kpi,
+.live-app.theme-dark .kpi,
+.live-app.theme-dark .icc-hero,
+.live-app.theme-dark .bas-hero,
+.live-app.theme-dark .icc-filters,
+.live-app.theme-dark .icc-detail,
+.live-app.theme-dark .icc-insight-card,
+.live-app.theme-dark .table-wrap,
+.live-app.theme-dark .bas-table-wrap,
+.live-app.theme-dark .icc-table-wrap,
+.live-app.theme-dark .chart-scroll.is-scroll {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e5e7eb;
+}
+.live-app.theme-dark .app-topbar {
+  background: rgba(17, 24, 39, 0.94) !important;
+}
+.live-app.theme-dark .sidebar-mark {
+  background: linear-gradient(145deg, #1d4ed8, #0ea5e9);
+}
+.live-app.theme-dark .side-nav-item,
+.live-app.theme-dark .sidebar-tabs .tab.side-nav-item {
+  color: #cbd5e1 !important;
+}
+.live-app.theme-dark .side-nav-item:hover,
+.live-app.theme-dark .sidebar-tabs .tab.side-nav-item:hover {
+  background: #243044 !important;
+  color: #fff !important;
+}
+.live-app.theme-dark .side-nav-item.active,
+.live-app.theme-dark .sidebar-tabs .tab.side-nav-item.active {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #93c5fd !important;
+  box-shadow: inset 3px 0 0 #60a5fa !important;
+}
+.live-app.theme-dark .btn,
+.live-app.theme-dark button.btn,
+.live-app.theme-dark .sidebar-toggle,
+.live-app.theme-dark .sidebar-collapse-btn,
+.live-app.theme-dark select,
+.live-app.theme-dark input,
+.live-app.theme-dark .toolbar input,
+.live-app.theme-dark .toolbar select {
+  background: #243044 !important;
+  border-color: #475569 !important;
+  color: #e5e7eb !important;
+}
+.live-app.theme-dark .btn-primary {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+.live-app.theme-dark .status {
+  background: #243044;
+  color: #cbd5e1;
+}
+.live-app.theme-dark .status.ok {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+.live-app.theme-dark table th {
+  background: #243044;
+  color: #cbd5e1;
+}
+.live-app.theme-dark table td {
+  border-color: #334155;
+  color: #e5e7eb;
+}
+.live-app.theme-dark .foot,
+.live-app.theme-dark .hint,
+.live-app.theme-dark .sidebar-hint,
+.live-app.theme-dark .app-topbar-eyebrow,
+.live-app.theme-dark .page-foot {
+  color: #94a3b8 !important;
+}
+.live-app.theme-dark .icc-q-critical { background: rgba(248,113,113,.16); color: #fca5a5; }
+.live-app.theme-dark .icc-q-fast { background: rgba(45,212,191,.14); color: #5eead4; }
+.live-app.theme-dark .icc-q-over { background: rgba(251,146,60,.14); color: #fdba74; }
+.live-app.theme-dark .icc-q-watch { background: rgba(148,163,184,.14); color: #cbd5e1; }
+.live-app.theme-dark .icc-dq {
+  background: #243044;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+@media (max-width: 900px) {
+  .live-app .icc-chart-box { height: 380px; }
+}

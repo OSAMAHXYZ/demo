@@ -47,8 +47,8 @@
     },
     /** Bubble radius mapping for Chart.js */
     bubble: {
-      minR: 6,
-      maxR: 28,
+      minR: 10,
+      maxR: 32,
     },
     pageSize: 50,
   };
@@ -663,17 +663,47 @@
     return b.minR + t * (b.maxR - b.minR);
   }
 
+  /** Deterministic jitter so stacked configs don't sit on one pixel. */
+  function stableJitter(seed, amount) {
+    const s = String(seed || "");
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const u = ((h >>> 0) % 10000) / 10000; // 0..1
+    return (u - 0.5) * 2 * amount;
+  }
+
+  function coverageAxisX(r) {
+    // Real Available/BO when BO exists. No-BO with stock → soft high coverage (not one fixed wall at 3).
+    if (r.stockCoverage == null) {
+      if (!(r.availableStock > 0)) return 0;
+      return Math.min(3.5, 1.2 + Math.log10(1 + r.availableStock) * 0.9);
+    }
+    if (!Number.isFinite(r.stockCoverage)) return 0;
+    // Soft-cap extreme ratios so the plot stays readable (tooltip still shows true coverage)
+    return Math.min(Math.max(0, r.stockCoverage), 3.5);
+  }
+
   function toChartPoints(rows, mode, cfg) {
-    const maxStock = Math.max(1, ...rows.map((r) => r.availableStock));
-    return rows.map((r) => {
-      const x = mode === "ageing"
+    const list = rows || [];
+    const maxStock = Math.max(1, ...list.map((r) => r.availableStock));
+    const maxVel = Math.max(0.01, ...list.map((r) => r.salesVelocity || 0));
+    return list.map((r) => {
+      let x = mode === "ageing"
         ? (r.allocationAgeing == null ? 0 : r.allocationAgeing)
-        : (r.stockCoverage == null ? (r.availableStock > 0 ? 3 : 0) : Math.min(r.stockCoverage, 5));
-      const y = r.salesVelocity;
+        : coverageAxisX(r);
+      let y = r.salesVelocity || 0;
+      // Tiny spread so overlapping points remain visible (does not change underlying metrics)
+      x += stableJitter(r.id + ":x", mode === "ageing" ? Math.max(0.4, x * 0.02) : 0.045);
+      y += stableJitter(r.id + ":y", Math.max(0.15, maxVel * 0.012));
+      if (x < 0) x = 0;
+      if (y < 0) y = 0;
       return {
         x,
         y,
-        r: bubbleRadius(r.availableStock, maxStock, cfg || CONFIG),
+        r: bubbleRadius(Math.max(1, r.availableStock), maxStock, cfg || CONFIG),
         rowId: r.id,
         meta: r,
       };
