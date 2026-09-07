@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260907act" />
+  <link rel="stylesheet" href="dashboard.css?v=20260907act2" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -881,7 +881,7 @@
               <div class="pbi-viz-head">
                 <div>
                   <h2>Allocation vs Back Orders by Product</h2>
-                  <span class="hint">Sorted by gap · click a product to filter</span>
+                  <span class="hint">Sorted by gap · click a product for details</span>
                 </div>
                 <label class="act-sort-lab">Sort
                   <select id="act-sort-gap">
@@ -930,6 +930,7 @@
                 <span class="hint" id="act-monthly-hint">Only months present in RTL age data</span>
               </div>
               <div class="chart-box act-chart-box act-chart-box--month"><canvas id="chart-act-monthly"></canvas></div>
+              <div class="act-monthly-kpis" id="act-monthly-kpis"></div>
             </article>
             <article class="card act-card">
               <div class="pbi-viz-head">
@@ -945,14 +946,17 @@
             <article class="card act-card">
               <div class="pbi-viz-head"><h2>Top 10 Back Orders</h2></div>
               <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-bo"></canvas></div>
+              <ul class="act-top-fallback" id="act-top-fallback-bo"></ul>
             </article>
             <article class="card act-card">
               <div class="pbi-viz-head"><h2>Top 10 Stock</h2></div>
               <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-stock"></canvas></div>
+              <ul class="act-top-fallback" id="act-top-fallback-stock"></ul>
             </article>
             <article class="card act-card">
               <div class="pbi-viz-head"><h2>Top 10 Allocation Gaps</h2></div>
               <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-gap"></canvas></div>
+              <ul class="act-top-fallback" id="act-top-fallback-gap"></ul>
             </article>
             <article class="card act-card act-alerts-card">
               <div class="pbi-viz-head">
@@ -1109,7 +1113,7 @@
               <h3 id="act-drawer-title">Product</h3>
               <p class="foot" id="act-drawer-sub">Allocation drill-down</p>
             </div>
-            <button type="button" class="btn" id="act-drawer-close">Close</button>
+            <button type="button" class="act-drawer-close-btn" id="act-drawer-close" aria-label="Close product panel">Close</button>
           </div>
           <div class="act-drawer-body" id="act-drawer-body"></div>
         </aside>
@@ -7866,10 +7870,21 @@
   }
 
   function actSelectProduct(product) {
+    // Chart click opens the drawer only — does not collapse the whole tower to one product.
+    if (product) openActDrawer(product);
+  }
+
+  function actFilterToProduct(product) {
     basView.product = product || "";
     basView.sfx = "";
     refreshBasFromFilters();
     if (product) openActDrawer(product);
+  }
+
+  function actClearProductFilter() {
+    basView.product = "";
+    basView.sfx = "";
+    refreshBasFromFilters();
   }
 
   function openActDrawer(product) {
@@ -7879,22 +7894,29 @@
     const title = $("#act-drawer-title");
     const sub = $("#act-drawer-sub");
     if (!drawer || !body) return;
-    const rows = (actTowerCache && actTowerCache.filteredRows) || [];
-    const leaves = rows.filter((r) => r.product === product);
+    const allRows = (actTowerCache && actTowerCache.allRows) || (actTowerCache && actTowerCache.filteredRows) || [];
+    const leaves = allRows.filter((r) => r.product === product);
     const agg = aggregateBasByProduct(leaves)[0];
     if (title) title.textContent = product;
     if (sub) sub.textContent = agg ? `${agg.seg || "—"} · ${leaves.length} suffix row(s)` : "—";
-    const late = (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack._filteredMatched)
-      ? actTowerCache.monthPack._filteredMatched.filter((c) => c.isLate && (c.allocProduct === product || c.product === product)).length
-      : null;
+    const lateSrc = (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack.matched)
+      ? actTowerCache.monthPack.matched
+      : (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack._filteredMatched) || [];
+    const late = lateSrc.filter((c) => c.isLate && (c.allocProduct === product || c.product === product)).length;
+    const isFiltered = basView.product === product;
     body.innerHTML = !agg ? `<p class="foot">No data</p>` : `
+      <div class="act-drawer-actions">
+        ${isFiltered
+          ? `<button type="button" class="btn" id="act-drawer-clear-filter">Show all products</button>`
+          : `<button type="button" class="btn-primary" id="act-drawer-filter">Filter tower to ${escapeHtml(product)}</button>`}
+      </div>
       <div class="act-drawer-kpis">
         <div><span class="lab">Allocation</span><strong>${formatNumber(agg.allocation)}</strong></div>
         <div><span class="lab">Back Orders</span><strong>${formatNumber(agg.boCount)}</strong></div>
         <div><span class="lab">Stock</span><strong>${formatNumber(agg.stockCount)}</strong></div>
         <div><span class="lab">Gap</span><strong class="${agg.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(agg.gap)}</strong></div>
         <div><span class="lab">Coverage</span><strong>${agg.boCount ? (agg.allocation / agg.boCount).toFixed(2) : "N/A"}</strong></div>
-        <div><span class="lab">Late RTL</span><strong>${late != null ? formatNumber(late) : "N/A"}</strong></div>
+        <div><span class="lab">Late RTL</span><strong>${formatNumber(late)}</strong></div>
       </div>
       <h4 class="act-drawer-h">SFX breakdown</h4>
       <div class="table-wrap"><table class="bas-table">
@@ -7909,17 +7931,29 @@
             <td>${basGapBadge(r.status, r.gap)}</td>
           </tr>`).join("")}</tbody>
       </table></div>
-      <p class="foot">Click a suffix to filter the tower · VIN detail is in Matched &amp; allocated below</p>`;
+      <p class="foot">Click a suffix to filter tables · VIN detail is in Matched &amp; allocated below</p>`;
+    const filterBtn = $("#act-drawer-filter");
+    if (filterBtn) filterBtn.addEventListener("click", () => actFilterToProduct(product));
+    const clearBtn = $("#act-drawer-clear-filter");
+    if (clearBtn) clearBtn.addEventListener("click", () => {
+      actClearProductFilter();
+      openActDrawer(product);
+    });
     body.querySelectorAll("[data-act-sfx]").forEach((tr) => {
       tr.addEventListener("click", () => {
         basView.product = product;
         basView.sfx = tr.getAttribute("data-act-sfx") || "";
         refreshBasFromFilters();
+        openActDrawer(product);
       });
     });
     drawer.hidden = false;
+    drawer.removeAttribute("hidden");
     drawer.setAttribute("aria-hidden", "false");
-    if (backdrop) backdrop.hidden = false;
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.removeAttribute("hidden");
+    }
   }
 
   function closeActDrawer() {
@@ -7927,9 +7961,13 @@
     const backdrop = $("#act-drawer-backdrop");
     if (drawer) {
       drawer.hidden = true;
+      drawer.setAttribute("hidden", "");
       drawer.setAttribute("aria-hidden", "true");
     }
-    if (backdrop) backdrop.hidden = true;
+    if (backdrop) {
+      backdrop.hidden = true;
+      backdrop.setAttribute("hidden", "");
+    }
   }
 
   function renderActAlertTable(metrics) {
@@ -7981,7 +8019,10 @@
   async function renderBasTowerCharts(metrics) {
     if (!window.Chart) return;
     const sortKey = basView.sortGap || "gap";
-    let products = [...metrics.byProduct];
+    // Prefer full product set for overview charts so a drawer filter doesn't blank Top 10 / monthly.
+    const overviewRows = (metrics.allRows && metrics.allRows.length) ? metrics.allRows : metrics.filteredRows;
+    const overviewByProduct = aggregateBasByProduct(overviewRows);
+    let products = [...overviewByProduct];
     products.sort((a, b) => {
       if (sortKey === "bo") return b.boCount - a.boCount;
       if (sortKey === "alloc") return b.allocation - a.allocation;
@@ -7990,6 +8031,13 @@
     });
     products = products.filter((p) => p.allocation || p.boCount || p.stockCount).slice(0, 18);
 
+    const resizeChart = (id) => {
+      try {
+        if (charts[id] && typeof charts[id].resize === "function") charts[id].resize();
+      } catch (_) { /* ignore */ }
+    };
+
+    try {
     // Product grouped bars
     const barId = "chart-act-product-bars";
     destroyActChart(barId);
@@ -8037,6 +8085,7 @@
           },
         },
       });
+      resizeChart(barId);
     }
 
     // Health quadrant
@@ -8057,9 +8106,13 @@
           meta: p,
         };
       });
-      await (typeof preloadCarImagesForPoints === "function"
-        ? preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })))
-        : Promise.resolve());
+      try {
+        await (typeof preloadCarImagesForPoints === "function"
+          ? preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })))
+          : Promise.resolve());
+      } catch (err) {
+        if (typeof console !== "undefined" && console.warn) console.warn("[ACT] car image preload", err);
+      }
       const quadPlugin = {
         id: "actHealthQuad",
         beforeDraw(chart) {
@@ -8168,9 +8221,10 @@
         },
         plugins: [quadPlugin, carPlugin],
       });
+      resizeChart(healthId);
     }
 
-    // Status donut
+    // Status donut — use filtered metrics for status counts (respects tower filters)
     const donutId = "chart-act-status";
     destroyActChart(donutId);
     const lateCount = metrics.lateRtl != null ? metrics.lateRtl : 0;
@@ -8198,7 +8252,6 @@
               callbacks: {
                 label(ctx) {
                   const v = ctx.parsed || 0;
-                  const base = ctx.dataIndex === 3 ? (lateCount || 1) : (donutTotal || 1);
                   const pct = ctx.dataIndex === 3
                     ? (lateCount ? "units" : "n/a")
                     : `${((v / (donutTotal || 1)) * 100).toFixed(0)}%`;
@@ -8209,6 +8262,7 @@
           },
         },
       });
+      resizeChart(donutId);
     }
     const mini = $("#act-donut-mini");
     if (mini) {
@@ -8219,22 +8273,29 @@
         <div class="act-donut-center-note">Suffix rows ${formatNumber(donutTotal)}</div>`;
     }
 
-    // Daily collection
+    // Daily + monthly + RES from month pack (unfiltered for overview when available)
     const dailyId = "chart-act-daily";
     destroyActChart(dailyId);
     const dailySide = $("#act-daily-side");
-    const pack = metrics.monthPack;
-    if (pack && pack._filteredRows) {
+    const monthKpis = $("#act-monthly-kpis");
+    let pack = metrics.monthPack;
+    if (!pack && typeof buildBasMonthlyData === "function" && typeof slotHasRows === "function" && slotHasRows("rtl")) {
+      try { pack = buildBasMonthlyData(); } catch (_) { pack = null; }
+    }
+    if (pack) {
       const ctx = pack.ctx;
+      const monthRows = pack.rows || [];
+      const matched = pack.matched || pack._filteredMatched || [];
       const dayLabels = [];
       const dayActual = [];
       const dayPlan = [];
-      const planTotal = pack._filteredRows.reduce((s, r) => s + r.allocation, 0);
-      const mtdTotal = pack._filteredRows.reduce((s, r) => s + r.mtd, 0);
+      const planTotal = monthRows.reduce((s, r) => s + r.allocation, 0);
+      const mtdTotal = monthRows.reduce((s, r) => s + r.mtd, 0);
       const dailyPlan = ctx.todayDay > 0 ? planTotal / ctx.todayDay : 0;
+      const dayRetail = pack.dayRetailTotals || [];
       for (let day = 1; day <= Math.min(30, ctx.daysInMonth); day += 1) {
         dayLabels.push(String(day));
-        dayActual.push((pack.dayRetailTotals && pack.dayRetailTotals[day]) || 0);
+        dayActual.push(dayRetail[day] || 0);
         dayPlan.push(day <= ctx.todayDay ? dailyPlan : null);
       }
       const dailyCanvas = document.getElementById(dailyId);
@@ -8255,20 +8316,19 @@
             scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 9 } } }, y: { beginAtZero: true } },
           },
         });
+        resizeChart(dailyId);
       }
+      const gap = planTotal - mtdTotal;
       if (dailySide) {
-        const gap = planTotal - mtdTotal;
         dailySide.innerHTML = `
           <div><span class="lab">MTD Collected</span><strong>${formatNumber(mtdTotal)}</strong></div>
           <div><span class="lab">MTD Plan</span><strong>${formatNumber(planTotal)}</strong></div>
           <div><span class="lab">MTD Gap</span><strong class="${gap >= 0 ? "bas-gap-pos" : "bas-gap-neg"}">${gap >= 0 ? "+" : ""}${formatNumber(gap)}</strong></div>`;
       }
 
-      // RES kpis + top 5
       const resKpis = $("#act-res-kpis");
-      const late = pack._filteredMatched.filter((c) => c.isLate).length;
-      const age0 = pack._filteredMatched.filter((c) => c.isTodayArrival).length;
-      const resTotal = pack._filteredMatched.length;
+      const late = matched.filter((c) => c.isLate).length;
+      const resTotal = matched.length;
       if (resKpis) {
         resKpis.innerHTML = [
           ["Total RES", resTotal],
@@ -8279,7 +8339,7 @@
         ].map(([lab, val]) => `<div class="act-res-chip"><span class="lab">${lab}</span><strong>${escapeHtml(String(val))}</strong></div>`).join("");
       }
       const byResProd = new Map();
-      pack._filteredMatched.forEach((c) => {
+      matched.forEach((c) => {
         const p = c.allocProduct || c.product || "—";
         byResProd.set(p, (byResProd.get(p) || 0) + 1);
       });
@@ -8291,8 +8351,103 @@
         charts[resId] = new Chart(resCanvas, {
           type: "bar",
           data: {
-            labels: topRes.map((x) => x[0]),
-            datasets: [{ data: topRes.map((x) => x[1]), backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
+            labels: topRes.length ? topRes.map((x) => x[0]) : ["No RES"],
+            datasets: [{ data: topRes.length ? topRes.map((x) => x[1]) : [0], backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } },
+            onClick(evt, els) {
+              if (!els.length || !topRes.length) return;
+              actSelectProduct(topRes[els[0].index][0]);
+            },
+          },
+        });
+        resizeChart(resId);
+      }
+
+      // Monthly: bar chart (Collected vs Plan) — single-point lines looked empty
+      const monthId = "chart-act-monthly";
+      destroyActChart(monthId);
+      const monthHint = $("#act-monthly-hint");
+      if (monthHint) monthHint.textContent = `${ctx.monthLabel} · from RTL age dates (no fabricated history)`;
+      const monthCanvas = document.getElementById(monthId);
+      if (monthCanvas) {
+        charts[monthId] = new Chart(monthCanvas, {
+          type: "bar",
+          data: {
+            labels: [ctx.monthLabel],
+            datasets: [
+              { label: "Collected", data: [mtdTotal], backgroundColor: "rgba(235,10,30,0.85)", borderRadius: 6, maxBarThickness: 64 },
+              { label: "Plan", data: [planTotal], backgroundColor: "rgba(148,163,184,0.7)", borderRadius: 6, maxBarThickness: 64 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "top", labels: { boxWidth: 10, font: { size: 10 } } } },
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+        resizeChart(monthId);
+      }
+      if (monthKpis) {
+        monthKpis.innerHTML = `
+          <div class="act-mini"><span class="lab">Collected</span><strong>${formatNumber(mtdTotal)}</strong></div>
+          <div class="act-mini"><span class="lab">Plan</span><strong>${formatNumber(planTotal)}</strong></div>
+          <div class="act-mini ${gap >= 0 ? "warn" : "ok"}"><span class="lab">Gap</span><strong>${gap >= 0 ? "+" : ""}${formatNumber(gap)}</strong></div>`;
+      }
+    } else {
+      if (dailySide) dailySide.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
+      if (monthKpis) monthKpis.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
+      ["chart-act-daily", "chart-act-monthly", "chart-act-res-top"].forEach(destroyActChart);
+      const resKpis = $("#act-res-kpis");
+      if (resKpis) resKpis.innerHTML = `<p class="foot">N/A</p>`;
+      const monthHint = $("#act-monthly-hint");
+      if (monthHint) monthHint.textContent = "Upload RTL stock to see monthly collection";
+    }
+    } catch (err) {
+      if (typeof console !== "undefined" && console.error) console.error("[ACT charts]", err);
+    }
+
+    // Top 10 always — even if earlier charts failed
+    const topBo = [...overviewByProduct].sort((a, b) => b.boCount - a.boCount).filter((r) => r.boCount > 0).slice(0, 10);
+    const topStock = [...overviewByProduct].sort((a, b) => b.stockCount - a.stockCount).filter((r) => r.stockCount > 0).slice(0, 10);
+    const topGap = [...overviewByProduct].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).filter((r) => r.gap !== 0 || r.allocation || r.boCount).slice(0, 10);
+
+    const fillTopFallback = (elId, rows, field) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      if (!rows.length) {
+        el.classList.add("is-visible");
+        el.innerHTML = `<li><span>No data</span><span>—</span></li>`;
+        return;
+      }
+      el.classList.add("is-visible");
+      el.innerHTML = rows.map((r) => {
+        const val = field === "gap" ? basFormatGap(r.gap) : formatNumber(r[field]);
+        return `<li><span>${escapeHtml(r.product)}</span><strong>${val}</strong></li>`;
+      }).join("");
+    };
+
+    const makeTop = (id, rows, field, colorFn, fallbackId) => {
+      destroyActChart(id);
+      fillTopFallback(fallbackId, rows, field);
+      const canvas = document.getElementById(id);
+      if (!canvas || !rows.length) return;
+      try {
+        charts[id] = new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: rows.map((r) => r.product),
+            datasets: [{
+              data: rows.map((r) => (field === "gap" ? r.gap : r[field])),
+              backgroundColor: rows.map((r) => (typeof colorFn === "function" ? colorFn(r) : colorFn)),
+              borderRadius: 4,
+            }],
           },
           options: {
             indexAxis: "y",
@@ -8302,78 +8457,20 @@
             scales: { x: { beginAtZero: true } },
             onClick(evt, els) {
               if (!els.length) return;
-              actSelectProduct(topRes[els[0].index][0]);
+              actSelectProduct(rows[els[0].index].product);
             },
           },
         });
+        resizeChart(id);
+        const fb = document.getElementById(fallbackId);
+        if (fb) fb.classList.remove("is-visible");
+      } catch (err) {
+        if (typeof console !== "undefined" && console.error) console.error("[ACT top chart]", id, err);
       }
-
-      // Monthly: only current month real data (no invented history)
-      const monthId = "chart-act-monthly";
-      destroyActChart(monthId);
-      const monthHint = $("#act-monthly-hint");
-      if (monthHint) monthHint.textContent = `${ctx.monthLabel} · only months present in RTL (no fabricated history)`;
-      const monthCanvas = document.getElementById(monthId);
-      if (monthCanvas) {
-        charts[monthId] = new Chart(monthCanvas, {
-          type: "line",
-          data: {
-            labels: [ctx.monthLabel],
-            datasets: [
-              { label: "Collected", data: [mtdTotal], borderColor: "#eb0a1e", backgroundColor: "rgba(235,10,30,0.15)", fill: true, tension: 0.3 },
-              { label: "Plan", data: [planTotal], borderColor: "#94a3b8", borderDash: [5, 4], fill: false, tension: 0.3 },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
-            scales: { y: { beginAtZero: true } },
-          },
-        });
-      }
-    } else {
-      if (dailySide) dailySide.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
-      ["chart-act-daily", "chart-act-monthly", "chart-act-res-top"].forEach(destroyActChart);
-      const resKpis = $("#act-res-kpis");
-      if (resKpis) resKpis.innerHTML = `<p class="foot">N/A</p>`;
-    }
-
-    // Top 10 charts
-    const topBo = [...metrics.byProduct].sort((a, b) => b.boCount - a.boCount).slice(0, 10);
-    const topStock = [...metrics.byProduct].sort((a, b) => b.stockCount - a.stockCount).slice(0, 10);
-    const topGap = [...metrics.byProduct].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).slice(0, 10);
-
-    const makeTop = (id, rows, field, colorFn) => {
-      destroyActChart(id);
-      const canvas = document.getElementById(id);
-      if (!canvas) return;
-      charts[id] = new Chart(canvas, {
-        type: "bar",
-        data: {
-          labels: rows.map((r) => r.product),
-          datasets: [{
-            data: rows.map((r) => field === "gap" ? r.gap : r[field]),
-            backgroundColor: rows.map((r) => (typeof colorFn === "function" ? colorFn(r) : colorFn)),
-            borderRadius: 4,
-          }],
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: { x: { beginAtZero: true } },
-          onClick(evt, els) {
-            if (!els.length) return;
-            actSelectProduct(rows[els[0].index].product);
-          },
-        },
-      });
     };
-    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(235,10,30,0.8)");
-    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(96,165,250,0.85)");
-    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(235,10,30,0.8)" : "rgba(15,118,110,0.8)"));
+    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(235,10,30,0.8)", "act-top-fallback-bo");
+    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(96,165,250,0.85)", "act-top-fallback-stock");
+    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(235,10,30,0.8)" : "rgba(15,118,110,0.8)"), "act-top-fallback-gap");
 
     renderActAlertTable(metrics);
   }
@@ -8531,7 +8628,7 @@
     const rows = filteredBasRows(allRows);
     const confirmedRows = filteredBasRows(confirmedAllRows);
     const metrics = computeBasTowerMetrics(d, rows);
-    actTowerCache = metrics;
+    actTowerCache = Object.assign(metrics, { allRows });
 
     renderBasKpis(rows, {
       totalDemand: metrics.totalDemand,
@@ -12070,6 +12167,11 @@
   if (actDrawerClose) actDrawerClose.addEventListener("click", closeActDrawer);
   const actDrawerBackdrop = $("#act-drawer-backdrop");
   if (actDrawerBackdrop) actDrawerBackdrop.addEventListener("click", closeActDrawer);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const drawer = $("#act-drawer");
+    if (drawer && !drawer.hidden) closeActDrawer();
+  });
 
   function refreshBasAllocFromFilters() {
     if (window._data) renderBasAllocatedVehicles(window._data);

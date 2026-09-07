@@ -5805,7 +5805,7 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 
-/* ——— Inventory Command Center · premium one-page redesign ——— */
+/* ï¿½ï¿½ï¿½ Inventory Command Center ï¿½ premium one-page redesign ï¿½ï¿½ï¿½ */
 .icc-command-center {
   display: flex;
   flex-direction: column;
@@ -6056,7 +6056,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* ——— Allocation Control Tower ——— */
+/* ï¿½ï¿½ï¿½ Allocation Control Tower ï¿½ï¿½ï¿½ */
 .act-tower { display: flex; flex-direction: column; gap: 12px; }
 .act-header {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 20px;
@@ -6100,13 +6100,64 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 .act-card { padding: 12px 14px; border-radius: 14px; }
 .act-chart-box { width: 100%; }
-.act-chart-box--bars { height: 360px !important; }
-.act-chart-box--quad { height: 360px !important; }
-.act-chart-box--donut { height: 220px !important; }
-.act-chart-box--daily { height: 220px !important; flex: 1; }
-.act-chart-box--month { height: 240px !important; }
-.act-chart-box--res { height: 160px !important; }
-.act-chart-box--top { height: 220px !important; }
+.act-chart-box--bars { height: 360px !important; min-height: 360px !important; }
+.act-chart-box--quad { height: 360px !important; min-height: 360px !important; }
+.act-chart-box--donut { height: 220px !important; min-height: 220px !important; }
+.act-chart-box--daily { height: 220px !important; min-height: 220px !important; flex: 1; }
+.act-chart-box--month { height: 240px !important; min-height: 240px !important; }
+.act-chart-box--res { height: 160px !important; min-height: 160px !important; }
+.act-chart-box--top { height: 240px !important; min-height: 240px !important; }
+.live-app .act-tower .chart-box.act-chart-box {
+  height: auto; /* reset live-app height:auto; sizes come from modifiers below */
+}
+.live-app .act-tower .act-chart-box--bars { height: 360px !important; min-height: 360px !important; }
+.live-app .act-tower .act-chart-box--quad { height: 360px !important; min-height: 360px !important; }
+.live-app .act-tower .act-chart-box--donut { height: 220px !important; min-height: 220px !important; }
+.live-app .act-tower .act-chart-box--daily { height: 220px !important; min-height: 220px !important; }
+.live-app .act-tower .act-chart-box--month { height: 240px !important; min-height: 240px !important; }
+.live-app .act-tower .act-chart-box--res { height: 160px !important; min-height: 160px !important; }
+.live-app .act-tower .act-chart-box--top { height: 240px !important; min-height: 240px !important; }
+.act-top-fallback {
+  display: none;
+  margin: 0;
+  padding: 8px 0 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+.act-top-fallback.is-visible { display: block; }
+.act-top-fallback li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+.act-drawer {
+  position: fixed; top: 0; right: 0; width: min(420px, 100vw); height: 100vh;
+  background: #fff; z-index: 1200; box-shadow: -8px 0 24px rgba(0,0,0,.18);
+  flex-direction: column; padding: 16px;
+  overflow: auto;
+}
+.act-drawer[hidden] { display: none !important; }
+.act-drawer:not([hidden]) { display: flex !important; }
+.act-drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 1190;
+}
+.act-drawer-backdrop[hidden] { display: none !important; }
+.act-drawer-backdrop:not([hidden]) { display: block !important; }
+.act-drawer-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.act-drawer-close-btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.act-drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+.act-monthly-kpis {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;
+}
 .act-daily-wrap { display: flex; gap: 10px; align-items: stretch; }
 .act-daily-side {
   flex: 0 0 120px; display: flex; flex-direction: column; gap: 10px; justify-content: center;
@@ -6146,15 +6197,6 @@ body.admin-page #panel-allocation:not([hidden]) {
   cursor: pointer; font-weight: 800; color: #111; margin-bottom: 12px;
 }
 .act-details-block[open] > summary { margin-bottom: 14px; }
-.act-drawer {
-  position: fixed; top: 0; right: 0; width: min(420px, 100vw); height: 100vh;
-  background: #fff; z-index: 80; box-shadow: -8px 0 24px rgba(0,0,0,.12);
-  display: flex; flex-direction: column; padding: 16px;
-}
-.act-drawer-backdrop {
-  position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 70;
-}
-.act-drawer-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
 .act-drawer-kpis {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
 }
