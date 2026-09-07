@@ -61,10 +61,10 @@
         </div>
         <div class="top-actions app-topbar-actions">
           <span class="status" id="status">Waiting for Admin Push</span>
-          <span class="status ok" id="live-badge" title="Refreshes when Admin pushes">LIVE</span>
+          <span class="status ok" id="live-badge" title="Data loads only when you click Refresh">Manual</span>
           <button type="button" class="btn theme-toggle" id="theme-toggle" title="Toggle dark mode" aria-pressed="false">Dark</button>
           <button type="button" id="clear-btn" disabled>Clear view</button>
-          <button type="button" class="btn-primary" id="run-btn" disabled>Refresh from Admin</button>
+          <button type="button" class="btn-primary" id="run-btn" disabled title="Reload the latest Admin Push data">Refresh</button>
         </div>
       </header>
 
@@ -73,7 +73,7 @@
       <h2>Waiting for Admin Push</h2>
       <p style="color:var(--muted);font-size:.9rem;margin:0 0 12px">
         Open <a href="admin.html">Admin</a>, upload Excel (<b>Sales Raw</b> for Sales Report), set targets, then click <b>Push to live</b>.
-        This page will update automatically.
+        On this page, click <b>Refresh</b> when you want the latest data (no auto-reload).
       </p>
       <div class="banner load" id="load-banner">Loading pushed workbooks…</div>
       <div class="banner err" id="error-banner"></div>
@@ -475,7 +475,7 @@
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
             <li>Upload slot <b>1 · Back Order</b></li>
             <li>Click <b>Push to live</b></li>
-            <li>Return here and click <b>Refresh from Admin</b> (or reopen this tab)</li>
+            <li>Return here and click <b>Refresh</b></li>
           </ol>
           <p class="foot" style="margin:0">Until then, Sales Dashboard can still run from Sales Raw alone.</p>
         </div>
@@ -620,7 +620,7 @@
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
             <li>Upload slot <b>2 · RTL Stock</b> and/or <b>3 · Stock Central</b></li>
             <li>Upload slot <b>1 · Back Order</b> for fulfillable BO allocation (optional)</li>
-            <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
 
@@ -739,7 +739,7 @@
             <li>Upload slot <b>2 · RTL Stock</b> for monthly collection tracker (Col J age)</li>
             <li>Upload <b>Sales Raw</b> for Delivered / Proforma status on matched VINs</li>
             <li>Optionally upload <b>Stock Central</b> for stock column in gap tables</li>
-            <li>Click <b>Push to live</b> · return here · <b>Refresh from Admin</b></li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
 
@@ -3123,7 +3123,7 @@
     $("#clear-btn").disabled = !any;
     $("#run-btn").disabled = !any;
     if (!any) setStatus("Waiting for Admin Push");
-    else setStatus("Ready · Refresh from Admin", "ok");
+    else setStatus("Ready · click Refresh for latest data", "ok");
   }
 
   function accessoriesInPeriod(r, live, prevMonthKey) {
@@ -8380,6 +8380,30 @@
     return out;
   }
 
+  function stockStatusByHeader(row, tests, fallbackLetter) {
+    const letter = findHeaderLetter(row, tests);
+    if (letter) {
+      const v = cellToString(cellByLetter(row, letter)).trim();
+      if (v) return v;
+    }
+    if (fallbackLetter) return cellToString(cellByLetter(row, fallbackLetter)).trim();
+    return "";
+  }
+
+  function stockPrimaryStatus(row) {
+    return stockStatusByHeader(row, [
+      (n) => n === "primary status" || n === "primary status desc",
+      (n) => n.includes("primary") && n.includes("status"),
+    ], "L");
+  }
+
+  function stockSecondaryStatus(row) {
+    return stockStatusByHeader(row, [
+      (n) => n === "secondary status" || n === "secondary status desc",
+      (n) => n.includes("secondary") && n.includes("status"),
+    ], "");
+  }
+
   function buildSalesVinLookup() {
     const byVin = new Map();
     (slots.sales.rows || []).forEach((r) => {
@@ -8390,13 +8414,23 @@
         proformaDate: r.proformaDate,
         deliveryDate: r.deliveryDate,
         salesman: resolveSalesmanName(r.salesman),
+        secondaryStatus: cellToString(r.secondaryStatus).trim(),
       };
       const prev = byVin.get(vin);
       if (!prev) {
         byVin.set(vin, entry);
         return;
       }
-      if (entry.delivered && !prev.delivered) byVin.set(vin, entry);
+      if (entry.delivered && !prev.delivered) {
+        byVin.set(vin, {
+          ...entry,
+          secondaryStatus: entry.secondaryStatus || prev.secondaryStatus || "",
+        });
+        return;
+      }
+      if (!prev.secondaryStatus && entry.secondaryStatus) {
+        prev.secondaryStatus = entry.secondaryStatus;
+      }
     });
     return byVin;
   }
@@ -8446,7 +8480,8 @@
       const product = cellToString(cellByLetter(r, "B")).trim();
       const suffix = normalizeProductSuffix(product, cellByLetter(r, "G"));
       const vin = extractVinValue(cellByLetter(r, "E")) || extractVinValue(cellByLetter(r, "H")) || "";
-      const status = cellToString(cellByLetter(r, "L")).trim();
+      const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "L")).trim();
+      const secondaryStatus = stockSecondaryStatus(r);
       const ageingRaw = cellByLetter(r, "J");
       const ageingNum = toNumber(ageingRaw);
       return {
@@ -8458,6 +8493,7 @@
         ext: cellToString(cellByLetter(r, "H")),
         int: cellToString(cellByLetter(r, "I")),
         status,
+        secondaryStatus,
         location: cellToString(cellByLetter(r, "M") || cellByLetter(r, "N")),
         ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
         _raw: r,
@@ -8483,7 +8519,8 @@
         vin,
         ext: cellToString(cellByLetter(r, "I")),
         int: cellToString(cellByLetter(r, "J")),
-        status: "",
+        status: stockPrimaryStatus(r),
+        secondaryStatus: stockSecondaryStatus(r),
         location: cellToString(cellByLetter(r, "K") || cellByLetter(r, "L")),
         ageing: null,
         _raw: r,
@@ -8592,6 +8629,7 @@
           boInt: ch.boInt || "—",
           location: stock.location || "—",
           status: stock.status || "—",
+          secondaryStatus: stock.secondaryStatus || "—",
           year: bo.year || "—",
           orderDate: bo.orderDate || "—",
           confirm: bo.confirm || "—",
@@ -8617,6 +8655,8 @@
       const salesSt = vinSalesStatusForLookup(r.vin, salesLookup, live);
       const key = extractVinValue(r.vin) || upperTrim(r.vin);
       const sales = salesLookup.get(key);
+      const salesSecondary = sales && sales.secondaryStatus ? sales.secondaryStatus : "";
+      const stockSecondary = r.secondaryStatus && r.secondaryStatus !== "—" ? r.secondaryStatus : "";
       return {
         seg: leaf ? leaf.seg : "—",
         product: leaf ? leaf.product : r.product,
@@ -8648,6 +8688,7 @@
         int: r.stockInt,
         orderDate: r.orderDate,
         status: r.status,
+        secondaryStatus: salesSecondary || stockSecondary || "—",
         stockRaw: r.stockRaw || null,
       };
     });
@@ -8683,6 +8724,7 @@
         const hay = [
           r.seg, r.product, r.sfx, r.vin, r.boNumber, r.salesman,
           r.boProduct, r.boSuffix, r.stockExt, r.stockInt, r.source, r.location,
+          r.status, r.secondaryStatus, r.salesStatus,
         ].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -8776,7 +8818,7 @@
     const heads = [
       "BO Number", "Product", "Salesman", "VIN", "Score", "Source", "Aging",
       "Suffix", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
-      "Sales status", "Location", "Order Date",
+      "Sales status", "Secondary status", "Primary status", "Location", "Order Date",
     ];
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
@@ -8786,6 +8828,8 @@
         const scoreBadge = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${n}%</span>`;
         const badgeCls = r.salesStatusCls === "ok" ? "ok" : r.salesStatusCls === "warn" ? "warn" : "na";
         const aging = r.ageing != null && r.ageing !== "" ? `${r.ageing}d` : "—";
+        const secondary = r.secondaryStatus && r.secondaryStatus !== "—" ? r.secondaryStatus : "—";
+        const primary = r.status && r.status !== "—" ? r.status : "—";
         const cells = [
           escapeHtml(r.boNumber || "—"),
           escapeHtml(r.product || "—"),
@@ -8801,6 +8845,8 @@
           escapeHtml(r.boExt || "—"),
           escapeHtml(r.boInt || "—"),
           `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus || "—")}</span>`,
+          escapeHtml(secondary),
+          escapeHtml(primary),
           escapeHtml(r.location || "—"),
           escapeHtml(r.orderDate || "—"),
         ];
@@ -9597,7 +9643,13 @@
         }
         buildDashboard();
         if (reason) setStatus(reason, "ok");
-        else setStatus("Live — synced from server", "ok");
+        else setStatus("Synced from server", "ok");
+        const badge = $("#live-badge");
+        if (badge) {
+          badge.textContent = "Manual";
+          badge.className = "status ok";
+          badge.title = "Data loads only when you click Refresh";
+        }
         try {
           lastDataPushAt = Number(Store.readDataPushStamp().at) || lastDataPushAt;
           lastPushAt = Number(JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}").at) || lastPushAt;
@@ -9615,7 +9667,7 @@
   }
 
   $("#clear-btn").addEventListener("click", clearAll);
-  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed from server"));
+  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed"));
   $("#csv-btn").addEventListener("click", exportCsv);
   const dashExcelBtn = $("#dash-excel-btn");
   if (dashExcelBtn) dashExcelBtn.addEventListener("click", exportStockBoDashboardExcel);
@@ -9658,23 +9710,31 @@
     if (msg.type === "admin-pushed" || msg.type === "targets-pushed") {
       lastPushAt = Number(msg.targetsAt || msg.at) || Date.now();
       lastDataPushAt = Number(msg.at) || lastDataPushAt;
-      if (msg.type === "admin-pushed") {
-        await refreshFromAdmin("Admin Push received — live update");
-      } else {
-        applyLiveTargets("Targets pushed — live update");
-      }
+      markUpdateAvailable(msg.type === "admin-pushed" ? "New Admin Push available" : "New targets available");
     }
+  }
+
+  function markUpdateAvailable(reason) {
+    const badge = $("#live-badge");
+    if (badge) {
+      badge.textContent = "Update available";
+      badge.className = "status busy";
+      badge.title = (reason || "Admin pushed new data") + " · click Refresh";
+    }
+    setStatus((reason || "Update available") + " · click Refresh", "busy");
+    const run = $("#run-btn");
+    if (run) run.disabled = false;
   }
 
   window.addEventListener("storage", (e) => {
     if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY || e.key === ALLOCATION_PLAN_KEY || e.key === ALLOCATION_PLAN_PUSH_KEY) {
-      maybeApplyPushedTargets("Targets pushed — live update");
+      markUpdateAvailable("Targets updated");
     }
     if (e.key === DATA_PUSH_KEY) {
       const at = Number(Store.readDataPushStamp().at) || 0;
       if (at && at !== lastDataPushAt) {
         lastDataPushAt = at;
-        refreshFromAdmin("Workbook pushed — live update");
+        markUpdateAvailable("New workbook push");
       }
     }
   });
@@ -9682,16 +9742,8 @@
     const bc = new BroadcastChannel(Store.CHANNEL);
     bc.onmessage = (ev) => { onAdminPushMessage(ev); };
   }
-  window.addEventListener("focus", () => {
-    refreshFromAdmin();
-  });
 
-  if (Store.startLiveSync) {
-    liveSync = Store.startLiveSync((reason) => refreshFromAdmin(reason || "Live sync — Admin Push"), {
-      pollMs: 8000,
-      initialAt: lastDataPushAt,
-    });
-  }
+  // Manual Refresh only — no poll / focus / live auto-reload (keeps the page responsive)
   $("#panel-tabs").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-panel]");
     if (!btn) return;
