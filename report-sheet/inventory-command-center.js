@@ -1,67 +1,98 @@
 /**
- * Inventory Command Center — data layer
+ * Inventory Command Center — data layer (real Excel only · no mock counts)
  *
- * Sources (Admin Push slots ↔ Excel workbooks):
- *   backorder  → Back Orders *.xlsx
- *   rtl        → rtlstock / RTL Stock
- *   central    → central.xlsx / Stock Central
- *   sales      → Sales Raw Data - TeleSales *.xlsx
- *   accessories→ accessoriessss.xlsx (row counts / DQ only)
- *   allocation → Stock E-Sales plan (Admin E-Sales values / allocation-plan-data.js)
+ * ============================================================
+ * DATA MAPPING (Admin Push slots ↔ workbooks)
+ * ============================================================
+ * backorder  → Back Orders *.xlsx
+ *              Product, ALJ/TMC Suffix, Model Year, Exterior, Interior,
+ *              VIN, Order Date, Aging, BO qty (header or Col AD)
+ *              Priority: primary source for Back Orders (1 row ≈ 1 unit / qty)
  *
- * Matching rule (documented):
- *   Config key = Product | ALJ Suffix | Model Year | Exterior | Interior
- *   - Product/suffix normalized (trim, upper, Fortuner first-2-letter suffix when product is Fortuner)
- *   - Colors compacted via colorKey (A-Z0-9 only)
- *   - Year as trimmed string
- *   - VIN is unique within each stock source; duplicate VINs counted once per source for Available Stock
- *   - BO units: one row = one unit (qty field used when present)
- *   - Sales Raw TeleSales typically has Product + Model Year only (no suffix/colors).
- *     Sales & velocity therefore join on Product (+ Year when both sides have year),
- *     and are attributed to every config row under that product/year.
- *   - E-Sales stock joins on Product + Suffix only (allocation plan leaf).
+ * rtl        → rtlstock.xlsx / RTL Stock
+ *              Col B Product, E VIN, F Year, G Suffix, H Ext, I Int, J Ageing
+ *              Priority: PRIMARY Available Stock (VIN deduped within RTL)
+ *
+ * central    → Stock E-Sales / central.xlsx (slot title: Stock E-Sales)
+ *              Same stock column map as RTL when mapped via mapStockInv
+ *              Priority: SECONDARY Available Stock (VIN deduped within source)
+ *              NOTE: counted in Available Stock separately from E-Sales plan
+ *
+ * sales      → Sales Raw Data - TeleSales *.xlsx
+ *              Product (+ Model Year when present), delivery/proforma dates, qty
+ *              Priority: PRIMARY Sales & Sales Velocity
+ *              Join: Product (+ Year when both sides have year)
+ *
+ * accessories→ accessoriessss.xlsx
+ *              Data-quality / row counts only (not inventory metrics)
+ *
+ * allocation → Admin E-Sales plan values (allocation-plan-data.js leaves)
+ *              Metric: E-Sales Stock (Product + Suffix) — NOT added into Available Stock
+ *
+ * Conflict rules (documented · never silent):
+ *   Available Stock = RTL VINs + Central/E-Sales-file VINs (per-source VIN dedupe)
+ *   E-Sales Stock   = allocation plan leaf values (separate KPI column)
+ *   Sales           = Sales Raw only
+ *   Back Orders     = Back Order file only
+ *
+ * Sales Velocity = unique attributed Sales ÷ periodDays
+ *   periodDays = live report range when set, else min→max sale dates in file, else 30
+ *
+ * Stock Coverage = Available Stock / Back Orders (null when BO = 0 → display "∞ (no BO)")
  */
 (function (global) {
+  /** Single source of truth for thresholds — do not duplicate elsewhere */
   const CONFIG = {
-    /** Stock coverage bands */
     coverage: {
-      criticalMax: 0.5, // < 0.50 Critical
+      criticalMax: 0.5, // < 0.50 Critical (with high demand)
       atRiskMax: 1.0, // < 1.00 At Risk
-      balancedMax: 1.5, // < 1.50 Balanced; >= Healthy / Overstock by velocity
+      balancedMax: 1.5, // < 1.50 Balanced; >= Healthy when velocity healthy
     },
-    /** Quadrant split defaults (overridden by data medians when autoThresholds=true) */
     quadrants: {
       autoThresholds: true,
-      coverageSplit: 1.0,
-      velocitySplit: null, // set from median when null + auto
+      coverageSplit: 1.0, // business: stock covers BO
+      velocitySplit: null, // median velocity when auto
     },
-    /** Demand pressure weights (documented formula below) */
     demand: {
       boWeight: 0.55,
       velocityWeight: 0.35,
       scarcityWeight: 0.1,
+      highPressure: 70,
+      moderatePressure: 40,
     },
-    /** Ageing (days) considered high */
     ageing: {
       highDays: 30,
     },
-    /** Bubble radius mapping for Chart.js */
     bubble: {
-      minR: 10,
-      maxR: 32,
+      minR: 12,
+      maxR: 36,
     },
     pageSize: 50,
+    vinListMax: 200,
   };
 
-  /**
-   * Demand Pressure (0–100):
-   *   pressure = 100 * (
-   *     wBo * norm(BO) +
-   *     wVel * norm(velocity) +
-   *     wScarce * (1 - clamp(coverage / 2, 0, 1))
-   *   )
-   * where norm(x) = x / max(x) across the current dataset (0 if max=0).
-   */
+  const QUADRANT_META = {
+    CRITICAL: {
+      label: "High demand · Low stock",
+      action: "PRIORITIZE ALLOCATION",
+      zone: "top-left",
+    },
+    FAST_MOVING: {
+      label: "High demand · High stock",
+      action: "HEALTHY COVERAGE",
+      zone: "top-right",
+    },
+    WATCH: {
+      label: "Low demand · Low stock",
+      action: "MONITOR / REVIEW",
+      zone: "bottom-left",
+    },
+    OVERSTOCK: {
+      label: "Low demand · High stock",
+      action: "SLOW MOVING / REVIEW",
+      zone: "bottom-right",
+    },
+  };
 
   function upperTrim(v) {
     return String(v ?? "").trim().toUpperCase();
@@ -94,11 +125,6 @@
     return m ? m[1] : s;
   }
 
-  function display(v, fallback) {
-    const s = String(v ?? "").trim();
-    return s || fallback || "—";
-  }
-
   function toNum(v) {
     if (v == null || v === "") return 0;
     if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -127,7 +153,6 @@
     if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
     if (v == null || v === "") return null;
     if (typeof v === "number" && Number.isFinite(v)) {
-      // Excel serial (approximate)
       if (v > 20000 && v < 80000) {
         const epoch = Date.UTC(1899, 11, 30);
         const d = new Date(epoch + Math.round(v) * 86400000);
@@ -153,7 +178,6 @@
   }
 
   function keyAtLevel(parts, level) {
-    // 0 product → 1 +suffix → 2 +year → 3 +ext → 4 +int
     const bits = [parts.product || "_"];
     if (level >= 1) bits.push(parts.suffix || "_");
     if (level >= 2) bits.push(parts.year || "_");
@@ -163,7 +187,6 @@
   }
 
   function salesJoinKey(parts) {
-    // Sales Raw usually lacks suffix/colors — Product + Year when year present
     if (parts.year) return `P:${parts.product}|Y:${parts.year}`;
     return `P:${parts.product}`;
   }
@@ -173,28 +196,45 @@
   }
 
   /**
-   * Inventory Status (table Status column):
-   *   Need Focus — Back Orders > Available Stock (BO demand exceeds stock)
-   *   Healthy    — Back Orders ≤ Available Stock
+   * Inventory status from CONFIG bands + ageing/velocity.
+   * Critical requires scarcity AND high demand pressure.
    */
-  function inventoryStatusFromBoStock(backOrders, availableStock) {
-    const bo = Number(backOrders) || 0;
-    const stock = Number(availableStock) || 0;
-    return bo > stock ? "Need Focus" : "Healthy";
+  function classifyInventoryStatus(r, velSplit, cfg) {
+    const cov = r.stockCoverage;
+    const vel = Number(r.salesVelocity) || 0;
+    const age = r.allocationAgeing;
+    const highDemand = r.demandPressure >= cfg.demand.highPressure || vel >= velSplit;
+    const highAge = age != null && age >= cfg.ageing.highDays;
+    const lowVel = vel < velSplit;
+
+    if (highAge && lowVel && (r.availableStock || 0) > 0) return "Slow Moving";
+    if (cov == null) {
+      if ((r.availableStock || 0) > 0 && lowVel) return "Slow Moving";
+      if ((r.backOrders || 0) > 0 && !(r.availableStock > 0)) return "Critical";
+      return "Healthy";
+    }
+    if (cov < cfg.coverage.criticalMax && highDemand) return "Critical";
+    if (cov < cfg.coverage.criticalMax) return "At Risk";
+    if (cov < cfg.coverage.atRiskMax) return "At Risk";
+    if (cov < cfg.coverage.balancedMax) return "Balanced";
+    if (lowVel) return "Slow Moving";
+    return "Healthy";
   }
 
-  function coverageStatus(coverage, velocity, velocitySplit, cfg) {
-    // Kept for quadrant helpers; table Status uses inventoryStatusFromBoStock.
-    const c = cfg.coverage;
-    if (coverage == null) {
-      if (velocity >= velocitySplit) return "Healthy";
-      return "Overstock";
+  function recommendedAction(status, quadrant) {
+    if (status === "Critical" || quadrant === "CRITICAL") {
+      return QUADRANT_META.CRITICAL.action;
     }
-    if (coverage < c.criticalMax) return "Critical";
-    if (coverage < c.atRiskMax) return "At Risk";
-    if (coverage < c.balancedMax) return "Balanced";
-    if (velocity < velocitySplit) return "Overstock";
-    return "Healthy";
+    if (status === "At Risk") return "PROTECT ALLOCATION / MONITOR REPLENISHMENT";
+    if (status === "Slow Moving" || quadrant === "OVERSTOCK") {
+      return QUADRANT_META.OVERSTOCK.action;
+    }
+    if (status === "Balanced") return "MAINTAIN BALANCE / WATCH DEMAND";
+    if (status === "Healthy" || quadrant === "FAST_MOVING") {
+      return QUADRANT_META.FAST_MOVING.action;
+    }
+    if (quadrant === "WATCH") return QUADRANT_META.WATCH.action;
+    return "MONITOR";
   }
 
   function quadrantOf(coverage, velocity, covSplit, velSplit) {
@@ -205,29 +245,6 @@
     if (highCov && highVel) return "FAST_MOVING";
     if (highCov && !highVel) return "OVERSTOCK";
     return "WATCH";
-  }
-
-  function recommendedAction(status, quadrant) {
-    if (status === "Need Focus") {
-      return "Prioritize allocation / expedite supply / review BO priority";
-    }
-    if (status === "Healthy") {
-      return "Maintain inventory / monitor replenishment";
-    }
-    if (status === "Critical" || quadrant === "CRITICAL") {
-      return "Prioritize allocation / expedite supply / review BO priority";
-    }
-    if (status === "At Risk") {
-      return "Monitor replenishment / protect allocation for confirmed BO";
-    }
-    if (status === "Overstock" || quadrant === "OVERSTOCK") {
-      return "Push sales / campaign / review allocation / consider transfer";
-    }
-    if (quadrant === "FAST_MOVING") {
-      return "Maintain inventory / monitor replenishment";
-    }
-    if (status === "Balanced") return "Maintain balance / watch demand";
-    return "Monitor closely";
   }
 
   function aggregateUnits(map, key, add) {
@@ -262,18 +279,6 @@
     return `${vals[0]} (+${vals.length - 1})`;
   }
 
-  /**
-   * @param {object} input
-   * @param {object[]} input.boRows - mapped BO {product,suffix,year,ext,int,qty?}
-   * @param {object[]} input.rtlRows - mapped stock
-   * @param {object[]} input.centralRows - mapped stock
-   * @param {object[]} input.salesRows - sales with product, year, dates
-   * @param {object[]} input.allocationLeaves - {product,sfx,allocation}
-   * @param {number} [input.periodDays]
-   * @param {object} [input.configOverrides]
-   * @param {number} [input.drillLevel] 0..4
-   * @param {object} [input.helpers] { extractVin, boQty }
-   */
   function build(input) {
     const cfg = {
       ...CONFIG,
@@ -305,9 +310,10 @@
       matchedConfigs: 0,
       unmatchedBoKeys: 0,
       unmatchedStockKeys: 0,
+      uniqueVins: 0,
+      matchedVins: 0,
     };
 
-    // --- Sales period days ---
     let periodDays = Number(input.periodDays) || 0;
     const saleDates = [];
     (input.salesRows || []).forEach((r) => {
@@ -321,7 +327,6 @@
     }
     if (!periodDays) periodDays = 30;
 
-    // --- E-Sales map (product+suffix) ---
     const eSalesMap = new Map();
     (input.allocationLeaves || []).forEach((leaf) => {
       if (!leaf || leaf.kind === "total") return;
@@ -331,7 +336,6 @@
       eSalesMap.set(k, (eSalesMap.get(k) || 0) + (Number(leaf.allocation) || 0));
     });
 
-    // --- Sales counts by product(+year) ---
     const salesMap = new Map();
     (input.salesRows || []).forEach((r) => {
       const product = upperTrim(r.product || r.Product || r.model || "");
@@ -359,7 +363,6 @@
       if (!b.sample) b.sample = { ...parts };
     }
 
-    // BO
     (input.boRows || []).forEach((r) => {
       const parts = configParts(r, helpers);
       if (!parts.product) {
@@ -378,7 +381,6 @@
       });
     });
 
-    // Stock helper
     function ingestStock(rows, sourceField) {
       const seenVin = new Set();
       (rows || []).forEach((r) => {
@@ -420,13 +422,11 @@
     ingestStock(input.rtlRows, "rtl");
     ingestStock(input.centralRows, "central");
 
-    // Attach E-Sales + Sales to buckets
     buckets.forEach((b) => {
       const product = pickLabel(b.products, b.sample && b.sample.product);
       const suffix = pickLabel(b.suffixes, b.sample && b.sample.suffix);
       const year = pickLabel(b.years, b.sample && b.sample.year);
 
-      // E-Sales: sum matching leaves under this bucket
       let eSales = 0;
       if (level === 0) {
         eSalesMap.forEach((v, k) => {
@@ -434,7 +434,6 @@
         });
       } else {
         eSales = eSalesMap.get(esalesKey(product, suffix)) || 0;
-        // If multi-suffix label, sum all suffixes in set
         if (b.suffixes.size > 1) {
           eSales = 0;
           b.suffixes.forEach((sfx) => {
@@ -449,13 +448,9 @@
       let sales = 0;
       if (skYear && salesMap.has(skYear)) sales = salesMap.get(skYear);
       else sales = salesMap.get(skProd) || 0;
-      // Avoid double-counting product sales across many year buckets at product level:
-      // at level 0 product-only, use product key only
       if (level === 0) sales = salesMap.get(skProd) || sales;
       b.sales = sales;
     });
-
-    // Also create buckets that only exist in E-Sales / Sales? Skip — focus demand vs stock from BO+stock.
 
     const coverages = [];
     const velocities = [];
@@ -470,6 +465,7 @@
       const ageing = b.ageingCount ? b.ageingSum / b.ageingCount : null;
       if (coverage != null) coverages.push(coverage);
       velocities.push(velocity);
+      const vinList = [...b.vins].slice(0, cfg.vinListMax);
       return {
         id: b.key,
         product,
@@ -487,22 +483,26 @@
         stockCoverage: coverage,
         allocationAgeing: ageing,
         vinCount: b.vins.size,
+        vins: level >= 4 ? vinList : [],
+        sources: {
+          backOrders: "Back Orders file",
+          availableStock: "RTL Stock + Stock E-Sales file (VIN deduped per source)",
+          eSalesStock: "Admin E-Sales allocation plan",
+          sales: "Sales Raw Data",
+        },
       };
     });
 
-    // Drop empty noise (no BO and no stock)
     rows = rows.filter((r) => r.backOrders > 0 || r.availableStock > 0);
 
     const maxBo = Math.max(0, ...rows.map((r) => r.backOrders));
     const maxVel = Math.max(0, ...rows.map((r) => r.salesVelocity));
-    // Coverage split defaults to 1.0 (stock covers BO). Velocity split uses data median when auto.
-    const covSplit = cfg.quadrants.coverageSplit != null
-      ? cfg.quadrants.coverageSplit
-      : 1.0;
+    const covSplit = cfg.quadrants.coverageSplit != null ? cfg.quadrants.coverageSplit : 1.0;
     const velSplit = cfg.quadrants.autoThresholds
       ? (cfg.quadrants.velocitySplit != null ? cfg.quadrants.velocitySplit : (median(velocities) || 0))
       : (cfg.quadrants.velocitySplit != null ? cfg.quadrants.velocitySplit : 0);
 
+    // First pass: pressure + quadrant (status needs pressure)
     rows = rows.map((r) => {
       const covNorm = r.stockCoverage == null ? 1 : clamp(r.stockCoverage / 2, 0, 1);
       const scarcity = 1 - covNorm;
@@ -511,17 +511,25 @@
         (cfg.demand.boWeight * (maxBo ? r.backOrders / maxBo : 0) +
           cfg.demand.velocityWeight * (maxVel ? r.salesVelocity / maxVel : 0) +
           cfg.demand.scarcityWeight * scarcity);
-      const inventoryStatus = inventoryStatusFromBoStock(r.backOrders, r.availableStock);
       const quadrant = quadrantOf(r.stockCoverage, r.salesVelocity, covSplit, velSplit);
       const demandStatus =
-        pressure >= 70 ? "High" : pressure >= 40 ? "Moderate" : "Low";
-      return {
+        pressure >= cfg.demand.highPressure
+          ? "High"
+          : pressure >= cfg.demand.moderatePressure
+            ? "Moderate"
+            : "Low";
+      const withPressure = {
         ...r,
         demandPressure: Math.round(pressure * 10) / 10,
         demandStatus,
-        inventoryStatus,
         quadrant,
+      };
+      const inventoryStatus = classifyInventoryStatus(withPressure, velSplit, cfg);
+      return {
+        ...withPressure,
+        inventoryStatus,
         recommendedAction: recommendedAction(inventoryStatus, quadrant),
+        quadrantLabel: (QUADRANT_META[quadrant] && QUADRANT_META[quadrant].label) || quadrant,
         stockCoverageDisplay: r.stockCoverage == null ? "∞ (no BO)" : Math.round(r.stockCoverage * 100) / 100,
       };
     });
@@ -529,11 +537,21 @@
     dq.matchedConfigs = rows.filter((r) => r.backOrders > 0 && r.availableStock > 0).length;
     dq.unmatchedBoKeys = rows.filter((r) => r.backOrders > 0 && r.availableStock === 0).length;
     dq.unmatchedStockKeys = rows.filter((r) => r.availableStock > 0 && r.backOrders === 0).length;
+    const allVins = new Set();
+    rows.forEach((r) => {
+      (r.vins || []).forEach((v) => allVins.add(v));
+      if (!(r.vins || []).length && r.vinCount) {
+        /* vin lists only at full drill; still count from vinCount for DQ at product levels via stock totals */
+      }
+    });
+    dq.uniqueVins = rows.reduce((s, r) => s + (Number(r.vinCount) || 0), 0);
+    dq.matchedVins = rows.filter((r) => r.backOrders > 0 && r.vinCount > 0).reduce((s, r) => s + r.vinCount, 0);
 
     const totalBo = rows.reduce((s, r) => s + r.backOrders, 0);
     const totalStock = rows.reduce((s, r) => s + r.availableStock, 0);
-    const totalSales = rows.reduce((s, r) => s + r.sales, 0);
-    // Avoid double-counting sales across config rows that share product sales attribution
+    const totalRtl = rows.reduce((s, r) => s + r.rtlStock, 0);
+    const totalCentral = rows.reduce((s, r) => s + r.centralStock, 0);
+    const totalESales = rows.reduce((s, r) => s + (Number(r.eSalesStock) || 0), 0);
     const salesSeen = new Set();
     let uniqueSales = 0;
     rows.forEach((r) => {
@@ -543,26 +561,57 @@
       uniqueSales += r.sales;
     });
 
-    const needFocusCount = rows.filter((r) => r.inventoryStatus === "Need Focus").length;
+    const criticalCount = rows.filter((r) => r.inventoryStatus === "Critical").length;
+    const atRiskCount = rows.filter((r) => r.inventoryStatus === "At Risk").length;
+    const balancedCount = rows.filter((r) => r.inventoryStatus === "Balanced").length;
     const healthyCount = rows.filter((r) => r.inventoryStatus === "Healthy").length;
+    const slowCount = rows.filter((r) => r.inventoryStatus === "Slow Moving").length;
+    const overstockQuad = rows.filter((r) => r.quadrant === "OVERSTOCK").length;
 
     const kpis = {
       totalBackOrders: totalBo,
       availableStock: totalStock,
+      rtlStock: totalRtl,
+      centralStock: totalCentral,
+      eSalesStock: totalESales,
       stockCoveragePct: totalBo ? (totalStock / totalBo) * 100 : null,
-      totalSales: uniqueSales || totalSales,
-      salesVelocity: (uniqueSales || totalSales) / periodDays,
-      criticalVehicles: needFocusCount,
-      needFocusVehicles: needFocusCount,
+      totalSales: uniqueSales,
+      salesVelocity: uniqueSales / periodDays,
+      criticalVehicles: criticalCount,
+      needFocusVehicles: criticalCount + atRiskCount,
+      atRiskVehicles: atRiskCount,
+      balancedVehicles: balancedCount,
       healthyVehicles: healthyCount,
-      slowMovingVehicles: rows.filter((r) => r.quadrant === "OVERSTOCK").length,
-      overstockVehicles: rows.filter((r) => r.quadrant === "OVERSTOCK").length,
+      slowMovingVehicles: slowCount,
+      overstockVehicles: overstockQuad,
       periodDays,
       coverageSplit: covSplit,
       velocitySplit: velSplit,
     };
 
-    const insights = buildInsights(rows, kpis);
+    const validation = {
+      totalBO: totalBo,
+      totalRtlStock: totalRtl,
+      totalESalesFileStock: totalCentral,
+      totalESalesPlan: totalESales,
+      totalAvailableStock: totalStock,
+      totalSales: uniqueSales,
+      uniqueVinSlots: dq.uniqueVins,
+      matchedVinsWithBO: dq.matchedVins,
+      duplicateVins: dq.duplicateVins,
+      missingProduct: dq.missingProduct,
+      missingSuffix: dq.missingSuffix,
+      missingYear: dq.missingYear,
+      missingExt: dq.missingExt,
+      missingInt: dq.missingInt,
+      periodDays,
+    };
+
+    if (typeof console !== "undefined" && console.info) {
+      console.info("[ICC validation]", validation);
+    }
+
+    const insights = buildInsights(rows, kpis, cfg);
 
     return {
       config: cfg,
@@ -571,79 +620,101 @@
       kpis,
       insights,
       dataQuality: dq,
+      validation,
+      quadrantMeta: QUADRANT_META,
       matchingNotes: [
         "Config key: Product | Suffix | Year | Ext | Int (level-dependent)",
         "Stock VINs deduped per source; BO rows counted as units",
         "Sales join: Product (+ Model Year when available) — Sales Raw often lacks suffix/colors",
-        "E-Sales join: Product + Suffix from allocation plan",
-        `Quadrant splits: coverage ${covSplit.toFixed(2)}, velocity ${velSplit.toFixed(3)}/day`,
+        "E-Sales plan joins on Product + Suffix — shown separately from Available Stock",
+        `Available Stock priority: RTL primary + Central/E-Sales file secondary`,
+        `Quadrant splits: coverage ${covSplit.toFixed(2)}, velocity ${Number(velSplit).toFixed(3)}/day`,
       ],
     };
   }
 
-  function buildInsights(rows, kpis) {
-    const byBo = [...rows].sort((a, b) => b.backOrders - a.backOrders).slice(0, 5);
+  function buildInsights(rows, kpis, cfg) {
+    const label = (r) =>
+      [r.product, r.suffix !== "—" ? r.suffix : null, r.year !== "—" ? r.year : null]
+        .filter(Boolean)
+        .join(" / ");
+
+    const byBo = [...rows].sort((a, b) => b.backOrders - a.backOrders);
+    const topDemand = byBo[0];
+    const insufficient = rows.filter((r) => r.backOrders > r.availableStock).length;
+    const highAgeLowVel = rows.filter(
+      (r) =>
+        r.allocationAgeing != null &&
+        r.allocationAgeing >= cfg.ageing.highDays &&
+        r.salesVelocity < kpis.velocitySplit
+    ).length;
+    const highCov = rows.filter(
+      (r) => r.stockCoverage != null && r.stockCoverage > cfg.coverage.balancedMax
+    ).length;
+    const topStock = [...rows].sort((a, b) => b.availableStock - a.availableStock)[0];
+    const stockShare =
+      topStock && kpis.availableStock
+        ? ((topStock.availableStock / kpis.availableStock) * 100).toFixed(1)
+        : null;
+
+    const narrative = [];
+    if (topDemand && topDemand.backOrders > 0) {
+      narrative.push(
+        `${label(topDemand)} has the highest demand pressure (BO ${topDemand.backOrders}, coverage ${topDemand.stockCoverageDisplay}).`
+      );
+    }
+    narrative.push(
+      `${insufficient} configuration${insufficient === 1 ? "" : "s"} have insufficient stock to cover current back orders.`
+    );
+    narrative.push(
+      `${highAgeLowVel} configuration${highAgeLowVel === 1 ? "" : "s"} have high ageing (≥${cfg.ageing.highDays}d) and low sales velocity.`
+    );
+    narrative.push(
+      `${highCov} configuration${highCov === 1 ? "" : "s"} sit above coverage ${cfg.coverage.balancedMax} (Healthy / Slow Moving band).`
+    );
+    if (topStock && stockShare != null) {
+      narrative.push(
+        `${label(topStock)} represents ${stockShare}% of current available stock (${topStock.availableStock} of ${kpis.availableStock} units).`
+      );
+    }
+    narrative.push(
+      `Period snapshot: BO ${kpis.totalBackOrders} · Stock ${kpis.availableStock} · Sales ${kpis.totalSales} over ${kpis.periodDays}d · Velocity ${Number(kpis.salesVelocity).toFixed(2)}/day.`
+    );
+
     const critical = [...rows]
-      .filter((r) => r.inventoryStatus === "Need Focus")
+      .filter((r) => r.inventoryStatus === "Critical")
       .sort((a, b) => b.demandPressure - a.demandPressure)
       .slice(0, 5);
-    const ageing = [...rows]
-      .filter((r) => r.allocationAgeing != null)
-      .sort((a, b) => b.allocationAgeing - a.allocationAgeing)
-      .slice(0, 5);
     const slow = [...rows]
-      .filter((r) => r.availableStock > 0)
-      .sort((a, b) => a.salesVelocity - b.salesVelocity || b.allocationAgeing - a.allocationAgeing)
+      .filter((r) => r.inventoryStatus === "Slow Moving")
+      .sort((a, b) => (b.allocationAgeing || 0) - (a.allocationAgeing || 0))
       .slice(0, 5);
-    const highCov = [...rows]
-      .filter((r) => r.stockCoverage != null)
-      .sort((a, b) => b.stockCoverage - a.stockCoverage)
-      .slice(0, 5);
-    const bestSell = [...rows].sort((a, b) => b.sales - a.sales).slice(0, 5);
-
-    const label = (r) => [r.product, r.suffix !== "—" ? r.suffix : null, r.year !== "—" ? r.year : null]
-      .filter(Boolean)
-      .join(" / ");
 
     return [
       {
-        id: "demand",
-        title: "Highest demand (BO)",
-        items: byBo.map((r) => `${label(r)} — BO ${r.backOrders}, stock ${r.availableStock}`),
+        id: "intelligence",
+        title: "Inventory Intelligence",
+        items: narrative,
       },
       {
         id: "critical",
-        title: "Need Focus (BO > Stock)",
-        items: critical.map((r) => `${label(r)} — BO ${r.backOrders}, stock ${r.availableStock}`),
+        title: "Critical · prioritize allocation",
+        items: critical.map(
+          (r) => `${label(r)} — BO ${r.backOrders}, stock ${r.availableStock}, cov ${r.stockCoverageDisplay}`
+        ),
       },
       {
-        id: "ageing",
-        title: "Highest allocation ageing",
-        items: ageing.map((r) => `${label(r)} — ${Math.round(r.allocationAgeing)}d, stock ${r.availableStock}`),
+        id: "demand",
+        title: "Highest demand (BO)",
+        items: byBo.slice(0, 5).map((r) => `${label(r)} — BO ${r.backOrders}, stock ${r.availableStock}`),
       },
       {
         id: "slow",
-        title: "Slowest-moving inventory",
-        items: slow.map((r) => `${label(r)} — vel ${r.salesVelocity.toFixed(2)}/d, stock ${r.availableStock}`),
-      },
-      {
-        id: "overcov",
-        title: "Unusually high stock coverage",
-        items: highCov.map((r) => `${label(r)} — coverage ${r.stockCoverageDisplay}`),
-      },
-      {
-        id: "bestsellers",
-        title: "Best-selling models (period)",
-        items: bestSell.map((r) => `${label(r)} — sales ${r.sales}, vel ${r.salesVelocity.toFixed(2)}/d`),
-      },
-      {
-        id: "summary",
-        title: "Period snapshot",
-        items: [
-          `BO ${kpis.totalBackOrders}, Stock ${kpis.availableStock}, Coverage ${kpis.stockCoveragePct == null ? "n/a" : kpis.stockCoveragePct.toFixed(0) + "%"}`,
-          `Sales ${kpis.totalSales} over ${kpis.periodDays}d, Velocity ${kpis.salesVelocity.toFixed(2)}/day`,
-          `Need Focus ${kpis.needFocusVehicles || kpis.criticalVehicles}, Healthy ${kpis.healthyVehicles || 0}`,
-        ],
+        title: "Slow moving inventory",
+        items: slow.map(
+          (r) =>
+            `${label(r)} — age ${r.allocationAgeing == null ? "—" : Math.round(r.allocationAgeing) + "d"}, vel ${r.salesVelocity.toFixed(2)}/d`
+        ),
       },
     ];
   }
@@ -671,11 +742,19 @@
         if (c > Number(f.coverageMax)) return false;
       }
       if (q) {
-        const hay = `${r.product} ${r.suffix} ${r.year} ${r.ext} ${r.int} ${r.inventoryStatus} ${r.recommendedAction}`.toLowerCase();
+        const vinHay = (r.vins || []).join(" ").toLowerCase();
+        const hay = `${r.product} ${r.suffix} ${r.year} ${r.ext} ${r.int} ${r.inventoryStatus} ${r.recommendedAction} ${vinHay}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
+  }
+
+  function topNBy(rows, field, n) {
+    const limit = n === "all" || n == null ? (rows || []).length : Number(n) || 10;
+    return [...(rows || [])]
+      .sort((a, b) => (Number(b[field]) || 0) - (Number(a[field]) || 0))
+      .slice(0, Math.max(0, limit));
   }
 
   function bubbleRadius(stock, maxStock, cfg) {
@@ -685,7 +764,6 @@
     return b.minR + t * (b.maxR - b.minR);
   }
 
-  /** Deterministic jitter so stacked configs don't sit on one pixel. */
   function stableJitter(seed, amount) {
     const s = String(seed || "");
     let h = 2166136261;
@@ -693,18 +771,16 @@
       h ^= s.charCodeAt(i);
       h = Math.imul(h, 16777619);
     }
-    const u = ((h >>> 0) % 10000) / 10000; // 0..1
+    const u = ((h >>> 0) % 10000) / 10000;
     return (u - 0.5) * 2 * amount;
   }
 
   function coverageAxisX(r) {
-    // Real Available/BO when BO exists. No-BO with stock → soft high coverage (not one fixed wall at 3).
     if (r.stockCoverage == null) {
       if (!(r.availableStock > 0)) return 0;
       return Math.min(3.5, 1.2 + Math.log10(1 + r.availableStock) * 0.9);
     }
     if (!Number.isFinite(r.stockCoverage)) return 0;
-    // Soft-cap extreme ratios so the plot stays readable (tooltip still shows true coverage)
     return Math.min(Math.max(0, r.stockCoverage), 3.5);
   }
 
@@ -715,11 +791,12 @@
     return list.map((r) => {
       let x = mode === "ageing"
         ? (r.allocationAgeing == null ? 0 : r.allocationAgeing)
-        : coverageAxisX(r);
-      let y = r.salesVelocity || 0;
-      // Tiny spread so overlapping points remain visible (does not change underlying metrics)
-      x += stableJitter(r.id + ":x", mode === "ageing" ? Math.max(0.4, x * 0.02) : 0.045);
-      y += stableJitter(r.id + ":y", Math.max(0.15, maxVel * 0.012));
+        : mode === "boStock"
+          ? r.backOrders
+          : coverageAxisX(r);
+      let y = mode === "boStock" ? r.availableStock : (r.salesVelocity || 0);
+      x += stableJitter(r.id + ":x", mode === "ageing" ? Math.max(0.4, x * 0.02) : mode === "boStock" ? Math.max(0.5, x * 0.01) : 0.045);
+      y += stableJitter(r.id + ":y", Math.max(0.15, (mode === "boStock" ? Math.max(1, y) : maxVel) * 0.012));
       if (x < 0) x = 0;
       if (y < 0) y = 0;
       return {
@@ -739,9 +816,12 @@
       "Model Year": r.year,
       Exterior: r.ext,
       Interior: r.int,
+      "VIN Count": r.vinCount,
       "Back Orders": r.backOrders,
       "Available Stock": r.availableStock,
-      "E-Sales Stock": r.eSalesStock,
+      "RTL Stock": r.rtlStock,
+      "Central / E-Sales file": r.centralStock,
+      "E-Sales Stock (plan)": r.eSalesStock,
       Sales: r.sales,
       "Sales Velocity": Math.round(r.salesVelocity * 1000) / 1000,
       "Stock Coverage": r.stockCoverageDisplay,
@@ -755,10 +835,13 @@
 
   global.InventoryCommandCenter = {
     CONFIG,
+    QUADRANT_META,
     build,
     filterRows,
     toChartPoints,
     rowsToExcel,
+    topNBy,
+    buildInsights,
     normalizeSuffix,
     keyAtLevel,
     configParts,

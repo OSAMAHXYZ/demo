@@ -11,9 +11,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
-  <script src="inventory-command-center.js"></script>
+  <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260907t2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260907icc" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -93,151 +93,219 @@
 
       <!-- PANEL: Sales Dashboard (Power BI–style one page) -->
       <!-- PANEL: Inventory Command Center / Summary -->
-      <div class="panel-section" id="panel-summary" style="display:none">
-        <div class="icc-hero">
-          <div>
-            <p class="icc-eyebrow">Inventory Command Center</p>
-            <h2 class="icc-title">Demand vs Stock</h2>
-            <p class="icc-sub">Simple figures: back orders, available stock, and coverage by configuration.</p>
-          </div>
-          <div class="icc-hero-actions">
-            <div class="icc-mode-toggle" role="group" aria-label="Analysis mode">
-              <button type="button" class="icc-mode-btn active" data-icc-mode="coverage">Demand vs Coverage</button>
-              <button type="button" class="icc-mode-btn" data-icc-mode="ageing">Ageing vs Velocity</button>
+      <div class="panel-section icc-command-center" id="panel-summary" style="display:none">
+        <header class="icc-cc-header">
+          <div class="icc-cc-brand">
+            <div class="icc-cc-brand-mark" aria-hidden="true">
+              <img src="../images/logo/toyota.png" alt="" class="icc-cc-logo" onerror="this.style.display='none'" />
             </div>
-            <button type="button" class="btn" id="icc-reset">Reset filters</button>
-            <button type="button" class="btn-primary" id="icc-export">Export Excel</button>
+            <div>
+              <p class="icc-eyebrow">Toyota · ALJ Motors</p>
+              <h2 class="icc-title">Inventory Command Center</h2>
+              <p class="icc-sub">Vehicle demand, stock coverage, sales velocity and inventory health — from live Excel only</p>
+            </div>
           </div>
+          <div class="icc-cc-header-meta">
+            <div class="icc-refresh-stamp" id="icc-refresh-stamp">
+              <span class="lab">Last data refresh</span>
+              <strong id="icc-refresh-time">—</strong>
+            </div>
+            <div class="icc-cc-header-actions">
+              <button type="button" class="btn" id="icc-refresh-btn" title="Reload pushed Excel from Admin">Refresh Data</button>
+              <button type="button" class="btn-primary" id="icc-export">Export</button>
+              <button type="button" class="btn theme-toggle" id="icc-theme-toggle" title="Toggle dark / light">Dark / Light</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="icc-filter-bar card" id="icc-filters">
+          <label class="icc-field icc-field-grow">Search VIN / Product
+            <input id="icc-search" type="search" placeholder="VIN, product, model, status…" />
+          </label>
+          <label class="icc-field">Drill
+            <select id="icc-drill">
+              <option value="0" selected>Product</option>
+              <option value="1">+ Suffix</option>
+              <option value="2">+ Model Year</option>
+              <option value="3">+ Exterior</option>
+              <option value="4">+ Interior → VIN</option>
+            </select>
+          </label>
+          <label class="icc-field">Product
+            <select id="icc-f-product"><option value="">All</option></select>
+          </label>
+          <label class="icc-field">Suffix
+            <select id="icc-f-suffix"><option value="">All</option></select>
+          </label>
+          <label class="icc-field">Model Year
+            <select id="icc-f-year"><option value="">All</option></select>
+          </label>
+          <label class="icc-field">Exterior
+            <select id="icc-f-ext"><option value="">All</option></select>
+          </label>
+          <label class="icc-field">Interior
+            <select id="icc-f-int"><option value="">All</option></select>
+          </label>
+          <label class="icc-field">Inventory Status
+            <select id="icc-f-status">
+              <option value="">All</option>
+              <option>Critical</option>
+              <option>At Risk</option>
+              <option>Balanced</option>
+              <option>Healthy</option>
+              <option>Slow Moving</option>
+            </select>
+          </label>
+          <label class="icc-field">Demand Status
+            <select id="icc-f-demand">
+              <option value="">All</option>
+              <option>High</option>
+              <option>Moderate</option>
+              <option>Low</option>
+            </select>
+          </label>
+          <label class="icc-field">Quadrant
+            <select id="icc-f-quadrant">
+              <option value="">All</option>
+              <option value="CRITICAL">High demand · Low stock</option>
+              <option value="FAST_MOVING">High demand · High stock</option>
+              <option value="WATCH">Low demand · Low stock</option>
+              <option value="OVERSTOCK">Low demand · High stock</option>
+            </select>
+          </label>
+          <label class="icc-field">Ageing min
+            <input id="icc-age-min" type="number" min="0" step="1" placeholder="0" />
+          </label>
+          <label class="icc-field">Ageing max
+            <input id="icc-age-max" type="number" min="0" step="1" placeholder="999" />
+          </label>
+          <label class="icc-field">Coverage min
+            <input id="icc-cov-min" type="number" min="0" step="0.1" placeholder="0" />
+          </label>
+          <label class="icc-field">Coverage max
+            <input id="icc-cov-max" type="number" min="0" step="0.1" placeholder="5" />
+          </label>
+          <button type="button" class="btn" id="icc-reset">Clear Filters</button>
+          <p class="foot icc-threshold-note" id="icc-threshold-note"></p>
         </div>
 
-        <div class="icc-dq" id="icc-dq" aria-live="polite"></div>
-        <div class="bo-kpis icc-kpi-row" id="icc-kpis"></div>
+        <div class="bo-kpis icc-kpi-row icc-kpi-scroll" id="icc-kpis"></div>
 
-        <div class="icc-layout">
-          <aside class="icc-filters card" id="icc-filters">
-            <h3 class="icc-filters-title">Filters</h3>
-            <label class="icc-field">Drill level
-              <select id="icc-drill">
-                <option value="0">Product</option>
-                <option value="1">Product → Suffix</option>
-                <option value="2">+ Model Year</option>
-                <option value="3">+ Exterior</option>
-                <option value="4" selected>+ Interior (full config)</option>
-              </select>
-            </label>
-            <label class="icc-field">Search
-              <input id="icc-search" type="search" placeholder="Product / suffix / status…" />
-            </label>
-            <label class="icc-field">Product
-              <select id="icc-f-product"><option value="">All</option></select>
-            </label>
-            <label class="icc-field">Suffix
-              <select id="icc-f-suffix"><option value="">All</option></select>
-            </label>
-            <label class="icc-field">Model Year
-              <select id="icc-f-year"><option value="">All</option></select>
-            </label>
-            <label class="icc-field">Exterior
-              <select id="icc-f-ext"><option value="">All</option></select>
-            </label>
-            <label class="icc-field">Interior
-              <select id="icc-f-int"><option value="">All</option></select>
-            </label>
-            <label class="icc-field">Inventory Status
-              <select id="icc-f-status">
-                <option value="">All</option>
-                <option>Need Focus</option>
-                <option>Healthy</option>
-              </select>
-            </label>
-            <label class="icc-field">Demand Status
-              <select id="icc-f-demand">
-                <option value="">All</option>
-                <option>High</option>
-                <option>Moderate</option>
-                <option>Low</option>
-              </select>
-            </label>
-            <label class="icc-field">Quadrant
-              <select id="icc-f-quadrant">
-                <option value="">All</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="FAST_MOVING">Fast Moving</option>
-                <option value="OVERSTOCK">Overstock / Slow</option>
-                <option value="WATCH">Watch</option>
-              </select>
-            </label>
-            <div class="icc-range-row">
-              <label class="icc-field">Ageing min
-                <input id="icc-age-min" type="number" min="0" step="1" placeholder="0" />
-              </label>
-              <label class="icc-field">Ageing max
-                <input id="icc-age-max" type="number" min="0" step="1" placeholder="999" />
-              </label>
+        <div class="icc-hero-stage">
+          <article class="card icc-chart-card icc-hero-chart" data-chart-id="chart-icc-bubble">
+            <div class="pbi-viz-head">
+              <div>
+                <h2 id="icc-chart-title">Demand vs Stock Coverage</h2>
+                <p class="icc-chart-sub" id="icc-chart-hint">Identify vehicles where demand pressure and inventory availability are misaligned. Vehicle markers · click to inspect.</p>
+              </div>
+              <div class="icc-chart-tools">
+                <div class="icc-mode-toggle" role="group" aria-label="Main chart mode">
+                  <button type="button" class="icc-mode-btn active" data-icc-mode="coverage">Demand vs Coverage</button>
+                  <button type="button" class="icc-mode-btn" data-icc-mode="ageing">Ageing vs Velocity</button>
+                </div>
+                <button type="button" class="btn" id="icc-chart-reset-zoom" title="Reset zoom">Reset view</button>
+                <button type="button" class="pbi-expand" data-expand="chart-icc-bubble" title="Open wide view">Wide</button>
+              </div>
             </div>
-            <div class="icc-range-row">
-              <label class="icc-field">Coverage min
-                <input id="icc-cov-min" type="number" min="0" step="0.1" placeholder="0" />
-              </label>
-              <label class="icc-field">Coverage max
-                <input id="icc-cov-max" type="number" min="0" step="0.1" placeholder="5" />
-              </label>
+            <div class="icc-quadrant-legend" id="icc-quad-legend">
+              <span class="icc-q icc-q-critical">Prioritize allocation</span>
+              <span class="icc-q icc-q-fast">Healthy coverage</span>
+              <span class="icc-q icc-q-watch">Monitor / review</span>
+              <span class="icc-q icc-q-over">Slow moving / review</span>
             </div>
-            <p class="foot icc-threshold-note" id="icc-threshold-note"></p>
+            <div class="chart-box icc-chart-box icc-chart-box--hero"><canvas id="chart-icc-bubble"></canvas></div>
+          </article>
+
+          <aside class="card icc-detail icc-detail-panel" id="icc-detail">
+            <h3>Vehicle detail</h3>
+            <p class="foot" id="icc-detail-empty">Click a vehicle on the chart or a table row. Metrics come from pushed Excel — never mock values.</p>
+            <div id="icc-detail-body" hidden></div>
           </aside>
-
-          <div class="icc-main">
-            <article class="card icc-chart-card" data-chart-id="chart-icc-bubble">
-              <div class="pbi-viz-head">
-                <h2 id="icc-chart-title">4-quadrant · Demand vs Stock Coverage</h2>
-                <span class="hint" id="icc-chart-hint">Bubble size = available stock · click bubble to inspect</span>
-                <button type="button" class="pbi-expand" data-expand="chart-icc-bubble" title="Open wide view with car pictures">Wide</button>
-              </div>
-              <div class="icc-quadrant-legend" id="icc-quad-legend">
-                <span class="icc-q icc-q-critical">Critical</span>
-                <span class="icc-q icc-q-fast">Fast moving</span>
-                <span class="icc-q icc-q-over">Overstock / slow</span>
-                <span class="icc-q icc-q-watch">Watch</span>
-              </div>
-              <div class="chart-box icc-chart-box"><canvas id="chart-icc-bubble"></canvas></div>
-            </article>
-
-            <article class="card icc-detail" id="icc-detail">
-              <h3>Vehicle Intelligence</h3>
-              <p class="foot" id="icc-detail-empty">Click a bubble or table row to inspect demand, stock, coverage, and recommended action.</p>
-              <div id="icc-detail-body" hidden></div>
-            </article>
-
-            <article class="card icc-insights" id="icc-insights">
-              <h2>Inventory Insights</h2>
-              <div class="icc-insight-grid" id="icc-insight-grid"></div>
-            </article>
-
-            <article class="card icc-table-card">
-              <div class="pbi-viz-head">
-                <h2>Vehicle configuration table</h2>
-                <span class="hint">Sort · filter · paginate · conditional status</span>
-              </div>
-              <div class="icc-table-toolbar">
-                <label>Sort
-                  <select id="icc-sort">
-                    <option value="demandPressure:desc">Demand pressure ↓</option>
-                    <option value="backOrders:desc">Back orders ↓</option>
-                    <option value="stockCoverage:asc">Coverage ↑</option>
-                    <option value="salesVelocity:desc">Velocity ↓</option>
-                    <option value="allocationAgeing:desc">Ageing ↓</option>
-                    <option value="availableStock:desc">Stock ↓</option>
-                    <option value="product:asc">Product A–Z</option>
-                  </select>
-                </label>
-                <span class="foot" id="icc-table-meta"></span>
-              </div>
-              <div class="table-wrap icc-table-wrap" id="icc-table"></div>
-              <div class="icc-pager" id="icc-pager"></div>
-              <p class="foot" id="icc-table-foot"></p>
-            </article>
-          </div>
         </div>
+
+        <div class="icc-secondary-grid">
+          <article class="card" data-chart-id="chart-icc-ageing">
+            <div class="pbi-viz-head">
+              <h2>Inventory Ageing vs Sales Velocity</h2>
+              <span class="hint">Bubble size = available stock · high ageing + low velocity = slow moving</span>
+            </div>
+            <div class="chart-box icc-chart-box icc-chart-box--sec"><canvas id="chart-icc-ageing"></canvas></div>
+          </article>
+          <article class="card" data-chart-id="chart-icc-bo-stock">
+            <div class="pbi-viz-head">
+              <h2>Back Orders vs Available Stock</h2>
+              <span class="hint">Diagonal = Stock equals BO · below = shortfall</span>
+            </div>
+            <div class="chart-box icc-chart-box icc-chart-box--sec"><canvas id="chart-icc-bo-stock"></canvas></div>
+          </article>
+        </div>
+
+        <div class="icc-rank-grid">
+          <article class="card">
+            <div class="pbi-viz-head">
+              <h2>Top vehicles by Back Orders</h2>
+              <label class="icc-rank-limit">Show
+                <select id="icc-rank-limit">
+                  <option value="10" selected>Top 10</option>
+                  <option value="20">Top 20</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+            </div>
+            <div class="chart-box icc-chart-box icc-chart-box--rank"><canvas id="chart-icc-top-bo"></canvas></div>
+          </article>
+          <article class="card">
+            <div class="pbi-viz-head">
+              <h2>Top vehicles by Available Stock</h2>
+              <span class="hint" id="icc-rank-stock-hint">Same limit as left</span>
+            </div>
+            <div class="chart-box icc-chart-box icc-chart-box--rank"><canvas id="chart-icc-top-stock"></canvas></div>
+          </article>
+        </div>
+
+        <article class="card icc-insights" id="icc-insights">
+          <h2>Inventory Intelligence</h2>
+          <p class="foot">Statements are calculated from the current filtered Excel dataset.</p>
+          <div class="icc-insight-grid" id="icc-insight-grid"></div>
+        </article>
+
+        <details class="card icc-dq-panel" id="icc-dq-panel">
+          <summary>Data Quality · click to inspect source rows, matches, duplicates, missing fields</summary>
+          <div class="icc-dq" id="icc-dq" aria-live="polite"></div>
+          <ul class="icc-dq-notes" id="icc-dq-notes"></ul>
+        </details>
+
+        <article class="card icc-table-card">
+          <div class="pbi-viz-head">
+            <h2>Vehicle Inventory Detail</h2>
+            <span class="hint">Search · sort · paginate · export · conditional status</span>
+          </div>
+          <div class="icc-table-toolbar">
+            <label>Sort
+              <select id="icc-sort">
+                <option value="demandPressure:desc">Demand pressure ↓</option>
+                <option value="backOrders:desc">Back orders ↓</option>
+                <option value="stockCoverage:asc">Coverage ↑</option>
+                <option value="salesVelocity:desc">Velocity ↓</option>
+                <option value="allocationAgeing:desc">Ageing ↓</option>
+                <option value="availableStock:desc">Stock ↓</option>
+                <option value="product:asc">Product A–Z</option>
+              </select>
+            </label>
+            <label class="icc-col-vis">Columns
+              <select id="icc-col-vis" multiple size="1" title="Toggle columns">
+                <option value="vinCount" selected>VIN Count</option>
+                <option value="rtl" selected>RTL</option>
+                <option value="central" selected>Central file</option>
+                <option value="esales" selected>E-Sales plan</option>
+              </select>
+            </label>
+            <span class="foot" id="icc-table-meta"></span>
+          </div>
+          <div class="table-wrap icc-table-wrap" id="icc-table"></div>
+          <div class="icc-pager" id="icc-pager"></div>
+          <p class="foot" id="icc-table-foot"></p>
+        </article>
       </div>
 
       <div class="panel-section" id="panel-salesreport" style="display:none">
@@ -9432,7 +9500,7 @@
   let iccCacheKey = "";
   let iccView = {
     mode: "coverage",
-    drillLevel: 4,
+    drillLevel: 0,
     search: "",
     product: "",
     suffix: "",
@@ -9450,6 +9518,8 @@
     page: 0,
     selectedId: "",
     kpiFilter: "",
+    rankLimit: "10",
+    cols: { vinCount: true, rtl: true, central: true, esales: true },
   };
 
   function iccPeriodDays() {
@@ -9557,13 +9627,16 @@
   function iccApplyKpiFilter(rows) {
     if (!iccView.kpiFilter) return rows;
     if (iccView.kpiFilter === "critical" || iccView.kpiFilter === "needFocus") {
-      return rows.filter((r) => r.inventoryStatus === "Need Focus");
+      return rows.filter((r) => r.inventoryStatus === "Critical" || r.inventoryStatus === "Need Focus");
+    }
+    if (iccView.kpiFilter === "atRisk") {
+      return rows.filter((r) => r.inventoryStatus === "At Risk");
     }
     if (iccView.kpiFilter === "healthy") {
       return rows.filter((r) => r.inventoryStatus === "Healthy");
     }
     if (iccView.kpiFilter === "slow") {
-      return rows.filter((r) => r.quadrant === "OVERSTOCK");
+      return rows.filter((r) => r.inventoryStatus === "Slow Moving" || r.quadrant === "OVERSTOCK");
     }
     if (iccView.kpiFilter === "overstock") {
       return rows.filter((r) => r.quadrant === "OVERSTOCK");
@@ -9613,24 +9686,34 @@
     }
     if (empty) empty.hidden = true;
     body.hidden = false;
-    const cov = row.stockCoverageDisplay;
+    const statusCls =
+      row.inventoryStatus === "Critical" || row.inventoryStatus === "Need Focus"
+        ? "bad"
+        : row.inventoryStatus === "At Risk" || row.inventoryStatus === "Slow Moving"
+          ? "warn"
+          : "ok";
+    const vinBlock = (row.vins && row.vins.length)
+      ? `<div class="icc-vin-list"><span class="lab">VIN list (${formatNumber(row.vinCount)})</span><div class="icc-vin-chips">${row.vins.map((v) => `<code>${escapeHtml(v)}</code>`).join("")}${(row.vinCount > row.vins.length) ? `<span class="foot">+${row.vinCount - row.vins.length} more</span>` : ""}</div></div>`
+      : `<div><span class="lab">VIN count</span><strong>${formatNumber(row.vinCount || 0)}</strong><p class="foot">Drill to Interior for VIN list</p></div>`;
     body.innerHTML = `
+      <div class="icc-detail-status"><span class="badge ${statusCls}">${escapeHtml(row.inventoryStatus)}</span>
+        <span class="foot">${escapeHtml(row.quadrantLabel || row.quadrant || "")}</span></div>
       <div class="icc-detail-grid">
-        <div><span class="lab">Product</span><strong>${escapeHtml(row.product)}</strong></div>
+        <div><span class="lab">Vehicle</span><strong>${escapeHtml(row.product)}</strong></div>
+        <div><span class="lab">Model Year</span><strong>${escapeHtml(row.year)}</strong></div>
         <div><span class="lab">Suffix</span><strong>${escapeHtml(row.suffix)}</strong></div>
-        <div><span class="lab">Year</span><strong>${escapeHtml(row.year)}</strong></div>
-        <div><span class="lab">Ext / Int</span><strong>${escapeHtml(row.ext)} / ${escapeHtml(row.int)}</strong></div>
-        <div><span class="lab">Back Orders</span><strong>${formatNumber(row.backOrders)}</strong></div>
-        <div><span class="lab">Available Stock</span><strong>${formatNumber(row.availableStock)}</strong></div>
-        <div><span class="lab">E-Sales Stock</span><strong>${formatNumber(row.eSalesStock)}</strong></div>
-        <div><span class="lab">Sales / Velocity</span><strong>${formatNumber(row.sales)} · ${row.salesVelocity.toFixed(2)}/d</strong></div>
-        <div><span class="lab">Coverage</span><strong>${escapeHtml(String(cov))}</strong></div>
-        <div><span class="lab">Ageing</span><strong>${row.allocationAgeing == null ? "—" : Math.round(row.allocationAgeing) + "d"}</strong></div>
-        <div><span class="lab">Demand Pressure</span><strong>${row.demandPressure}</strong></div>
-        <div><span class="lab">Status</span><strong><span class="badge ${row.inventoryStatus === "Need Focus" ? "bad" : "ok"}">${escapeHtml(row.inventoryStatus)}</span></strong></div>
+        <div><span class="lab">Exterior</span><strong>${escapeHtml(row.ext)}</strong></div>
+        <div><span class="lab">Interior</span><strong>${escapeHtml(row.int)}</strong></div>
+        <div><span class="lab">Back Orders</span><strong>${formatNumber(row.backOrders)}</strong><p class="foot">Back Orders file</p></div>
+        <div><span class="lab">Available Stock</span><strong>${formatNumber(row.availableStock)}</strong><p class="foot">RTL ${formatNumber(row.rtlStock || 0)} · File ${formatNumber(row.centralStock || 0)}</p></div>
+        <div><span class="lab">E-Sales Stock</span><strong>${row.eSalesStock != null ? formatNumber(row.eSalesStock) : "N/A"}</strong><p class="foot">Allocation plan</p></div>
+        <div><span class="lab">Sales</span><strong>${formatNumber(row.sales)}</strong><p class="foot">Sales Raw</p></div>
+        <div><span class="lab">Sales Velocity</span><strong>${Number(row.salesVelocity).toFixed(2)}/d</strong></div>
+        <div><span class="lab">Stock Coverage</span><strong>${escapeHtml(String(row.stockCoverageDisplay))}</strong></div>
+        <div><span class="lab">Allocation Ageing</span><strong>${row.allocationAgeing == null ? "N/A" : Math.round(row.allocationAgeing) + "d"}</strong></div>
       </div>
-      <p class="icc-action"><b>Recommended:</b> ${escapeHtml(row.recommendedAction)}</p>
-      <p class="foot">Quadrant · ${escapeHtml(row.quadrant.replace(/_/g, " "))}</p>`;
+      ${vinBlock}
+      <p class="icc-action"><b>Recommended action:</b> ${escapeHtml(row.recommendedAction)}</p>`;
   }
 
   const CAR_IMAGE_FILES = {
@@ -9834,14 +9917,20 @@
         allocationAgeing: g.ageingN ? ageing : null,
         demandPressure: g.demandPressure,
         quadrant,
-        inventoryStatus: quadrant === "CRITICAL" ? "Need Focus" : "Healthy",
+        inventoryStatus: quadrant === "CRITICAL"
+          ? "Critical"
+          : quadrant === "OVERSTOCK"
+            ? "Slow Moving"
+            : quadrant === "FAST_MOVING"
+              ? "Healthy"
+              : "Balanced",
         recommendedAction: quadrant === "CRITICAL"
-          ? "Prioritize allocation"
+          ? "PRIORITIZE ALLOCATION"
           : quadrant === "FAST_MOVING"
-            ? "Healthy coverage"
+            ? "HEALTHY COVERAGE"
             : quadrant === "OVERSTOCK"
-              ? "Potential slow moving"
-              : "Monitor / Review",
+              ? "SLOW MOVING / REVIEW"
+              : "MONITOR / REVIEW",
       };
       return { x, y, r, rowId: g.rowId, meta };
     }).sort((a, b) => (b.meta.demandPressure || 0) - (a.meta.demandPressure || 0));
@@ -9894,11 +9983,14 @@
   }
 
   function modeLabelCoords(pt) {
-    const x = Number(pt.x);
-    const y = Number(pt.y);
-    const xs = Number.isFinite(x) ? (Math.abs(x) >= 10 ? x.toFixed(0) : x.toFixed(1)) : "—";
-    const ys = Number.isFinite(y) ? (Math.abs(y) >= 10 ? y.toFixed(0) : y.toFixed(1)) : "—";
-    return `${xs}, ${ys}`;
+    const m = pt.meta || {};
+    const cov = m.stockCoverageDisplay != null
+      ? String(m.stockCoverageDisplay)
+      : (Number.isFinite(Number(pt.x)) ? Number(pt.x).toFixed(2) : "—");
+    const vel = Number.isFinite(Number(m.salesVelocity))
+      ? Number(m.salesVelocity).toFixed(1)
+      : (Number.isFinite(Number(pt.y)) ? Number(pt.y).toFixed(1) : "—");
+    return `${cov} cov · ${vel}/d`;
   }
 
   async function openWideIccBubbleChart() {
@@ -9946,11 +10038,11 @@
   async function renderIccBubbleChart(dataset, filtered, opts) {
     const options = opts || {};
     const canvasId = options.canvasId || "chart-icc-bubble";
-    const useCarImages = !!options.useCarImages;
+    const useCarImages = options.useCarImages !== false && (canvasId === "chart-icc-bubble" || options.useCarImages === true);
     const canvas = document.getElementById(canvasId) || $(`#${canvasId}`);
     if (!canvas || !window.Chart || !window.InventoryCommandCenter) return;
     const ICC = window.InventoryCommandCenter;
-    const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
+    const mode = options.mode || (iccView.mode === "ageing" ? "ageing" : "coverage");
     let points = ICC.toChartPoints(filtered, mode, dataset.config);
 
     if (useCarImages) {
@@ -9959,6 +10051,8 @@
         points = points.slice(0, 36);
       }
       await preloadCarImagesForPoints(points);
+    } else if (points.length > 120) {
+      points = points.slice(0, 120);
     }
 
     if (canvasId === "chart-icc-bubble") {
@@ -9968,7 +10062,7 @@
     const colors = {
       CRITICAL: "rgba(235, 10, 30, 0.72)",
       FAST_MOVING: "rgba(13, 148, 136, 0.72)",
-      OVERSTOCK: "rgba(180, 83, 9, 0.72)",
+      OVERSTOCK: "rgba(37, 99, 235, 0.55)",
       WATCH: "rgba(100, 116, 139, 0.65)",
     };
 
@@ -10005,7 +10099,7 @@
         ctx.moveTo(left, ySplit);
         ctx.lineTo(right, ySplit);
         ctx.stroke();
-        if (useCarImages) {
+        if (useCarImages || true) {
           ctx.setLineDash([]);
           ctx.font = "700 10px Outfit, Segoe UI, sans-serif";
           ctx.fillStyle = "rgba(235, 10, 30, 0.55)";
@@ -10015,7 +10109,7 @@
           ctx.fillText("HIGH DEMAND · HIGH STOCK", xSplit + 8, top + 14);
           ctx.fillStyle = "rgba(100, 116, 139, 0.55)";
           ctx.fillText("LOW DEMAND · LOW STOCK", left + 8, ySplit + 16);
-          ctx.fillStyle = "rgba(180, 83, 9, 0.55)";
+          ctx.fillStyle = "rgba(37, 99, 235, 0.55)";
           ctx.fillText("LOW DEMAND · HIGH STOCK", xSplit + 8, ySplit + 16);
         }
         ctx.restore();
@@ -10118,9 +10212,10 @@
     if (iccView.page >= pages) iccView.page = 0;
     const start = iccView.page * pageSize;
     const pageRows = sorted.slice(start, start + pageSize);
+    const cols = iccView.cols || {};
 
     if (!sorted.length) {
-      el.innerHTML = `<p class="foot" style="padding:16px">No configurations match the current filters. Push Back Order / RTL / Central / Sales from Admin.</p>`;
+      el.innerHTML = `<p class="foot" style="padding:16px">No configurations match the current filters. Push Back Order / RTL / Stock E-Sales / Sales from Admin.</p>`;
       if (foot) foot.textContent = "0 rows";
       if (meta) meta.textContent = "";
       if (pager) pager.innerHTML = "";
@@ -10128,15 +10223,28 @@
     }
 
     const statusCls = (s) => {
-      if (s === "Need Focus") return "icc-st-critical";
+      if (s === "Critical" || s === "Need Focus") return "icc-st-critical";
+      if (s === "At Risk") return "icc-st-risk";
+      if (s === "Slow Moving") return "icc-st-slow";
+      if (s === "Balanced") return "icc-st-balanced";
       if (s === "Healthy") return "icc-st-ok";
       return "";
+    };
+    const badgeCls = (s) => {
+      if (s === "Critical" || s === "Need Focus") return "bad";
+      if (s === "At Risk" || s === "Slow Moving") return "warn";
+      return "ok";
     };
 
     el.innerHTML = `<table class="bas-table icc-table">
       <thead><tr>
         <th>Product</th><th>Suffix</th><th>Year</th><th>Exterior</th><th>Interior</th>
-        <th class="num">BO</th><th class="num">Stock</th><th class="num">E-Sales</th><th class="num">Sales</th>
+        ${cols.vinCount !== false ? "<th class=\"num\">VIN Count</th>" : ""}
+        <th class="num">BO</th><th class="num">Stock</th>
+        ${cols.rtl !== false ? "<th class=\"num\">RTL</th>" : ""}
+        ${cols.central !== false ? "<th class=\"num\">Central file</th>" : ""}
+        ${cols.esales !== false ? "<th class=\"num\">E-Sales plan</th>" : ""}
+        <th class="num">Sales</th>
         <th class="num">Velocity</th><th class="num">Coverage</th><th class="num">Ageing</th>
         <th>Status</th><th>Action</th>
       </tr></thead>
@@ -10147,20 +10255,23 @@
           <td>${escapeHtml(r.year)}</td>
           <td>${escapeHtml(r.ext)}</td>
           <td>${escapeHtml(r.int)}</td>
+          ${cols.vinCount !== false ? `<td class="num">${formatNumber(r.vinCount || 0)}</td>` : ""}
           <td class="num">${formatNumber(r.backOrders)}</td>
           <td class="num">${formatNumber(r.availableStock)}</td>
-          <td class="num">${formatNumber(r.eSalesStock)}</td>
+          ${cols.rtl !== false ? `<td class="num">${formatNumber(r.rtlStock || 0)}</td>` : ""}
+          ${cols.central !== false ? `<td class="num">${formatNumber(r.centralStock || 0)}</td>` : ""}
+          ${cols.esales !== false ? `<td class="num">${formatNumber(r.eSalesStock || 0)}</td>` : ""}
           <td class="num">${formatNumber(r.sales)}</td>
-          <td class="num">${r.salesVelocity.toFixed(2)}</td>
+          <td class="num">${Number(r.salesVelocity).toFixed(2)}</td>
           <td class="num">${escapeHtml(String(r.stockCoverageDisplay))}</td>
-          <td class="num">${r.allocationAgeing == null ? "—" : Math.round(r.allocationAgeing)}</td>
-          <td><span class="badge ${r.inventoryStatus === "Need Focus" ? "bad" : "ok"}">${escapeHtml(r.inventoryStatus)}</span></td>
+          <td class="num">${r.allocationAgeing == null ? "N/A" : Math.round(r.allocationAgeing)}</td>
+          <td><span class="badge ${badgeCls(r.inventoryStatus)}">${escapeHtml(r.inventoryStatus)}</span></td>
           <td class="icc-action-cell">${escapeHtml(r.recommendedAction)}</td>
         </tr>`).join("")}</tbody>
     </table>`;
 
     if (meta) meta.textContent = `${formatNumber(sorted.length)} configs · page ${iccView.page + 1}/${pages}`;
-    if (foot) foot.textContent = `Showing ${formatNumber(pageRows.length)} of ${formatNumber(sorted.length)} · drill level ${dataset.drillLevel}`;
+    if (foot) foot.textContent = `Showing ${formatNumber(pageRows.length)} of ${formatNumber(sorted.length)} · drill ${dataset.drillLevel} · figures from pushed Excel`;
     if (pager) {
       pager.innerHTML = `
         <button type="button" class="btn" id="icc-page-prev" ${iccView.page <= 0 ? "disabled" : ""}>Prev</button>
@@ -10182,6 +10293,166 @@
     });
   }
 
+  function destroyChartIf(id) {
+    if (charts[id]) {
+      charts[id].destroy();
+      delete charts[id];
+    }
+  }
+
+  function renderIccSecondaryCharts(dataset, filtered) {
+    if (!window.Chart || !window.InventoryCommandCenter) return;
+    const ICC = window.InventoryCommandCenter;
+    const pointsAge = ICC.toChartPoints(filtered, "ageing", dataset.config).slice(0, 100);
+    const pointsBo = ICC.toChartPoints(filtered, "boStock", dataset.config).slice(0, 100);
+
+    const bubbleOpts = (labelX, labelY) => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const m = (ctx.raw && ctx.raw.meta) || {};
+              return `${m.product || ""} · BO ${m.backOrders} · Stock ${m.availableStock} · Vel ${Number(m.salesVelocity || 0).toFixed(2)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: labelX }, beginAtZero: true },
+        y: { title: { display: true, text: labelY }, beginAtZero: true },
+      },
+      onClick(evt, els, chart) {
+        if (!els.length) return;
+        const pt = chart.data.datasets[0].data[els[0].index];
+        if (!pt) return;
+        iccView.selectedId = pt.rowId;
+        renderIccDetail(filtered.find((r) => r.id === pt.rowId) || pt.meta);
+      },
+    });
+
+    const mapPts = (pts) => pts.map((p) => ({
+      x: p.x,
+      y: p.y,
+      r: Math.max(4, Math.min(18, p.r * 0.45)),
+      rowId: p.rowId,
+      meta: p.meta,
+      backgroundColor: p.meta && p.meta.quadrant === "CRITICAL"
+        ? "rgba(235,10,30,.55)"
+        : p.meta && p.meta.quadrant === "OVERSTOCK"
+          ? "rgba(37,99,235,.45)"
+          : "rgba(100,116,139,.45)",
+    }));
+
+    const ageCanvas = document.getElementById("chart-icc-ageing");
+    if (ageCanvas) {
+      destroyChartIf("chart-icc-ageing");
+      charts["chart-icc-ageing"] = new Chart(ageCanvas, {
+        type: "bubble",
+        data: { datasets: [{ data: mapPts(pointsAge) }] },
+        options: bubbleOpts("Allocation Ageing (days)", "Sales Velocity (units/day)"),
+      });
+    }
+
+    const boCanvas = document.getElementById("chart-icc-bo-stock");
+    if (boCanvas) {
+      destroyChartIf("chart-icc-bo-stock");
+      const maxAxis = Math.max(
+        1,
+        ...pointsBo.map((p) => p.x),
+        ...pointsBo.map((p) => p.y)
+      );
+      const diagPlugin = {
+        id: "iccBoDiag",
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea || !scales.x || !scales.y) return;
+          const x0 = scales.x.getPixelForValue(0);
+          const y0 = scales.y.getPixelForValue(0);
+          const x1 = scales.x.getPixelForValue(maxAxis);
+          const y1 = scales.y.getPixelForValue(maxAxis);
+          ctx.save();
+          ctx.strokeStyle = "rgba(235,10,30,.55)";
+          ctx.setLineDash([6, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.stroke();
+          ctx.restore();
+        },
+      };
+      charts["chart-icc-bo-stock"] = new Chart(boCanvas, {
+        type: "bubble",
+        data: { datasets: [{ data: mapPts(pointsBo) }] },
+        options: bubbleOpts("Back Orders", "Available Stock"),
+        plugins: [diagPlugin],
+      });
+    }
+
+    const limit = iccView.rankLimit === "all" ? filtered.length : Number(iccView.rankLimit) || 10;
+    const topBo = ICC.topNBy(filtered, "backOrders", limit);
+    const topStock = ICC.topNBy(filtered, "availableStock", limit);
+
+    const barChart = (id, rows, field, color) => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      destroyChartIf(id);
+      const labels = rows.map((r) => {
+        const s = r.suffix && r.suffix !== "—" ? ` ${r.suffix}` : "";
+        const name = `${r.product}${s}`;
+        return name.length > 22 ? name.slice(0, 20) + "…" : name;
+      });
+      charts[id] = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            data: rows.map((r) => r[field]),
+            backgroundColor: color,
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, ticks: { precision: 0 } },
+            y: { ticks: { font: { size: 11 } } },
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const row = rows[els[0].index];
+            if (!row) return;
+            iccView.selectedId = row.id;
+            renderIccDetail(row);
+          },
+        },
+      });
+    };
+    barChart("chart-icc-top-bo", topBo, "backOrders", "rgba(235, 10, 30, 0.75)");
+    barChart("chart-icc-top-stock", topStock, "availableStock", "rgba(15, 118, 110, 0.75)");
+  }
+
+  function iccLastRefreshLabel() {
+    try {
+      const raw = localStorage.getItem("toyota_admin_workbook_push_v1");
+      if (!raw) return "Not pushed yet";
+      const meta = JSON.parse(raw);
+      const at = meta && (meta.at || meta.pushedAt || meta.time);
+      if (!at) return "Push recorded (no timestamp)";
+      const d = new Date(at);
+      if (Number.isNaN(d.getTime())) return String(at);
+      return d.toLocaleString();
+    } catch {
+      return "Unavailable";
+    }
+  }
+
   function renderSummaryDashboard() {
     const panel = $("#panel-summary");
     if (!panel || !$("#icc-kpis")) return;
@@ -10189,7 +10460,7 @@
       $("#icc-kpis").innerHTML = "";
       const table = $("#icc-table");
       if (table) {
-        table.innerHTML = `<p class="foot" style="padding:16px">Push <b>Back Orders</b>, <b>RTL / Central stock</b>, and/or <b>Sales Raw</b> from Admin to open the Inventory Command Center.</p>`;
+        table.innerHTML = `<p class="foot" style="padding:16px">Push <b>Back Orders</b>, <b>RTL / Stock E-Sales</b>, and/or <b>Sales Raw</b> from Admin to open the Inventory Command Center.</p>`;
       }
       return;
     }
@@ -10203,6 +10474,9 @@
     const ICC = window.InventoryCommandCenter;
     let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
     filtered = iccApplyKpiFilter(filtered);
+
+    const stamp = $("#icc-refresh-time");
+    if (stamp) stamp.textContent = iccLastRefreshLabel();
 
     const all = dataset.rows;
     fillIccSelect("#icc-f-product", new Set(all.map((r) => r.product)), iccView.product, "All products");
@@ -10221,6 +10495,7 @@
     if ($("#icc-age-max")) $("#icc-age-max").value = iccView.ageingMax;
     if ($("#icc-cov-min")) $("#icc-cov-min").value = iccView.coverageMin;
     if ($("#icc-cov-max")) $("#icc-cov-max").value = iccView.coverageMax;
+    if ($("#icc-rank-limit")) $("#icc-rank-limit").value = iccView.rankLimit || "10";
 
     document.querySelectorAll(".icc-mode-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.getAttribute("data-icc-mode") === iccView.mode);
@@ -10231,40 +10506,55 @@
     if (title) {
       title.textContent = iccView.mode === "ageing"
         ? "Inventory Ageing vs Sales Velocity"
-        : "4-quadrant · Demand vs Stock Coverage";
+        : "Demand vs Stock Coverage";
     }
     if (hint) {
       hint.textContent = iccView.mode === "ageing"
-        ? "High ageing + low velocity = slow-moving, bubble size = stock"
-        : `X = Available / BO, Y = Sales / day, Coverage split ${dataset.kpis.coverageSplit.toFixed(2)}, Velocity split ${dataset.kpis.velocitySplit.toFixed(2)}`;
+        ? "High ageing + low velocity = slow-moving · bubble/vehicle size ∝ stock · from live Excel"
+        : `X = Available Stock ÷ Back Orders · Y = Sales ÷ ${dataset.kpis.periodDays}d · splits coverage ${Number(dataset.kpis.coverageSplit).toFixed(2)} · velocity ${Number(dataset.kpis.velocitySplit).toFixed(2)}/d`;
     }
     const note = $("#icc-threshold-note");
     if (note) {
       const c = dataset.config.coverage;
-      note.innerHTML = `
-        <span class="icc-note-title">Coverage bands</span>
-        <ul class="icc-note-list">
-          <li>&lt; ${c.criticalMax} = Critical</li>
-          <li>&lt; ${c.atRiskMax} = At Risk</li>
-          <li>&lt; ${c.balancedMax} = Balanced</li>
-          <li>≥ ${c.balancedMax} = Healthy / Overstock (by velocity)</li>
-        </ul>
-        <span class="icc-note-foot">Quadrant splits use coverage 1.0 and median velocity.</span>`;
+      note.textContent = `Thresholds · Critical <${c.criticalMax} · At Risk <${c.atRiskMax} · Balanced <${c.balancedMax} · Slow Moving = high ageing + low velocity`;
     }
 
     const k = dataset.kpis;
+    const filteredKpis = (() => {
+      const totalBo = filtered.reduce((s, r) => s + r.backOrders, 0);
+      const totalStock = filtered.reduce((s, r) => s + r.availableStock, 0);
+      const salesSeen = new Set();
+      let sales = 0;
+      filtered.forEach((r) => {
+        const sk = `${r.product}|${r.year}`;
+        if (salesSeen.has(sk)) return;
+        salesSeen.add(sk);
+        sales += r.sales;
+      });
+      return {
+        totalBackOrders: totalBo,
+        availableStock: totalStock,
+        stockCoveragePct: totalBo ? (totalStock / totalBo) * 100 : null,
+        totalSales: sales,
+        salesVelocity: sales / Math.max(1, k.periodDays || 1),
+        criticalVehicles: filtered.filter((r) => r.inventoryStatus === "Critical").length,
+        slowMovingVehicles: filtered.filter((r) => r.inventoryStatus === "Slow Moving").length,
+        overstockVehicles: filtered.filter((r) => r.quadrant === "OVERSTOCK").length,
+        healthyVehicles: filtered.filter((r) => r.inventoryStatus === "Healthy").length,
+      };
+    })();
+
     const kpiEl = $("#icc-kpis");
     if (kpiEl) {
       const cards = [
-        { id: "", label: "Total Back Orders", val: formatNumber(k.totalBackOrders), sub: "Open BO units" },
-        { id: "", label: "Available Stock", val: formatNumber(k.availableStock), sub: "RTL + Central VINs" },
-        { id: "", label: "Stock Coverage %", val: k.stockCoveragePct == null ? "n/a" : `${k.stockCoveragePct.toFixed(0)}%`, sub: "Stock ÷ BO", cls: k.stockCoveragePct != null && k.stockCoveragePct < 50 ? "bad" : "ok" },
-        { id: "", label: "Total Sales", val: formatNumber(k.totalSales), sub: `${k.periodDays}d period` },
-        { id: "", label: "Sales Velocity", val: k.salesVelocity.toFixed(2), sub: "Units / day" },
-        { id: "needFocus", label: "Need Focus", val: formatNumber(k.needFocusVehicles || k.criticalVehicles), sub: "BO > Stock · click to filter", cls: "bad" },
-        { id: "healthy", label: "Healthy", val: formatNumber(k.healthyVehicles || 0), sub: "BO ≤ Stock · click to filter", cls: "ok" },
-        { id: "slow", label: "Slow Moving", val: formatNumber(k.slowMovingVehicles), sub: "Quadrant · click to filter", cls: "warn" },
-        { id: "overstock", label: "Overstock quadrant", val: formatNumber(k.overstockVehicles), sub: "Click to filter", cls: "warn" },
+        { id: "", label: "Total Back Orders", val: formatNumber(filteredKpis.totalBackOrders), sub: "Open customer demand · BO file" },
+        { id: "", label: "Available Stock", val: formatNumber(filteredKpis.availableStock), sub: "RTL + E-Sales file VINs" },
+        { id: "", label: "Stock Coverage", val: filteredKpis.stockCoveragePct == null ? "N/A" : `${filteredKpis.stockCoveragePct.toFixed(0)}%`, sub: "Available ÷ Back Orders", cls: filteredKpis.stockCoveragePct != null && filteredKpis.stockCoveragePct < 50 ? "bad" : "ok" },
+        { id: "", label: "Total Sales", val: formatNumber(filteredKpis.totalSales), sub: `${k.periodDays}d · Sales Raw` },
+        { id: "", label: "Sales Velocity", val: filteredKpis.salesVelocity.toFixed(2), sub: "Units / day" },
+        { id: "critical", label: "Critical Vehicles", val: formatNumber(filteredKpis.criticalVehicles), sub: "Low coverage + high demand · click", cls: "bad" },
+        { id: "slow", label: "Slow Moving", val: formatNumber(filteredKpis.slowMovingVehicles), sub: "High ageing · low velocity · click", cls: "warn" },
+        { id: "overstock", label: "Overstock", val: formatNumber(filteredKpis.overstockVehicles), sub: "Low demand · high stock quadrant · click", cls: "warn" },
       ];
       kpiEl.innerHTML = cards.map((c) => `
         <button type="button" class="bo-kpi icc-kpi${c.cls ? " " + c.cls : ""}${iccView.kpiFilter === c.id && c.id ? " is-active" : ""}" data-icc-kpi="${c.id}">
@@ -10286,28 +10576,57 @@
     const dq = dataset.dataQuality;
     const dqEl = $("#icc-dq");
     if (dqEl) {
+      const v = dataset.validation || {};
       dqEl.innerHTML = `
-        <span><b>Data quality</b></span>
-        <span>BO ${formatNumber(dq.sourceRows.backorder)}</span>
-        <span>RTL ${formatNumber(dq.sourceRows.rtl)}</span>
-        <span>Central ${formatNumber(dq.sourceRows.central)}</span>
-        <span>Sales ${formatNumber(dq.sourceRows.sales)}</span>
-        <span>Matched configs ${formatNumber(dq.matchedConfigs)}</span>
-        <span>BO w/o stock ${formatNumber(dq.unmatchedBoKeys)}</span>
-        <span>Dup VINs ${formatNumber(dq.duplicateVins)}</span>
-        <span>Missing product ${formatNumber(dq.missingProduct)}</span>`;
+        <button type="button" class="icc-dq-chip" data-dq="bo"><b>BO rows</b> ${formatNumber(dq.sourceRows.backorder)}</button>
+        <button type="button" class="icc-dq-chip" data-dq="rtl"><b>RTL</b> ${formatNumber(dq.sourceRows.rtl)}</button>
+        <button type="button" class="icc-dq-chip" data-dq="central"><b>E-Sales file</b> ${formatNumber(dq.sourceRows.central)}</button>
+        <button type="button" class="icc-dq-chip" data-dq="sales"><b>Sales</b> ${formatNumber(dq.sourceRows.sales)}</button>
+        <span><b>Matched configs</b> ${formatNumber(dq.matchedConfigs)}</span>
+        <span><b>BO w/o stock</b> ${formatNumber(dq.unmatchedBoKeys)}</span>
+        <span><b>Stock w/o BO</b> ${formatNumber(dq.unmatchedStockKeys)}</span>
+        <span><b>Dup VINs</b> ${formatNumber(dq.duplicateVins)}</span>
+        <span><b>Missing product</b> ${formatNumber(dq.missingProduct)}</span>
+        <span><b>Missing suffix</b> ${formatNumber(dq.missingSuffix)}</span>
+        <span><b>Missing year</b> ${formatNumber(dq.missingYear)}</span>
+        <span><b>Missing ext</b> ${formatNumber(dq.missingExt)}</span>
+        <span><b>Missing int</b> ${formatNumber(dq.missingInt)}</span>
+        <span><b>Validation BO</b> ${formatNumber(v.totalBO)}</span>
+        <span><b>Validation stock</b> ${formatNumber(v.totalAvailableStock)}</span>
+        <span><b>Validation sales</b> ${formatNumber(v.totalSales)}</span>`;
+    }
+    const dqNotes = $("#icc-dq-notes");
+    if (dqNotes) {
+      dqNotes.innerHTML = (dataset.matchingNotes || []).map((n) => `<li>${escapeHtml(n)}</li>`).join("");
     }
 
     const insightEl = $("#icc-insight-grid");
     if (insightEl) {
-      insightEl.innerHTML = (dataset.insights || []).map((block) => `
+      const fk = {
+        totalBackOrders: filteredKpis.totalBackOrders,
+        availableStock: filteredKpis.availableStock,
+        stockCoveragePct: filteredKpis.stockCoveragePct,
+        totalSales: filteredKpis.totalSales,
+        salesVelocity: filteredKpis.salesVelocity,
+        periodDays: k.periodDays,
+        velocitySplit: k.velocitySplit,
+        criticalVehicles: filteredKpis.criticalVehicles,
+        needFocusVehicles: filteredKpis.criticalVehicles,
+        healthyVehicles: filteredKpis.healthyVehicles,
+        slowMovingVehicles: filteredKpis.slowMovingVehicles,
+      };
+      const insightSource = typeof ICC.buildInsights === "function"
+        ? ICC.buildInsights(filtered, fk, dataset.config)
+        : (dataset.insights || []);
+      insightEl.innerHTML = insightSource.map((block) => `
         <div class="icc-insight-card">
           <h4>${escapeHtml(block.title)}</h4>
-          <ul>${(block.items || []).slice(0, 5).map((t) => `<li>${escapeHtml(t)}</li>`).join("") || "<li>No signal</li>"}</ul>
+          <ul>${(block.items || []).slice(0, 6).map((t) => `<li>${escapeHtml(t)}</li>`).join("") || "<li>No signal</li>"}</ul>
         </div>`).join("");
     }
 
-    renderIccBubbleChart(dataset, filtered);
+    renderIccBubbleChart(dataset, filtered, { useCarImages: true });
+    renderIccSecondaryCharts(dataset, filtered);
     renderIccTable(dataset, filtered);
 
     const selected = filtered.find((r) => r.id === iccView.selectedId) || dataset.rows.find((r) => r.id === iccView.selectedId);
@@ -10328,15 +10647,15 @@
 
     const wb = XLSX.utils.book_new();
     appendKpiSheet(wb, "KPIs", [
-      { label: "Total Back Orders", val: k.totalBackOrders, sub: "open BO demand" },
-      { label: "Available Stock", val: k.availableStock, sub: "RTL + Central" },
-      { label: "Stock Coverage %", val: k.stockCoveragePct != null ? `${Math.round(k.stockCoveragePct * 100)}%` : "", sub: "Available ÷ BO" },
-      { label: "Total Sales", val: k.totalSales, sub: "period sales" },
-      { label: "Sales Velocity", val: k.salesVelocity != null ? Number(k.salesVelocity).toFixed(2) : "", sub: "units / day" },
-      { label: "Need Focus", val: k.needFocus, sub: "BO > stock" },
-      { label: "Healthy", val: k.healthy, sub: "coverage ok" },
-      { label: "Slow Moving", val: k.slowMoving, sub: "overstock / slow" },
-      { label: "Overstock quadrant", val: k.overstockQuadrant, sub: "quadrant count" },
+      { label: "Total Back Orders", val: k.totalBackOrders, sub: "open BO demand · BO file" },
+      { label: "Available Stock", val: k.availableStock, sub: "RTL + E-Sales file VINs" },
+      { label: "Stock Coverage %", val: k.stockCoveragePct != null ? `${Math.round(k.stockCoveragePct)}%` : "N/A", sub: "Available ÷ BO" },
+      { label: "Total Sales", val: k.totalSales, sub: "Sales Raw period" },
+      { label: "Sales Velocity", val: k.salesVelocity != null ? Number(k.salesVelocity).toFixed(2) : "N/A", sub: "units / day" },
+      { label: "Critical Vehicles", val: k.criticalVehicles, sub: "low coverage + high demand" },
+      { label: "Healthy", val: k.healthyVehicles, sub: "healthy coverage + velocity" },
+      { label: "Slow Moving", val: k.slowMovingVehicles, sub: "high ageing + low velocity" },
+      { label: "Overstock quadrant", val: k.overstockVehicles, sub: "low demand · high stock" },
     ].filter((x) => x.val !== undefined && x.val !== null));
 
     appendObjectSheet(wb, "Inventory Command Center", ICC.rowsToExcel(sorted));
@@ -10691,6 +11010,7 @@
     bindChange("#icc-f-demand", "demandStatus");
     bindChange("#icc-f-quadrant", "quadrant");
     bindChange("#icc-sort", "sort");
+    bindChange("#icc-rank-limit", "rankLimit");
     bindInput("#icc-age-min", "ageingMin");
     bindInput("#icc-age-max", "ageingMax");
     bindInput("#icc-cov-min", "coverageMin");
@@ -10739,12 +11059,40 @@
           page: 0,
           selectedId: "",
           kpiFilter: "",
+          rankLimit: iccView.rankLimit || "10",
+          cols: iccView.cols || { vinCount: true, rtl: true, central: true, esales: true },
         };
         renderSummaryDashboard();
       });
     }
     const exp = $("#icc-export");
     if (exp) exp.addEventListener("click", exportIccExcel);
+
+    const refreshBtn = $("#icc-refresh-btn");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => {
+        invalidateIccCache();
+        refreshFromAdmin("ICC refreshed from Admin push");
+      });
+    }
+    const themeBtn = $("#icc-theme-toggle");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", () => {
+        const main = $("#theme-toggle");
+        if (main) main.click();
+        else {
+          document.body.classList.toggle("theme-dark");
+        }
+      });
+    }
+    const zoomReset = $("#icc-chart-reset-zoom");
+    if (zoomReset) {
+      zoomReset.addEventListener("click", () => {
+        const ch = charts["chart-icc-bubble"];
+        if (ch && typeof ch.resetZoom === "function") ch.resetZoom();
+        else renderSummaryDashboard();
+      });
+    }
   }
   bindIccControls();
 
