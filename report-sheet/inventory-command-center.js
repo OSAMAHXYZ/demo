@@ -172,10 +172,21 @@
     return `${compact(product) || upperTrim(product)}|${normalizeSuffix(product, suffix)}`;
   }
 
+  /**
+   * Inventory Status (table Status column):
+   *   Need Focus — Back Orders > Available Stock (BO demand exceeds stock)
+   *   Healthy    — Back Orders ≤ Available Stock
+   */
+  function inventoryStatusFromBoStock(backOrders, availableStock) {
+    const bo = Number(backOrders) || 0;
+    const stock = Number(availableStock) || 0;
+    return bo > stock ? "Need Focus" : "Healthy";
+  }
+
   function coverageStatus(coverage, velocity, velocitySplit, cfg) {
+    // Kept for quadrant helpers; table Status uses inventoryStatusFromBoStock.
     const c = cfg.coverage;
     if (coverage == null) {
-      // No BO → infinite coverage conceptually; classify by velocity
       if (velocity >= velocitySplit) return "Healthy";
       return "Overstock";
     }
@@ -197,6 +208,12 @@
   }
 
   function recommendedAction(status, quadrant) {
+    if (status === "Need Focus") {
+      return "Prioritize allocation / expedite supply / review BO priority";
+    }
+    if (status === "Healthy") {
+      return "Maintain inventory / monitor replenishment";
+    }
     if (status === "Critical" || quadrant === "CRITICAL") {
       return "Prioritize allocation / expedite supply / review BO priority";
     }
@@ -206,7 +223,7 @@
     if (status === "Overstock" || quadrant === "OVERSTOCK") {
       return "Push sales / campaign / review allocation / consider transfer";
     }
-    if (quadrant === "FAST_MOVING" || status === "Healthy") {
+    if (quadrant === "FAST_MOVING") {
       return "Maintain inventory / monitor replenishment";
     }
     if (status === "Balanced") return "Maintain balance / watch demand";
@@ -494,7 +511,7 @@
         (cfg.demand.boWeight * (maxBo ? r.backOrders / maxBo : 0) +
           cfg.demand.velocityWeight * (maxVel ? r.salesVelocity / maxVel : 0) +
           cfg.demand.scarcityWeight * scarcity);
-      const inventoryStatus = coverageStatus(r.stockCoverage, r.salesVelocity, velSplit, cfg);
+      const inventoryStatus = inventoryStatusFromBoStock(r.backOrders, r.availableStock);
       const quadrant = quadrantOf(r.stockCoverage, r.salesVelocity, covSplit, velSplit);
       const demandStatus =
         pressure >= 70 ? "High" : pressure >= 40 ? "Moderate" : "Low";
@@ -526,15 +543,20 @@
       uniqueSales += r.sales;
     });
 
+    const needFocusCount = rows.filter((r) => r.inventoryStatus === "Need Focus").length;
+    const healthyCount = rows.filter((r) => r.inventoryStatus === "Healthy").length;
+
     const kpis = {
       totalBackOrders: totalBo,
       availableStock: totalStock,
       stockCoveragePct: totalBo ? (totalStock / totalBo) * 100 : null,
       totalSales: uniqueSales || totalSales,
       salesVelocity: (uniqueSales || totalSales) / periodDays,
-      criticalVehicles: rows.filter((r) => r.inventoryStatus === "Critical" || r.quadrant === "CRITICAL").length,
-      slowMovingVehicles: rows.filter((r) => r.quadrant === "OVERSTOCK" || r.inventoryStatus === "Overstock").length,
-      overstockVehicles: rows.filter((r) => r.inventoryStatus === "Overstock").length,
+      criticalVehicles: needFocusCount,
+      needFocusVehicles: needFocusCount,
+      healthyVehicles: healthyCount,
+      slowMovingVehicles: rows.filter((r) => r.quadrant === "OVERSTOCK").length,
+      overstockVehicles: rows.filter((r) => r.quadrant === "OVERSTOCK").length,
       periodDays,
       coverageSplit: covSplit,
       velocitySplit: velSplit,
@@ -562,7 +584,7 @@
   function buildInsights(rows, kpis) {
     const byBo = [...rows].sort((a, b) => b.backOrders - a.backOrders).slice(0, 5);
     const critical = [...rows]
-      .filter((r) => r.inventoryStatus === "Critical" || r.quadrant === "CRITICAL")
+      .filter((r) => r.inventoryStatus === "Need Focus")
       .sort((a, b) => b.demandPressure - a.demandPressure)
       .slice(0, 5);
     const ageing = [...rows]
@@ -581,7 +603,7 @@
 
     const label = (r) => [r.product, r.suffix !== "—" ? r.suffix : null, r.year !== "—" ? r.year : null]
       .filter(Boolean)
-      .join(" · ");
+      .join(" / ");
 
     return [
       {
@@ -591,18 +613,18 @@
       },
       {
         id: "critical",
-        title: "Most critical shortages",
-        items: critical.map((r) => `${label(r)} — coverage ${r.stockCoverageDisplay}, pressure ${r.demandPressure}`),
+        title: "Need Focus (BO > Stock)",
+        items: critical.map((r) => `${label(r)} — BO ${r.backOrders}, stock ${r.availableStock}`),
       },
       {
         id: "ageing",
         title: "Highest allocation ageing",
-        items: ageing.map((r) => `${label(r)} — ${Math.round(r.allocationAgeing)}d · stock ${r.availableStock}`),
+        items: ageing.map((r) => `${label(r)} — ${Math.round(r.allocationAgeing)}d, stock ${r.availableStock}`),
       },
       {
         id: "slow",
         title: "Slowest-moving inventory",
-        items: slow.map((r) => `${label(r)} — vel ${r.salesVelocity.toFixed(2)}/d · stock ${r.availableStock}`),
+        items: slow.map((r) => `${label(r)} — vel ${r.salesVelocity.toFixed(2)}/d, stock ${r.availableStock}`),
       },
       {
         id: "overcov",
@@ -618,9 +640,9 @@
         id: "summary",
         title: "Period snapshot",
         items: [
-          `BO ${kpis.totalBackOrders} · Stock ${kpis.availableStock} · Coverage ${kpis.stockCoveragePct == null ? "n/a" : kpis.stockCoveragePct.toFixed(0) + "%"}`,
-          `Sales ${kpis.totalSales} over ${kpis.periodDays}d · Velocity ${kpis.salesVelocity.toFixed(2)}/day`,
-          `Critical ${kpis.criticalVehicles} · Slow/Overstock ${kpis.slowMovingVehicles}`,
+          `BO ${kpis.totalBackOrders}, Stock ${kpis.availableStock}, Coverage ${kpis.stockCoveragePct == null ? "n/a" : kpis.stockCoveragePct.toFixed(0) + "%"}`,
+          `Sales ${kpis.totalSales} over ${kpis.periodDays}d, Velocity ${kpis.salesVelocity.toFixed(2)}/day`,
+          `Need Focus ${kpis.needFocusVehicles || kpis.criticalVehicles}, Healthy ${kpis.healthyVehicles || 0}`,
         ],
       },
     ];

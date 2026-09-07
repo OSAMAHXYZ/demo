@@ -40,7 +40,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ——— Page hero ——— */
+/* âââ Page hero âââ */
 .page-hero {
   position: relative;
   overflow: hidden;
@@ -138,7 +138,7 @@ body {
   box-sizing: border-box;
 }
 
-/* ——— Top bar ——— */
+/* âââ Top bar âââ */
 header.top {
   display: flex;
   flex-wrap: wrap;
@@ -269,7 +269,7 @@ button:disabled {
   border-color: #efc4ca;
 }
 
-/* ——— Admin nav ——— */
+/* âââ Admin nav âââ */
 .admin-bar {
   display: flex;
   flex-wrap: wrap;
@@ -291,7 +291,7 @@ button:disabled {
   font-weight: 500;
 }
 
-/* ——— Upload slots ——— */
+/* âââ Upload slots âââ */
 .grid-5 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -373,7 +373,7 @@ button:disabled {
   font-weight: 600;
 }
 
-/* ——— Banners ——— */
+/* âââ Banners âââ */
 .banner {
   display: none;
   margin: 0 0 16px;
@@ -420,7 +420,7 @@ button:disabled {
   }
 }
 
-/* ——— Stock KPIs / charts ——— */
+/* âââ Stock KPIs / charts âââ */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -487,7 +487,7 @@ button:disabled {
   height: min(720px, max(320px, 36px * 12));
 }
 
-/* Power BI–style sales page */
+/* Power BIâstyle sales page */
 .pbi-page {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -1147,7 +1147,7 @@ button:disabled {
   width: 100%;
 }
 
-/* ——— BO Dashboard ——— */
+/* âââ BO Dashboard âââ */
 .bo-dash {
   display: flex;
   flex-direction: column;
@@ -1551,12 +1551,12 @@ button:disabled {
 }
 
 .pbi-tables summary::before {
-  content: "▸ ";
+  content: "â¸ ";
   color: var(--muted);
 }
 
 .pbi-tables[open] summary::before {
-  content: "▾ ";
+  content: "â¾ ";
 }
 
 @media (max-width: 1100px) {
@@ -1613,7 +1613,7 @@ button:disabled {
   height: 240px;
 }
 
-/* ——— Tabs ——— */
+/* âââ Tabs âââ */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -1678,7 +1678,7 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
-/* ——— Toolbar / forms ——— */
+/* âââ Toolbar / forms âââ */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -1714,7 +1714,7 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(77, 163, 224, 0.18);
 }
 
-/* ——— Generic table ——— */
+/* âââ Generic table âââ */
 .table-wrap {
   overflow: auto;
   max-height: 540px;
@@ -1798,7 +1798,7 @@ tr.emp-row:hover td {
   font-weight: 500;
 }
 
-/* ——— Targets ——— */
+/* âââ Targets âââ */
 .target-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1954,7 +1954,7 @@ footer.page-foot {
   font-weight: 500;
 }
 
-/* ——— Employee drawer ——— */
+/* âââ Employee drawer âââ */
 .drawer-backdrop {
   display: none;
   position: fixed;
@@ -2202,7 +2202,7 @@ footer.page-foot {
   word-break: break-word;
 }
 
-/* ——— Sales Report (BI cards) ——— */
+/* âââ Sales Report (BI cards) âââ */
 .xl-sheet {
   background: transparent;
   border: none;
@@ -2588,7 +2588,7 @@ footer.page-foot {
   }
 }
 
-/* ——— Admin page (match Live Sales Dashboard chrome) ——— */
+/* âââ Admin page (match Live Sales Dashboard chrome) âââ */
 body.admin-page .admin-kpis {
   margin-bottom: 14px;
 }
@@ -2735,7 +2735,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   }
 }
 
-/* ——— Daily target pace ——— */
+/* âââ Daily target pace âââ */
 .pbi-daily-target {
   margin-top: 0;
 }
@@ -2844,7 +2844,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: #b91c1c;
 }
 
-/* ——— Allocation plan (Admin) ——— */
+/* âââ Allocation plan (Admin) âââ */
 .admin-allocation-card {
   overflow: hidden;
 }
@@ -2978,7 +2978,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 800;
 }
 
-/* ——— BO & Allocation & Stock dashboard ——— */
+/* âââ BO & Allocation & Stock dashboard âââ */
 .bas-dash {
   gap: 18px;
 }
@@ -3286,8 +3286,10 @@ body.admin-page #panel-allocation:not([hidden]) {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+  align-items: center;
 }
 
+.bas-alloc-toolbar input[type="search"],
 .bas-alloc-toolbar select {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -3296,6 +3298,12 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-size: 0.82rem;
   background: #fff;
   min-width: 160px;
+}
+
+.bas-alloc-toolbar input[type="search"] {
+  min-width: 200px;
+  flex: 1 1 200px;
+  max-width: 320px;
 }
 
 .bas-alloc-table .bas-vin {
@@ -3932,7 +3940,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   }
 }
 
-/* ��� Inventory Command Center / Summary ��� */
+/*  Inventory Command Center / Summary  */
 .icc-hero {
   display: flex;
   flex-wrap: wrap;
@@ -4033,6 +4041,10 @@ body.admin-page #panel-allocation:not([hidden]) {
   position: sticky;
   top: 12px;
   padding: 14px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .icc-filters-title {
   margin: 0 0 10px;
@@ -4047,6 +4059,8 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-size: 0.78rem;
   font-weight: 700;
   color: #64748b;
+  min-width: 0;
+  max-width: 100%;
 }
 .icc-field select,
 .icc-field input {
@@ -4057,15 +4071,54 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-radius: 8px;
   padding: 8px 10px;
   background: #fff;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.icc-field input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.icc-field input[type="number"]::-webkit-outer-spin-button,
+.icc-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .icc-range-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+.icc-range-row .icc-field {
+  margin-bottom: 8px;
 }
 .icc-threshold-note {
   margin: 8px 0 0;
   line-height: 1.4;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.icc-note-title {
+  display: block;
+  font-weight: 800;
+  color: #0b3a66;
+  margin-bottom: 6px;
+}
+.icc-note-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+.icc-note-list li {
+  margin: 2px 0;
+}
+.icc-note-foot {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.72rem;
 }
 .icc-main {
   display: flex;
@@ -4130,6 +4183,8 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-radius: 10px;
   background: #f8fafc;
   border: 1px solid #e2eaf2;
+  min-width: 0;
+  overflow: hidden;
 }
 .icc-insight-card h4 {
   margin: 0 0 8px;
@@ -4142,6 +4197,12 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: #475569;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+.icc-insight-card li {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 .icc-table-toolbar {
   display: flex;
@@ -4185,7 +4246,7 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 /* =========================================================
-   Live app CRM shell (UI only � report-sheet/index.html)
+   Live app CRM shell (UI only  report-sheet/index.html)
    ========================================================= */
 .live-app {
   --crm-bg: #eef1f5;
@@ -4610,7 +4671,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   }
 }
 
-/* �� Tighter charts (all dashboards) �� */
+/*  Tighter charts (all dashboards)  */
 .live-app .chart-box {
   height: 260px;
 }
@@ -4652,11 +4713,29 @@ body.admin-page #panel-allocation:not([hidden]) {
 .live-app .chart-scroll.is-scroll {
   max-height: 320px;
 }
-.live-app .theme-toggle {
-  min-width: 64px;
+.live-app .icc-filters.card {
+  overflow: hidden;
+  min-width: 0;
+}
+.live-app .icc-filters select,
+.live-app .icc-filters input {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.live-app .icc-range-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.live-app.theme-dark .icc-note-title {
+  color: #93c5fd;
+}
+.live-app.theme-dark .icc-threshold-note,
+.live-app.theme-dark .icc-note-foot {
+  color: #94a3b8;
 }
 
-/* �� Dark edition �� */
+/*  Dark edition  */
 .live-app.theme-dark {
   --crm-bg: #0f172a;
   --crm-sidebar: #111827;

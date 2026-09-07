@@ -12,6 +12,7 @@
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js"></script>
+  <script src="vin-color-match.js"></script>
   <link rel="stylesheet" href="dashboard.css" />
 
 </head>
@@ -137,11 +138,8 @@
             <label class="icc-field">Inventory Status
               <select id="icc-f-status">
                 <option value="">All</option>
-                <option>Critical</option>
-                <option>At Risk</option>
-                <option>Balanced</option>
+                <option>Need Focus</option>
                 <option>Healthy</option>
-                <option>Overstock</option>
               </select>
             </label>
             <label class="icc-field">Demand Status
@@ -900,10 +898,17 @@
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
-                <span class="hint">Confirmed BO → RTL first, else E-Sales stock · product + suffix · matched only</span>
+                <span class="hint">VIN matches · RTL (status filter) then E-Sales · product + suffix + paired colors · matched only</span>
               </div>
             </div>
             <div class="bas-alloc-toolbar">
+              <input type="search" id="bas-alloc-search" placeholder="Search…" autocomplete="off" />
+              <select id="bas-alloc-f-score">
+                <option value="">All scores</option>
+                <option value="high">≥ 80%</option>
+                <option value="mid">60–79%</option>
+                <option value="low">&lt; 60%</option>
+              </select>
               <select id="bas-alloc-f-status">
                 <option value="">All sales status</option>
                 <option value="Delivered">Delivered</option>
@@ -2715,11 +2720,26 @@
     return m ? m[0] : "";
   }
 
+  /** E-Sales / central: prefer sheet 3 «المخزون المتاح all retail». */
+  function esalesAvailableStockRows(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /المخزون\s*المتاح/i.test(n) && /retail|all/i.test(n)) ||
+      names.find((n) => /المخزون\s*المتاح/i.test(n)) ||
+      names.find((n) => /all\s*retail/i.test(n) && /مخزون|stock|avail/i.test(n)) ||
+      names.find((n) => /all\s*retail/i.test(n)) ||
+      names[2] ||
+      names[0];
+    return sheetRows(workbook, preferred);
+  }
+
   function rowsForSlot(id, workbook) {
     if (id === "backorder") return backorderRows(workbook);
     if (id === "cancelled") return cancelledBoRows(workbook);
     if (id === "accessories") return accessoriesRows(workbook);
     if (id === "sales") return salesRawRows(workbook);
+    if (id === "central") return esalesAvailableStockRows(workbook);
     return sheetRows(workbook, workbook.SheetNames[0]);
   }
 
@@ -7007,7 +7027,7 @@
 
   /* ——— BO & Allocation & Stock gap dashboard ——— */
   let basView = { search: "", seg: "", product: "", sfx: "", status: "" };
-  let basAllocView = { salesStatus: "", source: "" };
+  let basAllocView = { search: "", salesStatus: "", source: "", score: "" };
 
   function allocProductKey(p) {
     return upperTrim(p).replace(/\s+/g, " ");
@@ -8405,57 +8425,232 @@
     return { label: "NA", cls: "na", inPeriod: false };
   }
 
+  function productKeysEqual(a, b) {
+    const ca = allocCompact(a);
+    const cb = allocCompact(b);
+    if (!ca || !cb) return false;
+    return ca === cb || productMatchesAlloc(a, b) || productMatchesAlloc(b, a);
+  }
+
+  function suffixKeysEqual(product, a, b) {
+    const na = upperTrim(normalizeProductSuffix(product, a));
+    const nb = upperTrim(normalizeProductSuffix(product, b));
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    return suffixMatchesAlloc(a, b, product) || suffixMatchesAlloc(b, a, product);
+  }
+
+  function extractRtlColorStock(rows) {
+    const VCM = window.VinColorMatch;
+    return (rows || []).map((r, idx) => {
+      const product = cellToString(cellByLetter(r, "B")).trim();
+      const suffix = normalizeProductSuffix(product, cellByLetter(r, "G"));
+      const vin = extractVinValue(cellByLetter(r, "E")) || extractVinValue(cellByLetter(r, "H")) || "";
+      const status = cellToString(cellByLetter(r, "L")).trim();
+      const ageingRaw = cellByLetter(r, "J");
+      const ageingNum = toNumber(ageingRaw);
+      return {
+        idx: `RTL-${idx}`,
+        source: "RTL",
+        product,
+        suffix,
+        vin,
+        ext: cellToString(cellByLetter(r, "H")),
+        int: cellToString(cellByLetter(r, "I")),
+        status,
+        location: cellToString(cellByLetter(r, "M") || cellByLetter(r, "N")),
+        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        _raw: r,
+      };
+    }).filter((s) => {
+      if (!s.vin || !s.product) return false;
+      if (VCM && typeof VCM.rtlStatusAllowed === "function") return VCM.rtlStatusAllowed(s.status);
+      const st = String(s.status || "").toLowerCase();
+      return st.includes("sales order created") || st.includes("vehicle allocation completed");
+    });
+  }
+
+  function extractEsalesColorStock(rows) {
+    return (rows || []).map((r, idx) => {
+      const product = cellToString(cellByLetter(r, "D")).trim();
+      const suffix = normalizeProductSuffix(product, cellByLetter(r, "E"));
+      const vin = extractVinValue(cellByLetter(r, "H")) || "";
+      return {
+        idx: `E-Sales-${idx}`,
+        source: "E-Sales",
+        product,
+        suffix,
+        vin,
+        ext: cellToString(cellByLetter(r, "I")),
+        int: cellToString(cellByLetter(r, "J")),
+        status: "",
+        location: cellToString(cellByLetter(r, "K") || cellByLetter(r, "L")),
+        ageing: null,
+        _raw: r,
+      };
+    }).filter((s) => s.vin && s.product);
+  }
+
+  function extractBoColorOrders(rows) {
+    const getBo = buildFieldGetter(rows[0] || {});
+    return (rows || []).map((r, idx) => {
+      const product = cellToString(cellByLetter(r, "L") || getBo(r, "product")).trim();
+      const rawSuffix = cellToString(cellByLetter(r, "M") || getBo(r, "suffix") || getBo(r, "sfx")).trim();
+      const suffix = normalizeProductSuffix(product, rawSuffix);
+      const orderRaw = getBo(r, "orderDate");
+      const orderDate = parseDate(orderRaw);
+      const agingFromCol = toNumber(getBo(r, "agingDays"));
+      const aging = agingFromCol > 0
+        ? agingFromCol
+        : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
+      const confirm = cellToString(boConfirmRaw(r, getBo));
+      const pairs = [
+        { ext: cellByLetter(r, "N"), int: cellByLetter(r, "Q") },
+        { ext: cellByLetter(r, "O"), int: cellByLetter(r, "R") },
+        { ext: cellByLetter(r, "P"), int: cellByLetter(r, "S") },
+      ];
+      return {
+        idx,
+        product,
+        suffix,
+        pairs,
+        salesman: resolveSalesmanName(getBo(r, "salesman")),
+        boNumber: cellToString(getBo(r, "boNumber") || cellByLetter(r, "A")),
+        orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
+        orderTs: orderDate ? orderDate.getTime() : idx,
+        aging,
+        confirm,
+        confirmed: isConfirmedFlag(confirm),
+        year: cellToString(getBo(r, "year") || cellByLetter(r, "F")),
+        _raw: r,
+      };
+    }).filter((b) => b.product);
+  }
+
+  /**
+   * RTL VINs (status-filtered) first, then E-Sales sheet «المخزون المتاح all retail».
+   * Match BO on product (L) + suffix (M) + one paired color slot (N/Q, O/R, or P/S).
+   */
+  function buildVinColorPairedMatches() {
+    const VCM = window.VinColorMatch;
+    if (!VCM || typeof VCM.matchPairedColors !== "function") return [];
+
+    const bos = extractBoColorOrders(rawBoRows()).filter((b) => b.confirmed);
+    const rtl = extractRtlColorStock(slots.rtl.rows || []);
+    const esales = extractEsalesColorStock(slots.central.rows || []);
+
+    const usedBo = new Set();
+    const usedVin = new Set();
+    const out = [];
+
+    function tryStockList(list) {
+      list.forEach((stock) => {
+        const vinKey = upperTrim(stock.vin);
+        if (!vinKey || usedVin.has(vinKey)) return;
+
+        let best = null;
+        bos.forEach((bo) => {
+          if (usedBo.has(bo.idx)) return;
+          if (!productKeysEqual(bo.product, stock.product)) return;
+          if (!suffixKeysEqual(bo.product, bo.suffix, stock.suffix)
+            && !suffixKeysEqual(stock.product, bo.suffix, stock.suffix)) return;
+
+          const colorHit = VCM.matchPairedColors(stock.ext, stock.int, bo.pairs);
+          if (!colorHit) return;
+
+          const cand = { bo, colorHit, score: colorHit.score };
+          if (
+            !best
+            || cand.score > best.score
+            || (cand.score === best.score && bo.orderTs < best.bo.orderTs)
+          ) {
+            best = cand;
+          }
+        });
+
+        if (!best) return;
+        usedBo.add(best.bo.idx);
+        usedVin.add(vinKey);
+
+        const bo = best.bo;
+        const ch = best.colorHit;
+        out.push({
+          boNumber: bo.boNumber || "—",
+          product: stock.product || bo.product || "—",
+          salesman: bo.salesman || "—",
+          vin: stock.vin,
+          matchScore: best.score,
+          source: stock.source,
+          aging: stock.ageing != null ? stock.ageing : bo.aging,
+          suffix: stock.suffix || bo.suffix || "—",
+          boProduct: bo.product || "—",
+          boSuffix: bo.suffix || "—",
+          stockExt: stock.ext || "—",
+          stockInt: stock.int || "—",
+          matchPair: ch.pair,
+          boExt: ch.boExt || "—",
+          boInt: ch.boInt || "—",
+          location: stock.location || "—",
+          status: stock.status || "—",
+          year: bo.year || "—",
+          orderDate: bo.orderDate || "—",
+          confirm: bo.confirm || "—",
+          stockRaw: stock._raw || null,
+          boRaw: bo._raw || null,
+        });
+      });
+    }
+
+    tryStockList(rtl);
+    tryStockList(esales);
+    return out;
+  }
+
   function buildBasAllocatedVehicles() {
     if (!hasBackOrder()) return [];
     const live = ensureGlobalLivePeriod();
-    // Confirmed BOs · RTL first, then E-Sales (Admin slot 3 / Stock E-Sales file) · product + suffix · matched only
-    const allMatched = buildMatchedCars(
-      rawBoRows(),
-      slots.rtl.rows || [],
-      slots.central.rows || [],
-      {
-        confirmedOnly: true,
-        matchMode: "productSuffix",
-        rtlThenEsales: true,
-        secondaryLabel: "E-Sales",
-      }
-    );
     const salesLookup = buildSalesVinLookup();
+    const paired = buildVinColorPairedMatches();
 
-    return allMatched
-      .filter((r) => isConfirmedFlag(r["Confirm Flag"]))
-      .map((r) => {
-        const leaf = matchRtlToAllocLeaf({ product: r.Product, suffix: r["Alj Suffix"] });
-        const salesSt = vinSalesStatusForLookup(r.VIN, salesLookup, live);
-        const key = extractVinValue(r.VIN) || upperTrim(r.VIN);
-        const sales = salesLookup.get(key);
-        return {
-          seg: leaf ? leaf.seg : "—",
-          product: leaf ? leaf.product : r.Product,
-          sfx: leaf ? leaf.sfx : r["Alj Suffix"],
-          planMatch: !!leaf,
-          boNumber: r["Back Order Number"],
-          boProduct: r["BO Product"] || r.Product,
-          boSuffix: r["BO Suffix"] || r["Alj Suffix"],
-          vin: r.VIN,
-          source: r.Source,
-          confirm: r["Confirm Flag"],
-          salesStatus: salesSt.label,
-          salesStatusCls: salesSt.cls,
-          inPeriod: !!salesSt.inPeriod,
-          proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
-          deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
-          salesman: r["Salesman Name"],
-          salesSalesman: sales && sales.salesman ? sales.salesman : "—",
-          location: r["Current Location"],
-          ageing: r["Allocation Ageing"],
-          year: r["Model Year"],
-          ext: r["Exterior Color"],
-          int: r["Interior Color"],
-          orderDate: r["Order Date"],
-          stockRaw: r._stockRaw || null,
-        };
-      });
+    return paired.map((r) => {
+      const leaf = matchRtlToAllocLeaf({ product: r.product, suffix: r.suffix });
+      const salesSt = vinSalesStatusForLookup(r.vin, salesLookup, live);
+      const key = extractVinValue(r.vin) || upperTrim(r.vin);
+      const sales = salesLookup.get(key);
+      return {
+        seg: leaf ? leaf.seg : "—",
+        product: leaf ? leaf.product : r.product,
+        sfx: leaf ? leaf.sfx : r.suffix,
+        planMatch: !!leaf,
+        boNumber: r.boNumber,
+        boProduct: r.boProduct,
+        boSuffix: r.boSuffix,
+        vin: r.vin,
+        source: r.source,
+        confirm: r.confirm,
+        matchScore: r.matchScore,
+        matchPair: r.matchPair,
+        stockExt: r.stockExt,
+        stockInt: r.stockInt,
+        boExt: r.boExt,
+        boInt: r.boInt,
+        salesStatus: salesSt.label,
+        salesStatusCls: salesSt.cls,
+        inPeriod: !!salesSt.inPeriod,
+        proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
+        deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
+        salesman: r.salesman,
+        salesSalesman: sales && sales.salesman ? sales.salesman : "—",
+        location: r.location,
+        ageing: r.aging,
+        year: r.year,
+        ext: r.stockExt,
+        int: r.stockInt,
+        orderDate: r.orderDate,
+        status: r.status,
+        stockRaw: r.stockRaw || null,
+      };
+    });
   }
 
   function collectMatchedStockColumns(rows) {
@@ -8471,15 +8666,24 @@
   }
 
   function filteredBasAllocatedRows(rows) {
-    const q = basView.search.trim().toLowerCase();
+    const q = basAllocView.search.trim().toLowerCase();
     return rows.filter((r) => {
       if (basView.seg && r.seg !== basView.seg) return false;
       if (basView.product && r.product !== basView.product) return false;
       if (basView.sfx && r.sfx !== basView.sfx) return false;
       if (basAllocView.salesStatus && r.salesStatus !== basAllocView.salesStatus) return false;
       if (basAllocView.source && r.source !== basAllocView.source) return false;
+      if (basAllocView.score) {
+        const n = Number(r.matchScore) || 0;
+        if (basAllocView.score === "high" && n < 80) return false;
+        if (basAllocView.score === "mid" && (n < 60 || n >= 80)) return false;
+        if (basAllocView.score === "low" && n >= 60) return false;
+      }
       if (q) {
-        const hay = `${r.seg} ${r.product} ${r.sfx} ${r.vin} ${r.boNumber} ${r.salesman} ${r.boProduct} ${r.boSuffix}`.toLowerCase();
+        const hay = [
+          r.seg, r.product, r.sfx, r.vin, r.boNumber, r.salesman,
+          r.boProduct, r.boSuffix, r.stockExt, r.stockInt, r.source, r.location,
+        ].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -8501,6 +8705,8 @@
     const live = ensureGlobalLivePeriod();
     syncGlobalDateControls(live);
 
+    if ($("#bas-alloc-search")) $("#bas-alloc-search").value = basAllocView.search || "";
+    if ($("#bas-alloc-f-score")) $("#bas-alloc-f-score").value = basAllocView.score || "";
     if ($("#bas-alloc-f-status")) $("#bas-alloc-f-status").value = basAllocView.salesStatus || "";
     if ($("#bas-alloc-f-source")) $("#bas-alloc-f-source").value = basAllocView.source || "";
 
@@ -8515,6 +8721,7 @@
     const inPeriod = allRows.filter((r) => r.inPeriod).length;
     const rtlCount = allRows.filter((r) => r.source === "RTL").length;
     const esalesCount = allRows.filter((r) => r.source === "E-Sales").length;
+    const hi = allRows.filter((r) => (r.matchScore || 0) >= 80).length;
 
     const periodSub = live && live.rangeLabel
       ? live.rangeLabel
@@ -8522,17 +8729,18 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `Confirmed BO → RTL first, else E-Sales · ${formatNumber(rtlCount)} RTL · ${formatNumber(esalesCount)} E-Sales · matched only · sales status ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
+      headHint.textContent = `Color-paired VIN matches · RTL first (${formatNumber(rtlCount)}) · E-Sales (${formatNumber(esalesCount)}) · Ext↔Int slots 1–3 · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
-        { label: "Matched vehicles", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
+        { label: "Matched vehicles", val: formatNumber(allRows.length), sub: "Product + suffix + color pair", cls: "ok" },
         { label: "RTL / E-Sales", val: `${formatNumber(rtlCount)} / ${formatNumber(esalesCount)}`, sub: "RTL preferred · E-Sales fallback" },
+        { label: "Score ≥ 80%", val: formatNumber(hi), sub: "Strong color pair match", cls: hi ? "ok" : "" },
         { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
         { label: "Delivered", val: formatNumber(delivered), sub: `Col V in ${periodSub}`, cls: delivered ? "ok" : "" },
-        { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub} · not delivered`, cls: proforma ? "warn" : "" },
+        { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub}`, cls: proforma ? "warn" : "" },
         { label: "In period", val: formatNumber(inPeriod), sub: `${formatNumber(outside)} outside · ${formatNumber(na)} NA`, cls: inPeriod ? "ok" : "" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
@@ -8548,79 +8756,65 @@
     if (!tableEl) return;
 
     if (!rows.length) {
-      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL or E-Sales stock yet · check confirm flag, product, and suffix."}</p>`;
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL / E-Sales yet · check RTL status (Sales order created / Vehicle allocation completed), product, suffix, and paired exterior/interior colors."}</p>`;
       if (footEl) footEl.textContent = "0 rows";
       return;
     }
 
     const sorted = [...rows].sort((a, b) => {
+      const byScore = (Number(b.matchScore) || 0) - (Number(a.matchScore) || 0);
+      if (byScore) return byScore;
       const order = { Delivered: 0, Proforma: 1, "Outside period": 2, NA: 3 };
       const byStatus = (order[a.salesStatus] ?? 4) - (order[b.salesStatus] ?? 4);
       if (byStatus) return byStatus;
       return String(a.boNumber || "").localeCompare(String(b.boNumber || ""), undefined, { numeric: true });
     });
 
-    const stockCols = collectMatchedStockColumns(sorted);
     const limit = Math.min(sorted.length, MAX_ROWS);
     const show = sorted.slice(0, limit);
 
-    const leadHeads = [
-      { key: "bo", label: "Matched BO #" },
-      { key: "boProduct", label: "BO Product" },
-      { key: "boSuffix", label: "BO Suffix" },
-      { key: "salesman", label: "BO Salesman" },
-      { key: "orderDate", label: "Order Date" },
-      { key: "confirm", label: "Confirm" },
-      { key: "salesStatus", label: "Sales status" },
-      { key: "proforma", label: "Proforma" },
-      { key: "delivery", label: "Delivery" },
-      { key: "source", label: "Stock source" },
-      { key: "seg", label: "Plan Seg" },
-      { key: "planSfx", label: "Plan SFX" },
+    const heads = [
+      "BO Number", "Product", "Salesman", "VIN", "Score", "Source", "Aging",
+      "Suffix", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
+      "Sales status", "Location", "Order Date",
     ];
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
-      <thead><tr>
-        ${leadHeads.map((h) => `<th>${escapeHtml(h.label)}</th>`).join("")}
-        ${stockCols.map((c) =>
-          `<th title="Column ${escapeHtml(c.letter)}">${escapeHtml(c.label)}<span class="stock-col-letter">${escapeHtml(c.letter)}</span></th>`
-        ).join("")}
-      </tr></thead>
+      <thead><tr>${heads.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
       <tbody>${show.map((r) => {
-        const rowCls = r.salesStatus === "Delivered" ? "bas-row-above" : r.salesStatus === "Proforma" ? "bas-row-warn" : "bas-row-below";
+        const n = Number(r.matchScore) || 0;
+        const scoreBadge = `<span class="badge ${n >= 80 ? "ok" : n >= 60 ? "warn" : "bad"}">${n}%</span>`;
         const badgeCls = r.salesStatusCls === "ok" ? "ok" : r.salesStatusCls === "warn" ? "warn" : "na";
-        const leadCells = [
+        const aging = r.ageing != null && r.ageing !== "" ? `${r.ageing}d` : "—";
+        const cells = [
           escapeHtml(r.boNumber || "—"),
-          escapeHtml(r.boProduct || "—"),
-          escapeHtml(r.boSuffix || "—"),
+          escapeHtml(r.product || "—"),
           escapeHtml(r.salesman || "—"),
-          escapeHtml(r.orderDate || "—"),
-          `<span class="badge ok">Allocated</span>`,
-          `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus)}</span>`,
-          escapeHtml(r.proformaDate || "—"),
-          escapeHtml(r.deliveryDate || "—"),
+          `<span class="bas-vin">${escapeHtml(r.vin || "—")}</span>`,
+          scoreBadge,
           escapeHtml(r.source || "—"),
-          escapeHtml(r.seg || "—"),
-          escapeHtml(r.sfx || "—"),
+          escapeHtml(aging),
+          escapeHtml(r.sfx || r.boSuffix || "—"),
+          escapeHtml(r.stockExt || "—"),
+          escapeHtml(r.stockInt || "—"),
+          escapeHtml(r.matchPair != null ? `Pair ${r.matchPair}` : "—"),
+          escapeHtml(r.boExt || "—"),
+          escapeHtml(r.boInt || "—"),
+          `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus || "—")}</span>`,
+          escapeHtml(r.location || "—"),
+          escapeHtml(r.orderDate || "—"),
         ];
-        const stockCells = stockCols.map((c) => {
-          const t = r.stockRaw ? cellToString(boFileCell(r.stockRaw, c)) : "";
-          return `<td title="${escapeHtml(t)}">${t ? escapeHtml(t) : "—"}</td>`;
-        });
-        return `<tr class="${rowCls}">
-          ${leadCells.map((html, i) => (i === 0 ? `<td class="bas-vin">${html}</td>` : `<td>${html}</td>`)).join("")}
-          ${stockCells.join("")}
-        </tr>`;
+        const rowCls = n >= 80 ? "bas-row-above" : n >= 60 ? "bas-row-warn" : "bas-row-below";
+        return `<tr class="${rowCls}">${cells.map((html) => `<td>${html}</td>`).join("")}</tr>`;
       }).join("")}</tbody>
     </table>`;
 
     if (footEl) {
       const hasSales = hasSalesRaw();
-      const colNote = stockCols.length ? ` · ${formatNumber(stockCols.length)} stock columns` : "";
       footEl.textContent = (show.length < sorted.length
         ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
         : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
-        ` matched vehicles (RTL first · E-Sales fallback · product + suffix)${colNote} · ${periodSub}` +
+        ` matched vehicles (RTL status filter · E-Sales sheet 3 · paired colors)` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
@@ -8885,14 +9079,17 @@
 
   function iccApplyKpiFilter(rows) {
     if (!iccView.kpiFilter) return rows;
-    if (iccView.kpiFilter === "critical") {
-      return rows.filter((r) => r.inventoryStatus === "Critical" || r.quadrant === "CRITICAL");
+    if (iccView.kpiFilter === "critical" || iccView.kpiFilter === "needFocus") {
+      return rows.filter((r) => r.inventoryStatus === "Need Focus");
+    }
+    if (iccView.kpiFilter === "healthy") {
+      return rows.filter((r) => r.inventoryStatus === "Healthy");
     }
     if (iccView.kpiFilter === "slow") {
-      return rows.filter((r) => r.quadrant === "OVERSTOCK" || r.inventoryStatus === "Overstock");
+      return rows.filter((r) => r.quadrant === "OVERSTOCK");
     }
     if (iccView.kpiFilter === "overstock") {
-      return rows.filter((r) => r.inventoryStatus === "Overstock");
+      return rows.filter((r) => r.quadrant === "OVERSTOCK");
     }
     return rows;
   }
@@ -8953,7 +9150,7 @@
         <div><span class="lab">Coverage</span><strong>${escapeHtml(String(cov))}</strong></div>
         <div><span class="lab">Ageing</span><strong>${row.allocationAgeing == null ? "—" : Math.round(row.allocationAgeing) + "d"}</strong></div>
         <div><span class="lab">Demand Pressure</span><strong>${row.demandPressure}</strong></div>
-        <div><span class="lab">Status</span><strong><span class="badge ${row.inventoryStatus === "Critical" ? "bad" : row.inventoryStatus === "Overstock" ? "warn" : "ok"}">${escapeHtml(row.inventoryStatus)}</span></strong></div>
+        <div><span class="lab">Status</span><strong><span class="badge ${row.inventoryStatus === "Need Focus" ? "bad" : "ok"}">${escapeHtml(row.inventoryStatus)}</span></strong></div>
       </div>
       <p class="icc-action"><b>Recommended:</b> ${escapeHtml(row.recommendedAction)}</p>
       <p class="foot">Quadrant · ${escapeHtml(row.quadrant.replace(/_/g, " "))}</p>`;
@@ -9111,11 +9308,9 @@
     }
 
     const statusCls = (s) => {
-      if (s === "Critical") return "icc-st-critical";
-      if (s === "At Risk") return "icc-st-risk";
-      if (s === "Overstock") return "icc-st-over";
+      if (s === "Need Focus") return "icc-st-critical";
       if (s === "Healthy") return "icc-st-ok";
-      return "icc-st-bal";
+      return "";
     };
 
     el.innerHTML = `<table class="bas-table icc-table">
@@ -9139,7 +9334,7 @@
           <td class="num">${r.salesVelocity.toFixed(2)}</td>
           <td class="num">${escapeHtml(String(r.stockCoverageDisplay))}</td>
           <td class="num">${r.allocationAgeing == null ? "—" : Math.round(r.allocationAgeing)}</td>
-          <td><span class="badge ${r.inventoryStatus === "Critical" ? "bad" : r.inventoryStatus === "Overstock" ? "warn" : "ok"}">${escapeHtml(r.inventoryStatus)}</span></td>
+          <td><span class="badge ${r.inventoryStatus === "Need Focus" ? "bad" : "ok"}">${escapeHtml(r.inventoryStatus)}</span></td>
           <td class="icc-action-cell">${escapeHtml(r.recommendedAction)}</td>
         </tr>`).join("")}</tbody>
     </table>`;
@@ -9220,13 +9415,21 @@
     }
     if (hint) {
       hint.textContent = iccView.mode === "ageing"
-        ? "High ageing + low velocity = slow-moving · bubble size = stock"
-        : `X = Available / BO · Y = Sales / day · Coverage split ${dataset.kpis.coverageSplit.toFixed(2)} · Velocity split ${dataset.kpis.velocitySplit.toFixed(2)}`;
+        ? "High ageing + low velocity = slow-moving, bubble size = stock"
+        : `X = Available / BO, Y = Sales / day, Coverage split ${dataset.kpis.coverageSplit.toFixed(2)}, Velocity split ${dataset.kpis.velocitySplit.toFixed(2)}`;
     }
     const note = $("#icc-threshold-note");
     if (note) {
       const c = dataset.config.coverage;
-      note.textContent = `Coverage bands: <${c.criticalMax} Critical · <${c.atRiskMax} At Risk · <${c.balancedMax} Balanced · ≥ Healthy/Overstock by velocity. Auto quadrant splits from data medians.`;
+      note.innerHTML = `
+        <span class="icc-note-title">Coverage bands</span>
+        <ul class="icc-note-list">
+          <li>&lt; ${c.criticalMax} = Critical</li>
+          <li>&lt; ${c.atRiskMax} = At Risk</li>
+          <li>&lt; ${c.balancedMax} = Balanced</li>
+          <li>≥ ${c.balancedMax} = Healthy / Overstock (by velocity)</li>
+        </ul>
+        <span class="icc-note-foot">Quadrant splits use coverage 1.0 and median velocity.</span>`;
     }
 
     const k = dataset.kpis;
@@ -9238,9 +9441,10 @@
         { id: "", label: "Stock Coverage %", val: k.stockCoveragePct == null ? "n/a" : `${k.stockCoveragePct.toFixed(0)}%`, sub: "Stock ÷ BO", cls: k.stockCoveragePct != null && k.stockCoveragePct < 50 ? "bad" : "ok" },
         { id: "", label: "Total Sales", val: formatNumber(k.totalSales), sub: `${k.periodDays}d period` },
         { id: "", label: "Sales Velocity", val: k.salesVelocity.toFixed(2), sub: "Units / day" },
-        { id: "critical", label: "Critical Vehicles", val: formatNumber(k.criticalVehicles), sub: "Click to filter", cls: "bad" },
-        { id: "slow", label: "Slow Moving", val: formatNumber(k.slowMovingVehicles), sub: "Click to filter", cls: "warn" },
-        { id: "overstock", label: "Overstock", val: formatNumber(k.overstockVehicles), sub: "Click to filter", cls: "warn" },
+        { id: "needFocus", label: "Need Focus", val: formatNumber(k.needFocusVehicles || k.criticalVehicles), sub: "BO > Stock · click to filter", cls: "bad" },
+        { id: "healthy", label: "Healthy", val: formatNumber(k.healthyVehicles || 0), sub: "BO ≤ Stock · click to filter", cls: "ok" },
+        { id: "slow", label: "Slow Moving", val: formatNumber(k.slowMovingVehicles), sub: "Quadrant · click to filter", cls: "warn" },
+        { id: "overstock", label: "Overstock quadrant", val: formatNumber(k.overstockVehicles), sub: "Click to filter", cls: "warn" },
       ];
       kpiEl.innerHTML = cards.map((c) => `
         <button type="button" class="bo-kpi icc-kpi${c.cls ? " " + c.cls : ""}${iccView.kpiFilter === c.id && c.id ? " is-active" : ""}" data-icc-kpi="${c.id}">
@@ -9803,7 +10007,7 @@
   if (basClearEl) {
     basClearEl.addEventListener("click", () => {
       basView = { search: "", seg: "", product: "", sfx: "", status: "" };
-      basAllocView = { salesStatus: "", source: "" };
+      basAllocView = { search: "", salesStatus: "", source: "", score: "" };
       refreshBasFromFilters();
     });
   }
@@ -9818,6 +10022,20 @@
 
   function refreshBasAllocFromFilters() {
     if (window._data) renderBasAllocatedVehicles(window._data);
+  }
+  const basAllocSearchEl = $("#bas-alloc-search");
+  if (basAllocSearchEl) {
+    basAllocSearchEl.addEventListener("input", (e) => {
+      basAllocView.search = e.target.value || "";
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocScoreEl = $("#bas-alloc-f-score");
+  if (basAllocScoreEl) {
+    basAllocScoreEl.addEventListener("change", (e) => {
+      basAllocView.score = e.target.value;
+      refreshBasFromFilters();
+    });
   }
   const basAllocStatusEl = $("#bas-alloc-f-status");
   if (basAllocStatusEl) {
