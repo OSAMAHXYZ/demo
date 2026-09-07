@@ -1159,7 +1159,8 @@ button:disabled {
   min-height: 560px;
   height: min(78vh, 720px);
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(11, 58, 102, 0.05), transparent 55%),
+    radial-gradient(ellipse at 18% 0%, rgba(235, 10, 30, 0.05), transparent 50%),
+    radial-gradient(ellipse at 88% 10%, rgba(17, 17, 17, 0.04), transparent 45%),
     #fff;
 }
 

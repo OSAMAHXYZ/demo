@@ -9364,6 +9364,169 @@
     await Promise.all(products.map((p) => getCarImageForProduct(p)));
   }
 
+  /** One bubble per product — matches the Toyota car-picture wide chart. */
+  function aggregateIccPointsByProduct(points, mode, dataset) {
+    const map = new Map();
+    (points || []).forEach((p) => {
+      const product = String((p.meta && p.meta.product) || "").trim() || "—";
+      const key = product.toUpperCase();
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          product,
+          backOrders: 0,
+          availableStock: 0,
+          eSalesStock: 0,
+          sales: 0,
+          salesVelocity: 0,
+          coverageSum: 0,
+          coverageN: 0,
+          ageingSum: 0,
+          ageingN: 0,
+          demandPressure: 0,
+          quadrantVotes: Object.create(null),
+          sample: p.meta,
+          rowId: p.rowId,
+        };
+        map.set(key, g);
+      }
+      const m = p.meta || {};
+      g.backOrders += Number(m.backOrders) || 0;
+      g.availableStock += Number(m.availableStock) || 0;
+      g.eSalesStock += Number(m.eSalesStock) || 0;
+      g.sales += Number(m.sales) || 0;
+      g.salesVelocity += Number(m.salesVelocity) || 0;
+      g.demandPressure = Math.max(g.demandPressure, Number(m.demandPressure) || 0);
+      if (Number.isFinite(Number(m.stockCoverage))) {
+        g.coverageSum += Number(m.stockCoverage);
+        g.coverageN += 1;
+      }
+      if (m.allocationAgeing != null && Number.isFinite(Number(m.allocationAgeing))) {
+        g.ageingSum += Number(m.allocationAgeing);
+        g.ageingN += 1;
+      }
+      const q = m.quadrant || "WATCH";
+      g.quadrantVotes[q] = (g.quadrantVotes[q] || 0) + 1;
+      if ((Number(m.demandPressure) || 0) >= g.demandPressure) {
+        g.sample = m;
+        g.rowId = p.rowId;
+      }
+    });
+
+    const groups = [...map.values()];
+    const maxStock = Math.max(1, ...groups.map((g) => g.availableStock));
+    const covSplit = (dataset && dataset.kpis && dataset.kpis.coverageSplit) || 1;
+    const velSplit = (dataset && dataset.kpis && dataset.kpis.velocitySplit) || 20;
+
+    return groups.map((g) => {
+      const coverage = g.backOrders > 0
+        ? g.availableStock / g.backOrders
+        : (g.coverageN ? g.coverageSum / g.coverageN : (g.availableStock > 0 ? 3 : 0));
+      const velocity = g.salesVelocity;
+      const ageing = g.ageingN ? g.ageingSum / g.ageingN : 0;
+      let quadrant = "WATCH";
+      let best = -1;
+      Object.keys(g.quadrantVotes).forEach((q) => {
+        if (g.quadrantVotes[q] > best) {
+          best = g.quadrantVotes[q];
+          quadrant = q;
+        }
+      });
+      if (mode === "coverage") {
+        const highVel = velocity >= velSplit;
+        const highCov = coverage >= covSplit;
+        if (highVel && !highCov) quadrant = "CRITICAL";
+        else if (highVel && highCov) quadrant = "FAST_MOVING";
+        else if (!highVel && highCov) quadrant = "OVERSTOCK";
+        else quadrant = "WATCH";
+      }
+      const x = mode === "ageing" ? ageing : Math.min(3.5, Math.max(0, coverage));
+      const y = Math.max(0, velocity);
+      const r = Math.max(22, Math.min(40, 16 + Math.sqrt(Math.max(1, g.availableStock) / maxStock) * 28));
+      const meta = {
+        ...(g.sample || {}),
+        product: g.product,
+        suffix: "ALL",
+        year: "—",
+        ext: "—",
+        int: "—",
+        backOrders: g.backOrders,
+        availableStock: g.availableStock,
+        eSalesStock: g.eSalesStock,
+        sales: g.sales,
+        salesVelocity: velocity,
+        stockCoverage: coverage,
+        stockCoverageDisplay: Number.isFinite(coverage) ? coverage.toFixed(2) : "—",
+        allocationAgeing: g.ageingN ? ageing : null,
+        demandPressure: g.demandPressure,
+        quadrant,
+        inventoryStatus: quadrant === "CRITICAL" ? "Need Focus" : "Healthy",
+        recommendedAction: quadrant === "CRITICAL"
+          ? "Prioritize allocation"
+          : quadrant === "FAST_MOVING"
+            ? "Healthy coverage"
+            : quadrant === "OVERSTOCK"
+              ? "Potential slow moving"
+              : "Monitor / Review",
+      };
+      return { x, y, r, rowId: g.rowId, meta };
+    }).sort((a, b) => (b.meta.demandPressure || 0) - (a.meta.demandPressure || 0));
+  }
+
+  function carMarkerPluginFor(canvasId, points, useCarImages) {
+    return {
+      id: "iccCarMarkers_" + canvasId,
+      afterDatasetsDraw(chart) {
+        if (!useCarImages) return;
+        const { ctx, chartArea } = chart;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !meta.data) return;
+        ctx.save();
+        meta.data.forEach((el, i) => {
+          const pt = points[i];
+          if (!pt || !pt.meta) return;
+          const { x, y } = el.getProps(["x", "y"], true);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          if (chartArea && (x < chartArea.left - 40 || x > chartArea.right + 40)) return;
+          const file = resolveCarImageFile(pt.meta.product);
+          const key = file || `__none__:${String(pt.meta.product || "").toLowerCase()}`;
+          const img = carImageCache.get(key);
+          const size = Math.max(36, Math.min(72, (Number(pt.r) || 24) * 2.1));
+          if (img && img.complete && img.naturalWidth) {
+            ctx.drawImage(img, x - size / 2, y - size / 2 - 4, size, size);
+          } else {
+            const q = pt.meta.quadrant || "WATCH";
+            const fill = q === "CRITICAL" ? "#eb0a1e" : q === "FAST_MOVING" ? "#0f766e" : q === "OVERSTOCK" ? "#b45309" : "#64748b";
+            ctx.beginPath();
+            ctx.fillStyle = fill;
+            ctx.arc(x, y, size * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const label = String(pt.meta.product || "").trim();
+          const short = label.length > 18 ? label.slice(0, 16) + "…" : label;
+          const coords = modeLabelCoords(pt);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.font = "700 11px Outfit, Segoe UI, sans-serif";
+          ctx.fillStyle = "#111111";
+          ctx.fillText(short, x, y + size / 2 + 2);
+          ctx.font = "600 10px 'Space Grotesk', Outfit, sans-serif";
+          ctx.fillStyle = "#6b7280";
+          ctx.fillText(coords, x, y + size / 2 + 16);
+        });
+        ctx.restore();
+      },
+    };
+  }
+
+  function modeLabelCoords(pt) {
+    const x = Number(pt.x);
+    const y = Number(pt.y);
+    const xs = Number.isFinite(x) ? (Math.abs(x) >= 10 ? x.toFixed(0) : x.toFixed(1)) : "—";
+    const ys = Number.isFinite(y) ? (Math.abs(y) >= 10 ? y.toFixed(0) : y.toFixed(1)) : "—";
+    return `${xs}, ${ys}`;
+  }
+
   async function openWideIccBubbleChart() {
     const dataset = getInventoryCommandDataset();
     if (!dataset || !window.InventoryCommandCenter) {
@@ -9416,26 +9579,12 @@
     const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
     let points = ICC.toChartPoints(filtered, mode, dataset.config);
 
-    // Wide car view: keep chart readable — prefer higher-pressure / larger stock points
-    if (useCarImages && points.length > 80) {
-      points = [...points]
-        .sort((a, b) => {
-          const as = (a.meta && a.meta.availableStock) || 0;
-          const bs = (b.meta && b.meta.availableStock) || 0;
-          const ap = (a.meta && a.meta.demandPressure) || 0;
-          const bp = (b.meta && b.meta.demandPressure) || 0;
-          return bp - ap || bs - as;
-        })
-        .slice(0, 80);
-    }
-
     if (useCarImages) {
+      points = aggregateIccPointsByProduct(points, mode, dataset);
+      if (points.length > 36) {
+        points = points.slice(0, 36);
+      }
       await preloadCarImagesForPoints(points);
-      // Enlarge bubbles so car art is visible
-      points = points.map((p) => ({
-        ...p,
-        r: Math.max(18, Math.min(42, (Number(p.r) || 12) * 1.65)),
-      }));
     }
 
     if (canvasId === "chart-icc-bubble") {
@@ -9464,8 +9613,8 @@
         const ySplit = scales.y.getPixelForValue(dataset.kpis.velocitySplit);
         const { left, right, top, bottom } = chartArea;
         const bands = [
-          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235, 10, 30, 0.06)" },
-          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.06)" },
+          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235, 10, 30, 0.07)" },
+          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.07)" },
           { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" },
           { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" },
         ];
@@ -9482,17 +9631,24 @@
         ctx.moveTo(left, ySplit);
         ctx.lineTo(right, ySplit);
         ctx.stroke();
+        if (useCarImages) {
+          ctx.setLineDash([]);
+          ctx.font = "700 10px Outfit, Segoe UI, sans-serif";
+          ctx.fillStyle = "rgba(235, 10, 30, 0.55)";
+          ctx.textAlign = "left";
+          ctx.fillText("HIGH DEMAND · LOW STOCK", left + 8, top + 14);
+          ctx.fillStyle = "rgba(13, 148, 136, 0.55)";
+          ctx.fillText("HIGH DEMAND · HIGH STOCK", xSplit + 8, top + 14);
+          ctx.fillStyle = "rgba(100, 116, 139, 0.55)";
+          ctx.fillText("LOW DEMAND · LOW STOCK", left + 8, ySplit + 16);
+          ctx.fillStyle = "rgba(180, 83, 9, 0.55)";
+          ctx.fillText("LOW DEMAND · HIGH STOCK", xSplit + 8, ySplit + 16);
+        }
         ctx.restore();
       },
     };
 
-    const pointStyles = useCarImages
-      ? points.map((p) => {
-          const file = resolveCarImageFile(p.meta && p.meta.product);
-          const key = file || `__none__:${String((p.meta && p.meta.product) || "").toLowerCase()}`;
-          return carImageCache.get(key) || "circle";
-        })
-      : null;
+    const carPlugin = carMarkerPluginFor(canvasId, points, useCarImages);
 
     charts[canvasId] = new Chart(canvas, {
       type: "bubble",
@@ -9500,39 +9656,36 @@
         datasets: [{
           label: "Vehicles",
           data: points,
-          backgroundColor: points.map((p) => (
-            useCarImages
-              ? "rgba(255,255,255,0.12)"
-              : (colors[p.meta.quadrant] || colors.WATCH)
-          )),
-          borderColor: points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
-          borderWidth: useCarImages ? 2 : 1.25,
-          hoverBorderWidth: 2.5,
-          pointStyle: useCarImages
-            ? (ctx) => (pointStyles && pointStyles[ctx.dataIndex]) || "circle"
-            : "circle",
+          backgroundColor: useCarImages
+            ? "rgba(0,0,0,0)"
+            : points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderColor: useCarImages
+            ? "rgba(0,0,0,0)"
+            : points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderWidth: useCarImages ? 0 : 1.25,
+          hoverBorderWidth: useCarImages ? 0 : 2.5,
+          pointStyle: "circle",
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
-        layout: { padding: { top: 8, right: 12, bottom: 6, left: 6 } },
+        layout: { padding: { top: 18, right: 16, bottom: useCarImages ? 28 : 6, left: 6 } },
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: {
               title(items) {
                 const m = items[0] && items[0].raw && items[0].raw.meta;
-                return m ? `${m.product} · ${m.suffix}` : "";
+                return m ? `${m.product}${m.suffix && m.suffix !== "ALL" ? " · " + m.suffix : ""}` : "";
               },
               label(ctx) {
                 const m = ctx.raw && ctx.raw.meta;
                 if (!m) return "";
                 return [
-                  `Year ${m.year} · Ext ${m.ext} · Int ${m.int}`,
                   `BO ${m.backOrders} · Stock ${m.availableStock} · E-Sales ${m.eSalesStock}`,
-                  `Sales ${m.sales} · Velocity ${m.salesVelocity.toFixed(2)}/d`,
+                  `Sales ${m.sales} · Velocity ${Number(m.salesVelocity || 0).toFixed(1)}/d`,
                   `Coverage ${m.stockCoverageDisplay} · Ageing ${m.allocationAgeing == null ? "—" : Math.round(m.allocationAgeing) + "d"}`,
                   `Pressure ${m.demandPressure} · ${m.inventoryStatus}`,
                   m.recommendedAction,
@@ -9547,7 +9700,7 @@
               display: true,
               text: mode === "ageing" ? "Allocation Ageing (days)" : "Stock Coverage (Available / BO)",
               color: "#111111",
-              font: { weight: "700", family: "'Manrope', sans-serif" },
+              font: { weight: "700", family: "'Outfit', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
             beginAtZero: true,
@@ -9558,7 +9711,7 @@
               display: true,
               text: "Sales Velocity (units / day)",
               color: "#111111",
-              font: { weight: "700", family: "'Manrope', sans-serif" },
+              font: { weight: "700", family: "'Outfit', sans-serif" },
             },
             grid: { color: "rgba(148, 163, 184, 0.18)" },
             beginAtZero: true,
@@ -9570,12 +9723,12 @@
           const pt = points[el.index];
           if (!pt) return;
           iccView.selectedId = pt.rowId;
-          const row = filtered.find((r) => r.id === pt.rowId);
+          const row = filtered.find((r) => r.id === pt.rowId) || pt.meta;
           renderIccDetail(row);
           if (canvasId === "chart-icc-bubble") renderIccTable(dataset, filtered);
         },
       },
-      plugins: [quadrantPlugin],
+      plugins: [quadrantPlugin, carPlugin],
     });
   }
 
