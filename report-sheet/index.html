@@ -8057,7 +8057,9 @@
           meta: p,
         };
       });
-      await preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })));
+      await (typeof preloadCarImagesForPoints === "function"
+        ? preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })))
+        : Promise.resolve());
       const quadPlugin = {
         id: "actHealthQuad",
         beforeDraw(chart) {
@@ -8107,9 +8109,9 @@
             const pt = points[i];
             if (!pt) return;
             const { x, y } = el.getProps(["x", "y"], true);
-            const file = resolveCarImageFile(pt.product);
+            const file = typeof resolveCarImageFile === "function" ? resolveCarImageFile(pt.product) : "";
             const key = file || `__none__:${String(pt.product || "").toLowerCase()}`;
-            const img = carImageCache.get(key);
+            const img = (typeof carImageCache !== "undefined" && carImageCache.get) ? carImageCache.get(key) : null;
             const size = 34;
             if (img && img.complete && img.naturalWidth) {
               ctx.drawImage(img, x - size / 2, y - size / 2 - 2, size, size);
