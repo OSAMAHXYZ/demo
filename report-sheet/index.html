@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260907icc" />
+  <link rel="stylesheet" href="dashboard.css?v=20260907act" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -806,9 +806,9 @@
       <div class="panel-section" id="panel-boallocstock" style="display:none">
         <div class="bo-empty card bas-empty" id="bas-empty">
           <div class="bas-empty-icon" aria-hidden="true"></div>
-          <h2>BO &amp; Allocation &amp; Stock</h2>
+          <h2>Allocation Control Tower</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Compare ESAL allocation plan (E-Sales) against back orders with the same product and suffix — see if allocation is above or below demand.
+            Compare E-Sales allocation against back orders, stock, and RTL collection — one page for management.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Set allocation numbers in <a href="admin.html">Admin</a> → tab <b>3 · Allocation Plan</b></li>
@@ -820,16 +820,29 @@
           </ol>
         </div>
 
-        <div id="bas-dash" class="bo-dash bas-dash" hidden>
-          <div class="bas-hero card">
-            <div class="bas-hero-text">
-              <p class="bas-hero-eyebrow">Allocation control tower</p>
-              <h2 class="bas-hero-title">Plan · Back orders · RTL collection</h2>
-              <p class="bas-hero-sub">Compare E-Sales targets with live BO demand and daily RTL arrivals · green = headroom · red = shortfall</p>
+        <div id="bas-dash" class="bo-dash bas-dash act-tower" hidden>
+          <header class="act-header card">
+            <div class="act-header-brand">
+              <div class="act-header-mark" aria-hidden="true">
+                <img src="../images/logo/toyota.png" alt="" class="act-logo" onerror="this.style.display='none'" />
+              </div>
+              <div>
+                <p class="act-eyebrow">Toyota · ALJ Motors</p>
+                <h2 class="act-title">Allocation Control Tower</h2>
+                <p class="act-sub">BO Demand · Allocation · RTL Stock · Collection · Plan Performance</p>
+              </div>
             </div>
-          </div>
+            <div class="act-header-actions">
+              <div class="act-refresh-stamp">
+                <span class="lab">Last updated</span>
+                <strong id="act-refresh-time">—</strong>
+              </div>
+              <button type="button" class="btn-primary" id="act-refresh-btn">Refresh</button>
+              <button type="button" class="btn" id="bas-excel-btn">Export Excel</button>
+            </div>
+          </header>
 
-          <div class="bo-toolbar bas-toolbar" id="bas-toolbar">
+          <div class="bo-toolbar bas-toolbar act-filter-bar" id="bas-toolbar">
             <select id="bas-date-preset" title="Same date filter as Sales Dashboard">
               <option value="today">Today</option>
               <option value="this_month">This month (1st → today)</option>
@@ -848,37 +861,121 @@
             <button type="button" id="bas-date-apply" class="btn">Apply dates</button>
             <span class="bas-date-hint hint" id="bas-date-hint"></span>
             <span class="bas-toolbar-divider" aria-hidden="true"></span>
-            <input id="bas-search" type="search" placeholder="Search product / SFX / segment…" />
-            <select id="bas-f-seg"><option value="">All segments</option></select>
-            <select id="bas-f-product"><option value="">All cars</option></select>
+            <select id="bas-f-product"><option value="">All products</option></select>
             <select id="bas-f-sfx-top"><option value="">All suffixes</option></select>
+            <select id="bas-f-seg"><option value="">All segments</option></select>
             <select id="bas-f-status">
-              <option value="">All gap status</option>
+              <option value="">All allocation status</option>
               <option value="above">Above (allocation &gt; BO)</option>
               <option value="below">Below (BO &gt; allocation)</option>
               <option value="match">On track (equal)</option>
             </select>
+            <input id="bas-search" type="search" placeholder="Search product / SFX / VIN / segment…" />
             <button type="button" id="bas-clear-filters" class="btn">Clear filters</button>
-            <button type="button" id="bas-excel-btn" class="btn-primary">Export Excel</button>
           </div>
 
-          <div class="bas-legend" aria-hidden="true">
-            <span class="bas-legend-item is-above"><i></i>Above plan</span>
-            <span class="bas-legend-item is-below"><i></i>Below plan</span>
-            <span class="bas-legend-item is-track"><i></i>On track</span>
-            <span class="bas-legend-item is-late"><i></i>Late in RTL</span>
+          <div class="bo-kpis bas-kpi-row act-kpi-row" id="bas-kpis"></div>
+
+          <div class="act-main-grid">
+            <article class="card act-card act-hero-bars">
+              <div class="pbi-viz-head">
+                <div>
+                  <h2>Allocation vs Back Orders by Product</h2>
+                  <span class="hint">Sorted by gap · click a product to filter</span>
+                </div>
+                <label class="act-sort-lab">Sort
+                  <select id="act-sort-gap">
+                    <option value="gap" selected>By Gap</option>
+                    <option value="bo">By Back Orders</option>
+                    <option value="alloc">By Allocation</option>
+                    <option value="stock">By Stock</option>
+                  </select>
+                </label>
+              </div>
+              <div class="chart-box act-chart-box act-chart-box--bars"><canvas id="chart-act-product-bars"></canvas></div>
+            </article>
+
+            <article class="card act-card act-hero-quad">
+              <div class="pbi-viz-head">
+                <h2>Demand vs Allocation Health</h2>
+                <span class="hint">X = Allocation ÷ BO · Y = BO demand · size = stock</span>
+              </div>
+              <div class="chart-box act-chart-box act-chart-box--quad"><canvas id="chart-act-health"></canvas></div>
+            </article>
+
+            <article class="card act-card act-hero-donut">
+              <div class="pbi-viz-head">
+                <h2>Allocation Status</h2>
+                <span class="hint">Suffix rows · live Excel</span>
+              </div>
+              <div class="chart-box act-chart-box act-chart-box--donut"><canvas id="chart-act-status"></canvas></div>
+              <div class="act-donut-mini" id="act-donut-mini"></div>
+            </article>
           </div>
 
-          <div class="bo-kpis bas-kpi-row" id="bas-kpis"></div>
+          <div class="act-secondary-grid">
+            <article class="card act-card">
+              <div class="pbi-viz-head">
+                <h2>Daily RTL Collection vs Plan</h2>
+                <span class="hint">RES · plan pace vs daily arrivals</span>
+              </div>
+              <div class="act-daily-wrap">
+                <div class="chart-box act-chart-box act-chart-box--daily"><canvas id="chart-act-daily"></canvas></div>
+                <div class="act-daily-side" id="act-daily-side"></div>
+              </div>
+            </article>
+            <article class="card act-card">
+              <div class="pbi-viz-head">
+                <h2>Monthly RTL Collection</h2>
+                <span class="hint" id="act-monthly-hint">Only months present in RTL age data</span>
+              </div>
+              <div class="chart-box act-chart-box act-chart-box--month"><canvas id="chart-act-monthly"></canvas></div>
+            </article>
+            <article class="card act-card">
+              <div class="pbi-viz-head">
+                <h2>Retail Electronic Sales</h2>
+                <span class="hint">Search Area = Retail Electronic Sales</span>
+              </div>
+              <div class="act-res-kpis" id="act-res-kpis"></div>
+              <div class="chart-box act-chart-box act-chart-box--res"><canvas id="chart-act-res-top"></canvas></div>
+            </article>
+          </div>
 
-          <div class="bo-insights card bas-insights-panel" id="bas-insights"></div>
+          <div class="act-ops-grid">
+            <article class="card act-card">
+              <div class="pbi-viz-head"><h2>Top 10 Back Orders</h2></div>
+              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-bo"></canvas></div>
+            </article>
+            <article class="card act-card">
+              <div class="pbi-viz-head"><h2>Top 10 Stock</h2></div>
+              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-stock"></canvas></div>
+            </article>
+            <article class="card act-card">
+              <div class="pbi-viz-head"><h2>Top 10 Allocation Gaps</h2></div>
+              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-gap"></canvas></div>
+            </article>
+            <article class="card act-card act-alerts-card">
+              <div class="pbi-viz-head">
+                <h2>Operational Alerts</h2>
+              </div>
+              <div class="act-alert-tabs" id="act-alert-tabs" role="tablist">
+                <button type="button" class="act-alert-tab active" data-act-alert="shortfall">Shortfall</button>
+                <button type="button" class="act-alert-tab" data-act-alert="surplus">Surplus</button>
+                <button type="button" class="act-alert-tab" data-act-alert="late">Late RTL</button>
+              </div>
+              <div class="table-wrap act-alert-table" id="act-alert-table"></div>
+            </article>
+          </div>
+
+          <details class="card act-details-block" open>
+            <summary>Detailed allocation tables · All BO · Confirmed · Monthly · Matched VINs</summary>
 
           <article class="card bas-section-card bas-section-all">
             <div class="bas-section-head">
               <span class="bas-section-badge">1</span>
               <div class="pbi-viz-head">
                 <h2>All back orders vs allocation</h2>
-                <span class="hint">Gap = BO − Allocation · exact product + suffix match (qty summed)</span>
+                <span class="hint">Gap = BO − Allocation · exact product + suffix match</span>
               </div>
             </div>
             <div class="bo-toolbar bas-table-filters" id="bas-table-filters">
@@ -893,7 +990,7 @@
             <div class="bas-result-strip" id="bas-table-summary" aria-live="polite"></div>
             <div class="table-wrap bas-table-wrap" id="bas-table"></div>
             <p class="foot bas-foot" id="bas-foot"></p>
-        </article>
+          </article>
 
           <article class="card bas-section-card bas-section-conf bas-conf-block">
             <div class="bas-section-head">
@@ -975,7 +1072,7 @@
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
-                <span class="hint">RTL: VIN E · product B · suffix G · colors H/I · secondary L (Sales order created / Vehicle allocation completed) · age J · location Q · then E-Sales (age L + search area / sharing)</span>
+                <span class="hint">RTL then E-Sales · paired colors · live status</span>
               </div>
             </div>
             <div class="bas-alloc-toolbar">
@@ -1003,7 +1100,20 @@
             <div class="table-wrap bas-table-wrap" id="bas-alloc-table"></div>
             <p class="foot bas-foot" id="bas-alloc-foot"></p>
           </article>
+          </details>
         </div>
+
+        <aside class="act-drawer" id="act-drawer" aria-hidden="true" hidden>
+          <div class="act-drawer-head">
+            <div>
+              <h3 id="act-drawer-title">Product</h3>
+              <p class="foot" id="act-drawer-sub">Allocation drill-down</p>
+            </div>
+            <button type="button" class="btn" id="act-drawer-close">Close</button>
+          </div>
+          <div class="act-drawer-body" id="act-drawer-body"></div>
+        </aside>
+        <div class="act-drawer-backdrop" id="act-drawer-backdrop" hidden></div>
       </div>
 
       <!-- PANEL: Stock & BO Dashboard -->
@@ -4461,7 +4571,7 @@
     { id: "summary", label: "Summary" },
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
-    { id: "boallocstock", label: "BO&ALLOCATION&STOCK" },
+    { id: "boallocstock", label: "Allocation" },
     { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
@@ -7478,8 +7588,14 @@
   }
 
   /* ——— BO & Allocation & Stock gap dashboard ——— */
-  let basView = { search: "", seg: "", product: "", sfx: "", status: "" };
+  let basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: "shortfall", sortGap: "gap" };
   let basAllocView = { search: "", salesStatus: "", source: "", score: "" };
+  const ACT_CONFIG = {
+    coverageSplit: 1.0,
+    demandSplitAuto: true,
+    demandSplit: null,
+  };
+  let actTowerCache = null;
 
   function allocProductKey(p) {
     return upperTrim(p).replace(/\s+/g, " ");
@@ -7615,21 +7731,649 @@
     const totalGap = totalBo - totalAlloc;
     const below = rows.filter((r) => r.status === "below").length;
     const above = rows.filter((r) => r.status === "above").length;
-    const boLabel = opts.boLabel || "Matched back orders";
+    const boLabel = opts.boLabel || "Matched Back Orders";
     const boSub = opts.boSub || "Same product + suffix";
-    el.innerHTML = [
-      { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
-      { label: boLabel, val: formatNumber(totalBo), sub: boSub },
-      { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
-      { label: "Overall gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad" },
-      { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
-    ].map((k) => `
-      <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+    const lateRtl = opts.lateRtl != null ? opts.lateRtl : null;
+    const totalDemand = opts.totalDemand != null ? opts.totalDemand : null;
+
+    if (opts.compact) {
+      el.innerHTML = [
+        { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
+        { label: boLabel, val: formatNumber(totalBo), sub: boSub },
+        { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
+        { label: "Overall gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad" },
+        { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
+      ].map((k) => `
+        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+          <div class="lbl">${k.label}</div>
+          <div class="val">${k.val}</div>
+          <div class="sub">${k.sub}</div>
+        </article>
+      `).join("");
+      return;
+    }
+
+    const cards = [
+      { label: "Total Allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan", icon: "▣" },
+      { label: "Matched Back Orders", val: formatNumber(totalBo), sub: boSub, icon: "▤" },
+      { label: "Available Stock", val: formatNumber(totalStock), sub: "RTL + Central", icon: "◈" },
+      { label: "Total Back Orders", val: totalDemand != null ? formatNumber(totalDemand) : formatNumber(totalBo), sub: totalDemand != null ? "Customer demand · BO file" : "Matched demand", icon: "▦" },
+      { label: "Overall Gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad", icon: "⇄" },
+      { label: "Late in RTL", val: lateRtl != null ? formatNumber(lateRtl) : "N/A", sub: lateRtl != null ? "RES · age ≥ 1" : "Upload RTL stock", cls: lateRtl ? "bad" : "ok", icon: "⏱" },
+    ];
+    el.innerHTML = cards.map((k) => `
+      <article class="bo-kpi act-kpi${k.cls ? " " + k.cls : ""}">
+        <div class="act-kpi-icon" aria-hidden="true">${k.icon}</div>
         <div class="lbl">${k.label}</div>
         <div class="val">${k.val}</div>
         <div class="sub">${k.sub}</div>
       </article>
     `).join("");
+  }
+
+  function aggregateBasByProduct(rows) {
+    const map = new Map();
+    (rows || []).forEach((r) => {
+      const key = r.product || "—";
+      if (!map.has(key)) {
+        map.set(key, {
+          product: key,
+          seg: r.seg || "",
+          allocation: 0,
+          boCount: 0,
+          stockCount: 0,
+          gap: 0,
+          leaves: [],
+        });
+      }
+      const g = map.get(key);
+      g.allocation += r.allocation;
+      g.boCount += r.boCount;
+      g.stockCount += r.stockCount;
+      g.leaves.push(r);
+    });
+    return [...map.values()].map((g) => {
+      g.gap = g.boCount - g.allocation;
+      g.status = g.gap > 0 ? "below" : g.gap < 0 ? "above" : "match";
+      g.coverage = g.boCount > 0 ? g.allocation / g.boCount : (g.allocation > 0 ? Infinity : 0);
+      g.netCover = g.allocation + g.stockCount - g.boCount;
+      return g;
+    });
+  }
+
+  function computeBasTowerMetrics(d, filteredRows) {
+    const totalAlloc = filteredRows.reduce((s, r) => s + r.allocation, 0);
+    const matchedBo = filteredRows.reduce((s, r) => s + r.boCount, 0);
+    const totalStock = filteredRows.reduce((s, r) => s + r.stockCount, 0);
+    const totalGap = matchedBo - totalAlloc;
+    const below = filteredRows.filter((r) => r.status === "below").length;
+    const above = filteredRows.filter((r) => r.status === "above").length;
+    const match = filteredRows.filter((r) => r.status === "match").length;
+    const totalDemand = (d.bos || []).reduce((s, bo) => s + basBoUnitCount(bo), 0);
+
+    let lateRtl = null;
+    let monthPack = null;
+    if (slotHasRows("rtl")) {
+      monthPack = buildBasMonthlyData();
+      const filteredMonth = filteredBasMonthlyRows(monthPack.rows);
+      const filteredMatched = monthPack.matched.filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
+      lateRtl = filteredMatched.filter((c) => c.isLate).length;
+      monthPack._filteredRows = filteredMonth;
+      monthPack._filteredMatched = filteredMatched;
+    }
+
+    const byProduct = aggregateBasByProduct(filteredRows);
+    const demandVals = byProduct.map((p) => p.boCount).filter((n) => n > 0);
+    const demandSplit = ACT_CONFIG.demandSplitAuto
+      ? (demandVals.length ? demandVals.slice().sort((a, b) => a - b)[Math.floor(demandVals.length / 2)] : 0)
+      : (ACT_CONFIG.demandSplit || 0);
+
+    const metrics = {
+      totalAlloc,
+      matchedBo,
+      totalStock,
+      totalGap,
+      totalDemand,
+      lateRtl,
+      below,
+      above,
+      match,
+      byProduct,
+      demandSplit,
+      coverageSplit: ACT_CONFIG.coverageSplit,
+      monthPack,
+      filteredRows,
+    };
+
+    if (typeof console !== "undefined" && console.info) {
+      console.info("[ACT validation]", {
+        Allocation: totalAlloc,
+        MatchedBO: matchedBo,
+        TotalBO: totalDemand,
+        Stock: totalStock,
+        Gap: totalGap,
+        LateRTL: lateRtl,
+      });
+    }
+    return metrics;
+  }
+
+  function destroyActChart(id) {
+    if (charts[id]) {
+      charts[id].destroy();
+      delete charts[id];
+    }
+  }
+
+  function actSelectProduct(product) {
+    basView.product = product || "";
+    basView.sfx = "";
+    refreshBasFromFilters();
+    if (product) openActDrawer(product);
+  }
+
+  function openActDrawer(product) {
+    const drawer = $("#act-drawer");
+    const backdrop = $("#act-drawer-backdrop");
+    const body = $("#act-drawer-body");
+    const title = $("#act-drawer-title");
+    const sub = $("#act-drawer-sub");
+    if (!drawer || !body) return;
+    const rows = (actTowerCache && actTowerCache.filteredRows) || [];
+    const leaves = rows.filter((r) => r.product === product);
+    const agg = aggregateBasByProduct(leaves)[0];
+    if (title) title.textContent = product;
+    if (sub) sub.textContent = agg ? `${agg.seg || "—"} · ${leaves.length} suffix row(s)` : "—";
+    const late = (actTowerCache && actTowerCache.monthPack && actTowerCache.monthPack._filteredMatched)
+      ? actTowerCache.monthPack._filteredMatched.filter((c) => c.isLate && (c.allocProduct === product || c.product === product)).length
+      : null;
+    body.innerHTML = !agg ? `<p class="foot">No data</p>` : `
+      <div class="act-drawer-kpis">
+        <div><span class="lab">Allocation</span><strong>${formatNumber(agg.allocation)}</strong></div>
+        <div><span class="lab">Back Orders</span><strong>${formatNumber(agg.boCount)}</strong></div>
+        <div><span class="lab">Stock</span><strong>${formatNumber(agg.stockCount)}</strong></div>
+        <div><span class="lab">Gap</span><strong class="${agg.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(agg.gap)}</strong></div>
+        <div><span class="lab">Coverage</span><strong>${agg.boCount ? (agg.allocation / agg.boCount).toFixed(2) : "N/A"}</strong></div>
+        <div><span class="lab">Late RTL</span><strong>${late != null ? formatNumber(late) : "N/A"}</strong></div>
+      </div>
+      <h4 class="act-drawer-h">SFX breakdown</h4>
+      <div class="table-wrap"><table class="bas-table">
+        <thead><tr><th>SFX</th><th class="num">Alloc</th><th class="num">BO</th><th class="num">Stock</th><th class="num">Gap</th><th>Status</th></tr></thead>
+        <tbody>${leaves.map((r) => `
+          <tr data-act-sfx="${escapeHtml(r.sfx)}" class="act-sfx-row">
+            <td>${escapeHtml(r.sfx)}</td>
+            <td class="num">${formatNumber(r.allocation)}</td>
+            <td class="num">${formatNumber(r.boCount)}</td>
+            <td class="num">${formatNumber(r.stockCount)}</td>
+            <td class="num ${r.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(r.gap)}</td>
+            <td>${basGapBadge(r.status, r.gap)}</td>
+          </tr>`).join("")}</tbody>
+      </table></div>
+      <p class="foot">Click a suffix to filter the tower · VIN detail is in Matched &amp; allocated below</p>`;
+    body.querySelectorAll("[data-act-sfx]").forEach((tr) => {
+      tr.addEventListener("click", () => {
+        basView.product = product;
+        basView.sfx = tr.getAttribute("data-act-sfx") || "";
+        refreshBasFromFilters();
+      });
+    });
+    drawer.hidden = false;
+    drawer.setAttribute("aria-hidden", "false");
+    if (backdrop) backdrop.hidden = false;
+  }
+
+  function closeActDrawer() {
+    const drawer = $("#act-drawer");
+    const backdrop = $("#act-drawer-backdrop");
+    if (drawer) {
+      drawer.hidden = true;
+      drawer.setAttribute("aria-hidden", "true");
+    }
+    if (backdrop) backdrop.hidden = true;
+  }
+
+  function renderActAlertTable(metrics) {
+    const el = $("#act-alert-table");
+    if (!el) return;
+    const tab = basView.alertTab || "shortfall";
+    document.querySelectorAll(".act-alert-tab").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-act-alert") === tab);
+    });
+    if (tab === "late") {
+      const lateCars = (metrics.monthPack && metrics.monthPack._filteredMatched)
+        ? metrics.monthPack._filteredMatched.filter((c) => c.isLate).slice(0, 20)
+        : [];
+      if (!lateCars.length) {
+        el.innerHTML = `<p class="foot" style="padding:12px">${metrics.monthPack ? "No late RES units." : "N/A · upload RTL stock"}</p>`;
+        return;
+      }
+      el.innerHTML = `<table class="bas-table"><thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Collection</th></tr></thead>
+        <tbody>${lateCars.map((c) => `<tr>
+          <td>${escapeHtml(c.allocProduct || c.product || "")}</td>
+          <td>${escapeHtml(c.allocSfx || c.suffix || "")}</td>
+          <td>${escapeHtml(c.vin || "")}</td>
+          <td class="num">${c.age != null ? c.age : "—"}</td>
+          <td>${escapeHtml(c.collectionLabel || "—")}</td>
+        </tr>`).join("")}</tbody></table>`;
+      return;
+    }
+    const rows = tab === "surplus"
+      ? metrics.filteredRows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 15)
+      : metrics.filteredRows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 15);
+    if (!rows.length) {
+      el.innerHTML = `<p class="foot" style="padding:12px">No ${tab} rows.</p>`;
+      return;
+    }
+    el.innerHTML = `<table class="bas-table"><thead><tr>
+      <th>Product</th><th>SFX</th><th class="num">BO</th><th class="num">Allocation</th><th class="num">${tab === "surplus" ? "Surplus" : "Gap"}</th>
+    </tr></thead><tbody>${rows.map((r) => {
+      const gapShow = tab === "surplus" ? Math.abs(r.gap) : r.gap;
+      return `<tr>
+        <td>${escapeHtml(r.product)}</td>
+        <td>${escapeHtml(r.sfx)}</td>
+        <td class="num">${formatNumber(r.boCount)}</td>
+        <td class="num">${formatNumber(r.allocation)}</td>
+        <td class="num ${r.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(tab === "surplus" ? -gapShow : r.gap)}</td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+  }
+
+  async function renderBasTowerCharts(metrics) {
+    if (!window.Chart) return;
+    const sortKey = basView.sortGap || "gap";
+    let products = [...metrics.byProduct];
+    products.sort((a, b) => {
+      if (sortKey === "bo") return b.boCount - a.boCount;
+      if (sortKey === "alloc") return b.allocation - a.allocation;
+      if (sortKey === "stock") return b.stockCount - a.stockCount;
+      return Math.abs(b.gap) - Math.abs(a.gap) || b.gap - a.gap;
+    });
+    products = products.filter((p) => p.allocation || p.boCount || p.stockCount).slice(0, 18);
+
+    // Product grouped bars
+    const barId = "chart-act-product-bars";
+    destroyActChart(barId);
+    const barCanvas = document.getElementById(barId);
+    if (barCanvas) {
+      charts[barId] = new Chart(barCanvas, {
+        type: "bar",
+        data: {
+          labels: products.map((p) => p.product),
+          datasets: [
+            { label: "Allocation", data: products.map((p) => p.allocation), backgroundColor: "rgba(235,10,30,0.85)", borderRadius: 4 },
+            { label: "Back Orders", data: products.map((p) => p.boCount), backgroundColor: "rgba(15,23,42,0.85)", borderRadius: 4 },
+            { label: "Stock", data: products.map((p) => p.stockCount), backgroundColor: "rgba(96,165,250,0.85)", borderRadius: 4 },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "top", labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                afterBody(items) {
+                  const i = items[0] && items[0].dataIndex;
+                  const p = products[i];
+                  if (!p) return "";
+                  return [
+                    `Gap ${basFormatGap(p.gap)} · ${basGapLabel(p.status)}`,
+                    `Plan+Stock−BO ${p.netCover >= 0 ? "+" : ""}${p.netCover}`,
+                    `Coverage ${p.boCount ? (p.allocation / p.boCount).toFixed(2) : "N/A"}`,
+                  ];
+                },
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(148,163,184,0.15)" } },
+            y: { ticks: { font: { size: 11, weight: "600" } } },
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const p = products[els[0].index];
+            if (p) actSelectProduct(p.product);
+          },
+        },
+      });
+    }
+
+    // Health quadrant
+    const healthId = "chart-act-health";
+    destroyActChart(healthId);
+    const healthCanvas = document.getElementById(healthId);
+    if (healthCanvas) {
+      const covSplit = metrics.coverageSplit;
+      const demSplit = metrics.demandSplit;
+      const maxStock = Math.max(1, ...products.map((p) => p.stockCount));
+      const points = products.map((p) => {
+        const cov = p.boCount > 0 ? Math.min(2.5, p.allocation / p.boCount) : (p.allocation > 0 ? 2.2 : 0);
+        return {
+          x: cov,
+          y: p.boCount,
+          r: 8 + Math.sqrt(p.stockCount / maxStock) * 18,
+          product: p.product,
+          meta: p,
+        };
+      });
+      await preloadCarImagesForPoints(points.map((p) => ({ meta: { product: p.product } })));
+      const quadPlugin = {
+        id: "actHealthQuad",
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea || !scales.x || !scales.y) return;
+          const xSplit = scales.x.getPixelForValue(Math.min(covSplit, scales.x.max));
+          const ySplit = scales.y.getPixelForValue(demSplit);
+          const { left, right, top, bottom } = chartArea;
+          const bands = [
+            { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(235,10,30,0.07)" },
+            { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13,148,136,0.07)" },
+            { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(245,158,11,0.07)" },
+            { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(37,99,235,0.07)" },
+          ];
+          ctx.save();
+          bands.forEach((b) => {
+            ctx.fillStyle = b.c;
+            ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+          });
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = "rgba(17,17,17,0.35)";
+          ctx.beginPath();
+          ctx.moveTo(xSplit, top); ctx.lineTo(xSplit, bottom);
+          ctx.moveTo(left, ySplit); ctx.lineTo(right, ySplit);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = "700 9px Outfit, sans-serif";
+          ctx.fillStyle = "rgba(235,10,30,0.55)";
+          ctx.fillText("HIGH DEMAND / LOW ALLOC", left + 6, top + 12);
+          ctx.fillStyle = "rgba(13,148,136,0.55)";
+          ctx.fillText("HIGH DEMAND / HIGH ALLOC", xSplit + 6, top + 12);
+          ctx.fillStyle = "rgba(245,158,11,0.65)";
+          ctx.fillText("LOW / LOW · MONITOR", left + 6, ySplit + 14);
+          ctx.fillStyle = "rgba(37,99,235,0.55)";
+          ctx.fillText("LOW / HIGH · SURPLUS", xSplit + 6, ySplit + 14);
+          ctx.restore();
+        },
+      };
+      const carPlugin = {
+        id: "actHealthCars",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || !meta.data) return;
+          ctx.save();
+          meta.data.forEach((el, i) => {
+            const pt = points[i];
+            if (!pt) return;
+            const { x, y } = el.getProps(["x", "y"], true);
+            const file = resolveCarImageFile(pt.product);
+            const key = file || `__none__:${String(pt.product || "").toLowerCase()}`;
+            const img = carImageCache.get(key);
+            const size = 34;
+            if (img && img.complete && img.naturalWidth) {
+              ctx.drawImage(img, x - size / 2, y - size / 2 - 2, size, size);
+            } else {
+              ctx.beginPath();
+              ctx.fillStyle = "#eb0a1e";
+              ctx.arc(x, y, 6, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.textAlign = "center";
+            ctx.font = "700 9px Outfit, sans-serif";
+            ctx.fillStyle = "#111";
+            const short = pt.product.length > 14 ? pt.product.slice(0, 12) + "…" : pt.product;
+            ctx.fillText(short, x, y + size / 2 + 2);
+            ctx.font = "600 8px Space Grotesk, sans-serif";
+            ctx.fillStyle = "#6b7280";
+            ctx.fillText(`${pt.meta.boCount} BO · ${(pt.x).toFixed(1)} cov`, x, y + size / 2 + 13);
+          });
+          ctx.restore();
+        },
+      };
+      charts[healthId] = new Chart(healthCanvas, {
+        type: "bubble",
+        data: {
+          datasets: [{
+            data: points,
+            backgroundColor: "rgba(0,0,0,0)",
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          layout: { padding: { top: 16, bottom: 28, left: 4, right: 8 } },
+          plugins: { legend: { display: false }, tooltip: {
+            callbacks: {
+              label(ctx) {
+                const p = ctx.raw && ctx.raw.meta;
+                if (!p) return "";
+                return `${p.product}: BO ${p.boCount} · Alloc ${p.allocation} · Stock ${p.stockCount} · Gap ${basFormatGap(p.gap)}`;
+              },
+            },
+          } },
+          scales: {
+            x: { title: { display: true, text: "Allocation Coverage (Alloc ÷ BO)", font: { weight: "700" } }, min: 0, suggestedMax: 2.2, beginAtZero: true },
+            y: { title: { display: true, text: "Back Order Demand", font: { weight: "700" } }, beginAtZero: true },
+          },
+          onClick(evt, els) {
+            if (!els.length) return;
+            const p = points[els[0].index];
+            if (p) actSelectProduct(p.product);
+          },
+        },
+        plugins: [quadPlugin, carPlugin],
+      });
+    }
+
+    // Status donut
+    const donutId = "chart-act-status";
+    destroyActChart(donutId);
+    const lateCount = metrics.lateRtl != null ? metrics.lateRtl : 0;
+    const donutData = [metrics.below, metrics.above, metrics.match, lateCount];
+    const donutTotal = metrics.below + metrics.above + metrics.match;
+    const donutCanvas = document.getElementById(donutId);
+    if (donutCanvas) {
+      charts[donutId] = new Chart(donutCanvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Below Plan", "Above Plan", "On Track", "Late in RTL"],
+          datasets: [{
+            data: donutData,
+            backgroundColor: ["#eb0a1e", "#0f766e", "#2563eb", "#f59e0b"],
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "68%",
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const v = ctx.parsed || 0;
+                  const base = ctx.dataIndex === 3 ? (lateCount || 1) : (donutTotal || 1);
+                  const pct = ctx.dataIndex === 3
+                    ? (lateCount ? "units" : "n/a")
+                    : `${((v / (donutTotal || 1)) * 100).toFixed(0)}%`;
+                  return `${ctx.label}: ${v}${ctx.dataIndex === 3 ? "" : ` (${pct})`}`;
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+    const mini = $("#act-donut-mini");
+    if (mini) {
+      mini.innerHTML = `
+        <div class="act-mini bad"><span class="lab">Shortfall</span><strong>${formatNumber(metrics.below)}</strong><span class="sub">suffixes below</span></div>
+        <div class="act-mini ok"><span class="lab">Surplus</span><strong>${formatNumber(metrics.above)}</strong><span class="sub">suffixes above</span></div>
+        <div class="act-mini warn"><span class="lab">Late RTL</span><strong>${metrics.lateRtl != null ? formatNumber(metrics.lateRtl) : "N/A"}</strong><span class="sub">RES age ≥ 1</span></div>
+        <div class="act-donut-center-note">Suffix rows ${formatNumber(donutTotal)}</div>`;
+    }
+
+    // Daily collection
+    const dailyId = "chart-act-daily";
+    destroyActChart(dailyId);
+    const dailySide = $("#act-daily-side");
+    const pack = metrics.monthPack;
+    if (pack && pack._filteredRows) {
+      const ctx = pack.ctx;
+      const dayLabels = [];
+      const dayActual = [];
+      const dayPlan = [];
+      const planTotal = pack._filteredRows.reduce((s, r) => s + r.allocation, 0);
+      const mtdTotal = pack._filteredRows.reduce((s, r) => s + r.mtd, 0);
+      const dailyPlan = ctx.todayDay > 0 ? planTotal / ctx.todayDay : 0;
+      for (let day = 1; day <= Math.min(30, ctx.daysInMonth); day += 1) {
+        dayLabels.push(String(day));
+        dayActual.push((pack.dayRetailTotals && pack.dayRetailTotals[day]) || 0);
+        dayPlan.push(day <= ctx.todayDay ? dailyPlan : null);
+      }
+      const dailyCanvas = document.getElementById(dailyId);
+      if (dailyCanvas) {
+        charts[dailyId] = new Chart(dailyCanvas, {
+          type: "bar",
+          data: {
+            labels: dayLabels,
+            datasets: [
+              { type: "bar", label: "Collected", data: dayActual, backgroundColor: "rgba(148,163,184,0.55)", borderRadius: 3 },
+              { type: "line", label: "Plan pace", data: dayPlan, borderColor: "#eb0a1e", borderWidth: 2, pointRadius: 0, tension: 0.2 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+            scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 9 } } }, y: { beginAtZero: true } },
+          },
+        });
+      }
+      if (dailySide) {
+        const gap = planTotal - mtdTotal;
+        dailySide.innerHTML = `
+          <div><span class="lab">MTD Collected</span><strong>${formatNumber(mtdTotal)}</strong></div>
+          <div><span class="lab">MTD Plan</span><strong>${formatNumber(planTotal)}</strong></div>
+          <div><span class="lab">MTD Gap</span><strong class="${gap >= 0 ? "bas-gap-pos" : "bas-gap-neg"}">${gap >= 0 ? "+" : ""}${formatNumber(gap)}</strong></div>`;
+      }
+
+      // RES kpis + top 5
+      const resKpis = $("#act-res-kpis");
+      const late = pack._filteredMatched.filter((c) => c.isLate).length;
+      const age0 = pack._filteredMatched.filter((c) => c.isTodayArrival).length;
+      const resTotal = pack._filteredMatched.length;
+      if (resKpis) {
+        resKpis.innerHTML = [
+          ["Total RES", resTotal],
+          ["Collected MTD", mtdTotal],
+          ["Plan", planTotal],
+          ["Gap", (gap >= 0 ? "+" : "") + formatNumber(gap)],
+          ["Late", late],
+        ].map(([lab, val]) => `<div class="act-res-chip"><span class="lab">${lab}</span><strong>${escapeHtml(String(val))}</strong></div>`).join("");
+      }
+      const byResProd = new Map();
+      pack._filteredMatched.forEach((c) => {
+        const p = c.allocProduct || c.product || "—";
+        byResProd.set(p, (byResProd.get(p) || 0) + 1);
+      });
+      const topRes = [...byResProd.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const resId = "chart-act-res-top";
+      destroyActChart(resId);
+      const resCanvas = document.getElementById(resId);
+      if (resCanvas) {
+        charts[resId] = new Chart(resCanvas, {
+          type: "bar",
+          data: {
+            labels: topRes.map((x) => x[0]),
+            datasets: [{ data: topRes.map((x) => x[1]), backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } },
+            onClick(evt, els) {
+              if (!els.length) return;
+              actSelectProduct(topRes[els[0].index][0]);
+            },
+          },
+        });
+      }
+
+      // Monthly: only current month real data (no invented history)
+      const monthId = "chart-act-monthly";
+      destroyActChart(monthId);
+      const monthHint = $("#act-monthly-hint");
+      if (monthHint) monthHint.textContent = `${ctx.monthLabel} · only months present in RTL (no fabricated history)`;
+      const monthCanvas = document.getElementById(monthId);
+      if (monthCanvas) {
+        charts[monthId] = new Chart(monthCanvas, {
+          type: "line",
+          data: {
+            labels: [ctx.monthLabel],
+            datasets: [
+              { label: "Collected", data: [mtdTotal], borderColor: "#eb0a1e", backgroundColor: "rgba(235,10,30,0.15)", fill: true, tension: 0.3 },
+              { label: "Plan", data: [planTotal], borderColor: "#94a3b8", borderDash: [5, 4], fill: false, tension: 0.3 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+      }
+    } else {
+      if (dailySide) dailySide.innerHTML = `<p class="foot">N/A · upload RTL stock</p>`;
+      ["chart-act-daily", "chart-act-monthly", "chart-act-res-top"].forEach(destroyActChart);
+      const resKpis = $("#act-res-kpis");
+      if (resKpis) resKpis.innerHTML = `<p class="foot">N/A</p>`;
+    }
+
+    // Top 10 charts
+    const topBo = [...metrics.byProduct].sort((a, b) => b.boCount - a.boCount).slice(0, 10);
+    const topStock = [...metrics.byProduct].sort((a, b) => b.stockCount - a.stockCount).slice(0, 10);
+    const topGap = [...metrics.byProduct].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).slice(0, 10);
+
+    const makeTop = (id, rows, field, colorFn) => {
+      destroyActChart(id);
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      charts[id] = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: rows.map((r) => r.product),
+          datasets: [{
+            data: rows.map((r) => field === "gap" ? r.gap : r[field]),
+            backgroundColor: rows.map((r) => (typeof colorFn === "function" ? colorFn(r) : colorFn)),
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true } },
+          onClick(evt, els) {
+            if (!els.length) return;
+            actSelectProduct(rows[els[0].index].product);
+          },
+        },
+      });
+    };
+    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(235,10,30,0.8)");
+    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(96,165,250,0.85)");
+    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(235,10,30,0.8)" : "rgba(15,118,110,0.8)"));
+
+    renderActAlertTable(metrics);
   }
 
   function renderBasInsights(rows, opts = {}) {
@@ -7770,6 +8514,10 @@
     if (empty) empty.hidden = true;
     if (dash) dash.hidden = false;
 
+    const stamp = $("#act-refresh-time");
+    if (stamp) stamp.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+    if ($("#act-sort-gap")) $("#act-sort-gap").value = basView.sortGap || "gap";
+
     const allRows = buildBasRows(d);
     const confirmedAllRows = buildBasRows(d, { confirmedOnly: true });
     const segs = [...new Set(allRows.map((r) => r.seg))].sort();
@@ -7780,14 +8528,22 @@
 
     const rows = filteredBasRows(allRows);
     const confirmedRows = filteredBasRows(confirmedAllRows);
-    renderBasKpis(allRows);
-    renderBasInsights(allRows);
+    const metrics = computeBasTowerMetrics(d, rows);
+    actTowerCache = metrics;
+
+    renderBasKpis(rows, {
+      totalDemand: metrics.totalDemand,
+      lateRtl: metrics.lateRtl,
+    });
+    renderBasTowerCharts(metrics);
+
     renderBasTable(rows);
 
     renderBasKpis(confirmedAllRows, {
       kpiEl: "#bas-conf-kpis",
       boLabel: "Confirmed back orders",
       boSub: "Confirmed only · same product + suffix",
+      compact: true,
     });
     renderBasInsights(confirmedAllRows, {
       insightEl: "#bas-conf-insights",
@@ -11275,7 +12031,7 @@
   const basClearEl = $("#bas-clear-filters");
   if (basClearEl) {
     basClearEl.addEventListener("click", () => {
-      basView = { search: "", seg: "", product: "", sfx: "", status: "" };
+      basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: basView.alertTab || "shortfall", sortGap: basView.sortGap || "gap" };
       basAllocView = { search: "", salesStatus: "", source: "", score: "" };
       refreshBasFromFilters();
     });
@@ -11288,6 +12044,30 @@
       refreshBasFromFilters();
     });
   }
+  const actSort = $("#act-sort-gap");
+  if (actSort) {
+    actSort.addEventListener("change", () => {
+      basView.sortGap = actSort.value || "gap";
+      refreshBasFromFilters();
+    });
+  }
+  document.querySelectorAll(".act-alert-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      basView.alertTab = btn.getAttribute("data-act-alert") || "shortfall";
+      if (actTowerCache) renderActAlertTable(actTowerCache);
+      else refreshBasFromFilters();
+    });
+  });
+  const actRefresh = $("#act-refresh-btn");
+  if (actRefresh) {
+    actRefresh.addEventListener("click", () => {
+      refreshFromAdmin("Allocation tower refreshed");
+    });
+  }
+  const actDrawerClose = $("#act-drawer-close");
+  if (actDrawerClose) actDrawerClose.addEventListener("click", closeActDrawer);
+  const actDrawerBackdrop = $("#act-drawer-backdrop");
+  if (actDrawerBackdrop) actDrawerBackdrop.addEventListener("click", closeActDrawer);
 
   function refreshBasAllocFromFilters() {
     if (window._data) renderBasAllocatedVehicles(window._data);
