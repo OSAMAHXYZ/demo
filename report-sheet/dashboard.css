@@ -490,19 +490,19 @@ button:disabled {
 /* Power BIâstyle sales page */
 .pbi-page {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
   width: 100%;
 }
 
 .pbi-slicer {
   position: sticky;
-  top: 12px;
-  max-height: calc(100vh - 120px);
+  top: 8px;
+  max-height: calc(100vh - 88px);
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 10px;
 }
 
 .pbi-slicer h2 {
@@ -771,12 +771,15 @@ button:disabled {
 .pbi-visuals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
+  align-items: start;
 }
 
 .pbi-viz {
   margin: 0;
   min-width: 0;
+  height: auto;
+  align-self: start;
 }
 
 .pbi-viz-head {
@@ -4683,28 +4686,29 @@ body.admin-page #panel-allocation:not([hidden]) {
 
 /*  Tighter charts (all dashboards)  */
 .live-app .chart-box {
-  height: 260px;
+  height: 220px;
 }
 .live-app .chart-box.pbi-box {
-  height: 260px;
+  height: 220px;
 }
 .live-app .pbi-viz-head {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .live-app .pbi-visuals,
 .live-app .sr-charts,
 .live-app .charts,
 .live-app .bo-car-charts {
-  gap: 10px;
+  gap: 8px;
+  align-items: start;
 }
 .live-app .card {
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 .live-app .card h2 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 .live-app .icc-chart-card .pbi-viz-head {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   align-items: flex-start;
   gap: 6px 12px;
 }
@@ -4717,11 +4721,11 @@ body.admin-page #panel-allocation:not([hidden]) {
   margin: 0 0 4px;
 }
 .live-app .icc-chart-box {
-  height: 460px;
+  height: 380px;
   margin-top: 0;
 }
 .live-app .chart-scroll.is-scroll {
-  max-height: 320px;
+  max-height: 260px;
 }
 .live-app .icc-filters.card {
   overflow: hidden;
@@ -5155,7 +5159,228 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 .live-app .app-content {
-  padding: 18px 22px 36px !important;
+  padding: 10px 14px 20px !important;
+}
+
+/* ── Density: kill empty stretch / loose gaps ── */
+.live-app .pbi-visuals,
+.live-app .sr-charts,
+.live-app .charts,
+.live-app .bo-car-charts,
+.live-app .bas-charts {
+  align-items: start !important;
+  gap: 8px !important;
+}
+
+.live-app .pbi-viz,
+.live-app .card.pbi-viz {
+  height: auto !important;
+  align-self: start !important;
+  padding: 10px 12px !important;
+}
+
+.live-app .pbi-viz .acc-remain-wrap {
+  margin-top: 8px;
+}
+
+.live-app .pbi-page {
+  gap: 8px !important;
+}
+
+.live-app .pbi-slicer {
+  padding: 10px !important;
+  max-height: calc(100vh - 76px);
+}
+
+.live-app .pbi-name {
+  padding: 6px 8px !important;
+}
+
+.live-app .pbi-name-list {
+  gap: 3px;
+  min-height: 0;
+}
+
+.live-app .pbi-canvas {
+  gap: 8px !important;
+}
+
+.live-app .pbi-kpis {
+  gap: 8px !important;
+}
+
+.live-app .pbi-kpi {
+  padding: 8px 10px !important;
+}
+
+.live-app .xl-toolbar,
+.live-app .sr-date-bar {
+  gap: 8px;
+  margin-bottom: 8px !important;
+  padding: 8px 10px !important;
+}
+
+.live-app .icc-hero {
+  padding: 10px 14px !important;
+  margin-bottom: 8px !important;
+  gap: 10px 16px !important;
+}
+
+.live-app .icc-title {
+  font-size: 1.05rem !important;
+  margin: 0 0 2px !important;
+}
+
+.live-app .icc-sub {
+  font-size: 0.8rem !important;
+  max-width: 64ch;
+  line-height: 1.35 !important;
+}
+
+.live-app .icc-dq {
+  margin-bottom: 8px !important;
+  padding: 6px 10px !important;
+  gap: 6px 12px !important;
+}
+
+.live-app .icc-kpi-row,
+.live-app .bo-kpis,
+.live-app .kpis,
+.live-app .bas-kpi-row {
+  gap: 8px !important;
+  margin-bottom: 8px !important;
+}
+
+.live-app .bo-kpi,
+.live-app .kpi,
+.live-app .icc-kpi {
+  padding: 8px 10px !important;
+}
+
+.live-app .bo-kpi .val,
+.live-app .kpi .value {
+  font-size: 1.2rem !important;
+  margin-top: 2px !important;
+}
+
+.live-app .bo-kpi .lab,
+.live-app .bo-kpi .lbl,
+.live-app .kpi .label {
+  font-size: 0.65rem !important;
+}
+
+.live-app .icc-layout {
+  gap: 8px !important;
+}
+
+.live-app .icc-filters.card {
+  padding: 10px !important;
+}
+
+.live-app .icc-filters-title {
+  margin: 0 0 6px !important;
+  font-size: 0.85rem !important;
+}
+
+.live-app .icc-field {
+  margin-bottom: 6px !important;
+  gap: 2px !important;
+}
+
+.live-app .icc-field select,
+.live-app .icc-field input {
+  padding: 5px 8px !important;
+  font-size: 0.8rem !important;
+}
+
+.live-app .icc-main {
+  gap: 8px !important;
+}
+
+.live-app .icc-chart-box {
+  height: 380px !important;
+}
+
+.live-app .icc-insight-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.live-app .icc-insight-card {
+  padding: 8px 10px !important;
+}
+
+.live-app .icc-insight-card h4 {
+  margin: 0 0 4px !important;
+  font-size: 0.8rem !important;
+}
+
+.live-app .icc-insight-card ul {
+  font-size: 0.76rem !important;
+  line-height: 1.35 !important;
+  padding-left: 14px;
+}
+
+.live-app .icc-insight-card li {
+  margin: 0 0 3px !important;
+}
+
+.live-app .icc-detail {
+  padding: 10px 12px !important;
+}
+
+.live-app .chart-box,
+.live-app .chart-box.pbi-box {
+  height: 220px !important;
+}
+
+.live-app .chart-scroll.is-scroll {
+  max-height: 260px !important;
+}
+
+.live-app .card {
+  padding: 10px 12px !important;
+}
+
+.live-app .card h2 {
+  margin: 0 0 6px !important;
+  font-size: 0.85rem !important;
+}
+
+.live-app .app-topbar {
+  min-height: 52px !important;
+  padding: 8px 14px !important;
+  gap: 10px !important;
+}
+
+.live-app {
+  --topbar-h: 52px;
+  --sidebar-w: 220px;
+}
+
+.live-app .sidebar-brand {
+  padding: 12px 12px !important;
+  min-height: 52px !important;
+}
+
+.live-app .sidebar-nav {
+  padding: 10px 8px !important;
+}
+
+.live-app .side-nav-item,
+.live-app .sidebar-tabs .tab.side-nav-item {
+  padding: 8px 10px !important;
+  font-size: 0.8rem !important;
+  gap: 8px !important;
+}
+
+.live-app .sidebar-section-label {
+  margin: 0 6px 6px !important;
+}
+
+.live-app .page-foot {
+  margin-top: 4px !important;
+  padding: 6px 2px 0 !important;
 }
 
 @media (max-width: 1100px) {
