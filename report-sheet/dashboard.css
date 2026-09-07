@@ -5506,24 +5506,46 @@ body.admin-page #panel-allocation:not([hidden]) {
   letter-spacing: 0.14em;
 }
 
-.live-app.toyota-theme .side-nav-item,
-.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item {
-  color: rgba(255, 255, 255, 0.72) !important;
+/* Kill the old white #panel-tabs card — it made white labels invisible */
+.live-app.toyota-theme #panel-tabs,
+.live-app.toyota-theme .sidebar-tabs.tabs {
   background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 4px !important;
+}
+
+.live-app.toyota-theme .side-nav-item,
+.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item,
+.live-app.toyota-theme #panel-tabs .tab {
+  color: rgba(255, 255, 255, 0.82) !important;
+  background: transparent !important;
+  border: 0 !important;
   border-radius: 8px !important;
+  box-shadow: none !important;
 }
 
 .live-app.toyota-theme .side-nav-item:hover,
-.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
+.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item:hover,
+.live-app.toyota-theme #panel-tabs .tab:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
   color: #fff !important;
 }
 
 .live-app.toyota-theme .side-nav-item.active,
-.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item.active {
-  background: rgba(235, 10, 30, 0.16) !important;
+.live-app.toyota-theme .sidebar-tabs .tab.side-nav-item.active,
+.live-app.toyota-theme #panel-tabs .tab.active {
+  background: #eb0a1e !important;
   color: #fff !important;
-  box-shadow: inset 3px 0 0 #eb0a1e !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.live-app.toyota-theme .side-nav-item .side-nav-icon,
+.live-app.toyota-theme .side-nav-item .side-nav-label {
+  color: inherit !important;
 }
 
 .live-app.toyota-theme .sidebar-footer {
