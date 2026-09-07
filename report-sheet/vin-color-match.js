@@ -234,6 +234,7 @@
     return best;
   }
 
+  /** RTL secondary status (Col L): only these two values are eligible for matching. */
   function rtlStatusAllowed(...rawParts) {
     const s = rawParts
       .map((p) => String(p ?? "").toLowerCase().replace(/\s+/g, " ").trim())

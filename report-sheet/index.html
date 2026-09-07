@@ -907,7 +907,7 @@
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
-                <span class="hint">VIN matches · RTL (status filter) then E-Sales · product + suffix + paired colors · matched only</span>
+                <span class="hint">RTL: VIN E · product B · suffix G · colors H/I · secondary L (Sales order created / Vehicle allocation completed) · age J · location Q · then E-Sales (age L + search area / sharing)</span>
               </div>
             </div>
             <div class="bas-alloc-toolbar">
@@ -1593,9 +1593,11 @@
     salesChannel: ["sales channel", "channel", "distribution channel", "sales plant"],
     salesType: ["sales type", "payment type", "finance type", "deal type", "type of sale", "sale type", "payment method"],
     sfx: ["sfx", "grade", "alj suffix", "tmc suffix", "suffix", "variant", "trim"],
-    agingDays: ["aging", "aging days", "age days", "days aging", "bo aging"],
+    agingDays: ["aging", "aging days", "age days", "days aging", "bo aging", "allocation ageing", "allocation aging"],
     searchAreaDesc: ["search area desc", "search area description", "vehicle search area desc", "search area"],
-    vehicleSearchArea: ["vehicle search area", "veh search area"],
+    vehicleSearchArea: ["vehicle search area", "veh search area", "vehicle search area desc"],
+    sharingLevel: ["sharing level", "share level", "sharing", "sharing lvl", "stock sharing level"],
+    allocatedLocation: ["allocated location", "allocation location", "alloc location", "allocated loc"],
   };
 
   const HEADER_MARKERS = [
@@ -8447,7 +8449,7 @@
     return stockStatusByHeader(row, [
       (n) => n === "primary status" || n === "primary status desc",
       (n) => n.includes("primary") && n.includes("status"),
-    ], "L");
+    ], "");
   }
 
   function stockSecondaryStatus(row) {
@@ -8455,6 +8457,27 @@
       (n) => n === "secondary status" || n === "secondary status desc",
       (n) => n.includes("secondary") && n.includes("status"),
     ], "");
+  }
+
+  function stockFieldByAlias(row, aliasKey, fallbackLetters) {
+    const get = buildFieldGetter(row);
+    const fromAlias = cellToString(get(row, aliasKey)).trim();
+    if (fromAlias) return fromAlias;
+    const letter = findHeaderLetter(row, (HEADER_ALIASES[aliasKey] || []).map((a) => (n) => n === a || n.includes(a)));
+    if (letter) {
+      const v = cellToString(cellByLetter(row, letter)).trim();
+      if (v) return v;
+    }
+    for (const fb of fallbackLetters || []) {
+      const v = cellToString(cellByLetter(row, fb)).trim();
+      if (v) return v;
+    }
+    return "";
+  }
+
+  function parseStockAgeing(raw) {
+    const n = toNumber(raw);
+    return Number.isFinite(n) && n >= 0 ? n : null;
   }
 
   function buildSalesVinLookup() {
@@ -8532,12 +8555,15 @@
     return (rows || []).map((r, idx) => {
       const product = cellToString(cellByLetter(r, "B")).trim();
       const suffix = normalizeProductSuffix(product, cellByLetter(r, "G"));
-      const vin = extractVinValue(cellByLetter(r, "E")) || extractVinValue(cellByLetter(r, "H")) || "";
-      const statusL = cellToString(cellByLetter(r, "L")).trim();
-      const status = stockPrimaryStatus(r) || statusL;
-      const secondaryStatus = stockSecondaryStatus(r) || cellToString(cellByLetter(r, "K")).trim();
-      const ageingRaw = cellByLetter(r, "J");
-      const ageingNum = toNumber(ageingRaw);
+      const vin = extractVinValue(cellByLetter(r, "E")) || "";
+      // Col L = Secondary status (only Sales order created / Vehicle allocation completed)
+      const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r);
+      const status = stockPrimaryStatus(r);
+      // Col J = age · Col Q = allocated location
+      const ageing = parseStockAgeing(cellByLetter(r, "J"));
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", []);
       return {
         idx: `RTL-${idx}`,
         source: "RTL",
@@ -8546,28 +8572,32 @@
         vin,
         ext: cellToString(cellByLetter(r, "H")),
         int: cellToString(cellByLetter(r, "I")),
-        status,
-        secondaryStatus,
-        location: cellToString(cellByLetter(r, "M") || cellByLetter(r, "N")),
-        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        status: status || "—",
+        secondaryStatus: secondaryStatus || "—",
+        location: location || "—",
+        ageing,
+        vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", []) || stockFieldByAlias(r, "searchAreaDesc", []),
+        sharingLevel: stockFieldByAlias(r, "sharingLevel", []),
         _raw: r,
       };
     }).filter((s) => {
       if (!s.vin || !s.product) return false;
-      // Allow status on Primary (col L) or Secondary — either may hold allocation text
+      // Secondary status (Col L) must be one of the two allowed values
       if (VCM && typeof VCM.rtlStatusAllowed === "function") {
-        return VCM.rtlStatusAllowed(s.status, s.secondaryStatus);
+        return VCM.rtlStatusAllowed(s.secondaryStatus);
       }
-      const st = `${s.status || ""} ${s.secondaryStatus || ""}`.toLowerCase();
+      const st = String(s.secondaryStatus || "").toLowerCase();
       return st.includes("sales order created") || st.includes("vehicle allocation completed");
     });
   }
 
   function extractEsalesColorStock(rows) {
     return (rows || []).map((r, idx) => {
+      // Sheet «المخزون المتاح all retail»: D product · E suffix · H VIN · I ext · J int · L ageing
       const product = cellToString(cellByLetter(r, "D")).trim();
       const suffix = normalizeProductSuffix(product, cellByLetter(r, "E"));
       const vin = extractVinValue(cellByLetter(r, "H")) || "";
+      const ageing = parseStockAgeing(cellByLetter(r, "L"));
       return {
         idx: `E-Sales-${idx}`,
         source: "E-Sales",
@@ -8576,10 +8606,15 @@
         vin,
         ext: cellToString(cellByLetter(r, "I")),
         int: cellToString(cellByLetter(r, "J")),
-        status: stockPrimaryStatus(r),
-        secondaryStatus: stockSecondaryStatus(r),
-        location: cellToString(cellByLetter(r, "K") || cellByLetter(r, "L")),
-        ageing: null,
+        status: stockPrimaryStatus(r) || "—",
+        secondaryStatus: stockSecondaryStatus(r) || "—",
+        location: stockFieldByAlias(r, "allocatedLocation", ["K", "M", "N"])
+          || stockFieldByAlias(r, "location", ["K", "M", "N"])
+          || "—",
+        ageing,
+        vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", [])
+          || stockFieldByAlias(r, "searchAreaDesc", []),
+        sharingLevel: stockFieldByAlias(r, "sharingLevel", []),
         _raw: r,
       };
     }).filter((s) => s.vin && s.product);
@@ -8622,8 +8657,11 @@
   }
 
   /**
-   * RTL VINs (status-filtered) first, then E-Sales sheet «المخزون المتاح all retail».
+   * RTL VINs first (Col L secondary = Sales order created / Vehicle allocation completed),
+   * then E-Sales sheet «المخزون المتاح all retail».
    * Match BO on product (L) + suffix (M) + one paired color slot (N/Q, O/R, or P/S).
+   * RTL: age Col J · allocated location Col Q · Ext/Int H/I.
+   * E-Sales/Central: age Col L · show Vehicle search area + Sharing level.
    */
   function buildVinColorPairedMatches() {
     const VCM = window.VinColorMatch;
@@ -8687,6 +8725,8 @@
           location: stock.location || "—",
           status: stock.status || "—",
           secondaryStatus: stock.secondaryStatus || "—",
+          vehicleSearchArea: stock.vehicleSearchArea || "—",
+          sharingLevel: stock.sharingLevel || "—",
           year: bo.year || "—",
           orderDate: bo.orderDate || "—",
           confirm: bo.confirm || "—",
@@ -8745,7 +8785,9 @@
         int: r.stockInt,
         orderDate: r.orderDate,
         status: r.status,
-        secondaryStatus: salesSecondary || stockSecondary || "—",
+        secondaryStatus: stockSecondary || salesSecondary || "—",
+        vehicleSearchArea: r.vehicleSearchArea || "—",
+        sharingLevel: r.sharingLevel || "—",
         stockRaw: r.stockRaw || null,
       };
     });
@@ -8828,7 +8870,7 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `Color-paired VIN matches · RTL first when status allows (${formatNumber(rtlCount)}) · E-Sales fallback (${formatNumber(esalesCount)}) · Ext↔Int slots 1–3 · ${periodSub}`;
+      headHint.textContent = `RTL Col L = Sales order created / Vehicle allocation completed · age J · location Q · then E-Sales (age L) · color pairs · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
@@ -8875,7 +8917,8 @@
     const heads = [
       "BO Number", "Product", "Salesman", "VIN", "Score", "Source", "Aging",
       "Suffix", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
-      "Sales status", "Secondary status", "Primary status", "Location", "Order Date",
+      "Sales status", "Secondary status", "Primary status",
+      "Allocated location", "Vehicle search area", "Sharing level", "Order Date",
     ];
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
@@ -8905,6 +8948,8 @@
           escapeHtml(secondary),
           escapeHtml(primary),
           escapeHtml(r.location || "—"),
+          escapeHtml(r.vehicleSearchArea || "—"),
+          escapeHtml(r.sharingLevel || "—"),
           escapeHtml(r.orderDate || "—"),
         ];
         const rowCls = n >= 80 ? "bas-row-above" : n >= 60 ? "bas-row-warn" : "bas-row-below";
@@ -8917,7 +8962,7 @@
       footEl.textContent = (show.length < sorted.length
         ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
         : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
-        ` matched vehicles (RTL status filter · E-Sales sheet 3 · paired colors)` +
+        ` matched vehicles (RTL Col L status · age J · loc Q · E-Sales age L · paired colors)` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
