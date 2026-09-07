@@ -885,7 +885,7 @@
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
-                <span class="hint">Confirmed BO ↔ RTL/Central stock by product + suffix · full stock columns + matched BO</span>
+                <span class="hint">Confirmed BO → RTL first, else E-Sales stock · product + suffix · matched only</span>
               </div>
             </div>
             <div class="bas-alloc-toolbar">
@@ -899,7 +899,7 @@
               <select id="bas-alloc-f-source">
                 <option value="">All stock sources</option>
                 <option value="RTL">RTL Stock</option>
-                <option value="Central">Central Stock</option>
+                <option value="E-Sales">E-Sales Stock</option>
               </select>
             </div>
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-alloc-kpis"></div>
@@ -975,7 +975,7 @@
   const SLOT_DEFS = [
     { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
-    { id: "central", n: 3, title: "Stock Central", ar: "المخزون المركزي", blurb: "All / central stock" },
+    { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "First sheet · Col D VIN → Sales Raw employee · Col L amount" },
@@ -8175,14 +8175,17 @@
     };
   }
 
-  function buildMatchedCars(boRows, rtlRows, centralRows, opts = {}) {
+  function buildMatchedCars(boRows, rtlRows, secondaryRows, opts = {}) {
     const getBo = buildFieldGetter(boRows[0] || {});
     const getRtl = buildFieldGetter(rtlRows[0] || {});
-    const getCen = buildFieldGetter(centralRows[0] || {});
+    const getSec = buildFieldGetter(secondaryRows[0] || {});
     const confirmedOnly = !!opts.confirmedOnly;
     // "productSuffix" = confirmed BO ↔ stock by product + suffix only (BAS allocated table)
     // "full" = also require year + exterior/interior colors (Stock fulfillable table)
     const matchMode = opts.matchMode === "productSuffix" ? "productSuffix" : "full";
+    // Matched & allocated: RTL first, then E-Sales (secondary file = Admin slot "central" / Stock E-Sales)
+    const rtlThenEsales = !!opts.rtlThenEsales;
+    const secondaryLabel = opts.secondaryLabel || (rtlThenEsales ? "E-Sales" : "Central");
 
     const fullKey = (product, suffix, year, ext, intc) =>
       [upperTrim(product), upperTrim(suffix), String(year || "").trim(), colorKey(ext), colorKey(intc)].join("|");
@@ -8251,28 +8254,33 @@
         };
       });
 
-    const stocks = [
-      ...mapStock(rtlRows, getRtl, "RTL"),
-      ...mapStock(centralRows, getCen, "Central"),
-    ].filter((s) => s.vin);
+    const rtlStock = mapStock(rtlRows, getRtl, "RTL").filter((s) => s.vin);
+    const secondaryStock = mapStock(secondaryRows, getSec, secondaryLabel).filter((s) => s.vin);
 
     const sortedBo = bos.slice().sort((a, b) => a.orderTs - b.orderTs || a.idx - b.idx);
-    const sortedStock = stocks
-      .slice()
-      .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
 
-    const pools = new Map();
-    sortedStock.forEach((s) => {
-      if (!pools.has(s.key)) pools.set(s.key, []);
-      pools.get(s.key).push(Object.assign({}, s, { used: false }));
-    });
+    function buildPools(list) {
+      const sorted = list
+        .slice()
+        .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
+      const pools = new Map();
+      sorted.forEach((s) => {
+        if (!pools.has(s.key)) pools.set(s.key, []);
+        pools.get(s.key).push(Object.assign({}, s, { used: false }));
+      });
+      return pools;
+    }
+
+    function takeFromPools(pools, key) {
+      const pool = pools.get(key) || [];
+      const hit = pool.find((s) => !s.used && s.vin);
+      if (!hit) return null;
+      hit.used = true;
+      return hit;
+    }
 
     const out = [];
-    sortedBo.forEach((bo) => {
-      const pool = pools.get(bo.key) || [];
-      const hit = pool.find((s) => !s.used && s.vin);
-      if (!hit) return;
-      hit.used = true;
+    const pushMatch = (bo, hit) => {
       out.push({
         "Back Order Number": bo.boNumber || "—",
         VIN: hit.vin,
@@ -8293,6 +8301,28 @@
         _stockRaw: hit._raw || null,
         _boRaw: bo._raw || null,
       });
+    };
+
+    if (rtlThenEsales) {
+      // Priority: match RTL first; only if no RTL unit for that product+suffix, use E-Sales.
+      // Unmatched BOs are omitted (display matched only).
+      const rtlPools = buildPools(rtlStock);
+      const esalesPools = buildPools(secondaryStock);
+      sortedBo.forEach((bo) => {
+        const hit = takeFromPools(rtlPools, bo.key) || takeFromPools(esalesPools, bo.key);
+        if (!hit) return;
+        pushMatch(bo, hit);
+      });
+      return out;
+    }
+
+    // Default (Stock fulfillable): single pool RTL + Central, FIFO by VIN
+    const stocks = [...rtlStock, ...secondaryStock];
+    const pools = buildPools(stocks);
+    sortedBo.forEach((bo) => {
+      const hit = takeFromPools(pools, bo.key);
+      if (!hit) return;
+      pushMatch(bo, hit);
     });
     return out;
   }
@@ -8345,12 +8375,17 @@
   function buildBasAllocatedVehicles() {
     if (!hasBackOrder()) return [];
     const live = ensureGlobalLivePeriod();
-    // Confirmed BOs only · match RTL + Central stock by product + suffix (FIFO by order date)
+    // Confirmed BOs · RTL first, then E-Sales (Admin slot 3 / Stock E-Sales file) · product + suffix · matched only
     const allMatched = buildMatchedCars(
       rawBoRows(),
       slots.rtl.rows || [],
       slots.central.rows || [],
-      { confirmedOnly: true, matchMode: "productSuffix" }
+      {
+        confirmedOnly: true,
+        matchMode: "productSuffix",
+        rtlThenEsales: true,
+        secondaryLabel: "E-Sales",
+      }
     );
     const salesLookup = buildSalesVinLookup();
 
@@ -8446,7 +8481,7 @@
     const planMatched = allRows.filter((r) => r.planMatch).length;
     const inPeriod = allRows.filter((r) => r.inPeriod).length;
     const rtlCount = allRows.filter((r) => r.source === "RTL").length;
-    const centralCount = allRows.filter((r) => r.source === "Central").length;
+    const esalesCount = allRows.filter((r) => r.source === "E-Sales").length;
 
     const periodSub = live && live.rangeLabel
       ? live.rangeLabel
@@ -8454,14 +8489,14 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `Confirmed BO ↔ RTL/Central by product + suffix · ${formatNumber(rtlCount)} RTL · ${formatNumber(centralCount)} Central · sales status ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
+      headHint.textContent = `Confirmed BO → RTL first, else E-Sales · ${formatNumber(rtlCount)} RTL · ${formatNumber(esalesCount)} E-Sales · matched only · sales status ${globalDatePresetLabel(live.preset || globalDateFilter.preset)} · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Matched vehicles", val: formatNumber(allRows.length), sub: "Confirmed BO + stock VIN", cls: "ok" },
-        { label: "RTL / Central", val: `${formatNumber(rtlCount)} / ${formatNumber(centralCount)}`, sub: "Stock source split" },
+        { label: "RTL / E-Sales", val: `${formatNumber(rtlCount)} / ${formatNumber(esalesCount)}`, sub: "RTL preferred · E-Sales fallback" },
         { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
         { label: "Delivered", val: formatNumber(delivered), sub: `Col V in ${periodSub}`, cls: delivered ? "ok" : "" },
         { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub} · not delivered`, cls: proforma ? "warn" : "" },
@@ -8480,7 +8515,7 @@
     if (!tableEl) return;
 
     if (!rows.length) {
-      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL/Central stock yet · check confirm flag, product, and suffix."}</p>`;
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL or E-Sales stock yet · check confirm flag, product, and suffix."}</p>`;
       if (footEl) footEl.textContent = "0 rows";
       return;
     }
@@ -8552,7 +8587,7 @@
       footEl.textContent = (show.length < sorted.length
         ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
         : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
-        ` matched vehicles (confirmed BO ↔ product + suffix)${colNote} · ${periodSub}` +
+        ` matched vehicles (RTL first · E-Sales fallback · product + suffix)${colNote} · ${periodSub}` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
