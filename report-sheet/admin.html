@@ -11,45 +11,65 @@
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
 </head>
-<body class="admin-page">
-  <header class="page-hero">
-    <div class="page-hero-inner">
-      <div class="hero-brand">
-        <h1>Admin Control</h1>
-        <p>Upload Excel · set targets · Push to live (shared on all devices)</p>
-      </div>
-      <div class="hero-logo">
-        <div class="co">Abdul Latif Jameel</div>
-        <div class="motors">MOTORS</div>
-      </div>
-    </div>
-  </header>
-
-  <div class="shell">
-    <header class="top">
-      <div class="brand">
-        <div class="mark">AD</div>
-        <div>
-          <h1>Admin Push</h1>
-          <p>Push saves to the server — every laptop on this URL sees the same live report</p>
+<body class="live-app admin-page">
+  <div class="app-frame">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Admin navigation">
+      <div class="sidebar-brand">
+        <div class="sidebar-mark" aria-hidden="true"><span class="sidebar-mark-alj">ALJ</span></div>
+        <div class="sidebar-brand-text">
+          <strong>ALJ Motors</strong>
+          <span>Admin Control</span>
         </div>
       </div>
-      <div class="top-actions">
-        <span class="status" id="status">Ready</span>
-        <span class="status ok" id="admin-mode-badge">ADMIN</span>
-        <a class="btn" href="index.html">← Live Sales Report</a>
-        <button type="button" id="clear-files-btn" disabled>Clear files</button>
-        <button type="button" class="btn-primary" id="push-btn">Push to live</button>
+      <nav class="sidebar-nav">
+        <p class="sidebar-section-label">Admin</p>
+        <button type="button" class="tab side-nav-item active" data-admin-panel="uploads" id="tab-uploads">
+          <span class="side-nav-icon" aria-hidden="true">⬆</span>
+          <span class="side-nav-label">Excel Uploads</span>
+        </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="targets" id="tab-targets">
+          <span class="side-nav-icon" aria-hidden="true">♟</span>
+          <span class="side-nav-label">Employees &amp; Targets</span>
+        </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="allocation" id="tab-allocation">
+          <span class="side-nav-icon" aria-hidden="true">▦</span>
+          <span class="side-nav-label">Allocation Plan</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <a class="side-nav-item side-nav-link" href="index.html">
+          <span class="side-nav-icon" aria-hidden="true">◉</span>
+          <span class="side-nav-label">Live Dashboard</span>
+        </a>
+        <div class="sidebar-user-card">
+          <div class="sidebar-user-avatar" aria-hidden="true">O</div>
+          <div class="sidebar-user-meta">
+            <strong>Osama</strong>
+            <span>Digital Transformation</span>
+          </div>
+        </div>
       </div>
-    </header>
+    </aside>
 
-    <div class="admin-bar" id="nav-bar">
-      <button type="button" class="tab active" data-admin-panel="uploads" id="tab-uploads">1 · Excel Uploads</button>
-      <button type="button" class="tab" data-admin-panel="targets" id="tab-targets">2 · Employees &amp; Targets</button>
-      <button type="button" class="tab" data-admin-panel="allocation" id="tab-allocation">3 · Allocation Plan</button>
-      <span class="hint">Same look as Live Dashboard · Push when ready</span>
-    </div>
+    <div class="app-main">
+      <header class="app-topbar">
+        <div class="app-topbar-left">
+          <div class="app-topbar-titles">
+            <p class="app-topbar-eyebrow">Abdul Latif Jameel MOTORS</p>
+            <h1 class="app-page-title">Admin Push</h1>
+          </div>
+        </div>
+        <div class="top-actions app-topbar-actions">
+          <span class="status" id="status">Ready</span>
+          <span class="status ok" id="admin-mode-badge">ADMIN</span>
+          <a class="btn" href="index.html">Live report</a>
+          <button type="button" class="btn" id="clear-files-btn" disabled>Clear files</button>
+          <button type="button" class="btn-primary" id="push-btn">Push to live</button>
+        </div>
+      </header>
 
+      <div class="app-content">
+  <div class="shell">
     <div class="pbi-kpis admin-kpis" id="admin-kpis"></div>
 
     <section class="admin-panel" id="panel-uploads">
@@ -128,7 +148,10 @@
       </div>
     </section>
 
-    <footer class="page-foot">Admin only · Data stays in this browser · Live: <a href="index.html">report-sheet/index.html</a></footer>
+    <footer class="page-foot">Admin only · Push updates all live dashboards · <a href="index.html">Open live report</a></footer>
+  </div>
+      </div>
+    </div>
   </div>
 
 <script>

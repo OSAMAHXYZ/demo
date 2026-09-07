@@ -234,8 +234,11 @@
     return best;
   }
 
-  function rtlStatusAllowed(raw) {
-    const s = String(raw ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  function rtlStatusAllowed(...rawParts) {
+    const s = rawParts
+      .map((p) => String(p ?? "").toLowerCase().replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join(" | ");
     if (!s) return false;
     return s.includes("sales order created") || s.includes("vehicle allocation completed");
   }

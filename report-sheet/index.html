@@ -20,31 +20,33 @@
   <div class="app-frame">
     <aside class="app-sidebar" id="app-sidebar" aria-label="Dashboard navigation">
       <div class="sidebar-brand">
-        <div class="sidebar-mark">SR</div>
+        <div class="sidebar-mark" aria-hidden="true">
+          <span class="sidebar-mark-alj">ALJ</span>
+        </div>
         <div class="sidebar-brand-text">
-          <strong>Report Sheet</strong>
-          <span>ALJ Motors</span>
+          <strong>ALJ Motors</strong>
+          <span>Report Sheet</span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
 
       <nav class="sidebar-nav">
-        <p class="sidebar-section-label">Dashboards</p>
+        <p class="sidebar-section-label">Main menu</p>
         <div class="tabs sidebar-tabs" id="panel-tabs"></div>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="admin-bar sidebar-admin-bar" id="nav-bar">
-          <button type="button" class="tab side-nav-item" data-nav="dashboard" id="nav-dashboard" disabled>
-            <span class="side-nav-icon" aria-hidden="true">◉</span>
-            <span class="side-nav-label">Live Dashboard</span>
-          </button>
-        </div>
         <a class="side-nav-item side-nav-link" href="admin.html">
           <span class="side-nav-icon" aria-hidden="true">⚙</span>
-          <span class="side-nav-label">Admin · Upload &amp; Push</span>
+          <span class="side-nav-label">Settings · Admin</span>
         </a>
-        <p class="sidebar-hint">Upload Excel on Admin only</p>
+        <div class="sidebar-user-card">
+          <div class="sidebar-user-avatar" aria-hidden="true">O</div>
+          <div class="sidebar-user-meta">
+            <strong>Osama</strong>
+            <span>Digital Transformation</span>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -55,15 +57,20 @@
         <div class="app-topbar-left">
           <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu">☰</button>
           <div class="app-topbar-titles">
-            <p class="app-topbar-eyebrow">Abdul Latif Jameel MOTORS</p>
+            <p class="app-topbar-eyebrow" id="app-page-date"></p>
             <h1 class="app-page-title" id="app-page-title">Dashboard</h1>
           </div>
+        </div>
+        <div class="app-topbar-search" role="search">
+          <span class="app-search-icon" aria-hidden="true">⌕</span>
+          <input type="search" id="global-search" placeholder="Search by product, VIN, salesman, or order…" autocomplete="off" />
+          <kbd class="app-search-kbd">Ctrl K</kbd>
         </div>
         <div class="top-actions app-topbar-actions">
           <span class="status" id="status">Waiting for Admin Push</span>
           <span class="status ok" id="live-badge" title="Data loads only when you click Refresh">Manual</span>
           <button type="button" class="btn theme-toggle" id="theme-toggle" title="Toggle dark mode" aria-pressed="false">Dark</button>
-          <button type="button" id="clear-btn" disabled>Clear view</button>
+          <button type="button" class="btn" id="clear-btn" disabled>Clear</button>
           <button type="button" class="btn-primary" id="run-btn" disabled title="Reload the latest Admin Push data">Refresh</button>
         </div>
       </header>
@@ -179,10 +186,11 @@
           </aside>
 
           <div class="icc-main">
-            <article class="card icc-chart-card">
+            <article class="card icc-chart-card" data-chart-id="chart-icc-bubble">
               <div class="pbi-viz-head">
                 <h2 id="icc-chart-title">4-quadrant · Demand vs Stock Coverage</h2>
                 <span class="hint" id="icc-chart-hint">Bubble size = available stock · click bubble to inspect</span>
+                <button type="button" class="pbi-expand" data-expand="chart-icc-bubble" title="Open wide view with car pictures">Wide</button>
               </div>
               <div class="icc-quadrant-legend" id="icc-quad-legend">
                 <span class="icc-q icc-q-critical">Critical</span>
@@ -1549,8 +1557,8 @@
     });
     const dash = $("#dashboard");
     const wait = $("#wait-section");
-    const showDash = nav === "dashboard" && dash.classList.contains("show");
-    dash.style.display = showDash ? "" : "none";
+    const showDash = nav === "dashboard" && dash && dash.classList.contains("show");
+    if (dash) dash.style.display = showDash ? "" : "none";
     if (wait) wait.style.display = showDash ? "none" : "";
   }
 
@@ -4267,6 +4275,10 @@
   }
 
   function openWideChart(sourceId) {
+    if (sourceId === "chart-icc-bubble") {
+      openWideIccBubbleChart();
+      return;
+    }
     const snap = chartSnapshots[sourceId];
     if (!snap) return;
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
@@ -4321,6 +4333,11 @@
     if (list) list.innerHTML = "";
     const body = $("#pbi-wide-body");
     if (body) body.classList.add("pbi-wide-body--chart-only");
+    const box = $("#pbi-wide-box");
+    if (box) {
+      box.classList.remove("icc-wide-cars");
+      box.style.height = "";
+    }
     if (charts["pbi-wide-canvas"]) {
       charts["pbi-wide-canvas"].destroy();
       delete charts["pbi-wide-canvas"];
@@ -4737,10 +4754,10 @@
       if (el) el.style.display = p.id === panelId ? "" : "none";
     });
     const iconMap = {
-      summary: "▣",
-      salesreport: "▦",
+      summary: "◫",
+      salesreport: "▣",
       bodashboard: "▤",
-      boallocstock: "▥",
+      boallocstock: "▦",
       stockdashboard: "◈",
       dashboard: "◉",
     };
@@ -4754,6 +4771,13 @@
     if (titleEl) {
       const cur = panels.find((p) => p.id === panelId);
       titleEl.textContent = cur ? cur.label : "Dashboard";
+    }
+    const dateEl = $("#app-page-date");
+    if (dateEl) {
+      const now = new Date();
+      dateEl.textContent = now.toLocaleDateString("en-GB", {
+        weekday: "short", day: "numeric", month: "short", year: "numeric",
+      });
     }
     if (panelId === "summary") renderSummaryDashboard();
   }
@@ -8480,8 +8504,9 @@
       const product = cellToString(cellByLetter(r, "B")).trim();
       const suffix = normalizeProductSuffix(product, cellByLetter(r, "G"));
       const vin = extractVinValue(cellByLetter(r, "E")) || extractVinValue(cellByLetter(r, "H")) || "";
-      const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "L")).trim();
-      const secondaryStatus = stockSecondaryStatus(r);
+      const statusL = cellToString(cellByLetter(r, "L")).trim();
+      const status = stockPrimaryStatus(r) || statusL;
+      const secondaryStatus = stockSecondaryStatus(r) || cellToString(cellByLetter(r, "K")).trim();
       const ageingRaw = cellByLetter(r, "J");
       const ageingNum = toNumber(ageingRaw);
       return {
@@ -8500,8 +8525,11 @@
       };
     }).filter((s) => {
       if (!s.vin || !s.product) return false;
-      if (VCM && typeof VCM.rtlStatusAllowed === "function") return VCM.rtlStatusAllowed(s.status);
-      const st = String(s.status || "").toLowerCase();
+      // Allow status on Primary (col L) or Secondary — either may hold allocation text
+      if (VCM && typeof VCM.rtlStatusAllowed === "function") {
+        return VCM.rtlStatusAllowed(s.status, s.secondaryStatus);
+      }
+      const st = `${s.status || ""} ${s.secondaryStatus || ""}`.toLowerCase();
       return st.includes("sales order created") || st.includes("vehicle allocation completed");
     });
   }
@@ -8771,7 +8799,7 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `Color-paired VIN matches · RTL first (${formatNumber(rtlCount)}) · E-Sales (${formatNumber(esalesCount)}) · Ext↔Int slots 1–3 · ${periodSub}`;
+      headHint.textContent = `Color-paired VIN matches · RTL first when status allows (${formatNumber(rtlCount)}) · E-Sales fallback (${formatNumber(esalesCount)}) · Ext↔Int slots 1–3 · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
@@ -9202,14 +9230,188 @@
       <p class="foot">Quadrant · ${escapeHtml(row.quadrant.replace(/_/g, " "))}</p>`;
   }
 
-  function renderIccBubbleChart(dataset, filtered) {
-    const canvas = $("#chart-icc-bubble");
+  const CAR_IMAGE_FILES = {
+    camry: "camry.png",
+    corolla: "corolla.png",
+    "corolla cross": "corolla cross.png",
+    crown: "crown.png",
+    fortuner: "fortuner.png",
+    gr86: "gr86.png",
+    "hiace bus": "hiace bus.png",
+    "hiace van": "hiace van.png",
+    highlander: "highlander.png",
+    hilux: "hilux double cab.png",
+    "hilux dc": "hilux double cab.png",
+    "hilux double": "hilux double cab.png",
+    "hilux double cab": "hilux double cab.png",
+    "hilux sc": "Hilux single cab.png",
+    "hilux single": "Hilux single cab.png",
+    "hilux single cab": "Hilux single cab.png",
+    innova: "innova.png",
+    "land cruiser": "land cruiser.png",
+    "land cruiser hard top": "land cruiser hard top.png",
+    "land cruiser hardtop": "land cruiser hard top.png",
+    "land cruiser pickup": "land cruiser pickup.png",
+    lc300: "lc300 hev max.png",
+    "lc300 hev": "lc300 hev max.png",
+    "lc300 hev max": "lc300 hev max.png",
+    lc70: "land cruiser hard top.png",
+    "lite ace": "lite ace.png",
+    prado: "prado.png",
+    raize: "raize.png",
+    rav4: "rav4.png",
+    "rav 4": "rav4.png",
+    supra: "supra.png",
+    "urban cruiser": "urban cruiser.png",
+    veloz: "veloz.png",
+    yaris: "yaris.png",
+    coaster: "coaster.png",
+  };
+
+  const carImageCache = new Map(); // productKey -> HTMLImageElement | null
+  let iccBubbleRenderCtx = null;
+
+  function carImageBases() {
+    // report-sheet pages may be served from /report-sheet/ or repo root
+    return ["../images/cars/", "/images/cars/", "images/cars/"];
+  }
+
+  function resolveCarImageFile(product) {
+    const raw = String(product || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!raw) return "";
+    if (CAR_IMAGE_FILES[raw]) return CAR_IMAGE_FILES[raw];
+    const compact = raw.replace(/[^a-z0-9]+/g, " ").trim();
+    if (CAR_IMAGE_FILES[compact]) return CAR_IMAGE_FILES[compact];
+
+    // Prefer longer alias keys that appear in the product name
+    const keys = Object.keys(CAR_IMAGE_FILES).sort((a, b) => b.length - a.length);
+    for (const key of keys) {
+      if (raw.includes(key) || compact.includes(key)) return CAR_IMAGE_FILES[key];
+    }
+    // LC / Land Cruiser shorthand
+    if (/\blc\s*300\b/.test(raw) || /\blc300\b/.test(raw)) return CAR_IMAGE_FILES.lc300;
+    if (/\blc\s*70\b/.test(raw) || /\blc70\b/.test(raw)) return CAR_IMAGE_FILES.lc70;
+    if (/\bhilux\b/.test(raw) && /\bsingle|sc\b/.test(raw)) return CAR_IMAGE_FILES["hilux single cab"];
+    if (/\bhilux\b/.test(raw)) return CAR_IMAGE_FILES["hilux double cab"];
+    return "";
+  }
+
+  function loadCarImageElement(fileName) {
+    return new Promise((resolve) => {
+      if (!fileName) {
+        resolve(null);
+        return;
+      }
+      const bases = carImageBases();
+      let i = 0;
+      const tryNext = () => {
+        if (i >= bases.length) {
+          resolve(null);
+          return;
+        }
+        const img = new Image();
+        img.decoding = "async";
+        const url = bases[i] + encodeURI(fileName);
+        i += 1;
+        img.onload = () => resolve(img);
+        img.onerror = () => tryNext();
+        img.src = url;
+      };
+      tryNext();
+    });
+  }
+
+  async function getCarImageForProduct(product) {
+    const file = resolveCarImageFile(product);
+    const key = file || `__none__:${String(product || "").toLowerCase()}`;
+    if (carImageCache.has(key)) return carImageCache.get(key);
+    const img = await loadCarImageElement(file);
+    carImageCache.set(key, img);
+    return img;
+  }
+
+  async function preloadCarImagesForPoints(points) {
+    const products = [...new Set((points || []).map((p) => (p.meta && p.meta.product) || "").filter(Boolean))];
+    await Promise.all(products.map((p) => getCarImageForProduct(p)));
+  }
+
+  async function openWideIccBubbleChart() {
+    const dataset = getInventoryCommandDataset();
+    if (!dataset || !window.InventoryCommandCenter) {
+      setStatus("No Summary chart to expand", "err");
+      return;
+    }
+    const ICC = window.InventoryCommandCenter;
+    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
+    filtered = iccApplyKpiFilter(filtered);
+
+    const titleEl = $("#icc-chart-title");
+    $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Demand vs Stock Coverage";
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.classList.add("show");
+
+    const totals = $("#pbi-wide-totals");
+    if (totals) {
+      totals.hidden = true;
+      totals.innerHTML = "";
+    }
+    const nums = $("#pbi-wide-numbers");
+    if (nums) nums.hidden = true;
+    const body = $("#pbi-wide-body");
+    if (body) body.classList.add("pbi-wide-body--chart-only");
+
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    if (box) {
+      box.classList.add("icc-wide-cars");
+      box.style.height = "min(78vh, 720px)";
+    }
+    if (scroll) scroll.style.maxHeight = "min(82vh, 780px)";
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Wide view · car pictures by model · click a car to inspect · Close or Esc";
+
+    await renderIccBubbleChart(dataset, filtered, {
+      canvasId: "pbi-wide-canvas",
+      useCarImages: true,
+    });
+  }
+
+  async function renderIccBubbleChart(dataset, filtered, opts) {
+    const options = opts || {};
+    const canvasId = options.canvasId || "chart-icc-bubble";
+    const useCarImages = !!options.useCarImages;
+    const canvas = document.getElementById(canvasId) || $(`#${canvasId}`);
     if (!canvas || !window.Chart || !window.InventoryCommandCenter) return;
     const ICC = window.InventoryCommandCenter;
     const mode = iccView.mode === "ageing" ? "ageing" : "coverage";
-    const points = ICC.toChartPoints(filtered, mode, dataset.config);
-    const covSplit = dataset.kpis.coverageSplit;
-    const velSplit = dataset.kpis.velocitySplit;
+    let points = ICC.toChartPoints(filtered, mode, dataset.config);
+
+    // Wide car view: keep chart readable — prefer higher-pressure / larger stock points
+    if (useCarImages && points.length > 80) {
+      points = [...points]
+        .sort((a, b) => {
+          const as = (a.meta && a.meta.availableStock) || 0;
+          const bs = (b.meta && b.meta.availableStock) || 0;
+          const ap = (a.meta && a.meta.demandPressure) || 0;
+          const bp = (b.meta && b.meta.demandPressure) || 0;
+          return bp - ap || bs - as;
+        })
+        .slice(0, 80);
+    }
+
+    if (useCarImages) {
+      await preloadCarImagesForPoints(points);
+      // Enlarge bubbles so car art is visible
+      points = points.map((p) => ({
+        ...p,
+        r: Math.max(18, Math.min(42, (Number(p.r) || 12) * 1.65)),
+      }));
+    }
+
+    if (canvasId === "chart-icc-bubble") {
+      iccBubbleRenderCtx = { dataset, filtered };
+    }
 
     const colors = {
       CRITICAL: "rgba(200, 30, 44, 0.72)",
@@ -9218,23 +9420,25 @@
       WATCH: "rgba(100, 116, 139, 0.65)",
     };
 
-    if (charts["chart-icc-bubble"]) charts["chart-icc-bubble"].destroy();
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+      delete charts[canvasId];
+    }
 
     const quadrantPlugin = {
-      id: "iccQuadrants",
+      id: "iccQuadrants_" + canvasId,
       beforeDraw(chart) {
         if (mode !== "coverage") return;
         const { ctx, chartArea, scales } = chart;
         if (!chartArea || !scales.x || !scales.y) return;
-        const x0 = scales.x.getPixelForValue(0);
-        const xSplit = scales.x.getPixelForValue(Math.min(covSplit, scales.x.max));
-        const ySplit = scales.y.getPixelForValue(velSplit);
+        const xSplit = scales.x.getPixelForValue(Math.min(dataset.kpis.coverageSplit, scales.x.max));
+        const ySplit = scales.y.getPixelForValue(dataset.kpis.velocitySplit);
         const { left, right, top, bottom } = chartArea;
         const bands = [
-          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(200, 30, 44, 0.06)" }, // critical
-          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.06)" }, // fast
-          { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" }, // over
-          { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" }, // watch
+          { x1: left, x2: xSplit, y1: top, y2: ySplit, c: "rgba(200, 30, 44, 0.06)" },
+          { x1: xSplit, x2: right, y1: top, y2: ySplit, c: "rgba(13, 148, 136, 0.06)" },
+          { x1: xSplit, x2: right, y1: ySplit, y2: bottom, c: "rgba(180, 83, 9, 0.06)" },
+          { x1: left, x2: xSplit, y1: ySplit, y2: bottom, c: "rgba(100, 116, 139, 0.05)" },
         ];
         ctx.save();
         bands.forEach((b) => {
@@ -9250,27 +9454,41 @@
         ctx.lineTo(right, ySplit);
         ctx.stroke();
         ctx.restore();
-        void x0;
       },
     };
 
-    charts["chart-icc-bubble"] = new Chart(canvas, {
+    const pointStyles = useCarImages
+      ? points.map((p) => {
+          const file = resolveCarImageFile(p.meta && p.meta.product);
+          const key = file || `__none__:${String((p.meta && p.meta.product) || "").toLowerCase()}`;
+          return carImageCache.get(key) || "circle";
+        })
+      : null;
+
+    charts[canvasId] = new Chart(canvas, {
       type: "bubble",
       data: {
         datasets: [{
           label: "Vehicles",
           data: points,
-          backgroundColor: points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
-          borderColor: "rgba(11, 58, 102, 0.45)",
-          borderWidth: 1.25,
-          hoverBorderWidth: 2,
+          backgroundColor: points.map((p) => (
+            useCarImages
+              ? "rgba(255,255,255,0.12)"
+              : (colors[p.meta.quadrant] || colors.WATCH)
+          )),
+          borderColor: points.map((p) => colors[p.meta.quadrant] || colors.WATCH),
+          borderWidth: useCarImages ? 2 : 1.25,
+          hoverBorderWidth: 2.5,
+          pointStyle: useCarImages
+            ? (ctx) => (pointStyles && pointStyles[ctx.dataIndex]) || "circle"
+            : "circle",
         }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
-        layout: { padding: { top: 4, right: 8, bottom: 2, left: 2 } },
+        layout: { padding: { top: 8, right: 12, bottom: 6, left: 6 } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -9325,7 +9543,7 @@
           iccView.selectedId = pt.rowId;
           const row = filtered.find((r) => r.id === pt.rowId);
           renderIccDetail(row);
-          renderIccTable(dataset, filtered);
+          if (canvasId === "chart-icc-bubble") renderIccTable(dataset, filtered);
         },
       },
       plugins: [quadrantPlugin],
@@ -9678,11 +9896,39 @@
   const basExcelBtn = $("#bas-excel-btn");
   if (basExcelBtn) basExcelBtn.addEventListener("click", exportBasDashboardExcel);
 
-  $("#nav-bar").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-nav]");
-    if (!btn || btn.disabled) return;
-    if (btn.dataset.nav === "dashboard" && !window._data) return;
-    switchNav(btn.dataset.nav);
+  const navBarEl = $("#nav-bar");
+  if (navBarEl) {
+    navBarEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-nav]");
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.nav === "dashboard" && !window._data) return;
+      switchNav(btn.dataset.nav);
+    });
+  }
+
+  const globalSearchEl = $("#global-search");
+  if (globalSearchEl) {
+    globalSearchEl.addEventListener("input", (e) => {
+      const q = String(e.target.value || "").trim();
+      // Route search into the active panel's primary search box when present
+      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#search", "#bas-alloc-search"];
+      for (const sel of targets) {
+        const el = $(sel);
+        if (!el || el.offsetParent === null) continue;
+        el.value = q;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        break;
+      }
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "k") {
+      const el = $("#global-search");
+      if (!el) return;
+      e.preventDefault();
+      el.focus();
+      el.select();
+    }
   });
 
   function maybeApplyPushedTargets(reason) {
@@ -9847,6 +10093,20 @@
         renderSummaryDashboard();
       });
     });
+    const summaryPanel = $("#panel-summary");
+    if (summaryPanel) {
+      summaryPanel.addEventListener("click", (e) => {
+        const expand = e.target.closest("[data-expand]");
+        if (!expand) return;
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+      });
+      summaryPanel.addEventListener("dblclick", (e) => {
+        const viz = e.target.closest("[data-chart-id]");
+        if (!viz) return;
+        openWideChart(viz.getAttribute("data-chart-id"));
+      });
+    }
     const reset = $("#icc-reset");
     if (reset) {
       reset.addEventListener("click", () => {
