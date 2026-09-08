@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr9" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr16" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -359,6 +359,14 @@
 
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
+        <section class="sr-pace-board card" id="sr-pace-board" aria-label="Month pace summary">
+          <div class="sr-pace-board-head">
+            <h2>Month pace</h2>
+            <p class="hint" id="sr-pace-board-hint">Working-day plan vs remaining Proforma &amp; Delivery</p>
+          </div>
+          <div class="sr-pace-grid" id="sr-pace-grid"></div>
+        </section>
+
         <div class="pbi-page sr-page" id="sr-pbi-page">
           <aside class="pbi-slicer card sr-slicer">
             <h2>Sales Employee</h2>
@@ -378,16 +386,17 @@
             <section class="sr-section">
               <div class="sr-section-head">
                 <h3>Performance</h3>
-                <p>Del %, Prof+Del %, and target — one view per employee</p>
+                <p>Team Del % and Prof+Del % vs target · Wide for per-advisor detail</p>
               </div>
               <div class="pbi-visuals sr-grid sr-grid-hero" id="sr-charts-hero">
-                <article class="card pbi-viz sr-viz-perf" data-chart-id="chart-sr-perf">
+                <article class="card pbi-viz sr-viz-perf is-summary-only" data-chart-id="chart-sr-perf">
                   <div class="pbi-viz-head">
                     <h2>Del % · Prof+Del % · Target</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
                   </div>
-                  <div class="sr-perf-day" id="sr-perf-day" aria-label="Day totals"></div>
-                  <div class="chart-scroll">
+                  <div class="sr-perf-day" id="sr-perf-day" aria-label="Team achievement"></div>
+                  <p class="sr-summary-hint">Wide opens per-advisor chart and numbers</p>
+                  <div class="chart-scroll sr-detail-only">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
                   </div>
                 </article>
@@ -420,7 +429,10 @@
                 </article>
                 <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel" data-chart-id="chart-cancel">
                   <div class="pbi-viz-head">
-                    <h2>Cancellation %</h2>
+                    <div>
+                      <h2>Cancellation %</h2>
+                      <p class="pbi-slicer-hint">Team control vs 30% ceiling · click a name to filter</p>
+                    </div>
                     <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
                   </div>
                   <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
@@ -446,35 +458,38 @@
                     <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-profdel">
+                <article class="card pbi-viz sr-viz-profdel" data-chart-id="chart-sr-profdel">
                   <div class="pbi-viz-head">
-                    <h2>Prof + Del</h2>
+                    <h2>Prof + Del · volume &amp; %</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
                   </div>
                   <div class="chart-scroll">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
+                <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct" hidden>
                   <div class="pbi-viz-head">
                     <h2>Prof+Del %</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdelpct" title="Open wide view">Wide</button>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
                   </div>
                   <div class="chart-scroll">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz sr-viz-accessories" data-chart-id="chart-sr-accessories">
+                <article class="card pbi-viz sr-viz-accessories is-summary-only" data-chart-id="chart-sr-accessories">
                   <div class="pbi-viz-head">
                     <h2>Accessories · Ach %</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
                   </div>
                   <div class="acc-summary-board" id="acc-summary-board" hidden>
-                    <div class="acc-summary-brand">
+                    <div class="acc-summary-pct-hero">
                       <span class="acc-summary-icon" aria-hidden="true">⚙</span>
-                      <strong>Accessories</strong>
+                      <div class="acc-summary-pct-text">
+                        <span class="k">Accessories Ach %</span>
+                        <span class="v" id="acc-sum-pct">—</span>
+                      </div>
                     </div>
-                    <div class="acc-summary-cols">
+                    <div class="acc-summary-cols acc-summary-cols--detail" hidden>
                       <div class="acc-summary-cell">
                         <span class="k">Target</span>
                         <span class="v" id="acc-sum-target">—</span>
@@ -483,13 +498,10 @@
                         <span class="k">Achieved</span>
                         <span class="v" id="acc-sum-achieved">—</span>
                       </div>
-                      <div class="acc-summary-cell">
-                        <span class="k">%</span>
-                        <span class="v" id="acc-sum-pct">—</span>
-                      </div>
                     </div>
                   </div>
-                  <div class="sr-acc-layout">
+                  <p class="sr-summary-hint">Wide opens Ach % chart and remaining schedule</p>
+                  <div class="sr-acc-layout sr-detail-only">
                     <div class="chart-scroll sr-acc-chart">
                       <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
                     </div>
@@ -541,17 +553,18 @@
             </section>
 
             <section class="sr-section sr-section-stack">
-              <article class="card pbi-daily-target" id="sr-daily-target-card">
-                <div class="pbi-viz-head">
+              <details class="card pbi-daily-target sr-daily-target" id="sr-daily-target-card">
+                <summary class="sr-daily-target-summary">
                   <div>
                     <h2>Daily target pace · today</h2>
                     <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
                   </div>
-                </div>
+                  <span class="sr-collapse-hint" aria-hidden="true"></span>
+                </summary>
                 <div class="sr-daily-target-wrap" id="sr-daily-target-body">
                   <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
                 </div>
-              </article>
+              </details>
 
               <article class="card pbi-detail" id="sr-detail-card">
                 <div class="pbi-detail-head">
@@ -4303,17 +4316,27 @@
     if (!box) return;
     if (horizontal && labelCount > 1) {
       const series = Math.max(1, Number(seriesCount) || 1);
-      // Enough vertical room per name so labels never overlap (esp. 2–3 series groups)
-      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr" || canvasId === "chart-sr-perf";
-      const rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 48 : 36) : (dense ? 34 : 28);
-      const h = Math.max(240, Math.min(1200, labelCount * rowPx + 64));
+      // Enough vertical room per name so labels never overlap (esp. 2–3 series + Target line)
+      const perf = canvasId === "chart-sr-perf";
+      const profdel = canvasId === "chart-sr-profdel";
+      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr" || perf || profdel;
+      let rowPx;
+      if (perf) {
+        rowPx = series >= 2 ? 60 : 44;
+      } else if (profdel) {
+        rowPx = series >= 2 ? 52 : 36;
+      } else {
+        rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 48 : 36) : (dense ? 34 : 28);
+      }
+      const h = Math.max(280, Math.min(1600, labelCount * rowPx + 72));
       box.style.height = h + "px";
       box.style.minHeight = h + "px";
       if (scroll) {
         scroll.classList.add("is-scroll");
         const inSales = !!(scroll.closest && scroll.closest("#panel-salesreport"));
+        const visibleRows = perf ? 10 : 12;
         scroll.style.maxHeight = (inSales
-          ? Math.min(620, Math.max(360, rowPx * 12 + 48))
+          ? Math.min(perf ? 560 : 620, Math.max(360, rowPx * visibleRows + 56))
           : Math.min(380, Math.max(240, rowPx * 8 + 40))) + "px";
       }
     } else {
@@ -4350,10 +4373,13 @@
         if (ds.hidden) return;
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
+        const dsSuffix = ds.valueSuffix != null
+          ? ds.valueSuffix
+          : (looksLikePercentLabel(ds.label) ? "%" : (suffix || ""));
         meta.data.forEach((el, i) => {
           const raw = Number(ds.data[i]);
           if (!Number.isFinite(raw)) return;
-          const text = formatBarEndLabel(raw, suffix);
+          const text = formatBarEndLabel(raw, dsSuffix);
           if (!text) return;
           const { x, y } = el.getProps(["x", "y"], true);
           if (horizontal) {
@@ -4412,6 +4438,7 @@
         valueSuffix: opts.valueSuffix,
         categoryExtras: opts.categoryExtras,
         rowMeta: opts.rowMeta,
+        dualValueAxis: opts.dualValueAxis,
       })),
     };
     sizeChartScrollBox(id, labelCount, horizontal && type === "bar", seriesCount);
@@ -4427,9 +4454,10 @@
     delete datasetsExtra.valueSuffix;
     delete datasetsExtra.categoryExtras;
     delete datasetsExtra.rowMeta;
+    delete datasetsExtra.dualValueAxis;
     const softScale = {
       beginAtZero: true,
-      ...(opts.max != null ? { suggestedMax: opts.max } : {}),
+      ...(opts.max != null && !opts.dualValueAxis ? { suggestedMax: opts.max } : {}),
       grid: { color: "rgba(17, 17, 17, 0.06)", drawBorder: false },
       ticks: { precision: 0, color: "#6b7280", font: { size: 11, family: figureFont, weight: "600" } },
       border: { display: false },
@@ -4497,9 +4525,9 @@
         layout: {
           padding: {
             left: horizontal ? (opts.categoryExtras ? 4 : 2) : 4,
-            right: showValues && horizontal ? 48 : 8,
-            top: horizontal ? 4 : 4,
-            bottom: horizontal ? 4 : 4,
+            right: showValues && horizontal ? 52 : 8,
+            top: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
+            bottom: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
           },
         },
         onHover: clickable
@@ -4527,9 +4555,19 @@
             bodyFont: { family: fontFamily, size: 12 },
             padding: 12,
             cornerRadius: 10,
-            callbacks: clickable
-              ? { footer: () => "Click name to filter · use Wide for full view" }
-              : undefined,
+            callbacks: {
+              label(ctx) {
+                const ds = ctx.dataset || {};
+                const n = Number(ctx.parsed && (ctx.parsed.x != null ? ctx.parsed.x : ctx.parsed.y));
+                if (!Number.isFinite(n)) return ds.label || "";
+                const suf = ds.valueSuffix != null
+                  ? ds.valueSuffix
+                  : (looksLikePercentLabel(ds.label) ? "%" : (valueSuffix || ""));
+                const fig = Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+                return `${ds.label || "Value"}: ${fig}${suf}`;
+              },
+              ...(clickable ? { footer: () => "Click name to filter · use Wide for full view" } : {}),
+            },
           },
           barEndLabels: {
             display: showValues && type === "bar",
@@ -4540,9 +4578,39 @@
         },
         scales: type === "doughnut"
           ? {}
-          : horizontal
-            ? { x: softScale, y: categoryScale }
-            : { y: softScale, x: categoryScale },
+          : (() => {
+              if (!horizontal) return { y: softScale, x: categoryScale };
+              if (!opts.dualValueAxis) return { x: softScale, y: categoryScale };
+              return {
+                x: {
+                  ...softScale,
+                  position: "bottom",
+                  title: {
+                    display: true,
+                    text: "Volume",
+                    color: "#6b7280",
+                    font: { size: 10, family: fontFamily, weight: "700" },
+                  },
+                },
+                x2: {
+                  ...softScale,
+                  position: "top",
+                  suggestedMax: opts.max != null ? opts.max : 140,
+                  grid: { display: false },
+                  ticks: {
+                    ...softScale.ticks,
+                    callback(v) { return `${v}%`; },
+                  },
+                  title: {
+                    display: true,
+                    text: "%",
+                    color: "#0f766e",
+                    font: { size: 10, family: fontFamily, weight: "700" },
+                  },
+                },
+                y: categoryScale,
+              };
+            })(),
       },
     });
   }
@@ -4677,7 +4745,10 @@
             });
           }
         }
-        rows.push({ name: String(lab || "—"), cells });
+        rows.push({
+          name: (meta && meta[i] && meta[i].name) || String(lab || "—"),
+          cells,
+        });
       });
     }
 
@@ -4712,6 +4783,7 @@
         <div class="nums">${nums}</div>
       </div>`;
     }).join("");
+    numsEl.classList.toggle("pbi-wide-numbers--named", rows.some((r) => r.name && r.name !== "—"));
   }
 
   let lastAccRemainHtml = "";
@@ -4782,11 +4854,14 @@
     totalsEl.classList.add("pbi-wide-totals--acc");
     totalsEl.innerHTML = `
       <div class="acc-summary-board acc-summary-board--wide">
-        <div class="acc-summary-brand">
+        <div class="acc-summary-pct-hero">
           <span class="acc-summary-icon" aria-hidden="true">⚙</span>
-          <strong>Accessories</strong>
+          <div class="acc-summary-pct-text">
+            <span class="k">Accessories Ach %</span>
+            <span class="v">${sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%")}</span>
+          </div>
         </div>
-        <div class="acc-summary-cols">
+        <div class="acc-summary-cols acc-summary-cols--detail">
           <div class="acc-summary-cell">
             <span class="k">Target</span>
             <span class="v">${formatNumber(sum.quota)}</span>
@@ -4794,10 +4869,6 @@
           <div class="acc-summary-cell">
             <span class="k">Achieved</span>
             <span class="v">${formatNumber(sum.sold)}</span>
-          </div>
-          <div class="acc-summary-cell">
-            <span class="k">%</span>
-            <span class="v">${sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%")}</span>
           </div>
         </div>
       </div>`;
@@ -4830,6 +4901,7 @@
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--perf");
       modal.classList.add("pbi-wide-modal--accessories");
     }
 
@@ -5004,6 +5076,11 @@
     hideWidePerfExtra();
     const totalsReset = $("#pbi-wide-totals");
     if (totalsReset) totalsReset.classList.remove("pbi-wide-totals--acc");
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.toggle("pbi-wide-modal--perf", sourceId === "chart-sr-perf");
+      modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
+    }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Chart";
     const backdrop = $("#pbi-wide-backdrop");
@@ -5014,11 +5091,13 @@
     const horizontal = !!(snap.extra && snap.extra.horizontal);
     const box = $("#pbi-wide-box");
     const scroll = $("#pbi-wide-scroll");
+    const isPerf = sourceId === "chart-sr-perf";
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
       const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
-      box.style.height = Math.max(420, n * rowH + 80) + "px";
-      scroll.style.maxHeight = "min(78vh, 900px)";
+      box.style.height = Math.max(isPerf ? 360 : 420, n * rowH + 80) + "px";
+      // Cap chart pane so Volume / Sales type below stay on screen
+      scroll.style.maxHeight = isPerf ? "min(42vh, 480px)" : "min(78vh, 900px)";
     } else if (snap.type === "doughnut") {
       box.style.height = "380px";
       scroll.style.maxHeight = "";
@@ -5028,8 +5107,8 @@
     }
     const hint = $("#pbi-wide-hint");
     if (hint) {
-      hint.textContent = sourceId === "chart-sr-perf"
-        ? "Del % · Prof+Del % · Target · delivered cars by sales type below"
+      hint.textContent = isPerf
+        ? "Numbers list shows full advisor names · scroll chart for bars · Volume & Sales type below"
         : horizontal && n > 1
           ? "Numbers on the right · scroll for every name · click a bar to filter"
           : "Numbers beside the chart · Close or press Esc";
@@ -5042,9 +5121,9 @@
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
       const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
-      box.style.height = Math.max(420, n * rowH + 80) + "px";
+      box.style.height = Math.max(isPerf ? 360 : 420, n * rowH + 80) + "px";
     }
-    if (sourceId === "chart-sr-perf") {
+    if (isPerf) {
       const sr = (window._data && window._data.salesReport) || null;
       if (sr) renderWidePerfSalesType(sr);
     }
@@ -5074,6 +5153,10 @@
     hideWidePerfExtra();
     const table = $("#pbi-wide-table");
     if (table) table.innerHTML = "";
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
+    }
     const box = $("#pbi-wide-box");
     if (box) {
       box.classList.remove("icc-wide-cars");
@@ -6505,21 +6588,32 @@
     const pctText = pct == null ? "—" : `${pct}%`;
 
     el.innerHTML = `
-      <p class="cancel-pct-formula">
-        ${escapeHtml(scope)} · Cancel % = Cancelled ÷ (Delivery + Cancelled) × 100
-        · Target &lt; 30%
-      </p>
-      <div class="cancel-pct-row">
-        <div class="cancel-pct-main">
+      <div class="cancel-pct-top">
+        <div class="cancel-pct-gauge">
           <span class="lab">Cancellation %</span>
           <span class="val">${escapeHtml(pctText)}</span>
+          <span class="goal">Goal under 30%</span>
         </div>
-        <div class="cancel-pct-parts">
-          <div class="cancel-pct-part"><span class="lab">Cancelled</span><span class="val">${formatNumber(cancelled)}</span></div>
-          <div class="cancel-pct-part"><span class="lab">Delivery</span><span class="val">${formatNumber(delivery)}</span></div>
+        <div class="cancel-pct-stats">
+          <div class="cancel-pct-stat is-cancel">
+            <span class="lab">Cancelled</span>
+            <span class="val">${formatNumber(cancelled)}</span>
+          </div>
+          <div class="cancel-pct-stat is-del">
+            <span class="lab">Delivery</span>
+            <span class="val">${formatNumber(delivery)}</span>
+          </div>
+          <div class="cancel-pct-stat is-base">
+            <span class="lab">Base</span>
+            <span class="val">${formatNumber(cancelled + delivery)}</span>
+          </div>
         </div>
         <span class="cancel-pct-status">${escapeHtml(status)}</span>
       </div>
+      <p class="cancel-pct-formula">
+        <span class="scope">${escapeHtml(scope)}</span>
+        Cancel % = Cancelled ÷ (Delivery + Cancelled) × 100
+      </p>
     `;
   }
 
@@ -6580,6 +6674,7 @@
       }
     }
     renderNameList(sr);
+    renderPaceBoard(sr);
     renderPbiKpis(sr);
     renderCancelPctPanel(sr);
     renderSalesReportCharts(sr);
@@ -6624,6 +6719,97 @@
         ? "1 name selected · charts filtered"
         : `${list.length} names · click to filter page`;
     }
+  }
+
+  function buildPaceBoardMetrics(sr) {
+    const t = (sr && sr.totals) || {};
+    const dt = (sr && sr.dailyTarget) || {};
+    const workDays = Math.max(0, Number(dt.workingDays) || Number(workingDays) || 0);
+    const calPassed = Number(sr.daysPassed) || 0;
+    const daysPassed = workDays > 0
+      ? Math.max(0, Math.min(calPassed, workDays))
+      : calPassed;
+    const daysRemaining = workDays > 0
+      ? Math.max(0, workDays - daysPassed)
+      : Math.max(0, Number(sr.daysRemaining) || 0);
+
+    let target = Number(t.target) || 0;
+    let prof = Number(t.proformaMonth) || 0;
+    let del = Number(t.deliveryMonth) || 0;
+    let agents = (sr.rows || []).filter((r) => !r._vacation && rowTargetNum(r) > 0).length;
+
+    if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
+      const r = window._srRowsByKey[srView.selectedKey];
+      target = rowTargetNum(r);
+      prof = Number(r["Proforma (Month)"]) || 0;
+      del = Number(r["Delivery (Month)"]) || 0;
+      agents = r._vacation || target <= 0 ? 0 : 1;
+    }
+
+    const aveDaily = workDays > 0 ? target / workDays : 0;
+    const remProf = Math.max(0, target - prof);
+    const remDel = Math.max(0, target - del);
+    const reqProfDay = daysRemaining > 0 ? remProf / daysRemaining : remProf;
+    const reqDelDay = daysRemaining > 0 ? remDel / daysRemaining : remDel;
+    const aveProdAgent = agents > 0 ? del / agents : 0;
+
+    return {
+      workDays,
+      aveDaily,
+      daysPassed,
+      daysRemaining,
+      remProf,
+      remDel,
+      reqProfDay,
+      reqDelDay,
+      aveProdAgent,
+      agents,
+      target,
+      prof,
+      del,
+    };
+  }
+
+  function formatPaceNum(n, decimals) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return "—";
+    if (decimals == null) return formatNumber(Math.round(v));
+    const fixed = v.toFixed(decimals);
+    return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  }
+
+  function renderPaceBoard(sr) {
+    const grid = $("#sr-pace-grid");
+    const board = $("#sr-pace-board");
+    const hint = $("#sr-pace-board-hint");
+    if (!grid || !board) return;
+    if (!sr || !(sr.rows || []).length) {
+      board.hidden = true;
+      return;
+    }
+    board.hidden = false;
+    const m = buildPaceBoardMetrics(sr);
+    if (hint) {
+      hint.textContent = srView.selectedKey
+        ? "Filtered to selected advisor · remaining vs their target"
+        : `Team plan · ${formatNumber(m.agents)} active agents · target ${formatNumber(m.target)}`;
+    }
+    const cells = [
+      { lab: "No. of working days", val: formatPaceNum(m.workDays), tip: "Admin working days this month" },
+      { lab: "Ave. daily prof. & del./day", val: formatPaceNum(m.aveDaily, 2), tip: "Target ÷ working days" },
+      { lab: "Days passed", val: formatPaceNum(m.daysPassed), tip: "Working days elapsed" },
+      { lab: "Days remaining", val: formatPaceNum(m.daysRemaining), tip: "Working days left" },
+      { lab: "Remaining balance (Prof.)", val: formatPaceNum(m.remProf), tip: "Target − Proforma MTD" },
+      { lab: "Remaining balance (Del.)", val: formatPaceNum(m.remDel), tip: "Target − Delivery MTD" },
+      { lab: "Actual Prof. required/day", val: formatPaceNum(m.reqProfDay, 2), tip: "Remaining Prof ÷ days remaining" },
+      { lab: "Actual Del. required/day", val: formatPaceNum(m.reqDelDay, 2), tip: "Remaining Del ÷ days remaining" },
+      { lab: "Ave. Prod./agent (Overall)", val: formatPaceNum(m.aveProdAgent, 2), tip: "Delivery MTD ÷ active agents" },
+    ];
+    grid.innerHTML = cells.map((c) => `
+      <div class="sr-pace-cell" title="${escapeHtml(c.tip)}">
+        <span class="lab">${escapeHtml(c.lab)}</span>
+        <span class="val">${escapeHtml(c.val)}</span>
+      </div>`).join("");
   }
 
   function renderPbiKpis(sr) {
@@ -6793,31 +6979,43 @@
   function renderPerfDayStrip(sr, singleRow) {
     const el = $("#sr-perf-day");
     if (!el) return;
-    let dayDel;
-    let dayProf;
     let targetSum = 0;
+    let delSum = 0;
+    let profSum = 0;
     if (singleRow) {
-      dayDel = Number(singleRow["Delivery (Day)"]) || 0;
-      dayProf = Number(singleRow["Proforma (Day)"]) || 0;
       targetSum = rowTargetNum(singleRow);
+      delSum = Number(singleRow["Delivery (Month)"]) || 0;
+      profSum = Number(singleRow["Proforma (Month)"]) || 0;
     } else {
       const t = (sr && sr.totals) || {};
-      dayDel = Number(t.deliveryDay) || 0;
-      dayProf = Number(t.proformaDay) || 0;
       targetSum = Number(t.target) || 0;
-      if ((!dayDel && !dayProf) && sr && Array.isArray(sr.rows)) {
+      delSum = Number(t.deliveryMonth) || 0;
+      profSum = Number(t.proformaMonth) || 0;
+      if (sr && Array.isArray(sr.rows)) {
         const rows = filterSrRows(sr.rows);
-        dayDel = rows.reduce((s, r) => s + (Number(r["Delivery (Day)"]) || 0), 0);
-        dayProf = rows.reduce((s, r) => s + (Number(r["Proforma (Day)"]) || 0), 0);
-      }
-      if (!targetSum && sr && Array.isArray(sr.rows)) {
-        targetSum = filterSrRows(sr.rows).reduce((s, r) => s + rowTargetNum(r), 0);
+        if (!targetSum) targetSum = rows.reduce((s, r) => s + rowTargetNum(r), 0);
+        if (!delSum && !profSum) {
+          delSum = rows.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
+          profSum = rows.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
+        }
       }
     }
+    const delPct = targetSum > 0 ? (delSum / targetSum) * 100 : null;
+    const profDelPct = targetSum > 0 ? ((profSum + delSum) / targetSum) * 100 : null;
+    const fmtPct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
     el.innerHTML = `
-      <div class="sr-perf-chip"><span class="k">Day Delivery</span><span class="v">${formatNumber(dayDel)}</span></div>
-      <div class="sr-perf-chip"><span class="k">Day Proforma</span><span class="v">${formatNumber(dayProf)}</span></div>
-      <div class="sr-perf-chip sr-perf-chip--target"><span class="k">Target</span><span class="v">${formatNumber(targetSum)}</span></div>
+      <div class="sr-perf-metric is-target">
+        <span class="k">Target</span>
+        <span class="v">${formatNumber(targetSum)}</span>
+      </div>
+      <div class="sr-perf-metric is-del">
+        <span class="k">Del %</span>
+        <span class="v">${fmtPct(delPct)}</span>
+      </div>
+      <div class="sr-perf-metric is-prof">
+        <span class="k">Prof+Del %</span>
+        <span class="v">${fmtPct(profDelPct)}</span>
+      </div>
     `;
   }
 
@@ -6832,7 +7030,8 @@
     const delCounts = rows.map((r) => Number(r["Delivery (Month)"]) || 0);
     const profCounts = rows.map((r) => Number(r["Proforma (Month)"]) || 0);
     const categoryExtras = targets.map((t) => (t > 0 ? `Target ${formatNumber(t)}` : "Target —"));
-    const rowMeta = rows.map((_, i) => ({
+    const rowMeta = rows.map((r, i) => ({
+      name: String(r["Sales Employee"] || r.Salesman || "").trim() || "—",
       target: targets[i],
       del: delCounts[i],
       prof: profCounts[i],
@@ -6855,27 +7054,37 @@
 
     const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
     const empKeys = rows.map((r) => r._key);
-    upsertChart("chart-sr-perf", "bar", labels, null, {
+    // Highest Prof+Del % first so the chart reads top → bottom clearly
+    const order = rows
+      .map((r, i) => ({ i, score: profDelPcts[i], del: delPcts[i] }))
+      .sort((a, b) => b.score - a.score || b.del - a.del);
+    const ordLabels = order.map((o) => labels[o.i]);
+    const ordKeys = order.map((o) => empKeys[o.i]);
+    const ordDel = order.map((o) => delPcts[o.i]);
+    const ordProfDel = order.map((o) => profDelPcts[o.i]);
+    const ordExtras = order.map((o) => categoryExtras[o.i]);
+    const ordMeta = order.map((o) => rowMeta[o.i]);
+    upsertChart("chart-sr-perf", "bar", ordLabels, null, {
       horizontal: true,
       clickable: true,
-      empKeys,
+      empKeys: ordKeys,
       legend: true,
       showValues: true,
       valueSuffix: "%",
       max: 140,
-      categoryExtras,
-      rowMeta,
+      categoryExtras: ordExtras,
+      rowMeta: ordMeta,
       datasets: [
         {
           label: "Del %",
-          data: delPcts,
+          data: ordDel,
           backgroundColor: "rgba(235, 10, 30, 0.88)",
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Prof+Del %",
-          data: profDelPcts,
+          data: ordProfDel,
           backgroundColor: "rgba(13, 148, 136, 0.85)",
           borderWidth: 0,
           borderRadius: 5,
@@ -7038,7 +7247,15 @@
 
     if (!hasFile) {
       if (remainWrap) remainWrap.hidden = true;
-      if (summaryBoard) summaryBoard.hidden = true;
+      if (summaryBoard) {
+        summaryBoard.hidden = false;
+        const pctEl = $("#acc-sum-pct");
+        if (pctEl) pctEl.textContent = "—";
+      }
+      const hint = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+      if (hint) {
+        hint.textContent = "Upload Accessories Excel in Admin, then Push to live · Wide for details";
+      }
       setChartEmptyState(
         "chart-sr-accessories",
         "Upload Accessories Excel in Admin (slot 6 · Col D VIN matched to Sales Raw employee · Col L amount), then Push to live."
@@ -7069,13 +7286,24 @@
 
     if (!accRows.length) {
       if (remainWrap) remainWrap.hidden = true;
-      if (summaryBoard) summaryBoard.hidden = true;
+      if (summaryBoard) {
+        summaryBoard.hidden = false;
+        const pctEl = $("#acc-sum-pct");
+        if (pctEl) pctEl.textContent = "—";
+      }
+      const hint = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+      if (hint) {
+        hint.textContent = "No accessories amounts for this period · Wide for details";
+      }
       setChartEmptyState(
         "chart-sr-accessories",
         "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, and employee targets (or Accessories settled) in Admin."
       );
       return;
     }
+
+    const hintOk = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
+    if (hintOk) hintOk.textContent = "Wide opens Ach % chart and remaining schedule";
 
     if (remainWrap && remainTable) {
       remainWrap.hidden = false;
@@ -7177,17 +7405,38 @@
         Math.min(100, (r._delPct || 0) * 100),
         Math.max(0, 100 - (r._delPct || 0) * 100),
       ]);
-      upsertChart("chart-sr-profdel", "bar", ["Prof", "Del", "Prof+Del"], [
-        Number(r["Proforma (Month)"]) || 0,
-        Number(r["Delivery (Month)"]) || 0,
-        Number(r["Prof+Del"]) || 0,
-      ], {
-        backgroundColor: ["rgba(100, 116, 139, 0.75)", "rgba(235, 10, 30, 0.88)", "rgba(17, 17, 17, 0.85)"],
+      upsertChart("chart-sr-profdel", "bar", [shortEmpLabel(r["Sales Employee"] || r.Salesman)], null, {
+        horizontal: true,
+        legend: true,
+        dualValueAxis: true,
+        max: 140,
+        showValues: true,
+        datasets: [
+          {
+            label: "Prof+Del",
+            data: [Number(r["Prof+Del"]) || 0],
+            backgroundColor: "rgba(17, 17, 17, 0.88)",
+            borderWidth: 0,
+            borderRadius: 5,
+            xAxisID: "x",
+            valueSuffix: "",
+          },
+          {
+            label: "Prof+Del %",
+            data: [(r._profDelPct || 0) * 100],
+            backgroundColor: "rgba(13, 148, 136, 0.85)",
+            borderWidth: 0,
+            borderRadius: 5,
+            xAxisID: "x2",
+            valueSuffix: "%",
+          },
+        ],
       });
-      upsertChart("chart-sr-profdelpct", "doughnut", ["Prof+Del %", "Remaining"], [
-        Math.min(100, (r._profDelPct || 0) * 100),
-        Math.max(0, 100 - (r._profDelPct || 0) * 100),
-      ]);
+      if (charts["chart-sr-profdelpct"]) {
+        charts["chart-sr-profdelpct"].destroy();
+        delete charts["chart-sr-profdelpct"];
+      }
+      delete chartSnapshots["chart-sr-profdelpct"];
       upsertChart("chart-sr-prev", "bar", ["Prior month Prof", "Today Prof", "Today Del"], [
         Number(r["Proforma (Prev)"]) || 0,
         Number(r["Proforma (Day)"]) || 0,
@@ -7228,25 +7477,30 @@
     );
 
     const cancelPctVals = rows.map((r) => parsePct(r["Cancellation %"] || r["Cancel %"]) || 0);
-    upsertChart("chart-cancel", "bar", labels, null, {
+    const gapVals = rows.map((r) => parsePct(r["Gap +/-"]) || 0);
+    const cancelOrder = rows
+      .map((r, i) => ({ i, cancel: cancelPctVals[i], gap: gapVals[i] }))
+      .sort((a, b) => b.cancel - a.cancel || a.gap - b.gap);
+    upsertChart("chart-cancel", "bar", cancelOrder.map((o) => labels[o.i]), null, {
       ...clickOpts,
+      empKeys: cancelOrder.map((o) => empKeys[o.i]),
       legend: true,
       showValues: true,
       valueSuffix: "%",
       datasets: [
         {
           label: "Cancel %",
-          data: cancelPctVals,
-          backgroundColor: cancelPctVals.map((v) =>
-            v > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)"
+          data: cancelOrder.map((o) => cancelPctVals[o.i]),
+          backgroundColor: cancelOrder.map((o) =>
+            cancelPctVals[o.i] > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)"
           ),
           borderWidth: 0,
           borderRadius: 5,
         },
         {
           label: "Gap +/-",
-          data: rows.map((r) => parsePct(r["Gap +/-"]) || 0),
-          backgroundColor: "rgba(100, 116, 139, 0.65)",
+          data: cancelOrder.map((o) => gapVals[o.i]),
+          backgroundColor: "rgba(100, 116, 139, 0.55)",
           borderWidth: 0,
           borderRadius: 5,
         },
@@ -7262,20 +7516,46 @@
       valueSuffix: "%",
     });
 
-    upsertChart("chart-sr-profdel", "bar", labels, rows.map((r) => Number(r["Prof+Del"]) || 0), {
+    const pdOrder = rows
+      .map((r, i) => ({
+        i,
+        pct: (r._profDelPct || 0) * 100,
+        vol: Number(r["Prof+Del"]) || 0,
+      }))
+      .sort((a, b) => b.pct - a.pct || b.vol - a.vol);
+    upsertChart("chart-sr-profdel", "bar", pdOrder.map((o) => labels[o.i]), null, {
       ...clickOpts,
-      label: "Prof+Del",
-      backgroundColor: "rgba(17, 17, 17, 0.88)",
-    });
-
-    upsertChart("chart-sr-profdelpct", "bar", labels, rows.map((r) => (r._profDelPct || 0) * 100), {
-      ...clickOpts,
-      label: "Prof+Del %",
-      backgroundColor: "rgba(13, 148, 136, 0.85)",
-      max: 120,
+      empKeys: pdOrder.map((o) => empKeys[o.i]),
+      legend: true,
+      dualValueAxis: true,
+      max: 140,
       showValues: true,
-      valueSuffix: "%",
+      datasets: [
+        {
+          label: "Prof+Del",
+          data: pdOrder.map((o) => o.vol),
+          backgroundColor: "rgba(17, 17, 17, 0.88)",
+          borderWidth: 0,
+          borderRadius: 5,
+          xAxisID: "x",
+          valueSuffix: "",
+        },
+        {
+          label: "Prof+Del %",
+          data: pdOrder.map((o) => o.pct),
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 5,
+          xAxisID: "x2",
+          valueSuffix: "%",
+        },
+      ],
     });
+    if (charts["chart-sr-profdelpct"]) {
+      charts["chart-sr-profdelpct"].destroy();
+      delete charts["chart-sr-profdelpct"];
+    }
+    delete chartSnapshots["chart-sr-profdelpct"];
 
     upsertChart("chart-sr-prev", "bar", labels, null, {
       ...clickOpts,
