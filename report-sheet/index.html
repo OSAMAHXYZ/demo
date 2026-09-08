@@ -10242,6 +10242,28 @@
     const esalesCount = allRows.filter((r) => r.source === "E-Sales").length;
     const hi = allRows.filter((r) => (r.matchScore || 0) >= 80).length;
 
+    const rtlRaw = extractRtlColorStock(slots.rtl.rows || []);
+    const esalesRaw = extractEsalesColorStock(slots.central.rows || []);
+    const countUsage = (list) => {
+      const map = new Map();
+      let filled = 0;
+      (list || []).forEach((s) => {
+        const u = String(s.usage || "").trim();
+        if (!u || u === "—") return;
+        filled += 1;
+        map.set(u, (map.get(u) || 0) + 1);
+      });
+      const top = [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      return {
+        filled,
+        total: (list || []).length,
+        distinct: map.size,
+        top: top ? `${top[0]} (${top[1]})` : "",
+      };
+    };
+    const rtlUsage = countUsage(rtlRaw);
+    const esalesUsage = countUsage(esalesRaw);
+
     const periodSub = live && live.rangeLabel
       ? live.rangeLabel
       : (live && live.reportMonthLabel) || "selected period";
@@ -10260,6 +10282,22 @@
         { label: "On allocation plan", val: formatNumber(planMatched), sub: "Product + suffix in ESAL plan" },
         { label: "Delivered", val: formatNumber(delivered), sub: `Col V in ${periodSub}`, cls: delivered ? "ok" : "" },
         { label: "Proforma", val: formatNumber(proforma), sub: `Col P in ${periodSub}`, cls: proforma ? "warn" : "" },
+        {
+          label: "RTL Usage",
+          val: formatNumber(rtlUsage.filled),
+          sub: rtlUsage.top
+            ? `Col K · ${rtlUsage.filled}/${rtlUsage.total} · top ${rtlUsage.top}`
+            : `Col K from RTL raw · ${formatNumber(rtlUsage.total)} rows`,
+          cls: rtlUsage.filled ? "ok" : "",
+        },
+        {
+          label: "E-Sales Usage",
+          val: formatNumber(esalesUsage.filled),
+          sub: esalesUsage.top
+            ? `Col K · ${esalesUsage.filled}/${esalesUsage.total} · top ${esalesUsage.top}`
+            : `Col K from E-Sales raw · ${formatNumber(esalesUsage.total)} rows`,
+          cls: esalesUsage.filled ? "ok" : "",
+        },
         { label: "In period", val: formatNumber(inPeriod), sub: `${formatNumber(outside)} outside · ${formatNumber(na)} NA`, cls: inPeriod ? "ok" : "" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
