@@ -1333,14 +1333,19 @@
 
   /** Plant / salesman code / notes defaults (Excel Month-to-Date columns) */
   const EMPLOYEE_META = {
-    "samaher abdulmoghni al amri": { plant: "Telesales North", code: "36684", note: "Vacation" },
-    "haneen talal aqeel al madani": { plant: "Telesales North", code: "36685", note: "Vacation" },
+    "samaher abdulmoghni alamri": { plant: "Telesales North", code: "36684", note: "Vacation" },
+    "haneen talal aqeel almadani": { plant: "Telesales North", code: "36685", note: "Vacation" },
     "not assigned": { plant: "eCommerce Sales – Retail", code: "", note: "Vacation" },
     "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "12020", note: "Fleet" },
   };
 
+  /**
+   * Normalize salesman names for matching (Excel Col A ↔ Admin roster).
+   * Collapses Al/El particles and common transliterations so Col A spellings
+   * count to the same person for Proforma / Delivery.
+   */
   function normalizeNameLoose(v) {
-    return String(v ?? "")
+    let s = String(v ?? "")
       .normalize("NFKC")
       .replace(/[ـ]/g, "")
       .trim()
@@ -1349,6 +1354,23 @@
       .replace(/[^a-z0-9\u0600-\u06ff\s]/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
+    if (!s) return "";
+    // Common English transliteration variants seen in Sales Raw
+    s = s
+      .replace(/\bmohammad\b/g, "mohammed")
+      .replace(/\bmohamed\b/g, "mohammed")
+      .replace(/\bmohamad\b/g, "mohammed")
+      .replace(/\bfatimah?\b/g, "fatmah")
+      .replace(/\blujain\b/g, "lujen")
+      .replace(/\bmansou?r\b/g, "mansuor")
+      .replace(/\bghadaer\b/g, "ghadeer")
+      .replace(/\bwaseem\b/g, "wasim")
+      .replace(/\balawiya\b/g, "alawiyyah")
+      .replace(/\bsamkary\b/g, "samkari")
+      .replace(/\bhjouj\b/g, "hjoouj");
+    // "Al Harbi" / "Al-Harbi" / "AlHarbi" → alharbi (stable last-name key)
+    s = s.replace(/\b(al|el)\s+/g, "al");
+    return s.replace(/\s+/g, " ").trim();
   }
 
   function nameTokens(v) {
@@ -1452,18 +1474,23 @@
     const sa = significant(a);
     const sb = significant(b);
     if (!sa.length || !sb.length) return 0;
+    // Always require first-name agreement for fuzzy attribution (stops wrong Proforma rolls)
+    if (sa[0] !== sb[0] && !almostEqualToken(sa[0], sb[0])) return 0;
 
-    const almostEqual = (x, y) => {
+    function almostEqualToken(x, y) {
       if (x === y) return true;
       if (!x || !y) return false;
-      if (x.length >= 3 && (y.startsWith(x) || x.startsWith(y))) return true;
+      // Prefix only for longer tokens (avoid "ali"↔"alawiyyah", "abdul"↔"abdullah")
+      const minLen = Math.min(x.length, y.length);
+      const maxLen = Math.max(x.length, y.length);
+      if (minLen >= 6 && maxLen - minLen <= 3 && (y.startsWith(x) || x.startsWith(y))) return true;
       // 1-edit typo tolerance (Ghadaer ↔ Ghadeer)
-      const la = x.length;
-      const lb = y.length;
-      if (Math.abs(la - lb) > 1 || Math.min(la, lb) < 4) return false;
+      if (Math.abs(x.length - y.length) > 1 || Math.min(x.length, y.length) < 4) return false;
       let i = 0;
       let j = 0;
       let edits = 0;
+      const la = x.length;
+      const lb = y.length;
       while (i < la && j < lb) {
         if (x[i] === y[j]) {
           i += 1;
@@ -1481,19 +1508,22 @@
       }
       edits += (la - i) + (lb - j);
       return edits <= 1;
-    };
+    }
 
-    const tokenHit = (t, pool) => pool.some((u) => almostEqual(t, u));
+    const tokenHit = (t, pool) => pool.some((u) => almostEqualToken(t, u));
     const aInB = sa.every((t) => tokenHit(t, sb));
     const bInA = sb.every((t) => tokenHit(t, sa));
-    if (aInB && sa.length >= 2) return 85 + Math.min(10, sa.length);
-    if (bInA && sb.length >= 2) return 80 + Math.min(10, sb.length);
+    if (aInB && sa.length >= 2) return 90 + Math.min(8, sa.length);
+    if (bInA && sb.length >= 2) return 86 + Math.min(8, sb.length);
 
     const firstOk = tokenHit(sa[0], [sb[0]]);
     const lastOk = tokenHit(sa[sa.length - 1], [sb[sb.length - 1]]);
-    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2) return 78;
-    // Same first+last with middle typos / extra tokens
-    if (firstOk && lastOk && Math.min(sa.length, sb.length) >= 2) return 74;
+    const lastLen = Math.min(sa[sa.length - 1].length, sb[sb.length - 1].length);
+    // First+last only when last name is distinctive (length ≥ 5)
+    if (firstOk && lastOk && sa.length >= 2 && sb.length >= 2 && lastLen >= 5) {
+      if (sa.length === sb.length) return 82;
+      return 78;
+    }
     return 0;
   }
 
@@ -1503,11 +1533,12 @@
     rosterCanonicalNames().forEach((canon) => {
       if (normalizeNameLoose(canon) === "not assigned") return;
       const score = scoreNameMatch(loose, normalizeNameLoose(canon));
-      if (score >= 72) scored.push({ canonical: canon, key: normalizeNameLoose(canon), score });
+      if (score >= 82) scored.push({ canonical: canon, key: normalizeNameLoose(canon), score });
     });
     if (!scored.length) return null;
     scored.sort((a, b) => b.score - a.score || b.canonical.length - a.canonical.length);
-    if (scored.length > 1 && scored[0].score - scored[1].score < 8) return null;
+    // Ambiguous (two close roster hits) → do not guess; keeps Proforma on the raw name
+    if (scored.length > 1 && scored[0].score - scored[1].score < 10) return null;
     return { canonical: scored[0].canonical, key: scored[0].key };
   }
 
@@ -1525,8 +1556,8 @@
     }
     const fuzzy = fuzzyMatchRoster(loose);
     if (fuzzy) {
-      // Cache so later filters hit instantly
-      NAME_IDENTITY_MAP.set(loose, fuzzy);
+      // Only cache high-confidence fuzzy hits (avoid sticky wrong attribution)
+      if (scoreNameMatch(loose, fuzzy.key) >= 90) NAME_IDENTITY_MAP.set(loose, fuzzy);
       return fuzzy;
     }
     return {
@@ -2423,7 +2454,7 @@
     (salesRows || []).forEach((r) => {
       const vin = extractVinValue(r && r.vin);
       if (!vin) return;
-      const name = resolveSalesmanName(r.salesman);
+      const name = resolveSalesmanName(r._salesmanRaw || r.salesman);
       if (!name) return;
       // Prefer first non-empty; keep stable for duplicates
       if (!map.has(vin)) map.set(vin, name);
@@ -2819,7 +2850,8 @@
       if (hits >= 3) break;
     }
 
-    // Excel formulas use fixed letters A / P / V; also fall back to header names.
+    // Excel COUNTIFS uses fixed Col A for salesman. Prefer A unless that header
+    // is clearly a code/id column — wrong header overrides were mis-counting Proforma.
     let idxA = colLetterToIndex("A");
     let idxP = colLetterToIndex("P");
     let idxV = colLetterToIndex("V");
@@ -2828,21 +2860,36 @@
     const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
     const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
     const headerSalesman = findHeaderIdx([
-      (n) => n === "salesman name" || n === "salesman" || n === "sales employee" || n === "employee name",
+      (n) => n === "salesman name",
+      (n) => n === "salesman",
+      (n) => n === "sales employee" || n === "employee name",
+      (n) => n === "advisor" || n === "consultant",
     ]);
     const headerProforma = findHeaderIdx([
       (n) => n.includes("proforma") && n.includes("date"),
       (n) => n === "proforma" || n === "proforma date" || n === "pro forma date",
     ]);
     const headerDelivery = findHeaderIdx([
-      (n) => n.includes("delivery") && n.includes("date"),
-      (n) => n === "delivery" || n === "delivery date" || n === "delivered date",
+      (n) => n === "delivery date" || n === "delivered date" || n === "actual delivery date",
+      (n) => n.includes("delivery") && n.includes("date") && !n.includes("note") && !n.includes("invoice"),
+      (n) => n === "delivery" || n === "delivered date",
     ]);
     const headerSecondary = findHeaderIdx([
       (n) => n === "secondary status" || n === "secondary status desc",
       (n) => n.includes("secondary") && n.includes("status"),
     ]);
-    if (headerSalesman >= 0) idxA = headerSalesman;
+
+    const colANorm = normHeader(headers[idxA] || "");
+    const colAIsCode = /\b(code|id|number|no|emp)\b/.test(colANorm) && !/name/.test(colANorm);
+    const colAIsName = !colANorm
+      || /salesman|employee|advisor|consultant|name/.test(colANorm);
+    if (headerSalesman >= 0 && (colAIsCode || (!colAIsName && headerSalesman !== idxA))) {
+      idxA = headerSalesman;
+    } else if (headerSalesman === idxA) {
+      idxA = headerSalesman;
+    }
+    // else keep Col A — matches Excel Rowdata!A:A
+
     if (headerProforma >= 0) idxP = headerProforma;
     if (headerDelivery >= 0) idxV = headerDelivery;
     const idxSecondary = headerSecondary >= 0 ? headerSecondary : colLetterToIndex("H");
@@ -2859,11 +2906,14 @@
       const asText = line.map((c) => normHeader(c));
       if (HEADER_MARKERS.filter((m) => asText.some((c) => c === m || c.includes(m))).length >= 3) continue;
 
-      const salesman = resolveSalesmanName(cellToString(line[idxA]).trim());
-      if (!salesman) continue;
+      const salesmanRaw = cellToString(line[idxA]).trim();
+      if (!salesmanRaw) continue;
+      // Resolve once from the raw Col A spelling (aliases + safe fuzzy)
+      const salesman = resolveSalesmanName(salesmanRaw);
 
       const obj = {
         salesman,
+        _salesmanRaw: salesmanRaw,
         plant: "",
         salesmanCode: "",
         proformaDate: parseDate(line[idxP]),
@@ -2872,6 +2922,9 @@
         vin: "",
         _sheet: preferred,
         __cells: line,
+        _colSalesman: idxA,
+        _colProforma: idxP,
+        _colDelivery: idxV,
       };
       headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
 
@@ -3510,7 +3563,7 @@
       const pd = r.proformaDate;
       const dayIndex = proformaDayIndex(pd, live);
       if (!dayIndex) return;
-      const name = rosterSalesmanName(r.salesman);
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
       const key = nameKey(name);
       if (!key) return;
       if (!byKey.has(key)) byKey.set(key, new Map());
@@ -3708,10 +3761,11 @@
     });
 
     // Sales Raw:
-    // Proforma = Col A match · Col P in period (includes delivered)
+    // Proforma = Col A name match · Col P in period (includes delivered)
     // Delivery = Col V in period
+    // Always resolve from _salesmanRaw (Col A spelling) so Proforma attribution stays stable
     salesRows.forEach((r) => {
-      const name = rosterSalesmanName(r.salesman);
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
       if (!name) return;
       const p = ensure(name);
       if (!p) return;
@@ -3802,6 +3856,9 @@
       monthDelivery: 0,
       dayProforma: 0,
       dayDelivery: 0,
+      matchedRoster: 0,
+      unmatchedNames: 0,
+      sampleUnmatched: [],
       sampleProforma: [],
       sampleDelivery: [],
       today: live.label,
@@ -3815,6 +3872,15 @@
       calendarLabel: live.calendarLabel || calendarLive.label,
     };
     salesRows.forEach((r) => {
+      const raw = r._salesmanRaw || r.salesman;
+      const id = resolveEmployeeIdentity(raw);
+      if (id && isRosterKey(id.key) && !id.unmatched) diag.matchedRoster += 1;
+      else {
+        diag.unmatchedNames += 1;
+        if (diag.sampleUnmatched.length < 6 && raw) {
+          diag.sampleUnmatched.push(String(raw).trim());
+        }
+      }
       if (r.proformaDate && !hasDeliveryDate(r)) diag.withProformaOpen += 1;
       if (r.proformaDate) {
         diag.withProformaDate += 1;
@@ -5647,7 +5713,15 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=Col P in period (all issued) · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col A name → Col P in period · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      const diag = sr.diag || {};
+      if (diag.unmatchedNames > 0 && typeof console !== "undefined" && console.info) {
+        console.info("[Sales name match]", {
+          matchedRoster: diag.matchedRoster,
+          unmatchedNames: diag.unmatchedNames,
+          sampleUnmatched: diag.sampleUnmatched,
+        });
+      }
     }
     const dayTitle = $("#sr-day-title");
     if (dayTitle) {
@@ -5693,6 +5767,11 @@
           Matching <b>report month (${escapeHtml(diag.monthKey || live.monthKey)})</b>:
           Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>,
           Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>.
+          Name match: roster <b>${formatNumber(diag.matchedRoster || 0)}</b> ·
+          unmatched Col A <b>${formatNumber(diag.unmatchedNames || 0)}</b>
+          ${diag.sampleUnmatched && diag.sampleUnmatched.length
+            ? ` (e.g. ${escapeHtml(diag.sampleUnmatched.slice(0, 3).join(", "))})`
+            : ""}.
           ${samples ? `<br>Sample dates found in file: ${escapeHtml(samples)}` : "<br>No readable dates found in Col P/V — check those columns contain dates."}
           <br><span style="font-weight:500">If your file has older dates than today, the dashboard auto-uses the latest month in the file. Upload a file with current-month dates, or refresh after Admin push.</span>
         `;
@@ -5800,7 +5879,7 @@
     $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
     $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · Excel rows from Sales Raw`;
 
-    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
+    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
     const records = row._records || [];
     const proformaMonth = records.filter((r) => r.flags?.proformaMonth);
     const deliveryMonth = records.filter((r) => r.flags?.deliveryMonth);
@@ -6147,7 +6226,7 @@
     const live = sr.live || todayKeys();
     const day = row.day || {};
     const month = row.month || row;
-    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r.salesman) === key);
+    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
     const cancelRawRows = cancelledRawRowsForSalesman(key);
     const accRawRows = accessoriesRawRowsForSalesman(key, live, sr.prevMonthKey);
     const records = row._records || [];
