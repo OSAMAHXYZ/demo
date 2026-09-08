@@ -2814,26 +2814,25 @@
     return !!parseDate(d);
   }
 
-  /** Invoice date present (Sales Raw Invoice Date / Col V) → proforma is closed. */
+  /** Excel COUNTIFS Col V blank — any Col V date closes the proforma. */
+  function hasColVDate(r) {
+    return hasDeliveryDate(r);
+  }
+
+  // Alias used by matched-VIN status helpers (Col V filled = invoiced/delivered)
   function hasInvoiceDate(r) {
-    if (!r) return false;
-    const d = r.invoiceDate != null && r.invoiceDate !== ""
-      ? r.invoiceDate
-      : null;
-    if (d == null || d === "") return false;
-    if (d instanceof Date) return !Number.isNaN(d.getTime());
-    return !!parseDate(d);
+    return hasColVDate(r);
   }
 
   /**
-   * Proforma per employee (Excel COUNTIFS style):
-   *   Col A = salesman · Col P in period · Invoice date blank
-   * Rows that already have an invoice date are ignored by the Proforma counter.
-   * Delivery = delivery date column in period (independent).
+   * Excel Proforma:
+   *   =COUNTIFS(Rowdata!A:A, name, Rowdata!P:P, ">="&start, Rowdata!V:V, "")
+   * Excel Delivery:
+   *   =SUMPRODUCT(--(TRIM(A)=name), --(TEXT(V,"yyyymm")=month))
    */
   function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
     if (!r) return false;
-    if (hasInvoiceDate(r)) return false;
+    if (hasColVDate(r)) return false; // Rowdata!V:V, ""
     return salesPeriodMatch(r.proformaDate, live, period, prevMonthKey);
   }
 
@@ -2947,20 +2946,11 @@
 
     if (headerProforma >= 0) idxP = headerProforma;
 
-    // Invoice date: header first, else Col V (Excel open-proforma blank check)
-    let idxInvoice = headerInvoice >= 0 ? headerInvoice : -1;
-    const colVNorm = normHeader(headers[idxColV] || "");
-    if (idxInvoice < 0) {
-      if (/invoice/.test(colVNorm) || !/delivery/.test(colVNorm)) idxInvoice = idxColV;
-    }
-
-    // Delivery date: dedicated header only (do not steal invoice Col V)
-    let idxDelivery = headerDelivery >= 0 ? headerDelivery : -1;
-    if (idxDelivery < 0 && /delivery/.test(colVNorm) && !/invoice/.test(colVNorm)) {
-      idxDelivery = idxColV;
-    }
-    // Keep idxV for compatibility / scans: prefer delivery, else invoice col
-    idxV = idxDelivery >= 0 ? idxDelivery : (idxInvoice >= 0 ? idxInvoice : idxColV);
+    // Excel formulas lock Col V for delivery + open-proforma blank check.
+    // Do not remap V to another "Delivery Date" header — SUMPRODUCT uses Rowdata!V.
+    idxV = idxColV;
+    const idxInvoice = idxColV;
+    const idxDelivery = idxColV;
 
     const idxSecondary = headerSecondary >= 0 ? headerSecondary : colLetterToIndex("H");
 
@@ -2981,8 +2971,9 @@
       // Resolve once from the raw Col A spelling (aliases + safe fuzzy)
       const salesman = resolveSalesmanName(salesmanRaw);
 
-      const invoiceDate = idxInvoice >= 0 ? parseDate(line[idxInvoice]) : null;
-      const deliveryDate = idxDelivery >= 0 ? parseDate(line[idxDelivery]) : null;
+      // Col P = proforma date · Col V = delivery date (blank => open proforma)
+      const deliveryDate = parseDate(line[idxColV]);
+      const invoiceDate = deliveryDate;
 
       const obj = {
         salesman,
@@ -2998,8 +2989,8 @@
         __cells: line,
         _colSalesman: idxA,
         _colProforma: idxP,
-        _colInvoice: idxInvoice,
-        _colDelivery: idxDelivery,
+        _colInvoice: idxColV,
+        _colDelivery: idxColV,
       };
       headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
 
@@ -3023,7 +3014,7 @@
       if (vinHeaderIdx >= 0) vin = extractVinValue(line[vinHeaderIdx]);
       if (!vin) {
         for (let i = 0; i < line.length; i += 1) {
-          if (i === idxA || i === idxP || i === idxInvoice || i === idxDelivery) continue;
+          if (i === idxA || i === idxP || i === idxColV) continue;
           vin = extractVinValue(line[i]);
           if (vin) break;
         }
@@ -4016,7 +4007,7 @@
     const daysInMonth = live.daysInMonth
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
 
-    // Proforma = Col P in period · invoice blank · Delivery = delivery date in period
+    // Proforma = Col P in period · Col V blank · Delivery = Col V in period
     // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma (open)
     // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
     const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
@@ -5792,7 +5783,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=Col P in period · invoice blank · Delivery=delivery date · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col P + Col V blank · Delivery=Col V in period · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
       const diag = sr.diag || {};
       if (diag.unmatchedNames > 0 && typeof console !== "undefined" && console.info) {
         console.info("[Sales name match]", {
@@ -5838,7 +5829,7 @@
           <b>Why Proforma/Delivery look empty:</b>
           Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
           parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
-          open Proforma (P set, invoice blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
+          open Proforma (P set, V blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
           parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
           Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
           Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
@@ -5903,7 +5894,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P · invoice blank · Delivery=delivery date · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P + Col V blank · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -6573,7 +6564,7 @@
           </tbody>
         </table>
       </div>
-      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on open Col P proforma (invoice blank)</p>
+      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on open Col P proforma (Col V blank)</p>
     `;
   }
 
