@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr3" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr9" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -378,34 +378,17 @@
             <section class="sr-section">
               <div class="sr-section-head">
                 <h3>Performance</h3>
-                <p>Delivery, Proforma, and achievement vs target</p>
+                <p>Del %, Prof+Del %, and target — one view per employee</p>
               </div>
               <div class="pbi-visuals sr-grid sr-grid-hero" id="sr-charts-hero">
-                <article class="card pbi-viz sr-viz-wide" data-chart-id="chart-sr">
+                <article class="card pbi-viz sr-viz-perf" data-chart-id="chart-sr-perf">
                   <div class="pbi-viz-head">
-                    <h2>Delivery / Proforma / Target</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr" title="Open wide view">Wide</button>
+                    <h2>Del % · Prof+Del % · Target</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
                   </div>
+                  <div class="sr-perf-day" id="sr-perf-day" aria-label="Day totals"></div>
                   <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-ach">
-                  <div class="pbi-viz-head">
-                    <h2>Ach% · Delivery ÷ Target</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-ach" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-day">
-                  <div class="pbi-viz-head">
-                    <h2>Day · Delivery / Proforma</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-day" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
                   </div>
                 </article>
               </div>
@@ -414,10 +397,10 @@
             <section class="sr-section">
               <div class="sr-section-head">
                 <h3>Month health</h3>
-                <p>Mix vs target and cancellation control</p>
+                <p>Cancellation control vs 30% target</p>
               </div>
               <div class="pbi-visuals sr-grid sr-grid-health">
-                <article class="card pbi-viz" data-chart-id="chart-sr-overview">
+                <article class="card pbi-viz" data-chart-id="chart-sr-overview" hidden>
                   <div class="pbi-viz-head">
                     <h2>Month overview</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
@@ -426,7 +409,7 @@
                     <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-plant">
+                <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
                   <div class="pbi-viz-head">
                     <h2>By Plant</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
@@ -484,7 +467,27 @@
                 <article class="card pbi-viz sr-viz-accessories" data-chart-id="chart-sr-accessories">
                   <div class="pbi-viz-head">
                     <h2>Accessories · Ach %</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open wide view">Wide</button>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
+                  </div>
+                  <div class="acc-summary-board" id="acc-summary-board" hidden>
+                    <div class="acc-summary-brand">
+                      <span class="acc-summary-icon" aria-hidden="true">⚙</span>
+                      <strong>Accessories</strong>
+                    </div>
+                    <div class="acc-summary-cols">
+                      <div class="acc-summary-cell">
+                        <span class="k">Target</span>
+                        <span class="v" id="acc-sum-target">—</span>
+                      </div>
+                      <div class="acc-summary-cell">
+                        <span class="k">Achieved</span>
+                        <span class="v" id="acc-sum-achieved">—</span>
+                      </div>
+                      <div class="acc-summary-cell">
+                        <span class="k">%</span>
+                        <span class="v" id="acc-sum-pct">—</span>
+                      </div>
+                    </div>
                   </div>
                   <div class="sr-acc-layout">
                     <div class="chart-scroll sr-acc-chart">
@@ -493,7 +496,6 @@
                     <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
                       <div class="acc-remain-head">
                         <h3 class="acc-remain-title">Remaining to accessories target</h3>
-                        <button type="button" class="pbi-expand" data-expand="acc-remain-table" title="Open full employee list">Wide</button>
                       </div>
                       <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
                     </div>
@@ -1218,6 +1220,18 @@
           <h3 class="pbi-wide-numbers-title">Numbers</h3>
           <div class="pbi-wide-numbers-list" id="pbi-wide-numbers-list"></div>
         </aside>
+      </div>
+      <div class="pbi-wide-perf-extra" id="pbi-wide-perf-extra" hidden>
+        <div class="pbi-wide-perf-volume" id="pbi-wide-perf-volume"></div>
+        <div class="pbi-wide-salestype">
+          <h3 class="pbi-wide-numbers-title">Sales type · Delivered cars</h3>
+          <div class="pbi-wide-salestype-grid">
+            <div class="chart-box pbi-wide-salestype-box">
+              <canvas id="pbi-wide-salestype-canvas"></canvas>
+            </div>
+            <div class="pbi-wide-salestype-legend" id="pbi-wide-salestype-legend"></div>
+          </div>
+        </div>
       </div>
       <div class="pbi-wide-table-wrap" id="pbi-wide-table-wrap" hidden>
         <div class="table-wrap acc-remain-table-wrap acc-remain-table-wrap--wide" id="pbi-wide-table"></div>
@@ -3028,6 +3042,18 @@
         }
       }
       obj.vin = vin;
+
+      const salesTypeIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return HEADER_ALIASES.salesType.some((a) => n === a || n.includes(a));
+      });
+      const paidIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return HEADER_ALIASES.paid.some((a) => n === a || n.includes(a));
+      });
+      const paid = paidIdx >= 0 ? isPaid(line[paidIdx]) : false;
+      obj.salesType = inferSalesType(salesTypeIdx >= 0 ? line[salesTypeIdx] : "", paid);
+
       rows.push(obj);
     }
     return rows;
@@ -3754,6 +3780,13 @@
     const prevMonthLabel = live.prevMonthLabel
       || prevDate.toLocaleString("en-US", { month: "long" });
     const byPerson = new Map();
+    const deliveryBySalesType = Object.create(null);
+    let proformaExceptMonth = 0;
+
+    const bumpSalesType = (type) => {
+      const t = String(type || "Other").trim() || "Other";
+      deliveryBySalesType[t] = (deliveryBySalesType[t] || 0) + 1;
+    };
 
     const ensure = (name) => {
       const display = resolveDisplayName(name);
@@ -3769,6 +3802,7 @@
           proformaDay: 0,
           proformaMonth: 0,
           proformaPrev: 0,
+          proformaExceptMonth: 0,
           deliveryDay: 0,
           deliveryMonth: 0,
           deliveryPrev: 0,
@@ -3869,10 +3903,15 @@
       if (salesIsProformaInPeriod(r, live, "month", prevMonthKey)) {
         p.proformaMonth += 1;
         flags.proformaMonth = true;
+      } else if (!hasColVDate(r) && r.proformaDate) {
+        // Open proforma whose Col P is outside the active month/period
+        p.proformaExceptMonth += 1;
+        proformaExceptMonth += 1;
       }
       if (salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) {
         p.deliveryMonth += 1;
         flags.deliveryMonth = true;
+        bumpSalesType(r.salesType || inferSalesType("", false));
       }
 
       if (salesIsProformaInPeriod(r, live, "prev", prevMonthKey)) {
@@ -4112,6 +4151,7 @@
         "Proforma (Day)": p.proformaDay,
         "Proforma (Month)": p.proformaMonth,
         "Proforma (Prev)": p.proformaPrev,
+        "Proforma (Except Month)": p.proformaExceptMonth,
         "Delivery (Day)": p.deliveryDay,
         "Delivery (Month)": p.deliveryMonth,
         "Delivery (Prev)": p.deliveryPrev,
@@ -4182,6 +4222,8 @@
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
         proformaPrev: totProformaPrev,
+        proformaExceptMonth,
+        deliveryBySalesType: { ...deliveryBySalesType },
         deliveryDay: totDeliveryDay,
         deliveryMonth: totDeliveryMonth,
         deliveryPrev: totDeliveryPrev,
@@ -4253,7 +4295,7 @@
   }
 
   function sizeChartScrollBox(canvasId, labelCount, horizontal, seriesCount) {
-    if (canvasId === "pbi-wide-canvas") return;
+    if (canvasId === "pbi-wide-canvas" || canvasId === "pbi-wide-salestype-canvas") return;
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     const box = canvas.closest(".chart-box");
@@ -4262,8 +4304,8 @@
     if (horizontal && labelCount > 1) {
       const series = Math.max(1, Number(seriesCount) || 1);
       // Enough vertical room per name so labels never overlap (esp. 2–3 series groups)
-      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr";
-      const rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 44 : 36) : (dense ? 34 : 28);
+      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr" || canvasId === "chart-sr-perf";
+      const rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 48 : 36) : (dense ? 34 : 28);
       const h = Math.max(240, Math.min(1200, labelCount * rowPx + 64));
       box.style.height = h + "px";
       box.style.minHeight = h + "px";
@@ -4368,6 +4410,8 @@
         max: opts.max,
         showValues: opts.showValues,
         valueSuffix: opts.valueSuffix,
+        categoryExtras: opts.categoryExtras,
+        rowMeta: opts.rowMeta,
       })),
     };
     sizeChartScrollBox(id, labelCount, horizontal && type === "bar", seriesCount);
@@ -4381,6 +4425,8 @@
     delete datasetsExtra.clickable;
     delete datasetsExtra.showValues;
     delete datasetsExtra.valueSuffix;
+    delete datasetsExtra.categoryExtras;
+    delete datasetsExtra.rowMeta;
     const softScale = {
       beginAtZero: true,
       ...(opts.max != null ? { suggestedMax: opts.max } : {}),
@@ -4404,9 +4450,13 @@
         callback(value) {
           const raw = this.getLabelForValue ? this.getLabelForValue(value) : value;
           const label = String(raw == null ? "" : raw).trim();
+          const extras = opts.categoryExtras;
+          const idx = Number(value);
+          const extra = Array.isArray(extras) && Number.isFinite(idx) ? extras[idx] : null;
           if (!horizontal) return label;
-          if (label.length <= 22) return label;
-          return label.slice(0, 20) + "…";
+          const short = label.length <= 24 ? label : label.slice(0, 22) + "…";
+          if (extra) return [short, String(extra)];
+          return short;
         },
       },
       border: { display: false },
@@ -4446,10 +4496,10 @@
         animation: { duration: 320, easing: "easeOutQuart" },
         layout: {
           padding: {
-            left: horizontal ? 2 : 4,
-            right: showValues && horizontal ? 44 : 8,
-            top: horizontal ? 2 : 4,
-            bottom: horizontal ? 2 : 4,
+            left: horizontal ? (opts.categoryExtras ? 4 : 2) : 4,
+            right: showValues && horizontal ? 48 : 8,
+            top: horizontal ? 4 : 4,
+            bottom: horizontal ? 4 : 4,
           },
         },
         onHover: clickable
@@ -4590,6 +4640,7 @@
       </div>`).join("");
 
     // Detail rows: every label with its number(s)
+    const meta = (snap.extra && snap.extra.rowMeta) || null;
     const rows = [];
     if (cols.length && labels.length) {
       labels.forEach((lab, i) => {
@@ -4599,6 +4650,33 @@
           const tip = cols.length > 1 ? `${col.label}: ${text}` : text;
           return { text, tip, multi: cols.length > 1, colLabel: col.label };
         });
+        if (meta && meta[i]) {
+          const m = meta[i];
+          if (m.target != null) {
+            cells.unshift({
+              text: formatNumber(m.target),
+              tip: `Target: ${formatNumber(m.target)}`,
+              multi: true,
+              colLabel: "Target",
+            });
+          }
+          if (m.del != null) {
+            cells.push({
+              text: formatNumber(m.del),
+              tip: `Delivery: ${formatNumber(m.del)}`,
+              multi: true,
+              colLabel: "Del",
+            });
+          }
+          if (m.prof != null) {
+            cells.push({
+              text: formatNumber(m.prof),
+              tip: `Proforma: ${formatNumber(m.prof)}`,
+              multi: true,
+              colLabel: "Prof",
+            });
+          }
+        }
         rows.push({ name: String(lab || "—"), cells });
       });
     }
@@ -4613,8 +4691,13 @@
     numsEl.hidden = false;
     if (bodyEl) bodyEl.classList.remove("pbi-wide-body--chart-only");
 
-    const head = cols.length > 1
-      ? `<div class="pbi-wide-num-head"><span>Name</span><span>${cols.map((c) => escapeHtml(c.label)).join(" · ")}</span></div>`
+    const headLabels = [];
+    if (meta && meta.some((m) => m && m.target != null)) headLabels.push("Target");
+    cols.forEach((c) => headLabels.push(c.label));
+    if (meta && meta.some((m) => m && m.del != null)) headLabels.push("Del");
+    if (meta && meta.some((m) => m && m.prof != null)) headLabels.push("Prof");
+    const head = headLabels.length > 1
+      ? `<div class="pbi-wide-num-head"><span>Name</span><span>${headLabels.map((c) => escapeHtml(c)).join(" · ")}</span></div>`
       : "";
 
     listEl.innerHTML = head + rows.map((r) => {
@@ -4635,43 +4718,275 @@
 
   function hideWideTableMode() {
     const wrap = $("#pbi-wide-table-wrap");
-    if (wrap) wrap.hidden = true;
+    if (wrap) {
+      wrap.hidden = true;
+      wrap.classList.remove("pbi-wide-table-wrap--with-chart");
+    }
     const body = $("#pbi-wide-body");
     if (body) body.hidden = false;
     const modal = document.querySelector(".pbi-wide-modal");
-    if (modal) modal.classList.remove("pbi-wide-modal--table");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--accessories");
+    }
   }
 
-  function openWideAccRemainTable() {
+  function accessoriesSummaryTotals(sr, rows) {
+    const t = (sr && sr.totals) || {};
+    const list = Array.isArray(rows) ? rows : [];
+    if (srView.selectedKey && list[0]) {
+      const r = list[0];
+      const quota = Number(r._accQuota) || 0;
+      const sold = Number(r._accSold) || 0;
+      const ach = quota > 0 ? sold / quota : (r._accAchPct != null ? r._accAchPct : null);
+      return { quota, sold, achPct: ach };
+    }
+    if (t.accQuota != null || t.accSold != null) {
+      return {
+        quota: Number(t.accQuota) || 0,
+        sold: Number(t.accSold) || 0,
+        achPct: t.accAchPct != null ? t.accAchPct : (t.accQuota ? (t.accSold || 0) / t.accQuota : null),
+      };
+    }
+    const acc = (sr && sr.accessories && sr.accessories.totals) || {};
+    return {
+      quota: Number(acc.quota) || 0,
+      sold: Number(acc.sold) || 0,
+      achPct: acc.achPct != null ? acc.achPct : null,
+    };
+  }
+
+  function renderAccessoriesSummaryBoard(sr, rows) {
+    const board = $("#acc-summary-board");
+    if (!board) return;
+    const sum = accessoriesSummaryTotals(sr, rows);
+    const targetEl = $("#acc-sum-target");
+    const soldEl = $("#acc-sum-achieved");
+    const pctEl = $("#acc-sum-pct");
+    if (targetEl) targetEl.textContent = formatNumber(sum.quota);
+    if (soldEl) soldEl.textContent = formatNumber(sum.sold);
+    if (pctEl) {
+      pctEl.textContent = sum.achPct == null
+        ? (sum.quota ? "0.0%" : "—")
+        : ((sum.achPct * 100).toFixed(1) + "%");
+    }
+    board.hidden = !(sum.quota > 0 || sum.sold > 0);
+  }
+
+  function renderWideAccessoriesSummary(sr) {
+    const totalsEl = $("#pbi-wide-totals");
+    if (!totalsEl) return;
+    const rows = filterSrRows((sr && sr.rows) || []);
+    const sum = accessoriesSummaryTotals(sr, rows);
+    totalsEl.hidden = false;
+    totalsEl.classList.add("pbi-wide-totals--acc");
+    totalsEl.innerHTML = `
+      <div class="acc-summary-board acc-summary-board--wide">
+        <div class="acc-summary-brand">
+          <span class="acc-summary-icon" aria-hidden="true">⚙</span>
+          <strong>Accessories</strong>
+        </div>
+        <div class="acc-summary-cols">
+          <div class="acc-summary-cell">
+            <span class="k">Target</span>
+            <span class="v">${formatNumber(sum.quota)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">Achieved</span>
+            <span class="v">${formatNumber(sum.sold)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">%</span>
+            <span class="v">${sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%")}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function openWideAccessories() {
+    const snap = chartSnapshots["chart-sr-accessories"];
     const source = $("#acc-remain-table");
     const dest = $("#pbi-wide-table");
     const wrap = $("#pbi-wide-table-wrap");
-    if (!source || !dest || !wrap) return;
-    const html = lastAccRemainHtml || source.innerHTML;
-    if (!html || !html.trim()) return;
-    dest.innerHTML = html;
-    $("#pbi-wide-title").textContent = "Remaining to accessories target";
+    const html = lastAccRemainHtml || (source && source.innerHTML) || "";
+    if (!snap && (!html || !html.trim())) return;
+
+    hideWidePerfExtra();
+    hideWideTableMode();
+
+    $("#pbi-wide-title").textContent = "Accessories";
     const hint = $("#pbi-wide-hint");
-    if (hint) hint.textContent = "Full employee list · click a name to open that advisor";
-    const totals = $("#pbi-wide-totals");
-    if (totals) {
-      totals.hidden = true;
-      totals.innerHTML = "";
-    }
-    const nums = $("#pbi-wide-numbers");
-    if (nums) nums.hidden = true;
-    const body = $("#pbi-wide-body");
-    if (body) body.hidden = true;
-    wrap.hidden = false;
-    const modal = document.querySelector(".pbi-wide-modal");
-    if (modal) modal.classList.add("pbi-wide-modal--table");
-    if (charts["pbi-wide-canvas"]) {
-      charts["pbi-wide-canvas"].destroy();
-      delete charts["pbi-wide-canvas"];
-    }
+    if (hint) hint.textContent = "Target · Achieved · % · full Ach % chart and advisor details · click a name to open that advisor";
+
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
     backdrop.classList.add("show");
+
+    const body = $("#pbi-wide-body");
+    if (body) {
+      body.hidden = false;
+      body.classList.remove("pbi-wide-body--chart-only");
+    }
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--table");
+      modal.classList.add("pbi-wide-modal--accessories");
+    }
+
+    const sr = (window._data && window._data.salesReport) || null;
+    if (sr) renderWideAccessoriesSummary(sr);
+
+    if (snap) {
+      const n = (snap.labels || []).length;
+      const horizontal = !!(snap.extra && snap.extra.horizontal);
+      const box = $("#pbi-wide-box");
+      const scroll = $("#pbi-wide-scroll");
+      if (horizontal && snap.type === "bar" && n > 1) {
+        box.style.height = Math.max(480, n * 40 + 80) + "px";
+        scroll.style.maxHeight = "min(56vh, 720px)";
+        scroll.classList.add("is-scroll");
+      } else if (snap.type === "doughnut") {
+        box.style.height = "320px";
+        scroll.style.maxHeight = "";
+      } else {
+        box.style.height = "360px";
+        scroll.style.maxHeight = "";
+      }
+      renderWideNumbers(snap);
+      const extra = { ...(snap.extra || {}) };
+      upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
+      if (horizontal && snap.type === "bar" && n > 1) {
+        box.style.height = Math.max(480, n * 40 + 80) + "px";
+      }
+    } else {
+      const nums = $("#pbi-wide-numbers");
+      if (nums) nums.hidden = true;
+      if (body) body.classList.add("pbi-wide-body--chart-only");
+    }
+
+    if (wrap && dest && html && html.trim()) {
+      dest.innerHTML = html;
+      wrap.hidden = false;
+      wrap.classList.add("pbi-wide-table-wrap--with-chart");
+    }
+  }
+
+  function openWideAccRemainTable() {
+    openWideAccessories();
+  }
+
+  function deliverySalesTypeBreakdown(sr) {
+    const live = (sr && sr.live) || todayKeys();
+    const prevMonthKey = (sr && sr.prevMonthKey) || toYyyymm(new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1));
+    const selectedKey = srView.selectedKey || "";
+    const order = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
+    const counts = Object.create(null);
+    order.forEach((t) => { counts[t] = 0; });
+    (slots.sales.rows || []).forEach((r) => {
+      if (!salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) return;
+      const display = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      if (!display) return;
+      if (selectedKey && nameKey(display) !== selectedKey) return;
+      const type = String(r.salesType || inferSalesType("", false) || "Other").trim() || "Other";
+      const bucket = order.includes(type) ? type : "Other";
+      counts[bucket] = (counts[bucket] || 0) + 1;
+    });
+    const keys = order.slice();
+    Object.keys(counts).forEach((k) => {
+      if (!keys.includes(k) && counts[k] > 0) keys.push(k);
+    });
+    return keys.map((type) => ({ type, count: counts[type] || 0 }));
+  }
+
+  function renderWidePerfSalesType(sr) {
+    const wrap = $("#pbi-wide-perf-extra");
+    const volumeEl = $("#pbi-wide-perf-volume");
+    const legendEl = $("#pbi-wide-salestype-legend");
+    if (!wrap || !volumeEl || !legendEl) return;
+
+    const rows = filterSrRows((sr && sr.rows) || []);
+    const t = (sr && sr.totals) || {};
+    let target = 0;
+    let del = 0;
+    let prof = 0;
+    if (srView.selectedKey && rows[0]) {
+      const r = rows[0];
+      target = rowTargetNum(r);
+      del = Number(r["Delivery (Month)"]) || 0;
+      prof = Number(r["Proforma (Month)"]) || 0;
+    } else {
+      target = Number(t.target) || 0;
+      del = Number(t.deliveryMonth) || 0;
+      prof = Number(t.proformaMonth) || 0;
+    }
+    const profDel = prof + del;
+    const maxVol = Math.max(1, target, del, profDel);
+    const volRows = [
+      { lab: "Tar", val: target, cls: "is-target" },
+      { lab: "Del", val: del, cls: "is-del" },
+      { lab: "Prof & Del", val: profDel, cls: "is-profdel" },
+    ];
+    volumeEl.innerHTML = `
+      <h3 class="pbi-wide-numbers-title">Volume vs target</h3>
+      <div class="pbi-wide-vol-bars">${volRows.map((r) => {
+        const pct = Math.max(2, Math.round((r.val / maxVol) * 100));
+        return `<div class="pbi-wide-vol-row ${r.cls}">
+          <span class="lab">${escapeHtml(r.lab)}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span class="val">${formatNumber(r.val)}</span>
+        </div>`;
+      }).join("")}</div>
+    `;
+
+    const types = deliverySalesTypeBreakdown(sr);
+    const total = types.reduce((s, x) => s + x.count, 0);
+    const colors = {
+      Cash: "#3b82f6",
+      Bank: "#10b981",
+      ALJUF: "#8b5cf6",
+      Employee: "#f59e0b",
+      Fleet: "#64748b",
+      Other: "#94a3b8",
+    };
+    legendEl.innerHTML = types.map((x) => {
+      const pct = total > 0 ? ((x.count / total) * 100).toFixed(0) : "0";
+      return `<div class="pbi-wide-salestype-item">
+        <span class="swatch" style="background:${colors[x.type] || colors.Other}"></span>
+        <span class="name">${escapeHtml(x.type)}</span>
+        <span class="count">${formatNumber(x.count)}</span>
+        <span class="pct">${pct}%</span>
+      </div>`;
+    }).join("") || `<p class="foot" style="margin:0">No delivered cars in this period.</p>`;
+
+    const labels = types.map((x) => x.type);
+    const values = types.map((x) => x.count);
+    const bg = labels.map((lab) => colors[lab] || colors.Other);
+    if (charts["pbi-wide-salestype-canvas"]) {
+      charts["pbi-wide-salestype-canvas"].destroy();
+      delete charts["pbi-wide-salestype-canvas"];
+    }
+    if (total > 0) {
+      upsertChart("pbi-wide-salestype-canvas", "doughnut", labels, values, {
+        backgroundColor: bg,
+        legend: false,
+      });
+    } else {
+      const canvas = document.getElementById("pbi-wide-salestype-canvas");
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    wrap.hidden = false;
+  }
+
+  function hideWidePerfExtra() {
+    const wrap = $("#pbi-wide-perf-extra");
+    if (wrap) wrap.hidden = true;
+    if (charts["pbi-wide-salestype-canvas"]) {
+      charts["pbi-wide-salestype-canvas"].destroy();
+      delete charts["pbi-wide-salestype-canvas"];
+    }
   }
 
   function openWideChart(sourceId) {
@@ -4679,13 +4994,16 @@
       openWideIccBubbleChart();
       return;
     }
-    if (sourceId === "acc-remain-table") {
-      openWideAccRemainTable();
+    if (sourceId === "acc-remain-table" || sourceId === "chart-sr-accessories") {
+      openWideAccessories();
       return;
     }
     const snap = chartSnapshots[sourceId];
     if (!snap) return;
     hideWideTableMode();
+    hideWidePerfExtra();
+    const totalsReset = $("#pbi-wide-totals");
+    if (totalsReset) totalsReset.classList.remove("pbi-wide-totals--acc");
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Chart";
     const backdrop = $("#pbi-wide-backdrop");
@@ -4697,7 +5015,9 @@
     const box = $("#pbi-wide-box");
     const scroll = $("#pbi-wide-scroll");
     if (horizontal && snap.type === "bar" && n > 1) {
-      box.style.height = Math.max(420, n * 42 + 80) + "px";
+      const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+      const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
+      box.style.height = Math.max(420, n * rowH + 80) + "px";
       scroll.style.maxHeight = "min(78vh, 900px)";
     } else if (snap.type === "doughnut") {
       box.style.height = "380px";
@@ -4708,9 +5028,11 @@
     }
     const hint = $("#pbi-wide-hint");
     if (hint) {
-      hint.textContent = horizontal && n > 1
-        ? "Numbers on the right · scroll for every name · click a bar to filter"
-        : "Numbers beside the chart · Close or press Esc";
+      hint.textContent = sourceId === "chart-sr-perf"
+        ? "Del % · Prof+Del % · Target · delivered cars by sales type below"
+        : horizontal && n > 1
+          ? "Numbers on the right · scroll for every name · click a bar to filter"
+          : "Numbers beside the chart · Close or press Esc";
     }
     renderWideNumbers(snap);
     // Re-render into wide canvas
@@ -4718,7 +5040,13 @@
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
     // Force wide box height after upsert (upsert may reset)
     if (horizontal && snap.type === "bar" && n > 1) {
-      box.style.height = Math.max(420, n * 42 + 80) + "px";
+      const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+      const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
+      box.style.height = Math.max(420, n * rowH + 80) + "px";
+    }
+    if (sourceId === "chart-sr-perf") {
+      const sr = (window._data && window._data.salesReport) || null;
+      if (sr) renderWidePerfSalesType(sr);
     }
   }
 
@@ -4731,6 +5059,7 @@
     if (totals) {
       totals.hidden = true;
       totals.innerHTML = "";
+      totals.classList.remove("pbi-wide-totals--acc");
     }
     const nums = $("#pbi-wide-numbers");
     const list = $("#pbi-wide-numbers-list");
@@ -4742,6 +5071,7 @@
       body.classList.add("pbi-wide-body--chart-only");
     }
     hideWideTableMode();
+    hideWidePerfExtra();
     const table = $("#pbi-wide-table");
     if (table) table.innerHTML = "";
     const box = $("#pbi-wide-box");
@@ -6316,6 +6646,7 @@
         { lab: "Delivery MTD", val: formatNumber(del) },
         { lab: "Proforma MTD", val: formatNumber(pro) },
         { lab: "Prof+Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)) },
+        { lab: "Proforma except this month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0) },
         { lab: "Del %", val: escapeHtml(String(r["Del %"] ?? "—")) },
         { lab: "Target", val: r._vacation ? "VACATION" : formatNumber(rowTargetNum(r)) },
         { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
@@ -6329,6 +6660,7 @@
         { lab: "Delivery MTD", val: formatNumber(t.deliveryMonth || 0) },
         { lab: "Proforma MTD", val: formatNumber(t.proformaMonth || 0) },
         { lab: "Prof+Del", val: formatNumber(t.profPlusDel || 0) },
+        { lab: "Proforma except this month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)) },
         { lab: "Del %", val: t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "—" },
         { lab: "Target", val: formatNumber(t.target || 0) },
         { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
@@ -6458,38 +6790,103 @@
     if (note) note.hidden = true;
   }
 
-  function renderDayTotalChart(sr, singleRow) {
-    clearChartEmptyState("chart-sr-day");
+  function renderPerfDayStrip(sr, singleRow) {
+    const el = $("#sr-perf-day");
+    if (!el) return;
     let dayDel;
     let dayProf;
+    let targetSum = 0;
     if (singleRow) {
       dayDel = Number(singleRow["Delivery (Day)"]) || 0;
       dayProf = Number(singleRow["Proforma (Day)"]) || 0;
+      targetSum = rowTargetNum(singleRow);
     } else {
       const t = (sr && sr.totals) || {};
       dayDel = Number(t.deliveryDay) || 0;
       dayProf = Number(t.proformaDay) || 0;
-      // Fallback: sum visible/chart rows if totals missing
-      if (!dayDel && !dayProf && sr && Array.isArray(sr.rows)) {
+      targetSum = Number(t.target) || 0;
+      if ((!dayDel && !dayProf) && sr && Array.isArray(sr.rows)) {
         const rows = filterSrRows(sr.rows);
         dayDel = rows.reduce((s, r) => s + (Number(r["Delivery (Day)"]) || 0), 0);
         dayProf = rows.reduce((s, r) => s + (Number(r["Proforma (Day)"]) || 0), 0);
       }
+      if (!targetSum && sr && Array.isArray(sr.rows)) {
+        targetSum = filterSrRows(sr.rows).reduce((s, r) => s + rowTargetNum(r), 0);
+      }
     }
-    if (!dayDel && !dayProf) {
-      const live = (sr && sr.live) || todayKeys();
-      const dayRef = live.source === "file" ? `report day (${live.label})` : "today";
-      setChartEmptyState(
-        "chart-sr-day",
-        `No Delivery or Proforma dated ${dayRef} (Col P / Col V).`
-      );
+    el.innerHTML = `
+      <div class="sr-perf-chip"><span class="k">Day Delivery</span><span class="v">${formatNumber(dayDel)}</span></div>
+      <div class="sr-perf-chip"><span class="k">Day Proforma</span><span class="v">${formatNumber(dayProf)}</span></div>
+      <div class="sr-perf-chip sr-perf-chip--target"><span class="k">Target</span><span class="v">${formatNumber(targetSum)}</span></div>
+    `;
+  }
+
+  function renderPerfMergedChart(sr, rows, opts) {
+    const single = !!(opts && opts.single) || rows.length === 1;
+    renderPerfDayStrip(sr, single ? rows[0] : null);
+    clearChartEmptyState("chart-sr-perf");
+
+    const delPcts = rows.map((r) => (r._delPct != null ? r._delPct * 100 : (parsePct(r["Ach%"]) || 0)));
+    const profDelPcts = rows.map((r) => (r._profDelPct != null ? r._profDelPct * 100 : (parsePct(r["Prof+Del %"]) || 0)));
+    const targets = rows.map((r) => rowTargetNum(r));
+    const delCounts = rows.map((r) => Number(r["Delivery (Month)"]) || 0);
+    const profCounts = rows.map((r) => Number(r["Proforma (Month)"]) || 0);
+    const categoryExtras = targets.map((t) => (t > 0 ? `Target ${formatNumber(t)}` : "Target —"));
+    const rowMeta = rows.map((_, i) => ({
+      target: targets[i],
+      del: delCounts[i],
+      prof: profCounts[i],
+    }));
+
+    if (single) {
+      upsertChart("chart-sr-perf", "bar", ["Del % (Del÷Target)", "Prof+Del %"], [
+        delPcts[0],
+        profDelPcts[0],
+      ], {
+        showValues: true,
+        valueSuffix: "%",
+        max: 120,
+        backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(13, 148, 136, 0.85)"],
+        rowMeta,
+        legend: true,
+      });
       return;
     }
-    upsertChart("chart-sr-day", "bar", ["Delivery (day)", "Proforma (day)"], [dayDel, dayProf], {
-      backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(13, 148, 136, 0.8)"],
-      max: Math.max(1, dayDel, dayProf),
-      legend: false,
+
+    const labels = rows.map((r) => shortEmpLabel(r["Sales Employee"] || r.Salesman));
+    const empKeys = rows.map((r) => r._key);
+    upsertChart("chart-sr-perf", "bar", labels, null, {
+      horizontal: true,
+      clickable: true,
+      empKeys,
+      legend: true,
+      showValues: true,
+      valueSuffix: "%",
+      max: 140,
+      categoryExtras,
+      rowMeta,
+      datasets: [
+        {
+          label: "Del %",
+          data: delPcts,
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+        {
+          label: "Prof+Del %",
+          data: profDelPcts,
+          backgroundColor: "rgba(13, 148, 136, 0.85)",
+          borderWidth: 0,
+          borderRadius: 5,
+        },
+      ],
     });
+  }
+
+  function renderDayTotalChart(sr, singleRow) {
+    // Day totals now live in the Performance strip above the merged chart.
+    renderPerfDayStrip(sr, singleRow || null);
   }
 
   function renderDailyAchChart(sr, rows, opts) {
@@ -6637,9 +7034,11 @@
     const hasFile = acc.hasFile;
     const remainWrap = $("#acc-remain-wrap");
     const remainTable = $("#acc-remain-table");
+    const summaryBoard = $("#acc-summary-board");
 
     if (!hasFile) {
       if (remainWrap) remainWrap.hidden = true;
+      if (summaryBoard) summaryBoard.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
         "Upload Accessories Excel in Admin (slot 6 · Col D VIN matched to Sales Raw employee · Col L amount), then Push to live."
@@ -6648,6 +7047,7 @@
     }
 
     clearChartEmptyState("chart-sr-accessories");
+    renderAccessoriesSummaryBoard(sr, rows);
 
     const accRows = rows
       .map((r) => {
@@ -6665,10 +7065,11 @@
         };
       })
       .filter((x) => x.quota > 0 || x.sold > 0)
-      .sort((a, b) => b.remaining - a.remaining || b.pct - a.pct);
+      .sort((a, b) => b.pct - a.pct || a.remaining - b.remaining || String(a.row["Sales Employee"] || "").localeCompare(String(b.row["Sales Employee"] || "")));
 
     if (!accRows.length) {
       if (remainWrap) remainWrap.hidden = true;
+      if (summaryBoard) summaryBoard.hidden = true;
       setChartEmptyState(
         "chart-sr-accessories",
         "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, and employee targets (or Accessories settled) in Admin."
@@ -6748,25 +7149,9 @@
     const clickOpts = { horizontal, clickable: !single, empKeys };
     // When single, still allow click but less useful — keep clickable false for cleaner UX
 
-    const achColors = rows.map((r) => {
-      const n = parsePct(r["Ach%"]) || 0;
-      return n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)";
-    });
-
     if (single) {
       const r = rows[0];
-      upsertChart("chart-sr", "bar", ["Delivery", "Proforma", "Target"], [
-        Number(r["Delivery (Month)"]) || 0,
-        Number(r["Proforma (Month)"]) || 0,
-        rowTargetNum(r),
-      ], {
-        backgroundColor: ["rgba(235, 10, 30, 0.88)", "rgba(100, 116, 139, 0.75)", "rgba(17, 17, 17, 0.85)"],
-      });
-      upsertChart("chart-sr-ach", "doughnut", ["Ach%", "Remaining"], [
-        Math.min(100, parsePct(r["Ach%"]) || 0),
-        Math.max(0, 100 - (parsePct(r["Ach%"]) || 0)),
-      ]);
-      renderDayTotalChart(sr, r);
+      renderPerfMergedChart(sr, rows, { single: true });
       upsertChart("chart-sr-plant", "doughnut", [String(r.Plant || "—")], [Number(r["Delivery (Month)"]) || 1]);
       upsertChart("chart-sr-overview", "doughnut",
         ["Delivery", "Proforma gap", "To target"],
@@ -6822,45 +7207,7 @@
       return;
     }
 
-    upsertChart("chart-sr", "bar", labels, null, {
-      ...clickOpts,
-      legend: true,
-      datasets: [
-        {
-          label: "Delivery",
-          data: rows.map((r) => Number(r["Delivery (Month)"]) || 0),
-          backgroundColor: "rgba(235, 10, 30, 0.88)",
-          borderWidth: 0,
-          borderRadius: 5,
-        },
-        {
-          label: "Proforma",
-          data: rows.map((r) => Number(r["Proforma (Month)"]) || 0),
-          backgroundColor: "rgba(100, 116, 139, 0.75)",
-          borderWidth: 0,
-          borderRadius: 5,
-        },
-        {
-          label: "Target",
-          data: rows.map((r) => rowTargetNum(r)),
-          backgroundColor: "rgba(17, 17, 17, 0.85)",
-          borderWidth: 0,
-          borderRadius: 5,
-        },
-      ],
-    });
-
-    upsertChart("chart-sr-ach", "bar", labels, rows.map((r) => parsePct(r["Ach%"]) || 0), {
-      ...clickOpts,
-      label: "Delivery ÷ Target %",
-      backgroundColor: achColors,
-      max: 120,
-      showValues: true,
-      valueSuffix: "%",
-    });
-
-    // Day chart: team totals for today (Delivery / Proforma)
-    renderDayTotalChart(sr, null);
+    renderPerfMergedChart(sr, rows, { single: false });
 
     const plantMap = new Map();
     rows.forEach((r) => {
@@ -7199,15 +7546,19 @@
       .map((r) => {
         const target = Number(r._accQuota != null ? r._accQuota : r.accQuota) || 0;
         const sold = Number(r._accSold != null ? r._accSold : r.accSold) || 0;
+        const ach = target ? (sold / target) * 100 : 0;
         return {
           Advisor: r["Sales Employee"] || r.Salesman || "",
           "Acc Target": target,
           Achieved: sold,
-          "Ach %": target ? `${((sold / target) * 100).toFixed(1)}%` : "",
+          "Ach %": target ? `${ach.toFixed(1)}%` : "",
           Remaining: Math.max(0, target - sold),
+          _ach: ach,
         };
       })
-      .filter((r) => r["Acc Target"] || r.Achieved);
+      .filter((r) => r["Acc Target"] || r.Achieved)
+      .sort((a, b) => b._ach - a._ach)
+      .map(({ _ach, ...row }) => row);
     appendObjectSheet(wb, "Accessories Remaining", accRemain);
 
     const cancelByEmp = exportRows
