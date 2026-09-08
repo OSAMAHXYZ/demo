@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr2" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -426,6 +426,15 @@
                     <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
                   </div>
                 </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-plant">
+                  <div class="pbi-viz-head">
+                    <h2>By Plant</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+                  </div>
+                </article>
                 <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel" data-chart-id="chart-cancel">
                   <div class="pbi-viz-head">
                     <h2>Cancellation %</h2>
@@ -434,15 +443,6 @@
                   <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
                   <div class="chart-scroll">
                     <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
-                  <div class="pbi-viz-head">
-                    <h2>By Plant</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
                   </div>
                 </article>
               </div>
@@ -4254,19 +4254,21 @@
     if (horizontal && labelCount > 1) {
       const series = Math.max(1, Number(seriesCount) || 1);
       // Enough vertical room per name so labels never overlap (esp. 2–3 series groups)
-      const rowPx = series >= 3 ? 46 : series === 2 ? 36 : 28;
-      const h = Math.max(200, Math.min(900, labelCount * rowPx + 56));
+      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr";
+      const rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 44 : 36) : (dense ? 34 : 28);
+      const h = Math.max(240, Math.min(1200, labelCount * rowPx + 64));
       box.style.height = h + "px";
-      box.style.minHeight = "";
+      box.style.minHeight = h + "px";
       if (scroll) {
         scroll.classList.add("is-scroll");
         const inSales = !!(scroll.closest && scroll.closest("#panel-salesreport"));
         scroll.style.maxHeight = (inSales
-          ? Math.min(560, Math.max(320, rowPx * 10 + 48))
+          ? Math.min(620, Math.max(360, rowPx * 12 + 48))
           : Math.min(380, Math.max(240, rowPx * 8 + 40))) + "px";
       }
     } else {
       box.style.height = "220px";
+      box.style.minHeight = "";
       if (scroll) {
         scroll.classList.remove("is-scroll");
         scroll.style.maxHeight = "";
@@ -4385,18 +4387,18 @@
         autoSkip: false,
         color: horizontal ? "#374151" : "#111111",
         font: {
-          size: horizontal ? 11 : 12,
+          size: horizontal ? 10 : 12,
           family: fontFamily,
           weight: horizontal ? "600" : "700",
-          lineHeight: 1.15,
+          lineHeight: 1.2,
         },
-        padding: horizontal ? 6 : 4,
+        padding: horizontal ? 10 : 4,
         callback(value) {
           const raw = this.getLabelForValue ? this.getLabelForValue(value) : value;
           const label = String(raw == null ? "" : raw).trim();
           if (!horizontal) return label;
-          if (label.length <= 16) return label;
-          return label.slice(0, 14) + "…";
+          if (label.length <= 22) return label;
+          return label.slice(0, 20) + "…";
         },
       },
       border: { display: false },

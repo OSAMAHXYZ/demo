@@ -6304,7 +6304,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 .sr-grid-health {
-  grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
 }
 .sr-grid:not(.sr-grid-hero):not(.sr-grid-health) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6322,10 +6322,16 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-size: .9rem; font-weight: 800; letter-spacing: -0.01em; color: #0f172a;
 }
 .sr-panel .chart-box.pbi-box {
-  height: 260px !important; min-height: 220px !important;
+  height: 260px;
+  min-height: 220px;
+}
+/* Let JS size horizontal employee charts so names don't overlap */
+.sr-panel .chart-scroll.is-scroll .chart-box.pbi-box {
+  height: auto !important;
+  min-height: 280px !important;
 }
 .sr-panel .chart-scroll.is-scroll {
-  max-height: 560px; border-radius: 12px; border-color: #e8eef5; background: #fcfdff;
+  max-height: 620px; border-radius: 12px; border-color: #e8eef5; background: #fcfdff;
 }
 .sr-panel .chart-empty-note {
   padding: 36px 18px; border-radius: 12px; background: #f8fafc; border: 1px dashed #e2e8f0;
@@ -6335,6 +6341,9 @@ body.admin-page #panel-allocation:not([hidden]) {
   margin: 0 0 10px; border-radius: 12px;
 }
 .sr-viz-cancel .cancel-pct-panel .cancel-pct-main .val { font-size: 1.55rem; }
+.sr-viz-cancel .chart-scroll.is-scroll {
+  max-height: 640px;
+}
 
 .sr-panel .pbi-daily-target,
 .sr-panel .pbi-detail,
@@ -6347,11 +6356,20 @@ body.admin-page #panel-allocation:not([hidden]) {
 
 @media (max-width: 1280px) {
   .sr-kpis.pbi-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .sr-grid-hero, .sr-grid-health,
+  .sr-grid-hero,
   .sr-grid:not(.sr-grid-hero):not(.sr-grid-health) {
     grid-template-columns: 1fr 1fr;
   }
+  .sr-grid-health {
+    grid-template-columns: 1fr 1fr 1.2fr;
+  }
   .sr-viz-wide { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .sr-grid-health {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sr-viz-cancel { grid-column: 1 / -1; }
 }
 @media (max-width: 980px) {
   .sr-page.pbi-page { grid-template-columns: 1fr; }
@@ -6365,9 +6383,14 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 .live-app .sr-panel .chart-box.pbi-box {
-  height: 260px !important; min-height: 220px !important;
+  height: 260px;
+  min-height: 220px;
 }
-.live-app .sr-panel .chart-scroll.is-scroll { max-height: 560px; }
+.live-app .sr-panel .chart-scroll.is-scroll .chart-box.pbi-box {
+  height: auto !important;
+  min-height: 280px !important;
+}
+.live-app .sr-panel .chart-scroll.is-scroll { max-height: 620px; }
 .live-app.toyota-theme .sr-hero-title {
   font-family: "Space Grotesk", Outfit, sans-serif;
 }
