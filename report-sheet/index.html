@@ -2777,13 +2777,26 @@
     return !!parseDate(d);
   }
 
+  /** Invoice date present (Sales Raw Invoice Date / Col V) → proforma is closed. */
+  function hasInvoiceDate(r) {
+    if (!r) return false;
+    const d = r.invoiceDate != null && r.invoiceDate !== ""
+      ? r.invoiceDate
+      : null;
+    if (d == null || d === "") return false;
+    if (d instanceof Date) return !Number.isNaN(d.getTime());
+    return !!parseDate(d);
+  }
+
   /**
-   * Proforma per employee: Col A = salesman, Col P date in selected period.
-   * Counts every proforma issued in the period — including rows that later got a delivery date.
-   * Delivery = Col V date in selected period (independent; same row can count for both).
+   * Proforma per employee (Excel COUNTIFS style):
+   *   Col A = salesman · Col P in period · Invoice date blank
+   * Rows that already have an invoice date are ignored by the Proforma counter.
+   * Delivery = delivery date column in period (independent).
    */
   function salesIsProformaInPeriod(r, live, period, prevMonthKey) {
     if (!r) return false;
+    if (hasInvoiceDate(r)) return false;
     return salesPeriodMatch(r.proformaDate, live, period, prevMonthKey);
   }
 
@@ -2850,11 +2863,12 @@
       if (hits >= 3) break;
     }
 
-    // Excel COUNTIFS uses fixed Col A for salesman. Prefer A unless that header
-    // is clearly a code/id column — wrong header overrides were mis-counting Proforma.
+    // Excel COUNTIFS uses fixed Col A / P / V. Col V is Invoice Date in Sales Raw
+    // (blank V = open proforma). Delivery Date may be a separate header column.
     let idxA = colLetterToIndex("A");
     let idxP = colLetterToIndex("P");
-    let idxV = colLetterToIndex("V");
+    const idxColV = colLetterToIndex("V");
+    let idxV = idxColV;
 
     const headerRow = matrix[headerIdx] || [];
     const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
@@ -2868,6 +2882,10 @@
     const headerProforma = findHeaderIdx([
       (n) => n.includes("proforma") && n.includes("date"),
       (n) => n === "proforma" || n === "proforma date" || n === "pro forma date",
+    ]);
+    const headerInvoice = findHeaderIdx([
+      (n) => n.includes("invoice") && n.includes("date"),
+      (n) => n === "invoice date" || n === "inv date" || n === "invoice",
     ]);
     const headerDelivery = findHeaderIdx([
       (n) => n === "delivery date" || n === "delivered date" || n === "actual delivery date",
@@ -2891,7 +2909,22 @@
     // else keep Col A — matches Excel Rowdata!A:A
 
     if (headerProforma >= 0) idxP = headerProforma;
-    if (headerDelivery >= 0) idxV = headerDelivery;
+
+    // Invoice date: header first, else Col V (Excel open-proforma blank check)
+    let idxInvoice = headerInvoice >= 0 ? headerInvoice : -1;
+    const colVNorm = normHeader(headers[idxColV] || "");
+    if (idxInvoice < 0) {
+      if (/invoice/.test(colVNorm) || !/delivery/.test(colVNorm)) idxInvoice = idxColV;
+    }
+
+    // Delivery date: dedicated header only (do not steal invoice Col V)
+    let idxDelivery = headerDelivery >= 0 ? headerDelivery : -1;
+    if (idxDelivery < 0 && /delivery/.test(colVNorm) && !/invoice/.test(colVNorm)) {
+      idxDelivery = idxColV;
+    }
+    // Keep idxV for compatibility / scans: prefer delivery, else invoice col
+    idxV = idxDelivery >= 0 ? idxDelivery : (idxInvoice >= 0 ? idxInvoice : idxColV);
+
     const idxSecondary = headerSecondary >= 0 ? headerSecondary : colLetterToIndex("H");
 
     // Excel Rowdata formulas start at row 2 → skip header row (index 0+)
@@ -2911,20 +2944,25 @@
       // Resolve once from the raw Col A spelling (aliases + safe fuzzy)
       const salesman = resolveSalesmanName(salesmanRaw);
 
+      const invoiceDate = idxInvoice >= 0 ? parseDate(line[idxInvoice]) : null;
+      const deliveryDate = idxDelivery >= 0 ? parseDate(line[idxDelivery]) : null;
+
       const obj = {
         salesman,
         _salesmanRaw: salesmanRaw,
         plant: "",
         salesmanCode: "",
         proformaDate: parseDate(line[idxP]),
-        deliveryDate: parseDate(line[idxV]),
+        invoiceDate,
+        deliveryDate,
         secondaryStatus: cellToString(line[idxSecondary]).trim(),
         vin: "",
         _sheet: preferred,
         __cells: line,
         _colSalesman: idxA,
         _colProforma: idxP,
-        _colDelivery: idxV,
+        _colInvoice: idxInvoice,
+        _colDelivery: idxDelivery,
       };
       headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
 
@@ -2948,7 +2986,7 @@
       if (vinHeaderIdx >= 0) vin = extractVinValue(line[vinHeaderIdx]);
       if (!vin) {
         for (let i = 0; i < line.length; i += 1) {
-          if (i === idxA || i === idxP || i === idxV) continue;
+          if (i === idxA || i === idxP || i === idxInvoice || i === idxDelivery) continue;
           vin = extractVinValue(line[i]);
           if (vin) break;
         }
@@ -3761,8 +3799,8 @@
     });
 
     // Sales Raw:
-    // Proforma = Col A name match · Col P in period (includes delivered)
-    // Delivery = Col V in period
+    // Proforma = Col A name · Col P in period · invoice date blank
+    // Delivery = delivery date in period
     // Always resolve from _salesmanRaw (Col A spelling) so Proforma attribution stays stable
     salesRows.forEach((r) => {
       const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
@@ -3881,7 +3919,7 @@
           diag.sampleUnmatched.push(String(raw).trim());
         }
       }
-      if (r.proformaDate && !hasDeliveryDate(r)) diag.withProformaOpen += 1;
+      if (r.proformaDate && !hasInvoiceDate(r)) diag.withProformaOpen += 1;
       if (r.proformaDate) {
         diag.withProformaDate += 1;
         if (diag.sampleProforma.length < 5) {
@@ -3941,8 +3979,8 @@
     const daysInMonth = live.daysInMonth
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
 
-    // Proforma = Col P in period (all issued) · Delivery = Col V in period
-    // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma
+    // Proforma = Col P in period · invoice blank · Delivery = delivery date in period
+    // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma (open)
     // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
     const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
       const delPlusVsnd = proforma; // Del+VSND mirrors Proforma
@@ -5713,7 +5751,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=Col A name → Col P in period · Delivery=Col V · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col P in period · invoice blank · Delivery=delivery date · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
       const diag = sr.diag || {};
       if (diag.unmatchedNames > 0 && typeof console !== "undefined" && console.info) {
         console.info("[Sales name match]", {
@@ -5759,7 +5797,7 @@
           <b>Why Proforma/Delivery look empty:</b>
           Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
           parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
-          open Proforma (P set, V blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
+          open Proforma (P set, invoice blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
           parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
           Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
           Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
@@ -5824,7 +5862,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P in period (all issued) · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P · invoice blank · Delivery=delivery date · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -6494,7 +6532,7 @@
           </tbody>
         </table>
       </div>
-      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on Col P proforma (all issued in month)</p>
+      <p class="foot" style="margin:8px 0 0">Example: base 5 · got 4 yesterday → carry +1 → need 6 today · based on open Col P proforma (invoice blank)</p>
     `;
   }
 
@@ -9818,9 +9856,11 @@
       if (!vin || vin.length < 11) return;
       const entry = {
         delivered: hasDeliveryDate(r),
+        invoiced: hasInvoiceDate(r),
         proformaDate: r.proformaDate,
+        invoiceDate: r.invoiceDate,
         deliveryDate: r.deliveryDate,
-        salesman: resolveSalesmanName(r.salesman),
+        salesman: resolveSalesmanName(r._salesmanRaw || r.salesman),
         secondaryStatus: cellToString(r.secondaryStatus).trim(),
       };
       const prev = byVin.get(vin);
@@ -9852,17 +9892,17 @@
       ? salesDateInActivePeriod(s.deliveryDate, period)
       : !!(s.delivered && s.deliveryDate);
     const proIn = hasRange
-      ? !!(s.proformaDate && parseDate(s.proformaDate) && !s.delivered && salesDateInActivePeriod(s.proformaDate, period))
-      : !!(s.proformaDate && parseDate(s.proformaDate) && !s.delivered);
+      ? !!(s.proformaDate && parseDate(s.proformaDate) && !s.invoiced && !s.delivered && salesDateInActivePeriod(s.proformaDate, period))
+      : !!(s.proformaDate && parseDate(s.proformaDate) && !s.invoiced && !s.delivered);
 
-    // Period-aware: Col V in range → Delivered; else Col P in range → Proforma
+    // Period-aware: delivery in range → Delivered; else open Col P (no invoice) → Proforma
     if (delIn) return { label: "Delivered", cls: "ok", inPeriod: true };
     if (proIn) return { label: "Proforma", cls: "warn", inPeriod: true };
     if (hasRange && period.preset !== "all") {
       return { label: "Outside period", cls: "na", inPeriod: false };
     }
     if (s.delivered) return { label: "Delivered", cls: "ok", inPeriod: true };
-    if (s.proformaDate && parseDate(s.proformaDate)) return { label: "Proforma", cls: "warn", inPeriod: true };
+    if (s.proformaDate && parseDate(s.proformaDate) && !s.invoiced) return { label: "Proforma", cls: "warn", inPeriod: true };
     return { label: "NA", cls: "na", inPeriod: false };
   }
 
