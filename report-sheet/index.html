@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260907act2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -308,235 +308,272 @@
         </article>
       </div>
 
-      <div class="panel-section" id="panel-salesreport" style="display:none">
-        <div class="xl-toolbar">
-          <input id="sr-search" type="search" placeholder="Search employee…" />
-          <select id="sr-filter">
-            <option value="">All employees</option>
-            <option value="above">Ach% ≥100%</option>
-            <option value="below">Ach% &lt;100%</option>
-          </select>
-          <select id="sr-chart-mode" title="Who appears when no name is selected">
-            <option value="active">List: Active only</option>
-            <option value="top12">List: Top 12</option>
-            <option value="all">List: All names</option>
-          </select>
-          <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name filter</button>
-          <button type="button" id="sr-csv-btn" class="btn-primary">Export Excel</button>
-          <span class="hint" id="sr-live-hint">Click a name to filter this page to that person only</span>
+      <div class="panel-section sr-panel" id="panel-salesreport" style="display:none">
+        <header class="sr-hero">
+          <div class="sr-hero-copy">
+            <h1 class="sr-hero-title">Sales Report</h1>
+            <p class="sr-hero-sub" id="sr-live-hint">Delivery · Proforma · Target · click a name to focus one employee</p>
+          </div>
+          <div class="sr-hero-actions">
+            <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name</button>
+            <button type="button" id="sr-csv-btn" class="btn-primary">Export Excel</button>
+          </div>
+        </header>
+
+        <div class="sr-controls card">
+          <div class="sr-controls-row">
+            <input id="sr-search" type="search" placeholder="Search employee…" />
+            <select id="sr-filter">
+              <option value="">All employees</option>
+              <option value="above">Ach% ≥100%</option>
+              <option value="below">Ach% &lt;100%</option>
+            </select>
+            <select id="sr-chart-mode" title="Who appears when no name is selected">
+              <option value="active">List: Active only</option>
+              <option value="top12">List: Top 12</option>
+              <option value="all">List: All names</option>
+            </select>
+          </div>
+          <div class="sr-date-bar" id="sr-date-bar">
+            <span class="sr-date-label">Period</span>
+            <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
+              <option value="today">Today</option>
+              <option value="this_month">This month (1st → today)</option>
+              <option value="last_month">Last month</option>
+              <option value="all">All dates</option>
+              <option value="custom">Custom range</option>
+            </select>
+            <label class="sr-date-field sr-date-custom">
+              <span>From</span>
+              <input type="date" id="sr-date-from" />
+            </label>
+            <label class="sr-date-field sr-date-custom">
+              <span>To</span>
+              <input type="date" id="sr-date-to" />
+            </label>
+            <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
+            <button type="button" id="sr-date-reset" class="btn">Reset</button>
+            <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
+          </div>
         </div>
-        <div class="sr-date-bar xl-toolbar" id="sr-date-bar">
-          <span class="sr-date-label">Report period</span>
-          <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
-            <option value="today">Today</option>
-            <option value="this_month">This month (1st → today)</option>
-            <option value="last_month">Last month</option>
-            <option value="all">All dates</option>
-            <option value="custom">Custom range</option>
-          </select>
-          <label class="sr-date-field sr-date-custom">
-            <span>From</span>
-            <input type="date" id="sr-date-from" />
-          </label>
-          <label class="sr-date-field sr-date-custom">
-            <span>To</span>
-            <input type="date" id="sr-date-to" />
-          </label>
-          <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
-          <button type="button" id="sr-date-reset" class="btn">Reset to today</button>
-          <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
-        </div>
+
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
-        <div class="pbi-page" id="sr-pbi-page">
-          <aside class="pbi-slicer card">
+        <div class="pbi-page sr-page" id="sr-pbi-page">
+          <aside class="pbi-slicer card sr-slicer">
             <h2>Sales Employee</h2>
             <p class="pbi-slicer-hint" id="sr-charts-note">Click a name to filter</p>
             <div class="pbi-name-list" id="sr-name-list"></div>
           </aside>
 
-          <div class="pbi-canvas">
+          <div class="pbi-canvas sr-canvas">
             <div class="pbi-filter-bar" id="sr-filter-bar" hidden>
               <span>Filtered to</span>
               <strong id="sr-filter-name">—</strong>
               <button type="button" id="sr-filter-clear">✕ Clear</button>
             </div>
 
-            <div class="pbi-kpis" id="sr-pbi-kpis"></div>
+            <div class="pbi-kpis sr-kpis" id="sr-pbi-kpis"></div>
 
-            <div class="pbi-visuals" id="sr-charts">
-              <article class="card pbi-viz" data-chart-id="chart-sr">
-                <div class="pbi-viz-head">
-                  <h2>Delivery / Proforma / Target</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-ach">
-                <div class="pbi-viz-head">
-                  <h2>Ach% · Delivery ÷ Target</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-ach" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-day">
-                <div class="pbi-viz-head">
-                  <h2>Day · Delivery / Proforma (total)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-day" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
-                <div class="pbi-viz-head">
-                  <h2>By Plant</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-overview">
-                <div class="pbi-viz-head">
-                  <h2>Month overview</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz pbi-viz-cancel" data-chart-id="chart-cancel">
-                <div class="pbi-viz-head">
-                  <h2>Cancellation %</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
-                </div>
-                <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
-                <div class="pbi-viz-head">
-                  <h2>Schedule · Del % (Delivery ÷ Target)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-profdel">
-                <div class="pbi-viz-head">
-                  <h2>Schedule · Prof + Del</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
-                <div class="pbi-viz-head">
-                  <h2>Schedule · Prof+Del %</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdelpct" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-accessories">
-                <div class="pbi-viz-head">
-                  <h2>Accessories · Ach %</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
-                </div>
-                <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
-                  <h3 class="acc-remain-title">Remaining to accessories target</h3>
-                  <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
-                <div class="pbi-viz-head">
-                  <h2>Daily · Ach % today</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-dailyach" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
-                <div class="pbi-viz-head">
-                  <h2>Proforma · Prior month vs Today</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
-                <div class="pbi-viz-head">
-                  <h2>Month pace</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
-                <div class="pbi-viz-head">
-                  <h2>Cancelled BOs by employee</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-cancelcount" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div>
-                </div>
-              </article>
-            </div>
+            <section class="sr-section">
+              <div class="sr-section-head">
+                <h3>Performance</h3>
+                <p>Delivery, Proforma, and achievement vs target</p>
+              </div>
+              <div class="pbi-visuals sr-grid sr-grid-hero" id="sr-charts-hero">
+                <article class="card pbi-viz sr-viz-wide" data-chart-id="chart-sr">
+                  <div class="pbi-viz-head">
+                    <h2>Delivery / Proforma / Target</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-ach">
+                  <div class="pbi-viz-head">
+                    <h2>Ach% · Delivery ÷ Target</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-ach" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-ach"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-day">
+                  <div class="pbi-viz-head">
+                    <h2>Day · Delivery / Proforma</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-day" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-day"></canvas></div>
+                  </div>
+                </article>
+              </div>
+            </section>
 
-            <article class="card pbi-daily-target" id="sr-daily-target-card">
-              <div class="pbi-viz-head">
-                <div>
-                  <h2>Daily target pace · today</h2>
-                  <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
-                </div>
+            <section class="sr-section">
+              <div class="sr-section-head">
+                <h3>Month health</h3>
+                <p>Mix vs target and cancellation control</p>
               </div>
-              <div class="sr-daily-target-wrap" id="sr-daily-target-body">
-                <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
+              <div class="pbi-visuals sr-grid sr-grid-health">
+                <article class="card pbi-viz" data-chart-id="chart-sr-overview">
+                  <div class="pbi-viz-head">
+                    <h2>Month overview</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel" data-chart-id="chart-cancel">
+                  <div class="pbi-viz-head">
+                    <h2>Cancellation %</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
+                  <div class="pbi-viz-head">
+                    <h2>By Plant</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+                  </div>
+                </article>
               </div>
-            </article>
+            </section>
 
-            <article class="card pbi-detail" id="sr-detail-card">
-              <div class="pbi-detail-head">
-                <div>
-                  <h2 id="sr-detail-title">Employee details</h2>
-                  <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
-                </div>
+            <section class="sr-section">
+              <div class="sr-section-head">
+                <h3>Schedule</h3>
+                <p>Del %, Prof+Del volume, and pace</p>
               </div>
-              <div id="sr-detail-body">
-                <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
+              <div class="pbi-visuals sr-grid" id="sr-charts">
+                <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
+                  <div class="pbi-viz-head">
+                    <h2>Del % (Delivery ÷ Target)</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-profdel">
+                  <div class="pbi-viz-head">
+                    <h2>Prof + Del</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
+                  <div class="pbi-viz-head">
+                    <h2>Prof+Del %</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdelpct" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-accessories">
+                  <div class="pbi-viz-head">
+                    <h2>Accessories · Ach %</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
+                  </div>
+                  <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
+                    <h3 class="acc-remain-title">Remaining to accessories target</h3>
+                    <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
+                  <div class="pbi-viz-head">
+                    <h2>Daily · Ach % today</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-dailyach" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
+                  <div class="pbi-viz-head">
+                    <h2>Cancelled BOs</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-cancelcount" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
+                  <div class="pbi-viz-head">
+                    <h2>Proforma · Prior month vs Today</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
+                  </div>
+                </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
+                  <div class="pbi-viz-head">
+                    <h2>Month pace</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
+                  </div>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
+                  </div>
+                </article>
               </div>
-            </article>
+            </section>
 
-            <details class="pbi-tables card">
-              <summary>Day to Date &amp; Month to Date tables</summary>
-              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
-                <div class="xl-kpi" id="sr-day-kpis"></div>
-                <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
-                <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-              </div>
-              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                <div class="xl-mtd" id="sr-month-title">Month to Date</div>
-                <div class="xl-kpi" id="sr-kpis"></div>
-                <div class="xl-table-wrap" id="sr-table-wrap"></div>
-                <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-              </div>
-            </details>
+            <section class="sr-section sr-section-stack">
+              <article class="card pbi-daily-target" id="sr-daily-target-card">
+                <div class="pbi-viz-head">
+                  <div>
+                    <h2>Daily target pace · today</h2>
+                    <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
+                  </div>
+                </div>
+                <div class="sr-daily-target-wrap" id="sr-daily-target-body">
+                  <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
+                </div>
+              </article>
+
+              <article class="card pbi-detail" id="sr-detail-card">
+                <div class="pbi-detail-head">
+                  <div>
+                    <h2 id="sr-detail-title">Employee details</h2>
+                    <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
+                  </div>
+                </div>
+                <div id="sr-detail-body">
+                  <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
+                </div>
+              </article>
+
+              <details class="pbi-tables card sr-tables">
+                <summary>Day to Date &amp; Month to Date tables</summary>
+                <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                  <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+                  <div class="xl-kpi" id="sr-day-kpis"></div>
+                  <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
+                  <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+                </div>
+                <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                  <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+                  <div class="xl-kpi" id="sr-kpis"></div>
+                  <div class="xl-table-wrap" id="sr-table-wrap"></div>
+                  <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+                </div>
+              </details>
+            </section>
           </div>
         </div>
       </div>
@@ -4232,7 +4269,10 @@
       box.style.minHeight = "";
       if (scroll) {
         scroll.classList.add("is-scroll");
-        scroll.style.maxHeight = Math.min(380, Math.max(240, rowPx * 8 + 40)) + "px";
+        const inSales = !!(scroll.closest && scroll.closest("#panel-salesreport"));
+        scroll.style.maxHeight = (inSales
+          ? Math.min(560, Math.max(320, rowPx * 10 + 48))
+          : Math.min(380, Math.max(240, rowPx * 8 + 40))) + "px";
       }
     } else {
       box.style.height = "220px";
@@ -12159,7 +12199,7 @@
     if (!btn) return;
     selectEmployee(btn.getAttribute("data-emp-key"));
   });
-  $("#sr-charts").addEventListener("click", (e) => {
+  $("#sr-pbi-page").addEventListener("click", (e) => {
     const expand = e.target.closest("[data-expand]");
     if (expand) {
       e.preventDefault();
@@ -12172,7 +12212,7 @@
       if (key) selectEmployee(key);
     }
   });
-  $("#sr-charts").addEventListener("dblclick", (e) => {
+  $("#sr-pbi-page").addEventListener("dblclick", (e) => {
     const viz = e.target.closest("[data-chart-id]");
     if (!viz) return;
     openWideChart(viz.getAttribute("data-chart-id"));
