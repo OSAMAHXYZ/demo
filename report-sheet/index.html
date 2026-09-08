@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr17" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr22" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -23,13 +23,13 @@
         <div class="sidebar-mark" aria-hidden="true">
           <img class="sidebar-toyota-logo" src="../images/logo/toyota.png" alt="" width="36" height="36" onerror="this.style.display='none';this.nextElementSibling.hidden=false" />
           <span class="sidebar-mark-alj" hidden>T</span>
-        </div>
+      </div>
         <div class="sidebar-brand-text">
           <strong>TOYOTA</strong>
           <span>ALJ · Report Sheet</span>
-        </div>
-        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
+    </div>
 
       <nav class="sidebar-nav">
         <p class="sidebar-section-label">Dashboards</p>
@@ -46,8 +46,8 @@
           <div class="sidebar-user-meta">
             <strong>Osama</strong>
             <span>Digital Transformation</span>
-          </div>
         </div>
+      </div>
       </div>
     </aside>
 
@@ -68,13 +68,13 @@
           <kbd class="app-search-kbd">Ctrl K</kbd>
         </div>
         <div class="top-actions app-topbar-actions">
-          <span class="status" id="status">Waiting for Admin Push</span>
+        <span class="status" id="status">Waiting for Admin Push</span>
           <span class="status ok" id="live-badge" title="Data loads only when you click Refresh">Manual</span>
           <button type="button" class="btn theme-toggle" id="theme-toggle" title="Toggle dark mode" aria-pressed="false">Dark</button>
           <button type="button" class="btn" id="clear-btn" disabled>Clear</button>
           <button type="button" class="btn-primary" id="run-btn" disabled title="Reload the latest Admin Push data">Refresh</button>
-        </div>
-      </header>
+      </div>
+    </header>
 
       <div class="app-content">
     <section id="wait-section" class="card wait-card" style="margin-bottom:16px">
@@ -322,39 +322,39 @@
 
         <div class="sr-controls card">
           <div class="sr-controls-row">
-            <input id="sr-search" type="search" placeholder="Search employee…" />
-            <select id="sr-filter">
-              <option value="">All employees</option>
-              <option value="above">Ach% ≥100%</option>
-              <option value="below">Ach% &lt;100%</option>
-            </select>
-            <select id="sr-chart-mode" title="Who appears when no name is selected">
-              <option value="active">List: Active only</option>
-              <option value="top12">List: Top 12</option>
-              <option value="all">List: All names</option>
-            </select>
-          </div>
+          <input id="sr-search" type="search" placeholder="Search employee…" />
+          <select id="sr-filter">
+            <option value="">All employees</option>
+            <option value="above">Ach% ≥100%</option>
+            <option value="below">Ach% &lt;100%</option>
+          </select>
+          <select id="sr-chart-mode" title="Who appears when no name is selected">
+            <option value="active">List: Active only</option>
+            <option value="top12">List: Top 12</option>
+            <option value="all">List: All names</option>
+          </select>
+        </div>
           <div class="sr-date-bar" id="sr-date-bar">
             <span class="sr-date-label">Period</span>
-            <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
-              <option value="today">Today</option>
-              <option value="this_month">This month (1st → today)</option>
-              <option value="last_month">Last month</option>
-              <option value="all">All dates</option>
-              <option value="custom">Custom range</option>
-            </select>
-            <label class="sr-date-field sr-date-custom">
-              <span>From</span>
-              <input type="date" id="sr-date-from" />
-            </label>
-            <label class="sr-date-field sr-date-custom">
-              <span>To</span>
-              <input type="date" id="sr-date-to" />
-            </label>
-            <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
+          <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
+            <option value="today">Today</option>
+            <option value="this_month">This month (1st → today)</option>
+            <option value="last_month">Last month</option>
+            <option value="all">All dates</option>
+            <option value="custom">Custom range</option>
+          </select>
+          <label class="sr-date-field sr-date-custom">
+            <span>From</span>
+            <input type="date" id="sr-date-from" />
+          </label>
+          <label class="sr-date-field sr-date-custom">
+            <span>To</span>
+            <input type="date" id="sr-date-to" />
+          </label>
+          <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
             <button type="button" id="sr-date-reset" class="btn">Reset</button>
-            <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
-          </div>
+          <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
+        </div>
         </div>
 
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
@@ -390,97 +390,98 @@
               </div>
               <div class="pbi-visuals sr-grid sr-grid-hero" id="sr-charts-hero">
                 <article class="card pbi-viz sr-viz-perf is-summary-only" data-chart-id="chart-sr-perf">
-                  <div class="pbi-viz-head">
+                <div class="pbi-viz-head">
                     <h2>Del % · Prof+Del % · Target</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
-                  </div>
+                </div>
                   <div class="sr-perf-day" id="sr-perf-day" aria-label="Team achievement"></div>
                   <p class="sr-summary-hint">Wide opens per-advisor chart and numbers</p>
                   <div class="chart-scroll sr-detail-only">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
-                  </div>
-                </article>
-              </div>
+                </div>
+              </article>
+                </div>
             </section>
 
             <section class="sr-section">
               <div class="sr-section-head">
                 <h3>Month health</h3>
-                <p>Cancellation control vs 30% target</p>
-              </div>
+                <p>Team cancel rate vs 30% · Wide for per-advisor detail</p>
+                </div>
               <div class="pbi-visuals sr-grid sr-grid-health">
                 <article class="card pbi-viz" data-chart-id="chart-sr-overview" hidden>
-                  <div class="pbi-viz-head">
+                <div class="pbi-viz-head">
                     <h2>Month overview</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
+                </div>
+                <div class="chart-scroll">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
-                  <div class="pbi-viz-head">
-                    <h2>By Plant</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel" data-chart-id="chart-cancel">
-                  <div class="pbi-viz-head">
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
+                <div class="pbi-viz-head">
+                  <h2>By Plant</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
+                </div>
+              </article>
+                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel is-summary-only" data-chart-id="chart-cancel">
+                <div class="pbi-viz-head">
                     <div>
-                      <h2>Cancellation %</h2>
-                      <p class="pbi-slicer-hint">Team control vs 30% ceiling · click a name to filter</p>
+                  <h2>Cancellation %</h2>
+                      <p class="pbi-slicer-hint">Team control vs 30% ceiling · Wide for per-advisor chart</p>
                     </div>
-                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
-                  </div>
-                </article>
+                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open full cancel chart">Wide</button>
+                </div>
+                <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
+                  <p class="sr-summary-hint">Wide opens Cancel % · Gap · Cancelled BOs by advisor</p>
+                  <div class="chart-scroll sr-detail-only">
+                  <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+                </div>
+              </article>
               </div>
             </section>
 
             <section class="sr-section">
               <div class="sr-section-head">
                 <h3>Schedule</h3>
-                <p>Del %, Prof+Del volume, and pace</p>
+                <p>Prof+Del volume &amp; %, accessories, and pace</p>
               </div>
               <div class="pbi-visuals sr-grid" id="sr-charts">
-                <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
-                  <div class="pbi-viz-head">
+                <article class="card pbi-viz" data-chart-id="chart-sr-delpct" hidden>
+                <div class="pbi-viz-head">
                     <h2>Del % (Delivery ÷ Target)</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
-                  </div>
-                </article>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
+                </div>
+              </article>
                 <article class="card pbi-viz sr-viz-profdel" data-chart-id="chart-sr-profdel">
-                  <div class="pbi-viz-head">
+                <div class="pbi-viz-head">
                     <h2>Prof + Del · volume &amp; %</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
-                  </div>
-                </article>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
+                </div>
+              </article>
                 <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct" hidden>
-                  <div class="pbi-viz-head">
+                <div class="pbi-viz-head">
                     <h2>Prof+Del %</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
-                  </div>
-                </article>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
+                </div>
+              </article>
                 <article class="card pbi-viz sr-viz-accessories is-summary-only" data-chart-id="chart-sr-accessories">
-                  <div class="pbi-viz-head">
-                    <h2>Accessories · Ach %</h2>
+                <div class="pbi-viz-head">
+                  <h2>Accessories · Ach %</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
-                  </div>
+                </div>
                   <div class="acc-summary-board" id="acc-summary-board" hidden>
                     <div class="acc-summary-pct-hero">
                       <span class="acc-summary-icon" aria-hidden="true">⚙</span>
@@ -503,7 +504,7 @@
                   <p class="sr-summary-hint">Wide opens Ach % chart and remaining schedule</p>
                   <div class="sr-acc-layout sr-detail-only">
                     <div class="chart-scroll sr-acc-chart">
-                      <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
                     </div>
                     <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
                       <div class="acc-remain-head">
@@ -511,9 +512,9 @@
                       </div>
                       <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
                     </div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
+                </div>
+              </article>
+                <article class="card pbi-viz" data-chart-id="chart-sr-dailyach" hidden>
                   <div class="pbi-viz-head">
                     <h2>Daily · Ach % today</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-dailyach" title="Open wide view">Wide</button>
@@ -522,77 +523,77 @@
                     <div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
+                <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount" hidden>
                   <div class="pbi-viz-head">
                     <h2>Cancelled BOs</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-cancelcount" title="Open wide view">Wide</button>
+                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open cancellation wide view">Wide</button>
                   </div>
                   <div class="chart-scroll">
                     <div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
-                  <div class="pbi-viz-head">
-                    <h2>Proforma · Prior month vs Today</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
-                  </div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
-                  <div class="pbi-viz-head">
-                    <h2>Month pace</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
-                  </div>
-                </article>
-              </div>
+              <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
+                <div class="pbi-viz-head">
+                  <h2>Proforma · Prior month vs Today</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
+                </div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
+                <div class="pbi-viz-head">
+                  <h2>Month pace</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
+                </div>
+              </article>
+                </div>
             </section>
 
             <section class="sr-section sr-section-stack">
               <details class="card pbi-daily-target sr-daily-target" id="sr-daily-target-card">
                 <summary class="sr-daily-target-summary">
-                  <div>
-                    <h2>Daily target pace · today</h2>
-                    <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
-                  </div>
+                <div>
+                  <h2>Daily target pace · today</h2>
+                  <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
+                </div>
                   <span class="sr-collapse-hint" aria-hidden="true"></span>
                 </summary>
-                <div class="sr-daily-target-wrap" id="sr-daily-target-body">
-                  <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
-                </div>
+              <div class="sr-daily-target-wrap" id="sr-daily-target-body">
+                <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
+              </div>
               </details>
 
-              <article class="card pbi-detail" id="sr-detail-card">
-                <div class="pbi-detail-head">
-                  <div>
-                    <h2 id="sr-detail-title">Employee details</h2>
-                    <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
-                  </div>
+            <article class="card pbi-detail" id="sr-detail-card">
+              <div class="pbi-detail-head">
+                <div>
+                  <h2 id="sr-detail-title">Employee details</h2>
+                  <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
                 </div>
-                <div id="sr-detail-body">
-                  <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
-                </div>
-              </article>
+              </div>
+              <div id="sr-detail-body">
+                <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
+              </div>
+            </article>
 
               <details class="pbi-tables card sr-tables">
-                <summary>Day to Date &amp; Month to Date tables</summary>
-                <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                  <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
-                  <div class="xl-kpi" id="sr-day-kpis"></div>
-                  <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
-                  <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-                </div>
-                <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                  <div class="xl-mtd" id="sr-month-title">Month to Date</div>
-                  <div class="xl-kpi" id="sr-kpis"></div>
-                  <div class="xl-table-wrap" id="sr-table-wrap"></div>
-                  <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-                </div>
-              </details>
+              <summary>Day to Date &amp; Month to Date tables</summary>
+              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+                <div class="xl-kpi" id="sr-day-kpis"></div>
+                <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
+                <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+              </div>
+              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
+                <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+                <div class="xl-kpi" id="sr-kpis"></div>
+                <div class="xl-table-wrap" id="sr-table-wrap"></div>
+                <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+              </div>
+            </details>
             </section>
           </div>
         </div>
@@ -882,12 +883,12 @@
             <div class="act-header-brand">
               <div class="act-header-mark" aria-hidden="true">
                 <img src="../images/logo/toyota.png" alt="" class="act-logo" onerror="this.style.display='none'" />
-              </div>
+            </div>
               <div>
                 <p class="act-eyebrow">Toyota · ALJ Motors</p>
                 <h2 class="act-title">Allocation Control Tower</h2>
                 <p class="act-sub">BO Demand · Allocation · RTL Stock · Collection · Plan Performance</p>
-              </div>
+          </div>
             </div>
             <div class="act-header-actions">
               <div class="act-refresh-stamp">
@@ -939,7 +940,7 @@
                 <div>
                   <h2>Allocation vs Back Orders by Product</h2>
                   <span class="hint">Sorted by gap · click a product for details</span>
-                </div>
+          </div>
                 <label class="act-sort-lab">Sort
                   <select id="act-sort-gap">
                     <option value="gap" selected>By Gap</option>
@@ -1051,7 +1052,7 @@
             <div class="bas-result-strip" id="bas-table-summary" aria-live="polite"></div>
             <div class="table-wrap bas-table-wrap" id="bas-table"></div>
             <p class="foot bas-foot" id="bas-foot"></p>
-          </article>
+        </article>
 
           <article class="card bas-section-card bas-section-conf bas-conf-block">
             <div class="bas-section-head">
@@ -1243,6 +1244,14 @@
               <canvas id="pbi-wide-salestype-canvas"></canvas>
             </div>
             <div class="pbi-wide-salestype-legend" id="pbi-wide-salestype-legend"></div>
+          </div>
+        </div>
+      </div>
+      <div class="pbi-wide-cancel-extra" id="pbi-wide-cancel-extra" hidden>
+        <h3 class="pbi-wide-numbers-title">Cancelled BOs</h3>
+        <div class="pbi-wide-scroll" id="pbi-wide-cancelcount-scroll">
+          <div class="chart-box pbi-wide-box" id="pbi-wide-cancelcount-box">
+            <canvas id="pbi-wide-cancelcount-canvas"></canvas>
           </div>
         </div>
       </div>
@@ -4325,7 +4334,11 @@
   }
 
   function sizeChartScrollBox(canvasId, labelCount, horizontal, seriesCount) {
-    if (canvasId === "pbi-wide-canvas" || canvasId === "pbi-wide-salestype-canvas") return;
+    if (
+      canvasId === "pbi-wide-canvas"
+      || canvasId === "pbi-wide-salestype-canvas"
+      || canvasId === "pbi-wide-cancelcount-canvas"
+    ) return;
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     const box = canvas.closest(".chart-box");
@@ -4478,7 +4491,7 @@
     delete datasetsExtra.dualValueAxis;
     const softScale = {
       beginAtZero: true,
-      ...(opts.max != null && !opts.dualValueAxis ? { suggestedMax: opts.max } : {}),
+      ...(opts.max != null && !opts.dualValueAxis ? { max: opts.max } : {}),
       grid: { color: "rgba(17, 17, 17, 0.06)", drawBorder: false },
       ticks: { precision: 0, color: "#6b7280", font: { size: 11, family: figureFont, weight: "600" } },
       border: { display: false },
@@ -4778,6 +4791,14 @@
               colLabel: "Prof",
             });
           }
+          if (m.cancelled != null) {
+            cells.push({
+              text: formatNumber(m.cancelled),
+              tip: `Cancelled BOs: ${formatNumber(m.cancelled)}`,
+              multi: true,
+              colLabel: "Cancelled",
+            });
+          }
         }
         rows.push({
           name: (meta && meta[i] && meta[i].name) || String(lab || "—"),
@@ -4801,6 +4822,7 @@
     cols.forEach((c) => headLabels.push(c.label));
     if (meta && meta.some((m) => m && m.del != null)) headLabels.push("Del");
     if (meta && meta.some((m) => m && m.prof != null)) headLabels.push("Prof");
+    if (meta && meta.some((m) => m && m.cancelled != null)) headLabels.push("Cancelled");
     const head = headLabels.length > 1
       ? `<div class="pbi-wide-num-head"><span>Name</span><span>${headLabels.map((c) => escapeHtml(c)).join(" · ")}</span></div>`
       : "";
@@ -4917,6 +4939,7 @@
     if (!snap && (!html || !html.trim())) return;
 
     hideWidePerfExtra();
+    hideWideCancelExtra();
     hideWideTableMode();
 
     $("#pbi-wide-title").textContent = "Accessories";
@@ -4936,6 +4959,7 @@
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
       modal.classList.remove("pbi-wide-modal--perf");
+      modal.classList.remove("pbi-wide-modal--cancel");
       modal.classList.add("pbi-wide-modal--accessories");
     }
 
@@ -5118,6 +5142,80 @@
     }
   }
 
+  function hideWideCancelExtra() {
+    const wrap = $("#pbi-wide-cancel-extra");
+    if (wrap) wrap.hidden = true;
+    if (charts["pbi-wide-cancelcount-canvas"]) {
+      charts["pbi-wide-cancelcount-canvas"].destroy();
+      delete charts["pbi-wide-cancelcount-canvas"];
+    }
+    const box = $("#pbi-wide-cancelcount-box");
+    if (box) {
+      box.style.height = "";
+      box.style.minHeight = "";
+    }
+  }
+
+  function renderWideCancelCount(snap) {
+    const wrap = $("#pbi-wide-cancel-extra");
+    const box = $("#pbi-wide-cancelcount-box");
+    const scroll = $("#pbi-wide-cancelcount-scroll");
+    const canvas = document.getElementById("pbi-wide-cancelcount-canvas");
+    if (!wrap || !box || !canvas) return;
+
+    const meta = (snap.extra && snap.extra.rowMeta) || [];
+    const empKeys = (snap.extra && snap.extra.empKeys) || [];
+    const entries = meta
+      .map((m, i) => ({
+        name: (m && m.name) || (snap.labels && snap.labels[i]) || "—",
+        count: Number(m && m.cancelled) || 0,
+        key: empKeys[i] || "",
+      }))
+      .filter((e) => e.count > 0)
+      .sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
+
+    if (!entries.length) {
+      hideWideCancelExtra();
+      return;
+    }
+
+    wrap.hidden = false;
+    const n = entries.length;
+    const fit = fitHorizontalChartHeight(n, 1, {
+      preferredRow: 28,
+      minRow: 16,
+      maxViewportFrac: 0.28,
+      chromePx: 40,
+      pad: 40,
+    });
+    box.style.height = fit.height + "px";
+    box.style.minHeight = fit.height + "px";
+    canvas.dataset.fitRowPx = String(fit.rowPx);
+    if (scroll) {
+      scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
+    }
+
+    upsertChart(
+      "pbi-wide-cancelcount-canvas",
+      "bar",
+      entries.map((e) => shortEmpLabel(e.name)),
+      entries.map((e) => e.count),
+      {
+        horizontal: n > 1,
+        clickable: n > 1,
+        empKeys: entries.map((e) => e.key),
+        label: "Cancelled BOs",
+        backgroundColor: "rgba(235, 10, 30, 0.82)",
+        showValues: true,
+        max: Math.max(1, ...entries.map((e) => e.count)),
+        rowMeta: entries.map((e) => ({ name: e.name, cancelled: e.count })),
+      }
+    );
+    box.style.height = fit.height + "px";
+    box.style.minHeight = fit.height + "px";
+  }
+
   function openWideChart(sourceId) {
     if (sourceId === "chart-icc-bubble") {
       openWideIccBubbleChart();
@@ -5127,19 +5225,26 @@
       openWideAccessories();
       return;
     }
+    if (sourceId === "chart-sr-cancelcount") sourceId = "chart-cancel";
     const snap = chartSnapshots[sourceId];
     if (!snap) return;
     hideWideTableMode();
     hideWidePerfExtra();
+    hideWideCancelExtra();
     const totalsReset = $("#pbi-wide-totals");
     if (totalsReset) totalsReset.classList.remove("pbi-wide-totals--acc");
     const modal = document.querySelector(".pbi-wide-modal");
+    const isPerf = sourceId === "chart-sr-perf";
+    const isCancel = sourceId === "chart-cancel";
     if (modal) {
-      modal.classList.toggle("pbi-wide-modal--perf", sourceId === "chart-sr-perf");
+      modal.classList.toggle("pbi-wide-modal--perf", isPerf);
+      modal.classList.toggle("pbi-wide-modal--cancel", isCancel);
       modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
-    $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Chart";
+    $("#pbi-wide-title").textContent = isCancel
+      ? "Cancellation % · Cancelled BOs"
+      : (titleEl ? titleEl.textContent : "Chart");
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
     backdrop.classList.add("show");
@@ -5148,16 +5253,17 @@
     const horizontal = !!(snap.extra && snap.extra.horizontal);
     const box = $("#pbi-wide-box");
     const scroll = $("#pbi-wide-scroll");
-    const isPerf = sourceId === "chart-sr-perf";
     const wideCanvas = document.getElementById("pbi-wide-canvas");
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
       const fit = fitHorizontalChartHeight(n, seriesN, {
-        preferredRow: seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28,
-        minRow: seriesN >= 2 ? 18 : 15,
-        maxViewportFrac: isPerf ? 0.48 : 0.78,
-        chromePx: isPerf ? 120 : 80,
-        pad: 56,
+        preferredRow: isPerf
+          ? (seriesN >= 2 ? 42 : 32)
+          : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+        minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+        maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : 0.78),
+        chromePx: isPerf ? 90 : (isCancel ? 160 : 80),
+        pad: isPerf ? 72 : 56,
       });
       box.style.height = fit.height + "px";
       box.style.minHeight = fit.height + "px";
@@ -5177,32 +5283,38 @@
     if (hint) {
       hint.textContent = isPerf
         ? "Full team on one screen · names in Numbers · Volume & Sales type below"
-        : horizontal && n > 1
-          ? "All names on one screen · Numbers on the right · click a bar to filter"
-          : "Numbers beside the chart · Close or press Esc";
+        : isCancel
+          ? "Cancel % & Gap above · Cancelled BOs below · click a bar to filter"
+          : horizontal && n > 1
+            ? "All names on one screen · Numbers on the right · click a bar to filter"
+        : "Numbers beside the chart · Close or press Esc";
     }
     renderWideNumbers(snap);
-    // Re-render into wide canvas
     const extra = { ...(snap.extra || {}) };
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
-    // Keep fitted height after upsert (upsert skips sizing for wide canvas)
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
       const fit = fitHorizontalChartHeight(n, seriesN, {
-        preferredRow: seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28,
-        minRow: seriesN >= 2 ? 18 : 15,
-        maxViewportFrac: isPerf ? 0.48 : 0.78,
-        chromePx: isPerf ? 120 : 80,
-        pad: 56,
+        preferredRow: isPerf
+          ? (seriesN >= 2 ? 42 : 32)
+          : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+        minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+        maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : 0.78),
+        chromePx: isPerf ? 90 : (isCancel ? 160 : 80),
+        pad: isPerf ? 72 : 56,
       });
       box.style.height = fit.height + "px";
       box.style.minHeight = fit.height + "px";
       if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      if (charts["pbi-wide-canvas"] && typeof charts["pbi-wide-canvas"].resize === "function") {
+        charts["pbi-wide-canvas"].resize();
+      }
     }
     if (isPerf) {
       const sr = (window._data && window._data.salesReport) || null;
       if (sr) renderWidePerfSalesType(sr);
     }
+    if (isCancel) renderWideCancelCount(snap);
   }
 
   function closeWideChart() {
@@ -5227,11 +5339,12 @@
     }
     hideWideTableMode();
     hideWidePerfExtra();
+    hideWideCancelExtra();
     const table = $("#pbi-wide-table");
     if (table) table.innerHTML = "";
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
-      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
     const box = $("#pbi-wide-box");
     if (box) {
@@ -6095,7 +6208,6 @@
     { key: "Cancellation %", label: "Cancellation %" },
     { key: "Can. Target 30%", label: "Can. Target 30%" },
     { key: "Gap +/-", label: "Gap +/-" },
-    { key: "Notes", label: "" },
   ];
 
   function filterSrRows(baseRows) {
@@ -7140,6 +7252,11 @@
     const ordProfDel = order.map((o) => profDelPcts[o.i]);
     const ordExtras = order.map((o) => categoryExtras[o.i]);
     const ordMeta = order.map((o) => rowMeta[o.i]);
+    const peakPct = Math.max(0, ...ordDel, ...ordProfDel);
+    let axisMax = Math.ceil((peakPct * 1.15) / 10) * 10;
+    if (axisMax < 50) axisMax = 50;
+    if (peakPct >= 90 && axisMax < 110) axisMax = 110;
+    if (axisMax > 140) axisMax = 140;
     upsertChart("chart-sr-perf", "bar", ordLabels, null, {
       horizontal: true,
       clickable: true,
@@ -7147,7 +7264,7 @@
       legend: true,
       showValues: true,
       valueSuffix: "%",
-      max: 140,
+      max: axisMax,
       categoryExtras: ordExtras,
       rowMeta: ordMeta,
       datasets: [
@@ -7350,8 +7467,8 @@
           ? Math.max(0, Number(r._accRemaining) || 0)
           : Math.max(0, quota - sold);
         return {
-          row: r,
-          pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
+        row: r,
+        pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
           quota,
           sold,
           remaining,
@@ -7476,6 +7593,10 @@
           oneCancel > 30 ? "rgba(235, 10, 30, 0.88)" : "rgba(13, 148, 136, 0.8)",
           "rgba(100, 116, 139, 0.65)",
         ],
+        rowMeta: [{
+          name: String(r["Sales Employee"] || r.Salesman || "").trim() || "—",
+          cancelled: Number((r.month || r)["Cancelled BOs"]) || 0,
+        }],
       });
       upsertChart("chart-sr-delpct", "doughnut", ["Del %", "Remaining"], [
         Math.min(100, (r._delPct || 0) * 100),
@@ -7563,6 +7684,10 @@
       legend: true,
       showValues: true,
       valueSuffix: "%",
+      rowMeta: cancelOrder.map((o) => ({
+        name: String(rows[o.i]["Sales Employee"] || rows[o.i].Salesman || "").trim() || "—",
+        cancelled: Number((rows[o.i].month || rows[o.i])["Cancelled BOs"]) || 0,
+      })),
       datasets: [
         {
           label: "Cancel %",
@@ -7608,7 +7733,7 @@
       showValues: true,
       datasets: [
         {
-          label: "Prof+Del",
+      label: "Prof+Del",
           data: pdOrder.map((o) => o.vol),
           backgroundColor: "rgba(17, 17, 17, 0.88)",
           borderWidth: 0,
@@ -7617,13 +7742,13 @@
           valueSuffix: "",
         },
         {
-          label: "Prof+Del %",
+      label: "Prof+Del %",
           data: pdOrder.map((o) => o.pct),
-          backgroundColor: "rgba(13, 148, 136, 0.85)",
+      backgroundColor: "rgba(13, 148, 136, 0.85)",
           borderWidth: 0,
           borderRadius: 5,
           xAxisID: "x2",
-          valueSuffix: "%",
+      valueSuffix: "%",
         },
       ],
     });
@@ -8578,7 +8703,7 @@
   function suffixMatchesAlloc(boSuffix, allocSfx, product) {
     const b = upperTrim(boSuffix);
     if (!b || b === "—") return false;
-    const bC = allocCompact(b);
+      const bC = allocCompact(b);
     if (!bC) return false;
 
     // Fortuner: match by first two letters (G2 GX2 4X2 ↔ G2, G4 GX2 4X4 ↔ G4)
@@ -8663,19 +8788,19 @@
     const totalDemand = opts.totalDemand != null ? opts.totalDemand : null;
 
     if (opts.compact) {
-      el.innerHTML = [
-        { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
-        { label: boLabel, val: formatNumber(totalBo), sub: boSub },
-        { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
+    el.innerHTML = [
+      { label: "Total allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan" },
+      { label: boLabel, val: formatNumber(totalBo), sub: boSub },
+      { label: "Available stock", val: formatNumber(totalStock), sub: "RTL + Central" },
         { label: "Overall gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad" },
-        { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
-      ].map((k) => `
-        <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
-          <div class="lbl">${k.label}</div>
-          <div class="val">${k.val}</div>
-          <div class="sub">${k.sub}</div>
-        </article>
-      `).join("");
+      { label: "Suffixes below plan", val: formatNumber(below), sub: `${formatNumber(above)} above · ${formatNumber(rows.length - below - above)} on track`, cls: below ? "bad" : "ok" },
+    ].map((k) => `
+      <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
+        <div class="lbl">${k.label}</div>
+        <div class="val">${k.val}</div>
+        <div class="sub">${k.sub}</div>
+      </article>
+    `).join("");
       return;
     }
 
@@ -10543,13 +10668,13 @@
 
     function buildPools(list) {
       const sorted = list
-        .slice()
-        .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
-      const pools = new Map();
+      .slice()
+      .sort((a, b) => String(a.vin).localeCompare(String(b.vin), undefined, { numeric: true }));
+    const pools = new Map();
       sorted.forEach((s) => {
-        if (!pools.has(s.key)) pools.set(s.key, []);
-        pools.get(s.key).push(Object.assign({}, s, { used: false }));
-      });
+      if (!pools.has(s.key)) pools.set(s.key, []);
+      pools.get(s.key).push(Object.assign({}, s, { used: false }));
+    });
       return pools;
     }
 
@@ -10594,8 +10719,8 @@
         const hit = takeFromPools(rtlPools, bo.key) || takeFromPools(esalesPools, bo.key);
         if (!hit) return;
         pushMatch(bo, hit);
-      });
-      return out;
+    });
+    return out;
     }
 
     // Default (Stock fulfillable): single pool RTL + Central, FIFO by VIN
@@ -10932,14 +11057,14 @@
       const leaf = matchRtlToAllocLeaf({ product: r.product, suffix: r.suffix });
       const salesSt = vinSalesStatusForLookup(r.vin, salesLookup, live);
       const key = extractVinValue(r.vin) || upperTrim(r.vin);
-      const sales = salesLookup.get(key);
+        const sales = salesLookup.get(key);
       const salesSecondary = sales && sales.secondaryStatus ? sales.secondaryStatus : "";
       const stockSecondary = r.secondaryStatus && r.secondaryStatus !== "—" ? r.secondaryStatus : "";
-      return {
-        seg: leaf ? leaf.seg : "—",
+        return {
+          seg: leaf ? leaf.seg : "—",
         product: leaf ? leaf.product : r.product,
         sfx: leaf ? leaf.sfx : r.suffix,
-        planMatch: !!leaf,
+          planMatch: !!leaf,
         boNumber: r.boNumber,
         boProduct: r.boProduct,
         boSuffix: r.boSuffix,
@@ -10952,13 +11077,13 @@
         stockInt: r.stockInt,
         boExt: r.boExt,
         boInt: r.boInt,
-        salesStatus: salesSt.label,
-        salesStatusCls: salesSt.cls,
-        inPeriod: !!salesSt.inPeriod,
-        proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
-        deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
+          salesStatus: salesSt.label,
+          salesStatusCls: salesSt.cls,
+          inPeriod: !!salesSt.inPeriod,
+          proformaDate: sales && sales.proformaDate ? cellToString(sales.proformaDate) : "—",
+          deliveryDate: sales && sales.deliveryDate ? cellToString(sales.deliveryDate) : "—",
         salesman: r.salesman,
-        salesSalesman: sales && sales.salesman ? sales.salesman : "—",
+          salesSalesman: sales && sales.salesman ? sales.salesman : "—",
         location: r.location,
         usage: r.usage || "—",
         ageing: r.aging,
@@ -10971,8 +11096,8 @@
         vehicleSearchArea: r.vehicleSearchArea || "—",
         sharingLevel: r.sharingLevel || "—",
         stockRaw: r.stockRaw || null,
-      };
-    });
+        };
+      });
   }
 
   function collectMatchedStockColumns(rows) {
@@ -12604,15 +12729,15 @@
     }
     showError("");
     refreshInFlight = (async () => {
-      try {
-        const ok = await hydrateSlotsFromAdmin();
-        if (!ok) {
-          clearAll();
-          setStatus(reason || "Waiting for Admin Push");
-          return;
-        }
-        buildDashboard();
-        if (reason) setStatus(reason, "ok");
+    try {
+      const ok = await hydrateSlotsFromAdmin();
+      if (!ok) {
+        clearAll();
+        setStatus(reason || "Waiting for Admin Push");
+        return;
+      }
+      buildDashboard();
+      if (reason) setStatus(reason, "ok");
         else setStatus("Synced from server", "ok");
         const badge = $("#live-badge");
         if (badge) {
@@ -12625,8 +12750,8 @@
           lastPushAt = Number(JSON.parse(localStorage.getItem(TARGETS_PUSH_KEY) || "{}").at) || lastPushAt;
           if (liveSync && liveSync.setLastAt) liveSync.setLastAt(lastDataPushAt);
         } catch { /* ignore */ }
-      } catch (err) {
-        showError(err.message || String(err));
+    } catch (err) {
+      showError(err.message || String(err));
       }
     })();
     try {
@@ -12651,11 +12776,11 @@
   const navBarEl = $("#nav-bar");
   if (navBarEl) {
     navBarEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-nav]");
-      if (!btn || btn.disabled) return;
-      if (btn.dataset.nav === "dashboard" && !window._data) return;
-      switchNav(btn.dataset.nav);
-    });
+    const btn = e.target.closest("[data-nav]");
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.nav === "dashboard" && !window._data) return;
+    switchNav(btn.dataset.nav);
+  });
   }
 
   const globalSearchEl = $("#global-search");
