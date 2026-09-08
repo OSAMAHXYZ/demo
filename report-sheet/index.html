@@ -5175,6 +5175,7 @@
       "Sales Status": r.salesStatus || "",
       "Secondary Status": r.secondaryStatus || "",
       "Primary Status": r.status || "",
+      Usage: r.usage || "",
       "Allocated Location": r.location || "",
       "Vehicle Search Area": r.vehicleSearchArea || "",
       "Sharing Level": r.sharingLevel || "",
@@ -9930,8 +9931,9 @@
       // Col L = Secondary status (only Sales order created / Vehicle allocation completed)
       const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r);
       const status = stockPrimaryStatus(r);
-      // Col J = age · Col Q = allocated location
+      // Col J = age · Col K = usage · Col Q = allocated location
       const ageing = parseStockAgeing(cellByLetter(r, "J"));
+      const usage = cellToString(cellByLetter(r, "K")).trim();
       const location = cellToString(cellByLetter(r, "Q")).trim()
         || stockFieldByAlias(r, "allocatedLocation", [])
         || stockFieldByAlias(r, "location", []);
@@ -9946,6 +9948,7 @@
         status: status || "—",
         secondaryStatus: secondaryStatus || "—",
         location: location || "—",
+        usage: usage || "—",
         ageing,
         vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", []) || stockFieldByAlias(r, "searchAreaDesc", []),
         sharingLevel: stockFieldByAlias(r, "sharingLevel", []),
@@ -9964,10 +9967,11 @@
 
   function extractEsalesColorStock(rows) {
     return (rows || []).map((r, idx) => {
-      // Sheet «المخزون المتاح all retail»: D product · E suffix · H VIN · I ext · J int · L ageing
+      // Sheet «المخزون المتاح all retail»: D product · E suffix · H VIN · I ext · J int · K usage · L ageing
       const product = cellToString(cellByLetter(r, "D")).trim();
       const suffix = normalizeProductSuffix(product, cellByLetter(r, "E"));
       const vin = extractVinValue(cellByLetter(r, "H")) || "";
+      const usage = cellToString(cellByLetter(r, "K")).trim();
       const ageing = parseStockAgeing(cellByLetter(r, "L"));
       return {
         idx: `E-Sales-${idx}`,
@@ -9979,9 +9983,10 @@
         int: cellToString(cellByLetter(r, "J")),
         status: stockPrimaryStatus(r) || "—",
         secondaryStatus: stockSecondaryStatus(r) || "—",
-        location: stockFieldByAlias(r, "allocatedLocation", ["K", "M", "N"])
-          || stockFieldByAlias(r, "location", ["K", "M", "N"])
+        location: stockFieldByAlias(r, "allocatedLocation", ["M", "N", "O"])
+          || stockFieldByAlias(r, "location", ["M", "N", "O"])
           || "—",
+        usage: usage || "—",
         ageing,
         vehicleSearchArea: stockFieldByAlias(r, "vehicleSearchArea", [])
           || stockFieldByAlias(r, "searchAreaDesc", []),
@@ -10031,8 +10036,8 @@
    * RTL VINs first (Col L secondary = Sales order created / Vehicle allocation completed),
    * then E-Sales sheet «المخزون المتاح all retail».
    * Match BO on product (L) + suffix (M) + one paired color slot (N/Q, O/R, or P/S).
-   * RTL: age Col J · allocated location Col Q · Ext/Int H/I.
-   * E-Sales/Central: age Col L · show Vehicle search area + Sharing level.
+   * RTL: age Col J · usage Col K · allocated location Col Q · Ext/Int H/I.
+   * E-Sales/Central: usage Col K · age Col L · show Vehicle search area + Sharing level.
    */
   function buildVinColorPairedMatches() {
     const VCM = window.VinColorMatch;
@@ -10094,6 +10099,7 @@
           boExt: ch.boExt || "—",
           boInt: ch.boInt || "—",
           location: stock.location || "—",
+          usage: stock.usage || "—",
           status: stock.status || "—",
           secondaryStatus: stock.secondaryStatus || "—",
           vehicleSearchArea: stock.vehicleSearchArea || "—",
@@ -10150,6 +10156,7 @@
         salesman: r.salesman,
         salesSalesman: sales && sales.salesman ? sales.salesman : "—",
         location: r.location,
+        usage: r.usage || "—",
         ageing: r.aging,
         year: r.year,
         ext: r.stockExt,
@@ -10194,7 +10201,7 @@
         const hay = [
           r.seg, r.product, r.sfx, r.vin, r.boNumber, r.salesman,
           r.boProduct, r.boSuffix, r.stockExt, r.stockInt, r.source, r.location,
-          r.status, r.secondaryStatus, r.salesStatus,
+          r.usage, r.status, r.secondaryStatus, r.salesStatus,
         ].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -10241,7 +10248,7 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `RTL Col L = Sales order created / Vehicle allocation completed · age J · location Q · then E-Sales (age L) · color pairs · ${periodSub}`;
+      headHint.textContent = `RTL Col L status · age J · usage K · loc Q · E-Sales usage K · age L · color pairs · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
@@ -10289,7 +10296,7 @@
       "BO Number", "Product", "Salesman", "VIN", "Score", "Source", "Aging",
       "Suffix", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
       "Sales status", "Secondary status", "Primary status",
-      "Allocated location", "Vehicle search area", "Sharing level", "Order Date",
+      "Usage", "Allocated location", "Vehicle search area", "Sharing level", "Order Date",
     ];
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
@@ -10318,6 +10325,7 @@
           `<span class="badge ${badgeCls}">${escapeHtml(r.salesStatus || "—")}</span>`,
           escapeHtml(secondary),
           escapeHtml(primary),
+          escapeHtml(r.usage || "—"),
           escapeHtml(r.location || "—"),
           escapeHtml(r.vehicleSearchArea || "—"),
           escapeHtml(r.sharingLevel || "—"),
@@ -10333,7 +10341,7 @@
       footEl.textContent = (show.length < sorted.length
         ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
         : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
-        ` matched vehicles (RTL Col L status · age J · loc Q · E-Sales age L · paired colors)` +
+        ` matched vehicles (RTL/E-Sales Col K usage · RTL age J · loc Q · E-Sales age L · paired colors)` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
   }
