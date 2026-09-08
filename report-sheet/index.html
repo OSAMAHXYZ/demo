@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr3" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -481,17 +481,22 @@
                     <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-accessories">
+                <article class="card pbi-viz sr-viz-accessories" data-chart-id="chart-sr-accessories">
                   <div class="pbi-viz-head">
                     <h2>Accessories · Ach %</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open wide view">Wide</button>
                   </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
-                  </div>
-                  <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
-                    <h3 class="acc-remain-title">Remaining to accessories target</h3>
-                    <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
+                  <div class="sr-acc-layout">
+                    <div class="chart-scroll sr-acc-chart">
+                      <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
+                    </div>
+                    <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
+                      <div class="acc-remain-head">
+                        <h3 class="acc-remain-title">Remaining to accessories target</h3>
+                        <button type="button" class="pbi-expand" data-expand="acc-remain-table" title="Open full employee list">Wide</button>
+                      </div>
+                      <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
+                    </div>
                   </div>
                 </article>
                 <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
@@ -1213,6 +1218,9 @@
           <h3 class="pbi-wide-numbers-title">Numbers</h3>
           <div class="pbi-wide-numbers-list" id="pbi-wide-numbers-list"></div>
         </aside>
+      </div>
+      <div class="pbi-wide-table-wrap" id="pbi-wide-table-wrap" hidden>
+        <div class="table-wrap acc-remain-table-wrap acc-remain-table-wrap--wide" id="pbi-wide-table"></div>
       </div>
       <p class="foot" id="pbi-wide-hint" style="margin:0;padding:8px 16px 14px">Scroll to see all names · click a name bar to filter</p>
     </div>
@@ -4623,13 +4631,61 @@
     }).join("");
   }
 
+  let lastAccRemainHtml = "";
+
+  function hideWideTableMode() {
+    const wrap = $("#pbi-wide-table-wrap");
+    if (wrap) wrap.hidden = true;
+    const body = $("#pbi-wide-body");
+    if (body) body.hidden = false;
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) modal.classList.remove("pbi-wide-modal--table");
+  }
+
+  function openWideAccRemainTable() {
+    const source = $("#acc-remain-table");
+    const dest = $("#pbi-wide-table");
+    const wrap = $("#pbi-wide-table-wrap");
+    if (!source || !dest || !wrap) return;
+    const html = lastAccRemainHtml || source.innerHTML;
+    if (!html || !html.trim()) return;
+    dest.innerHTML = html;
+    $("#pbi-wide-title").textContent = "Remaining to accessories target";
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Full employee list · click a name to open that advisor";
+    const totals = $("#pbi-wide-totals");
+    if (totals) {
+      totals.hidden = true;
+      totals.innerHTML = "";
+    }
+    const nums = $("#pbi-wide-numbers");
+    if (nums) nums.hidden = true;
+    const body = $("#pbi-wide-body");
+    if (body) body.hidden = true;
+    wrap.hidden = false;
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) modal.classList.add("pbi-wide-modal--table");
+    if (charts["pbi-wide-canvas"]) {
+      charts["pbi-wide-canvas"].destroy();
+      delete charts["pbi-wide-canvas"];
+    }
+    const backdrop = $("#pbi-wide-backdrop");
+    backdrop.hidden = false;
+    backdrop.classList.add("show");
+  }
+
   function openWideChart(sourceId) {
     if (sourceId === "chart-icc-bubble") {
       openWideIccBubbleChart();
       return;
     }
+    if (sourceId === "acc-remain-table") {
+      openWideAccRemainTable();
+      return;
+    }
     const snap = chartSnapshots[sourceId];
     if (!snap) return;
+    hideWideTableMode();
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     $("#pbi-wide-title").textContent = titleEl ? titleEl.textContent : "Chart";
     const backdrop = $("#pbi-wide-backdrop");
@@ -4681,7 +4737,13 @@
     if (nums) nums.hidden = true;
     if (list) list.innerHTML = "";
     const body = $("#pbi-wide-body");
-    if (body) body.classList.add("pbi-wide-body--chart-only");
+    if (body) {
+      body.hidden = false;
+      body.classList.add("pbi-wide-body--chart-only");
+    }
+    hideWideTableMode();
+    const table = $("#pbi-wide-table");
+    if (table) table.innerHTML = "";
     const box = $("#pbi-wide-box");
     if (box) {
       box.classList.remove("icc-wide-cars");
@@ -6616,7 +6678,7 @@
 
     if (remainWrap && remainTable) {
       remainWrap.hidden = false;
-      remainTable.innerHTML = `<table class="acc-remain-table">
+      const tableHtml = `<table class="acc-remain-table">
         <thead><tr>
           <th>Advisor</th>
           <th class="num">Acc Target</th>
@@ -6637,6 +6699,8 @@
           </tr>`;
         }).join("")}</tbody>
       </table>`;
+      remainTable.innerHTML = tableHtml;
+      lastAccRemainHtml = tableHtml;
     }
 
     const single = !!(opts && opts.single) || accRows.length === 1;
@@ -12498,6 +12562,14 @@
   $("#pbi-wide-close").addEventListener("click", closeWideChart);
   $("#pbi-wide-backdrop").addEventListener("click", (e) => {
     if (e.target.id === "pbi-wide-backdrop") closeWideChart();
+    const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
+    if (accName && accName.closest("#pbi-wide-table-wrap")) {
+      const key = accName.getAttribute("data-emp-key");
+      if (key) {
+        closeWideChart();
+        selectEmployee(key);
+      }
+    }
   });
   $("#sr-csv-btn").addEventListener("click", exportTelesalesSchedule);
   function onEmpTableClick(e) {
