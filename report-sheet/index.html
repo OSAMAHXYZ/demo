@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr16" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr17" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -4307,6 +4307,23 @@
       </button>`).join("");
   }
 
+  function fitHorizontalChartHeight(labelCount, seriesCount, opts) {
+    const o = opts || {};
+    const pad = o.pad != null ? o.pad : 64;
+    const minRow = o.minRow != null ? o.minRow : (seriesCount >= 2 ? 22 : 18);
+    const preferredRow = o.preferredRow != null
+      ? o.preferredRow
+      : (seriesCount >= 3 ? 44 : seriesCount === 2 ? 36 : 28);
+    const frac = o.maxViewportFrac != null ? o.maxViewportFrac : 0.72;
+    const maxH = Math.max(220, Math.floor(window.innerHeight * frac) - (o.chromePx || 0));
+    const preferred = labelCount * preferredRow + pad;
+    if (preferred <= maxH) {
+      return { height: preferred, rowPx: preferredRow };
+    }
+    const rowPx = Math.max(minRow, Math.floor((maxH - pad) / Math.max(1, labelCount)));
+    return { height: Math.min(maxH, labelCount * rowPx + pad), rowPx };
+  }
+
   function sizeChartScrollBox(canvasId, labelCount, horizontal, seriesCount) {
     if (canvasId === "pbi-wide-canvas" || canvasId === "pbi-wide-salestype-canvas") return;
     const canvas = document.getElementById(canvasId);
@@ -4316,32 +4333,33 @@
     if (!box) return;
     if (horizontal && labelCount > 1) {
       const series = Math.max(1, Number(seriesCount) || 1);
-      // Enough vertical room per name so labels never overlap (esp. 2–3 series + Target line)
       const perf = canvasId === "chart-sr-perf";
       const profdel = canvasId === "chart-sr-profdel";
-      const dense = canvasId === "chart-cancel" || canvasId === "chart-sr" || perf || profdel;
-      let rowPx;
-      if (perf) {
-        rowPx = series >= 2 ? 60 : 44;
-      } else if (profdel) {
-        rowPx = series >= 2 ? 52 : 36;
-      } else {
-        rowPx = series >= 3 ? (dense ? 52 : 46) : series === 2 ? (dense ? 48 : 36) : (dense ? 34 : 28);
-      }
-      const h = Math.max(280, Math.min(1600, labelCount * rowPx + 72));
-      box.style.height = h + "px";
-      box.style.minHeight = h + "px";
+      const cancel = canvasId === "chart-cancel";
+      const inSales = !!(scroll && scroll.closest && scroll.closest("#panel-salesreport"));
+      let preferredRow;
+      if (perf) preferredRow = series >= 2 ? 44 : 32;
+      else if (profdel) preferredRow = series >= 2 ? 40 : 28;
+      else if (cancel) preferredRow = series >= 2 ? 40 : 28;
+      else preferredRow = series >= 3 ? 40 : series === 2 ? 34 : 26;
+      const fit = fitHorizontalChartHeight(labelCount, series, {
+        preferredRow,
+        minRow: series >= 2 ? 20 : 16,
+        maxViewportFrac: inSales ? (perf ? 0.55 : 0.62) : 0.55,
+        pad: 56,
+      });
+      box.style.height = fit.height + "px";
+      box.style.minHeight = fit.height + "px";
+      canvas.dataset.fitRowPx = String(fit.rowPx);
       if (scroll) {
-        scroll.classList.add("is-scroll");
-        const inSales = !!(scroll.closest && scroll.closest("#panel-salesreport"));
-        const visibleRows = perf ? 10 : 12;
-        scroll.style.maxHeight = (inSales
-          ? Math.min(perf ? 560 : 620, Math.max(360, rowPx * visibleRows + 56))
-          : Math.min(380, Math.max(240, rowPx * 8 + 40))) + "px";
+        // Keep the full chart on one screen — no inner scroll
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
       }
     } else {
       box.style.height = "220px";
       box.style.minHeight = "";
+      delete canvas.dataset.fitRowPx;
       if (scroll) {
         scroll.classList.remove("is-scroll");
         scroll.style.maxHeight = "";
@@ -4365,8 +4383,11 @@
       const suffix = cfg.suffix || "";
       const fontFamily = cfg.fontFamily || "'Outfit', 'Segoe UI', sans-serif";
       const horizontal = chart.options.indexAxis === "y";
+      const canvasEl = chart.canvas;
+      const fitRow = Number((canvasEl && canvasEl.dataset && canvasEl.dataset.fitRowPx) || 0);
+      const fitCompact = horizontal && fitRow > 0 && fitRow < 30;
       ctx.save();
-      ctx.font = `700 12px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
+      ctx.font = `700 ${fitCompact ? 9 : 12}px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
       ctx.fillStyle = "#111111";
       ctx.textBaseline = "middle";
       chart.data.datasets.forEach((ds, di) => {
@@ -4483,20 +4504,33 @@
           const extra = Array.isArray(extras) && Number.isFinite(idx) ? extras[idx] : null;
           if (!horizontal) return label;
           const short = label.length <= 24 ? label : label.slice(0, 22) + "…";
-          if (extra) return [short, String(extra)];
+          const fit = Number(canvas.dataset.fitRowPx) || 0;
+          // Two-line name+target only when rows are tall enough
+          if (extra && fit >= 28) return [short, String(extra)];
           return short;
         },
       },
       border: { display: false },
     };
     const clickable = !!(opts.clickable && empKeys && empKeys.length);
+    const fitRowPx = Number(canvas.dataset.fitRowPx) || 0;
     const catPct = horizontal
       ? (seriesCount >= 3 ? 0.88 : seriesCount === 2 ? 0.82 : 0.78)
       : 0.72;
     const barPct = horizontal ? 0.9 : 0.9;
-    const maxThick = horizontal
+    let maxThick = horizontal
       ? (seriesCount >= 3 ? 12 : seriesCount === 2 ? 16 : 22)
       : 36;
+    if (horizontal && fitRowPx > 0) {
+      maxThick = Math.max(3, Math.min(maxThick, Math.floor(fitRowPx / seriesCount) - 2));
+    }
+    if (horizontal && fitRowPx > 0 && fitRowPx < 30) {
+      categoryScale.ticks.font = {
+        ...categoryScale.ticks.font,
+        size: fitRowPx < 22 ? 8 : 9,
+      };
+      categoryScale.ticks.padding = 4;
+    }
     charts[id] = new Chart(canvas, {
       type,
       data: {
@@ -4887,7 +4921,7 @@
 
     $("#pbi-wide-title").textContent = "Accessories";
     const hint = $("#pbi-wide-hint");
-    if (hint) hint.textContent = "Target · Achieved · % · full Ach % chart and advisor details · click a name to open that advisor";
+    if (hint) hint.textContent = "Ach % chart fits on one screen · schedule below · click a name to open that advisor";
 
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
@@ -4913,22 +4947,45 @@
       const horizontal = !!(snap.extra && snap.extra.horizontal);
       const box = $("#pbi-wide-box");
       const scroll = $("#pbi-wide-scroll");
+      const wideCanvas = document.getElementById("pbi-wide-canvas");
       if (horizontal && snap.type === "bar" && n > 1) {
-        box.style.height = Math.max(480, n * 40 + 80) + "px";
-        scroll.style.maxHeight = "min(56vh, 720px)";
-        scroll.classList.add("is-scroll");
+        const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: 32,
+          minRow: 16,
+          maxViewportFrac: 0.42,
+          chromePx: 100,
+          pad: 48,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+        scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
       } else if (snap.type === "doughnut") {
+        box.style.height = "280px";
+        scroll.style.maxHeight = "";
+        if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
+      } else {
         box.style.height = "320px";
         scroll.style.maxHeight = "";
-      } else {
-        box.style.height = "360px";
-        scroll.style.maxHeight = "";
+        if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
       }
       renderWideNumbers(snap);
       const extra = { ...(snap.extra || {}) };
       upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
       if (horizontal && snap.type === "bar" && n > 1) {
-        box.style.height = Math.max(480, n * 40 + 80) + "px";
+        const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: 32,
+          minRow: 16,
+          maxViewportFrac: 0.42,
+          chromePx: 100,
+          pad: 48,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
       }
     } else {
       const nums = $("#pbi-wide-numbers");
@@ -5092,36 +5149,55 @@
     const box = $("#pbi-wide-box");
     const scroll = $("#pbi-wide-scroll");
     const isPerf = sourceId === "chart-sr-perf";
+    const wideCanvas = document.getElementById("pbi-wide-canvas");
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-      const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
-      box.style.height = Math.max(isPerf ? 360 : 420, n * rowH + 80) + "px";
-      // Cap chart pane so Volume / Sales type below stay on screen
-      scroll.style.maxHeight = isPerf ? "min(42vh, 480px)" : "min(78vh, 900px)";
+      const fit = fitHorizontalChartHeight(n, seriesN, {
+        preferredRow: seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28,
+        minRow: seriesN >= 2 ? 18 : 15,
+        maxViewportFrac: isPerf ? 0.48 : 0.78,
+        chromePx: isPerf ? 120 : 80,
+        pad: 56,
+      });
+      box.style.height = fit.height + "px";
+      box.style.minHeight = fit.height + "px";
+      if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
     } else if (snap.type === "doughnut") {
       box.style.height = "380px";
       scroll.style.maxHeight = "";
+      if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
     } else {
       box.style.height = "420px";
       scroll.style.maxHeight = "";
+      if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
     }
     const hint = $("#pbi-wide-hint");
     if (hint) {
       hint.textContent = isPerf
-        ? "Numbers list shows full advisor names · scroll chart for bars · Volume & Sales type below"
+        ? "Full team on one screen · names in Numbers · Volume & Sales type below"
         : horizontal && n > 1
-          ? "Numbers on the right · scroll for every name · click a bar to filter"
+          ? "All names on one screen · Numbers on the right · click a bar to filter"
           : "Numbers beside the chart · Close or press Esc";
     }
     renderWideNumbers(snap);
     // Re-render into wide canvas
     const extra = { ...(snap.extra || {}) };
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
-    // Force wide box height after upsert (upsert may reset)
+    // Keep fitted height after upsert (upsert skips sizing for wide canvas)
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-      const rowH = seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 52 : 42;
-      box.style.height = Math.max(isPerf ? 360 : 420, n * rowH + 80) + "px";
+      const fit = fitHorizontalChartHeight(n, seriesN, {
+        preferredRow: seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28,
+        minRow: seriesN >= 2 ? 18 : 15,
+        maxViewportFrac: isPerf ? 0.48 : 0.78,
+        chromePx: isPerf ? 120 : 80,
+        pad: 56,
+      });
+      box.style.height = fit.height + "px";
+      box.style.minHeight = fit.height + "px";
+      if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
     }
     if (isPerf) {
       const sr = (window._data && window._data.salesReport) || null;
