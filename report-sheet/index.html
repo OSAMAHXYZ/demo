@@ -621,13 +621,14 @@
         <div class="bo-empty card" id="rv-empty">
           <h2>Reserved Vehicles Tracker</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Reads <b>E-Sales المحجوز</b> from Central Stock (order Col F · VIN Col L), ranks each order with the BO queue algorithm, and shows Sales Raw / stock location status per VIN.
+            Reads <b>E-Sales المحجوز</b> from Central Stock (order Col F · VIN Col L), ranks each order with the BO queue algorithm, and shows Sales Raw / RTL / E-Sales stock status per VIN.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
             <li>Upload slot <b>3 · Stock Central</b> (must include sheet <b>E-Sales المحجوز</b>)</li>
             <li>Upload slot <b>1 · Back Order</b> for queue position</li>
-            <li>Upload slot <b>4 · Sales Raw</b> for proforma / delivery dates (optional for stock location fallback)</li>
+            <li>Upload slot <b>2 · RTL Stock</b> and/or All Retail available stock for VIN location fallback</li>
+            <li>Upload slot <b>4 · Sales Raw</b> for proforma / delivery dates (optional)</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
@@ -13149,7 +13150,45 @@
     return byVin;
   }
 
-  function resolveReservedVinStatus(vin, salesLookup, stockLookup) {
+  /** RTL slot VINs for reserved tracker — all rows with a VIN (no color-match status filter). */
+  function buildRtlStockVinLookup() {
+    const byVin = new Map();
+    (slots.rtl.rows || []).forEach((r, idx) => {
+      const vin = extractVinValue(cellByLetter(r, "E"))
+        || extractVinValue(r.vin)
+        || upperTrim(cellToString(r.vin));
+      if (!vin) return;
+      if (byVin.has(vin)) return;
+      const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const status = stockPrimaryStatus(r) || "";
+      byVin.set(vin, {
+        idx: `RTL-${idx}`,
+        source: "RTL",
+        vin,
+        secondaryStatus: secondaryStatus || "—",
+        location: location || "—",
+        status: status || "—",
+        _raw: r,
+      });
+    });
+    return byVin;
+  }
+
+  function reservedStockStatusDetail(stock, fallback) {
+    const secondary = cellToString(stock.secondaryStatus).trim();
+    const location = cellToString(stock.location).trim();
+    const primary = cellToString(stock.status).trim();
+    if (secondary && secondary !== "—") return secondary;
+    if (location && location !== "—") return location;
+    if (primary && primary !== "—") return primary;
+    return fallback;
+  }
+
+  function resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup) {
     const key = extractVinValue(vin) || upperTrim(vin);
     if (!key) {
       return { kind: "empty", label: "No VIN", detail: "—", cls: "na" };
@@ -13181,26 +13220,32 @@
         cls: "na",
       };
     }
+    const rtl = rtlLookup.get(key);
+    if (rtl) {
+      return {
+        kind: "rtl",
+        label: "RTL Stock",
+        detail: reservedStockStatusDetail(rtl, "In RTL stock"),
+        cls: "info",
+        secondaryStatus: cellToString(rtl.secondaryStatus).trim(),
+        location: cellToString(rtl.location).trim(),
+      };
+    }
     const stock = stockLookup.get(key);
     if (stock) {
-      const secondary = cellToString(stock.secondaryStatus).trim();
-      const location = cellToString(stock.location).trim();
-      const detail = secondary && secondary !== "—"
-        ? secondary
-        : (location && location !== "—" ? location : "In available stock");
       return {
         kind: "stock",
-        label: "Stock location",
-        detail,
+        label: "E-Sales stock",
+        detail: reservedStockStatusDetail(stock, "In available stock"),
         cls: "info",
-        secondaryStatus: secondary,
-        location,
+        secondaryStatus: cellToString(stock.secondaryStatus).trim(),
+        location: cellToString(stock.location).trim(),
       };
     }
     return {
       kind: "missing",
       label: "Not found",
-      detail: "Not in Sales Raw or All Retail available stock",
+      detail: "Not in Sales Raw, RTL Stock, or All Retail available stock",
       cls: "na",
     };
   }
@@ -13219,6 +13264,7 @@
   function buildReservedVehicleRows() {
     const reserved = slots.central.reservedRows || [];
     const salesLookup = buildSalesVinLookup();
+    const rtlLookup = buildRtlStockVinLookup();
     const stockLookup = buildEsalesStockVinLookup();
     const engine = getBoOrderLookupEngine();
     const queueCache = new Map();
@@ -13226,7 +13272,7 @@
     return reserved.map((rec) => {
       const orderNumber = String(rec.orderNumber || "").trim();
       const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
-      const status = resolveReservedVinStatus(vin, salesLookup, stockLookup);
+      const status = resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup);
 
       let queue = null;
       let queueError = "";
@@ -13310,11 +13356,12 @@
     const rows = filteredReservedVehicleRows();
     const withQueue = allRows.filter((r) => r.position != null).length;
     const withSales = allRows.filter((r) => r.status.kind === "sales").length;
+    const withRtl = allRows.filter((r) => r.status.kind === "rtl").length;
     const withStock = allRows.filter((r) => r.status.kind === "stock").length;
     const missing = allRows.filter((r) => r.status.kind === "missing" || r.status.kind === "empty").length;
 
     if (hint) {
-      hint.textContent = `${sheetName} · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "optional"}`;
+      hint.textContent = `${sheetName} · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "optional"} · RTL ${slotHasRows("rtl") ? "ready" : "optional"}`;
     }
 
     if (kpis) {
@@ -13322,7 +13369,8 @@
         ["Reserved", allRows.length, "ok"],
         ["In queue", withQueue, "ok"],
         ["Sales Raw", withSales, "warn"],
-        ["Stock location", withStock, "ok"],
+        ["RTL Stock", withRtl, "ok"],
+        ["E-Sales stock", withStock, "ok"],
         ["Not found", missing, missing ? "warn" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
