@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr27" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr28" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -475,35 +475,130 @@
               </div>
             </details>
 
-            <details class="sr-fold" id="sr-emp-fold">
+            <details class="sr-fold sr-fold--schedule" id="sr-emp-fold" open>
               <summary class="sr-fold-summary">
-                <span>Employee Details</span>
+                <span>Employee Sales Schedule &amp; Targets</span>
                 <span class="sr-fold-chev" aria-hidden="true">▾</span>
               </summary>
               <div class="sr-fold-body">
-                <p class="sr-live-hint foot" id="sr-live-hint" style="margin:8px 0"></p>
-                <div class="banner" id="sr-diag-banner" style="display:none"></div>
-                <div class="sr-xl-block">
-                  <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
-                  <div class="xl-kpi" id="sr-day-kpis"></div>
-                  <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
-                  <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-                </div>
-                <div class="sr-xl-block" style="margin-top:12px">
-                  <div class="xl-mtd" id="sr-month-title">Month to Date</div>
-                  <div class="xl-kpi" id="sr-kpis"></div>
-                  <div class="xl-table-wrap" id="sr-table-wrap"></div>
-                  <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-                </div>
-                <div class="card pbi-detail" id="sr-detail-card" style="margin-top:12px">
-                  <div class="pbi-viz-head">
-                    <div>
-                      <h2 id="sr-detail-title">Employee details</h2>
-                      <p class="pbi-slicer-hint" id="sr-detail-sub">Select a name to see only their Excel rows</p>
+                <section class="sr-schedule" id="sr-schedule" aria-label="Employee sales schedule">
+                  <header class="sr-sched-head">
+                    <div class="sr-sched-brand">
+                      <img src="../images/logo/toyota.png" alt="" class="sr-sched-logo" width="40" height="40" onerror="this.style.display='none'" />
+                      <div>
+                        <h3 class="sr-sched-title">Employee Sales Schedule &amp; Targets</h3>
+                        <p class="sr-sched-sub">Daily performance, allocation and cancellation tracking</p>
+                      </div>
                     </div>
+                    <div class="sr-sched-actions">
+                      <div class="sr-sched-datechip" title="Report date">
+                        <button type="button" class="sr-day-nav" id="sr-sched-prev" aria-label="Previous day">‹</button>
+                        <strong id="sr-sched-date-lbl">—</strong>
+                        <button type="button" class="sr-day-nav" id="sr-sched-next" aria-label="Next day">›</button>
+                      </div>
+                      <button type="button" class="sr-sched-btn" id="sr-sched-today">Today</button>
+                      <button type="button" class="sr-sched-btn" id="sr-sched-export">Export</button>
+                      <button type="button" class="sr-sched-btn" id="sr-sched-refresh">Refresh</button>
+                      <a class="sr-sched-btn sr-sched-btn--primary" href="admin.html">Upload New File</a>
+                    </div>
+                  </header>
+
+                  <div class="sr-sched-info" id="sr-diag-banner" hidden></div>
+                  <p class="sr-live-hint foot" id="sr-live-hint" hidden></p>
+
+                  <div class="sr-sched-filters">
+                    <label class="sr-sched-field">
+                      <span class="lab">Report period</span>
+                      <select id="sr-sched-period" aria-label="Day or month schedule">
+                        <option value="month" selected>Month to date</option>
+                        <option value="day">Day to date</option>
+                      </select>
+                    </label>
+                    <label class="sr-sched-field">
+                      <span class="lab">Plant</span>
+                      <select id="sr-sched-plant" aria-label="Filter by plant">
+                        <option value="">All plants</option>
+                      </select>
+                    </label>
+                    <label class="sr-sched-field">
+                      <span class="lab">Salesman</span>
+                      <select id="sr-sched-salesman" aria-label="Filter by salesman">
+                        <option value="">All salesmen</option>
+                      </select>
+                    </label>
+                    <label class="sr-sched-field">
+                      <span class="lab">Status</span>
+                      <select id="sr-sched-status" aria-label="Filter by status">
+                        <option value="">All</option>
+                        <option value="ontrack">On Track</option>
+                        <option value="below">Below Target</option>
+                        <option value="vacation">Vacation</option>
+                        <option value="unassigned">Not Assigned</option>
+                      </select>
+                    </label>
+                    <label class="sr-sched-search">
+                      <span class="sr-emp-search-ico" aria-hidden="true">⌕</span>
+                      <input type="search" id="sr-sched-search" placeholder="Search by name, ID, or plant…" autocomplete="off" aria-label="Search schedule" />
+                    </label>
+                    <button type="button" class="sr-sched-btn" id="sr-sched-clear">Clear Filters</button>
                   </div>
-                  <div id="sr-detail-body"></div>
-                </div>
+
+                  <div class="sr-sched-kpis xl-kpi" id="sr-kpis" aria-live="polite"></div>
+                  <div class="sr-sched-kpis xl-kpi" id="sr-day-kpis" hidden aria-live="polite"></div>
+
+                  <article class="sr-sched-table-card">
+                    <div class="sr-sched-table-head">
+                      <div>
+                        <h4 class="sr-sched-table-title">Employee Schedule &amp; Performance</h4>
+                        <p class="sr-sched-table-sub" id="sr-month-title">Month to Date</p>
+                        <p class="sr-sched-table-sub" id="sr-day-title" hidden>Day to Date</p>
+                      </div>
+                      <div class="sr-sched-legend" aria-label="Status legend">
+                        <span class="sr-leg is-on"><i></i>On Track</span>
+                        <span class="sr-leg is-below"><i></i>Below Target</span>
+                        <span class="sr-leg is-vac"><i></i>Vacation</span>
+                        <span class="sr-leg is-na"><i></i>Not Assigned</span>
+                      </div>
+                      <div class="sr-sched-count" id="sr-sched-count">0 Employees</div>
+                    </div>
+                    <div class="xl-table-wrap sr-sched-wrap" id="sr-table-wrap"></div>
+                    <div class="xl-table-wrap sr-sched-wrap" id="sr-day-table-wrap" hidden></div>
+                    <div class="sr-sched-pager">
+                      <p class="foot" id="sr-table-foot"></p>
+                      <p class="foot" id="sr-day-table-foot" hidden></p>
+                      <div class="sr-sched-pager-controls">
+                        <label>
+                          Rows per page
+                          <select id="sr-sched-pagesize" aria-label="Rows per page">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                          </select>
+                        </label>
+                        <div class="sr-sched-pages" id="sr-sched-pages"></div>
+                      </div>
+                    </div>
+                  </article>
+
+                  <footer class="sr-sched-foot">
+                    <div class="sr-sched-foot-copy">
+                      <strong>Performance Summary</strong>
+                      <span>Charts and team KPIs stay above · open Wide on any card</span>
+                    </div>
+                    <button type="button" class="sr-sched-btn sr-sched-btn--charts" id="sr-sched-charts">View Charts</button>
+                  </footer>
+
+                  <div class="card pbi-detail" id="sr-detail-card" style="margin-top:12px">
+                    <div class="pbi-viz-head">
+                      <div>
+                        <h2 id="sr-detail-title">Employee details</h2>
+                        <p class="pbi-slicer-hint" id="sr-detail-sub">Select a name to see only their Excel rows</p>
+                      </div>
+                    </div>
+                    <div id="sr-detail-body"></div>
+                  </div>
+                </section>
               </div>
             </details>
 
@@ -5988,7 +6083,7 @@
     saveGlobalDateFilter();
   }
 
-  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "" };
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", plant: "", status: "", salesman: "", page: 1, pageSize: 10, schedulePeriod: "month" };
 
   function globalDatePresetLabel(preset) {
     if (preset === "today") return "Today";
@@ -6115,9 +6210,9 @@
   }
 
   const SR_COLS = [
-    { key: "No", label: "No" },
+    { key: "No", label: "#" },
     { key: "Plant", label: "Plant" },
-    { key: "Salesman", label: "Salesman" },
+    { key: "Salesman", label: "Salesman ID" },
     { key: "Sales Employee", label: "Sales Employee" },
     { key: "Proforma", label: "Proforma" },
     { key: "Delivery", label: "Delivery" },
@@ -6131,6 +6226,28 @@
     { key: "Can. Target 30%", label: "Can. Target 30%" },
     { key: "Gap +/-", label: "Gap +/-" },
   ];
+
+  function scheduleRowStatus(r) {
+    const full = r._full || r;
+    if (full._vacation || r._vacation || String(r.Target || "").toUpperCase() === "VACATION") return "vacation";
+    const name = String(r["Sales Employee"] || "").trim();
+    if (/^not\s*assigned$/i.test(name)) return "unassigned";
+    const achRaw = r["Ach%"];
+    if (achRaw === "#DIV/0!") return "below";
+    const ach = parseFloat(String(achRaw)) || 0;
+    return ach >= 100 ? "ontrack" : "below";
+  }
+
+  function scheduleStatusBadge(status) {
+    const map = {
+      ontrack: { lab: "On Track", cls: "is-on" },
+      below: { lab: "Below Target", cls: "is-below" },
+      vacation: { lab: "Vacation", cls: "is-vac" },
+      unassigned: { lab: "Not Assigned", cls: "is-na" },
+    };
+    const m = map[status] || map.below;
+    return `<span class="sr-status ${m.cls}"><i></i>${m.lab}</span>`;
+  }
 
   function filterSrRows(baseRows) {
     let rows = baseRows.slice();
@@ -6154,7 +6271,16 @@
           || (r._key && String(r._key).includes(qKey));
       });
     }
-    if (srView.filter) {
+    if (srView.plant) {
+      rows = rows.filter((r) => String(r.Plant || "") === srView.plant);
+    }
+    if (srView.salesman) {
+      rows = rows.filter((r) => String(r._key || "") === srView.salesman || String(r.Salesman || "") === srView.salesman);
+    }
+    if (srView.status) {
+      rows = rows.filter((r) => scheduleRowStatus(r) === srView.status);
+    }
+    if (srView.filter === "above" || srView.filter === "below") {
       rows = rows.filter((r) => {
         const ach = r["Ach%"];
         if (ach === "#DIV/0!") return srView.filter === "below";
@@ -6187,68 +6313,167 @@
       _key: r._key,
       _vins: r._vins,
       _full: r,
+      _vacation: !!r._vacation,
       _period: period,
     };
   }
 
   function renderXlTable(rows, totalsObj, tableSel, footSel, footText) {
     const YELLOW = new Set(["Proforma", "Delivery"]);
+    const PINK = new Set(["Diff", "Gap +/-"]);
     const DIV0_KEYS = new Set(["Ach%", "Ach% (Sales)", "Cancellation %", "Gap +/-"]);
     const tableEl = $(tableSel);
     const footEl = $(footSel);
     if (!tableEl) return;
 
+    const pageSize = Math.max(1, Number(srView.pageSize) || 10);
+    const total = rows.length;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize) || 1);
+    if (srView.page > maxPage) srView.page = maxPage;
+    if (srView.page < 1) srView.page = 1;
+    const start = (srView.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    const countEl = $("#sr-sched-count");
+    if (countEl) countEl.textContent = formatNumber(total) + " Employees";
+
     if (!rows.length) {
-      tableEl.innerHTML = `<p class="foot" style="padding:16px">No rows to show.</p>`;
+      tableEl.innerHTML = '<p class="foot" style="padding:16px">No rows to show.</p>';
       if (footEl) footEl.textContent = "0 rows";
+      renderSchedulePager(0, 0, 0);
       return;
     }
 
+    const cols = SR_COLS.concat([
+      { key: "_status", label: "Status" },
+      { key: "_actions", label: "Actions" },
+    ]);
+
     const cellHtml = (r, col, idx) => {
       const h = col.key;
-      let raw = h === "No" ? (idx + 1) : r[h];
+      if (h === "_status") {
+        return '<td class="tl">' + scheduleStatusBadge(scheduleRowStatus(r)) + "</td>";
+      }
+      if (h === "_actions") {
+        return '<td class="num"><button type="button" class="sr-row-more" data-emp-key="' + escapeHtml(r._key || "") + '" aria-label="Open employee">···</button></td>';
+      }
+      let raw = h === "No" ? (start + idx + 1) : r[h];
       let val = escapeHtml(raw == null || raw === "" ? (h === "Notes" ? "" : "—") : raw);
       let cls = YELLOW.has(h) ? "col-yellow num" : (h === "Plant" || h === "Sales Employee" || h === "Notes" ? "tl" : "num");
+      if (PINK.has(h)) cls += " col-pink";
       if (col.divide) cls += " col-divide";
       if (h === "Notes") cls += " note";
-      if (h === "Target" && r._vacation) {
-        val = `<span class="xl-vacation">VACATION</span>`;
+      if (h === "Target" && (r._vacation || (r._full && r._full._vacation))) {
+        val = '<span class="xl-vacation">VACATION</span>';
         cls = "tl note";
       }
       if (DIV0_KEYS.has(h) && String(raw) === "#DIV/0!") {
-        val = `<span class="xl-div0">#DIV/0!</span>`;
-        cls = (col.divide ? "col-divide " : "") + "num";
+        val = '<span class="xl-div0">#DIV/0!</span>';
+        cls = (col.divide ? "col-divide " : "") + "num" + (PINK.has(h) ? " col-pink" : "");
       }
       if (h === "Cancellation %") {
         const pct = parsePct(raw);
         if (pct != null && pct > 30) cls += " is-cancel-over";
       }
       if (h === "Sales Employee") {
-        val = `<span class="emp-name">${escapeHtml(r["Sales Employee"])}</span><span class="emp-hint">Click for VINs</span>`;
+        val = '<span class="emp-name">' + escapeHtml(r["Sales Employee"]) + '</span><span class="emp-hint">Click for VINs</span>';
         cls = "tl";
       }
-      if (h === "No") cls = "num";
-      return `<td class="${cls}">${val}</td>`;
+      if (h === "No" || h === "Salesman") cls = "num";
+      return '<td class="' + cls + '">' + val + "</td>";
     };
 
-    const body = rows.map((r, idx) =>
-      `<tr class="emp-row" data-emp-key="${escapeHtml(r._key || "")}">${SR_COLS.map((c) => cellHtml(r, c, idx)).join("")}</tr>`
+    const body = pageRows.map((r, idx) =>
+      '<tr class="emp-row status-' + scheduleRowStatus(r) + '" data-emp-key="' + escapeHtml(r._key || "") + '">' + cols.map((c) => cellHtml(r, c, idx)).join("") + "</tr>"
     ).join("");
 
-    const totalsRow = `<tr>${SR_COLS.map((c) => {
+    const totalsRow = '<tr class="sr-total-row">' + cols.map((c) => {
+      if (c.key === "_status" || c.key === "_actions") return "<td></td>";
       let cls = YELLOW.has(c.key) ? "col-yellow num" : (c.key === "Plant" || c.key === "Notes" ? "tl" : "num");
+      if (PINK.has(c.key)) cls += " col-pink";
       if (c.divide) cls += " col-divide";
       if (c.key === "Cancellation %") {
         const pct = parsePct(totalsObj[c.key]);
         if (pct != null && pct > 30) cls += " is-cancel-over";
       }
-      return `<td class="${cls}">${escapeHtml(String(totalsObj[c.key] ?? ""))}</td>`;
-    }).join("")}</tr>`;
+      return '<td class="' + cls + '">' + escapeHtml(String(totalsObj[c.key] ?? "")) + "</td>";
+    }).join("") + "</tr>";
 
-    tableEl.innerHTML = `<table class="xl-table"><thead><tr>${SR_COLS.map((c) =>
-      `<th class="${c.divide ? "col-divide" : ""}">${escapeHtml(c.label)}</th>`
-    ).join("")}</tr></thead><tbody>${body}</tbody><tfoot>${totalsRow}</tfoot></table>`;
-    if (footEl) footEl.textContent = footText;
+    tableEl.innerHTML = '<table class="xl-table sr-sched-table"><thead><tr>' + cols.map((c) =>
+      '<th class="' + (c.divide ? "col-divide" : "") + (YELLOW.has(c.key) ? " col-yellow" : "") + (PINK.has(c.key) ? " col-pink" : "") + '">' + escapeHtml(c.label) + "</th>"
+    ).join("") + "</tr></thead><tbody>" + body + "</tbody><tfoot>" + totalsRow + "</tfoot></table>";
+    const from = total ? start + 1 : 0;
+    const to = Math.min(start + pageSize, total);
+    if (footEl) footEl.textContent = footText || ("Showing " + from + "–" + to + " of " + formatNumber(total) + " employees");
+    renderSchedulePager(from, to, total);
+  }
+
+  function renderSchedulePager(from, to, total) {
+    const el = $("#sr-sched-pages");
+    if (!el) return;
+    const pageSize = Math.max(1, Number(srView.pageSize) || 10);
+    const maxPage = Math.max(1, Math.ceil(total / pageSize) || 1);
+    const page = Math.min(Math.max(1, srView.page || 1), maxPage);
+    srView.page = page;
+    let html = "";
+    html += '<button type="button" class="sr-page-btn" data-sr-page="' + (page - 1) + '"' + (page <= 1 ? " disabled" : "") + ' aria-label="Previous page">‹</button>';
+    const limit = Math.min(maxPage, 7);
+    for (let p = 1; p <= limit; p++) {
+      html += '<button type="button" class="sr-page-btn' + (p === page ? " is-active" : "") + '" data-sr-page="' + p + '">' + p + "</button>";
+    }
+    if (maxPage > 7) {
+      html += '<span class="sr-page-ellipsis">…</span>';
+      html += '<button type="button" class="sr-page-btn' + (page === maxPage ? " is-active" : "") + '" data-sr-page="' + maxPage + '">' + maxPage + "</button>";
+    }
+    html += '<button type="button" class="sr-page-btn" data-sr-page="' + (page + 1) + '"' + (page >= maxPage ? " disabled" : "") + ' aria-label="Next page">›</button>';
+    el.innerHTML = html;
+  }
+
+  function syncSchedulePeriodUi() {
+    const isDay = srView.schedulePeriod === "day";
+    const dayKpi = $("#sr-day-kpis");
+    const monthKpi = $("#sr-kpis");
+    const dayWrap = $("#sr-day-table-wrap");
+    const monthWrap = $("#sr-table-wrap");
+    const dayFoot = $("#sr-day-table-foot");
+    const monthFoot = $("#sr-table-foot");
+    const dayTitle = $("#sr-day-title");
+    const monthTitle = $("#sr-month-title");
+    if (dayKpi) dayKpi.hidden = !isDay;
+    if (monthKpi) monthKpi.hidden = isDay;
+    if (dayWrap) dayWrap.hidden = !isDay;
+    if (monthWrap) monthWrap.hidden = isDay;
+    if (dayFoot) dayFoot.hidden = !isDay;
+    if (monthFoot) monthFoot.hidden = isDay;
+    if (dayTitle) dayTitle.hidden = !isDay;
+    if (monthTitle) monthTitle.hidden = isDay;
+    const periodSel = $("#sr-sched-period");
+    if (periodSel) periodSel.value = isDay ? "day" : "month";
+  }
+
+  function fillScheduleFilterOptions(sr) {
+    const plantSel = $("#sr-sched-plant");
+    const salesSel = $("#sr-sched-salesman");
+    const rows = (sr && sr.rows) || [];
+    if (plantSel) {
+      const plants = [...new Set(rows.map((r) => String(r.Plant || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      const cur = srView.plant || "";
+      plantSel.innerHTML = '<option value="">All plants</option>' + plants.map((p) =>
+        '<option value="' + escapeHtml(p) + '"' + (p === cur ? " selected" : "") + ">" + escapeHtml(p) + "</option>"
+      ).join("");
+    }
+    if (salesSel) {
+      const cur = srView.salesman || "";
+      salesSel.innerHTML = '<option value="">All salesmen</option>' + rows.map((r) => {
+        const key = r._key || "";
+        const label = shortEmpLabel(r["Sales Employee"] || "—") + (r.Salesman ? (" · " + r.Salesman) : "");
+        return '<option value="' + escapeHtml(key) + '"' + (key === cur ? " selected" : "") + ">" + escapeHtml(label) + "</option>";
+      }).join("");
+    }
+    const statusSel = $("#sr-sched-status");
+    if (statusSel) statusSel.value = srView.status || "";
+    const sizeSel = $("#sr-sched-pagesize");
+    if (sizeSel) sizeSel.value = String(srView.pageSize || 10);
   }
 
   function buildTotalsObj(sr, period) {
@@ -6306,7 +6531,6 @@
     if (!sr.rows.length) { el.style.display = "none"; return; }
     el.style.display = "";
     const t = sr.totals;
-    const live = sr.live || todayKeys();
     const isDay = period === "day";
     const target = isDay ? (t.dayTarget || 0) : (t.target || 0);
     const delivery = isDay ? (t.deliveryDay || 0) : (t.deliveryMonth || 0);
@@ -6315,47 +6539,28 @@
     const diff = isDay ? (t.diffDay || 0) : (t.diff || 0);
     const cancelPct = Math.round(((isDay ? t.cancelPctDay : t.cancelPct) || 0) * 100);
     const cancelOver = cancelPct > 30;
-    const gapLabel = isDay
-      ? "Today Gap"
-      : `${(live.now || new Date()).toLocaleString("en-US", { month: "long" })} Gap`;
+    const gapLabel = isDay ? "Today Gap" : "Month Gap";
     const gapVal = target - delivery;
     const remainTotal = Math.max(0, target - delVsnd);
     const remainConfirm = Math.max(0, target - delivery);
     const allocGap = Math.abs(proforma - delivery);
 
-    el.innerHTML = `
-      <div class="xl-kpi-cell blue">
-        <span class="lab">Target</span>
-        <span class="val">${formatNumber(target)}</span>
-      </div>
-      <div class="xl-kpi-cell blue">
-        <span class="lab">${escapeHtml(gapLabel)}</span>
-        <span class="val">${formatNumber(gapVal)}</span>
-      </div>
-      <div class="xl-kpi-cell green">
-        <span class="lab">Del+VSND</span>
-        <span class="val">${formatNumber(delVsnd)}</span>
-      </div>
-      <div class="xl-kpi-cell split">
-        <span class="lab">Remaining of allocation</span>
-        <div class="subrow">
-          <div class="sub"><div class="s-lab">Total</div><div class="s-val">${formatNumber(remainTotal)}</div></div>
-          <div class="sub"><div class="s-lab">Confirm</div><div class="s-val">${formatNumber(remainConfirm)}</div></div>
-        </div>
-      </div>
-      <div class="xl-kpi-cell blue">
-        <span class="lab">Dif of sales</span>
-        <span class="val">${formatNumber(diff)}</span>
-      </div>
-      <div class="xl-kpi-cell peach">
-        <span class="lab">Gap between allocation &amp; actual sales</span>
-        <span class="val">${formatNumber(allocGap)}</span>
-      </div>
-      <div class="xl-kpi-cell cancel${cancelOver ? " is-over" : " is-ok"}">
-        <span class="lab">Cancelled Bos % · &lt;30%</span>
-        <span class="val">${cancelPct}%</span>
-      </div>
-    `;
+    const cards = [
+      { tone: "red", ico: "◎", lab: "Total Target", val: formatNumber(target), sub: isDay ? "Daily sales target" : "Monthly sales target" },
+      { tone: "blue", ico: "△", lab: gapLabel, val: formatNumber(gapVal), sub: "Gap to target" },
+      { tone: "green", ico: "▣", lab: "Del + VSND", val: formatNumber(delVsnd), sub: isDay ? "Deliveries + VSND today" : "Deliveries + VSND MTD" },
+      { tone: "rose", ico: "⇄", lab: "Total / Confirm", val: formatNumber(remainTotal) + " / " + formatNumber(remainConfirm), sub: "Remaining of allocation" },
+      { tone: "violet", ico: "∑", lab: "Difference of Sales", val: formatNumber(diff), sub: "Target vs actual" },
+      { tone: "orange", ico: "!", lab: "Gap (Allocation vs Actual)", val: formatNumber(allocGap), sub: "Difference" },
+      { tone: cancelOver ? "warn" : "teal", ico: "%", lab: "Cancelled BOs (<30%)", val: cancelPct + "%", sub: "Cancellation rate", over: cancelOver },
+    ];
+    el.innerHTML = cards.map((c) =>
+      '<div class="sr-sched-kpi tone-' + c.tone + (c.over ? " is-over" : "") + '">' +
+        '<div class="sr-sched-kpi-top"><span class="sr-sched-kpi-ico" aria-hidden="true">' + c.ico + '</span><span class="lab">' + escapeHtml(c.lab) + "</span></div>" +
+        '<div class="val">' + c.val + "</div>" +
+        '<div class="sub">' + escapeHtml(c.sub) + "</div>" +
+      "</div>"
+    ).join("");
   }
 
   function renderSalesReportTable(sr) {
@@ -6461,6 +6666,13 @@
       }
     }
 
+    fillScheduleFilterOptions(sr);
+    syncSchedulePeriodUi();
+    const dateLbl = $("#sr-sched-date-lbl");
+    if (dateLbl) {
+      const d = (sr.live && sr.live.now) ? sr.live.now : new Date();
+      dateLbl.textContent = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    }
     const dayRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "day")));
     const monthRows = filterSrRows(sr.rows.map((r) => mapPeriodRow(r, "month")));
 
@@ -13069,7 +13281,13 @@
   const srFilterEl = $("#sr-filter");
   if (srFilterEl) {
     srFilterEl.addEventListener("change", (e) => {
-      srView.filter = e.target.value;
+      const v = e.target.value || "";
+      if (v === "above" || v === "below") srView.filter = v;
+      else {
+        srView.filter = "";
+        srView.plant = v;
+      }
+      srView.page = 1;
       if (window._data && hasSalesReportInputs()) refreshSalesSelection();
     });
   }
@@ -13550,6 +13768,101 @@
       renderTable(window._data);
     });
   }
+
+  function bindScheduleUi() {
+    const period = $("#sr-sched-period");
+    if (period) period.addEventListener("change", () => {
+      srView.schedulePeriod = period.value === "day" ? "day" : "month";
+      srView.page = 1;
+      syncSchedulePeriodUi();
+      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+    });
+    const plant = $("#sr-sched-plant");
+    if (plant) plant.addEventListener("change", () => {
+      srView.plant = plant.value || "";
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const salesman = $("#sr-sched-salesman");
+    if (salesman) salesman.addEventListener("change", () => {
+      srView.salesman = salesman.value || "";
+      srView.page = 1;
+      if (salesman.value) selectEmployee(salesman.value);
+      else if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const status = $("#sr-sched-status");
+    if (status) status.addEventListener("change", () => {
+      srView.status = status.value || "";
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const search = $("#sr-sched-search");
+    if (search) search.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      const hidden = $("#sr-search");
+      if (hidden) hidden.value = e.target.value;
+      const nameSearch = $("#sr-name-search");
+      if (nameSearch) nameSearch.value = e.target.value;
+      srView.page = 1;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+    const clear = $("#sr-sched-clear");
+    if (clear) clear.addEventListener("click", () => {
+      srView.plant = "";
+      srView.status = "";
+      srView.salesman = "";
+      srView.search = "";
+      srView.filter = "";
+      srView.page = 1;
+      ["#sr-sched-plant", "#sr-sched-status", "#sr-sched-salesman", "#sr-sched-search", "#sr-search", "#sr-name-search", "#sr-filter"].forEach((sel) => {
+        const el = $(sel);
+        if (el && (el.tagName === "SELECT" || el.tagName === "INPUT")) el.value = "";
+      });
+      clearEmployeeFilter();
+    });
+    const pagesize = $("#sr-sched-pagesize");
+    if (pagesize) pagesize.addEventListener("change", () => {
+      srView.pageSize = Number(pagesize.value) || 10;
+      srView.page = 1;
+      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+    });
+    const pages = $("#sr-sched-pages");
+    if (pages) pages.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-sr-page]");
+      if (!btn || btn.disabled) return;
+      const p = Number(btn.getAttribute("data-sr-page"));
+      if (!Number.isFinite(p) || p < 1) return;
+      srView.page = p;
+      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+    });
+    const today = $("#sr-sched-today");
+    if (today) today.addEventListener("click", () => {
+      const sel = $("#sr-date-preset");
+      if (sel) sel.value = "today";
+      onDatePresetChange("today");
+    });
+    const exp = $("#sr-sched-export");
+    if (exp) exp.addEventListener("click", () => { const b = $("#sr-csv-btn"); if (b) b.click(); });
+    const refresh = $("#sr-sched-refresh");
+    if (refresh) refresh.addEventListener("click", () => { const b = $("#run-btn"); if (b) b.click(); });
+    const prev = $("#sr-sched-prev");
+    if (prev) prev.addEventListener("click", () => { const b = $("#sr-day-prev"); if (b) b.click(); });
+    const next = $("#sr-sched-next");
+    if (next) next.addEventListener("click", () => { const b = $("#sr-day-next"); if (b) b.click(); });
+    const charts = $("#sr-sched-charts");
+    if (charts) charts.addEventListener("click", () => {
+      const card = document.querySelector(".sr-mock-perf");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const schedule = $("#sr-schedule");
+    if (schedule) schedule.addEventListener("click", (e) => {
+      const more = e.target.closest(".sr-row-more");
+      if (!more) return;
+      const key = more.getAttribute("data-emp-key");
+      if (key) selectEmployee(key);
+    });
+  }
+  bindScheduleUi();
 
   renderSlots();
   switchNav("dashboard");
