@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr25" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr26" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -481,27 +481,20 @@
                 <span class="sr-fold-chev" aria-hidden="true">▾</span>
               </summary>
               <div class="sr-fold-body">
-                <div class="sr-table-scroll">
-                  <table class="data-table sr-table" id="sr-table">
-                    <thead>
-                      <tr>
-                        <th>Employee</th>
-                        <th>Showroom</th>
-                        <th class="num">Delivered</th>
-                        <th class="num">Proforma</th>
-                        <th class="num">Cancelled</th>
-                        <th class="num">Total</th>
-                        <th class="num">DEL %</th>
-                        <th class="num">Cancel %</th>
-                        <th class="num">Prof+Del</th>
-                        <th class="num">Target</th>
-                        <th class="num">Ach %</th>
-                      </tr>
-                    </thead>
-                    <tbody id="sr-tbody"></tbody>
-                  </table>
+                <p class="sr-live-hint foot" id="sr-live-hint" style="margin:8px 0"></p>
+                <div class="banner" id="sr-diag-banner" style="display:none"></div>
+                <div class="sr-xl-block">
+                  <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
+                  <div class="xl-kpi" id="sr-day-kpis"></div>
+                  <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
+                  <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
                 </div>
-                <p class="sr-empty" id="sr-empty" hidden>No rows match the current filters.</p>
+                <div class="sr-xl-block" style="margin-top:12px">
+                  <div class="xl-mtd" id="sr-month-title">Month to Date</div>
+                  <div class="xl-kpi" id="sr-kpis"></div>
+                  <div class="xl-table-wrap" id="sr-table-wrap"></div>
+                  <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
+                </div>
                 <div class="card pbi-detail" id="sr-detail-card" style="margin-top:12px">
                   <div class="pbi-viz-head">
                     <div>
@@ -13066,18 +13059,27 @@
   }
   bindIccControls();
 
-  $("#sr-search").addEventListener("input", (e) => {
-    srView.search = e.target.value;
-    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
-  });
-  $("#sr-filter").addEventListener("change", (e) => {
-    srView.filter = e.target.value;
-    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
-  });
-  $("#sr-chart-mode").addEventListener("change", (e) => {
-    srView.chartMode = e.target.value || "active";
-    if (window._data && hasSalesReportInputs()) refreshSalesSelection();
-  });
+  const srSearchEl = $("#sr-search");
+  if (srSearchEl) {
+    srSearchEl.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  const srFilterEl = $("#sr-filter");
+  if (srFilterEl) {
+    srFilterEl.addEventListener("change", (e) => {
+      srView.filter = e.target.value;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  const srChartModeEl = $("#sr-chart-mode");
+  if (srChartModeEl) {
+    srChartModeEl.addEventListener("change", (e) => {
+      srView.chartMode = e.target.value || "active";
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
   function onDatePresetChange(preset) {
     globalDateFilter.preset = preset;
     if (preset !== "custom") {
@@ -13491,47 +13493,63 @@
     if (!tr) return;
     selectEmployee(tr.getAttribute("data-emp-key"));
   }
-  $("#sr-table-wrap").addEventListener("click", onEmpTableClick);
-  $("#sr-day-table-wrap").addEventListener("click", onEmpTableClick);
-  $("#emp-drawer-close").addEventListener("click", closeEmployeeDrawer);
-  $("#emp-backdrop").addEventListener("click", closeEmployeeDrawer);
+  const srTableWrap = $("#sr-table-wrap");
+  if (srTableWrap) srTableWrap.addEventListener("click", onEmpTableClick);
+  const srDayTableWrap = $("#sr-day-table-wrap");
+  if (srDayTableWrap) srDayTableWrap.addEventListener("click", onEmpTableClick);
+  const empDrawerClose = $("#emp-drawer-close");
+  if (empDrawerClose) empDrawerClose.addEventListener("click", closeEmployeeDrawer);
+  const empBackdrop = $("#emp-backdrop");
+  if (empBackdrop) empBackdrop.addEventListener("click", closeEmployeeDrawer);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (!$("#pbi-wide-backdrop").hidden) {
-        closeWideChart();
-        return;
-      }
-      if (srView.selectedKey) clearEmployeeFilter();
-      closeEmployeeDrawer();
+    if (e.key !== "Escape") return;
+    const wide = $("#pbi-wide-backdrop");
+    if (wide && !wide.hidden) {
+      closeWideChart();
+      return;
     }
+    if (srView.selectedKey) clearEmployeeFilter();
+    closeEmployeeDrawer();
   });
 
-  $("#search").addEventListener("input", (e) => {
-    view.search = e.target.value;
-    if (window._data) renderTable(window._data);
-  });
-  $("#filter-extra").addEventListener("change", (e) => {
-    view.extra = e.target.value;
-    if (window._data) renderTable(window._data);
-  });
-  $("#tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tab]");
-    if (!btn) return;
-    view.tab = btn.dataset.tab;
-    view.extra = "";
-    view.search = "";
-    $("#search").value = "";
-    renderTabs();
-    renderTable(window._data);
-  });
-  $("#kpis").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tab]");
-    if (!btn || !window._data) return;
-    view.tab = btn.dataset.tab;
-    view.extra = "";
-    renderTabs();
-    renderTable(window._data);
-  });
+  const searchEl = $("#search");
+  if (searchEl) {
+    searchEl.addEventListener("input", (e) => {
+      view.search = e.target.value;
+      if (window._data) renderTable(window._data);
+    });
+  }
+  const filterExtra = $("#filter-extra");
+  if (filterExtra) {
+    filterExtra.addEventListener("change", (e) => {
+      view.extra = e.target.value;
+      if (window._data) renderTable(window._data);
+    });
+  }
+  const tabsEl = $("#tabs");
+  if (tabsEl) {
+    tabsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn) return;
+      view.tab = btn.dataset.tab;
+      view.extra = "";
+      view.search = "";
+      if (searchEl) searchEl.value = "";
+      renderTabs();
+      renderTable(window._data);
+    });
+  }
+  const kpisEl = $("#kpis");
+  if (kpisEl) {
+    kpisEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tab]");
+      if (!btn || !window._data) return;
+      view.tab = btn.dataset.tab;
+      view.extra = "";
+      renderTabs();
+      renderTable(window._data);
+    });
+  }
 
   renderSlots();
   switchNav("dashboard");
