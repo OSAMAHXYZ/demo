@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr22" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr24" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -312,7 +312,7 @@
         <header class="sr-hero">
           <div class="sr-hero-copy">
             <h1 class="sr-hero-title">Sales Report</h1>
-            <p class="sr-hero-sub" id="sr-live-hint">Delivery · Proforma · Target · click a name to focus one employee</p>
+            <p class="sr-hero-sub" id="sr-live-hint">Tap a pulse card for detail · click a name to focus one employee</p>
           </div>
           <div class="sr-hero-actions">
             <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name</button>
@@ -359,13 +359,16 @@
 
         <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
 
-        <section class="sr-pace-board card" id="sr-pace-board" aria-label="Month pace summary">
-          <div class="sr-pace-board-head">
-            <h2>Month pace</h2>
-            <p class="hint" id="sr-pace-board-hint">Working-day plan vs remaining Proforma &amp; Delivery</p>
-          </div>
+        <details class="sr-pace-board card" id="sr-pace-board" aria-label="Month pace summary">
+          <summary class="sr-pace-board-head">
+            <div>
+              <h2>Month pace</h2>
+              <p class="hint" id="sr-pace-board-hint">Working-day plan vs remaining Proforma &amp; Delivery</p>
+            </div>
+            <span class="sr-collapse-hint" aria-hidden="true"></span>
+          </summary>
           <div class="sr-pace-grid" id="sr-pace-grid"></div>
-        </section>
+        </details>
 
         <div class="pbi-page sr-page" id="sr-pbi-page">
           <aside class="pbi-slicer card sr-slicer">
@@ -385,108 +388,36 @@
 
             <section class="sr-section">
               <div class="sr-section-head">
-                <h3>Performance</h3>
-                <p>Team Del % and Prof+Del % vs target · Wide for per-advisor detail</p>
+                <h3>Pulse</h3>
+                <p>Tap a card · Wide opens full detail</p>
               </div>
-              <div class="pbi-visuals sr-grid sr-grid-hero" id="sr-charts-hero">
-                <article class="card pbi-viz sr-viz-perf is-summary-only" data-chart-id="chart-sr-perf">
-                <div class="pbi-viz-head">
-                    <h2>Del % · Prof+Del % · Target</h2>
+              <div class="pbi-visuals sr-pulse-grid" id="sr-charts-hero">
+                <article class="card pbi-viz sr-viz-perf is-summary-only sr-tap" data-chart-id="chart-sr-perf" tabindex="0" role="button" aria-label="Open performance chart">
+                  <div class="pbi-viz-head">
+                    <h2>Performance</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
-                </div>
+                  </div>
                   <div class="sr-perf-day" id="sr-perf-day" aria-label="Team achievement"></div>
-                  <p class="sr-summary-hint">Wide opens per-advisor chart and numbers</p>
-                  <div class="chart-scroll sr-detail-only">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
-                </div>
-              </article>
-                </div>
-            </section>
+                </article>
 
-            <section class="sr-section">
-              <div class="sr-section-head">
-                <h3>Month health</h3>
-                <p>Team cancel rate vs 30% · Wide for per-advisor detail</p>
-                </div>
-              <div class="pbi-visuals sr-grid sr-grid-health">
-                <article class="card pbi-viz" data-chart-id="chart-sr-overview" hidden>
-                <div class="pbi-viz-head">
-                    <h2>Month overview</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-overview" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-plant" hidden>
-                <div class="pbi-viz-head">
-                  <h2>By Plant</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-plant" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div>
-                </div>
-              </article>
-                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel is-summary-only" data-chart-id="chart-cancel">
-                <div class="pbi-viz-head">
-                    <div>
-                  <h2>Cancellation %</h2>
-                      <p class="pbi-slicer-hint">Team control vs 30% ceiling · Wide for per-advisor chart</p>
-                    </div>
+                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel is-summary-only sr-tap" data-chart-id="chart-cancel" tabindex="0" role="button" aria-label="Open cancellation chart">
+                  <div class="pbi-viz-head">
+                    <h2>Cancellation</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open full cancel chart">Wide</button>
-                </div>
-                <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
-                  <p class="sr-summary-hint">Wide opens Cancel % · Gap · Cancelled BOs by advisor</p>
-                  <div class="chart-scroll sr-detail-only">
-                  <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
-                </div>
-              </article>
-              </div>
-            </section>
+                  </div>
+                  <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
+                </article>
 
-            <section class="sr-section">
-              <div class="sr-section-head">
-                <h3>Schedule</h3>
-                <p>Prof+Del volume &amp; %, accessories, and pace</p>
-              </div>
-              <div class="pbi-visuals sr-grid" id="sr-charts">
-                <article class="card pbi-viz" data-chart-id="chart-sr-delpct" hidden>
-                <div class="pbi-viz-head">
-                    <h2>Del % (Delivery ÷ Target)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-delpct" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div>
-                </div>
-              </article>
-                <article class="card pbi-viz sr-viz-profdel" data-chart-id="chart-sr-profdel">
-                <div class="pbi-viz-head">
-                    <h2>Prof + Del · volume &amp; %</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
-                </div>
-              </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct" hidden>
-                <div class="pbi-viz-head">
-                    <h2>Prof+Del %</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div>
-                </div>
-              </article>
-                <article class="card pbi-viz sr-viz-accessories is-summary-only" data-chart-id="chart-sr-accessories">
-                <div class="pbi-viz-head">
-                  <h2>Accessories · Ach %</h2>
+                <article class="card pbi-viz sr-viz-accessories is-summary-only sr-tap" data-chart-id="chart-sr-accessories" tabindex="0" role="button" aria-label="Open accessories chart">
+                  <div class="pbi-viz-head">
+                    <h2>Accessories</h2>
                     <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
-                </div>
+                  </div>
                   <div class="acc-summary-board" id="acc-summary-board" hidden>
                     <div class="acc-summary-pct-hero">
                       <span class="acc-summary-icon" aria-hidden="true">⚙</span>
                       <div class="acc-summary-pct-text">
-                        <span class="k">Accessories Ach %</span>
+                        <span class="k">Ach %</span>
                         <span class="v" id="acc-sum-pct">—</span>
                       </div>
                     </div>
@@ -501,10 +432,9 @@
                       </div>
                     </div>
                   </div>
-                  <p class="sr-summary-hint">Wide opens Ach % chart and remaining schedule</p>
                   <div class="sr-acc-layout sr-detail-only">
                     <div class="chart-scroll sr-acc-chart">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
+                      <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
                     </div>
                     <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
                       <div class="acc-remain-head">
@@ -512,46 +442,64 @@
                       </div>
                       <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
                     </div>
-                </div>
-              </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-dailyach" hidden>
-                  <div class="pbi-viz-head">
-                    <h2>Daily · Ach % today</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-dailyach" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div>
                   </div>
                 </article>
-                <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount" hidden>
+
+                <article class="card pbi-viz sr-viz-profdel is-summary-only sr-tap" data-chart-id="chart-sr-profdel" tabindex="0" role="button" aria-label="Open Prof plus Del chart">
                   <div class="pbi-viz-head">
-                    <h2>Cancelled BOs</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open cancellation wide view">Wide</button>
+                    <h2>Prof + Del</h2>
+                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
                   </div>
-                  <div class="chart-scroll">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div>
+                  <div class="sr-profdel-day" id="sr-profdel-day" aria-label="Prof plus Del summary"></div>
+                  <div class="chart-scroll sr-detail-only">
+                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
                   </div>
                 </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-prev" hidden>
-                <div class="pbi-viz-head">
-                  <h2>Proforma · Prior month vs Today</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-prev" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div>
-                </div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-pace" hidden>
-                <div class="pbi-viz-head">
-                  <h2>Month pace</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-sr-pace" title="Open wide view">Wide</button>
-                </div>
-                <div class="chart-scroll">
-                  <div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div>
-                </div>
-              </article>
-                </div>
+              </div>
             </section>
+
+            <div hidden aria-hidden="true">
+              <article class="card pbi-viz" data-chart-id="chart-sr-overview">
+                <div class="pbi-viz-head"><h2>Month overview</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-plant">
+                <div class="pbi-viz-head"><h2>By Plant</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
+                <div class="pbi-viz-head"><h2>Del %</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
+                <div class="pbi-viz-head"><h2>Prof+Del %</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
+                <div class="pbi-viz-head"><h2>Daily Ach %</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
+                <div class="pbi-viz-head"><h2>Cancelled BOs</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-prev">
+                <div class="pbi-viz-head"><h2>Prior month</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-sr-pace">
+                <div class="pbi-viz-head"><h2>Month pace</h2></div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div></div>
+              </article>
+              <div class="chart-scroll sr-detail-only">
+                <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
+              </div>
+              <div class="chart-scroll sr-detail-only">
+                <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
+              </div>
+            </div>
+
+            <div class="pbi-visuals sr-grid" id="sr-charts" hidden></div>
 
             <section class="sr-section sr-section-stack">
               <details class="card pbi-daily-target sr-daily-target" id="sr-daily-target-card">
@@ -6966,6 +6914,50 @@
     return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
   }
 
+  function renderProfDelSummaryStrip(sr, rows) {
+    const el = $("#sr-profdel-day");
+    if (!el) return;
+    const list = Array.isArray(rows) ? rows : [];
+    let vol = 0;
+    let target = 0;
+    let prof = 0;
+    let del = 0;
+    if (srView.selectedKey && list[0]) {
+      const r = list[0];
+      vol = Number(r["Prof+Del"]) || 0;
+      target = rowTargetNum(r);
+      prof = Number(r["Proforma (Month)"]) || 0;
+      del = Number(r["Delivery (Month)"]) || 0;
+    } else {
+      const t = (sr && sr.totals) || {};
+      target = Number(t.target) || 0;
+      del = Number(t.deliveryMonth) || 0;
+      prof = Number(t.proformaMonth) || 0;
+      vol = prof + del;
+      if (!target && list.length) {
+        target = list.reduce((s, r) => s + rowTargetNum(r), 0);
+        del = list.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
+        prof = list.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
+        vol = prof + del;
+      }
+    }
+    const pct = target > 0 ? ((vol / target) * 100) : null;
+    el.innerHTML = `
+      <div class="sr-perf-metric is-vol">
+        <span class="k">Volume</span>
+        <span class="v">${formatNumber(vol)}</span>
+      </div>
+      <div class="sr-perf-metric is-prof">
+        <span class="k">Prof+Del %</span>
+        <span class="v">${pct == null ? "—" : pct.toFixed(1) + "%"}</span>
+      </div>
+      <div class="sr-perf-metric is-target">
+        <span class="k">Target</span>
+        <span class="v">${formatNumber(target)}</span>
+      </div>
+    `;
+  }
+
   function renderPaceBoard(sr) {
     const grid = $("#sr-pace-grid");
     const board = $("#sr-pace-board");
@@ -7634,6 +7626,7 @@
         delete charts["chart-sr-profdelpct"];
       }
       delete chartSnapshots["chart-sr-profdelpct"];
+      renderProfDelSummaryStrip(sr, rows);
       upsertChart("chart-sr-prev", "bar", ["Prior month Prof", "Today Prof", "Today Del"], [
         Number(r["Proforma (Prev)"]) || 0,
         Number(r["Proforma (Day)"]) || 0,
@@ -7757,6 +7750,7 @@
       delete charts["chart-sr-profdelpct"];
     }
     delete chartSnapshots["chart-sr-profdelpct"];
+    renderProfDelSummaryStrip(sr, rows);
 
     upsertChart("chart-sr-prev", "bar", labels, null, {
       ...clickOpts,
@@ -13099,11 +13093,24 @@
     if (accName && accName.closest("#acc-remain-wrap")) {
       const key = accName.getAttribute("data-emp-key");
       if (key) selectEmployee(key);
+      return;
     }
+    const tap = e.target.closest(".sr-tap[data-chart-id]");
+    if (tap && !e.target.closest("button, a, input, select, summary")) {
+      e.preventDefault();
+      openWideChart(tap.getAttribute("data-chart-id"));
+    }
+  });
+  $("#sr-pbi-page").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const tap = e.target.closest(".sr-tap[data-chart-id]");
+    if (!tap || e.target.closest("button, a, input, select")) return;
+    e.preventDefault();
+    openWideChart(tap.getAttribute("data-chart-id"));
   });
   $("#sr-pbi-page").addEventListener("dblclick", (e) => {
     const viz = e.target.closest("[data-chart-id]");
-    if (!viz) return;
+    if (!viz || viz.classList.contains("sr-tap")) return;
     openWideChart(viz.getAttribute("data-chart-id"));
   });
   const boDashEl = $("#bo-dash");
