@@ -513,7 +513,11 @@
   }
 
   function findHeaderRow(matrix) {
-    const markers = ["vin", "product", "suffix", "sfx", "model", "chassis"];
+    const markers = [
+      "vin", "product", "suffix", "sfx", "model", "chassis",
+      "year", "exterior", "interior", "age", "usage", "status",
+      "location", "search area", "allocated",
+    ];
     let bestIdx = 0;
     let bestHits = -1;
     const limit = Math.min(matrix.length, 40);
