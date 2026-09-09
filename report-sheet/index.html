@@ -3804,7 +3804,8 @@
         "Acc Achieved": m.sold,
         "Acc In Progress": m.inProgress || 0,
         "Acc Ach %": m.achPct == null ? (m.quota ? "0%" : "—") : pct1(m.achPct),
-        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
+        "Acc Ach+IP %": (m.quota || 0) > 0 ? pct1(((m.sold || 0) + (m.inProgress || 0)) / m.quota) : "—",
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
         "Adjusted Target": m.netTarget,
         ...monthBlock,
         Proforma: 0,
@@ -3822,7 +3823,8 @@
         _accSold: m.sold,
         _accInProgress: m.inProgress || 0,
         _accAchPct: m.achPct,
-        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
+        _accCombinedPct: (m.quota || 0) > 0 ? ((m.sold || 0) + (m.inProgress || 0)) / m.quota : null,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
         _accNetTarget: m.netTarget,
       });
     });
@@ -7987,9 +7989,7 @@
         const quota = Number(r._accQuota) || 0;
         const sold = Number(r._accSold) || 0;
         const inProgress = Number(r._accInProgress) || 0;
-        const remaining = r._accRemaining != null
-          ? Math.max(0, Number(r._accRemaining) || 0)
-          : Math.max(0, quota - sold - inProgress);
+        const remaining = Math.max(0, quota - sold - inProgress);
         const combinedPct = quota > 0 ? ((sold + inProgress) / quota) * 100 : 0;
         return {
           row: r,
