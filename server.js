@@ -10,16 +10,27 @@ const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 
 const ROOT = __dirname;
-const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
-const REPORT_SHEET_DIR = path.join(ROOT, 'report-sheet-data');
+/** Persistent volume root (Railway: mount volume + set PERSISTENT_DATA_DIR=/data). Falls back to app root. */
+const PERSISTENT_ROOT = String(
+  process.env.PERSISTENT_DATA_DIR
+  || process.env.RAILWAY_VOLUME_MOUNT_PATH
+  || ''
+).trim() || ROOT;
+const DATA_FILE = path.join(PERSISTENT_ROOT, 'delivery-inventory-data.json');
+const REPORT_SHEET_DIR = path.join(PERSISTENT_ROOT, 'report-sheet-data');
 const REPORT_SHEET_META = path.join(REPORT_SHEET_DIR, 'meta.json');
 const REPORT_SHEET_FILES = path.join(REPORT_SHEET_DIR, 'files');
+/** Append-only RTL historical archive — never cleared by live Push/clear. */
 const RTL_DAILY_DIR = path.join(REPORT_SHEET_DIR, 'rtl-daily');
+const RTL_DAILY_FILES_DIR = path.join(RTL_DAILY_DIR, 'excel');
 const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
+const LEGACY_RTL_DAILY_DIR = path.join(ROOT, 'report-sheet-data', 'rtl-daily');
 const REPORT_SLOT_IDS = Object.freeze([
   'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories'
 ]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Timestamped snapshot id: 2026-09-09T14-30-05-123-ab12 (or legacy YYYY-MM-DD). */
+const RTL_SNAPSHOT_ID_RE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}-\d{2}-\d{2}-\d{1,3}(?:-[a-z0-9]+)?)?$/i;
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
 const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
@@ -316,6 +327,7 @@ function broadcastReportSheetUpdate(at) {
 
 function clearReportSheetFiles() {
   ensureReportSheetDirs();
+  // Live slot files only — NEVER touch RTL_DAILY_DIR historical archive.
   for (const id of REPORT_SLOT_IDS) {
     const fp = reportSheetFilePath(id);
     if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
@@ -326,6 +338,7 @@ function clearReportSheetFiles() {
 function ensureRtlDailyDirs() {
   ensureReportSheetDirs();
   if (!fs.existsSync(RTL_DAILY_DIR)) fs.mkdirSync(RTL_DAILY_DIR, { recursive: true });
+  if (!fs.existsSync(RTL_DAILY_FILES_DIR)) fs.mkdirSync(RTL_DAILY_FILES_DIR, { recursive: true });
 }
 
 function normalizeDateKey(value) {
@@ -334,21 +347,192 @@ function normalizeDateKey(value) {
   return '';
 }
 
-function rtlDailySnapshotPath(dateKey) {
-  const key = normalizeDateKey(dateKey);
+function normalizeRtlSnapshotId(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (RTL_SNAPSHOT_ID_RE.test(s)) return s;
+  return '';
+}
+
+function riyadhDateTimeParts(ms) {
+  const d = new Date(Number(ms) || Date.now());
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value || '00';
+  return {
+    dateKey: `${get('year')}-${get('month')}-${get('day')}`,
+    hh: get('hour'),
+    mm: get('minute'),
+    ss: get('second'),
+    ms: String(d.getMilliseconds()).padStart(3, '0')
+  };
+}
+
+function makeRtlSnapshotId(at) {
+  const t = Number(at) || Date.now();
+  const p = riyadhDateTimeParts(t);
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `${p.dateKey}T${p.hh}-${p.mm}-${p.ss}-${p.ms}-${rand}`;
+}
+
+function rtlDailySnapshotPath(idOrDate) {
+  const id = normalizeRtlSnapshotId(idOrDate) || normalizeDateKey(idOrDate);
+  if (!id) return null;
+  return path.join(RTL_DAILY_DIR, `${id}.json`);
+}
+
+function rtlDailyExcelPath(id) {
+  const key = normalizeRtlSnapshotId(id);
   if (!key) return null;
-  return path.join(RTL_DAILY_DIR, `${key}.json`);
+  return path.join(RTL_DAILY_FILES_DIR, `${key}.xlsx`);
+}
+
+function migrateLegacyRtlDailyDir() {
+  if (!LEGACY_RTL_DAILY_DIR || LEGACY_RTL_DAILY_DIR === RTL_DAILY_DIR) return;
+  if (!fs.existsSync(LEGACY_RTL_DAILY_DIR)) return;
+  ensureRtlDailyDirs();
+  let names = [];
+  try {
+    names = fs.readdirSync(LEGACY_RTL_DAILY_DIR);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name || name.startsWith('.')) continue;
+    const src = path.join(LEGACY_RTL_DAILY_DIR, name);
+    const dest = path.join(RTL_DAILY_DIR, name);
+    try {
+      const st = fs.statSync(src);
+      if (!st.isFile()) continue;
+      if (fs.existsSync(dest)) continue;
+      fs.copyFileSync(src, dest);
+    } catch {
+      /* ignore one file */
+    }
+  }
+}
+
+function readRtlSnapshotFile(fp, fallbackId) {
+  if (!fp || !fs.existsSync(fp)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    if (!parsed || typeof parsed !== 'object') return null;
+    const vehicles = Array.isArray(parsed.vehicles)
+      ? parsed.vehicles.map(sanitizeRtlVehicle).filter(Boolean)
+      : [];
+    const id = normalizeRtlSnapshotId(parsed.id)
+      || normalizeRtlSnapshotId(fallbackId)
+      || normalizeDateKey(parsed.date)
+      || normalizeDateKey(fallbackId)
+      || '';
+    if (!id) return null;
+    const date = normalizeDateKey(parsed.date) || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : '');
+    return {
+      id,
+      date,
+      at: Number(parsed.at) || 0,
+      fileName: String(parsed.fileName || ''),
+      source: String(parsed.source || ''),
+      excelSaved: Boolean(parsed.excelSaved),
+      count: vehicles.length,
+      vehicles
+    };
+  } catch {
+    return null;
+  }
+}
+
+function listRtlSnapshotIdsOnDisk() {
+  ensureRtlDailyDirs();
+  let names = [];
+  try {
+    names = fs.readdirSync(RTL_DAILY_DIR);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((n) => n.endsWith('.json') && n !== 'index.json')
+    .map((n) => n.replace(/\.json$/i, ''))
+    .filter((id) => normalizeRtlSnapshotId(id) || normalizeDateKey(id));
+}
+
+/** Rebuild index from disk so history survives a lost/corrupt index.json. */
+function rebuildRtlDailyIndexFromDisk() {
+  const snaps = [];
+  for (const id of listRtlSnapshotIdsOnDisk()) {
+    const snap = readRtlSnapshotFile(rtlDailySnapshotPath(id), id);
+    if (!snap) continue;
+    snaps.push({
+      id: snap.id,
+      date: snap.date,
+      at: snap.at,
+      count: snap.count,
+      fileName: snap.fileName,
+      source: snap.source,
+      excelSaved: snap.excelSaved
+    });
+  }
+  snaps.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
+  saveRtlDailyIndex({ snapshots: snaps });
+  return { snapshots: snaps };
 }
 
 function loadRtlDailyIndex() {
+  migrateLegacyRtlDailyDir();
   ensureRtlDailyDirs();
   try {
-    if (!fs.existsSync(RTL_DAILY_INDEX)) return { snapshots: [] };
+    if (!fs.existsSync(RTL_DAILY_INDEX)) {
+      return rebuildRtlDailyIndexFromDisk();
+    }
     const parsed = JSON.parse(fs.readFileSync(RTL_DAILY_INDEX, 'utf8'));
-    const snapshots = Array.isArray(parsed?.snapshots) ? parsed.snapshots : [];
+    let snapshots = Array.isArray(parsed?.snapshots) ? parsed.snapshots : [];
+    // Normalize legacy entries (date-only) and merge any on-disk files missing from index.
+    const byId = new Map();
+    for (const s of snapshots) {
+      const id = normalizeRtlSnapshotId(s.id) || normalizeDateKey(s.date) || normalizeDateKey(s.id);
+      if (!id) continue;
+      byId.set(id, {
+        id,
+        date: normalizeDateKey(s.date) || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : ''),
+        at: Number(s.at) || 0,
+        count: Number(s.count) || 0,
+        fileName: String(s.fileName || ''),
+        source: String(s.source || ''),
+        excelSaved: Boolean(s.excelSaved)
+      });
+    }
+    const diskIds = listRtlSnapshotIdsOnDisk();
+    let dirty = false;
+    for (const id of diskIds) {
+      if (byId.has(id)) continue;
+      const snap = readRtlSnapshotFile(rtlDailySnapshotPath(id), id);
+      if (!snap) continue;
+      byId.set(id, {
+        id: snap.id,
+        date: snap.date,
+        at: snap.at,
+        count: snap.count,
+        fileName: snap.fileName,
+        source: snap.source,
+        excelSaved: snap.excelSaved
+      });
+      dirty = true;
+    }
+    snapshots = [...byId.values()].sort(
+      (a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id))
+    );
+    if (dirty) saveRtlDailyIndex({ snapshots });
     return { snapshots };
   } catch {
-    return { snapshots: [] };
+    return rebuildRtlDailyIndexFromDisk();
   }
 }
 
@@ -495,9 +679,20 @@ function scanRtlStockBuffer(buffer) {
   return vehicles;
 }
 
-function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source }) {
+/**
+ * Append-only snapshot. Never overwrites an existing id.
+ * Optional excelBuffer stores the original RTL workbook beside the JSON.
+ */
+function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuffer, at: atIn } = {}) {
   ensureRtlDailyDirs();
-  const key = normalizeDateKey(dateKey) || todayIsoRiyadh();
+  const at = Number(atIn) || Date.now();
+  const date = normalizeDateKey(dateKey) || riyadhDateTimeParts(at).dateKey;
+  let id = makeRtlSnapshotId(at);
+  // Extremely unlikely collision — bump until free.
+  while (fs.existsSync(rtlDailySnapshotPath(id))) {
+    id = makeRtlSnapshotId(Date.now());
+  }
+
   const seen = new Set();
   const list = [];
   for (const raw of vehicles || []) {
@@ -506,44 +701,91 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source }) {
     seen.add(v.vin);
     list.push(v);
   }
-  const at = Date.now();
+
+  let excelSaved = false;
+  if (excelBuffer && Buffer.isBuffer(excelBuffer) && excelBuffer.length) {
+    const xfp = rtlDailyExcelPath(id);
+    const xtmp = `${xfp}.${process.pid}.tmp`;
+    fs.writeFileSync(xtmp, excelBuffer);
+    fs.renameSync(xtmp, xfp);
+    excelSaved = true;
+  }
+
   const name = String(fileName || '').trim();
   const snap = {
-    date: key,
+    id,
+    date,
     at,
     fileName: name,
     source: String(source || '').trim(),
+    excelSaved,
     count: list.length,
     vehicles: list
   };
-  const fp = rtlDailySnapshotPath(key);
+  const fp = rtlDailySnapshotPath(id);
   const tmp = `${fp}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
   fs.renameSync(tmp, fp);
 
   const index = loadRtlDailyIndex();
-  const entry = { date: key, at, count: list.length, fileName: name, source: snap.source };
-  const rest = index.snapshots.filter((s) => s.date !== key);
+  const entry = {
+    id,
+    date,
+    at,
+    count: list.length,
+    fileName: name,
+    source: snap.source,
+    excelSaved
+  };
+  // Append — never replace prior snapshots (same calendar day keeps all pushes).
+  const rest = index.snapshots.filter((s) => s.id !== id);
   rest.push(entry);
-  rest.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  rest.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
   saveRtlDailyIndex({ snapshots: rest });
   return snap;
 }
 
-/** Newest-first last-seen map for every VIN across RTL daily snapshots. */
-function buildRtlDailyLastSeenIndex() {
+function loadRtlDailySnapshot(idOrDate) {
+  const direct = normalizeRtlSnapshotId(idOrDate);
+  if (direct) {
+    const snap = readRtlSnapshotFile(rtlDailySnapshotPath(direct), direct);
+    if (snap) return snap;
+  }
+  const dateKey = normalizeDateKey(idOrDate);
+  if (!dateKey) return null;
+  // Legacy single-file-per-day
+  const legacy = readRtlSnapshotFile(rtlDailySnapshotPath(dateKey), dateKey);
+  if (legacy) return legacy;
+  // Newest snapshot for that calendar day
   const index = loadRtlDailyIndex();
-  const dates = [...index.snapshots]
-    .map((s) => normalizeDateKey(s.date))
-    .filter(Boolean)
-    .sort((a, b) => String(b).localeCompare(String(a)));
+  const match = index.snapshots.find((s) => s.date === dateKey);
+  if (!match) return null;
+  return readRtlSnapshotFile(rtlDailySnapshotPath(match.id), match.id);
+}
+
+function listRtlSnapshotsNewestFirst() {
+  return loadRtlDailyIndex().snapshots.slice().sort(
+    (a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id))
+  );
+}
+
+/** Newest-first last-seen map for every VIN across all historical RTL snapshots. */
+function buildRtlDailyLastSeenIndex() {
+  const entries = listRtlSnapshotsNewestFirst();
   const lastSeen = {};
-  for (const date of dates) {
-    const snap = loadRtlDailySnapshot(date);
+  const dates = [];
+  const seenDates = new Set();
+  for (const entry of entries) {
+    const snap = loadRtlDailySnapshot(entry.id || entry.date);
     if (!snap) continue;
+    if (snap.date && !seenDates.has(snap.date)) {
+      seenDates.add(snap.date);
+      dates.push(snap.date);
+    }
     for (const v of snap.vehicles || []) {
       if (!v.vin || lastSeen[v.vin]) continue;
       lastSeen[v.vin] = {
+        snapshotId: snap.id,
         date: snap.date,
         at: snap.at,
         product: v.product || '',
@@ -553,28 +795,7 @@ function buildRtlDailyLastSeenIndex() {
       };
     }
   }
-  return { snapshotCount: dates.length, dates, lastSeen };
-}
-
-function loadRtlDailySnapshot(dateKey) {
-  const fp = rtlDailySnapshotPath(dateKey);
-  if (!fp || !fs.existsSync(fp)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    if (!parsed || typeof parsed !== 'object') return null;
-    const vehicles = Array.isArray(parsed.vehicles)
-      ? parsed.vehicles.map(sanitizeRtlVehicle).filter(Boolean)
-      : [];
-    return {
-      date: normalizeDateKey(parsed.date) || normalizeDateKey(dateKey),
-      at: Number(parsed.at) || 0,
-      fileName: String(parsed.fileName || ''),
-      count: vehicles.length,
-      vehicles
-    };
-  } catch {
-    return null;
-  }
+  return { snapshotCount: entries.length, dates, lastSeen };
 }
 
 function compareRtlSnapshots(fromSnap, toSnap) {
@@ -591,13 +812,22 @@ function compareRtlSnapshots(fromSnap, toSnap) {
       added.push(to);
       continue;
     }
-    if (from.product !== to.product || from.suffix !== to.suffix) {
+    if (
+      from.product !== to.product
+      || from.suffix !== to.suffix
+      || from.location !== to.location
+      || from.vehicleSearchArea !== to.vehicleSearchArea
+    ) {
       changed.push({
         vin,
         fromProduct: from.product,
         fromSuffix: from.suffix,
+        fromLocation: from.location,
+        fromVehicleSearchArea: from.vehicleSearchArea,
         toProduct: to.product,
-        toSuffix: to.suffix
+        toSuffix: to.suffix,
+        toLocation: to.location,
+        toVehicleSearchArea: to.vehicleSearchArea
       });
     } else {
       same.push(to);
@@ -608,6 +838,8 @@ function compareRtlSnapshots(fromSnap, toSnap) {
   }
 
   return {
+    fromId: fromSnap?.id || '',
+    toId: toSnap?.id || '',
     fromDate: fromSnap?.date || '',
     toDate: toSnap?.date || '',
     fromCount: fromSnap?.count || 0,
@@ -2536,14 +2768,15 @@ app.post('/api/report-sheet/push', (req, res) => {
       if (id === 'rtl') {
         try {
           const vehicles = scanRtlStockBuffer(buf);
-          if (vehicles.length) {
-            rtlSnapshot = persistRtlDailySnapshot({
-              dateKey: todayIsoRiyadh(),
-              vehicles,
-              fileName: name,
-              source: 'admin-push'
-            });
-          }
+          // Always append a permanent timestamped snapshot (never overwrite history).
+          rtlSnapshot = persistRtlDailySnapshot({
+            dateKey: todayIsoRiyadh(),
+            vehicles,
+            fileName: name,
+            source: 'admin-push',
+            excelBuffer: buf,
+            at
+          });
         } catch (snapErr) {
           console.error('[report-sheet/push] RTL snapshot', snapErr);
         }
@@ -2573,7 +2806,13 @@ app.post('/api/report-sheet/push', (req, res) => {
       hasSales: meta.hasSales,
       hasCancelled: meta.hasCancelled,
       rtlDaily: rtlSnapshot
-        ? { date: rtlSnapshot.date, count: rtlSnapshot.count, at: rtlSnapshot.at }
+        ? {
+          id: rtlSnapshot.id,
+          date: rtlSnapshot.date,
+          count: rtlSnapshot.count,
+          at: rtlSnapshot.at,
+          excelSaved: rtlSnapshot.excelSaved
+        }
         : null
     });
   } catch (err) {
@@ -2599,9 +2838,12 @@ app.post('/api/report-sheet/clear', (_req, res) => {
 /** RTL daily VIN/product/suffix archive — does not touch live dashboard slots. */
 app.get('/api/rtl-daily/meta', (_req, res) => {
   try {
-    const index = loadRtlDailyIndex();
-    const snapshots = [...index.snapshots].sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    return res.json({ snapshots });
+    const snapshots = listRtlSnapshotsNewestFirst();
+    return res.json({
+      snapshots,
+      persistentRoot: PERSISTENT_ROOT,
+      archiveDir: RTL_DAILY_DIR
+    });
   } catch (err) {
     console.error('[rtl-daily/meta]', err);
     return res.status(500).json({ error: err.message || 'Failed to load RTL daily index' });
@@ -2610,15 +2852,15 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
 
 app.get('/api/rtl-daily/compare', (req, res) => {
   try {
-    const fromDate = normalizeDateKey(req.query.from);
-    const toDate = normalizeDateKey(req.query.to);
-    if (!fromDate || !toDate) {
-      return res.status(400).json({ error: 'from and to dates (YYYY-MM-DD) are required' });
+    const fromRef = String(req.query.from || '').trim();
+    const toRef = String(req.query.to || '').trim();
+    if (!fromRef || !toRef) {
+      return res.status(400).json({ error: 'from and to (snapshot id or YYYY-MM-DD) are required' });
     }
-    const fromSnap = loadRtlDailySnapshot(fromDate);
-    const toSnap = loadRtlDailySnapshot(toDate);
-    if (!fromSnap) return res.status(404).json({ error: `No snapshot for ${fromDate}` });
-    if (!toSnap) return res.status(404).json({ error: `No snapshot for ${toDate}` });
+    const fromSnap = loadRtlDailySnapshot(fromRef);
+    const toSnap = loadRtlDailySnapshot(toRef);
+    if (!fromSnap) return res.status(404).json({ error: `No snapshot for ${fromRef}` });
+    if (!toSnap) return res.status(404).json({ error: `No snapshot for ${toRef}` });
     return res.json(compareRtlSnapshots(fromSnap, toSnap));
   } catch (err) {
     console.error('[rtl-daily/compare]', err);
@@ -2645,18 +2887,14 @@ app.get('/api/rtl-daily/vin/:vin', (req, res) => {
     if (!vin || vin.length < 11) {
       return res.status(400).json({ error: 'Invalid VIN' });
     }
-    const index = loadRtlDailyIndex();
-    const dates = [...index.snapshots]
-      .map((s) => normalizeDateKey(s.date))
-      .filter(Boolean)
-      .sort((a, b) => String(b).localeCompare(String(a)));
     const history = [];
-    for (const date of dates) {
-      const snap = loadRtlDailySnapshot(date);
+    for (const entry of listRtlSnapshotsNewestFirst()) {
+      const snap = loadRtlDailySnapshot(entry.id || entry.date);
       if (!snap) continue;
       const hit = (snap.vehicles || []).find((v) => v.vin === vin);
       if (!hit) continue;
       history.push({
+        snapshotId: snap.id,
         date: snap.date,
         at: snap.at,
         product: hit.product || '',
@@ -2677,11 +2915,13 @@ app.get('/api/rtl-daily/vin/:vin', (req, res) => {
   }
 });
 
-app.get('/api/rtl-daily/:date', (req, res) => {
+app.get('/api/rtl-daily/:id', (req, res) => {
   try {
-    const dateKey = normalizeDateKey(req.params.date);
-    if (!dateKey) return res.status(400).json({ error: 'Invalid date' });
-    const snap = loadRtlDailySnapshot(dateKey);
+    const ref = String(req.params.id || '').trim();
+    if (!normalizeRtlSnapshotId(ref) && !normalizeDateKey(ref)) {
+      return res.status(400).json({ error: 'Invalid snapshot id' });
+    }
+    const snap = loadRtlDailySnapshot(ref);
     if (!snap) return res.status(404).json({ error: 'Snapshot not found' });
     return res.json(snap);
   } catch (err) {
@@ -2695,30 +2935,52 @@ app.post('/api/rtl-daily/save', (req, res) => {
     const body = req.body || {};
     const dateKey = normalizeDateKey(body.date) || todayIsoRiyadh();
     const vehiclesIn = Array.isArray(body.vehicles) ? body.vehicles : [];
+    let excelBuffer = null;
+    if (body.excelBase64) {
+      try {
+        excelBuffer = Buffer.from(String(body.excelBase64), 'base64');
+      } catch {
+        excelBuffer = null;
+      }
+    }
     const snap = persistRtlDailySnapshot({
       dateKey,
       vehicles: vehiclesIn,
       fileName: body.fileName,
-      source: body.source || 'uploader'
+      source: body.source || 'uploader',
+      excelBuffer
     });
-    return res.json({ ok: true, date: snap.date, count: snap.count, at: snap.at });
+    return res.json({
+      ok: true,
+      id: snap.id,
+      date: snap.date,
+      count: snap.count,
+      at: snap.at,
+      excelSaved: snap.excelSaved
+    });
   } catch (err) {
     console.error('[rtl-daily/save]', err);
     return res.status(500).json({ error: err.message || 'Save failed' });
   }
 });
 
-app.delete('/api/rtl-daily/:date', (req, res) => {
+app.delete('/api/rtl-daily/:id', (req, res) => {
   try {
-    const dateKey = normalizeDateKey(req.params.date);
-    if (!dateKey) return res.status(400).json({ error: 'Invalid date' });
-    const fp = rtlDailySnapshotPath(dateKey);
+    const id = normalizeRtlSnapshotId(req.params.id);
+    if (!id || (DATE_KEY_RE.test(id) && !String(id).includes('T'))) {
+      return res.status(400).json({
+        error: 'Delete requires a full timestamped snapshot id. Calendar-date mass delete is disabled to protect history.'
+      });
+    }
+    const fp = rtlDailySnapshotPath(id);
     if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
+    const xfp = rtlDailyExcelPath(id);
+    if (xfp && fs.existsSync(xfp)) fs.unlinkSync(xfp);
     const index = loadRtlDailyIndex();
     saveRtlDailyIndex({
-      snapshots: index.snapshots.filter((s) => s.date !== dateKey)
+      snapshots: index.snapshots.filter((s) => s.id !== id)
     });
-    return res.json({ ok: true, date: dateKey });
+    return res.json({ ok: true, id });
   } catch (err) {
     console.error('[rtl-daily/delete]', err);
     return res.status(500).json({ error: err.message || 'Delete failed' });
@@ -4739,7 +5001,15 @@ wss.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
+  migrateLegacyRtlDailyDir();
+  try {
+    loadRtlDailyIndex();
+  } catch (err) {
+    console.error('[rtl-daily] index rebuild failed', err);
+  }
   console.log(`[delivery] listening on http://localhost:${PORT}`);
   console.log(`[delivery] agents password: ${AGENT_PASSWORD}`);
+  console.log(`[delivery] persistent root: ${PERSISTENT_ROOT}`);
   console.log(`[delivery] data file: ${DATA_FILE}`);
+  console.log(`[delivery] RTL archive (append-only): ${RTL_DAILY_DIR}`);
 });

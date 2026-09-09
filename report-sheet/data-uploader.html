@@ -284,8 +284,9 @@
     </div>
 
     <p class="note">
-      This page stores RTL snapshots separately from Admin Push.
-      Saving here does <b>not</b> update the live Sales Report dashboard.
+      Manual archive tool. <b>Admin Push to Live</b> also appends a permanent timestamped RTL snapshot automatically
+      (VIN + date + Vehicle Search Area + original Excel). History is never overwritten by a later push.
+      Saving here does <b>not</b> change the live Sales Report dashboard.
     </p>
 
     <div class="grid">
@@ -309,7 +310,7 @@
         </div>
         <div class="actions">
           <button type="button" class="primary" id="btn-scan">Scan file</button>
-          <button type="button" class="primary" id="btn-save" disabled>Save day snapshot</button>
+          <button type="button" class="primary" id="btn-save" disabled>Append snapshot</button>
           <button type="button" id="btn-clear-preview" disabled>Clear preview</button>
         </div>
         <div class="status" id="scan-status">Choose an RTL file to begin.</div>
@@ -330,8 +331,8 @@
       </section>
 
       <section class="card">
-        <h2>Saved days</h2>
-        <p class="sub">One snapshot per calendar day. Re-saving the same date overwrites that day only.</p>
+        <h2>Saved snapshots</h2>
+        <p class="sub">Append-only archive. Each save creates a new timestamped entry — previous snapshots are kept.</p>
         <div class="actions" style="margin-top:0">
           <button type="button" id="btn-refresh">Refresh list</button>
         </div>
@@ -388,11 +389,30 @@
 
   let scanned = [];
   let scannedFileName = "";
+  let scannedExcelBase64 = "";
   let snapshots = [];
   let lastCompare = null;
   let cmpTab = "added";
 
   const $ = (sel) => document.querySelector(sel);
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  function snapLabel(s) {
+    const id = s.id || s.date || "";
+    const when = s.at
+      ? new Date(s.at).toLocaleString("en-GB", { timeZone: "Asia/Riyadh" })
+      : (s.date || "");
+    return `${when || id} · ${s.count || 0} VINs`;
+  }
 
   function todayRiyadh() {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
@@ -584,7 +604,7 @@
       snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
       renderSnapList();
       fillCompareSelects();
-      setStatus($("#list-status"), snapshots.length ? `${snapshots.length} day(s) saved` : "No snapshots yet");
+      setStatus($("#list-status"), snapshots.length ? `${snapshots.length} snapshot(s) saved` : "No snapshots yet");
     } catch (err) {
       setStatus($("#list-status"), err.message || "Failed to load", "err");
     }
@@ -593,38 +613,45 @@
   function renderSnapList() {
     const list = $("#snap-list");
     if (!snapshots.length) {
-      list.innerHTML = `<li><span class="muted">Upload and save a day to start the archive.</span></li>`;
+      list.innerHTML = `<li><span class="muted">Push RTL from Admin or save here to start the archive.</span></li>`;
       return;
     }
-    list.innerHTML = snapshots.map((s) => `
+    list.innerHTML = snapshots.map((s) => {
+      const id = s.id || s.date || "";
+      const canDelete = id.includes("T");
+      return `
       <li>
         <div>
-          <strong>${escapeHtml(s.date)}</strong>
-          <div class="meta">${escapeHtml(String(s.count || 0))} VINs${s.fileName ? " · " + escapeHtml(s.fileName) : ""}</div>
+          <strong>${escapeHtml(snapLabel(s))}</strong>
+          <div class="meta">${escapeHtml(id)}${s.fileName ? " · " + escapeHtml(s.fileName) : ""}${s.source ? " · " + escapeHtml(s.source) : ""}</div>
         </div>
         <div class="actions" style="margin:0">
-          <button type="button" data-del="${escapeHtml(s.date)}">Delete</button>
+          ${canDelete
+            ? `<button type="button" data-del="${escapeHtml(id)}">Delete</button>`
+            : `<span class="muted">legacy</span>`}
         </div>
-      </li>
-    `).join("");
+      </li>`;
+    }).join("");
   }
 
   function fillCompareSelects() {
-    const opts = snapshots.map((s) =>
-      `<option value="${escapeHtml(s.date)}">${escapeHtml(s.date)} (${escapeHtml(String(s.count || 0))})</option>`
-    ).join("");
+    const opts = snapshots.map((s) => {
+      const id = s.id || s.date || "";
+      return `<option value="${escapeHtml(id)}">${escapeHtml(snapLabel(s))}</option>`;
+    }).join("");
     const from = $("#cmp-from");
     const to = $("#cmp-to");
     const prevFrom = from.value;
     const prevTo = to.value;
     from.innerHTML = opts || `<option value="">—</option>`;
     to.innerHTML = opts || `<option value="">—</option>`;
+    const ids = snapshots.map((s) => s.id || s.date);
     if (snapshots.length >= 2) {
-      from.value = prevFrom && snapshots.some((s) => s.date === prevFrom) ? prevFrom : snapshots[1].date;
-      to.value = prevTo && snapshots.some((s) => s.date === prevTo) ? prevTo : snapshots[0].date;
+      from.value = prevFrom && ids.includes(prevFrom) ? prevFrom : ids[1];
+      to.value = prevTo && ids.includes(prevTo) ? prevTo : ids[0];
     } else if (snapshots.length === 1) {
-      from.value = snapshots[0].date;
-      to.value = snapshots[0].date;
+      from.value = ids[0];
+      to.value = ids[0];
     }
   }
 
@@ -680,11 +707,12 @@
       const result = scanRtlWorkbook(wb);
       scanned = result.vehicles;
       scannedFileName = file.name;
+      scannedExcelBase64 = arrayBufferToBase64(buf);
       $("#kpi-rows").textContent = String(result.rowsRead || 0);
       renderPreview();
       setStatus(
         $("#scan-status"),
-        `Scanned ${scanned.length} unique VIN(s) from ${file.name}. Ready to save — dashboard is not affected.`,
+        `Scanned ${scanned.length} unique VIN(s) from ${file.name}. Ready to append — live dashboard is not affected.`,
         "ok"
       );
     } catch (err) {
@@ -697,6 +725,7 @@
   $("#btn-clear-preview").addEventListener("click", () => {
     scanned = [];
     scannedFileName = "";
+    scannedExcelBase64 = "";
     $("#rtl-file").value = "";
     renderPreview();
     setStatus($("#scan-status"), "Preview cleared.");
@@ -705,7 +734,7 @@
   $("#btn-save").addEventListener("click", async () => {
     if (!scanned.length) return;
     const date = $("#snap-date").value || todayRiyadh();
-    setStatus($("#scan-status"), "Saving snapshot…");
+    setStatus($("#scan-status"), "Appending snapshot…");
     try {
       const res = await fetch(API_SAVE, {
         method: "POST",
@@ -714,13 +743,15 @@
           date,
           fileName: scannedFileName,
           vehicles: scanned,
+          excelBase64: scannedExcelBase64 || undefined,
+          source: "uploader",
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText);
       setStatus(
         $("#scan-status"),
-        `Saved ${data.count} VIN(s) for ${data.date}. Live dashboard unchanged.`,
+        `Appended ${data.count} VIN(s) as ${data.id || data.date}. Live dashboard unchanged.`,
         "ok"
       );
       await loadMeta();
@@ -734,10 +765,10 @@
   $("#snap-list").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-del]");
     if (!btn) return;
-    const date = btn.getAttribute("data-del");
-    if (!date || !confirm(`Delete RTL snapshot for ${date}?`)) return;
+    const id = btn.getAttribute("data-del");
+    if (!id || !confirm(`Delete RTL snapshot ${id}? This cannot be undone.`)) return;
     try {
-      const res = await fetch(`${API_DELETE}/${encodeURIComponent(date)}`, { method: "DELETE" });
+      const res = await fetch(`${API_DELETE}/${encodeURIComponent(id)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText);
       await loadMeta();

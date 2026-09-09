@@ -696,7 +696,7 @@
       renderAllocationPanel();
       const srOk = dataStamp.hasSales;
       const rtlNote = server && server.rtlDaily
-        ? ` · RTL snapshot ${server.rtlDaily.date} (${server.rtlDaily.count} VINs)`
+        ? ` · RTL archive ${server.rtlDaily.id || server.rtlDaily.date} (${server.rtlDaily.count} VINs${server.rtlDaily.excelSaved ? " +xlsx" : ""})`
         : "";
       setStatus(
         srOk
