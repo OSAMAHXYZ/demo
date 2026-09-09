@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260909aa1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260909acc1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -247,9 +247,11 @@
                     <div class="acc-summary-pct-text">
                       <span class="k">Ach %</span>
                       <span class="v" id="acc-sum-pct">—</span>
+                      <span class="v acc-sum-pct-combined" id="acc-sum-pct-combined" title="(Achieved + In Progress) ÷ Target">—</span>
                     </div>
                     <div class="sr-acc-progress-track" aria-hidden="true">
                       <div class="sr-acc-progress-fill" id="sr-acc-progress-fill" style="width:0%"></div>
+                      <div class="sr-acc-progress-fill sr-acc-progress-fill-combined" id="sr-acc-progress-fill-combined" style="width:0%"></div>
                     </div>
                   </div>
                   <div class="acc-summary-cols acc-summary-cols--detail">
@@ -3667,7 +3669,7 @@
         : adminTarget;
       const sold = soldByKey.get(key) || 0;
       const inProgress = progressByKey.get(key) || 0;
-      const remaining = Math.max(0, quota - sold);
+      const remaining = Math.max(0, quota - sold - inProgress);
       byKey.set(key, {
         salesman: e.name,
         adminTarget,
@@ -3675,6 +3677,7 @@
         sold,
         inProgress,
         achPct: quota > 0 ? sold / quota : null,
+        combinedPct: quota > 0 ? (sold + inProgress) / quota : null,
         remaining,
         netTarget: remaining,
       });
@@ -3756,13 +3759,15 @@
         "Acc Achieved": m.sold,
         "Acc In Progress": m.inProgress || 0,
         "Acc Ach %": accAchPct == null ? (m.quota ? "0%" : "—") : pct1(accAchPct),
-        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
+        "Acc Ach+IP %": (m.quota || 0) > 0 ? pct1(((m.sold || 0) + (m.inProgress || 0)) / m.quota) : "—",
+        "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
         "Adjusted Target": m.netTarget,
         _accQuota: m.quota,
         _accSold: m.sold,
         _accInProgress: m.inProgress || 0,
         _accAchPct: accAchPct,
-        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
+        _accCombinedPct: (m.quota || 0) > 0 ? ((m.sold || 0) + (m.inProgress || 0)) / m.quota : null,
+        _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0) - (m.inProgress || 0)),
         _accNetTarget: m.netTarget,
       };
     });
@@ -5125,29 +5130,32 @@
   function accessoriesSummaryTotals(sr, rows) {
     const t = (sr && sr.totals) || {};
     const list = Array.isArray(rows) ? rows : [];
+    const pack = (quota, sold, inProgress, achPct) => {
+      const q = Number(quota) || 0;
+      const s = Number(sold) || 0;
+      const p = Number(inProgress) || 0;
+      const ach = achPct != null ? Number(achPct) : (q > 0 ? s / q : null);
+      const combinedPct = q > 0 ? (s + p) / q : null;
+      return { quota: q, sold: s, inProgress: p, achPct: ach, combinedPct };
+    };
     if (srView.selectedKey && list[0]) {
       const r = list[0];
       const quota = Number(r._accQuota) || 0;
       const sold = Number(r._accSold) || 0;
       const inProgress = Number(r._accInProgress) || 0;
       const ach = quota > 0 ? sold / quota : (r._accAchPct != null ? r._accAchPct : null);
-      return { quota, sold, inProgress, achPct: ach };
+      return pack(quota, sold, inProgress, ach);
     }
     if (t.accQuota != null || t.accSold != null || t.accInProgress != null) {
-      return {
-        quota: Number(t.accQuota) || 0,
-        sold: Number(t.accSold) || 0,
-        inProgress: Number(t.accInProgress) || 0,
-        achPct: t.accAchPct != null ? t.accAchPct : (t.accQuota ? (t.accSold || 0) / t.accQuota : null),
-      };
+      return pack(
+        t.accQuota,
+        t.accSold,
+        t.accInProgress,
+        t.accAchPct != null ? t.accAchPct : (t.accQuota ? (t.accSold || 0) / t.accQuota : null)
+      );
     }
     const acc = (sr && sr.accessories && sr.accessories.totals) || {};
-    return {
-      quota: Number(acc.quota) || 0,
-      sold: Number(acc.sold) || 0,
-      inProgress: Number(acc.inProgress) || 0,
-      achPct: acc.achPct != null ? acc.achPct : null,
-    };
+    return pack(acc.quota, acc.sold, acc.inProgress, acc.achPct);
   }
 
   function renderAccessoriesSummaryBoard(sr, rows) {
@@ -5158,15 +5166,27 @@
     const soldEl = $("#acc-sum-achieved");
     const progressEl = $("#acc-sum-progress");
     const pctEl = $("#acc-sum-pct");
+    const combinedEl = $("#acc-sum-pct-combined");
     const fillEl = $("#sr-acc-progress-fill");
+    const fillCombinedEl = $("#sr-acc-progress-fill-combined");
     const pctNum = sum.achPct == null ? (sum.quota ? 0 : null) : (sum.achPct * 100);
+    const combinedNum = sum.combinedPct == null ? (sum.quota ? 0 : null) : (sum.combinedPct * 100);
     if (targetEl) targetEl.textContent = formatNumber(sum.quota);
     if (soldEl) soldEl.textContent = formatNumber(sum.sold);
     if (progressEl) progressEl.textContent = formatNumber(sum.inProgress || 0);
     if (pctEl) {
       pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
+      pctEl.title = "Achieved ÷ Target";
+    }
+    if (combinedEl) {
+      combinedEl.textContent = combinedNum == null ? "—" : (combinedNum.toFixed(1) + "%");
+      combinedEl.title = "(Achieved + In Progress) ÷ Target";
     }
     if (fillEl) fillEl.style.width = (pctNum == null ? 0 : Math.max(0, Math.min(100, pctNum))).toFixed(1) + "%";
+    if (fillCombinedEl) {
+      const w = combinedNum == null ? 0 : Math.max(0, Math.min(100, combinedNum));
+      fillCombinedEl.style.width = w.toFixed(1) + "%";
+    }
     board.hidden = !(sum.quota > 0 || sum.sold > 0 || sum.inProgress > 0);
   }
 
@@ -5175,6 +5195,8 @@
     if (!totalsEl) return;
     const rows = filterSrRows((sr && sr.rows) || []);
     const sum = accessoriesSummaryTotals(sr, rows);
+    const achTxt = sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%");
+    const combTxt = sum.combinedPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.combinedPct * 100).toFixed(1) + "%");
     totalsEl.hidden = false;
     totalsEl.classList.add("pbi-wide-totals--acc");
     totalsEl.innerHTML = `
@@ -5183,7 +5205,9 @@
           <span class="acc-summary-icon" aria-hidden="true">⚙</span>
           <div class="acc-summary-pct-text">
             <span class="k">Accessories Ach %</span>
-            <span class="v">${sum.achPct == null ? (sum.quota ? "0.0%" : "—") : ((sum.achPct * 100).toFixed(1) + "%")}</span>
+            <span class="v">${achTxt}</span>
+            <span class="v acc-sum-pct-combined">${combTxt}</span>
+            <span class="k acc-sum-combined-lab">Ach + In Progress</span>
           </div>
         </div>
         <div class="acc-summary-cols acc-summary-cols--detail">
@@ -7965,10 +7989,12 @@
         const inProgress = Number(r._accInProgress) || 0;
         const remaining = r._accRemaining != null
           ? Math.max(0, Number(r._accRemaining) || 0)
-          : Math.max(0, quota - sold);
+          : Math.max(0, quota - sold - inProgress);
+        const combinedPct = quota > 0 ? ((sold + inProgress) / quota) * 100 : 0;
         return {
-        row: r,
-        pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
+          row: r,
+          pct: r._accAchPct != null ? r._accAchPct * 100 : (quota > 0 ? (sold / quota) * 100 : 0),
+          combinedPct,
           quota,
           sold,
           inProgress,
@@ -7976,7 +8002,7 @@
         };
       })
       .filter((x) => x.quota > 0 || x.sold > 0 || x.inProgress > 0)
-      .sort((a, b) => b.pct - a.pct || a.remaining - b.remaining || String(a.row["Sales Employee"] || "").localeCompare(String(b.row["Sales Employee"] || "")));
+      .sort((a, b) => b.combinedPct - a.combinedPct || b.pct - a.pct || String(a.row["Sales Employee"] || "").localeCompare(String(b.row["Sales Employee"] || "")));
 
     if (!accRows.length) {
       if (remainWrap) remainWrap.hidden = true;
@@ -7984,6 +8010,8 @@
         summaryBoard.hidden = false;
         const pctEl = $("#acc-sum-pct");
         if (pctEl) pctEl.textContent = "—";
+        const combEl = $("#acc-sum-pct-combined");
+        if (combEl) combEl.textContent = "—";
       }
       const hint = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
       if (hint) {
@@ -7997,7 +8025,7 @@
     }
 
     const hintOk = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
-    if (hintOk) hintOk.textContent = "Wide opens Ach % chart · VSND Col S = In Progress (not delivered)";
+    if (hintOk) hintOk.textContent = "Wide · per employee Achieved + In Progress · red % = (Ach + IP) ÷ Target";
 
     if (remainWrap && remainTable) {
       remainWrap.hidden = false;
@@ -8008,6 +8036,7 @@
           <th class="num">Achieved</th>
           <th class="num">In Progress</th>
           <th class="num">Ach %</th>
+          <th class="num">Ach+IP %</th>
           <th class="num">Remaining</th>
         </tr></thead>
         <tbody>${accRows.map((x) => {
@@ -8020,6 +8049,7 @@
             <td class="num">${formatNumber(x.sold)}</td>
             <td class="num">${formatNumber(x.inProgress)}</td>
             <td class="num">${x.row["Acc Ach %"] || (x.quota ? pct1(x.sold / x.quota) : "—")}</td>
+            <td class="num acc-combined-pct">${x.quota ? pct1((x.sold + x.inProgress) / x.quota) : "—"}</td>
             <td class="num ${remCls}"><b>${done ? "0 · done" : formatNumber(x.remaining)}</b></td>
           </tr>`;
         }).join("")}</tbody>
@@ -8030,80 +8060,52 @@
 
     const single = !!(opts && opts.single) || accRows.length === 1;
     const labels = single
-      ? ["This employee"]
+      ? [shortEmpLabel(accRows[0].row["Sales Employee"] || accRows[0].row.Salesman || "This employee")]
       : accRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
     const empKeys = accRows.map((x) => x.row._key);
     const horizontal = !single && accRows.length > 1;
     const soldVals = accRows.map((x) => x.sold);
     const progressVals = accRows.map((x) => x.inProgress);
     const remainVals = accRows.map((x) => x.remaining);
-    const hasProgress = progressVals.some((n) => n > 0);
 
     if (single) {
       const r = accRows[0];
-      const doughnutLabels = hasProgress || r.inProgress > 0
-        ? ["Achieved", "Not delivered", "Remaining"]
-        : ["Ach %", "Remaining"];
-      const doughnutVals = hasProgress || r.inProgress > 0
-        ? [r.sold, r.inProgress, r.remaining]
-        : [Math.min(100, r.pct), Math.max(0, 100 - r.pct)];
-      upsertChart("chart-sr-accessories", "doughnut", doughnutLabels, doughnutVals, {
+      upsertChart("chart-sr-accessories", "doughnut", ["Achieved", "In Progress", "Remaining"], [r.sold, r.inProgress, r.remaining], {
         legend: true,
-        backgroundColor: hasProgress || r.inProgress > 0
-          ? ["rgba(13, 148, 136, 0.9)", "rgba(180, 83, 9, 0.88)", "rgba(148, 163, 184, 0.55)"]
-          : undefined,
+        backgroundColor: ["rgba(13, 148, 136, 0.9)", "rgba(235, 10, 30, 0.88)", "rgba(148, 163, 184, 0.55)"],
       });
       return;
     }
 
-    if (hasProgress) {
-      upsertChart("chart-sr-accessories", "bar", labels, soldVals, {
-        horizontal,
-        clickable: accRows.length > 1,
-        empKeys,
-        legend: true,
-        stacked: true,
-        datasets: [
-          {
-            label: "Achieved",
-            data: soldVals,
-            backgroundColor: "rgba(13, 148, 136, 0.88)",
-            borderRadius: 4,
-            stack: "acc",
-          },
-          {
-            label: "Not delivered",
-            data: progressVals,
-            backgroundColor: "rgba(180, 83, 9, 0.88)",
-            borderRadius: 4,
-            stack: "acc",
-          },
-          {
-            label: "Remaining",
-            data: remainVals,
-            backgroundColor: "rgba(148, 163, 184, 0.45)",
-            borderRadius: 4,
-            stack: "acc",
-          },
-        ],
-      });
-      return;
-    }
-
-    const pctVals = accRows.map((x) => x.pct);
-    const accColors = pctVals.map((n) =>
-      n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)"
-    );
-
-    upsertChart("chart-sr-accessories", "bar", labels, pctVals, {
+    upsertChart("chart-sr-accessories", "bar", labels, soldVals, {
       horizontal,
       clickable: accRows.length > 1,
       empKeys,
-      label: "Accessories Ach %",
-      backgroundColor: accColors,
-      max: 120,
-      showValues: true,
-      valueSuffix: "%",
+      legend: true,
+      stacked: true,
+      datasets: [
+        {
+          label: "Achieved",
+          data: soldVals,
+          backgroundColor: "rgba(13, 148, 136, 0.88)",
+          borderRadius: 4,
+          stack: "acc",
+        },
+        {
+          label: "In Progress",
+          data: progressVals,
+          backgroundColor: "rgba(235, 10, 30, 0.88)",
+          borderRadius: 4,
+          stack: "acc",
+        },
+        {
+          label: "Remaining",
+          data: remainVals,
+          backgroundColor: "rgba(148, 163, 184, 0.45)",
+          borderRadius: 4,
+          stack: "acc",
+        },
+      ],
     });
   }
 

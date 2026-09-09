@@ -7706,17 +7706,56 @@ body.admin-page #panel-allocation:not([hidden]) {
   line-height: 1;
   opacity: 1;
 }
+.sr-mock-acc .acc-summary-pct-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 14px;
+}
+.sr-mock-acc .acc-summary-pct-text .v.acc-sum-pct-combined,
+.acc-sum-pct-combined {
+  color: #ff4d4f !important;
+  font-size: 1.55rem !important;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.acc-summary-board--wide .acc-sum-pct-combined {
+  color: #eb0a1e !important;
+  font-size: 1.45rem !important;
+}
+.acc-sum-combined-lab {
+  display: block;
+  font-size: 0.68rem !important;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #eb0a1e !important;
+  opacity: 0.9;
+}
 .sr-acc-progress-track {
+  position: relative;
   height: 10px;
   border-radius: 999px;
   background: rgba(255,255,255,0.22);
   overflow: hidden;
 }
 .sr-acc-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
   border-radius: inherit;
   background: #fff;
   transition: width .35s ease;
+  z-index: 2;
+}
+.sr-acc-progress-fill-combined {
+  background: rgba(235, 10, 30, 0.95) !important;
+  z-index: 1;
+}
+.acc-combined-pct {
+  color: #eb0a1e !important;
+  font-weight: 800;
 }
 .sr-mock-acc .acc-summary-cols,
 .sr-mock-acc .acc-summary-cols--detail {
