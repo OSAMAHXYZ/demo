@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr28" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr29" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -6360,7 +6360,13 @@
     const pageRows = rows.slice(start, start + pageSize);
 
     const countEl = $("#sr-sched-count");
-    if (countEl) countEl.textContent = formatNumber(total) + " Employees";
+    const dayCountEl = $("#sr-day-sched-count");
+    const countText = formatNumber(total) + " Employees";
+    if (tableSel === "#sr-day-table-wrap") {
+      if (dayCountEl) dayCountEl.textContent = countText;
+    } else if (countEl) {
+      countEl.textContent = countText;
+    }
 
     if (!rows.length) {
       tableEl.innerHTML = '<p class="foot" style="padding:16px">No rows to show.</p>';
@@ -13808,10 +13814,7 @@
   function bindScheduleUi() {
     const period = $("#sr-sched-period");
     if (period) period.addEventListener("change", () => {
-      srView.schedulePeriod = period.value === "day" ? "day" : "month";
-      srView.page = 1;
-      syncSchedulePeriodUi();
-      if (window._data && window._data.salesReport) renderSalesReportTable(window._data.salesReport);
+      jumpToSchedulePeriod(period.value === "day" ? "day" : "month");
     });
     const plant = $("#sr-sched-plant");
     if (plant) plant.addEventListener("change", () => {
