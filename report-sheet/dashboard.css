@@ -1438,15 +1438,18 @@ button:disabled {
   background: #f8fafc;
 }
 .pbi-wide-modal--accessories {
-  width: min(1240px, 97vw);
-  max-height: 94vh;
+  width: min(1480px, 98vw);
+  max-height: 96vh;
 }
 .pbi-wide-modal--accessories .pbi-wide-body {
   max-height: none;
 }
 .pbi-wide-modal--accessories .pbi-wide-scroll {
-  max-height: none !important;
-  overflow: hidden;
+  max-height: min(58vh, 640px) !important;
+  overflow: auto !important;
+}
+.pbi-wide-modal--accessories .pbi-wide-box {
+  min-height: 360px;
 }
 .pbi-wide-table-wrap--with-chart {
   border-top: 1px solid var(--line);
@@ -1455,7 +1458,7 @@ button:disabled {
   overflow: auto;
 }
 .pbi-wide-modal--accessories .pbi-wide-table-wrap--with-chart {
-  max-height: min(32vh, 320px);
+  max-height: min(28vh, 280px);
 }
 
 .pbi-wide-numbers-title {

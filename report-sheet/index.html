@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260909acc1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260909acc2" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -4541,20 +4541,25 @@
       if (perf) preferredRow = series >= 2 ? 44 : 32;
       else if (profdel) preferredRow = series >= 2 ? 40 : 28;
       else if (cancel) preferredRow = series >= 2 ? 40 : 28;
+      else if (canvasId === "chart-sr-accessories") preferredRow = 40;
       else preferredRow = series >= 3 ? 40 : series === 2 ? 34 : 26;
       const fit = fitHorizontalChartHeight(labelCount, series, {
         preferredRow,
-        minRow: series >= 2 ? 20 : 16,
-        maxViewportFrac: inSales ? (perf ? 0.55 : 0.62) : 0.55,
+        minRow: canvasId === "chart-sr-accessories" ? 28 : (series >= 2 ? 20 : 16),
+        maxViewportFrac: inSales ? (perf ? 0.55 : canvasId === "chart-sr-accessories" ? 0.7 : 0.62) : 0.55,
         pad: 56,
       });
       box.style.height = fit.height + "px";
       box.style.minHeight = fit.height + "px";
       canvas.dataset.fitRowPx = String(fit.rowPx);
       if (scroll) {
-        // Keep the full chart on one screen — no inner scroll
-        scroll.classList.remove("is-scroll");
-        scroll.style.maxHeight = "";
+        if (canvasId === "chart-sr-accessories" && labelCount > 8) {
+          scroll.classList.add("is-scroll");
+          scroll.style.maxHeight = Math.max(320, Math.floor(window.innerHeight * 0.55)) + "px";
+        } else {
+          scroll.classList.remove("is-scroll");
+          scroll.style.maxHeight = "";
+        }
       }
     } else if (canvasId === "chart-sr-profdel") {
       box.style.height = "210px";
@@ -4698,6 +4703,7 @@
     const showValues = !!opts.showValues;
     const valueSuffix = opts.valueSuffix != null ? opts.valueSuffix : "";
     const seriesCount = (opts.datasets && opts.datasets.length) || 1;
+    const thicknessSeries = opts.stacked ? 1 : seriesCount;
     chartSnapshots[id] = {
       type,
       labels: labels ? labels.slice() : [],
@@ -4716,9 +4722,10 @@
         categoryExtras: opts.categoryExtras,
         rowMeta: opts.rowMeta,
         dualValueAxis: opts.dualValueAxis,
+        stacked: opts.stacked,
       })),
     };
-    sizeChartScrollBox(id, labelCount, horizontal && type === "bar", seriesCount);
+    sizeChartScrollBox(id, labelCount, horizontal && type === "bar", thicknessSeries);
 
     const datasetsExtra = { ...opts };
     delete datasetsExtra.horizontal;
@@ -4774,21 +4781,30 @@
     const clickable = !!(opts.clickable && empKeys && empKeys.length);
     const fitRowPx = Number(canvas.dataset.fitRowPx) || 0;
     const catPct = horizontal
-      ? (seriesCount >= 3 ? 0.88 : seriesCount === 2 ? 0.82 : 0.78)
+      ? (thicknessSeries >= 3 ? 0.88 : thicknessSeries === 2 ? 0.82 : 0.86)
       : 0.72;
-    const barPct = horizontal ? 0.9 : 0.9;
+    const barPct = horizontal ? 0.92 : 0.9;
     let maxThick = horizontal
-      ? (seriesCount >= 3 ? 12 : seriesCount === 2 ? 16 : 22)
+      ? (opts.stacked ? 22 : (thicknessSeries >= 3 ? 12 : thicknessSeries === 2 ? 16 : 22))
       : 36;
     if (horizontal && fitRowPx > 0) {
-      maxThick = Math.max(3, Math.min(maxThick, Math.floor(fitRowPx / seriesCount) - 2));
+      maxThick = Math.max(opts.stacked ? 10 : 3, Math.min(maxThick, Math.floor(fitRowPx * 0.7)));
     }
-    if (horizontal && fitRowPx > 0 && fitRowPx < 30) {
+    if (horizontal && fitRowPx > 0 && fitRowPx < 30 && !opts.stacked) {
       categoryScale.ticks.font = {
         ...categoryScale.ticks.font,
         size: fitRowPx < 22 ? 8 : 9,
       };
       categoryScale.ticks.padding = 4;
+    }
+    if (horizontal && (opts.stacked || fitRowPx >= 30)) {
+      categoryScale.ticks.font = {
+        ...categoryScale.ticks.font,
+        size: fitRowPx >= 36 ? 12 : 11,
+        weight: "700",
+      };
+      categoryScale.ticks.padding = 8;
+      categoryScale.ticks.color = "#111827";
     }
     charts[id] = new Chart(canvas, {
       type,
@@ -4817,8 +4833,8 @@
         animation: { duration: 320, easing: "easeOutQuart" },
         layout: {
           padding: {
-            left: horizontal ? (opts.categoryExtras ? 4 : 2) : 4,
-            right: showValues && horizontal ? 52 : (type === "line" ? 10 : 8),
+            left: horizontal ? (opts.categoryExtras ? 8 : 6) : 4,
+            right: (showValues || opts.stacked) && horizontal ? 64 : (type === "line" ? 10 : 8),
             top: type === "line" ? 28 : (horizontal ? (opts.dualValueAxis ? 10 : 4) : 4),
             bottom: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
           },
@@ -5243,7 +5259,7 @@
 
     $("#pbi-wide-title").textContent = "Accessories";
     const hint = $("#pbi-wide-hint");
-    if (hint) hint.textContent = "Ach % chart fits on one screen · schedule below · click a name to open that advisor";
+    if (hint) hint.textContent = "Scroll the chart for every advisor · Achieved + In Progress + Remaining · click a name to filter";
 
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
@@ -5272,43 +5288,38 @@
       const scroll = $("#pbi-wide-scroll");
       const wideCanvas = document.getElementById("pbi-wide-canvas");
       if (horizontal && snap.type === "bar" && n > 1) {
-        const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-        const fit = fitHorizontalChartHeight(n, seriesN, {
-          preferredRow: 32,
-          minRow: 16,
-          maxViewportFrac: 0.42,
-          chromePx: 100,
-          pad: 48,
-        });
-        box.style.height = fit.height + "px";
-        box.style.minHeight = fit.height + "px";
-        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
-        scroll.style.maxHeight = "";
-        scroll.classList.remove("is-scroll");
+        const preferredRow = 42;
+        const chartH = Math.max(320, n * preferredRow + 64);
+        const viewH = Math.max(360, Math.floor(window.innerHeight * 0.58));
+        box.style.height = chartH + "px";
+        box.style.minHeight = Math.min(chartH, viewH) + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(preferredRow);
+        scroll.style.maxHeight = viewH + "px";
+        scroll.classList.add("is-scroll");
       } else if (snap.type === "doughnut") {
         box.style.height = "280px";
         scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
         if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
       } else {
         box.style.height = "320px";
         scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
         if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
       }
       renderWideNumbers(snap);
       const extra = { ...(snap.extra || {}) };
       upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
       if (horizontal && snap.type === "bar" && n > 1) {
-        const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-        const fit = fitHorizontalChartHeight(n, seriesN, {
-          preferredRow: 32,
-          minRow: 16,
-          maxViewportFrac: 0.42,
-          chromePx: 100,
-          pad: 48,
-        });
-        box.style.height = fit.height + "px";
-        box.style.minHeight = fit.height + "px";
-        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+        const preferredRow = 42;
+        const chartH = Math.max(320, n * preferredRow + 64);
+        const viewH = Math.max(360, Math.floor(window.innerHeight * 0.58));
+        box.style.height = chartH + "px";
+        box.style.minHeight = Math.min(chartH, viewH) + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(preferredRow);
+        scroll.style.maxHeight = viewH + "px";
+        scroll.classList.add("is-scroll");
+        if (charts["pbi-wide-canvas"]) charts["pbi-wide-canvas"].resize();
       }
     } else {
       const nums = $("#pbi-wide-numbers");
@@ -8060,13 +8071,21 @@
 
     const single = !!(opts && opts.single) || accRows.length === 1;
     const labels = single
-      ? [shortEmpLabel(accRows[0].row["Sales Employee"] || accRows[0].row.Salesman || "This employee")]
-      : accRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
+      ? [String(accRows[0].row["Sales Employee"] || accRows[0].row.Salesman || "This employee")]
+      : accRows.map((x) => {
+          const full = String(x.row["Sales Employee"] || x.row.Salesman || "—").trim();
+          return full.length <= 28 ? full : shortEmpLabel(full);
+        });
     const empKeys = accRows.map((x) => x.row._key);
     const horizontal = !single && accRows.length > 1;
-    const soldVals = accRows.map((x) => x.sold);
-    const progressVals = accRows.map((x) => x.inProgress);
-    const remainVals = accRows.map((x) => x.remaining);
+    const soldVals = accRows.map((x) => Math.max(0, Number(x.sold) || 0));
+    const progressVals = accRows.map((x) => Math.max(0, Number(x.inProgress) || 0));
+    const remainVals = accRows.map((x) => Math.max(0, Number(x.remaining) || 0));
+    const stackMax = Math.max(
+      1,
+      ...accRows.map((x, i) => soldVals[i] + progressVals[i] + remainVals[i])
+    );
+    const axisMax = Math.ceil(stackMax * 1.15);
 
     if (single) {
       const r = accRows[0];
@@ -8083,26 +8102,28 @@
       empKeys,
       legend: true,
       stacked: true,
+      max: axisMax,
+      showValues: false,
       datasets: [
         {
           label: "Achieved",
           data: soldVals,
-          backgroundColor: "rgba(13, 148, 136, 0.88)",
-          borderRadius: 4,
+          backgroundColor: "rgba(13, 148, 136, 0.92)",
+          borderRadius: 3,
           stack: "acc",
         },
         {
           label: "In Progress",
           data: progressVals,
-          backgroundColor: "rgba(235, 10, 30, 0.88)",
-          borderRadius: 4,
+          backgroundColor: "rgba(235, 10, 30, 0.92)",
+          borderRadius: 3,
           stack: "acc",
         },
         {
           label: "Remaining",
           data: remainVals,
-          backgroundColor: "rgba(148, 163, 184, 0.45)",
-          borderRadius: 4,
+          backgroundColor: "rgba(148, 163, 184, 0.55)",
+          borderRadius: 3,
           stack: "acc",
         },
       ],
