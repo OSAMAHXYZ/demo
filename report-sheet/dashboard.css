@@ -6904,17 +6904,25 @@ body.admin-page #panel-allocation:not([hidden]) {
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
-.sr-perf-metric.is-del { border-color: rgba(235, 10, 30, 0.18); }
+.sr-perf-metric.is-del {
+  border-color: rgba(235, 10, 30, 0.35);
+  background: #fff1f2;
+}
 .sr-perf-metric.is-del .v { color: #eb0a1e; }
-.sr-perf-metric.is-prof { border-color: rgba(13, 148, 136, 0.2); }
-.sr-perf-metric.is-prof .v { color: #0f766e; }
+.sr-perf-metric.is-prof {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: #f0fdf4;
+}
+.sr-perf-metric.is-prof .v { color: #16a34a; }
 .sr-perf-metric.is-vol .v { color: #111; }
+.sr-perf-metric.is-vol .sr-trend.is-up { color: #eb0a1e; }
 .sr-perf-metric.is-target {
   background: #111;
   border-color: #111;
 }
 .sr-perf-metric.is-target .k { color: #94a3b8; }
 .sr-perf-metric.is-target .v { color: #fff; }
+.sr-perf-metric.is-target .sr-trend { color: #94a3b8; }
 
 .sr-panel .pbi-viz {
   border-radius: 12px; padding: 10px 12px !important;
@@ -7369,21 +7377,22 @@ body.admin-page #panel-allocation:not([hidden]) {
 .sr-kpi-ico {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 800;
   background: #f1f5f9;
   flex-shrink: 0;
 }
-.sr-kpi-card.tone-blue .sr-kpi-ico { background: #e0f2fe; color: #0284c7; }
-.sr-kpi-card.tone-violet .sr-kpi-ico { background: #ede9fe; color: #6d28d9; }
-.sr-kpi-card.tone-green .sr-kpi-ico { background: #dcfce7; color: #15803d; }
-.sr-kpi-card.tone-sky .sr-kpi-ico { background: #e0f2fe; color: #0369a1; }
-.sr-kpi-card.tone-red .sr-kpi-ico { background: #fee2e2; color: #eb0a1e; }
+.sr-kpi-card.tone-blue .sr-kpi-ico { background: #dbeafe; color: #1d4ed8; }
+.sr-kpi-card.tone-violet .sr-kpi-ico { background: #ede9fe; color: #7c3aed; }
+.sr-kpi-card.tone-green .sr-kpi-ico { background: #dcfce7; color: #16a34a; }
+.sr-kpi-card.tone-sky .sr-kpi-ico { background: #e0f2fe; color: #0284c7; }
+.sr-kpi-card.tone-red .sr-kpi-ico { background: #ffe4e6; color: #eb0a1e; }
 .sr-kpi-card.tone-teal .sr-kpi-ico { background: #ccfbf1; color: #0f766e; }
-.sr-kpi-card.tone-warn .sr-kpi-ico { background: #fee2e2; color: #b91c1c; }
+.sr-kpi-card.tone-warn .sr-kpi-ico { background: #fee2e2; color: #dc2626; }
 .sr-kpi-lab {
   font-size: 0.62rem;
   font-weight: 800;
@@ -7408,9 +7417,12 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 700;
   margin-top: auto;
 }
-.sr-trend.is-up { color: #15803d; }
-.sr-trend.is-down { color: #dc2626; }
+.sr-trend.is-up { color: #16a34a; }
+.sr-trend.is-down { color: #eb0a1e; }
 .sr-trend.is-flat { color: #94a3b8; }
+.sr-kpi-card.tone-blue .sr-trend.is-up,
+.sr-kpi-card.tone-green .sr-trend.is-up { color: #eb0a1e; }
+.sr-kpi-card.tone-violet .sr-trend.is-up { color: #16a34a; }
 .sr-mock-grid {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
@@ -7490,22 +7502,36 @@ body.admin-page #panel-allocation:not([hidden]) {
 .sr-perf-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1d4ed8, #2563eb);
+  background: #2563eb;
   transition: width .35s ease;
 }
 .sr-perf-progress-stats.sr-perf-day {
   margin: 0;
 }
+.sr-mock-perf .sr-perf-metric.is-del {
+  border-color: rgba(235, 10, 30, 0.4);
+  background: #fff1f2;
+}
+.sr-mock-perf .sr-perf-metric.is-prof {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: #f0fdf4;
+}
 .sr-perf-metric.is-remain {
-  border-color: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.4);
   background: #eff6ff;
 }
-.sr-perf-metric.is-remain .v { color: #1d4ed8; }
-.sr-cancel-mock-body {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.1fr);
-  gap: 12px;
-  align-items: center;
+.sr-perf-metric.is-remain .v { color: #2563eb; }
+.sr-mock-cancel .cancel-pct-panel,
+.sr-mock-cancel .cancel-pct-panel.sr-cancel-mock,
+.sr-mock-cancel .cancel-pct-panel.is-over,
+.sr-mock-cancel .cancel-pct-panel.is-ok,
+.sr-mock-cancel .cancel-pct-panel.is-empty {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 .sr-cancel-donut {
   --cancel-deg: 0deg;
@@ -7595,9 +7621,10 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: #bbf7d0;
 }
 .sr-mock-acc {
-  background: linear-gradient(145deg, #4a3428 0%, #3b2a22 55%, #2f211b 100%) !important;
-  border-color: #3b2a22 !important;
+  background: #3b2a22 !important;
+  border-color: #2f211b !important;
   color: #fff;
+  box-shadow: 0 8px 22px rgba(47, 33, 27, 0.28) !important;
 }
 .sr-mock-acc .sr-mock-card-title,
 .sr-mock-acc .sr-mock-card-sub { color: #f8fafc; }
@@ -7607,30 +7634,43 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: rgba(255,255,255,0.18);
   color: #fff;
 }
+.sr-mock-acc .acc-summary-board.sr-acc-mock,
 .sr-acc-mock.acc-summary-board {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
 }
 .sr-mock-acc .acc-summary-pct-hero {
-  padding: 0;
-  background: transparent;
-  border: 0;
+  padding: 4px 0 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: #fff !important;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  align-items: stretch;
 }
 .sr-mock-acc .acc-summary-pct-text .k {
-  color: rgba(248, 250, 252, 0.7);
+  display: none;
 }
 .sr-mock-acc .acc-summary-pct-text .v {
-  color: #fff;
-  font-size: 1.8rem;
+  color: #fff !important;
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  opacity: 1;
 }
 .sr-acc-progress-track {
   height: 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.22);
   overflow: hidden;
 }
 .sr-acc-progress-fill {
@@ -7639,13 +7679,29 @@ body.admin-page #panel-allocation:not([hidden]) {
   background: #fff;
   transition: width .35s ease;
 }
-.sr-mock-acc .acc-summary-cols {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.sr-mock-acc .acc-summary-cols,
+.sr-mock-acc .acc-summary-cols--detail {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px !important;
+  background: transparent !important;
 }
-.sr-mock-acc .acc-summary-cell .k { color: rgba(248, 250, 252, 0.65); }
-.sr-mock-acc .acc-summary-cell .v { color: #fff; }
+.sr-mock-acc .acc-summary-cell {
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #8b4513 0%, #a0522d 55%, #6b3410 100%) !important;
+  color: #fff !important;
+  text-align: left;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.sr-mock-acc .acc-summary-cell .k {
+  color: rgba(255, 255, 255, 0.78) !important;
+  opacity: 1;
+}
+.sr-mock-acc .acc-summary-cell .v {
+  color: #fff !important;
+  font-size: 1.15rem;
+}
 .sr-profdel-day {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
