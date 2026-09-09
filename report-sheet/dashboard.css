@@ -8267,3 +8267,6 @@ body.admin-page #panel-allocation:not([hidden]) {
 .sr-kpi-card .sr-trend,
 .sr-profdel-day .sr-trend,
 .sr-perf-metric .sr-trend { display: none !important; }
+#sr-diag-banner,
+.sr-schedule #sr-diag-banner,
+.sr-sched-info { display: none !important; }

@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr29" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr30" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -6653,59 +6653,10 @@
     const diag = sr.diag || {};
     const diagEl = $("#sr-diag-banner");
     if (diagEl) {
-      const dayEmpty = (diag.dayProforma || 0) === 0 && (diag.dayDelivery || 0) === 0;
-      const monthEmpty = (diag.monthProforma || 0) === 0 && (diag.monthDelivery || 0) === 0;
-      if (diag.salesRows > 0 && (dayEmpty || monthEmpty)) {
-        diagEl.style.display = "block";
-        diagEl.className = "banner load show";
-        const samples = [...new Set([...(diag.sampleProforma || []), ...(diag.sampleDelivery || [])])].slice(0, 6).join(", ");
-        diagEl.innerHTML = `
-          <b>Why Proforma/Delivery look empty:</b>
-          Sales Raw has <b>${formatNumber(diag.salesRows)}</b> rows ·
-          parsed Col P dates: <b>${formatNumber(diag.withProformaDate || 0)}</b> ·
-          open Proforma (P set, V blank): <b>${formatNumber(diag.withProformaOpen || 0)}</b> ·
-          parsed Col V dates: <b>${formatNumber(diag.withDeliveryDate || 0)}</b>.
-          Matching <b>report day (${escapeHtml(diag.today || live.label)})</b>:
-          Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>,
-          Delivery <b>${formatNumber(diag.dayDelivery || 0)}</b>.
-          Matching <b>report month (${escapeHtml(diag.monthKey || live.monthKey)})</b>:
-          Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>,
-          Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>.
-          Name match: roster <b>${formatNumber(diag.matchedRoster || 0)}</b> ·
-          unmatched Col A <b>${formatNumber(diag.unmatchedNames || 0)}</b>
-          ${diag.sampleUnmatched && diag.sampleUnmatched.length
-            ? ` (e.g. ${escapeHtml(diag.sampleUnmatched.slice(0, 3).join(", "))})`
-            : ""}.
-          ${samples ? `<br>Sample dates found in file: ${escapeHtml(samples)}` : "<br>No readable dates found in Col P/V — check those columns contain dates."}
-          <br><span style="font-weight:500">If your file has older dates than today, the dashboard auto-uses the latest month in the file. Upload a file with current-month dates, or refresh after Admin push.</span>
-        `;
-      } else if (diag.filterMode === "custom" && diag.salesRows > 0) {
-        diagEl.style.display = "block";
-        diagEl.className = "banner load show ok";
-        diagEl.innerHTML = `
-          <b>Custom date range:</b>
-          Showing <b>${escapeHtml(diag.rangeLabel || "")}</b>
-          · Proforma <b>${formatNumber(diag.monthProforma || 0)}</b>
-          · Delivery <b>${formatNumber(diag.monthDelivery || 0)}</b>
-          · End-day Proforma <b>${formatNumber(diag.dayProforma || 0)}</b>
-          · End-day Delivery <b>${formatNumber(diag.dayDelivery || 0)}</b>.
-        `;
-      } else if (diag.source === "file" && diag.salesRows > 0) {
-        diagEl.style.display = "block";
-        diagEl.className = "banner load show ok";
-        diagEl.innerHTML = `
-          <b>Using dates from your uploaded file:</b>
-          Showing <b>${escapeHtml(diag.reportMonthLabel || diag.monthKey)}</b>
-          (latest month in Sales Raw).
-          Calendar month <b>${escapeHtml(diag.calendarMonthKey || "")}</b> had no matching Col P/V dates.
-          Day snapshot: <b>${escapeHtml(diag.today || live.label)}</b>
-          · Proforma MTD <b>${formatNumber(diag.monthProforma || 0)}</b>
-          · Delivery MTD <b>${formatNumber(diag.monthDelivery || 0)}</b>.
-        `;
-      } else if (diagEl) {
-        diagEl.style.display = "none";
-        diagEl.classList.remove("show");
-      }
+      diagEl.hidden = true;
+      diagEl.style.display = "none";
+      diagEl.classList.remove("show");
+      diagEl.innerHTML = "";
     }
 
     fillScheduleFilterOptions(sr);
@@ -7173,7 +7124,6 @@
       <div class="sr-perf-metric is-vol">
         <span class="k">Volume</span>
         <span class="v">${formatNumber(vol)}</span>
-        ${trendHtml(volDelta)}
       </div>
       <div class="sr-perf-metric is-prof">
         <span class="k">Prof+Del %</span>
@@ -7182,7 +7132,6 @@
       <div class="sr-perf-metric is-target">
         <span class="k">Target</span>
         <span class="v">${formatNumber(target)}</span>
-        <span class="sr-trend is-flat">0%</span>
       </div>
     `;
   }
