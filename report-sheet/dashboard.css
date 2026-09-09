@@ -2232,7 +2232,7 @@ tr.emp-row:hover td {
 /* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Targets Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
 .target-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 10px;
 }
 
@@ -2271,8 +2271,8 @@ tr.emp-row:hover td {
 
 .target-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto auto 88px;
-  gap: 8px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px 10px;
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2290,6 +2290,14 @@ tr.emp-row:hover td {
 .target-row.is-vacation {
   border-color: #cbd5e1;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.target-row-controls {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 
 .target-vacation {
@@ -2331,12 +2339,7 @@ tr.emp-row:hover td {
 }
 @media (max-width: 720px) {
   .target-row {
-    grid-template-columns: 28px 1fr;
-  }
-  .target-vacation,
-  .target-guest,
-  .target-row input[type="number"] {
-    grid-column: 2;
+    grid-template-columns: 28px minmax(0, 1fr);
   }
 }
 
@@ -2364,14 +2367,21 @@ tr.emp-row:hover td {
   font-weight: 700;
 }
 
-.target-row input {
+.target-row input[data-emp-name] {
   width: 100%;
+  min-width: 0;
+  color: #111 !important;
+  background: #fff !important;
+  font-weight: 600;
+  font-size: 0.88rem;
 }
 
-.target-row input[type="number"] {
+.target-row input[data-emp-target] {
+  width: 88px;
   text-align: center;
   font-weight: 700;
   background: #fff;
+  color: #111;
 }
 
 .target-summary {
@@ -8457,7 +8467,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   .rv-head-actions input[type="search"] { flex: 1; min-width: 0; }
 }
 
-/* �� Summary � Delivered vs Proforma �� */
+/* �� Summary � Delivered vs Proforma �� */
 .dvp-summary {
   display: flex;
   flex-direction: column;

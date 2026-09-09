@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="dashboard.css?v=20260907t2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260909emp1" />
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
 </head>
@@ -430,9 +430,8 @@
       return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
         const row = parsed[i] || {};
         const savedName = String(row.name || "").trim();
-        const name = !savedName || isPlaceholderName(savedName)
-          ? DEFAULT_EMPLOYEES[i].name
-          : savedName;
+        const fallback = DEFAULT_EMPLOYEES[i]?.name || `Employee ${i + 1}`;
+        const name = !savedName || isPlaceholderName(savedName) ? fallback : savedName;
         const metaNote = (() => {
           const key = String(name).trim().toLowerCase().replace(/\s+/g, " ");
           const meta = {
@@ -473,7 +472,9 @@
       const typedTarget = Math.max(0, Number(targetEl ? targetEl.value : prev.target) || 0);
       return {
         id: i + 1,
-        name: (nameEl ? nameEl.value : prev.name || DEFAULT_EMPLOYEES[i].name).trim() || DEFAULT_EMPLOYEES[i].name,
+        name: (nameEl ? nameEl.value : prev.name || DEFAULT_EMPLOYEES[i].name).trim()
+          || DEFAULT_EMPLOYEES[i]?.name
+          || `Employee ${i + 1}`,
         vacation: onVacation,
         guestExpCenter: guestEl ? guestEl.checked : !!prev.guestExpCenter,
         target: onVacation
@@ -527,16 +528,18 @@
       const onGuest = !!e.guestExpCenter;
       return `<div class="target-row${onVac ? " is-vacation" : ""}${onGuest ? " is-guest" : ""}"${hidden}>
         <div class="idx">${e.id}</div>
-        <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name)}" placeholder="Employee name" />
-        <label class="target-vacation" title="Target counts as 0 · shows VACATION on report">
-          <input data-emp-vacation="${i}" type="checkbox"${onVac ? " checked" : ""} />
-          <span>Vacation</span>
-        </label>
-        <label class="target-guest" title="Counts toward Summary · Guest Experience Automall">
-          <input data-emp-guest="${i}" type="checkbox"${onGuest ? " checked" : ""} />
-          <span>Guest Exp</span>
-        </label>
-        <input data-emp-target="${i}" type="number" min="0" step="1" value="${onVac ? 0 : (e.target || 0)}" title="Monthly target"${onVac ? " disabled" : ""} />
+        <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name || DEFAULT_EMPLOYEES[i].name)}" placeholder="Employee name" autocomplete="off" />
+        <div class="target-row-controls">
+          <label class="target-vacation" title="Target counts as 0 · shows VACATION on report">
+            <input data-emp-vacation="${i}" type="checkbox"${onVac ? " checked" : ""} />
+            <span>Vacation</span>
+          </label>
+          <label class="target-guest" title="Counts toward Summary · Guest Experience Automall">
+            <input data-emp-guest="${i}" type="checkbox"${onGuest ? " checked" : ""} />
+            <span>Guest Exp</span>
+          </label>
+          <input data-emp-target="${i}" type="number" min="0" step="1" value="${onVac ? 0 : (e.target || 0)}" title="Monthly target"${onVac ? " disabled" : ""} />
+        </div>
       </div>`;
     }).join("");
     $("#target-foot").textContent = `${EMPLOYEE_COUNT} employees · Guest Exp → Summary Guest Experience · then Push to live`;
