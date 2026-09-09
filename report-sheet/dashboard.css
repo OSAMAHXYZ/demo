@@ -8749,3 +8749,64 @@ body.admin-page #panel-allocation:not([hidden]) {
 .dvp-trend.is-up { color: #15803d; }
 .dvp-trend.is-down { color: #b91c1c; }
 .dvp-trend.is-flat { color: #94a3b8; }
+
+/* --- Allocation Audit --- */
+.aa-dash { display: flex; flex-direction: column; gap: 14px; }
+.aa-summary-card,
+.aa-vin-card {
+  padding: 14px 16px 16px;
+  border: 1px solid #e5eaf1;
+  border-radius: 14px;
+  background: #fff;
+}
+.aa-table-wrap {
+  overflow: auto;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  margin-top: 8px;
+}
+.aa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.aa-table th,
+.aa-table td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: top;
+}
+.aa-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  z-index: 1;
+}
+.aa-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.aa-gap-neg { color: #b91c1c; font-weight: 700; }
+.aa-gap-pos { color: #15803d; font-weight: 700; }
+.aa-row-missing {
+  background: rgba(185, 28, 28, 0.06);
+}
+.aa-row-missing td { border-bottom-color: rgba(185, 28, 28, 0.12); }
+.aa-missing-flag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.aa-dash .rv-head-actions select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}

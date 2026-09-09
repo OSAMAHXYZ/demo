@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260909dvp1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260909aa1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -647,6 +647,65 @@
           <div class="bo-kpis" id="rv-kpis"></div>
           <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
           <p class="foot" id="rv-table-foot"></p>
+        </div>
+      </div>
+
+      <!-- PANEL: Allocation Audit -->
+      <div class="panel-section" id="panel-allocationaudit" style="display:none">
+        <div class="bo-empty card" id="aa-empty">
+          <h2>Allocation Audit</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Compare Admin allocation vs Retail Electronic Sales arrivals, then trace each VIN in Sales Raw,
+            E-Sales المحجوز, All Retail المخزون المتاح, and RTL daily snapshots.
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Set allocation in <a href="admin.html">Admin</a> → <b>3 · Allocation Plan</b></li>
+            <li>Upload slot <b>2 · RTL Stock</b> (Search Area = Retail Electronic Sales)</li>
+            <li>Upload slot <b>3 · Stock Central</b> (sheets المحجوز + المخزون المتاح)</li>
+            <li>Upload slot <b>4 · Sales Raw</b> for Proforma / Delivered status</li>
+            <li>Click <b>Push to live</b> (also saves today’s RTL snapshot) · return here · <b>Refresh</b></li>
+          </ol>
+        </div>
+
+        <div id="aa-dash" class="bo-dash aa-dash" hidden>
+          <div class="rv-head">
+            <div>
+              <h2 class="rv-title">Allocation Audit</h2>
+              <p class="rv-sub" id="aa-live-hint">Allocation · RES actual · Sales Raw · E-Sales · RTL snapshots</p>
+            </div>
+            <div class="rv-head-actions">
+              <select id="aa-filter-status" title="Filter VIN status">
+                <option value="">All statuses</option>
+                <option value="delivered">Delivered</option>
+                <option value="proforma">Proforma</option>
+                <option value="reserved">In المحجوز</option>
+                <option value="available">In المخزون المتاح</option>
+                <option value="missing">Not found (red)</option>
+              </select>
+              <input id="aa-search" type="search" placeholder="Search product / suffix / VIN…" />
+              <button type="button" id="aa-excel-btn" class="btn-primary">Export Excel</button>
+            </div>
+          </div>
+          <div class="bo-kpis" id="aa-kpis"></div>
+          <article class="card aa-summary-card">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>Product allocation vs actual</h2>
+                <span class="hint">Plan vs Retail Electronic Sales VINs currently in RTL</span>
+              </div>
+            </div>
+            <div class="table-wrap aa-table-wrap" id="aa-summary-wrap"></div>
+          </article>
+          <article class="card aa-vin-card">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>VIN audit trail</h2>
+                <span class="hint">Sales Raw · المحجوز · المخزون المتاح · last RTL snapshot day / location / search area</span>
+              </div>
+            </div>
+            <div class="table-wrap aa-table-wrap" id="aa-vin-wrap"></div>
+            <p class="foot" id="aa-vin-foot"></p>
+          </article>
         </div>
       </div>
 
@@ -5594,6 +5653,7 @@
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boallocstock", label: "Allocation" },
+    { id: "allocationaudit", label: "Allocation Audit" },
     { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
@@ -5616,6 +5676,11 @@
     return Array.isArray(slots.central?.reservedRows) && slots.central.reservedRows.length > 0;
   }
 
+  function hasAllocationAuditInputs() {
+    const hasPlan = ALLOCATION_ROWS.some((r) => r.kind === "leaf" && (Number(allocationValues[r.id]) || 0) > 0);
+    return hasPlan || slotHasRows("rtl") || hasReservedVehiclesInputs() || slotHasRows("central");
+  }
+
   /** Sales Report when Sales Raw is pushed (Cancelled BO optional — zeros if missing) */
   function hasSalesReportInputs() {
     return hasSalesRaw();
@@ -5630,6 +5695,7 @@
       if (p.id === "salesreport") return hasSalesReportInputs();
       if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
+      if (p.id === "allocationaudit") return true;
       // BO + Stock Dashboard always visible — empty state when BO file missing
       return true;
     });
@@ -6219,6 +6285,7 @@
       salesreport: "▣",
       bodashboard: "▤",
       boallocstock: "▦",
+      allocationaudit: "⬡",
       stockdashboard: "◈",
       reservedvehicles: "◎",
       dashboard: "◉",
@@ -6244,6 +6311,7 @@
     }
     if (panelId === "summary") renderSummaryDashboard();
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
+    if (panelId === "allocationaudit") renderAllocationAudit();
   }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
@@ -13464,6 +13532,395 @@
     setStatus("Reserved Vehicles Excel exported", "ok");
   }
 
+  let aaView = { search: "", status: "" };
+  let aaLastSeenCache = { loaded: false, loading: null, lastSeen: {}, snapshotCount: 0, error: "" };
+
+  async function ensureAaRtlLastSeen() {
+    if (aaLastSeenCache.loaded) return aaLastSeenCache;
+    if (aaLastSeenCache.loading) return aaLastSeenCache.loading;
+    aaLastSeenCache.loading = (async () => {
+      try {
+        const res = await fetch("/api/rtl-daily/last-seen", { cache: "no-store" });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+        const data = await res.json();
+        aaLastSeenCache.lastSeen = data && data.lastSeen && typeof data.lastSeen === "object" ? data.lastSeen : {};
+        aaLastSeenCache.snapshotCount = Number(data.snapshotCount) || 0;
+        aaLastSeenCache.error = "";
+        aaLastSeenCache.loaded = true;
+      } catch (err) {
+        aaLastSeenCache.lastSeen = {};
+        aaLastSeenCache.snapshotCount = 0;
+        aaLastSeenCache.error = err.message || "RTL snapshots unavailable";
+        aaLastSeenCache.loaded = true;
+      } finally {
+        aaLastSeenCache.loading = null;
+      }
+      return aaLastSeenCache;
+    })();
+    return aaLastSeenCache.loading;
+  }
+
+  function buildReservedVinSet() {
+    const set = new Set();
+    (slots.central.reservedRows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(r.vin);
+      if (vin) set.add(vin);
+    });
+    return set;
+  }
+
+  function resolveAaSalesStatus(vin, salesLookup) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const sales = salesLookup.get(key);
+    if (!sales) {
+      return { kind: "none", label: "—", detail: "Not in Sales Raw", cls: "na" };
+    }
+    if (sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate))) {
+      return {
+        kind: "delivered",
+        label: "Delivered",
+        detail: `Delivery ${formatRvDate(sales.deliveryDate)}`,
+        cls: "ok",
+        proformaDate: sales.proformaDate,
+        deliveryDate: sales.deliveryDate,
+      };
+    }
+    if (sales.proformaDate && parseDate(sales.proformaDate)) {
+      return {
+        kind: "proforma",
+        label: "Proforma",
+        detail: `Proforma ${formatRvDate(sales.proformaDate)}`,
+        cls: "warn",
+        proformaDate: sales.proformaDate,
+        deliveryDate: sales.deliveryDate,
+      };
+    }
+    return {
+      kind: "sales",
+      label: "In Sales Raw",
+      detail: "No proforma / delivery date",
+      cls: "na",
+      proformaDate: sales.proformaDate,
+      deliveryDate: sales.deliveryDate,
+    };
+  }
+
+  function buildAllocationAuditPack() {
+    const salesLookup = buildSalesVinLookup();
+    const availableLookup = buildEsalesStockVinLookup();
+    const reservedSet = buildReservedVinSet();
+    const lastSeen = aaLastSeenCache.lastSeen || {};
+    const resCars = buildRetailElectronicSalesCars();
+
+    const byLeaf = new Map();
+    ALLOCATION_ROWS.forEach((leaf) => {
+      if (leaf.kind !== "leaf") return;
+      byLeaf.set(leaf.id, {
+        id: leaf.id,
+        seg: leaf.seg,
+        product: leaf.product,
+        sfx: leaf.sfx,
+        allocation: Number(allocationValues[leaf.id]) || 0,
+        actual: 0,
+        delivered: 0,
+        proforma: 0,
+        reserved: 0,
+        available: 0,
+        missing: 0,
+      });
+    });
+
+    const vinRows = [];
+    const seenVin = new Set();
+
+    resCars.forEach((car) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seenVin.has(vin)) return;
+      seenVin.add(vin);
+
+      const leaf = matchRtlToAllocLeaf(car);
+      const sales = resolveAaSalesStatus(vin, salesLookup);
+      const inReserved = reservedSet.has(vin);
+      const avail = availableLookup.get(vin) || null;
+      const inAvailable = !!avail;
+      const snap = lastSeen[vin] || null;
+      const missing = sales.kind === "none" && !inReserved && !inAvailable;
+
+      const whereBits = [];
+      if (sales.kind === "delivered" || sales.kind === "proforma" || sales.kind === "sales") {
+        whereBits.push(sales.label);
+      }
+      if (inReserved) whereBits.push("المحجوز");
+      if (inAvailable) whereBits.push("المخزون المتاح");
+      if (snap) whereBits.push(`RTL ${snap.date}`);
+      if (missing) whereBits.push("Not found");
+
+      const row = {
+        vin,
+        product: leaf ? leaf.product : (car.product || "—"),
+        sfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        seg: leaf ? leaf.seg : (car.seg || "—"),
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        age: car.age,
+        searchArea: car.searchAreaDesc || "",
+        liveLocation: car.location || "",
+        sales,
+        inReserved,
+        inAvailable,
+        availableDetail: avail
+          ? reservedStockStatusDetail(avail, "In available stock")
+          : "—",
+        availableLocation: avail ? cellToString(avail.location).trim() : "",
+        snap,
+        missing,
+        whereLabel: whereBits.join(" · ") || "—",
+      };
+      vinRows.push(row);
+
+      if (leaf && byLeaf.has(leaf.id)) {
+        const sum = byLeaf.get(leaf.id);
+        sum.actual += 1;
+        if (sales.kind === "delivered") sum.delivered += 1;
+        if (sales.kind === "proforma") sum.proforma += 1;
+        if (inReserved) sum.reserved += 1;
+        if (inAvailable) sum.available += 1;
+        if (missing) sum.missing += 1;
+      }
+    });
+
+    const summaryRows = [...byLeaf.values()]
+      .filter((r) => r.allocation > 0 || r.actual > 0)
+      .map((r) => ({ ...r, gap: r.actual - r.allocation }))
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || String(a.product).localeCompare(String(b.product)));
+
+    vinRows.sort((a, b) => {
+      if (a.missing !== b.missing) return a.missing ? -1 : 1;
+      return String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
+    });
+
+    return {
+      summaryRows,
+      vinRows,
+      totals: {
+        allocation: summaryRows.reduce((s, r) => s + r.allocation, 0),
+        actual: vinRows.length,
+        delivered: vinRows.filter((r) => r.sales.kind === "delivered").length,
+        proforma: vinRows.filter((r) => r.sales.kind === "proforma").length,
+        reserved: vinRows.filter((r) => r.inReserved).length,
+        available: vinRows.filter((r) => r.inAvailable).length,
+        missing: vinRows.filter((r) => r.missing).length,
+        snapshots: aaLastSeenCache.snapshotCount || 0,
+      },
+    };
+  }
+
+  function filteredAaVinRows(vinRows) {
+    const q = String(aaView.search || "").trim().toLowerCase();
+    const st = String(aaView.status || "").trim();
+    return vinRows.filter((r) => {
+      if (st === "delivered" && r.sales.kind !== "delivered") return false;
+      if (st === "proforma" && r.sales.kind !== "proforma") return false;
+      if (st === "reserved" && !r.inReserved) return false;
+      if (st === "available" && !r.inAvailable) return false;
+      if (st === "missing" && !r.missing) return false;
+      if (!q) return true;
+      const hay = [r.vin, r.product, r.sfx, r.seg, r.sales.label, r.whereLabel, r.snap && r.snap.location, r.snap && r.snap.vehicleSearchArea]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }
+
+  function renderAllocationAudit() {
+    const empty = $("#aa-empty");
+    const dash = $("#aa-dash");
+    if (!empty || !dash) return;
+
+    if (!hasAllocationAuditInputs()) {
+      empty.hidden = false;
+      empty.style.display = "";
+      dash.hidden = true;
+      return;
+    }
+
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+
+    const pack = buildAllocationAuditPack();
+    const { summaryRows, vinRows, totals } = pack;
+    const filtered = filteredAaVinRows(vinRows);
+
+    const hint = $("#aa-live-hint");
+    if (hint) {
+      const snapNote = aaLastSeenCache.error
+        ? ` · snapshots: ${aaLastSeenCache.error}`
+        : ` · ${totals.snapshots} RTL snapshot day(s)`;
+      hint.textContent = `RES actual ${totals.actual} · plan ${totals.allocation} · missing ${totals.missing}${snapNote}`;
+    }
+
+    const kpis = $("#aa-kpis");
+    if (kpis) {
+      kpis.innerHTML = [
+        ["Allocation", totals.allocation, "ok"],
+        ["Actual RES", totals.actual, "ok"],
+        ["Delivered", totals.delivered, "ok"],
+        ["Proforma", totals.proforma, "warn"],
+        ["المحجوز", totals.reserved, "ok"],
+        ["المخزون المتاح", totals.available, "ok"],
+        ["Not found", totals.missing, totals.missing ? "bad" : "ok"],
+      ].map(([label, value, status]) => `
+        <div class="bo-kpi ${status}">
+          <div class="lab">${escapeHtml(label)}</div>
+          <div class="val">${escapeHtml(String(value))}</div>
+        </div>`).join("");
+    }
+
+    const sumWrap = $("#aa-summary-wrap");
+    if (sumWrap) {
+      if (!summaryRows.length) {
+        sumWrap.innerHTML = `<p class="foot" style="padding:16px">No allocation plan rows with values, and no RES VINs matched.</p>`;
+      } else {
+        sumWrap.innerHTML = `<table class="data-table aa-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Suffix</th>
+              <th class="num">Allocation</th>
+              <th class="num">Actual</th>
+              <th class="num">Gap</th>
+              <th class="num">Delivered</th>
+              <th class="num">Proforma</th>
+              <th class="num">المحجوز</th>
+              <th class="num">Available</th>
+              <th class="num">Missing</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaryRows.map((r) => `
+              <tr>
+                <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
+                <td>${escapeHtml(r.sfx || "—")}</td>
+                <td class="num">${escapeHtml(String(r.allocation))}</td>
+                <td class="num">${escapeHtml(String(r.actual))}</td>
+                <td class="num ${r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : ""}">${escapeHtml(String(r.gap))}</td>
+                <td class="num">${escapeHtml(String(r.delivered))}</td>
+                <td class="num">${escapeHtml(String(r.proforma))}</td>
+                <td class="num">${escapeHtml(String(r.reserved))}</td>
+                <td class="num">${escapeHtml(String(r.available))}</td>
+                <td class="num">${escapeHtml(String(r.missing))}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+      }
+    }
+
+    const vinWrap = $("#aa-vin-wrap");
+    const foot = $("#aa-vin-foot");
+    if (vinWrap) {
+      if (!filtered.length) {
+        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales VINs match the filters.</p>`;
+      } else {
+        vinWrap.innerHTML = `<table class="data-table aa-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>VIN</th>
+              <th>Sales Raw</th>
+              <th>المحجوز</th>
+              <th>المخزون المتاح</th>
+              <th>Last RTL day</th>
+              <th>Last location</th>
+              <th>Vehicle search area</th>
+              <th>Where</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map((r) => {
+              const snapDate = r.snap ? r.snap.date : "—";
+              const snapLoc = r.snap && r.snap.location
+                ? r.snap.location
+                : (r.liveLocation && r.liveLocation !== "—" ? r.liveLocation : "—");
+              const snapArea = r.snap && r.snap.vehicleSearchArea
+                ? r.snap.vehicleSearchArea
+                : (r.searchArea || "—");
+              return `<tr class="${r.missing ? "aa-row-missing" : ""}">
+                <td><strong>${escapeHtml(r.product)}</strong>
+                  <div class="rv-muted">${escapeHtml(r.sfx || "")}${r.age != null ? ` · age ${escapeHtml(String(r.age))}` : ""}</div></td>
+                <td class="mono">${escapeHtml(r.vin)}</td>
+                <td><span class="rv-status rv-status-${escapeHtml(r.sales.cls)}">${escapeHtml(r.sales.label)}</span>
+                  <div class="rv-muted">${escapeHtml(r.sales.detail)}</div></td>
+                <td>${r.inReserved
+                  ? `<span class="rv-status rv-status-info">Yes</span>`
+                  : `<span class="rv-muted">No</span>`}</td>
+                <td>${r.inAvailable
+                  ? `<span class="rv-status rv-status-info">Yes</span><div class="rv-muted">${escapeHtml(r.availableDetail)}</div>`
+                  : `<span class="rv-muted">No</span>`}</td>
+                <td>${escapeHtml(snapDate)}</td>
+                <td>${escapeHtml(snapLoc)}</td>
+                <td>${escapeHtml(snapArea)}</td>
+                <td>${r.missing
+                  ? `<span class="aa-missing-flag">Not found</span>`
+                  : `<span class="rv-muted">${escapeHtml(r.whereLabel)}</span>`}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+      }
+    }
+    if (foot) {
+      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} RES VINs · missing ${totals.missing}`;
+    }
+
+    if (!aaLastSeenCache.loaded) {
+      ensureAaRtlLastSeen().then(() => {
+        if (activePanel === "allocationaudit") renderAllocationAudit();
+      });
+    }
+  }
+
+  function exportAllocationAuditExcel() {
+    if (!hasAllocationAuditInputs()) {
+      setStatus("No allocation audit data to export", "busy");
+      return;
+    }
+    const pack = buildAllocationAuditPack();
+    const summary = pack.summaryRows.map((r) => ({
+      Product: r.product,
+      Suffix: r.sfx,
+      Segment: r.seg,
+      Allocation: r.allocation,
+      Actual: r.actual,
+      Gap: r.gap,
+      Delivered: r.delivered,
+      Proforma: r.proforma,
+      Reserved: r.reserved,
+      Available: r.available,
+      Missing: r.missing,
+    }));
+    const vins = pack.vinRows.map((r) => ({
+      Product: r.product,
+      Suffix: r.sfx,
+      VIN: r.vin,
+      "Sales Status": r.sales.label,
+      "Sales Detail": r.sales.detail,
+      "In Reserved (المحجوز)": r.inReserved ? "Yes" : "No",
+      "In Available (المخزون المتاح)": r.inAvailable ? "Yes" : "No",
+      "Available Detail": r.availableDetail,
+      "Last RTL Day": r.snap ? r.snap.date : "",
+      "Last Location": (r.snap && r.snap.location) || r.liveLocation || "",
+      "Vehicle Search Area": (r.snap && r.snap.vehicleSearchArea) || r.searchArea || "",
+      Missing: r.missing ? "Yes" : "No",
+      Where: r.whereLabel,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vins), "VIN Audit");
+    downloadWorkbook(wb, `Allocation-Audit-${excelFileStamp()}`);
+    setStatus("Allocation Audit Excel exported", "ok");
+  }
+
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
@@ -13490,6 +13947,11 @@
     renderBoAllocStockDashboard(d);
     renderStockDashboard();
     renderReservedVehiclesTracker();
+    aaLastSeenCache.loaded = false;
+    renderAllocationAudit();
+    ensureAaRtlLastSeen().then(() => {
+      if (activePanel === "allocationaudit") renderAllocationAudit();
+    });
     invalidateIccCache();
     if (hasSummaryInputs()) renderSummaryDashboard();
     if (hasSalesReportInputs()) {
@@ -13596,6 +14058,22 @@
   if (stockExcelBtn) stockExcelBtn.addEventListener("click", exportStockDashboardExcel);
   const rvExcelBtn = $("#rv-excel-btn");
   if (rvExcelBtn) rvExcelBtn.addEventListener("click", exportReservedVehiclesExcel);
+  const aaExcelBtn = $("#aa-excel-btn");
+  if (aaExcelBtn) aaExcelBtn.addEventListener("click", exportAllocationAuditExcel);
+  const aaSearch = $("#aa-search");
+  if (aaSearch) {
+    aaSearch.addEventListener("input", (e) => {
+      aaView.search = e.target.value;
+      if (activePanel === "allocationaudit") renderAllocationAudit();
+    });
+  }
+  const aaFilter = $("#aa-filter-status");
+  if (aaFilter) {
+    aaFilter.addEventListener("change", (e) => {
+      aaView.status = e.target.value;
+      if (activePanel === "allocationaudit") renderAllocationAudit();
+    });
+  }
   const basExcelBtn = $("#bas-excel-btn");
   if (basExcelBtn) basExcelBtn.addEventListener("click", exportBasDashboardExcel);
 
@@ -13614,7 +14092,7 @@
     globalSearchEl.addEventListener("input", (e) => {
       const q = String(e.target.value || "").trim();
       // Route search into the active panel's primary search box when present
-      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#rv-search", "#search", "#bas-alloc-search"];
+      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#rv-search", "#aa-search", "#search", "#bas-alloc-search"];
       for (const sel of targets) {
         const el = $(sel);
         if (!el || el.offsetParent === null) continue;

@@ -371,8 +371,189 @@ function sanitizeRtlVehicle(raw) {
   return {
     vin,
     product: String(raw?.product || '').trim(),
-    suffix: String(raw?.suffix || '').trim()
+    suffix: String(raw?.suffix || '').trim(),
+    location: String(raw?.location || '').trim(),
+    vehicleSearchArea: String(raw?.vehicleSearchArea || raw?.searchAreaDesc || '').trim()
   };
+}
+
+function rtlNormHeader(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-./\\]+/g, ' ')
+    .replace(/[^\w\u0600-\u06ff ]+/g, '')
+    .trim();
+}
+
+function rtlCellToString(value) {
+  if (value == null) return '';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return String(value).trim();
+}
+
+function rtlExtractVin(raw) {
+  const cleaned = rtlCellToString(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cleaned) return '';
+  const m = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/) || cleaned.match(/[A-Z0-9]{17}/);
+  return m ? m[0] : (cleaned.length >= 11 ? cleaned : '');
+}
+
+function rtlColLetterToIndex(letter) {
+  const s = String(letter || '').toUpperCase().replace(/[^A-Z]/g, '');
+  let n = 0;
+  for (let i = 0; i < s.length; i += 1) n = n * 26 + (s.charCodeAt(i) - 64);
+  return Math.max(0, n - 1);
+}
+
+function rtlResolveCol(headers, tests, fallbackLetter) {
+  const idx = headers.findIndex((h) => tests.some((t) => t(rtlNormHeader(h))));
+  if (idx >= 0) return idx;
+  return rtlColLetterToIndex(fallbackLetter);
+}
+
+/** Scan RTL workbook buffer → unique VIN rows with location + vehicle search area. */
+function scanRtlStockBuffer(buffer) {
+  if (!buffer || !buffer.length) return [];
+  let wb;
+  try {
+    wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  } catch {
+    return [];
+  }
+  const sheetName = wb.SheetNames && wb.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = wb.Sheets[sheetName];
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  if (!matrix.length) return [];
+
+  let headerIdx = 0;
+  let bestHits = -1;
+  for (let r = 0; r < Math.min(matrix.length, 25); r += 1) {
+    const row = matrix[r] || [];
+    let hits = 0;
+    for (const cell of row) {
+      const n = rtlNormHeader(cell);
+      if (!n) continue;
+      if (n === 'vin' || n.includes('vin') || n.includes('chassis')) hits += 2;
+      if (n === 'product' || n.includes('product')) hits += 1;
+      if (n === 'suffix' || n.includes('suffix') || n.includes('sfx')) hits += 1;
+      if (n.includes('search area') || n.includes('vehicle search')) hits += 1;
+      if (n.includes('location') || n.includes('allocated')) hits += 1;
+    }
+    if (hits > bestHits) {
+      bestHits = hits;
+      headerIdx = r;
+    }
+    if (hits >= 4) break;
+  }
+
+  const headerRow = matrix[headerIdx] || [];
+  const width = Math.max(headerRow.length, rtlColLetterToIndex('Q') + 1, 12);
+  const headers = [];
+  for (let i = 0; i < width; i += 1) {
+    headers.push(rtlCellToString(headerRow[i]) || `Column ${i + 1}`);
+  }
+
+  const idxProduct = rtlResolveCol(headers, [
+    (n) => n === 'product' || n === 'model' || n === 'vehicle model',
+    (n) => n.includes('product')
+  ], 'B');
+  const idxVin = rtlResolveCol(headers, [
+    (n) => n === 'vin' || n === 'chassis' || n === 'chassis no' || n === 'chassis number',
+    (n) => n.includes('vin')
+  ], 'E');
+  const idxSuffix = rtlResolveCol(headers, [
+    (n) => n === 'suffix' || n === 'sfx' || n === 'alj suffix' || n === 'grade',
+    (n) => n.includes('suffix') || n.includes('sfx')
+  ], 'G');
+  const idxLocation = rtlResolveCol(headers, [
+    (n) => n === 'allocated location' || n === 'location' || n === 'loc',
+    (n) => n.includes('allocated location') || (n.includes('location') && !n.includes('search'))
+  ], 'Q');
+  const idxSearch = rtlResolveCol(headers, [
+    (n) => n === 'vehicle search area' || n === 'search area desc' || n === 'search area',
+    (n) => n.includes('vehicle search') || n.includes('search area')
+  ], 'P');
+
+  const seen = new Set();
+  const vehicles = [];
+  for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+    const line = matrix[r] || [];
+    const vin = rtlExtractVin(line[idxVin]);
+    if (!vin || seen.has(vin)) continue;
+    seen.add(vin);
+    const v = sanitizeRtlVehicle({
+      vin,
+      product: rtlCellToString(line[idxProduct]),
+      suffix: rtlCellToString(line[idxSuffix]),
+      location: rtlCellToString(line[idxLocation]),
+      vehicleSearchArea: rtlCellToString(line[idxSearch])
+    });
+    if (v) vehicles.push(v);
+  }
+  return vehicles;
+}
+
+function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source }) {
+  ensureRtlDailyDirs();
+  const key = normalizeDateKey(dateKey) || todayIsoRiyadh();
+  const seen = new Set();
+  const list = [];
+  for (const raw of vehicles || []) {
+    const v = sanitizeRtlVehicle(raw);
+    if (!v || seen.has(v.vin)) continue;
+    seen.add(v.vin);
+    list.push(v);
+  }
+  const at = Date.now();
+  const name = String(fileName || '').trim();
+  const snap = {
+    date: key,
+    at,
+    fileName: name,
+    source: String(source || '').trim(),
+    count: list.length,
+    vehicles: list
+  };
+  const fp = rtlDailySnapshotPath(key);
+  const tmp = `${fp}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
+  fs.renameSync(tmp, fp);
+
+  const index = loadRtlDailyIndex();
+  const entry = { date: key, at, count: list.length, fileName: name, source: snap.source };
+  const rest = index.snapshots.filter((s) => s.date !== key);
+  rest.push(entry);
+  rest.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  saveRtlDailyIndex({ snapshots: rest });
+  return snap;
+}
+
+/** Newest-first last-seen map for every VIN across RTL daily snapshots. */
+function buildRtlDailyLastSeenIndex() {
+  const index = loadRtlDailyIndex();
+  const dates = [...index.snapshots]
+    .map((s) => normalizeDateKey(s.date))
+    .filter(Boolean)
+    .sort((a, b) => String(b).localeCompare(String(a)));
+  const lastSeen = {};
+  for (const date of dates) {
+    const snap = loadRtlDailySnapshot(date);
+    if (!snap) continue;
+    for (const v of snap.vehicles || []) {
+      if (!v.vin || lastSeen[v.vin]) continue;
+      lastSeen[v.vin] = {
+        date: snap.date,
+        at: snap.at,
+        product: v.product || '',
+        suffix: v.suffix || '',
+        location: v.location || '',
+        vehicleSearchArea: v.vehicleSearchArea || ''
+      };
+    }
+  }
+  return { snapshotCount: dates.length, dates, lastSeen };
 }
 
 function loadRtlDailySnapshot(dateKey) {
@@ -2339,6 +2520,8 @@ app.post('/api/report-sheet/push', (req, res) => {
 
     clearReportSheetFiles();
 
+    let rtlSnapshot = null;
+
     for (const id of REPORT_SLOT_IDS) {
       const entry = filesIn[id];
       if (!entry || !entry.base64) continue;
@@ -2349,6 +2532,22 @@ app.post('/api/report-sheet/push', (req, res) => {
       const name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
       fileNames[id] = name;
       slots.push(id);
+
+      if (id === 'rtl') {
+        try {
+          const vehicles = scanRtlStockBuffer(buf);
+          if (vehicles.length) {
+            rtlSnapshot = persistRtlDailySnapshot({
+              dateKey: todayIsoRiyadh(),
+              vehicles,
+              fileName: name,
+              source: 'admin-push'
+            });
+          }
+        } catch (snapErr) {
+          console.error('[report-sheet/push] RTL snapshot', snapErr);
+        }
+      }
     }
 
     const meta = {
@@ -2372,7 +2571,10 @@ app.post('/api/report-sheet/push', (req, res) => {
       at,
       slots,
       hasSales: meta.hasSales,
-      hasCancelled: meta.hasCancelled
+      hasCancelled: meta.hasCancelled,
+      rtlDaily: rtlSnapshot
+        ? { date: rtlSnapshot.date, count: rtlSnapshot.count, at: rtlSnapshot.at }
+        : null
     });
   } catch (err) {
     console.error('[report-sheet/push]', err);
@@ -2424,6 +2626,57 @@ app.get('/api/rtl-daily/compare', (req, res) => {
   }
 });
 
+app.get('/api/rtl-daily/last-seen', (_req, res) => {
+  try {
+    const pack = buildRtlDailyLastSeenIndex();
+    return res.json(pack);
+  } catch (err) {
+    console.error('[rtl-daily/last-seen]', err);
+    return res.status(500).json({ error: err.message || 'Failed to build last-seen index' });
+  }
+});
+
+app.get('/api/rtl-daily/vin/:vin', (req, res) => {
+  try {
+    const vin = String(req.params.vin || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (!vin || vin.length < 11) {
+      return res.status(400).json({ error: 'Invalid VIN' });
+    }
+    const index = loadRtlDailyIndex();
+    const dates = [...index.snapshots]
+      .map((s) => normalizeDateKey(s.date))
+      .filter(Boolean)
+      .sort((a, b) => String(b).localeCompare(String(a)));
+    const history = [];
+    for (const date of dates) {
+      const snap = loadRtlDailySnapshot(date);
+      if (!snap) continue;
+      const hit = (snap.vehicles || []).find((v) => v.vin === vin);
+      if (!hit) continue;
+      history.push({
+        date: snap.date,
+        at: snap.at,
+        product: hit.product || '',
+        suffix: hit.suffix || '',
+        location: hit.location || '',
+        vehicleSearchArea: hit.vehicleSearchArea || ''
+      });
+    }
+    return res.json({
+      vin,
+      count: history.length,
+      last: history[0] || null,
+      history
+    });
+  } catch (err) {
+    console.error('[rtl-daily/vin]', err);
+    return res.status(500).json({ error: err.message || 'VIN lookup failed' });
+  }
+});
+
 app.get('/api/rtl-daily/:date', (req, res) => {
   try {
     const dateKey = normalizeDateKey(req.params.date);
@@ -2439,40 +2692,16 @@ app.get('/api/rtl-daily/:date', (req, res) => {
 
 app.post('/api/rtl-daily/save', (req, res) => {
   try {
-    ensureRtlDailyDirs();
     const body = req.body || {};
     const dateKey = normalizeDateKey(body.date) || todayIsoRiyadh();
     const vehiclesIn = Array.isArray(body.vehicles) ? body.vehicles : [];
-    const seen = new Set();
-    const vehicles = [];
-    for (const raw of vehiclesIn) {
-      const v = sanitizeRtlVehicle(raw);
-      if (!v || seen.has(v.vin)) continue;
-      seen.add(v.vin);
-      vehicles.push(v);
-    }
-    const at = Date.now();
-    const fileName = String(body.fileName || '').trim();
-    const snap = {
-      date: dateKey,
-      at,
-      fileName,
-      count: vehicles.length,
-      vehicles
-    };
-    const fp = rtlDailySnapshotPath(dateKey);
-    const tmp = `${fp}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
-    fs.renameSync(tmp, fp);
-
-    const index = loadRtlDailyIndex();
-    const entry = { date: dateKey, at, count: vehicles.length, fileName };
-    const rest = index.snapshots.filter((s) => s.date !== dateKey);
-    rest.push(entry);
-    rest.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    saveRtlDailyIndex({ snapshots: rest });
-
-    return res.json({ ok: true, date: dateKey, count: vehicles.length, at });
+    const snap = persistRtlDailySnapshot({
+      dateKey,
+      vehicles: vehiclesIn,
+      fileName: body.fileName,
+      source: body.source || 'uploader'
+    });
+    return res.json({ ok: true, date: snap.date, count: snap.count, at: snap.at });
   } catch (err) {
     console.error('[rtl-daily/save]', err);
     return res.status(500).json({ error: err.message || 'Save failed' });

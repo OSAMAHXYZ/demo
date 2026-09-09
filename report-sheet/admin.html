@@ -663,8 +663,9 @@
       });
 
       let serverAt = Date.now();
+      let server = null;
       try {
-        const server = await Store.pushToServer({
+        server = await Store.pushToServer({
           targets: employeeTargets,
           accessoriesSettled: settledAmount,
           workingDays,
@@ -694,10 +695,13 @@
       renderTargetsPanel();
       renderAllocationPanel();
       const srOk = dataStamp.hasSales;
+      const rtlNote = server && server.rtlDaily
+        ? ` · RTL snapshot ${server.rtlDaily.date} (${server.rtlDaily.count} VINs)`
+        : "";
       setStatus(
         srOk
-          ? "Pushed to live — all devices will update"
-          : "Pushed to live — add Sales Raw for Sales Report",
+          ? `Pushed to live — all devices will update${rtlNote}`
+          : `Pushed to live — add Sales Raw for Sales Report${rtlNote}`,
         "ok"
       );
     } catch (err) {

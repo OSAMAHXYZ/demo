@@ -513,6 +513,14 @@
       (n) => n === "suffix" || n === "sfx" || n === "alj suffix" || n === "grade",
       (n) => n.includes("suffix") || n.includes("sfx"),
     ], "G");
+    const idxLocation = resolveCol(headers, [
+      (n) => n === "allocated location" || n === "location" || n === "loc",
+      (n) => n.includes("allocated location") || (n.includes("location") && !n.includes("search")),
+    ], "Q");
+    const idxSearch = resolveCol(headers, [
+      (n) => n === "vehicle search area" || n === "search area desc" || n === "search area",
+      (n) => n.includes("vehicle search") || n.includes("search area"),
+    ], "P");
 
     const seen = new Set();
     const vehicles = [];
@@ -529,6 +537,8 @@
         vin,
         product: cellToString(line[idxProduct]),
         suffix: cellToString(line[idxSuffix]),
+        location: cellToString(line[idxLocation]),
+        vehicleSearchArea: cellToString(line[idxSearch]),
       });
     }
 
