@@ -8264,3 +8264,6 @@ body.admin-page #panel-allocation:not([hidden]) {
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.06);
 }
 #sr-day-schedule-card .sr-sched-table-title { color: #1d4ed8; }
+.sr-kpi-card .sr-trend,
+.sr-profdel-day .sr-trend,
+.sr-perf-metric .sr-trend { display: none !important; }
