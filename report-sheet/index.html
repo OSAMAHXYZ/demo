@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr24" />
+  <link rel="stylesheet" href="dashboard.css?v=20260908sr25" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -308,246 +308,228 @@
         </article>
       </div>
 
-      <div class="panel-section sr-panel" id="panel-salesreport" style="display:none">
-        <header class="sr-hero">
-          <div class="sr-hero-copy">
-            <h1 class="sr-hero-title">Sales Report</h1>
-            <p class="sr-hero-sub" id="sr-live-hint">Tap a pulse card for detail · click a name to focus one employee</p>
+      <div class="panel-section sr-panel" id="panel-salesreport" role="tabpanel" aria-labelledby="tab-salesreport" style="display:none">
+      <div class="sr-dash" id="sr-pbi-page">
+        <div class="sr-dash-head">
+          <div class="sr-dash-head-copy">
+            <p class="sr-eyebrow">Sales Performance</p>
+            <h2 class="sr-title">Sales Dashboard</h2>
+            <p class="sr-sub">Track performance, manage targets, and drive results.</p>
           </div>
-          <div class="sr-hero-actions">
-            <button type="button" id="sr-clear-sel" class="btn" disabled>Clear name</button>
-            <button type="button" id="sr-csv-btn" class="btn-primary">Export Excel</button>
+          <div class="sr-dash-toolbar" role="toolbar" aria-label="Sales dashboard controls">
+            <div class="sr-day-chip" id="sr-day-chip" title="Working day">
+              <button type="button" class="sr-day-nav" id="sr-day-prev" aria-label="Previous day">‹</button>
+              <div class="sr-day-chip-body">
+                <span class="sr-day-chip-label">Working Day</span>
+                <strong class="sr-day-chip-value" id="sr-date-hint">—</strong>
+              </div>
+              <button type="button" class="sr-day-nav" id="sr-day-next" aria-label="Next day">›</button>
+            </div>
+            <div class="sr-range-pills" role="group" aria-label="Date range">
+              <button type="button" class="sr-range-pill is-active" data-sr-range="today">Today</button>
+              <button type="button" class="sr-range-pill" data-sr-range="mtd">MTD</button>
+              <button type="button" class="sr-range-pill" data-sr-range="last">Last</button>
+              <button type="button" class="sr-range-pill" data-sr-range="all">All</button>
+            </div>
+            <div class="sr-toolbar-filters">
+              <label class="sr-filter-chip" for="sr-filter">
+                <span class="sr-filter-chip-ico" aria-hidden="true">◎</span>
+                <select id="sr-filter" class="sr-filter-select" aria-label="Filter by showroom or advisor">
+                  <option value="">All Showrooms</option>
+                </select>
+              </label>
+              <label class="sr-filter-chip sr-filter-chip--mode" for="sr-chart-mode" title="Employee list scope">
+                <select id="sr-chart-mode" class="sr-filter-select" aria-label="Employee list mode">
+                  <option value="active" selected>Active</option>
+                  <option value="top12">Top 12</option>
+                  <option value="all">All names</option>
+                </select>
+              </label>
+            </div>
+            <button type="button" class="sr-export-btn" id="sr-csv-btn">
+              <span aria-hidden="true">↑</span> Export
+            </button>
+            <button type="button" class="btn-ghost sr-clear-sel" id="sr-clear-sel" hidden>Clear selection</button>
           </div>
-        </header>
-
-        <div class="sr-controls card">
-          <div class="sr-controls-row">
-          <input id="sr-search" type="search" placeholder="Search employee…" />
-          <select id="sr-filter">
-            <option value="">All employees</option>
-            <option value="above">Ach% ≥100%</option>
-            <option value="below">Ach% &lt;100%</option>
-          </select>
-          <select id="sr-chart-mode" title="Who appears when no name is selected">
-            <option value="active">List: Active only</option>
-            <option value="top12">List: Top 12</option>
-            <option value="all">List: All names</option>
-          </select>
         </div>
-          <div class="sr-date-bar" id="sr-date-bar">
-            <span class="sr-date-label">Period</span>
-          <select id="sr-date-preset" title="Default is Today · applies to Sales and Allocation dashboards">
-            <option value="today">Today</option>
-            <option value="this_month">This month (1st → today)</option>
-            <option value="last_month">Last month</option>
+
+        <div class="sr-hidden-fields" aria-hidden="true">
+          <input type="search" id="sr-search" value="" tabindex="-1" />
+          <select id="sr-date-preset" tabindex="-1">
+            <option value="today" selected>Today</option>
+            <option value="mtd">Month to date</option>
+            <option value="last">Last month</option>
             <option value="all">All dates</option>
             <option value="custom">Custom range</option>
           </select>
-          <label class="sr-date-field sr-date-custom">
-            <span>From</span>
-            <input type="date" id="sr-date-from" />
-          </label>
-          <label class="sr-date-field sr-date-custom">
-            <span>To</span>
-            <input type="date" id="sr-date-to" />
-          </label>
-          <button type="button" id="sr-date-apply" class="btn-primary">Apply</button>
-            <button type="button" id="sr-date-reset" class="btn">Reset</button>
-          <span class="hint sr-date-hint" id="sr-date-hint">Today · day = today · month = MTD</span>
-        </div>
+          <input type="date" id="sr-date-from" tabindex="-1" />
+          <input type="date" id="sr-date-to" tabindex="-1" />
+          <button type="button" id="sr-date-apply" tabindex="-1">Apply</button>
+          <button type="button" id="sr-date-reset" tabindex="-1">Reset</button>
+          <button type="button" id="sr-filter-clear" tabindex="-1">Clear</button>
         </div>
 
-        <div class="banner load" id="sr-diag-banner" style="display:none;margin:0 0 14px"></div>
-
-        <details class="sr-pace-board card" id="sr-pace-board" aria-label="Month pace summary">
-          <summary class="sr-pace-board-head">
-            <div>
-              <h2>Month pace</h2>
-              <p class="hint" id="sr-pace-board-hint">Working-day plan vs remaining Proforma &amp; Delivery</p>
+        <div class="sr-dash-body">
+          <aside class="sr-emp-rail" aria-label="Sales employees">
+            <div class="sr-emp-rail-head">
+              <h3 class="sr-emp-rail-title">Sales Employees</h3>
+              <p class="sr-emp-rail-meta" id="sr-name-list-meta">Click a name to filter</p>
             </div>
-            <span class="sr-collapse-hint" aria-hidden="true"></span>
-          </summary>
-          <div class="sr-pace-grid" id="sr-pace-grid"></div>
-        </details>
-
-        <div class="pbi-page sr-page" id="sr-pbi-page">
-          <aside class="pbi-slicer card sr-slicer">
-            <h2>Sales Employee</h2>
-            <p class="pbi-slicer-hint" id="sr-charts-note">Click a name to filter</p>
-            <div class="pbi-name-list" id="sr-name-list"></div>
+            <label class="sr-emp-search">
+              <span class="sr-emp-search-ico" aria-hidden="true">⌕</span>
+              <input type="search" id="sr-name-search" placeholder="Search employee…" autocomplete="off" aria-label="Search sales employees" />
+            </label>
+            <div class="sr-name-list" id="sr-name-list" role="listbox" aria-label="Sales employees"></div>
           </aside>
 
-          <div class="pbi-canvas sr-canvas">
-            <div class="pbi-filter-bar" id="sr-filter-bar" hidden>
-              <span>Filtered to</span>
-              <strong id="sr-filter-name">—</strong>
-              <button type="button" id="sr-filter-clear">✕ Clear</button>
+          <div class="sr-dash-main">
+            <div class="sr-kpi-mock" id="sr-pbi-kpis" aria-live="polite"></div>
+
+            <div class="sr-mock-grid">
+              <article class="sr-mock-card sr-mock-perf is-summary-only sr-tap" data-chart-id="chart-sr-perf" data-expand="chart-sr-perf" role="button" tabindex="0" aria-label="Open Performance wide view">
+                <div class="sr-mock-card-head">
+                  <div>
+                    <h2 class="sr-mock-card-title">Performance</h2>
+                    <span class="sr-mock-card-sub">Team Delivery &amp; Proforma vs Target</span>
+                  </div>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
+                </div>
+                <div class="sr-perf-progress" id="sr-perf-progress">
+                  <div class="sr-perf-progress-meta">
+                    <span>Target <strong id="sr-perf-target-lbl">—</strong></span>
+                    <span>Achieved <strong id="sr-perf-achieved-lbl">—</strong></span>
+                  </div>
+                  <div class="sr-perf-progress-track" aria-hidden="true">
+                    <div class="sr-perf-progress-fill" id="sr-perf-progress-fill" style="width:0%"></div>
+                  </div>
+                  <div class="sr-perf-day sr-perf-progress-stats" id="sr-perf-day" aria-label="Team achievement"></div>
+                </div>
+                <div class="chart-scroll sr-detail-only"><div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div></div>
+              </article>
+
+              <article class="sr-mock-card sr-mock-cancel is-summary-only sr-tap" data-chart-id="chart-cancel" data-expand="chart-cancel" role="button" tabindex="0" aria-label="Open Cancellation wide view">
+                <div class="sr-mock-card-head">
+                  <h2 class="sr-mock-card-title">Cancellation</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open full cancel chart">Wide</button>
+                </div>
+                <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
+                <div class="chart-scroll sr-detail-only"><div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div></div>
+              </article>
+
+              <article class="sr-mock-card sr-mock-acc is-summary-only sr-tap" data-chart-id="chart-sr-accessories" data-expand="chart-sr-accessories" role="button" tabindex="0" aria-label="Open Accessories wide view">
+                <div class="sr-mock-card-head">
+                  <h2 class="sr-mock-card-title">Accessories Performance</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
+                </div>
+                <div class="acc-summary-board sr-acc-mock" id="acc-summary-board" hidden>
+                  <div class="acc-summary-pct-hero">
+                    <div class="acc-summary-pct-text">
+                      <span class="k">Ach %</span>
+                      <span class="v" id="acc-sum-pct">—</span>
+                    </div>
+                    <div class="sr-acc-progress-track" aria-hidden="true">
+                      <div class="sr-acc-progress-fill" id="sr-acc-progress-fill" style="width:0%"></div>
+                    </div>
+                  </div>
+                  <div class="acc-summary-cols acc-summary-cols--detail">
+                    <div class="acc-summary-cell">
+                      <span class="k">Target</span>
+                      <span class="v" id="acc-sum-target">—</span>
+                    </div>
+                    <div class="acc-summary-cell">
+                      <span class="k">Achieved</span>
+                      <span class="v" id="acc-sum-achieved">—</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="sr-acc-layout sr-detail-only">
+                  <div class="sr-acc-chart">
+                    <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div></div>
+                  </div>
+                  <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
+                    <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="sr-mock-card sr-mock-profdel is-summary-only sr-tap" data-chart-id="chart-sr-profdel" data-expand="chart-sr-profdel" role="button" tabindex="0" aria-label="Open Prof+Del wide view">
+                <div class="sr-mock-card-head">
+                  <h2 class="sr-mock-card-title">Prof + Del</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
+                </div>
+                <div class="sr-profdel-day" id="sr-profdel-day" aria-label="Prof plus Del summary"></div>
+                <div class="chart-scroll sr-detail-only"><div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div></div>
+              </article>
             </div>
 
-            <div class="pbi-kpis sr-kpis" id="sr-pbi-kpis"></div>
-
-            <section class="sr-section">
-              <div class="sr-section-head">
-                <h3>Pulse</h3>
-                <p>Tap a card · Wide opens full detail</p>
-              </div>
-              <div class="pbi-visuals sr-pulse-grid" id="sr-charts-hero">
-                <article class="card pbi-viz sr-viz-perf is-summary-only sr-tap" data-chart-id="chart-sr-perf" tabindex="0" role="button" aria-label="Open performance chart">
-                  <div class="pbi-viz-head">
-                    <h2>Performance</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-perf" title="Open wide combined view">Wide</button>
-                  </div>
-                  <div class="sr-perf-day" id="sr-perf-day" aria-label="Team achievement"></div>
-                </article>
-
-                <article class="card pbi-viz pbi-viz-cancel sr-viz-cancel is-summary-only sr-tap" data-chart-id="chart-cancel" tabindex="0" role="button" aria-label="Open cancellation chart">
-                  <div class="pbi-viz-head">
-                    <h2>Cancellation</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-cancel" title="Open full cancel chart">Wide</button>
-                  </div>
-                  <div class="cancel-pct-panel" id="sr-cancel-pct-panel"></div>
-                </article>
-
-                <article class="card pbi-viz sr-viz-accessories is-summary-only sr-tap" data-chart-id="chart-sr-accessories" tabindex="0" role="button" aria-label="Open accessories chart">
-                  <div class="pbi-viz-head">
-                    <h2>Accessories</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-accessories" title="Open full accessories charts">Wide</button>
-                  </div>
-                  <div class="acc-summary-board" id="acc-summary-board" hidden>
-                    <div class="acc-summary-pct-hero">
-                      <span class="acc-summary-icon" aria-hidden="true">⚙</span>
-                      <div class="acc-summary-pct-text">
-                        <span class="k">Ach %</span>
-                        <span class="v" id="acc-sum-pct">—</span>
-                      </div>
-                    </div>
-                    <div class="acc-summary-cols acc-summary-cols--detail" hidden>
-                      <div class="acc-summary-cell">
-                        <span class="k">Target</span>
-                        <span class="v" id="acc-sum-target">—</span>
-                      </div>
-                      <div class="acc-summary-cell">
-                        <span class="k">Achieved</span>
-                        <span class="v" id="acc-sum-achieved">—</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="sr-acc-layout sr-detail-only">
-                    <div class="chart-scroll sr-acc-chart">
-                      <div class="chart-box pbi-box"><canvas id="chart-sr-accessories"></canvas></div>
-                    </div>
-                    <div class="acc-remain-wrap" id="acc-remain-wrap" hidden>
-                      <div class="acc-remain-head">
-                        <h3 class="acc-remain-title">Remaining to accessories target</h3>
-                      </div>
-                      <div class="table-wrap acc-remain-table-wrap" id="acc-remain-table"></div>
-                    </div>
-                  </div>
-                </article>
-
-                <article class="card pbi-viz sr-viz-profdel is-summary-only sr-tap" data-chart-id="chart-sr-profdel" tabindex="0" role="button" aria-label="Open Prof plus Del chart">
-                  <div class="pbi-viz-head">
-                    <h2>Prof + Del</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
-                  </div>
-                  <div class="sr-profdel-day" id="sr-profdel-day" aria-label="Prof plus Del summary"></div>
-                  <div class="chart-scroll sr-detail-only">
-                    <div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div>
-                  </div>
-                </article>
-              </div>
-            </section>
-
-            <div hidden aria-hidden="true">
-              <article class="card pbi-viz" data-chart-id="chart-sr-overview">
-                <div class="pbi-viz-head"><h2>Month overview</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-overview"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-plant">
-                <div class="pbi-viz-head"><h2>By Plant</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-plant"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-delpct">
-                <div class="pbi-viz-head"><h2>Del %</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-delpct"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-profdelpct">
-                <div class="pbi-viz-head"><h2>Prof+Del %</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-profdelpct"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-dailyach">
-                <div class="pbi-viz-head"><h2>Daily Ach %</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-dailyach"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-cancelcount">
-                <div class="pbi-viz-head"><h2>Cancelled BOs</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-cancelcount"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-prev">
-                <div class="pbi-viz-head"><h2>Prior month</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-prev"></canvas></div></div>
-              </article>
-              <article class="card pbi-viz" data-chart-id="chart-sr-pace">
-                <div class="pbi-viz-head"><h2>Month pace</h2></div>
-                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-sr-pace"></canvas></div></div>
-              </article>
-              <div class="chart-scroll sr-detail-only">
-                <div class="chart-box pbi-box"><canvas id="chart-sr-perf"></canvas></div>
-              </div>
-              <div class="chart-scroll sr-detail-only">
-                <div class="chart-box pbi-box"><canvas id="chart-cancel"></canvas></div>
-              </div>
-            </div>
-
-            <div class="pbi-visuals sr-grid" id="sr-charts" hidden></div>
-
-            <section class="sr-section sr-section-stack">
-              <details class="card pbi-daily-target sr-daily-target" id="sr-daily-target-card">
-                <summary class="sr-daily-target-summary">
-                <div>
-                  <h2>Daily target pace · today</h2>
-                  <p class="pbi-slicer-hint" id="sr-daily-target-sub">Base daily = target ÷ working days · yesterday shortfall adds to today</p>
+            <details class="sr-fold" id="sr-pace-fold">
+              <summary class="sr-fold-summary">
+                <span>Daily Target Pace</span>
+                <span class="sr-fold-chev" aria-hidden="true">▾</span>
+              </summary>
+              <div class="sr-fold-body">
+                <div class="sr-pace-board" id="sr-pace-board" aria-live="polite">
+                  <p class="hint" id="sr-pace-board-hint">Working-day plan vs remaining Proforma &amp; Delivery</p>
+                  <div class="sr-pace-grid" id="sr-pace-grid"></div>
                 </div>
-                  <span class="sr-collapse-hint" aria-hidden="true"></span>
-                </summary>
-              <div class="sr-daily-target-wrap" id="sr-daily-target-body">
-                <p class="foot" style="margin:0;padding:8px 0">Set working days in Admin → Push to live.</p>
-              </div>
-              </details>
-
-            <article class="card pbi-detail" id="sr-detail-card">
-              <div class="pbi-detail-head">
-                <div>
-                  <h2 id="sr-detail-title">Employee details</h2>
-                  <p id="sr-detail-sub">Select a name to see only their Excel rows</p>
-                </div>
-              </div>
-              <div id="sr-detail-body">
-                <p class="foot" style="margin:0;padding:8px 0">No name selected — click a name in the list or on a chart.</p>
-              </div>
-            </article>
-
-              <details class="pbi-tables card sr-tables">
-              <summary>Day to Date &amp; Month to Date tables</summary>
-              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                <div class="xl-mtd day" id="sr-day-title">Day to Date</div>
-                <div class="xl-kpi" id="sr-day-kpis"></div>
-                <div class="xl-table-wrap" id="sr-day-table-wrap"></div>
-                <p class="foot" id="sr-day-table-foot" style="padding:8px 4px 4px;margin:0"></p>
-              </div>
-              <div class="xl-sheet" style="box-shadow:none;border:none;padding:12px 0 0">
-                <div class="xl-mtd" id="sr-month-title">Month to Date</div>
-                <div class="xl-kpi" id="sr-kpis"></div>
-                <div class="xl-table-wrap" id="sr-table-wrap"></div>
-                <p class="foot" id="sr-table-foot" style="padding:8px 4px 4px;margin:0"></p>
               </div>
             </details>
-            </section>
+
+            <details class="sr-fold" id="sr-emp-fold">
+              <summary class="sr-fold-summary">
+                <span>Employee Details</span>
+                <span class="sr-fold-chev" aria-hidden="true">▾</span>
+              </summary>
+              <div class="sr-fold-body">
+                <div class="sr-table-scroll">
+                  <table class="data-table sr-table" id="sr-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Showroom</th>
+                        <th class="num">Delivered</th>
+                        <th class="num">Proforma</th>
+                        <th class="num">Cancelled</th>
+                        <th class="num">Total</th>
+                        <th class="num">DEL %</th>
+                        <th class="num">Cancel %</th>
+                        <th class="num">Prof+Del</th>
+                        <th class="num">Target</th>
+                        <th class="num">Ach %</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sr-tbody"></tbody>
+                  </table>
+                </div>
+                <p class="sr-empty" id="sr-empty" hidden>No rows match the current filters.</p>
+                <div class="card pbi-detail" id="sr-detail-card" style="margin-top:12px">
+                  <div class="pbi-viz-head">
+                    <div>
+                      <h2 id="sr-detail-title">Employee details</h2>
+                      <p class="pbi-slicer-hint" id="sr-detail-sub">Select a name to see only their Excel rows</p>
+                    </div>
+                  </div>
+                  <div id="sr-detail-body"></div>
+                </div>
+              </div>
+            </details>
+
+            <div class="sr-hidden-charts" aria-hidden="true">
+              <canvas id="chart-sr-overview"></canvas>
+              <canvas id="chart-sr-plant"></canvas>
+              <canvas id="chart-sr-delpct"></canvas>
+              <canvas id="chart-sr-profdelpct"></canvas>
+              <canvas id="chart-sr-dailyach"></canvas>
+              <canvas id="chart-sr-cancelcount"></canvas>
+              <canvas id="chart-sr-prev"></canvas>
+              <canvas id="chart-sr-pace"></canvas>
+            </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- PANEL: BO Dashboard (executive) -->
+    <!-- PANEL: BO Dashboard (executive) -->
       <div class="panel-section" id="panel-bodashboard" style="display:none">
         <div class="bo-empty card" id="bo-empty">
           <h2>Back Order Management Dashboard</h2>
@@ -4839,13 +4821,14 @@
     const targetEl = $("#acc-sum-target");
     const soldEl = $("#acc-sum-achieved");
     const pctEl = $("#acc-sum-pct");
+    const fillEl = $("#sr-acc-progress-fill");
+    const pctNum = sum.achPct == null ? (sum.quota ? 0 : null) : (sum.achPct * 100);
     if (targetEl) targetEl.textContent = formatNumber(sum.quota);
     if (soldEl) soldEl.textContent = formatNumber(sum.sold);
     if (pctEl) {
-      pctEl.textContent = sum.achPct == null
-        ? (sum.quota ? "0.0%" : "—")
-        : ((sum.achPct * 100).toFixed(1) + "%");
+      pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
     }
+    if (fillEl) fillEl.style.width = (pctNum == null ? 0 : Math.max(0, Math.min(100, pctNum))).toFixed(1) + "%";
     board.hidden = !(sum.quota > 0 || sum.sold > 0);
   }
 
@@ -6061,15 +6044,13 @@
     const srHint = $("#sr-date-hint");
     const basHint = $("#bas-date-hint");
     if (srHint) {
-      if (preset === "this_month") {
-        srHint.textContent = live && live.rangeLabel
-          ? `This month · ${live.rangeLabel} (1st through today)`
-          : "This month · 1st through today";
-      } else if (preset === "today") {
-        srHint.textContent = `Today · day = today · month = MTD${live && live.rangeLabel ? " · " + live.rangeLabel : ""}`;
-      } else {
-        srHint.textContent = hintText;
-      }
+      const dayDate = (live && live.now) ? live.now : new Date();
+      const dayLabel = dayDate.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+      srHint.textContent = dayLabel;
+      srHint.title = hintText;
+      document.querySelectorAll(".sr-range-pill").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.getAttribute("data-sr-range") === preset);
+      });
     }
     if (basHint) {
       if (preset === "this_month") {
@@ -6712,44 +6693,35 @@
     }
 
     const ratio = cancelPctRatio(cancelled, delivery);
-    const pct = ratio == null ? null : Math.round(ratio * 1000) / 10; // 1 decimal
+    const pct = ratio == null ? null : Math.round(ratio * 1000) / 10;
     const over = pct != null && pct > 30;
     const empty = pct == null;
-    el.className = "cancel-pct-panel" + (empty ? " is-empty" : over ? " is-over" : " is-ok");
-    const status = empty
-      ? "No data"
-      : over
-        ? "Over 30% target"
-        : "Within 30% target";
+    const base = cancelled + delivery;
+    el.className = "cancel-pct-panel sr-cancel-mock" + (empty ? " is-empty" : over ? " is-over" : " is-ok");
     const pctText = pct == null ? "—" : `${pct}%`;
+    const deg = pct == null ? 0 : Math.max(0, Math.min(180, (pct / 100) * 180));
 
     el.innerHTML = `
-      <div class="cancel-pct-top">
-        <div class="cancel-pct-gauge">
-          <span class="lab">Cancellation %</span>
-          <span class="val">${escapeHtml(pctText)}</span>
-          <span class="goal">Goal under 30%</span>
-        </div>
-        <div class="cancel-pct-stats">
-          <div class="cancel-pct-stat is-cancel">
-            <span class="lab">Cancelled</span>
-            <span class="val">${formatNumber(cancelled)}</span>
-          </div>
-          <div class="cancel-pct-stat is-del">
-            <span class="lab">Delivery</span>
-            <span class="val">${formatNumber(delivery)}</span>
-          </div>
-          <div class="cancel-pct-stat is-base">
-            <span class="lab">Base</span>
-            <span class="val">${formatNumber(cancelled + delivery)}</span>
+      <div class="sr-cancel-mock-body">
+        <div class="sr-cancel-donut" style="--cancel-deg:${deg}deg" aria-hidden="true">
+          <div class="sr-cancel-donut-hole">
+            <strong>${escapeHtml(pctText)}</strong>
+            <span>Cancellation Rate</span>
           </div>
         </div>
-        <span class="cancel-pct-status">${escapeHtml(status)}</span>
+        <div class="sr-cancel-legend">
+          <div class="sr-cancel-leg is-cancel"><span class="dot"></span><span class="lab">Cancelled</span><strong>${formatNumber(cancelled)}</strong></div>
+          <div class="sr-cancel-leg is-del"><span class="dot"></span><span class="lab">Delivery</span><strong>${formatNumber(delivery)}</strong></div>
+          <div class="sr-cancel-leg is-base"><span class="dot"></span><span class="lab">Base</span><strong>${formatNumber(base)}</strong></div>
+        </div>
       </div>
-      <p class="cancel-pct-formula">
-        <span class="scope">${escapeHtml(scope)}</span>
-        Cancel % = Cancelled ÷ (Delivery + Cancelled) × 100
-      </p>
+      <div class="sr-cancel-banner${over ? " is-warn" : empty ? "" : " is-ok"}">
+        ${empty
+          ? "No cancellation data for this selection."
+          : over
+            ? "Over 30% of target. Take action to reduce cancellations and improve conversion."
+            : `${escapeHtml(scope)} · Within 30% cancellation target.`}
+      </div>
     `;
   }
 
@@ -6797,7 +6769,10 @@
     const sr = window._data && window._data.salesReport;
     if (!sr) return;
     const clearBtn = $("#sr-clear-sel");
-    if (clearBtn) clearBtn.disabled = !srView.selectedKey;
+    if (clearBtn) {
+      clearBtn.hidden = !srView.selectedKey;
+      clearBtn.disabled = !srView.selectedKey;
+    }
     const bar = $("#sr-filter-bar");
     const nameEl = $("#sr-filter-name");
     if (bar && nameEl) {
@@ -6828,7 +6803,6 @@
   function renderNameList(sr) {
     const el = $("#sr-name-list");
     if (!el) return;
-    // List uses mode filter but NOT selectedKey (so user can pick another name)
     const prev = srView.selectedKey;
     srView.selectedKey = "";
     const rows = chartRowsForMode(sr.rows || []);
@@ -6843,17 +6817,18 @@
       const active = r._key === srView.selectedKey ? " active" : "";
       const del = Number(r["Delivery (Month)"]) || 0;
       const pro = Number(r["Proforma (Month)"]) || 0;
-      return `<button type="button" class="pbi-name${active}" data-emp-key="${escapeHtml(r._key)}">
+      return `<button type="button" class="pbi-name sr-emp-row${active}" data-emp-key="${escapeHtml(r._key)}" role="option" aria-selected="${active ? "true" : "false"}">
         <span class="nm">${escapeHtml(shortEmpLabel(r["Sales Employee"]))}</span>
-        <span class="meta">D ${formatNumber(del)} · P ${formatNumber(pro)}</span>
+        <span class="sr-emp-counts">${formatNumber(pro)}-${formatNumber(del)}</span>
+        <span class="sr-emp-chev" aria-hidden="true">›</span>
       </button>`;
     }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`;
 
-    const note = $("#sr-charts-note");
-    if (note) {
-      note.textContent = srView.selectedKey
-        ? "1 name selected · charts filtered"
-        : `${list.length} names · click to filter page`;
+    const meta = $("#sr-name-list-meta");
+    if (meta) {
+      meta.textContent = srView.selectedKey
+        ? "1 selected · click again to clear"
+        : `${list.length} names · Click to filter`;
     }
   }
 
@@ -6922,30 +6897,36 @@
     let target = 0;
     let prof = 0;
     let del = 0;
+    let volPrev = 0;
     if (srView.selectedKey && list[0]) {
       const r = list[0];
       vol = Number(r["Prof+Del"]) || 0;
       target = rowTargetNum(r);
       prof = Number(r["Proforma (Month)"]) || 0;
       del = Number(r["Delivery (Month)"]) || 0;
+      volPrev = (Number(r["Proforma (Prev)"]) || 0) + (Number(r["Delivery (Prev)"]) || 0);
     } else {
       const t = (sr && sr.totals) || {};
       target = Number(t.target) || 0;
       del = Number(t.deliveryMonth) || 0;
       prof = Number(t.proformaMonth) || 0;
       vol = prof + del;
+      volPrev = (Number(t.proformaPrev) || 0) + (Number(t.deliveryPrev) || 0);
       if (!target && list.length) {
         target = list.reduce((s, r) => s + rowTargetNum(r), 0);
         del = list.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
         prof = list.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
         vol = prof + del;
+        volPrev = list.reduce((s, r) => s + (Number(r["Proforma (Prev)"]) || 0) + (Number(r["Delivery (Prev)"]) || 0), 0);
       }
     }
     const pct = target > 0 ? ((vol / target) * 100) : null;
+    const volDelta = momDeltaPct(vol, volPrev);
     el.innerHTML = `
       <div class="sr-perf-metric is-vol">
         <span class="k">Volume</span>
         <span class="v">${formatNumber(vol)}</span>
+        ${trendHtml(volDelta)}
       </div>
       <div class="sr-perf-metric is-prof">
         <span class="k">Prof+Del %</span>
@@ -6954,6 +6935,7 @@
       <div class="sr-perf-metric is-target">
         <span class="k">Target</span>
         <span class="v">${formatNumber(target)}</span>
+        <span class="sr-trend is-flat">0%</span>
       </div>
     `;
   }
@@ -6964,10 +6946,9 @@
     const hint = $("#sr-pace-board-hint");
     if (!grid || !board) return;
     if (!sr || !(sr.rows || []).length) {
-      board.hidden = true;
+      grid.innerHTML = "";
       return;
     }
-    board.hidden = false;
     const m = buildPaceBoardMetrics(sr);
     if (hint) {
       hint.textContent = srView.selectedKey
@@ -6992,6 +6973,28 @@
       </div>`).join("");
   }
 
+  function momDeltaPct(cur, prev) {
+    const c = Number(cur);
+    const p = Number(prev);
+    if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) return null;
+    return ((c - p) / Math.abs(p)) * 100;
+  }
+
+  function trendHtml(delta, opts) {
+    const o = opts || {};
+    if (delta == null || !Number.isFinite(delta)) {
+      return `<span class="sr-trend is-flat">${o.flatLabel || "0%"}</span>`;
+    }
+    const abs = Math.abs(delta);
+    const txt = `${abs >= 10 ? abs.toFixed(0) : abs.toFixed(1)}%`;
+    if (Math.abs(delta) < 0.05) return `<span class="sr-trend is-flat">0%</span>`;
+    const badUp = !!o.badWhenUp;
+    const up = delta > 0;
+    const cls = up ? (badUp ? "is-down" : "is-up") : (badUp ? "is-up" : "is-down");
+    const arrow = up ? "↑" : "↓";
+    return `<span class="sr-trend ${cls}">${arrow} ${txt}</span>`;
+  }
+
   function renderPbiKpis(sr) {
     const el = $("#sr-pbi-kpis");
     if (!el) return;
@@ -7001,42 +7004,57 @@
     if (srView.selectedKey && rows[0]) {
       const r = rows[0];
       const m = r.month || r;
-      const d = r.day || {};
       const cancelN = Number(m["Cancelled BOs"]) || 0;
       const del = Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
       const pro = Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
+      const delPrev = Number(r["Delivery (Prev)"]) || 0;
+      const proPrev = Number(r["Proforma (Prev)"]) || 0;
       const ratio = cancelPctRatio(cancelN, del);
       const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
       const cancelOver = ratio != null && ratio * 100 > 30;
+      const target = r._vacation ? null : rowTargetNum(r);
+      const delPctVal = target ? (del / target) * 100 : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del) },
-        { lab: "Proforma MTD", val: formatNumber(pro) },
-        { lab: "Prof+Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)) },
-        { lab: "Proforma except this month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0) },
-        { lab: "Del %", val: escapeHtml(String(r["Del %"] ?? "—")) },
-        { lab: "Target", val: r._vacation ? "VACATION" : formatNumber(rowTargetNum(r)) },
-        { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
-        { lab: "Today Prof", val: formatNumber(r["Proforma (Day)"] || d.Proforma) },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev) },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev) },
+        { lab: "Prof + Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev) },
+        { lab: "Proforma Except This Month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0), ico: "clock", tone: "sky", trend: null },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null },
+        { lab: "TARGET", val: r._vacation ? "VACATION" : formatNumber(target || 0), ico: "target", tone: "teal", trend: 0 },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null },
+        { lab: "EMPLOYEES", val: "1", ico: "people", tone: "blue", trend: 0 },
       ];
     } else {
       const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0);
       const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
       const cancelOver = ratio != null && ratio * 100 > 30;
+      const del = Number(t.deliveryMonth) || 0;
+      const pro = Number(t.proformaMonth) || 0;
+      const delPrev = Number(t.deliveryPrev) || 0;
+      const proPrev = Number(t.proformaPrev) || 0;
+      const delPctVal = t.target ? ((t.delPct || 0) * 100) : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(t.deliveryMonth || 0) },
-        { lab: "Proforma MTD", val: formatNumber(t.proformaMonth || 0) },
-        { lab: "Prof+Del", val: formatNumber(t.profPlusDel || 0) },
-        { lab: "Proforma except this month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)) },
-        { lab: "Del %", val: t.target ? ((t.delPct || 0) * 100).toFixed(1) + "%" : "—" },
-        { lab: "Target", val: formatNumber(t.target || 0) },
-        { lab: "Cancelled BOs %", val: escapeHtml(cancelPct), over: cancelOver, ok: ratio != null && !cancelOver },
-        { lab: "Employees", val: formatNumber((sr.rows || []).length) },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev) },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev) },
+        { lab: "Prof + Del", val: formatNumber(t.profPlusDel || (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev) },
+        { lab: "Proforma Except This Month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)), ico: "clock", tone: "sky", trend: null },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null },
+        { lab: "TARGET", val: formatNumber(t.target || 0), ico: "target", tone: "teal", trend: 0 },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, badWhenUp: true },
+        { lab: "EMPLOYEES", val: formatNumber((sr.rows || []).length), ico: "people", tone: "blue", trend: 0 },
       ];
     }
+    const icoMap = {
+      truck: "D", doc: "P", layers: "+", clock: "E", pct: "%", target: "T", x: "X", people: "N",
+    };
     el.innerHTML = cards.map((c) => `
-      <div class="pbi-kpi${c.over ? " is-over" : c.ok ? " is-ok" : ""}">
-        <div class="lab">${c.lab}</div>
-        <div class="val">${c.val}</div>
+      <div class="sr-kpi-card tone-${c.tone || "neutral"}${c.over ? " is-over" : c.ok ? " is-ok" : ""}">
+        <div class="sr-kpi-top">
+          <span class="sr-kpi-ico" aria-hidden="true">${icoMap[c.ico] || "•"}</span>
+          <span class="sr-kpi-lab">${c.lab}</span>
+        </div>
+        <div class="sr-kpi-val">${c.val}</div>
+        ${trendHtml(c.trend, { badWhenUp: c.badWhenUp })}
       </div>`).join("");
   }
 
@@ -7180,21 +7198,30 @@
         }
       }
     }
+    const achieved = profSum + delSum;
     const delPct = targetSum > 0 ? (delSum / targetSum) * 100 : null;
-    const profDelPct = targetSum > 0 ? ((profSum + delSum) / targetSum) * 100 : null;
+    const profDelPct = targetSum > 0 ? (achieved / targetSum) * 100 : null;
+    const remaining = Math.max(0, targetSum - achieved);
     const fmtPct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
+    const fill = targetSum > 0 ? Math.max(0, Math.min(100, (achieved / targetSum) * 100)) : 0;
+    const fillEl = $("#sr-perf-progress-fill");
+    const tgtLbl = $("#sr-perf-target-lbl");
+    const achLbl = $("#sr-perf-achieved-lbl");
+    if (fillEl) fillEl.style.width = fill.toFixed(1) + "%";
+    if (tgtLbl) tgtLbl.textContent = formatNumber(targetSum);
+    if (achLbl) achLbl.textContent = `${formatNumber(achieved)}${profDelPct == null ? "" : ` (${profDelPct.toFixed(1)}%)`}`;
     el.innerHTML = `
-      <div class="sr-perf-metric is-target">
-        <span class="k">Target</span>
-        <span class="v">${formatNumber(targetSum)}</span>
-      </div>
       <div class="sr-perf-metric is-del">
-        <span class="k">Del %</span>
+        <span class="k">DEL %</span>
         <span class="v">${fmtPct(delPct)}</span>
       </div>
       <div class="sr-perf-metric is-prof">
-        <span class="k">Prof+Del %</span>
+        <span class="k">PROF+DEL %</span>
         <span class="v">${fmtPct(profDelPct)}</span>
+      </div>
+      <div class="sr-perf-metric is-remain">
+        <span class="k">Remaining</span>
+        <span class="v">${formatNumber(remaining)}</span>
       </div>
     `;
   }
@@ -13071,48 +13098,96 @@
   if (basDatePreset) {
     basDatePreset.addEventListener("change", (e) => onDatePresetChange(e.target.value));
   }
-  $("#sr-date-apply").addEventListener("click", applySrDateFilter);
-  $("#sr-date-reset").addEventListener("click", resetSrDateFilter);
+  const srDateApply = $("#sr-date-apply");
+  if (srDateApply) srDateApply.addEventListener("click", applySrDateFilter);
+  const srDateReset = $("#sr-date-reset");
+  if (srDateReset) srDateReset.addEventListener("click", resetSrDateFilter);
   const basDateApply = $("#bas-date-apply");
   if (basDateApply) basDateApply.addEventListener("click", () => applyGlobalDateFilter());
-  $("#sr-clear-sel").addEventListener("click", clearEmployeeFilter);
-  $("#sr-filter-clear").addEventListener("click", clearEmployeeFilter);
-  $("#sr-name-list").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-emp-key]");
-    if (!btn) return;
-    selectEmployee(btn.getAttribute("data-emp-key"));
+  const srClearSel = $("#sr-clear-sel");
+  if (srClearSel) srClearSel.addEventListener("click", clearEmployeeFilter);
+  const srFilterClear = $("#sr-filter-clear");
+  if (srFilterClear) srFilterClear.addEventListener("click", clearEmployeeFilter);
+  const srNameList = $("#sr-name-list");
+  if (srNameList) {
+    srNameList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-emp-key]");
+      if (!btn) return;
+      selectEmployee(btn.getAttribute("data-emp-key"));
+    });
+  }
+  document.querySelectorAll(".sr-range-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const preset = btn.getAttribute("data-sr-range") || "today";
+      const sel = $("#sr-date-preset");
+      if (sel) sel.value = preset;
+      onDatePresetChange(preset);
+    });
   });
-  $("#sr-pbi-page").addEventListener("click", (e) => {
-    const expand = e.target.closest("[data-expand]");
-    if (expand) {
-      e.preventDefault();
-      openWideChart(expand.getAttribute("data-expand"));
-      return;
-    }
-    const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
-    if (accName && accName.closest("#acc-remain-wrap")) {
-      const key = accName.getAttribute("data-emp-key");
-      if (key) selectEmployee(key);
-      return;
-    }
-    const tap = e.target.closest(".sr-tap[data-chart-id]");
-    if (tap && !e.target.closest("button, a, input, select, summary")) {
+  const srNameSearch = $("#sr-name-search");
+  if (srNameSearch) {
+    srNameSearch.addEventListener("input", (e) => {
+      srView.search = e.target.value;
+      const hiddenSearch = $("#sr-search");
+      if (hiddenSearch) hiddenSearch.value = e.target.value;
+      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+    });
+  }
+  function shiftSrWorkingDay(delta) {
+    const base = (window._globalLivePeriod && window._globalLivePeriod.now)
+      ? new Date(window._globalLivePeriod.now)
+      : new Date();
+    base.setDate(base.getDate() + delta);
+    const iso = toIsoDateInput(base);
+    globalDateFilter.preset = "custom";
+    globalDateFilter.from = iso;
+    globalDateFilter.to = iso;
+    const sel = $("#sr-date-preset");
+    if (sel) sel.value = "custom";
+    const from = $("#sr-date-from");
+    const to = $("#sr-date-to");
+    if (from) from.value = iso;
+    if (to) to.value = iso;
+    applyGlobalDateFilter("Working day shifted");
+  }
+  const srDayPrev = $("#sr-day-prev");
+  if (srDayPrev) srDayPrev.addEventListener("click", () => shiftSrWorkingDay(-1));
+  const srDayNext = $("#sr-day-next");
+  if (srDayNext) srDayNext.addEventListener("click", () => shiftSrWorkingDay(1));
+  const srPbiPage = $("#sr-pbi-page");
+  if (srPbiPage) {
+    srPbiPage.addEventListener("click", (e) => {
+      const expand = e.target.closest("[data-expand]");
+      if (expand) {
+        e.preventDefault();
+        openWideChart(expand.getAttribute("data-expand"));
+        return;
+      }
+      const accName = e.target.closest(".acc-remain-name,[data-emp-key]");
+      if (accName && accName.closest("#acc-remain-wrap")) {
+        const key = accName.getAttribute("data-emp-key");
+        if (key) selectEmployee(key);
+        return;
+      }
+      const tap = e.target.closest(".sr-tap[data-chart-id]");
+      if (tap && !e.target.closest("button, a, input, select, summary")) {
+        e.preventDefault();
+        openWideChart(tap.getAttribute("data-chart-id"));
+      }
+    });
+    srPbiPage.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tap = e.target.closest(".sr-tap[data-chart-id]");
+      if (!tap || e.target.closest("button, a, input, select")) return;
       e.preventDefault();
       openWideChart(tap.getAttribute("data-chart-id"));
-    }
-  });
-  $("#sr-pbi-page").addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    const tap = e.target.closest(".sr-tap[data-chart-id]");
-    if (!tap || e.target.closest("button, a, input, select")) return;
-    e.preventDefault();
-    openWideChart(tap.getAttribute("data-chart-id"));
-  });
-  $("#sr-pbi-page").addEventListener("dblclick", (e) => {
-    const viz = e.target.closest("[data-chart-id]");
-    if (!viz || viz.classList.contains("sr-tap")) return;
-    openWideChart(viz.getAttribute("data-chart-id"));
-  });
+    });
+    srPbiPage.addEventListener("dblclick", (e) => {
+      const viz = e.target.closest("[data-chart-id]");
+      if (!viz || viz.classList.contains("sr-tap")) return;
+      openWideChart(viz.getAttribute("data-chart-id"));
+    });
+  }
   const boDashEl = $("#bo-dash");
   if (boDashEl) {
     boDashEl.addEventListener("click", (e) => {
