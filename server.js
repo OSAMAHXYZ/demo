@@ -14,9 +14,12 @@ const DATA_FILE = path.join(ROOT, 'delivery-inventory-data.json');
 const REPORT_SHEET_DIR = path.join(ROOT, 'report-sheet-data');
 const REPORT_SHEET_META = path.join(REPORT_SHEET_DIR, 'meta.json');
 const REPORT_SHEET_FILES = path.join(REPORT_SHEET_DIR, 'files');
+const RTL_DAILY_DIR = path.join(REPORT_SHEET_DIR, 'rtl-daily');
+const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
 const REPORT_SLOT_IDS = Object.freeze([
   'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories'
 ]);
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TEMPLATE_FILE = path.join(ROOT, 'templates', 'delivery_note_template.docx');
 const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx');
 const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
@@ -317,6 +320,128 @@ function clearReportSheetFiles() {
     const fp = reportSheetFilePath(id);
     if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
   }
+}
+
+/** RTL daily snapshots — isolated from live dashboard push (never clears with report-sheet). */
+function ensureRtlDailyDirs() {
+  ensureReportSheetDirs();
+  if (!fs.existsSync(RTL_DAILY_DIR)) fs.mkdirSync(RTL_DAILY_DIR, { recursive: true });
+}
+
+function normalizeDateKey(value) {
+  const s = String(value || '').trim();
+  if (DATE_KEY_RE.test(s)) return s;
+  return '';
+}
+
+function rtlDailySnapshotPath(dateKey) {
+  const key = normalizeDateKey(dateKey);
+  if (!key) return null;
+  return path.join(RTL_DAILY_DIR, `${key}.json`);
+}
+
+function loadRtlDailyIndex() {
+  ensureRtlDailyDirs();
+  try {
+    if (!fs.existsSync(RTL_DAILY_INDEX)) return { snapshots: [] };
+    const parsed = JSON.parse(fs.readFileSync(RTL_DAILY_INDEX, 'utf8'));
+    const snapshots = Array.isArray(parsed?.snapshots) ? parsed.snapshots : [];
+    return { snapshots };
+  } catch {
+    return { snapshots: [] };
+  }
+}
+
+function saveRtlDailyIndex(index) {
+  ensureRtlDailyDirs();
+  const payload = {
+    snapshots: Array.isArray(index?.snapshots) ? index.snapshots : []
+  };
+  const tmp = `${RTL_DAILY_INDEX}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
+  fs.renameSync(tmp, RTL_DAILY_INDEX);
+}
+
+function sanitizeRtlVehicle(raw) {
+  const vin = String(raw?.vin || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  if (!vin || vin.length < 11) return null;
+  return {
+    vin,
+    product: String(raw?.product || '').trim(),
+    suffix: String(raw?.suffix || '').trim()
+  };
+}
+
+function loadRtlDailySnapshot(dateKey) {
+  const fp = rtlDailySnapshotPath(dateKey);
+  if (!fp || !fs.existsSync(fp)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    if (!parsed || typeof parsed !== 'object') return null;
+    const vehicles = Array.isArray(parsed.vehicles)
+      ? parsed.vehicles.map(sanitizeRtlVehicle).filter(Boolean)
+      : [];
+    return {
+      date: normalizeDateKey(parsed.date) || normalizeDateKey(dateKey),
+      at: Number(parsed.at) || 0,
+      fileName: String(parsed.fileName || ''),
+      count: vehicles.length,
+      vehicles
+    };
+  } catch {
+    return null;
+  }
+}
+
+function compareRtlSnapshots(fromSnap, toSnap) {
+  const fromMap = new Map((fromSnap?.vehicles || []).map((v) => [v.vin, v]));
+  const toMap = new Map((toSnap?.vehicles || []).map((v) => [v.vin, v]));
+  const added = [];
+  const removed = [];
+  const changed = [];
+  const same = [];
+
+  for (const [vin, to] of toMap) {
+    const from = fromMap.get(vin);
+    if (!from) {
+      added.push(to);
+      continue;
+    }
+    if (from.product !== to.product || from.suffix !== to.suffix) {
+      changed.push({
+        vin,
+        fromProduct: from.product,
+        fromSuffix: from.suffix,
+        toProduct: to.product,
+        toSuffix: to.suffix
+      });
+    } else {
+      same.push(to);
+    }
+  }
+  for (const [vin, from] of fromMap) {
+    if (!toMap.has(vin)) removed.push(from);
+  }
+
+  return {
+    fromDate: fromSnap?.date || '',
+    toDate: toSnap?.date || '',
+    fromCount: fromSnap?.count || 0,
+    toCount: toSnap?.count || 0,
+    added,
+    removed,
+    changed,
+    same,
+    summary: {
+      added: added.length,
+      removed: removed.length,
+      changed: changed.length,
+      same: same.length
+    }
+  };
 }
 
 function persistAndBroadcast() {
@@ -1464,10 +1589,10 @@ function pickExactishCol(row, aliases) {
 }
 
 const VIN_ALIASES = [
-  'vin no', 'vin no.', 'vin number', 'vin#', 'vin',
-  'chassis', 'chassis / vin', 'chassis/vin', 'chassis no', 'chassis no.',
-  'chassis number', 'شاسيه', 'رقم الشاسيه', 'frame', 'frame no'
-];
+    'vin no', 'vin no.', 'vin number', 'vin#', 'vin',
+    'chassis', 'chassis / vin', 'chassis/vin', 'chassis no', 'chassis no.',
+    'chassis number', 'شاسيه', 'رقم الشاسيه', 'frame', 'frame no'
+  ];
 
 function rowToVehicle(row) {
   const vin = normVin(pickCol(row, VIN_ALIASES));
@@ -1486,20 +1611,20 @@ function rowToVehicle(row) {
     return '';
   })();
   const model = modelExact || product;
-  const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
-  const location = pickCol(row, [
-    'gt location', 'stock location', 'storage location', 'location',
-    'warehouse', 'yard', 'الموقع', 'المستودع'
-  ]);
+      const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
+      const location = pickCol(row, [
+        'gt location', 'stock location', 'storage location', 'location',
+        'warehouse', 'yard', 'الموقع', 'المستودع'
+      ]);
   const plate = pickExactishCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
-  const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
+      const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
   const phone = pickCol(row, [
     'contact no', 'contact no.', 'contact number', 'contact',
     'phone', 'phone no', 'phone number', 'mobile', 'mobile no', 'mobile number',
     'tel', 'telephone', 'هاتف', 'جوال', 'رقم الجوال', 'رقم الهاتف'
   ]);
-  const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
-  const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
+      const imageUrl = pickCol(row, ['image', 'image url', 'imageurl', 'photo', 'صورة']);
+      const suffix = pickCol(row, ['suffix', 'ext', 'color', 'model year']);
   const proformaDate = normalizeExcelDate(pickCol(row, [
     'proforma date', 'proforma', 'pro forma date', 'تاريخ البروفورما', 'تاريخ العرض'
   ]));
@@ -1515,12 +1640,12 @@ function rowToVehicle(row) {
     vin,
     product: product || model,
     model: model || product,
-    gt,
-    location,
+        gt,
+        location,
     plate: plate === '#' ? '' : plate,
-    customerName,
+        customerName,
     phone: phone === '#' ? '' : phone,
-    imageUrl,
+        imageUrl,
     suffix,
     proformaDate,
     invoiceDate,
@@ -2266,6 +2391,108 @@ app.post('/api/report-sheet/clear', (_req, res) => {
   } catch (err) {
     console.error('[report-sheet/clear]', err);
     return res.status(500).json({ error: err.message || 'Clear failed' });
+  }
+});
+
+/** RTL daily VIN/product/suffix archive — does not touch live dashboard slots. */
+app.get('/api/rtl-daily/meta', (_req, res) => {
+  try {
+    const index = loadRtlDailyIndex();
+    const snapshots = [...index.snapshots].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return res.json({ snapshots });
+  } catch (err) {
+    console.error('[rtl-daily/meta]', err);
+    return res.status(500).json({ error: err.message || 'Failed to load RTL daily index' });
+  }
+});
+
+app.get('/api/rtl-daily/compare', (req, res) => {
+  try {
+    const fromDate = normalizeDateKey(req.query.from);
+    const toDate = normalizeDateKey(req.query.to);
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ error: 'from and to dates (YYYY-MM-DD) are required' });
+    }
+    const fromSnap = loadRtlDailySnapshot(fromDate);
+    const toSnap = loadRtlDailySnapshot(toDate);
+    if (!fromSnap) return res.status(404).json({ error: `No snapshot for ${fromDate}` });
+    if (!toSnap) return res.status(404).json({ error: `No snapshot for ${toDate}` });
+    return res.json(compareRtlSnapshots(fromSnap, toSnap));
+  } catch (err) {
+    console.error('[rtl-daily/compare]', err);
+    return res.status(500).json({ error: err.message || 'Compare failed' });
+  }
+});
+
+app.get('/api/rtl-daily/:date', (req, res) => {
+  try {
+    const dateKey = normalizeDateKey(req.params.date);
+    if (!dateKey) return res.status(400).json({ error: 'Invalid date' });
+    const snap = loadRtlDailySnapshot(dateKey);
+    if (!snap) return res.status(404).json({ error: 'Snapshot not found' });
+    return res.json(snap);
+  } catch (err) {
+    console.error('[rtl-daily/get]', err);
+    return res.status(500).json({ error: err.message || 'Failed to load snapshot' });
+  }
+});
+
+app.post('/api/rtl-daily/save', (req, res) => {
+  try {
+    ensureRtlDailyDirs();
+    const body = req.body || {};
+    const dateKey = normalizeDateKey(body.date) || todayIsoRiyadh();
+    const vehiclesIn = Array.isArray(body.vehicles) ? body.vehicles : [];
+    const seen = new Set();
+    const vehicles = [];
+    for (const raw of vehiclesIn) {
+      const v = sanitizeRtlVehicle(raw);
+      if (!v || seen.has(v.vin)) continue;
+      seen.add(v.vin);
+      vehicles.push(v);
+    }
+    const at = Date.now();
+    const fileName = String(body.fileName || '').trim();
+    const snap = {
+      date: dateKey,
+      at,
+      fileName,
+      count: vehicles.length,
+      vehicles
+    };
+    const fp = rtlDailySnapshotPath(dateKey);
+    const tmp = `${fp}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
+    fs.renameSync(tmp, fp);
+
+    const index = loadRtlDailyIndex();
+    const entry = { date: dateKey, at, count: vehicles.length, fileName };
+    const rest = index.snapshots.filter((s) => s.date !== dateKey);
+    rest.push(entry);
+    rest.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    saveRtlDailyIndex({ snapshots: rest });
+
+    return res.json({ ok: true, date: dateKey, count: vehicles.length, at });
+  } catch (err) {
+    console.error('[rtl-daily/save]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+app.delete('/api/rtl-daily/:date', (req, res) => {
+  try {
+    const dateKey = normalizeDateKey(req.params.date);
+    if (!dateKey) return res.status(400).json({ error: 'Invalid date' });
+    const fp = rtlDailySnapshotPath(dateKey);
+    if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
+    const index = loadRtlDailyIndex();
+    saveRtlDailyIndex({
+      snapshots: index.snapshots.filter((s) => s.date !== dateKey)
+    });
+    return res.json({ ok: true, date: dateKey });
+  } catch (err) {
+    console.error('[rtl-daily/delete]', err);
+    return res.status(500).json({ error: err.message || 'Delete failed' });
   }
 });
 

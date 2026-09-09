@@ -13,7 +13,8 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260908sr31" />
+  <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
+  <link rel="stylesheet" href="dashboard.css?v=20260909dvp1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -40,6 +41,10 @@
         <a class="side-nav-item side-nav-link" href="admin.html">
           <span class="side-nav-icon" aria-hidden="true">⚙</span>
           <span class="side-nav-label">Admin Push</span>
+        </a>
+        <a class="side-nav-item side-nav-link" href="data-uploader.html">
+          <span class="side-nav-icon" aria-hidden="true">⇪</span>
+          <span class="side-nav-label">Data Uploader</span>
         </a>
         <div class="sidebar-user-card">
           <div class="sidebar-user-avatar" aria-hidden="true">O</div>
@@ -91,223 +96,39 @@
     <section id="dashboard">
       <!-- Panel tabs are rendered in the left sidebar (#panel-tabs) -->
 
-      <!-- PANEL: Sales Dashboard (Power BI–style one page) -->
-      <!-- PANEL: Inventory Command Center / Summary -->
-      <div class="panel-section icc-command-center" id="panel-summary" style="display:none">
-        <header class="icc-cc-header">
-          <div class="icc-cc-brand">
-            <div class="icc-cc-brand-mark" aria-hidden="true">
-              <img src="../images/logo/toyota.png" alt="" class="icc-cc-logo" onerror="this.style.display='none'" />
-            </div>
+      <!-- PANEL: Summary · Delivered vs Proforma -->
+      <div class="panel-section dvp-summary" id="panel-summary" style="display:none">
+        <header class="dvp-head">
+          <div class="dvp-brand">
+            <img class="dvp-logo" src="../images/logo/toyota.png" alt="" width="44" height="44" onerror="this.style.display='none'" />
             <div>
-              <p class="icc-eyebrow">Toyota · ALJ Motors</p>
-              <h2 class="icc-title">Inventory Command Center</h2>
-              <p class="icc-sub">Vehicle demand, stock coverage, sales velocity and inventory health — from live Excel only</p>
+              <p class="dvp-eyebrow">Abdul Latif Jameel Motors</p>
+              <h2 class="dvp-title">Sales Performance</h2>
+              <p class="dvp-sub">Delivered vs Proforma</p>
             </div>
           </div>
-          <div class="icc-cc-header-meta">
-            <div class="icc-refresh-stamp" id="icc-refresh-stamp">
-              <span class="lab">Last data refresh</span>
-              <strong id="icc-refresh-time">—</strong>
+          <div class="dvp-head-meta">
+            <div class="dvp-asof">
+              <span class="lab">As of</span>
+              <strong id="dvp-asof">—</strong>
             </div>
-            <div class="icc-cc-header-actions">
-              <button type="button" class="btn" id="icc-refresh-btn" title="Reload pushed Excel from Admin">Refresh Data</button>
-              <button type="button" class="btn-primary" id="icc-export">Export</button>
-              <button type="button" class="btn theme-toggle" id="icc-theme-toggle" title="Toggle dark / light">Dark / Light</button>
-            </div>
+            <button type="button" class="btn" id="dvp-refresh-btn">Refresh</button>
           </div>
         </header>
 
-        <div class="icc-filter-bar card" id="icc-filters">
-          <label class="icc-field icc-field-grow">Search VIN / Product
-            <input id="icc-search" type="search" placeholder="VIN, product, model, status…" />
-          </label>
-          <label class="icc-field">Drill
-            <select id="icc-drill">
-              <option value="0" selected>Product</option>
-              <option value="1">+ Suffix</option>
-              <option value="2">+ Model Year</option>
-              <option value="3">+ Exterior</option>
-              <option value="4">+ Interior → VIN</option>
-            </select>
-          </label>
-          <label class="icc-field">Product
-            <select id="icc-f-product"><option value="">All</option></select>
-          </label>
-          <label class="icc-field">Suffix
-            <select id="icc-f-suffix"><option value="">All</option></select>
-          </label>
-          <label class="icc-field">Model Year
-            <select id="icc-f-year"><option value="">All</option></select>
-          </label>
-          <label class="icc-field">Exterior
-            <select id="icc-f-ext"><option value="">All</option></select>
-          </label>
-          <label class="icc-field">Interior
-            <select id="icc-f-int"><option value="">All</option></select>
-          </label>
-          <label class="icc-field">Inventory Status
-            <select id="icc-f-status">
-              <option value="">All</option>
-              <option>Critical</option>
-              <option>At Risk</option>
-              <option>Balanced</option>
-              <option>Healthy</option>
-              <option>Slow Moving</option>
-            </select>
-          </label>
-          <label class="icc-field">Demand Status
-            <select id="icc-f-demand">
-              <option value="">All</option>
-              <option>High</option>
-              <option>Moderate</option>
-              <option>Low</option>
-            </select>
-          </label>
-          <label class="icc-field">Quadrant
-            <select id="icc-f-quadrant">
-              <option value="">All</option>
-              <option value="CRITICAL">High demand · Low stock</option>
-              <option value="FAST_MOVING">High demand · High stock</option>
-              <option value="WATCH">Low demand · Low stock</option>
-              <option value="OVERSTOCK">Low demand · High stock</option>
-            </select>
-          </label>
-          <label class="icc-field">Ageing min
-            <input id="icc-age-min" type="number" min="0" step="1" placeholder="0" />
-          </label>
-          <label class="icc-field">Ageing max
-            <input id="icc-age-max" type="number" min="0" step="1" placeholder="999" />
-          </label>
-          <label class="icc-field">Coverage min
-            <input id="icc-cov-min" type="number" min="0" step="0.1" placeholder="0" />
-          </label>
-          <label class="icc-field">Coverage max
-            <input id="icc-cov-max" type="number" min="0" step="0.1" placeholder="5" />
-          </label>
-          <button type="button" class="btn" id="icc-reset">Clear Filters</button>
-          <p class="foot icc-threshold-note" id="icc-threshold-note"></p>
+        <div class="dvp-empty card" id="dvp-empty" hidden>
+          <h3>Delivered vs Proforma</h3>
+          <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · B2C · Guest Experience totals.</p>
+          <p class="foot">Mark Guest Experience advisors in Admin → Employees → <b>Guest Exp</b>, then Push to live.</p>
         </div>
 
-        <div class="bo-kpis icc-kpi-row icc-kpi-scroll" id="icc-kpis"></div>
-
-        <div class="icc-hero-stage">
-          <article class="card icc-chart-card icc-hero-chart" data-chart-id="chart-icc-bubble">
-            <div class="pbi-viz-head">
-              <div>
-                <h2 id="icc-chart-title">Demand vs Stock Coverage</h2>
-                <p class="icc-chart-sub" id="icc-chart-hint">Identify vehicles where demand pressure and inventory availability are misaligned. Vehicle markers · click to inspect.</p>
-              </div>
-              <div class="icc-chart-tools">
-                <div class="icc-mode-toggle" role="group" aria-label="Main chart mode">
-                  <button type="button" class="icc-mode-btn active" data-icc-mode="coverage">Demand vs Coverage</button>
-                  <button type="button" class="icc-mode-btn" data-icc-mode="ageing">Ageing vs Velocity</button>
-                </div>
-                <button type="button" class="btn" id="icc-chart-reset-zoom" title="Reset zoom">Reset view</button>
-                <button type="button" class="pbi-expand" data-expand="chart-icc-bubble" title="Open wide view">Wide</button>
-              </div>
-            </div>
-            <div class="icc-quadrant-legend" id="icc-quad-legend">
-              <span class="icc-q icc-q-critical">Prioritize allocation</span>
-              <span class="icc-q icc-q-fast">Healthy coverage</span>
-              <span class="icc-q icc-q-watch">Monitor / review</span>
-              <span class="icc-q icc-q-over">Slow moving / review</span>
-            </div>
-            <div class="chart-box icc-chart-box icc-chart-box--hero"><canvas id="chart-icc-bubble"></canvas></div>
-          </article>
-
-          <aside class="card icc-detail icc-detail-panel" id="icc-detail">
-            <h3>Vehicle detail</h3>
-            <p class="foot" id="icc-detail-empty">Click a vehicle on the chart or a table row. Metrics come from pushed Excel — never mock values.</p>
-            <div id="icc-detail-body" hidden></div>
-          </aside>
+        <div id="dvp-board" class="dvp-board" hidden>
+          <div class="dvp-cards" id="dvp-cards"></div>
+          <div class="dvp-totals" id="dvp-totals"></div>
         </div>
-
-        <div class="icc-secondary-grid">
-          <article class="card" data-chart-id="chart-icc-ageing">
-            <div class="pbi-viz-head">
-              <h2>Inventory Ageing vs Sales Velocity</h2>
-              <span class="hint">Bubble size = available stock · high ageing + low velocity = slow moving</span>
-            </div>
-            <div class="chart-box icc-chart-box icc-chart-box--sec"><canvas id="chart-icc-ageing"></canvas></div>
-          </article>
-          <article class="card" data-chart-id="chart-icc-bo-stock">
-            <div class="pbi-viz-head">
-              <h2>Back Orders vs Available Stock</h2>
-              <span class="hint">Diagonal = Stock equals BO · below = shortfall</span>
-            </div>
-            <div class="chart-box icc-chart-box icc-chart-box--sec"><canvas id="chart-icc-bo-stock"></canvas></div>
-          </article>
-        </div>
-
-        <div class="icc-rank-grid">
-          <article class="card">
-            <div class="pbi-viz-head">
-              <h2>Top vehicles by Back Orders</h2>
-              <label class="icc-rank-limit">Show
-                <select id="icc-rank-limit">
-                  <option value="10" selected>Top 10</option>
-                  <option value="20">Top 20</option>
-                  <option value="all">All</option>
-                </select>
-              </label>
-            </div>
-            <div class="chart-box icc-chart-box icc-chart-box--rank"><canvas id="chart-icc-top-bo"></canvas></div>
-          </article>
-          <article class="card">
-            <div class="pbi-viz-head">
-              <h2>Top vehicles by Available Stock</h2>
-              <span class="hint" id="icc-rank-stock-hint">Same limit as left</span>
-            </div>
-            <div class="chart-box icc-chart-box icc-chart-box--rank"><canvas id="chart-icc-top-stock"></canvas></div>
-          </article>
-        </div>
-
-        <article class="card icc-insights" id="icc-insights">
-          <h2>Inventory Intelligence</h2>
-          <p class="foot">Statements are calculated from the current filtered Excel dataset.</p>
-          <div class="icc-insight-grid" id="icc-insight-grid"></div>
-        </article>
-
-        <details class="card icc-dq-panel" id="icc-dq-panel">
-          <summary>Data Quality · click to inspect source rows, matches, duplicates, missing fields</summary>
-          <div class="icc-dq" id="icc-dq" aria-live="polite"></div>
-          <ul class="icc-dq-notes" id="icc-dq-notes"></ul>
-        </details>
-
-        <article class="card icc-table-card">
-          <div class="pbi-viz-head">
-            <h2>Vehicle Inventory Detail</h2>
-            <span class="hint">Search · sort · paginate · export · conditional status</span>
-          </div>
-          <div class="icc-table-toolbar">
-            <label>Sort
-              <select id="icc-sort">
-                <option value="demandPressure:desc">Demand pressure ↓</option>
-                <option value="backOrders:desc">Back orders ↓</option>
-                <option value="stockCoverage:asc">Coverage ↑</option>
-                <option value="salesVelocity:desc">Velocity ↓</option>
-                <option value="allocationAgeing:desc">Ageing ↓</option>
-                <option value="availableStock:desc">Stock ↓</option>
-                <option value="product:asc">Product A–Z</option>
-              </select>
-            </label>
-            <label class="icc-col-vis">Columns
-              <select id="icc-col-vis" multiple size="1" title="Toggle columns">
-                <option value="vinCount" selected>VIN Count</option>
-                <option value="rtl" selected>RTL</option>
-                <option value="central" selected>Central file</option>
-                <option value="esales" selected>E-Sales plan</option>
-              </select>
-            </label>
-            <span class="foot" id="icc-table-meta"></span>
-          </div>
-          <div class="table-wrap icc-table-wrap" id="icc-table"></div>
-          <div class="icc-pager" id="icc-pager"></div>
-          <p class="foot" id="icc-table-foot"></p>
-        </article>
       </div>
 
+      <!-- PANEL: Sales Dashboard -->
       <div class="panel-section sr-panel" id="panel-salesreport" role="tabpanel" aria-labelledby="tab-salesreport" style="display:none">
       <div class="sr-dash" id="sr-pbi-page">
         <div class="sr-dash-head">
@@ -440,6 +261,10 @@
                       <span class="k">Achieved</span>
                       <span class="v" id="acc-sum-achieved">—</span>
                     </div>
+                    <div class="acc-summary-cell">
+                      <span class="k">In Progress</span>
+                      <span class="v" id="acc-sum-progress">—</span>
+                    </div>
                   </div>
                 </div>
                 <div class="sr-acc-layout sr-detail-only">
@@ -457,8 +282,13 @@
                   <h2 class="sr-mock-card-title">Prof + Del</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-sr-profdel" title="Open wide view">Wide</button>
                 </div>
-                <div class="sr-profdel-day" id="sr-profdel-day" aria-label="Prof plus Del summary"></div>
-                <div class="chart-scroll sr-detail-only"><div class="chart-box pbi-box"><canvas id="chart-sr-profdel"></canvas></div></div>
+                <div class="sr-profdel-chart-wrap">
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box sr-profdel-box">
+                      <canvas id="chart-sr-profdel"></canvas>
+                    </div>
+                  </div>
+                </div>
               </article>
             </div>
 
@@ -783,6 +613,39 @@
               <div class="table-wrap" id="bo-sfx-table"></div>
             </article>
           </div>
+        </div>
+      </div>
+
+      <!-- PANEL: Reserved Vehicles Tracker -->
+      <div class="panel-section" id="panel-reservedvehicles" style="display:none">
+        <div class="bo-empty card" id="rv-empty">
+          <h2>Reserved Vehicles Tracker</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Reads <b>E-Sales المحجوز</b> from Central Stock (order Col F · VIN Col L), ranks each order with the BO queue algorithm, and shows Sales Raw / stock location status per VIN.
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
+            <li>Upload slot <b>3 · Stock Central</b> (must include sheet <b>E-Sales المحجوز</b>)</li>
+            <li>Upload slot <b>1 · Back Order</b> for queue position</li>
+            <li>Upload slot <b>4 · Sales Raw</b> for proforma / delivery dates (optional for stock location fallback)</li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
+          </ol>
+        </div>
+
+        <div id="rv-dash" class="bo-dash rv-dash" hidden>
+          <div class="rv-head">
+            <div>
+              <h2 class="rv-title">Reserved Vehicles Tracker</h2>
+              <p class="rv-sub" id="rv-live-hint">Central · المحجوز · BO queue · Sales Raw status</p>
+            </div>
+            <div class="rv-head-actions">
+              <input id="rv-search" type="search" placeholder="Search order / VIN…" />
+              <button type="button" id="rv-excel-btn" class="btn-primary">Export Excel</button>
+            </div>
+          </div>
+          <div class="bo-kpis" id="rv-kpis"></div>
+          <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
+          <p class="foot" id="rv-table-foot"></p>
         </div>
       </div>
 
@@ -1315,7 +1178,7 @@
     { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
-    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "First sheet · Col D VIN → Sales Raw employee · Col L amount" },
+    { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -1723,9 +1586,9 @@
   function loadEmployeeTargets() {
     try {
       const raw = localStorage.getItem(TARGETS_KEY);
-      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
+      if (!raw) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
       return Array.from({ length: EMPLOYEE_COUNT }, (_, i) => {
         const row = parsed[i] || {};
         const savedName = String(row.name || "").trim();
@@ -1741,10 +1604,11 @@
           name,
           target: Math.max(0, Number(row.target) || 0),
           vacation,
+          guestExpCenter: !!row.guestExpCenter,
         };
       });
     } catch {
-      return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false }));
+      return DEFAULT_EMPLOYEES.map((e) => ({ ...e, vacation: false, guestExpCenter: false }));
     }
   }
 
@@ -1863,6 +1727,7 @@
       refreshSalesSelection();
       updated = true;
     }
+    if (hasSummaryInputs()) renderSummaryDashboard();
     if (window._data) renderBoAllocStockDashboard(window._data);
     if (updated) setStatus(reason || "Targets updated live", "ok");
     return updated;
@@ -1942,7 +1807,18 @@
     "interior color", "model year", "back order number", "salesman name", "amount",
   ];
 
-  const slots = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, { file: null, rows: [], name: "" }]));
+  const slots = Object.fromEntries(SLOT_DEFS.map((s) => {
+    const base = { file: null, rows: [], name: "" };
+    if (s.id === "central") {
+      base.reservedRows = [];
+      base.reservedSheet = "";
+    }
+    if (s.id === "accessories") {
+      base.vsndRows = [];
+      base.vsndSheet = "";
+    }
+    return [s.id, base];
+  }));
   let view = { tab: "backorder", search: "", extra: "" };
   const charts = {};
   const chartSnapshots = {};
@@ -2486,6 +2362,7 @@
    *   Col D = VIN (look up salesman in Sales Raw)
    *   Col L = amount (accessories achieved)
    * Optional date column (by header) for period filter; undated rows still count in MTD.
+   * Sheet 2 «VSND»: Col I VIN · Col L sales employee · Col S value (in progress / not delivered).
    * Ach% = amount ÷ accessories target (settled pool share, else employee monthly target)
    */
   function parseAmount(v) {
@@ -2494,6 +2371,88 @@
     if (!s) return 0;
     const n = parseFloat(s.replace(/[^\d.\-]/g, ""));
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function cellHasValue(v) {
+    if (v == null) return false;
+    if (typeof v === "number") return Number.isFinite(v);
+    return String(v).trim() !== "";
+  }
+
+  function accessoriesVsndSheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /^vsnd$/i.test(String(n).trim())) ||
+      names.find((n) => /\bvsnd\b/i.test(n)) ||
+      (names.length > 1 ? names[1] : null)
+    );
+  }
+
+  /**
+   * Accessories workbook · sheet VSND:
+   *   Col I = VIN · Col L = sales employee · Col S = value
+   * Count/sum only rows that have a value in Col S.
+   */
+  function accessoriesVsndRows(workbook) {
+    const preferred = accessoriesVsndSheetName(workbook);
+    if (!preferred || !workbook.Sheets[preferred]) return [];
+
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
+      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
+    });
+    if (!matrix.length) return [];
+
+    let headerIdx = 0;
+    let bestHits = -1;
+    const markers = ["vin", "chassis", "sales employee", "salesman", "employee", "amount", "value"];
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      if (!cells.some(Boolean)) continue;
+      const hits = markers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+      if (hits >= 2) break;
+    }
+
+    const idxI = colLetterToIndex("I");
+    const idxL = colLetterToIndex("L");
+    const idxS = colLetterToIndex("S");
+    const headerRow = matrix[headerIdx] || [];
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const seenHdr = {};
+    const uniqueHeaders = headers.map((h) => {
+      if (!seenHdr[h]) { seenHdr[h] = 1; return h; }
+      seenHdr[h] += 1;
+      return `${h} (${seenHdr[h]})`;
+    });
+    const width = Math.max(uniqueHeaders.length, idxS + 1);
+
+    const start = bestHits >= 1 ? headerIdx + 1 : 1;
+    const rows = [];
+    for (let r = start; r < matrix.length; r += 1) {
+      const line = padCells(matrix[r] || [], width);
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      if (!cellHasValue(line[idxS])) continue;
+
+      const amount = parseAmount(line[idxS]);
+      if (!amount) continue;
+
+      const vin = extractVinValue(line[idxI]) || upperTrim(cellToString(line[idxI]));
+      const salesman = resolveSalesmanName(cellToString(line[idxL]).trim());
+      const obj = {
+        vin,
+        amount,
+        salesman,
+        _sheet: preferred,
+        _kind: "vsnd",
+        __cells: line,
+        __headers: uniqueHeaders,
+      };
+      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      rows.push(obj);
+    }
+    return rows;
   }
 
   function accessoriesRows(workbook) {
@@ -3145,6 +3104,34 @@
     return sheetRows(workbook, preferred);
   }
 
+  /** E-Sales reserved sheet «المحجوز» — Col F order · Col L VIN. */
+  function esalesReservedSheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /المحجوز/i.test(n) && /e[\s_-]*sales|esales/i.test(n)) ||
+      names.find((n) => /المحجوز/i.test(n)) ||
+      names.find((n) => /reserv/i.test(n) && /e[\s_-]*sales|esales|stock/i.test(n)) ||
+      null
+    );
+  }
+
+  function esalesReservedStockRows(workbook) {
+    const sheetName = esalesReservedSheetName(workbook);
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    return sheetRows(workbook, sheetName).map((r, idx) => {
+      const orderNumber = cellToString(cellByLetter(r, "F")).trim();
+      const vin = extractVinValue(cellByLetter(r, "L")) || upperTrim(cellToString(cellByLetter(r, "L")));
+      return {
+        idx,
+        sheet: sheetName,
+        orderNumber,
+        vin,
+        _raw: r,
+      };
+    }).filter((r) => r.orderNumber || r.vin);
+  }
+
   function rowsForSlot(id, workbook) {
     if (id === "backorder") return backorderRows(workbook);
     if (id === "cancelled") return cancelledBoRows(workbook);
@@ -3494,7 +3481,17 @@
       /* fall back to local IndexedDB */
     }
     const payload = await Store.loadWorkbookFiles();
-    SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
+    SLOT_DEFS.forEach((d) => {
+      slots[d.id] = { file: null, rows: [], name: "" };
+      if (d.id === "central") {
+        slots[d.id].reservedRows = [];
+        slots[d.id].reservedSheet = "";
+      }
+      if (d.id === "accessories") {
+        slots[d.id].vsndRows = [];
+        slots[d.id].vsndSheet = "";
+      }
+    });
     if (!payload || !payload.files) {
       updateWaitFoot();
       $("#run-btn").disabled = true;
@@ -3510,11 +3507,20 @@
         if (!f || !f.buffer) continue;
         const wb = bufferToWorkbook(f.name, f.buffer);
         const rows = rowsForSlot(d.id, wb);
-        slots[d.id] = {
+        const slot = {
           file: { name: f.name, size: f.size || f.buffer.byteLength },
           rows,
           name: f.name,
         };
+        if (d.id === "central") {
+          slot.reservedRows = esalesReservedStockRows(wb);
+          slot.reservedSheet = esalesReservedSheetName(wb) || "";
+        }
+        if (d.id === "accessories") {
+          slot.vsndRows = accessoriesVsndRows(wb);
+          slot.vsndSheet = accessoriesVsndSheetName(wb) || "";
+        }
+        slots[d.id] = slot;
       }
       invalidateStockAvailabilityCache();
       invalidateIccCache();
@@ -3569,6 +3575,27 @@
       soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
     });
 
+    const progressByKey = new Map();
+    let progressRows = 0;
+    let progressUnmatched = 0;
+    (slots.accessories.vsndRows || []).forEach((r) => {
+      const amount = Number(r.amount) || 0;
+      if (!amount) return;
+      let salesman = resolveSalesmanName(r.salesman);
+      if (!salesman) {
+        const vin = extractVinValue(r.vin);
+        if (vin && vinMap.has(vin)) salesman = vinMap.get(vin);
+      }
+      r.salesman = salesman || r.salesman || "";
+      const key = nameKey(salesman);
+      if (!key) {
+        progressUnmatched += 1;
+        return;
+      }
+      progressRows += 1;
+      progressByKey.set(key, (progressByKey.get(key) || 0) + amount);
+    });
+
     const byKey = new Map();
     employeeTargets.forEach((e) => {
       const key = nameKey(e.name);
@@ -3579,25 +3606,33 @@
         ? (settled / totalAdminTarget) * adminTarget
         : adminTarget;
       const sold = soldByKey.get(key) || 0;
+      const inProgress = progressByKey.get(key) || 0;
       const remaining = Math.max(0, quota - sold);
       byKey.set(key, {
         salesman: e.name,
         adminTarget,
         quota,
         sold,
+        inProgress,
         achPct: quota > 0 ? sold / quota : null,
         remaining,
         netTarget: remaining,
       });
       soldByKey.delete(key);
+      progressByKey.delete(key);
     });
-    soldByKey.forEach((sold, key) => {
-      const fromFile = (slots.accessories.rows || []).find((r) => nameKey(r.salesman) === key);
+    const leftoverKeys = new Set([...soldByKey.keys(), ...progressByKey.keys()]);
+    leftoverKeys.forEach((key) => {
+      const sold = soldByKey.get(key) || 0;
+      const inProgress = progressByKey.get(key) || 0;
+      const fromFile = (slots.accessories.rows || []).find((r) => nameKey(r.salesman) === key)
+        || (slots.accessories.vsndRows || []).find((r) => nameKey(r.salesman) === key);
       byKey.set(key, {
         salesman: fromFile ? fromFile.salesman : key,
         adminTarget: 0,
         quota: 0,
         sold,
+        inProgress,
         achPct: null,
         remaining: 0,
         netTarget: 0,
@@ -3606,6 +3641,7 @@
 
     const totSold = [...byKey.values()].reduce((s, x) => s + x.sold, 0);
     const totQuota = [...byKey.values()].reduce((s, x) => s + x.quota, 0);
+    const totInProgress = [...byKey.values()].reduce((s, x) => s + (x.inProgress || 0), 0);
     return {
       settled,
       totalAdminTarget,
@@ -3613,30 +3649,36 @@
       byKey,
       matchedRows,
       unmatchedVin,
+      progressRows,
+      progressUnmatched,
       totals: {
         sold: totSold,
         quota: totQuota,
+        inProgress: totInProgress,
         achPct: totQuota > 0 ? totSold / totQuota : null,
       },
-      hasFile: !!(slots.accessories.rows && slots.accessories.rows.length),
+      hasFile: !!(slots.accessories.rows && slots.accessories.rows.length)
+        || !!(slots.accessories.vsndRows && slots.accessories.vsndRows.length),
     };
   }
 
   function applyAccessoriesToReportRows(rows, acc) {
     const merged = rows.map((r) => {
       const m = acc.byKey.get(r._key) || {
-        quota: 0, sold: 0, achPct: null, netTarget: rowTargetNum(r), adminTarget: rowTargetNum(r),
+        quota: 0, sold: 0, inProgress: 0, achPct: null, netTarget: rowTargetNum(r), adminTarget: rowTargetNum(r),
       };
       const accAchPct = m.achPct;
       return {
         ...r,
         "Acc Target": m.quota,
         "Acc Achieved": m.sold,
+        "Acc In Progress": m.inProgress || 0,
         "Acc Ach %": accAchPct == null ? (m.quota ? "0%" : "—") : pct1(accAchPct),
         "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         "Adjusted Target": m.netTarget,
         _accQuota: m.quota,
         _accSold: m.sold,
+        _accInProgress: m.inProgress || 0,
         _accAchPct: accAchPct,
         _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         _accNetTarget: m.netTarget,
@@ -3645,7 +3687,7 @@
 
     const existing = new Set(merged.map((r) => r._key));
     acc.byKey.forEach((m, key) => {
-      if (existing.has(key) || !m.sold) return;
+      if (existing.has(key) || !(m.sold || m.inProgress)) return;
       merged.push({
         No: 0,
         Plant: "—",
@@ -3663,26 +3705,19 @@
         "Day Target": m.adminTarget,
         "Prof+Del": 0,
         "Del %": "#DIV/0!",
-        "Prof+Del %": "#DIV/0!",
-        _delPct: null,
-        _profDelPct: null,
-        Proforma: 0,
-        Delivery: 0,
         "Acc Target": m.quota,
         "Acc Achieved": m.sold,
-        "Acc Ach %": m.achPct == null ? "0%" : pct1(m.achPct),
+        "Acc In Progress": m.inProgress || 0,
+        "Acc Ach %": m.achPct == null ? (m.quota ? "0%" : "—") : pct1(m.achPct),
         "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         "Adjusted Target": m.netTarget,
+        _key: key,
         _accQuota: m.quota,
         _accSold: m.sold,
+        _accInProgress: m.inProgress || 0,
         _accAchPct: m.achPct,
         _accRemaining: m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         _accNetTarget: m.netTarget,
-        day: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
-        month: { Proforma: 0, Delivery: 0, Target: m.adminTarget, "Cancelled BOs": 0 },
-        _vins: [],
-        _records: [],
-        _key: key,
       });
     });
     return merged.map((r, i) => ({ ...r, No: i + 1 }));
@@ -4315,6 +4350,7 @@
         accSold: accessories.totals.sold,
         accQuota: accessories.totals.quota,
         accAchPct: accessories.totals.achPct,
+        accInProgress: accessories.totals.inProgress || 0,
         accSettled: accessories.settled,
       },
     };
@@ -4412,6 +4448,14 @@
         scroll.classList.remove("is-scroll");
         scroll.style.maxHeight = "";
       }
+    } else if (canvasId === "chart-sr-profdel") {
+      box.style.height = "210px";
+      box.style.minHeight = "210px";
+      delete canvas.dataset.fitRowPx;
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
     } else {
       box.style.height = "220px";
       box.style.minHeight = "";
@@ -4484,6 +4528,54 @@
     },
   };
 
+  /** Colored value tags above line-chart points (Prof / Del daily). */
+  const linePointLabelsPlugin = {
+    id: "linePointLabels",
+    afterDatasetsDraw(chart) {
+      const cfg = chart.options.plugins && chart.options.plugins.linePointLabels;
+      if (!cfg || !cfg.display) return;
+      if (chart.config.type !== "line") return;
+      const { ctx } = chart;
+      ctx.save();
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.hidden) return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        const fill = ds.pointLabelBg || ds.borderColor || "#2563eb";
+        ctx.font = `700 10px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        meta.data.forEach((el, i) => {
+          const raw = Number(ds.data[i]);
+          if (!Number.isFinite(raw) || raw <= 0) return;
+          const text = String(Math.round(raw));
+          const { x, y } = el.getProps(["x", "y"], true);
+          const tw = ctx.measureText(text).width;
+          const padX = 5;
+          const padY = 3;
+          const bw = tw + padX * 2;
+          const bh = 14;
+          const stackLift = di * (bh + 2);
+          const bx = x - bw / 2;
+          const by = y - 16 - stackLift - bh / 2;
+          ctx.fillStyle = fill;
+          ctx.beginPath();
+          const r = 3;
+          ctx.moveTo(bx + r, by);
+          ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+          ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+          ctx.arcTo(bx, by + bh, bx, by, r);
+          ctx.arcTo(bx, by, bx + bw, by, r);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.fillText(text, x, by + bh / 2);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
@@ -4532,14 +4624,17 @@
     delete datasetsExtra.categoryExtras;
     delete datasetsExtra.rowMeta;
     delete datasetsExtra.dualValueAxis;
+    delete datasetsExtra.stacked;
     const softScale = {
       beginAtZero: true,
+      stacked: !!opts.stacked,
       ...(opts.max != null && !opts.dualValueAxis ? { max: opts.max } : {}),
       grid: { color: "rgba(17, 17, 17, 0.06)", drawBorder: false },
       ticks: { precision: 0, color: "#6b7280", font: { size: 11, family: figureFont, weight: "600" } },
       border: { display: false },
     };
     const categoryScale = {
+      stacked: !!opts.stacked,
       grid: { display: false },
       ticks: {
         maxRotation: horizontal ? 0 : 40,
@@ -4606,7 +4701,7 @@
           ...ds,
         })),
       },
-      plugins: [barEndLabelsPlugin],
+      plugins: [barEndLabelsPlugin, linePointLabelsPlugin],
       options: {
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
@@ -4615,8 +4710,8 @@
         layout: {
           padding: {
             left: horizontal ? (opts.categoryExtras ? 4 : 2) : 4,
-            right: showValues && horizontal ? 52 : 8,
-            top: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
+            right: showValues && horizontal ? 52 : (type === "line" ? 10 : 8),
+            top: type === "line" ? 28 : (horizontal ? (opts.dualValueAxis ? 10 : 4) : 4),
             bottom: horizontal ? (opts.dualValueAxis ? 10 : 4) : 4,
           },
         },
@@ -4665,10 +4760,34 @@
             fontFamily,
             figureFont,
           },
+          linePointLabels: {
+            display: !!(opts.pointLabels && type === "line"),
+            figureFont,
+          },
         },
         scales: type === "doughnut"
           ? {}
           : (() => {
+              if (type === "line") {
+                return {
+                  y: {
+                    ...softScale,
+                    stacked: false,
+                    ticks: { ...softScale.ticks, precision: 0 },
+                  },
+                  x: {
+                    ...categoryScale,
+                    stacked: false,
+                    ticks: {
+                      ...categoryScale.ticks,
+                      maxRotation: 0,
+                      autoSkip: true,
+                      maxTicksLimit: 16,
+                      font: { size: 10, family: fontFamily, weight: "600" },
+                    },
+                  },
+                };
+              }
               if (!horizontal) return { y: softScale, x: categoryScale };
               if (!opts.dualValueAxis) return { x: softScale, y: categoryScale };
               return {
@@ -4909,13 +5028,15 @@
       const r = list[0];
       const quota = Number(r._accQuota) || 0;
       const sold = Number(r._accSold) || 0;
+      const inProgress = Number(r._accInProgress) || 0;
       const ach = quota > 0 ? sold / quota : (r._accAchPct != null ? r._accAchPct : null);
-      return { quota, sold, achPct: ach };
+      return { quota, sold, inProgress, achPct: ach };
     }
-    if (t.accQuota != null || t.accSold != null) {
+    if (t.accQuota != null || t.accSold != null || t.accInProgress != null) {
       return {
         quota: Number(t.accQuota) || 0,
         sold: Number(t.accSold) || 0,
+        inProgress: Number(t.accInProgress) || 0,
         achPct: t.accAchPct != null ? t.accAchPct : (t.accQuota ? (t.accSold || 0) / t.accQuota : null),
       };
     }
@@ -4923,6 +5044,7 @@
     return {
       quota: Number(acc.quota) || 0,
       sold: Number(acc.sold) || 0,
+      inProgress: Number(acc.inProgress) || 0,
       achPct: acc.achPct != null ? acc.achPct : null,
     };
   }
@@ -4933,16 +5055,18 @@
     const sum = accessoriesSummaryTotals(sr, rows);
     const targetEl = $("#acc-sum-target");
     const soldEl = $("#acc-sum-achieved");
+    const progressEl = $("#acc-sum-progress");
     const pctEl = $("#acc-sum-pct");
     const fillEl = $("#sr-acc-progress-fill");
     const pctNum = sum.achPct == null ? (sum.quota ? 0 : null) : (sum.achPct * 100);
     if (targetEl) targetEl.textContent = formatNumber(sum.quota);
     if (soldEl) soldEl.textContent = formatNumber(sum.sold);
+    if (progressEl) progressEl.textContent = formatNumber(sum.inProgress || 0);
     if (pctEl) {
       pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
     }
     if (fillEl) fillEl.style.width = (pctNum == null ? 0 : Math.max(0, Math.min(100, pctNum))).toFixed(1) + "%";
-    board.hidden = !(sum.quota > 0 || sum.sold > 0);
+    board.hidden = !(sum.quota > 0 || sum.sold > 0 || sum.inProgress > 0);
   }
 
   function renderWideAccessoriesSummary(sr) {
@@ -4969,6 +5093,10 @@
           <div class="acc-summary-cell">
             <span class="k">Achieved</span>
             <span class="v">${formatNumber(sum.sold)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">In Progress</span>
+            <span class="v">${formatNumber(sum.inProgress || 0)}</span>
           </div>
         </div>
       </div>`;
@@ -5324,11 +5452,14 @@
       if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
     }
     const hint = $("#pbi-wide-hint");
+    const isProfDel = sourceId === "chart-sr-profdel";
     if (hint) {
       hint.textContent = isPerf
         ? "Full team on one screen · names in Numbers · Volume & Sales type below"
         : isCancel
           ? "Cancel % & Gap above · Cancelled BOs below · click a bar to filter"
+          : isProfDel
+            ? "Daily Proforma (Col P) vs Delivery (Col V) · day of month"
           : horizontal && n > 1
             ? "All names on one screen · Numbers on the right · click a bar to filter"
         : "Numbers beside the chart · Close or press Esc";
@@ -5417,11 +5548,12 @@
   }
 
   const PANEL_DEFS = [
-    { id: "summary", label: "Summary" },
+    { id: "summary", label: "Summary · Del vs Prof" },
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boallocstock", label: "Allocation" },
     { id: "stockdashboard", label: "Stock Dashboard" },
+    { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
   let activePanel = "salesreport";
@@ -5438,19 +5570,24 @@
     return slotHasRows("backorder");
   }
 
+  function hasReservedVehiclesInputs() {
+    return Array.isArray(slots.central?.reservedRows) && slots.central.reservedRows.length > 0;
+  }
+
   /** Sales Report when Sales Raw is pushed (Cancelled BO optional — zeros if missing) */
   function hasSalesReportInputs() {
     return hasSalesRaw();
   }
 
   function hasSummaryInputs() {
-    return hasBackOrder() || hasStockFiles() || hasSalesRaw();
+    return hasSalesRaw() || hasBackOrder() || hasStockFiles();
   }
 
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
       if (p.id === "salesreport") return hasSalesReportInputs();
       if (p.id === "summary") return hasSummaryInputs();
+      if (p.id === "reservedvehicles") return true;
       // BO + Stock Dashboard always visible — empty state when BO file missing
       return true;
     });
@@ -6041,6 +6178,7 @@
       bodashboard: "▤",
       boallocstock: "▦",
       stockdashboard: "◈",
+      reservedvehicles: "◎",
       dashboard: "◉",
     };
     $("#panel-tabs").innerHTML = panels.map((p) =>
@@ -6063,6 +6201,7 @@
       dateEl.textContent = `TOYOTA · ${d}`;
     }
     if (panelId === "summary") renderSummaryDashboard();
+    if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
   }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
@@ -7087,53 +7226,89 @@
     return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
   }
 
-  function renderProfDelSummaryStrip(sr, rows) {
-    const el = $("#sr-profdel-day");
-    if (!el) return;
-    const list = Array.isArray(rows) ? rows : [];
-    let vol = 0;
-    let target = 0;
-    let prof = 0;
-    let del = 0;
-    let volPrev = 0;
-    if (srView.selectedKey && list[0]) {
-      const r = list[0];
-      vol = Number(r["Prof+Del"]) || 0;
-      target = rowTargetNum(r);
-      prof = Number(r["Proforma (Month)"]) || 0;
-      del = Number(r["Delivery (Month)"]) || 0;
-      volPrev = (Number(r["Proforma (Prev)"]) || 0) + (Number(r["Delivery (Prev)"]) || 0);
-    } else {
-      const t = (sr && sr.totals) || {};
-      target = Number(t.target) || 0;
-      del = Number(t.deliveryMonth) || 0;
-      prof = Number(t.proformaMonth) || 0;
-      vol = prof + del;
-      volPrev = (Number(t.proformaPrev) || 0) + (Number(t.deliveryPrev) || 0);
-      if (!target && list.length) {
-        target = list.reduce((s, r) => s + rowTargetNum(r), 0);
-        del = list.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
-        prof = list.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
-        vol = prof + del;
-        volPrev = list.reduce((s, r) => s + (Number(r["Proforma (Prev)"]) || 0) + (Number(r["Delivery (Prev)"]) || 0), 0);
-      }
+  function buildDailyProfDelSeries(sr, selectedKey) {
+    const live = (sr && sr.live) || window._globalLivePeriod || ensureGlobalLivePeriod();
+    const prevMonthKey = sr && sr.prevMonthKey;
+    let days = Math.max(1, Number(live.daysInMonth) || 31);
+    if (live.rangeFrom && live.rangeTo) {
+      const span = Math.round((startOfDay(live.rangeTo).getTime() - startOfDay(live.rangeFrom).getTime()) / 86400000) + 1;
+      if (span > 0 && span <= 62) days = span;
     }
-    const pct = target > 0 ? ((vol / target) * 100) : null;
-    const volDelta = momDeltaPct(vol, volPrev);
-    el.innerHTML = `
-      <div class="sr-perf-metric is-vol">
-        <span class="k">Volume</span>
-        <span class="v">${formatNumber(vol)}</span>
-      </div>
-      <div class="sr-perf-metric is-prof">
-        <span class="k">Prof+Del %</span>
-        <span class="v">${pct == null ? "—" : pct.toFixed(1) + "%"}</span>
-      </div>
-      <div class="sr-perf-metric is-target">
-        <span class="k">Target</span>
-        <span class="v">${formatNumber(target)}</span>
-      </div>
-    `;
+    const labels = [];
+    const proforma = Array(days).fill(0);
+    const delivery = Array(days).fill(0);
+    for (let d = 1; d <= days; d += 1) labels.push(String(d));
+
+    const keyFilter = selectedKey ? String(selectedKey) : "";
+    (slots.sales.rows || []).forEach((r) => {
+      if (keyFilter) {
+        const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+        if (nameKey(name) !== keyFilter) return;
+      }
+      if (r.proformaDate && salesPeriodMatch(r.proformaDate, live, "month", prevMonthKey)) {
+        const di = proformaDayIndex(r.proformaDate, live);
+        if (di >= 1 && di <= days) proforma[di - 1] += 1;
+      }
+      if (r.deliveryDate && salesPeriodMatch(r.deliveryDate, live, "month", prevMonthKey)) {
+        const di = proformaDayIndex(r.deliveryDate, live);
+        if (di >= 1 && di <= days) delivery[di - 1] += 1;
+      }
+    });
+
+    return {
+      labels,
+      proforma,
+      delivery,
+      days,
+      totProforma: proforma.reduce((s, n) => s + n, 0),
+      totDelivery: delivery.reduce((s, n) => s + n, 0),
+    };
+  }
+
+  function renderProfDelDailyChart(sr, rows) {
+    const series = buildDailyProfDelSeries(sr, srView.selectedKey || "");
+    const maxY = Math.max(5, ...series.proforma, ...series.delivery);
+    upsertChart("chart-sr-profdel", "line", series.labels, null, {
+      legend: true,
+      pointLabels: true,
+      max: Math.ceil(maxY * 1.15),
+      datasets: [
+        {
+          label: "Proforma",
+          data: series.proforma,
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37, 99, 235, 0.12)",
+          pointLabelBg: "#2563eb",
+          pointBackgroundColor: "#2563eb",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 1.5,
+          pointRadius: 3.5,
+          pointHoverRadius: 5,
+          borderWidth: 2.5,
+          tension: 0.25,
+          fill: false,
+        },
+        {
+          label: "Delivery",
+          data: series.delivery,
+          borderColor: "#eb0a1e",
+          backgroundColor: "rgba(235, 10, 30, 0.10)",
+          pointLabelBg: "#9f1239",
+          pointBackgroundColor: "#eb0a1e",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 1.5,
+          pointRadius: 3.5,
+          pointHoverRadius: 5,
+          borderWidth: 2.5,
+          tension: 0.25,
+          fill: false,
+        },
+      ],
+    });
+  }
+
+  function renderProfDelSummaryStrip(sr, rows) {
+    renderProfDelDailyChart(sr, rows);
   }
 
   function renderPaceBoard(sr) {
@@ -7677,6 +7852,7 @@
       .map((r) => {
         const quota = Number(r._accQuota) || 0;
         const sold = Number(r._accSold) || 0;
+        const inProgress = Number(r._accInProgress) || 0;
         const remaining = r._accRemaining != null
           ? Math.max(0, Number(r._accRemaining) || 0)
           : Math.max(0, quota - sold);
@@ -7685,10 +7861,11 @@
         pct: r._accAchPct != null ? r._accAchPct * 100 : 0,
           quota,
           sold,
+          inProgress,
           remaining,
         };
       })
-      .filter((x) => x.quota > 0 || x.sold > 0)
+      .filter((x) => x.quota > 0 || x.sold > 0 || x.inProgress > 0)
       .sort((a, b) => b.pct - a.pct || a.remaining - b.remaining || String(a.row["Sales Employee"] || "").localeCompare(String(b.row["Sales Employee"] || "")));
 
     if (!accRows.length) {
@@ -7704,13 +7881,13 @@
       }
       setChartEmptyState(
         "chart-sr-accessories",
-        "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, and employee targets (or Accessories settled) in Admin."
+        "No accessories amounts / targets for this period. Need Sales Raw VIN match (Col D) + Col L amount, VSND Col S in progress, and employee targets (or Accessories settled) in Admin."
       );
       return;
     }
 
     const hintOk = summaryBoard && summaryBoard.parentElement && summaryBoard.parentElement.querySelector(".sr-summary-hint");
-    if (hintOk) hintOk.textContent = "Wide opens Ach % chart and remaining schedule";
+    if (hintOk) hintOk.textContent = "Wide opens Ach % chart · VSND Col S = In Progress (not delivered)";
 
     if (remainWrap && remainTable) {
       remainWrap.hidden = false;
@@ -7719,6 +7896,7 @@
           <th>Advisor</th>
           <th class="num">Acc Target</th>
           <th class="num">Achieved</th>
+          <th class="num">In Progress</th>
           <th class="num">Ach %</th>
           <th class="num">Remaining</th>
         </tr></thead>
@@ -7730,6 +7908,7 @@
             <td><button type="button" class="bo-link acc-remain-name" data-emp-key="${escapeHtml(x.row._key || "")}">${escapeHtml(name)}</button></td>
             <td class="num">${formatNumber(x.quota)}</td>
             <td class="num">${formatNumber(x.sold)}</td>
+            <td class="num">${formatNumber(x.inProgress)}</td>
             <td class="num">${x.row["Acc Ach %"] || (x.quota ? pct1(x.sold / x.quota) : "—")}</td>
             <td class="num ${remCls}"><b>${done ? "0 · done" : formatNumber(x.remaining)}</b></td>
           </tr>`;
@@ -7745,19 +7924,66 @@
       : accRows.map((x) => shortEmpLabel(x.row["Sales Employee"] || x.row.Salesman));
     const empKeys = accRows.map((x) => x.row._key);
     const horizontal = !single && accRows.length > 1;
+    const soldVals = accRows.map((x) => x.sold);
+    const progressVals = accRows.map((x) => x.inProgress);
+    const remainVals = accRows.map((x) => x.remaining);
+    const hasProgress = progressVals.some((n) => n > 0);
+
+    if (single) {
+      const r = accRows[0];
+      const doughnutLabels = hasProgress || r.inProgress > 0
+        ? ["Achieved", "Not delivered", "Remaining"]
+        : ["Ach %", "Remaining"];
+      const doughnutVals = hasProgress || r.inProgress > 0
+        ? [r.sold, r.inProgress, r.remaining]
+        : [Math.min(100, r.pct), Math.max(0, 100 - r.pct)];
+      upsertChart("chart-sr-accessories", "doughnut", doughnutLabels, doughnutVals, {
+        legend: true,
+        backgroundColor: hasProgress || r.inProgress > 0
+          ? ["rgba(13, 148, 136, 0.9)", "rgba(180, 83, 9, 0.88)", "rgba(148, 163, 184, 0.55)"]
+          : undefined,
+      });
+      return;
+    }
+
+    if (hasProgress) {
+      upsertChart("chart-sr-accessories", "bar", labels, soldVals, {
+        horizontal,
+        clickable: accRows.length > 1,
+        empKeys,
+        legend: true,
+        stacked: true,
+        datasets: [
+          {
+            label: "Achieved",
+            data: soldVals,
+            backgroundColor: "rgba(13, 148, 136, 0.88)",
+            borderRadius: 4,
+            stack: "acc",
+          },
+          {
+            label: "Not delivered",
+            data: progressVals,
+            backgroundColor: "rgba(180, 83, 9, 0.88)",
+            borderRadius: 4,
+            stack: "acc",
+          },
+          {
+            label: "Remaining",
+            data: remainVals,
+            backgroundColor: "rgba(148, 163, 184, 0.45)",
+            borderRadius: 4,
+            stack: "acc",
+          },
+        ],
+      });
+      return;
+    }
+
     const pctVals = accRows.map((x) => x.pct);
     const accColors = pctVals.map((n) =>
       n >= 100 ? "rgba(13, 148, 136, 0.88)" : n >= 70 ? "rgba(180, 83, 9, 0.82)" : "rgba(235, 10, 30, 0.85)"
     );
-
-    if (single) {
-      const r = accRows[0];
-      upsertChart("chart-sr-accessories", "doughnut", ["Ach %", "Remaining"], [
-        Math.min(100, r.pct),
-        Math.max(0, 100 - r.pct),
-      ]);
-      return;
-    }
 
     upsertChart("chart-sr-accessories", "bar", labels, pctVals, {
       horizontal,
@@ -7816,39 +8042,12 @@
         Math.min(100, (r._delPct || 0) * 100),
         Math.max(0, 100 - (r._delPct || 0) * 100),
       ]);
-      upsertChart("chart-sr-profdel", "bar", [shortEmpLabel(r["Sales Employee"] || r.Salesman)], null, {
-        horizontal: true,
-        legend: true,
-        dualValueAxis: true,
-        max: 140,
-        showValues: true,
-        datasets: [
-          {
-            label: "Prof+Del",
-            data: [Number(r["Prof+Del"]) || 0],
-            backgroundColor: "rgba(17, 17, 17, 0.88)",
-            borderWidth: 0,
-            borderRadius: 5,
-            xAxisID: "x",
-            valueSuffix: "",
-          },
-          {
-            label: "Prof+Del %",
-            data: [(r._profDelPct || 0) * 100],
-            backgroundColor: "rgba(13, 148, 136, 0.85)",
-            borderWidth: 0,
-            borderRadius: 5,
-            xAxisID: "x2",
-            valueSuffix: "%",
-          },
-        ],
-      });
       if (charts["chart-sr-profdelpct"]) {
         charts["chart-sr-profdelpct"].destroy();
         delete charts["chart-sr-profdelpct"];
       }
       delete chartSnapshots["chart-sr-profdelpct"];
-      renderProfDelSummaryStrip(sr, rows);
+      renderProfDelDailyChart(sr, rows);
       upsertChart("chart-sr-prev", "bar", ["Prior month Prof", "Today Prof", "Today Del"], [
         Number(r["Proforma (Prev)"]) || 0,
         Number(r["Proforma (Day)"]) || 0,
@@ -7932,47 +8131,12 @@
       valueSuffix: "%",
     });
 
-    const pdOrder = rows
-      .map((r, i) => ({
-        i,
-        pct: (r._profDelPct || 0) * 100,
-        vol: Number(r["Prof+Del"]) || 0,
-      }))
-      .sort((a, b) => b.pct - a.pct || b.vol - a.vol);
-    upsertChart("chart-sr-profdel", "bar", pdOrder.map((o) => labels[o.i]), null, {
-      ...clickOpts,
-      empKeys: pdOrder.map((o) => empKeys[o.i]),
-      legend: true,
-      dualValueAxis: true,
-      max: 140,
-      showValues: true,
-      datasets: [
-        {
-      label: "Prof+Del",
-          data: pdOrder.map((o) => o.vol),
-          backgroundColor: "rgba(17, 17, 17, 0.88)",
-          borderWidth: 0,
-          borderRadius: 5,
-          xAxisID: "x",
-          valueSuffix: "",
-        },
-        {
-      label: "Prof+Del %",
-          data: pdOrder.map((o) => o.pct),
-      backgroundColor: "rgba(13, 148, 136, 0.85)",
-          borderWidth: 0,
-          borderRadius: 5,
-          xAxisID: "x2",
-      valueSuffix: "%",
-        },
-      ],
-    });
     if (charts["chart-sr-profdelpct"]) {
       charts["chart-sr-profdelpct"].destroy();
       delete charts["chart-sr-profdelpct"];
     }
     delete chartSnapshots["chart-sr-profdelpct"];
-    renderProfDelSummaryStrip(sr, rows);
+    renderProfDelDailyChart(sr, rows);
 
     upsertChart("chart-sr-prev", "bar", labels, null, {
       ...clickOpts,
@@ -12618,184 +12782,245 @@
     }
   }
 
+  function guestExpEmployeeKeys() {
+    const keys = new Set();
+    (employeeTargets || []).forEach((e) => {
+      if (!e || !e.guestExpCenter) return;
+      const key = nameKey(e.name);
+      if (key) keys.add(key);
+    });
+    return keys;
+  }
+
+  function salesRowProductBlob(r) {
+    if (!r) return "";
+    const bits = [
+      r.product, r.Product, r.model, r.Model, r["Vehicle Model"], r["vehicle model"],
+      r.Description, r.description, r.Material, r.material,
+      r.plant, r.Plant, r.secondaryStatus,
+    ];
+    Object.keys(r).forEach((k) => {
+      if (/^__/.test(k)) return;
+      const n = normHeader(k);
+      if (n.includes("product") || n.includes("model") || n.includes("brand") || n.includes("material") || n.includes("desc")) {
+        bits.push(r[k]);
+      }
+    });
+    return bits.map((x) => cellToString(x)).filter(Boolean).join(" ");
+  }
+
+  function isLexusSaleRow(r) {
+    const blob = salesRowProductBlob(r);
+    return /lexus|\bes\s*3|\bes\s*2|\brx\s*\d|\blx\s*\d|\bgx\s*\d|\bnx\s*\d|\bux\s*\d|\bls\s*\d|\blc\s*\d/i.test(blob);
+  }
+
+  function dvpBucketForSaleRow(r, guestKeys) {
+    const key = nameKey(rosterSalesmanName(r._salesmanRaw || r.salesman));
+    if (key && guestKeys.has(key)) return "guest";
+    if (isLexusSaleRow(r)) return "lexus";
+    return "b2c";
+  }
+
+  function countDvpBucket(rows, live, prevMonthKey, period, guestKeys) {
+    const out = { lexus: { delivered: 0, proforma: 0 }, b2c: { delivered: 0, proforma: 0 }, guest: { delivered: 0, proforma: 0 } };
+    (rows || []).forEach((r) => {
+      const bucket = dvpBucketForSaleRow(r, guestKeys);
+      if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) out[bucket].delivered += 1;
+      if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) out[bucket].proforma += 1;
+    });
+    return out;
+  }
+
+  function dvpTrendPct(cur, prev) {
+    if (!Number.isFinite(prev) || prev === 0) return cur > 0 ? 100 : null;
+    return ((cur - prev) / Math.abs(prev)) * 100;
+  }
+
+  function dvpStatusFor(delivered, proforma) {
+    if (delivered <= 0 && proforma <= 0) return { icon: "○", text: "No activity in period" };
+    if (delivered >= proforma && delivered > 0) return { icon: "★", text: "Strong delivery conversion" };
+    if (proforma > delivered * 1.5) return { icon: "◎", text: "Proforma pipeline building" };
+    return { icon: "◆", text: "Good momentum" };
+  }
+
+  function buildDeliveredVsProformaSummary() {
+    const live = window._globalLivePeriod || ensureGlobalLivePeriod();
+    const prevMonthKey = live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : "");
+    const guestKeys = guestExpEmployeeKeys();
+    const rows = slots.sales.rows || [];
+    const cur = countDvpBucket(rows, live, prevMonthKey, "month", guestKeys);
+    const prev = countDvpBucket(rows, live, prevMonthKey, "prev", guestKeys);
+
+    const cards = [
+      {
+        id: "lexus",
+        title: "Lexus Sales",
+        subtitle: "Luxury brand channel",
+        theme: "lexus",
+        image: "../images/cars/crown.png",
+        delivered: cur.lexus.delivered,
+        proforma: cur.lexus.proforma,
+        prevDelivered: prev.lexus.delivered,
+        prevProforma: prev.lexus.proforma,
+      },
+      {
+        id: "b2c",
+        title: "B2C Sales",
+        subtitle: "Retail · eCommerce · Telesales",
+        theme: "b2c",
+        image: "../images/cars/camry.png",
+        delivered: cur.b2c.delivered,
+        proforma: cur.b2c.proforma,
+        prevDelivered: prev.b2c.delivered,
+        prevProforma: prev.b2c.proforma,
+      },
+      {
+        id: "guest",
+        title: "Experience Automall",
+        subtitle: "Guest Experience Center",
+        theme: "guest",
+        image: "../images/cars/alj-register.png",
+        delivered: cur.guest.delivered,
+        proforma: cur.guest.proforma,
+        prevDelivered: prev.guest.delivered,
+        prevProforma: prev.guest.proforma,
+        guestCount: guestKeys.size,
+      },
+    ];
+
+    const totalDel = cards.reduce((s, c) => s + c.delivered, 0);
+    const totalPro = cards.reduce((s, c) => s + c.proforma, 0);
+    const prevDel = cards.reduce((s, c) => s + c.prevDelivered, 0);
+    const prevPro = cards.reduce((s, c) => s + c.prevProforma, 0);
+    const ratio = totalPro > 0 ? (totalDel / totalPro) * 100 : (totalDel > 0 ? 100 : null);
+    const prevRatio = prevPro > 0 ? (prevDel / prevPro) * 100 : null;
+
+    return {
+      live,
+      cards,
+      totals: {
+        delivered: totalDel,
+        proforma: totalPro,
+        ratio,
+        delTrend: dvpTrendPct(totalDel, prevDel),
+        proTrend: dvpTrendPct(totalPro, prevPro),
+        ratioTrend: (ratio != null && prevRatio != null) ? (ratio - prevRatio) : null,
+      },
+    };
+  }
+
+  function dvpCylHtml(delivered, proforma, theme) {
+    const max = Math.max(delivered, proforma, 1);
+    const hDel = Math.max(8, Math.round((delivered / max) * 100));
+    const hPro = Math.max(8, Math.round((proforma / max) * 100));
+    return `<div class="dvp-cyls dvp-cyls--${escapeHtml(theme)}" aria-hidden="true">
+      <div class="dvp-cyl">
+        <div class="dvp-cyl-stack" style="height:${hDel}%">
+          <span class="dvp-cyl-val">${escapeHtml(formatNumber(delivered))}</span>
+          <div class="dvp-cyl-bar is-del"></div>
+        </div>
+        <span class="dvp-cyl-lab">Del</span>
+      </div>
+      <div class="dvp-cyl">
+        <div class="dvp-cyl-stack" style="height:${hPro}%">
+          <span class="dvp-cyl-val">${escapeHtml(formatNumber(proforma))}</span>
+          <div class="dvp-cyl-bar is-pro"></div>
+        </div>
+        <span class="dvp-cyl-lab">Prof</span>
+      </div>
+    </div>`;
+  }
+
+  function dvpTrendChip(delta) {
+    if (delta == null || !Number.isFinite(delta)) return `<span class="dvp-trend is-flat">—</span>`;
+    const up = delta >= 0;
+    const abs = Math.abs(delta);
+    const txt = `${up ? "+" : "−"}${abs >= 10 ? abs.toFixed(0) : abs.toFixed(1)}%`;
+    return `<span class="dvp-trend ${up ? "is-up" : "is-down"}">${up ? "▲" : "▼"} ${txt} vs last period</span>`;
+  }
+
   function renderSummaryDashboard() {
     const panel = $("#panel-summary");
-    if (!panel || !$("#icc-kpis")) return;
-    if (!hasSummaryInputs()) {
-      $("#icc-kpis").innerHTML = "";
-      const table = $("#icc-table");
-      if (table) {
-        table.innerHTML = `<p class="foot" style="padding:16px">Push <b>Back Orders</b>, <b>RTL / Stock E-Sales</b>, and/or <b>Sales Raw</b> from Admin to open the Inventory Command Center.</p>`;
-      }
+    if (!panel || !$("#dvp-cards")) return;
+    const empty = $("#dvp-empty");
+    const board = $("#dvp-board");
+    const asof = $("#dvp-asof");
+
+    if (!hasSalesRaw()) {
+      if (empty) empty.hidden = false;
+      if (board) board.hidden = true;
+      if (asof) asof.textContent = "—";
       return;
     }
 
-    const dataset = getInventoryCommandDataset();
-    if (!dataset) {
-      $("#icc-kpis").innerHTML = `<p class="foot">Inventory engine failed to load.</p>`;
-      return;
+    if (empty) empty.hidden = true;
+    if (board) board.hidden = false;
+
+    const data = buildDeliveredVsProformaSummary();
+    if (asof) {
+      const live = data.live || {};
+      asof.textContent = live.rangeLabel || live.label || cellToString(live.now) || "—";
     }
 
-    const ICC = window.InventoryCommandCenter;
-    let filtered = ICC.filterRows(dataset.rows, iccFiltersFromView());
-    filtered = iccApplyKpiFilter(filtered);
+    const cardsEl = $("#dvp-cards");
+    cardsEl.innerHTML = data.cards.map((c) => {
+      const status = dvpStatusFor(c.delivered, c.proforma);
+      const guestNote = c.id === "guest"
+        ? `<p class="dvp-guest-note">${c.guestCount
+          ? escapeHtml(String(c.guestCount)) + " advisor(s) marked Guest Exp in Admin"
+          : "No Guest Exp advisors selected in Admin yet"}</p>`
+        : "";
+      return `<article class="dvp-card theme-${escapeHtml(c.theme)}">
+        <div class="dvp-card-hero" style="--dvp-img:url('${escapeHtml(c.image)}')">
+          <div class="dvp-card-hero-copy">
+            <h3>${escapeHtml(c.title)}</h3>
+            <p>${escapeHtml(c.subtitle)}</p>
+          </div>
+        </div>
+        <div class="dvp-card-body">
+          <div class="dvp-kpi-row">
+            <div class="dvp-kpi is-del">
+              <span class="ico" aria-hidden="true">▣</span>
+              <div>
+                <span class="k">Delivered</span>
+                <span class="v">${escapeHtml(formatNumber(c.delivered))}</span>
+              </div>
+            </div>
+            <div class="dvp-kpi is-pro">
+              <span class="ico" aria-hidden="true">▤</span>
+              <div>
+                <span class="k">Pro-Forma</span>
+                <span class="v">${escapeHtml(formatNumber(c.proforma))}</span>
+              </div>
+            </div>
+          </div>
+          ${dvpCylHtml(c.delivered, c.proforma, c.theme)}
+          <div class="dvp-card-foot">
+            <span class="dvp-status-ico" aria-hidden="true">${status.icon}</span>
+            <span>${escapeHtml(status.text)}</span>
+          </div>
+          ${guestNote}
+        </div>
+      </article>`;
+    }).join("");
 
-    const stamp = $("#icc-refresh-time");
-    if (stamp) stamp.textContent = iccLastRefreshLabel();
-
-    const all = dataset.rows;
-    fillIccSelect("#icc-f-product", new Set(all.map((r) => r.product)), iccView.product, "All products");
-    fillIccSelect("#icc-f-suffix", new Set(all.map((r) => r.suffix).filter((x) => x && x !== "—")), iccView.suffix, "All suffixes");
-    fillIccSelect("#icc-f-year", new Set(all.map((r) => r.year).filter((x) => x && x !== "—")), iccView.year, "All years");
-    fillIccSelect("#icc-f-ext", new Set(all.map((r) => r.ext).filter((x) => x && x !== "—")), iccView.ext, "All exterior");
-    fillIccSelect("#icc-f-int", new Set(all.map((r) => r.int).filter((x) => x && x !== "—")), iccView.int, "All interior");
-
-    if ($("#icc-drill")) $("#icc-drill").value = String(iccView.drillLevel);
-    if ($("#icc-search")) $("#icc-search").value = iccView.search;
-    if ($("#icc-f-status")) $("#icc-f-status").value = iccView.inventoryStatus;
-    if ($("#icc-f-demand")) $("#icc-f-demand").value = iccView.demandStatus;
-    if ($("#icc-f-quadrant")) $("#icc-f-quadrant").value = iccView.quadrant;
-    if ($("#icc-sort")) $("#icc-sort").value = iccView.sort;
-    if ($("#icc-age-min")) $("#icc-age-min").value = iccView.ageingMin;
-    if ($("#icc-age-max")) $("#icc-age-max").value = iccView.ageingMax;
-    if ($("#icc-cov-min")) $("#icc-cov-min").value = iccView.coverageMin;
-    if ($("#icc-cov-max")) $("#icc-cov-max").value = iccView.coverageMax;
-    if ($("#icc-rank-limit")) $("#icc-rank-limit").value = iccView.rankLimit || "10";
-
-    document.querySelectorAll(".icc-mode-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.getAttribute("data-icc-mode") === iccView.mode);
-    });
-
-    const title = $("#icc-chart-title");
-    const hint = $("#icc-chart-hint");
-    if (title) {
-      title.textContent = iccView.mode === "ageing"
-        ? "Inventory Ageing vs Sales Velocity"
-        : "Demand vs Stock Coverage";
-    }
-    if (hint) {
-      hint.textContent = iccView.mode === "ageing"
-        ? "High ageing + low velocity = slow-moving · bubble/vehicle size ∝ stock · from live Excel"
-        : `X = Available Stock ÷ Back Orders · Y = Sales ÷ ${dataset.kpis.periodDays}d · splits coverage ${Number(dataset.kpis.coverageSplit).toFixed(2)} · velocity ${Number(dataset.kpis.velocitySplit).toFixed(2)}/d`;
-    }
-    const note = $("#icc-threshold-note");
-    if (note) {
-      const c = dataset.config.coverage;
-      note.textContent = `Thresholds · Critical <${c.criticalMax} · At Risk <${c.atRiskMax} · Balanced <${c.balancedMax} · Slow Moving = high ageing + low velocity`;
-    }
-
-    const k = dataset.kpis;
-    const filteredKpis = (() => {
-      const totalBo = filtered.reduce((s, r) => s + r.backOrders, 0);
-      const totalStock = filtered.reduce((s, r) => s + r.availableStock, 0);
-      const salesSeen = new Set();
-      let sales = 0;
-      filtered.forEach((r) => {
-        const sk = `${r.product}|${r.year}`;
-        if (salesSeen.has(sk)) return;
-        salesSeen.add(sk);
-        sales += r.sales;
-      });
-      return {
-        totalBackOrders: totalBo,
-        availableStock: totalStock,
-        stockCoveragePct: totalBo ? (totalStock / totalBo) * 100 : null,
-        totalSales: sales,
-        salesVelocity: sales / Math.max(1, k.periodDays || 1),
-        criticalVehicles: filtered.filter((r) => r.inventoryStatus === "Critical").length,
-        slowMovingVehicles: filtered.filter((r) => r.inventoryStatus === "Slow Moving").length,
-        overstockVehicles: filtered.filter((r) => r.quadrant === "OVERSTOCK").length,
-        healthyVehicles: filtered.filter((r) => r.inventoryStatus === "Healthy").length,
-      };
-    })();
-
-    const kpiEl = $("#icc-kpis");
-    if (kpiEl) {
-      const cards = [
-        { id: "", label: "Total Back Orders", val: formatNumber(filteredKpis.totalBackOrders), sub: "Open customer demand · BO file" },
-        { id: "", label: "Available Stock", val: formatNumber(filteredKpis.availableStock), sub: "RTL + E-Sales file VINs" },
-        { id: "", label: "Stock Coverage", val: filteredKpis.stockCoveragePct == null ? "N/A" : `${filteredKpis.stockCoveragePct.toFixed(0)}%`, sub: "Available ÷ Back Orders", cls: filteredKpis.stockCoveragePct != null && filteredKpis.stockCoveragePct < 50 ? "bad" : "ok" },
-        { id: "", label: "Total Sales", val: formatNumber(filteredKpis.totalSales), sub: `${k.periodDays}d · Sales Raw` },
-        { id: "", label: "Sales Velocity", val: filteredKpis.salesVelocity.toFixed(2), sub: "Units / day" },
-        { id: "critical", label: "Critical Vehicles", val: formatNumber(filteredKpis.criticalVehicles), sub: "Low coverage + high demand · click", cls: "bad" },
-        { id: "slow", label: "Slow Moving", val: formatNumber(filteredKpis.slowMovingVehicles), sub: "High ageing · low velocity · click", cls: "warn" },
-        { id: "overstock", label: "Overstock", val: formatNumber(filteredKpis.overstockVehicles), sub: "Low demand · high stock quadrant · click", cls: "warn" },
-      ];
-      kpiEl.innerHTML = cards.map((c) => `
-        <button type="button" class="bo-kpi icc-kpi${c.cls ? " " + c.cls : ""}${iccView.kpiFilter === c.id && c.id ? " is-active" : ""}" data-icc-kpi="${c.id}">
-          <div class="lbl">${escapeHtml(c.label)}</div>
-          <div class="val">${c.val}</div>
-          <div class="sub">${escapeHtml(c.sub)}</div>
-        </button>`).join("");
-      kpiEl.querySelectorAll("[data-icc-kpi]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-icc-kpi") || "";
-          if (!id) return;
-          iccView.kpiFilter = iccView.kpiFilter === id ? "" : id;
-          iccView.page = 0;
-          renderSummaryDashboard();
-        });
-      });
-    }
-
-    const dq = dataset.dataQuality;
-    const dqEl = $("#icc-dq");
-    if (dqEl) {
-      const v = dataset.validation || {};
-      dqEl.innerHTML = `
-        <button type="button" class="icc-dq-chip" data-dq="bo"><b>BO rows</b> ${formatNumber(dq.sourceRows.backorder)}</button>
-        <button type="button" class="icc-dq-chip" data-dq="rtl"><b>RTL</b> ${formatNumber(dq.sourceRows.rtl)}</button>
-        <button type="button" class="icc-dq-chip" data-dq="central"><b>E-Sales file</b> ${formatNumber(dq.sourceRows.central)}</button>
-        <button type="button" class="icc-dq-chip" data-dq="sales"><b>Sales</b> ${formatNumber(dq.sourceRows.sales)}</button>
-        <span><b>Matched configs</b> ${formatNumber(dq.matchedConfigs)}</span>
-        <span><b>BO w/o stock</b> ${formatNumber(dq.unmatchedBoKeys)}</span>
-        <span><b>Stock w/o BO</b> ${formatNumber(dq.unmatchedStockKeys)}</span>
-        <span><b>Dup VINs</b> ${formatNumber(dq.duplicateVins)}</span>
-        <span><b>Missing product</b> ${formatNumber(dq.missingProduct)}</span>
-        <span><b>Missing suffix</b> ${formatNumber(dq.missingSuffix)}</span>
-        <span><b>Missing year</b> ${formatNumber(dq.missingYear)}</span>
-        <span><b>Missing ext</b> ${formatNumber(dq.missingExt)}</span>
-        <span><b>Missing int</b> ${formatNumber(dq.missingInt)}</span>
-        <span><b>Validation BO</b> ${formatNumber(v.totalBO)}</span>
-        <span><b>Validation stock</b> ${formatNumber(v.totalAvailableStock)}</span>
-        <span><b>Validation sales</b> ${formatNumber(v.totalSales)}</span>`;
-    }
-    const dqNotes = $("#icc-dq-notes");
-    if (dqNotes) {
-      dqNotes.innerHTML = (dataset.matchingNotes || []).map((n) => `<li>${escapeHtml(n)}</li>`).join("");
-    }
-
-    const insightEl = $("#icc-insight-grid");
-    if (insightEl) {
-      const fk = {
-        totalBackOrders: filteredKpis.totalBackOrders,
-        availableStock: filteredKpis.availableStock,
-        stockCoveragePct: filteredKpis.stockCoveragePct,
-        totalSales: filteredKpis.totalSales,
-        salesVelocity: filteredKpis.salesVelocity,
-        periodDays: k.periodDays,
-        velocitySplit: k.velocitySplit,
-        criticalVehicles: filteredKpis.criticalVehicles,
-        needFocusVehicles: filteredKpis.criticalVehicles,
-        healthyVehicles: filteredKpis.healthyVehicles,
-        slowMovingVehicles: filteredKpis.slowMovingVehicles,
-      };
-      const insightSource = typeof ICC.buildInsights === "function"
-        ? ICC.buildInsights(filtered, fk, dataset.config)
-        : (dataset.insights || []);
-      insightEl.innerHTML = insightSource.map((block) => `
-        <div class="icc-insight-card">
-          <h4>${escapeHtml(block.title)}</h4>
-          <ul>${(block.items || []).slice(0, 6).map((t) => `<li>${escapeHtml(t)}</li>`).join("") || "<li>No signal</li>"}</ul>
-        </div>`).join("");
-    }
-
-    renderIccBubbleChart(dataset, filtered, { useCarImages: true });
-    renderIccSecondaryCharts(dataset, filtered);
-    renderIccTable(dataset, filtered);
-
-    const selected = filtered.find((r) => r.id === iccView.selectedId) || dataset.rows.find((r) => r.id === iccView.selectedId);
-    renderIccDetail(selected || null);
+    const t = data.totals;
+    $("#dvp-totals").innerHTML = `
+      <div class="dvp-total-card">
+        <span class="k">Total Delivered</span>
+        <span class="v">${escapeHtml(formatNumber(t.delivered))}</span>
+        ${dvpTrendChip(t.delTrend)}
+      </div>
+      <div class="dvp-total-card">
+        <span class="k">Total Proforma</span>
+        <span class="v">${escapeHtml(formatNumber(t.proforma))}</span>
+        ${dvpTrendChip(t.proTrend)}
+      </div>
+      <div class="dvp-total-card is-ratio">
+        <span class="k">Delivery / Proforma Ratio</span>
+        <span class="v">${t.ratio == null ? "—" : t.ratio.toFixed(1) + "%"}</span>
+        ${dvpTrendChip(t.ratioTrend)}
+      </div>`;
   }
 
   function exportIccExcel() {
@@ -12867,6 +13092,289 @@
     setStatus(`Summary Excel exported · ${formatNumber(filtered.length)} configs · section sheets`, "ok");
   }
 
+  function formatRvDate(value) {
+    const d = parseDate(value);
+    if (!d) return cellToString(value).trim() || "—";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function buildEsalesStockVinLookup() {
+    const byVin = new Map();
+    extractEsalesColorStock(slots.central.rows || []).forEach((s) => {
+      const vin = extractVinValue(s.vin) || upperTrim(s.vin);
+      if (!vin) return;
+      if (!byVin.has(vin)) byVin.set(vin, s);
+    });
+    return byVin;
+  }
+
+  function resolveReservedVinStatus(vin, salesLookup, stockLookup) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) {
+      return { kind: "empty", label: "No VIN", detail: "—", cls: "na" };
+    }
+    const sales = salesLookup.get(key);
+    if (sales) {
+      const bits = [];
+      if (sales.proformaDate && parseDate(sales.proformaDate)) {
+        bits.push(`Proforma ${formatRvDate(sales.proformaDate)}`);
+      }
+      if (sales.deliveryDate && parseDate(sales.deliveryDate)) {
+        bits.push(`Delivery ${formatRvDate(sales.deliveryDate)}`);
+      }
+      if (bits.length) {
+        const cls = sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) ? "ok" : "warn";
+        return {
+          kind: "sales",
+          label: bits[0].startsWith("Delivery") ? "Delivered" : "Proforma",
+          detail: bits.join(" · "),
+          cls,
+          proformaDate: sales.proformaDate,
+          deliveryDate: sales.deliveryDate,
+        };
+      }
+      return {
+        kind: "sales",
+        label: "In Sales Raw",
+        detail: "No proforma / delivery date",
+        cls: "na",
+      };
+    }
+    const stock = stockLookup.get(key);
+    if (stock) {
+      const secondary = cellToString(stock.secondaryStatus).trim();
+      const location = cellToString(stock.location).trim();
+      const detail = secondary && secondary !== "—"
+        ? secondary
+        : (location && location !== "—" ? location : "In available stock");
+      return {
+        kind: "stock",
+        label: "Stock location",
+        detail,
+        cls: "info",
+        secondaryStatus: secondary,
+        location,
+      };
+    }
+    return {
+      kind: "missing",
+      label: "Not found",
+      detail: "Not in Sales Raw or All Retail available stock",
+      cls: "na",
+    };
+  }
+
+  function getBoOrderLookupEngine() {
+    const Bo = window.BoOrderLookup;
+    if (!Bo) return null;
+    const rows = slots.backorder.rows || [];
+    if (!rows.length) return null;
+    const headers = Array.isArray(rows[0].__headers) && rows[0].__headers.length
+      ? rows[0].__headers.slice()
+      : Object.keys(rows[0]).filter((k) => !String(k).startsWith("__"));
+    return new Bo(rows, headers);
+  }
+
+  function buildReservedVehicleRows() {
+    const reserved = slots.central.reservedRows || [];
+    const salesLookup = buildSalesVinLookup();
+    const stockLookup = buildEsalesStockVinLookup();
+    const engine = getBoOrderLookupEngine();
+    const queueCache = new Map();
+
+    return reserved.map((rec) => {
+      const orderNumber = String(rec.orderNumber || "").trim();
+      const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
+      const status = resolveReservedVinStatus(vin, salesLookup, stockLookup);
+
+      let queue = null;
+      let queueError = "";
+      if (!orderNumber) {
+        queueError = "Missing order (Col F)";
+      } else if (!engine) {
+        queueError = hasBackOrder() ? "BO lookup unavailable" : "Push Back Order for queue";
+      } else {
+        const cacheKey = orderNumber.toLowerCase();
+        if (queueCache.has(cacheKey)) {
+          queue = queueCache.get(cacheKey);
+        } else {
+          try {
+            const found = engine.lookupOrder(orderNumber);
+            queue = found && found.queue ? found.queue : null;
+          } catch (err) {
+            queue = null;
+          }
+          queueCache.set(cacheKey, queue);
+        }
+        if (!queue) queueError = "Order not found in BO file";
+      }
+
+      const qr = queue && queue.queueResult ? queue.queueResult : null;
+      const nextInQueue = queue && Array.isArray(queue.nextInQueue) ? queue.nextInQueue : [];
+      const pairQueues = queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : [];
+
+      return {
+        orderNumber,
+        vin,
+        status,
+        queue,
+        queueError,
+        position: qr && qr.position != null ? qr.position : null,
+        ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : null,
+        totalQueue: qr && qr.totalQueueSize != null ? qr.totalQueueSize : null,
+        product: qr ? qr.product : (queue && queue.values ? queue.values.product : ""),
+        suffix: qr ? qr.suffix : (queue && queue.values ? queue.values.suffix : ""),
+        nextInQueue,
+        pairQueues,
+      };
+    });
+  }
+
+  let rvView = { search: "" };
+
+  function filteredReservedVehicleRows() {
+    const q = String(rvView.search || "").trim().toLowerCase();
+    const rows = buildReservedVehicleRows();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [r.orderNumber, r.vin, r.product, r.suffix, r.status.label, r.status.detail]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }
+
+  function renderReservedVehiclesTracker() {
+    const empty = $("#rv-empty");
+    const dash = $("#rv-dash");
+    const wrap = $("#rv-table-wrap");
+    const foot = $("#rv-table-foot");
+    const kpis = $("#rv-kpis");
+    const hint = $("#rv-live-hint");
+    if (!empty || !dash || !wrap) return;
+
+    if (!hasReservedVehiclesInputs()) {
+      empty.hidden = false;
+      empty.style.display = "";
+      dash.hidden = true;
+      return;
+    }
+
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+
+    const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
+    const allRows = buildReservedVehicleRows();
+    const rows = filteredReservedVehicleRows();
+    const withQueue = allRows.filter((r) => r.position != null).length;
+    const withSales = allRows.filter((r) => r.status.kind === "sales").length;
+    const withStock = allRows.filter((r) => r.status.kind === "stock").length;
+    const missing = allRows.filter((r) => r.status.kind === "missing" || r.status.kind === "empty").length;
+
+    if (hint) {
+      hint.textContent = `${sheetName} · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "optional"}`;
+    }
+
+    if (kpis) {
+      kpis.innerHTML = [
+        ["Reserved", allRows.length, "ok"],
+        ["In queue", withQueue, "ok"],
+        ["Sales Raw", withSales, "warn"],
+        ["Stock location", withStock, "ok"],
+        ["Not found", missing, missing ? "warn" : "ok"],
+      ].map(([label, value, status]) => `
+        <div class="bo-kpi ${status}">
+          <div class="lab">${escapeHtml(label)}</div>
+          <div class="val">${escapeHtml(String(value))}</div>
+        </div>`).join("");
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = `<p class="foot" style="padding:16px">No reserved rows match the search.</p>`;
+      if (foot) foot.textContent = "0 rows";
+      return;
+    }
+
+    const body = rows.map((r) => {
+      const nextHtml = r.nextInQueue.length
+        ? `<ol class="rv-next-list">${r.nextInQueue.map((n, i) =>
+            `<li><span class="rv-next-rank">#${i + 1}</span> <strong>${escapeHtml(n.orderNumber || "—")}</strong>
+              <span class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</span></li>`
+          ).join("")}</ol>`
+        : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
+
+      const pairHtml = r.pairQueues.length
+        ? `<div class="rv-pair-chips">${r.pairQueues.slice(0, 3).map((pq) =>
+            `<span class="rv-pair-chip" title="Tier ${escapeHtml(String(pq.tier ?? ""))}">
+              <b>Q${escapeHtml(String(pq.position ?? "—"))}</b>
+              ${escapeHtml(String(pq.exterior ?? ""))}/${escapeHtml(String(pq.interior ?? ""))}
+              <em>${escapeHtml(String(pq.totalQueueSize ?? "—"))}</em>
+            </span>`
+          ).join("")}</div>`
+        : "";
+
+      const posLabel = r.position != null
+        ? `<span class="rv-pos">${escapeHtml(String(r.position))}</span>
+           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead</span>`
+        : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
+
+      return `<tr>
+        <td><strong>${escapeHtml(r.orderNumber || "—")}</strong>
+          <div class="rv-muted">${escapeHtml(r.product || "")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div></td>
+        <td class="mono">${escapeHtml(r.vin || "—")}</td>
+        <td>${posLabel}${pairHtml}</td>
+        <td>${nextHtml}</td>
+        <td><span class="rv-status rv-status-${escapeHtml(r.status.cls)}">${escapeHtml(r.status.label)}</span>
+          <div class="rv-muted">${escapeHtml(r.status.detail)}</div></td>
+      </tr>`;
+    }).join("");
+
+    wrap.innerHTML = `<table class="data-table rv-table">
+      <thead>
+        <tr>
+          <th>Order (Col F)</th>
+          <th>VIN (Col L)</th>
+          <th>Current queue</th>
+          <th>Next 3 in queue</th>
+          <th>VIN status</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>`;
+
+    if (foot) {
+      foot.textContent = `Showing ${rows.length} of ${allRows.length} reserved vehicles · sheet ${sheetName}`;
+    }
+  }
+
+  function exportReservedVehiclesExcel() {
+    if (!hasReservedVehiclesInputs()) {
+      setStatus("No reserved sheet data to export", "busy");
+      return;
+    }
+    const rows = buildReservedVehicleRows().map((r) => ({
+      Order: r.orderNumber,
+      VIN: r.vin,
+      Product: r.product || "",
+      Suffix: r.suffix || "",
+      "Queue Position": r.position != null ? r.position : "",
+      "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
+      "Total Queue": r.totalQueue != null ? r.totalQueue : "",
+      "Next 1": r.nextInQueue[0] ? r.nextInQueue[0].orderNumber : "",
+      "Next 2": r.nextInQueue[1] ? r.nextInQueue[1].orderNumber : "",
+      "Next 3": r.nextInQueue[2] ? r.nextInQueue[2].orderNumber : "",
+      "Status": r.status.label,
+      "Status Detail": r.status.detail,
+      "Queue Note": r.queueError || "",
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Reserved Vehicles");
+    downloadWorkbook(wb, `Reserved-Vehicles-${excelFileStamp()}`);
+    setStatus("Reserved Vehicles Excel exported", "ok");
+  }
+
   function buildDashboard() {
     showError("");
     refreshTargetsFromAdmin();
@@ -12892,6 +13400,7 @@
     renderBoDashboard(d);
     renderBoAllocStockDashboard(d);
     renderStockDashboard();
+    renderReservedVehiclesTracker();
     invalidateIccCache();
     if (hasSummaryInputs()) renderSummaryDashboard();
     if (hasSalesReportInputs()) {
@@ -12915,7 +13424,17 @@
   }
 
   function clearAll() {
-    SLOT_DEFS.forEach((d) => { slots[d.id] = { file: null, rows: [], name: "" }; });
+    SLOT_DEFS.forEach((d) => {
+      slots[d.id] = { file: null, rows: [], name: "" };
+      if (d.id === "central") {
+        slots[d.id].reservedRows = [];
+        slots[d.id].reservedSheet = "";
+      }
+      if (d.id === "accessories") {
+        slots[d.id].vsndRows = [];
+        slots[d.id].vsndSheet = "";
+      }
+    });
     window._data = null;
     $("#dashboard").classList.remove("show");
     $("#dashboard").style.display = "none";
@@ -12986,6 +13505,8 @@
   if (boExcelBtn) boExcelBtn.addEventListener("click", exportBoDashboardExcel);
   const stockExcelBtn = $("#stock-excel-btn");
   if (stockExcelBtn) stockExcelBtn.addEventListener("click", exportStockDashboardExcel);
+  const rvExcelBtn = $("#rv-excel-btn");
+  if (rvExcelBtn) rvExcelBtn.addEventListener("click", exportReservedVehiclesExcel);
   const basExcelBtn = $("#bas-excel-btn");
   if (basExcelBtn) basExcelBtn.addEventListener("click", exportBasDashboardExcel);
 
@@ -13004,7 +13525,7 @@
     globalSearchEl.addEventListener("input", (e) => {
       const q = String(e.target.value || "").trim();
       // Route search into the active panel's primary search box when present
-      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#search", "#bas-alloc-search"];
+      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#rv-search", "#search", "#bas-alloc-search"];
       for (const sel of targets) {
         const el = $(sel);
         if (!el || el.offsetParent === null) continue;
@@ -13239,6 +13760,10 @@
         invalidateIccCache();
         refreshFromAdmin("ICC refreshed from Admin push");
       });
+    }
+    const dvpRefresh = $("#dvp-refresh-btn");
+    if (dvpRefresh) {
+      dvpRefresh.addEventListener("click", () => refreshFromAdmin("Summary refreshed"));
     }
     const themeBtn = $("#icc-theme-toggle");
     if (themeBtn) {
@@ -13621,6 +14146,13 @@
     stockSearchEl.addEventListener("input", (e) => {
       stockInvView.search = e.target.value;
       refreshStockFromFilters();
+    });
+  }
+  const rvSearchEl = $("#rv-search");
+  if (rvSearchEl) {
+    rvSearchEl.addEventListener("input", (e) => {
+      rvView.search = e.target.value;
+      renderReservedVehiclesTracker();
     });
   }
   [

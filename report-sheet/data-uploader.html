@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Uploader — RTL Daily Archive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --ink: #111827;
+      --muted: #64748b;
+      --line: #e5eaf1;
+      --card: #ffffff;
+      --toyota: #eb0a1e;
+      --ok: #047857;
+      --warn: #c2410c;
+      --info: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Outfit, system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(235, 10, 30, 0.08), transparent 55%),
+        linear-gradient(180deg, #fafbfc 0%, var(--bg) 40%, #eef2f6 100%);
+    }
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 22px;
+    }
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .brand img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+    }
+    .brand strong {
+      display: block;
+      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+    .brand span { color: var(--muted); font-size: 0.88rem; }
+    .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav-links a {
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 0.45rem 0.8rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .note {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 16px;
+    }
+    @media (max-width: 920px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+    .card h2 {
+      margin: 0 0 6px;
+      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-size: 1.1rem;
+    }
+    .card p.sub {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+    .field { margin-bottom: 12px; }
+    input[type="file"],
+    input[type="date"],
+    input[type="search"],
+    select {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid #d7dee8;
+      border-radius: 10px;
+      font: inherit;
+      background: #fff;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    button {
+      font: inherit;
+      font-weight: 700;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 0.6rem 0.95rem;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--toyota);
+      border-color: var(--toyota);
+      color: #fff;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 10px;
+      min-height: 1.25em;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--toyota); }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    @media (max-width: 720px) {
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .row { grid-template-columns: 1fr; }
+    }
+    .kpi {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #f8fafc;
+    }
+    .kpi .lab { font-size: 0.72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    .kpi .val {
+      margin-top: 4px;
+      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .table-wrap {
+      overflow: auto;
+      max-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    th, td {
+      padding: 0.55rem 0.7rem;
+      border-bottom: 1px solid #eef2f7;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      z-index: 1;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+    }
+    .pill {
+      display: inline-block;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .pill.ok { background: #ecfdf5; color: var(--ok); }
+    .pill.warn { background: #fff7ed; color: var(--warn); }
+    .pill.info { background: #eff6ff; color: var(--info); }
+    .pill.na { background: #f1f5f9; color: var(--muted); }
+    .snap-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .snap-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fafbfc;
+    }
+    .snap-list strong { font-family: "Space Grotesk", Outfit, sans-serif; }
+    .snap-list .meta { color: var(--muted); font-size: 0.8rem; }
+    .full { margin-top: 16px; }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .tabs button.active {
+      background: #111827;
+      border-color: #111827;
+      color: #fff;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <img src="../images/logo/toyota.png" alt="" onerror="this.style.display='none'" />
+        <div>
+          <strong>Data Uploader</strong>
+          <span>RTL daily VIN · product · suffix archive</span>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a href="admin.html">Admin Push</a>
+        <a href="index.html">Live Dashboard</a>
+      </div>
+    </div>
+
+    <p class="note">
+      This page stores RTL snapshots separately from Admin Push.
+      Saving here does <b>not</b> update the live Sales Report dashboard.
+    </p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Scan RTL sheet</h2>
+        <p class="sub">Reads every row with a VIN. Product = Col B · VIN = Col E · Suffix = Col G (header aliases also accepted).</p>
+
+        <div class="field">
+          <label for="rtl-file">RTL Excel / CSV</label>
+          <input id="rtl-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="snap-date">Snapshot date</label>
+            <input id="snap-date" type="date" />
+          </div>
+          <div class="field">
+            <label for="preview-search">Preview search</label>
+            <input id="preview-search" type="search" placeholder="VIN / product / suffix" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary" id="btn-scan">Scan file</button>
+          <button type="button" class="primary" id="btn-save" disabled>Save day snapshot</button>
+          <button type="button" id="btn-clear-preview" disabled>Clear preview</button>
+        </div>
+        <div class="status" id="scan-status">Choose an RTL file to begin.</div>
+        <div class="kpis" id="scan-kpis" hidden>
+          <div class="kpi"><div class="lab">VINs</div><div class="val" id="kpi-vins">0</div></div>
+          <div class="kpi"><div class="lab">Products</div><div class="val" id="kpi-products">0</div></div>
+          <div class="kpi"><div class="lab">Suffixes</div><div class="val" id="kpi-suffixes">0</div></div>
+          <div class="kpi"><div class="lab">Rows read</div><div class="val" id="kpi-rows">0</div></div>
+        </div>
+        <div class="table-wrap" id="preview-wrap" hidden>
+          <table>
+            <thead>
+              <tr><th>VIN</th><th>Product</th><th>Suffix</th></tr>
+            </thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Saved days</h2>
+        <p class="sub">One snapshot per calendar day. Re-saving the same date overwrites that day only.</p>
+        <div class="actions" style="margin-top:0">
+          <button type="button" id="btn-refresh">Refresh list</button>
+        </div>
+        <div class="status" id="list-status">Loading…</div>
+        <ul class="snap-list" id="snap-list"></ul>
+      </section>
+    </div>
+
+    <section class="card full">
+      <h2>Day-by-day compare</h2>
+      <p class="sub">Compare two saved RTL days: added VINs, removed VINs, and product/suffix changes.</p>
+      <div class="row">
+        <div class="field">
+          <label for="cmp-from">From day</label>
+          <select id="cmp-from"></select>
+        </div>
+        <div class="field">
+          <label for="cmp-to">To day</label>
+          <select id="cmp-to"></select>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-compare">Compare</button>
+        <button type="button" id="btn-export-cmp" disabled>Export compare Excel</button>
+      </div>
+      <div class="status" id="cmp-status"></div>
+      <div class="kpis" id="cmp-kpis" hidden>
+        <div class="kpi"><div class="lab">Added</div><div class="val" id="cmp-added">0</div></div>
+        <div class="kpi"><div class="lab">Removed</div><div class="val" id="cmp-removed">0</div></div>
+        <div class="kpi"><div class="lab">Changed</div><div class="val" id="cmp-changed">0</div></div>
+        <div class="kpi"><div class="lab">Same</div><div class="val" id="cmp-same">0</div></div>
+      </div>
+      <div class="tabs" id="cmp-tabs" hidden>
+        <button type="button" class="active" data-cmp-tab="added">Added</button>
+        <button type="button" data-cmp-tab="removed">Removed</button>
+        <button type="button" data-cmp-tab="changed">Changed</button>
+        <button type="button" data-cmp-tab="same">Same</button>
+      </div>
+      <div class="table-wrap" id="cmp-wrap" hidden>
+        <table>
+          <thead id="cmp-head"></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+(function () {
+  const API_META = "/api/rtl-daily/meta";
+  const API_SAVE = "/api/rtl-daily/save";
+  const API_COMPARE = "/api/rtl-daily/compare";
+  const API_DELETE = "/api/rtl-daily";
+
+  let scanned = [];
+  let scannedFileName = "";
+  let snapshots = [];
+  let lastCompare = null;
+  let cmpTab = "added";
+
+  const $ = (sel) => document.querySelector(sel);
+
+  function todayRiyadh() {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function setStatus(el, text, kind) {
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function colLetterToIndex(letter) {
+    let n = 0;
+    const s = String(letter || "").toUpperCase();
+    for (let i = 0; i < s.length; i += 1) n = n * 26 + (s.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  function cellToString(v) {
+    if (v == null) return "";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      return v.toISOString().slice(0, 10);
+    }
+    return String(v).trim();
+  }
+
+  function normHeader(v) {
+    return cellToString(v).toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  function extractVin(raw) {
+    const cleaned = String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!cleaned) return "";
+    const m = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/) || cleaned.match(/[A-Z0-9]{17}/);
+    return m ? m[0] : (cleaned.length >= 11 ? cleaned : "");
+  }
+
+  function indexToColLetter(idx) {
+    let n = idx + 1;
+    let s = "";
+    while (n > 0) {
+      const r = (n - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  function sheetMatrix(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return [];
+    const preferred =
+      names.find((n) => /rtl/i.test(n)) ||
+      names.find((n) => /stock|مخزون|retail/i.test(n)) ||
+      names[0];
+    return XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
+      header: 1,
+      defval: "",
+      blankrows: false,
+      raw: true,
+      cellDates: true,
+    });
+  }
+
+  function findHeaderRow(matrix) {
+    const markers = ["vin", "product", "suffix", "sfx", "model", "chassis"];
+    let bestIdx = 0;
+    let bestHits = -1;
+    const limit = Math.min(matrix.length, 40);
+    for (let i = 0; i < limit; i += 1) {
+      const cells = (matrix[i] || []).map(normHeader);
+      if (!cells.some(Boolean)) continue;
+      const hits = markers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) {
+        bestHits = hits;
+        bestIdx = i;
+      }
+      if (hits >= 3) break;
+    }
+    return bestIdx;
+  }
+
+  function resolveCol(headers, tests, fallbackLetter) {
+    const idx = headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
+    if (idx >= 0) return idx;
+    return colLetterToIndex(fallbackLetter);
+  }
+
+  function scanRtlWorkbook(workbook) {
+    const matrix = sheetMatrix(workbook);
+    if (!matrix.length) return { vehicles: [], rowsRead: 0 };
+
+    const headerIdx = findHeaderRow(matrix);
+    const headerRow = matrix[headerIdx] || [];
+    const width = Math.max(headerRow.length, colLetterToIndex("G") + 1, 8);
+    const headers = [];
+    for (let i = 0; i < width; i += 1) {
+      headers.push(cellToString(headerRow[i]) || `Column ${indexToColLetter(i)}`);
+    }
+
+    const idxProduct = resolveCol(headers, [
+      (n) => n === "product" || n === "model" || n === "vehicle model",
+      (n) => n.includes("product"),
+    ], "B");
+    const idxVin = resolveCol(headers, [
+      (n) => n === "vin" || n === "chassis" || n === "chassis no" || n === "chassis number",
+      (n) => n.includes("vin"),
+    ], "E");
+    const idxSuffix = resolveCol(headers, [
+      (n) => n === "suffix" || n === "sfx" || n === "alj suffix" || n === "grade",
+      (n) => n.includes("suffix") || n.includes("sfx"),
+    ], "G");
+
+    const seen = new Set();
+    const vehicles = [];
+    let rowsRead = 0;
+
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      rowsRead += 1;
+      const vin = extractVin(line[idxVin]);
+      if (!vin) continue;
+      if (seen.has(vin)) continue;
+      seen.add(vin);
+      vehicles.push({
+        vin,
+        product: cellToString(line[idxProduct]),
+        suffix: cellToString(line[idxSuffix]),
+      });
+    }
+
+    return { vehicles, rowsRead, sheetHint: workbook.SheetNames?.[0] || "" };
+  }
+
+  function renderPreview() {
+    const q = String($("#preview-search").value || "").trim().toLowerCase();
+    const rows = !q
+      ? scanned
+      : scanned.filter((v) =>
+          `${v.vin} ${v.product} ${v.suffix}`.toLowerCase().includes(q)
+        );
+
+    const products = new Set(scanned.map((v) => v.product).filter(Boolean));
+    const suffixes = new Set(scanned.map((v) => v.suffix).filter(Boolean));
+
+    $("#kpi-vins").textContent = String(scanned.length);
+    $("#kpi-products").textContent = String(products.size);
+    $("#kpi-suffixes").textContent = String(suffixes.size);
+
+    const body = $("#preview-body");
+    body.innerHTML = rows.slice(0, 500).map((v) => `
+      <tr>
+        <td class="mono">${escapeHtml(v.vin)}</td>
+        <td>${escapeHtml(v.product || "—")}</td>
+        <td>${escapeHtml(v.suffix || "—")}</td>
+      </tr>
+    `).join("");
+
+    $("#scan-kpis").hidden = !scanned.length;
+    $("#preview-wrap").hidden = !scanned.length;
+    $("#btn-save").disabled = !scanned.length;
+    $("#btn-clear-preview").disabled = !scanned.length;
+  }
+
+  async function loadMeta() {
+    setStatus($("#list-status"), "Loading…");
+    try {
+      const res = await fetch(API_META, { cache: "no-store" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+      const data = await res.json();
+      snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
+      renderSnapList();
+      fillCompareSelects();
+      setStatus($("#list-status"), snapshots.length ? `${snapshots.length} day(s) saved` : "No snapshots yet");
+    } catch (err) {
+      setStatus($("#list-status"), err.message || "Failed to load", "err");
+    }
+  }
+
+  function renderSnapList() {
+    const list = $("#snap-list");
+    if (!snapshots.length) {
+      list.innerHTML = `<li><span class="muted">Upload and save a day to start the archive.</span></li>`;
+      return;
+    }
+    list.innerHTML = snapshots.map((s) => `
+      <li>
+        <div>
+          <strong>${escapeHtml(s.date)}</strong>
+          <div class="meta">${escapeHtml(String(s.count || 0))} VINs${s.fileName ? " · " + escapeHtml(s.fileName) : ""}</div>
+        </div>
+        <div class="actions" style="margin:0">
+          <button type="button" data-del="${escapeHtml(s.date)}">Delete</button>
+        </div>
+      </li>
+    `).join("");
+  }
+
+  function fillCompareSelects() {
+    const opts = snapshots.map((s) =>
+      `<option value="${escapeHtml(s.date)}">${escapeHtml(s.date)} (${escapeHtml(String(s.count || 0))})</option>`
+    ).join("");
+    const from = $("#cmp-from");
+    const to = $("#cmp-to");
+    const prevFrom = from.value;
+    const prevTo = to.value;
+    from.innerHTML = opts || `<option value="">—</option>`;
+    to.innerHTML = opts || `<option value="">—</option>`;
+    if (snapshots.length >= 2) {
+      from.value = prevFrom && snapshots.some((s) => s.date === prevFrom) ? prevFrom : snapshots[1].date;
+      to.value = prevTo && snapshots.some((s) => s.date === prevTo) ? prevTo : snapshots[0].date;
+    } else if (snapshots.length === 1) {
+      from.value = snapshots[0].date;
+      to.value = snapshots[0].date;
+    }
+  }
+
+  function renderCompareTab() {
+    if (!lastCompare) return;
+    const map = {
+      added: lastCompare.added || [],
+      removed: lastCompare.removed || [],
+      changed: lastCompare.changed || [],
+      same: lastCompare.same || [],
+    };
+    const rows = map[cmpTab] || [];
+    const head = $("#cmp-head");
+    const body = $("#cmp-body");
+
+    if (cmpTab === "changed") {
+      head.innerHTML = `<tr><th>VIN</th><th>From product / suffix</th><th>To product / suffix</th></tr>`;
+      body.innerHTML = rows.map((r) => `
+        <tr>
+          <td class="mono">${escapeHtml(r.vin)}</td>
+          <td>${escapeHtml(r.fromProduct || "—")} / ${escapeHtml(r.fromSuffix || "—")}</td>
+          <td>${escapeHtml(r.toProduct || "—")} / ${escapeHtml(r.toSuffix || "—")}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="3" class="muted">None</td></tr>`;
+    } else {
+      head.innerHTML = `<tr><th>VIN</th><th>Product</th><th>Suffix</th></tr>`;
+      body.innerHTML = rows.map((r) => `
+        <tr>
+          <td class="mono">${escapeHtml(r.vin)}</td>
+          <td>${escapeHtml(r.product || "—")}</td>
+          <td>${escapeHtml(r.suffix || "—")}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="3" class="muted">None</td></tr>`;
+    }
+
+    document.querySelectorAll("#cmp-tabs button").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.cmpTab === cmpTab);
+    });
+  }
+
+  $("#snap-date").value = todayRiyadh();
+
+  $("#btn-scan").addEventListener("click", async () => {
+    const file = $("#rtl-file").files && $("#rtl-file").files[0];
+    if (!file) {
+      setStatus($("#scan-status"), "Choose an RTL Excel/CSV file first.", "err");
+      return;
+    }
+    setStatus($("#scan-status"), "Scanning…");
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const result = scanRtlWorkbook(wb);
+      scanned = result.vehicles;
+      scannedFileName = file.name;
+      $("#kpi-rows").textContent = String(result.rowsRead || 0);
+      renderPreview();
+      setStatus(
+        $("#scan-status"),
+        `Scanned ${scanned.length} unique VIN(s) from ${file.name}. Ready to save — dashboard is not affected.`,
+        "ok"
+      );
+    } catch (err) {
+      setStatus($("#scan-status"), err.message || "Scan failed", "err");
+    }
+  });
+
+  $("#preview-search").addEventListener("input", renderPreview);
+
+  $("#btn-clear-preview").addEventListener("click", () => {
+    scanned = [];
+    scannedFileName = "";
+    $("#rtl-file").value = "";
+    renderPreview();
+    setStatus($("#scan-status"), "Preview cleared.");
+  });
+
+  $("#btn-save").addEventListener("click", async () => {
+    if (!scanned.length) return;
+    const date = $("#snap-date").value || todayRiyadh();
+    setStatus($("#scan-status"), "Saving snapshot…");
+    try {
+      const res = await fetch(API_SAVE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          fileName: scannedFileName,
+          vehicles: scanned,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setStatus(
+        $("#scan-status"),
+        `Saved ${data.count} VIN(s) for ${data.date}. Live dashboard unchanged.`,
+        "ok"
+      );
+      await loadMeta();
+    } catch (err) {
+      setStatus($("#scan-status"), err.message || "Save failed", "err");
+    }
+  });
+
+  $("#btn-refresh").addEventListener("click", () => loadMeta());
+
+  $("#snap-list").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-del]");
+    if (!btn) return;
+    const date = btn.getAttribute("data-del");
+    if (!date || !confirm(`Delete RTL snapshot for ${date}?`)) return;
+    try {
+      const res = await fetch(`${API_DELETE}/${encodeURIComponent(date)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      await loadMeta();
+    } catch (err) {
+      setStatus($("#list-status"), err.message || "Delete failed", "err");
+    }
+  });
+
+  $("#btn-compare").addEventListener("click", async () => {
+    const from = $("#cmp-from").value;
+    const to = $("#cmp-to").value;
+    if (!from || !to) {
+      setStatus($("#cmp-status"), "Need two saved days to compare.", "err");
+      return;
+    }
+    setStatus($("#cmp-status"), "Comparing…");
+    try {
+      const res = await fetch(`${API_COMPARE}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      lastCompare = data;
+      cmpTab = "added";
+      $("#cmp-added").textContent = String(data.summary?.added || 0);
+      $("#cmp-removed").textContent = String(data.summary?.removed || 0);
+      $("#cmp-changed").textContent = String(data.summary?.changed || 0);
+      $("#cmp-same").textContent = String(data.summary?.same || 0);
+      $("#cmp-kpis").hidden = false;
+      $("#cmp-tabs").hidden = false;
+      $("#cmp-wrap").hidden = false;
+      $("#btn-export-cmp").disabled = false;
+      renderCompareTab();
+      setStatus(
+        $("#cmp-status"),
+        `Compared ${from} → ${to} · ${data.fromCount} → ${data.toCount} VINs`,
+        "ok"
+      );
+    } catch (err) {
+      setStatus($("#cmp-status"), err.message || "Compare failed", "err");
+    }
+  });
+
+  $("#cmp-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-cmp-tab]");
+    if (!btn) return;
+    cmpTab = btn.dataset.cmpTab;
+    renderCompareTab();
+  });
+
+  $("#btn-export-cmp").addEventListener("click", () => {
+    if (!lastCompare || typeof XLSX === "undefined") return;
+    const wb = XLSX.utils.book_new();
+    const sheets = [
+      ["Added", lastCompare.added || []],
+      ["Removed", lastCompare.removed || []],
+      ["Changed", (lastCompare.changed || []).map((r) => ({
+        VIN: r.vin,
+        "From Product": r.fromProduct,
+        "From Suffix": r.fromSuffix,
+        "To Product": r.toProduct,
+        "To Suffix": r.toSuffix,
+      }))],
+      ["Same", lastCompare.same || []],
+    ];
+    sheets.forEach(([name, rows]) => {
+      const normalized = rows.map((r) => (
+        r.vin != null
+          ? { VIN: r.vin, Product: r.product || "", Suffix: r.suffix || "", ...r }
+          : r
+      ));
+      const ws = XLSX.utils.json_to_sheet(normalized.length ? normalized : [{ Note: "None" }]);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    });
+    XLSX.writeFile(wb, `RTL-compare-${lastCompare.fromDate}-to-${lastCompare.toDate}.xlsx`);
+  });
+
+  loadMeta();
+})();
+  </script>
+</body>
+</html>
