@@ -3663,6 +3663,28 @@
   }
 
   function applyAccessoriesToReportRows(rows, acc) {
+    const emptyBlock = (target) => ({
+      Proforma: 0,
+      Delivery: 0,
+      Target: target || 0,
+      "Ach%": target ? "0%" : "#DIV/0!",
+      "Del+VSND": 0,
+      "Ach% (Sales)": target ? "0%" : "#DIV/0!",
+      Diff: target || 0,
+      "Cancelled BOs": 0,
+      "Cancellation %": "#DIV/0!",
+      "Can. Target 30%": "30%",
+      "Gap +/-": "#DIV/0!",
+      Notes: "",
+      _deliveryAch: 0,
+      _salesAch: 0,
+      _cancelPct: null,
+      _gap: null,
+      _diff: target || 0,
+      _targetNum: target || 0,
+      _vacation: false,
+    });
+
     const merged = rows.map((r) => {
       const m = acc.byKey.get(r._key) || {
         quota: 0, sold: 0, inProgress: 0, achPct: null, netTarget: rowTargetNum(r), adminTarget: rowTargetNum(r),
@@ -3688,6 +3710,9 @@
     const existing = new Set(merged.map((r) => r._key));
     acc.byKey.forEach((m, key) => {
       if (existing.has(key) || !(m.sold || m.inProgress)) return;
+      const target = Number(m.adminTarget) || 0;
+      const monthBlock = emptyBlock(target);
+      const dayBlock = emptyBlock(target);
       merged.push({
         No: 0,
         Plant: "—",
@@ -3701,16 +3726,32 @@
         "Delivery (Day)": 0,
         "Delivery (Month)": 0,
         "Delivery (Prev)": 0,
-        Target: m.adminTarget,
-        "Day Target": m.adminTarget,
+        Target: target,
+        "Day Target": target,
         "Prof+Del": 0,
-        "Del %": "#DIV/0!",
+        "Del %": target ? "0%" : "#DIV/0!",
+        "Prof+Del %": target ? "0%" : "#DIV/0!",
+        "Cancelled BOs": 0,
+        "Cancellation %": "#DIV/0!",
+        "Can. Target 30%": "30%",
+        "Gap +/-": "#DIV/0!",
         "Acc Target": m.quota,
         "Acc Achieved": m.sold,
         "Acc In Progress": m.inProgress || 0,
         "Acc Ach %": m.achPct == null ? (m.quota ? "0%" : "—") : pct1(m.achPct),
         "Acc Remaining": m.remaining != null ? m.remaining : Math.max(0, (m.quota || 0) - (m.sold || 0)),
         "Adjusted Target": m.netTarget,
+        ...monthBlock,
+        Proforma: 0,
+        Delivery: 0,
+        day: dayBlock,
+        month: monthBlock,
+        _delPct: target ? 0 : null,
+        _profDelPct: target ? 0 : null,
+        _vacation: false,
+        _targetNum: target,
+        _vins: [],
+        _records: [],
         _key: key,
         _accQuota: m.quota,
         _accSold: m.sold,
@@ -4288,20 +4329,20 @@
     const dailyTarget = buildDailyTargetReport(rowsWithAcc, live, workingDays, dailyProformaByKey);
     const rowsFinal = dailyTarget.rows;
 
-    const totProformaDay = rowsFinal.reduce((s, r) => s + r["Proforma (Day)"], 0);
-    const totProformaMonth = rowsFinal.reduce((s, r) => s + r["Proforma (Month)"], 0);
-    const totProformaPrev = rowsFinal.reduce((s, r) => s + r["Proforma (Prev)"], 0);
-    const totDeliveryDay = rowsFinal.reduce((s, r) => s + r["Delivery (Day)"], 0);
-    const totDeliveryMonth = rowsFinal.reduce((s, r) => s + r["Delivery (Month)"], 0);
-    const totDeliveryPrev = rowsFinal.reduce((s, r) => s + r["Delivery (Prev)"], 0);
+    const totProformaDay = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Day)"]) || 0), 0);
+    const totProformaMonth = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Month)"]) || 0), 0);
+    const totProformaPrev = rowsFinal.reduce((s, r) => s + (Number(r["Proforma (Prev)"]) || 0), 0);
+    const totDeliveryDay = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Day)"]) || 0), 0);
+    const totDeliveryMonth = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Month)"]) || 0), 0);
+    const totDeliveryPrev = rowsFinal.reduce((s, r) => s + (Number(r["Delivery (Prev)"]) || 0), 0);
     const totTarget = rowsFinal.reduce((s, r) => s + (Number(r._targetNum) || 0), 0);
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
     const totProfPlusDel = totProformaMonth + totDeliveryMonth;
-    const totVsnd = rowsFinal.reduce((s, r) => s + r.VSND, 0);
+    const totVsnd = rowsFinal.reduce((s, r) => s + (Number(r.VSND) || 0), 0);
     const totDelVsnd = totProformaMonth; // Del+VSND = Proforma
     const totDelVsndDay = totProformaDay;
-    const totCancelled = rowsFinal.reduce((s, r) => s + r["Cancelled BOs"], 0);
-    const totCancelledDay = rowsFinal.reduce((s, r) => s + r.day["Cancelled BOs"], 0);
+    const totCancelled = rowsFinal.reduce((s, r) => s + (Number(r["Cancelled BOs"]) || 0), 0);
+    const totCancelledDay = rowsFinal.reduce((s, r) => s + (Number(r.day && r.day["Cancelled BOs"]) || 0), 0);
     const monthCancelBase = totDeliveryMonth + totCancelled;
     const dayCancelBase = totDeliveryDay + totCancelledDay;
     const daysPassed = live.daysPassed != null ? live.daysPassed : live.now.getDate();
