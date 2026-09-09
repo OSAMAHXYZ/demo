@@ -508,10 +508,10 @@
 
                   <div class="sr-sched-filters">
                     <label class="sr-sched-field">
-                      <span class="lab">Report period</span>
-                      <select id="sr-sched-period" aria-label="Day or month schedule">
-                        <option value="month" selected>Month to date</option>
-                        <option value="day">Day to date</option>
+                      <span class="lab">Jump to</span>
+                      <select id="sr-sched-period" aria-label="Jump to day or month schedule">
+                        <option value="day">Day schedule</option>
+                        <option value="month" selected>Month schedule</option>
                       </select>
                     </label>
                     <label class="sr-sched-field">
@@ -543,15 +543,42 @@
                     <button type="button" class="sr-sched-btn" id="sr-sched-clear">Clear Filters</button>
                   </div>
 
-                  <div class="sr-sched-kpis xl-kpi" id="sr-kpis" aria-live="polite"></div>
-                  <div class="sr-sched-kpis xl-kpi" id="sr-day-kpis" hidden aria-live="polite"></div>
+                  <div class="sr-sched-kpi-stack">
+                    <div class="sr-sched-kpi-block">
+                      <h4 class="sr-sched-kpi-heading">Month to date</h4>
+                      <div class="sr-sched-kpis xl-kpi" id="sr-kpis" aria-live="polite"></div>
+                    </div>
+                    <div class="sr-sched-kpi-block" id="sr-day-kpi-block">
+                      <h4 class="sr-sched-kpi-heading">Day to date · Daily schedule</h4>
+                      <div class="sr-sched-kpis xl-kpi" id="sr-day-kpis" aria-live="polite"></div>
+                    </div>
+                  </div>
 
-                  <article class="sr-sched-table-card">
+                  <article class="sr-sched-table-card" id="sr-day-schedule-card">
+                    <div class="sr-sched-table-head">
+                      <div>
+                        <h4 class="sr-sched-table-title">Daily Employee Schedule</h4>
+                        <p class="sr-sched-table-sub" id="sr-day-title">Day to Date</p>
+                      </div>
+                      <div class="sr-sched-legend" aria-label="Status legend">
+                        <span class="sr-leg is-on"><i></i>On Track</span>
+                        <span class="sr-leg is-below"><i></i>Below Target</span>
+                        <span class="sr-leg is-vac"><i></i>Vacation</span>
+                        <span class="sr-leg is-na"><i></i>Not Assigned</span>
+                      </div>
+                      <div class="sr-sched-count" id="sr-day-sched-count">0 Employees</div>
+                    </div>
+                    <div class="xl-table-wrap sr-sched-wrap" id="sr-day-table-wrap"></div>
+                    <div class="sr-sched-pager">
+                      <p class="foot" id="sr-day-table-foot"></p>
+                    </div>
+                  </article>
+
+                  <article class="sr-sched-table-card" id="sr-month-schedule-card">
                     <div class="sr-sched-table-head">
                       <div>
                         <h4 class="sr-sched-table-title">Employee Schedule &amp; Performance</h4>
                         <p class="sr-sched-table-sub" id="sr-month-title">Month to Date</p>
-                        <p class="sr-sched-table-sub" id="sr-day-title" hidden>Day to Date</p>
                       </div>
                       <div class="sr-sched-legend" aria-label="Status legend">
                         <span class="sr-leg is-on"><i></i>On Track</span>
@@ -562,10 +589,8 @@
                       <div class="sr-sched-count" id="sr-sched-count">0 Employees</div>
                     </div>
                     <div class="xl-table-wrap sr-sched-wrap" id="sr-table-wrap"></div>
-                    <div class="xl-table-wrap sr-sched-wrap" id="sr-day-table-wrap" hidden></div>
                     <div class="sr-sched-pager">
                       <p class="foot" id="sr-table-foot"></p>
-                      <p class="foot" id="sr-day-table-foot" hidden></p>
                       <div class="sr-sched-pager-controls">
                         <label>
                           Rows per page
@@ -6430,7 +6455,7 @@
   }
 
   function syncSchedulePeriodUi() {
-    const isDay = srView.schedulePeriod === "day";
+    // Day + month KPIs and tables stay visible together.
     const dayKpi = $("#sr-day-kpis");
     const monthKpi = $("#sr-kpis");
     const dayWrap = $("#sr-day-table-wrap");
@@ -6439,16 +6464,27 @@
     const monthFoot = $("#sr-table-foot");
     const dayTitle = $("#sr-day-title");
     const monthTitle = $("#sr-month-title");
-    if (dayKpi) dayKpi.hidden = !isDay;
-    if (monthKpi) monthKpi.hidden = isDay;
-    if (dayWrap) dayWrap.hidden = !isDay;
-    if (monthWrap) monthWrap.hidden = isDay;
-    if (dayFoot) dayFoot.hidden = !isDay;
-    if (monthFoot) monthFoot.hidden = isDay;
-    if (dayTitle) dayTitle.hidden = !isDay;
-    if (monthTitle) monthTitle.hidden = isDay;
+    if (dayKpi) { dayKpi.hidden = false; dayKpi.style.display = ""; }
+    if (monthKpi) { monthKpi.hidden = false; monthKpi.style.display = ""; }
+    if (dayWrap) dayWrap.hidden = false;
+    if (monthWrap) monthWrap.hidden = false;
+    if (dayFoot) dayFoot.hidden = false;
+    if (monthFoot) monthFoot.hidden = false;
+    if (dayTitle) dayTitle.hidden = false;
+    if (monthTitle) monthTitle.hidden = false;
     const periodSel = $("#sr-sched-period");
-    if (periodSel) periodSel.value = isDay ? "day" : "month";
+    if (periodSel) periodSel.value = srView.schedulePeriod === "day" ? "day" : "month";
+  }
+
+  function jumpToSchedulePeriod(period) {
+    srView.schedulePeriod = period === "day" ? "day" : "month";
+    syncSchedulePeriodUi();
+    const target = period === "day"
+      ? ($("#sr-day-schedule-card") || $("#sr-day-kpi-block") || $("#sr-day-kpis"))
+      : ($("#sr-month-schedule-card") || $("#sr-kpis"));
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function fillScheduleFilterOptions(sr) {

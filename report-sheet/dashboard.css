@@ -8240,3 +8240,27 @@ body.admin-page #panel-allocation:not([hidden]) {
   .sr-sched-kpis.xl-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sr-sched-filters { grid-template-columns: 1fr; }
 }
+.sr-sched-kpi-stack { display: flex; flex-direction: column; gap: 12px; }
+.sr-sched-kpi-heading {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+.sr-sched-kpi-block {
+  padding: 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8eef5;
+}
+#sr-day-kpi-block {
+  border-color: rgba(37, 99, 235, 0.22);
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+#sr-day-schedule-card {
+  border-color: rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.06);
+}
+#sr-day-schedule-card .sr-sched-table-title { color: #1d4ed8; }
