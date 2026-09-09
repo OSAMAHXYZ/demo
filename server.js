@@ -552,12 +552,32 @@ function sanitizeRtlVehicle(raw) {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
   if (!vin || vin.length < 11) return null;
+  const detailsIn = raw?.details && typeof raw.details === 'object' ? raw.details : null;
+  const details = {};
+  if (detailsIn) {
+    for (const [k, v] of Object.entries(detailsIn)) {
+      const key = String(k || '').trim();
+      if (!key || key.length > 80) continue;
+      const val = String(v ?? '').trim();
+      if (!val) continue;
+      details[key] = val.slice(0, 240);
+      if (Object.keys(details).length >= 40) break;
+    }
+  }
   return {
     vin,
     product: String(raw?.product || '').trim(),
     suffix: String(raw?.suffix || '').trim(),
+    year: String(raw?.year || '').trim(),
+    ext: String(raw?.ext || '').trim(),
+    int: String(raw?.int || '').trim(),
+    age: String(raw?.age ?? raw?.ageing ?? '').trim(),
+    usage: String(raw?.usage || '').trim(),
+    status: String(raw?.status || '').trim(),
+    secondaryStatus: String(raw?.secondaryStatus || '').trim(),
     location: String(raw?.location || '').trim(),
-    vehicleSearchArea: String(raw?.vehicleSearchArea || raw?.searchAreaDesc || '').trim()
+    vehicleSearchArea: String(raw?.vehicleSearchArea || raw?.searchAreaDesc || '').trim(),
+    details
   };
 }
 
@@ -651,6 +671,34 @@ function scanRtlStockBuffer(buffer) {
     (n) => n === 'suffix' || n === 'sfx' || n === 'alj suffix' || n === 'grade',
     (n) => n.includes('suffix') || n.includes('sfx')
   ], 'G');
+  const idxYear = rtlResolveCol(headers, [
+    (n) => n === 'year' || n === 'model year' || n === 'my',
+    (n) => n.includes('year')
+  ], 'F');
+  const idxExt = rtlResolveCol(headers, [
+    (n) => n === 'ext' || n === 'exterior' || n === 'exterior color' || n === 'ext color',
+    (n) => n.includes('exterior') || n === 'ext'
+  ], 'H');
+  const idxInt = rtlResolveCol(headers, [
+    (n) => n === 'int' || n === 'interior' || n === 'interior color' || n === 'int color',
+    (n) => n.includes('interior') || n === 'int'
+  ], 'I');
+  const idxAge = rtlResolveCol(headers, [
+    (n) => n === 'age' || n === 'ageing' || n === 'aging' || n === 'stock age',
+    (n) => n.includes('age')
+  ], 'J');
+  const idxUsage = rtlResolveCol(headers, [
+    (n) => n === 'usage' || n === 'usage desc' || n === 'usage description',
+    (n) => n.includes('usage')
+  ], 'K');
+  const idxStatus = rtlResolveCol(headers, [
+    (n) => n === 'status' || n === 'primary status' || n === 'vehicle status',
+    (n) => n === 'status' || n.includes('primary status')
+  ], 'D');
+  const idxSecondary = rtlResolveCol(headers, [
+    (n) => n === 'secondary status' || n === 'sec status',
+    (n) => n.includes('secondary status')
+  ], 'L');
   const idxLocation = rtlResolveCol(headers, [
     (n) => n === 'allocated location' || n === 'location' || n === 'loc',
     (n) => n.includes('allocated location') || (n.includes('location') && !n.includes('search'))
@@ -667,12 +715,26 @@ function scanRtlStockBuffer(buffer) {
     const vin = rtlExtractVin(line[idxVin]);
     if (!vin || seen.has(vin)) continue;
     seen.add(vin);
+    const details = {};
+    headers.forEach((h, i) => {
+      const val = rtlCellToString(line[i]);
+      if (!val) return;
+      details[h] = val;
+    });
     const v = sanitizeRtlVehicle({
       vin,
       product: rtlCellToString(line[idxProduct]),
       suffix: rtlCellToString(line[idxSuffix]),
+      year: rtlCellToString(line[idxYear]),
+      ext: rtlCellToString(line[idxExt]),
+      int: rtlCellToString(line[idxInt]),
+      age: rtlCellToString(line[idxAge]),
+      usage: rtlCellToString(line[idxUsage]),
+      status: rtlCellToString(line[idxStatus]),
+      secondaryStatus: rtlCellToString(line[idxSecondary]),
       location: rtlCellToString(line[idxLocation]),
-      vehicleSearchArea: rtlCellToString(line[idxSearch])
+      vehicleSearchArea: rtlCellToString(line[idxSearch]),
+      details
     });
     if (v) vehicles.push(v);
   }
@@ -790,8 +852,13 @@ function buildRtlDailyLastSeenIndex() {
         at: snap.at,
         product: v.product || '',
         suffix: v.suffix || '',
+        year: v.year || '',
         location: v.location || '',
-        vehicleSearchArea: v.vehicleSearchArea || ''
+        vehicleSearchArea: v.vehicleSearchArea || '',
+        status: v.status || '',
+        secondaryStatus: v.secondaryStatus || '',
+        usage: v.usage || '',
+        age: v.age || ''
       };
     }
   }

@@ -31,7 +31,7 @@
         linear-gradient(180deg, #fafbfc 0%, var(--bg) 40%, #eef2f6 100%);
     }
     .wrap {
-      max-width: 1180px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: 28px 20px 48px;
     }
@@ -168,7 +168,7 @@
     .status.err { color: var(--toyota); }
     .kpis {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 10px;
       margin: 14px 0;
     }
@@ -191,20 +191,29 @@
     }
     .table-wrap {
       overflow: auto;
-      max-height: 360px;
+      max-height: 480px;
       border: 1px solid var(--line);
       border-radius: 12px;
     }
     table {
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
-      font-size: 0.86rem;
+      font-size: 0.82rem;
     }
     th, td {
-      padding: 0.55rem 0.7rem;
+      padding: 0.5rem 0.65rem;
       border-bottom: 1px solid #eef2f7;
       text-align: left;
       vertical-align: top;
+      white-space: nowrap;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    td.wrap-cell {
+      white-space: normal;
+      max-width: 260px;
     }
     th {
       position: sticky;
@@ -292,7 +301,7 @@
     <div class="grid">
       <section class="card">
         <h2>Scan RTL sheet</h2>
-        <p class="sub">Reads every row with a VIN. Product = Col B · VIN = Col E · Suffix = Col G (header aliases also accepted).</p>
+        <p class="sub">Reads every column from the RTL sheet for each VIN (product, suffix, year, colors, age, usage, status, location, vehicle search area, and all other headers).</p>
 
         <div class="field">
           <label for="rtl-file">RTL Excel / CSV</label>
@@ -305,7 +314,7 @@
           </div>
           <div class="field">
             <label for="preview-search">Preview search</label>
-            <input id="preview-search" type="search" placeholder="VIN / product / suffix" />
+            <input id="preview-search" type="search" placeholder="VIN / product / suffix / location / search area…" />
           </div>
         </div>
         <div class="actions">
@@ -318,12 +327,28 @@
           <div class="kpi"><div class="lab">VINs</div><div class="val" id="kpi-vins">0</div></div>
           <div class="kpi"><div class="lab">Products</div><div class="val" id="kpi-products">0</div></div>
           <div class="kpi"><div class="lab">Suffixes</div><div class="val" id="kpi-suffixes">0</div></div>
+          <div class="kpi"><div class="lab">Locations</div><div class="val" id="kpi-locations">0</div></div>
+          <div class="kpi"><div class="lab">Search areas</div><div class="val" id="kpi-areas">0</div></div>
+          <div class="kpi"><div class="lab">Columns</div><div class="val" id="kpi-cols">0</div></div>
           <div class="kpi"><div class="lab">Rows read</div><div class="val" id="kpi-rows">0</div></div>
         </div>
         <div class="table-wrap" id="preview-wrap" hidden>
           <table>
-            <thead>
-              <tr><th>VIN</th><th>Product</th><th>Suffix</th></tr>
+            <thead id="preview-head">
+              <tr>
+                <th>VIN</th>
+                <th>Product</th>
+                <th>Suffix</th>
+                <th>Year</th>
+                <th>Ext</th>
+                <th>Int</th>
+                <th>Age</th>
+                <th>Usage</th>
+                <th>Status</th>
+                <th>Secondary status</th>
+                <th>Location</th>
+                <th>Vehicle search area</th>
+              </tr>
             </thead>
             <tbody id="preview-body"></tbody>
           </table>
@@ -390,6 +415,8 @@
   let scanned = [];
   let scannedFileName = "";
   let scannedExcelBase64 = "";
+  let scannedHeaders = [];
+  let scannedExtraHeaders = [];
   let snapshots = [];
   let lastCompare = null;
   let cmpTab = "added";
@@ -511,11 +538,15 @@
 
   function scanRtlWorkbook(workbook) {
     const matrix = sheetMatrix(workbook);
-    if (!matrix.length) return { vehicles: [], rowsRead: 0 };
+    if (!matrix.length) return { vehicles: [], rowsRead: 0, headers: [], extraHeaders: [] };
 
     const headerIdx = findHeaderRow(matrix);
     const headerRow = matrix[headerIdx] || [];
-    const width = Math.max(headerRow.length, colLetterToIndex("G") + 1, 8);
+    const width = Math.max(
+      headerRow.length,
+      colLetterToIndex("Q") + 1,
+      ...(matrix.slice(headerIdx, headerIdx + 30).map((r) => (r || []).length))
+    );
     const headers = [];
     for (let i = 0; i < width; i += 1) {
       headers.push(cellToString(headerRow[i]) || `Column ${indexToColLetter(i)}`);
@@ -533,6 +564,34 @@
       (n) => n === "suffix" || n === "sfx" || n === "alj suffix" || n === "grade",
       (n) => n.includes("suffix") || n.includes("sfx"),
     ], "G");
+    const idxYear = resolveCol(headers, [
+      (n) => n === "year" || n === "model year" || n === "my",
+      (n) => n.includes("year"),
+    ], "F");
+    const idxExt = resolveCol(headers, [
+      (n) => n === "ext" || n === "exterior" || n === "exterior color" || n === "ext color",
+      (n) => n.includes("exterior") || n === "ext",
+    ], "H");
+    const idxInt = resolveCol(headers, [
+      (n) => n === "int" || n === "interior" || n === "interior color" || n === "int color",
+      (n) => n.includes("interior") || n === "int",
+    ], "I");
+    const idxAge = resolveCol(headers, [
+      (n) => n === "age" || n === "ageing" || n === "aging" || n === "stock age",
+      (n) => n.includes("age"),
+    ], "J");
+    const idxUsage = resolveCol(headers, [
+      (n) => n === "usage" || n === "usage desc" || n === "usage description",
+      (n) => n.includes("usage"),
+    ], "K");
+    const idxStatus = resolveCol(headers, [
+      (n) => n === "status" || n === "primary status" || n === "vehicle status",
+      (n) => n === "status" || n.includes("primary status"),
+    ], "D");
+    const idxSecondary = resolveCol(headers, [
+      (n) => n === "secondary status" || n === "sec status",
+      (n) => n.includes("secondary status"),
+    ], "L");
     const idxLocation = resolveCol(headers, [
       (n) => n === "allocated location" || n === "location" || n === "loc",
       (n) => n.includes("allocated location") || (n.includes("location") && !n.includes("search")),
@@ -541,6 +600,15 @@
       (n) => n === "vehicle search area" || n === "search area desc" || n === "search area",
       (n) => n.includes("vehicle search") || n.includes("search area"),
     ], "P");
+
+    const mappedIdx = new Set([
+      idxProduct, idxVin, idxSuffix, idxYear, idxExt, idxInt,
+      idxAge, idxUsage, idxStatus, idxSecondary, idxLocation, idxSearch,
+    ]);
+    const extraHeaders = headers
+      .map((h, i) => ({ h, i }))
+      .filter(({ h, i }) => h && !mappedIdx.has(i))
+      .map(({ h }) => h);
 
     const seen = new Set();
     const vehicles = [];
@@ -553,39 +621,106 @@
       if (!vin) continue;
       if (seen.has(vin)) continue;
       seen.add(vin);
+
+      const details = {};
+      headers.forEach((h, i) => {
+        const val = cellToString(line[i]);
+        if (!val) return;
+        details[h] = val;
+      });
+
       vehicles.push({
         vin,
         product: cellToString(line[idxProduct]),
         suffix: cellToString(line[idxSuffix]),
+        year: cellToString(line[idxYear]),
+        ext: cellToString(line[idxExt]),
+        int: cellToString(line[idxInt]),
+        age: cellToString(line[idxAge]),
+        usage: cellToString(line[idxUsage]),
+        status: cellToString(line[idxStatus]),
+        secondaryStatus: cellToString(line[idxSecondary]),
         location: cellToString(line[idxLocation]),
         vehicleSearchArea: cellToString(line[idxSearch]),
+        details,
       });
     }
 
-    return { vehicles, rowsRead, sheetHint: workbook.SheetNames?.[0] || "" };
+    return {
+      vehicles,
+      rowsRead,
+      headers,
+      extraHeaders,
+      sheetHint: workbook.SheetNames?.[0] || "",
+    };
+  }
+
+  function vehicleSearchBlob(v) {
+    const bits = [
+      v.vin, v.product, v.suffix, v.year, v.ext, v.int, v.age, v.usage,
+      v.status, v.secondaryStatus, v.location, v.vehicleSearchArea,
+    ];
+    if (v.details) bits.push(...Object.values(v.details));
+    return bits.map((x) => String(x || "").toLowerCase()).join(" ");
   }
 
   function renderPreview() {
     const q = String($("#preview-search").value || "").trim().toLowerCase();
     const rows = !q
       ? scanned
-      : scanned.filter((v) =>
-          `${v.vin} ${v.product} ${v.suffix}`.toLowerCase().includes(q)
-        );
+      : scanned.filter((v) => vehicleSearchBlob(v).includes(q));
 
     const products = new Set(scanned.map((v) => v.product).filter(Boolean));
     const suffixes = new Set(scanned.map((v) => v.suffix).filter(Boolean));
+    const locations = new Set(scanned.map((v) => v.location).filter(Boolean));
+    const areas = new Set(scanned.map((v) => v.vehicleSearchArea).filter(Boolean));
 
     $("#kpi-vins").textContent = String(scanned.length);
     $("#kpi-products").textContent = String(products.size);
     $("#kpi-suffixes").textContent = String(suffixes.size);
+    const locEl = $("#kpi-locations");
+    if (locEl) locEl.textContent = String(locations.size);
+    const areaEl = $("#kpi-areas");
+    if (areaEl) areaEl.textContent = String(areas.size);
+    const colsEl = $("#kpi-cols");
+    if (colsEl) colsEl.textContent = String((scannedHeaders && scannedHeaders.length) || 0);
+
+    const extra = scannedExtraHeaders || [];
+    const head = $("#preview-head");
+    if (head) {
+      head.innerHTML = `<tr>
+        <th>VIN</th>
+        <th>Product</th>
+        <th>Suffix</th>
+        <th>Year</th>
+        <th>Ext</th>
+        <th>Int</th>
+        <th>Age</th>
+        <th>Usage</th>
+        <th>Status</th>
+        <th>Secondary status</th>
+        <th>Location</th>
+        <th>Vehicle search area</th>
+        ${extra.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}
+      </tr>`;
+    }
 
     const body = $("#preview-body");
-    body.innerHTML = rows.slice(0, 500).map((v) => `
+    body.innerHTML = rows.slice(0, 800).map((v) => `
       <tr>
         <td class="mono">${escapeHtml(v.vin)}</td>
         <td>${escapeHtml(v.product || "—")}</td>
         <td>${escapeHtml(v.suffix || "—")}</td>
+        <td>${escapeHtml(v.year || "—")}</td>
+        <td>${escapeHtml(v.ext || "—")}</td>
+        <td>${escapeHtml(v.int || "—")}</td>
+        <td>${escapeHtml(v.age || "—")}</td>
+        <td>${escapeHtml(v.usage || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(v.status || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(v.secondaryStatus || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(v.location || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(v.vehicleSearchArea || "—")}</td>
+        ${extra.map((h) => `<td class="wrap-cell">${escapeHtml((v.details && v.details[h]) || "—")}</td>`).join("")}
       </tr>
     `).join("");
 
@@ -706,13 +841,15 @@
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const result = scanRtlWorkbook(wb);
       scanned = result.vehicles;
+      scannedHeaders = result.headers || [];
+      scannedExtraHeaders = result.extraHeaders || [];
       scannedFileName = file.name;
       scannedExcelBase64 = arrayBufferToBase64(buf);
       $("#kpi-rows").textContent = String(result.rowsRead || 0);
       renderPreview();
       setStatus(
         $("#scan-status"),
-        `Scanned ${scanned.length} unique VIN(s) from ${file.name}. Ready to append — live dashboard is not affected.`,
+        `Scanned ${scanned.length} unique VIN(s) · ${scannedHeaders.length} column(s) from ${file.name}. Ready to append — live dashboard is not affected.`,
         "ok"
       );
     } catch (err) {
@@ -726,6 +863,8 @@
     scanned = [];
     scannedFileName = "";
     scannedExcelBase64 = "";
+    scannedHeaders = [];
+    scannedExtraHeaders = [];
     $("#rtl-file").value = "";
     renderPreview();
     setStatus($("#scan-status"), "Preview cleared.");
