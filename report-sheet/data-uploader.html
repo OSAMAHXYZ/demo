@@ -81,6 +81,31 @@
       font-size: 0.9rem;
       line-height: 1.45;
     }
+    .date-banner {
+      margin: 0 0 18px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+      border: 2px solid #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+    }
+    .date-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .date-banner-label {
+      font-size: 0.95rem;
+      color: #1e40af;
+      font-weight: 600;
+    }
+    .date-banner-date {
+      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-size: 1.25rem;
+      color: #1e3a8a;
+      letter-spacing: -0.01em;
+    }
     .grid {
       display: grid;
       grid-template-columns: 1.05fr 0.95fr;
@@ -293,29 +318,37 @@
     </div>
 
     <p class="note">
+      <b>Step 1:</b> Select the date you want to associate with your data. <b>Step 2:</b> Upload and scan the RTL file. <b>Step 3:</b> Click "Append snapshot" to save.
+      <br/><br/>
       Manual archive tool. <b>Admin Push to Live</b> also appends a permanent timestamped RTL snapshot automatically
       (VIN + date + Vehicle Search Area + original Excel). History is never overwritten by a later push.
       Saving here does <b>not</b> change the live Sales Report dashboard.
     </p>
+
+    <div class="date-banner" id="date-banner">
+      <div class="date-banner-content">
+        <span class="date-banner-label">📅 Data will be saved for:</span>
+        <strong class="date-banner-date" id="date-banner-display"></strong>
+      </div>
+    </div>
 
     <div class="grid">
       <section class="card">
         <h2>Scan RTL sheet</h2>
         <p class="sub">Reads every column from the RTL sheet for each VIN (product, suffix, year, colors, age, usage, status, location, vehicle search area, and all other headers).</p>
 
+        <div class="field" style="margin-bottom: 16px;">
+          <label for="snap-date" style="font-size: 0.9rem;">Select snapshot date</label>
+          <input id="snap-date" type="date" style="font-size: 1rem; font-weight: 600; padding: 0.75rem;" />
+        </div>
+
         <div class="field">
           <label for="rtl-file">RTL Excel / CSV</label>
           <input id="rtl-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
         </div>
-        <div class="row">
-          <div class="field">
-            <label for="snap-date">Snapshot date</label>
-            <input id="snap-date" type="date" />
-          </div>
-          <div class="field">
-            <label for="preview-search">Preview search</label>
-            <input id="preview-search" type="search" placeholder="VIN / product / suffix / location / search area…" />
-          </div>
+        <div class="field">
+          <label for="preview-search">Preview search</label>
+          <input id="preview-search" type="search" placeholder="VIN / product / suffix / location / search area…" />
         </div>
         <div class="actions">
           <button type="button" class="primary" id="btn-scan">Scan file</button>
@@ -443,6 +476,29 @@
 
   function todayRiyadh() {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
+  }
+
+  function formatDateDisplay(dateStr) {
+    if (!dateStr) return "No date selected";
+    try {
+      const date = new Date(dateStr + 'T12:00:00');
+      return new Intl.DateTimeFormat("en-US", { 
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }).format(date);
+    } catch {
+      return dateStr;
+    }
+  }
+
+  function updateDateBanner() {
+    const dateValue = $("#snap-date").value;
+    const banner = $("#date-banner-display");
+    if (banner) {
+      banner.textContent = formatDateDisplay(dateValue);
+    }
   }
 
   function escapeHtml(str) {
@@ -832,11 +888,21 @@
   }
 
   $("#snap-date").value = todayRiyadh();
+  updateDateBanner();
+
+  $("#snap-date").addEventListener("change", () => {
+    updateDateBanner();
+  });
 
   $("#btn-scan").addEventListener("click", async () => {
     const file = $("#rtl-file").files && $("#rtl-file").files[0];
     if (!file) {
       setStatus($("#scan-status"), "Choose an RTL Excel/CSV file first.", "err");
+      return;
+    }
+    const selectedDate = $("#snap-date").value;
+    if (!selectedDate) {
+      setStatus($("#scan-status"), "Please select a snapshot date first.", "err");
       return;
     }
     setStatus($("#scan-status"), "Scanning…");
@@ -853,7 +919,7 @@
       renderPreview();
       setStatus(
         $("#scan-status"),
-        `Scanned ${scanned.length} unique VIN(s) · ${scannedHeaders.length} column(s) from ${file.name}. Ready to append — live dashboard is not affected.`,
+        `✓ Scanned ${scanned.length} unique VIN(s) · ${scannedHeaders.length} column(s) from ${file.name}. Ready to save for ${formatDateDisplay(selectedDate)}. Live dashboard is not affected.`,
         "ok"
       );
     } catch (err) {
@@ -877,7 +943,11 @@
   $("#btn-save").addEventListener("click", async () => {
     if (!scanned.length) return;
     const date = $("#snap-date").value || todayRiyadh();
-    setStatus($("#scan-status"), "Appending snapshot…");
+    if (!date) {
+      setStatus($("#scan-status"), "Please select a snapshot date.", "err");
+      return;
+    }
+    setStatus($("#scan-status"), `Saving snapshot for ${formatDateDisplay(date)}…`);
     try {
       const res = await fetch(API_SAVE, {
         method: "POST",
@@ -894,7 +964,7 @@
       if (!res.ok) throw new Error(data.error || res.statusText);
       setStatus(
         $("#scan-status"),
-        `Appended ${data.count} VIN(s) as ${data.id || data.date}. Live dashboard unchanged.`,
+        `✓ Saved ${data.count} VIN(s) for ${formatDateDisplay(date)} as snapshot ${data.id || data.date}. Live dashboard unchanged.`,
         "ok"
       );
       await loadMeta();
