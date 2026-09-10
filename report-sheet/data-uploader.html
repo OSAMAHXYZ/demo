@@ -515,10 +515,18 @@
 
   function snapLabel(s) {
     const id = s.id || s.date || "";
-    const when = s.at
-      ? new Date(s.at).toLocaleString("en-GB", { timeZone: "Asia/Riyadh" })
-      : (s.date || "");
-    return `${when || id} · ${s.count || 0} VINs`;
+    // Show the selected calendar date prominently, with save time as secondary info
+    const calendarDate = s.date || id.split('T')[0] || "";
+    const saveTime = s.at
+      ? new Date(s.at).toLocaleTimeString("en-GB", { timeZone: "Asia/Riyadh", hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : "";
+    const displayDate = calendarDate
+      ? new Date(calendarDate + 'T12:00:00').toLocaleDateString("en-US", { year: 'numeric', month: '2-digit', day: '2-digit' })
+      : "";
+    const label = displayDate || id;
+    return saveTime 
+      ? `${label}, ${saveTime} · ${s.count || 0} VINs`
+      : `${label} · ${s.count || 0} VINs`;
   }
 
   function todayRiyadh() {
