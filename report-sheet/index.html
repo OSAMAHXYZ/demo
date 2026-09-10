@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
@@ -123,9 +124,78 @@
         </div>
 
         <div id="dvp-board" class="dvp-board" hidden>
+          <!-- Professional Dashboard Header -->
+          <div class="dvp-professional-header">
+            <div class="dvp-header-brand">
+              <div class="dvp-brand-logo-text">ABDUL LATIF JAMEEL MOTORS</div>
+              <div class="dvp-brand-subtitle">TOYOTA</div>
+            </div>
+            <div class="dvp-header-title-section">
+              <h2 class="dvp-dashboard-title">Sales Performance</h2>
+              <div class="dvp-header-controls">
+                <div class="dvp-filter-group">
+                  <label class="dvp-filter-label">
+                    <iconify-icon icon="mdi:calendar"></iconify-icon>
+                    Date
+                  </label>
+                  <select class="dvp-filter-select" id="dvp-date-filter">
+                    <option value="current">Current Period</option>
+                    <option value="prev">Previous Period</option>
+                    <option value="ytd">Year to Date</option>
+                  </select>
+                </div>
+                <div class="dvp-filter-group">
+                  <label class="dvp-filter-label">
+                    <iconify-icon icon="mdi:map-marker"></iconify-icon>
+                    Location
+                  </label>
+                  <select class="dvp-filter-select" id="dvp-location-filter">
+                    <option value="all">All Locations</option>
+                    <option value="riyadh">Riyadh</option>
+                    <option value="jeddah">Jeddah</option>
+                  </select>
+                </div>
+                <div class="dvp-filter-group">
+                  <label class="dvp-filter-label">
+                    <iconify-icon icon="mdi:car"></iconify-icon>
+                    Model
+                  </label>
+                  <select class="dvp-filter-select" id="dvp-model-filter">
+                    <option value="all">All Models</option>
+                    <option value="camry">Camry</option>
+                    <option value="corolla">Corolla</option>
+                    <option value="rav4">RAV4</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Cards -->
           <div class="dvp-cards" id="dvp-cards"></div>
-          <div class="dvp-summary-chart" id="dvp-summary-chart"></div>
+          
+          <!-- Charts Section -->
+          <div class="dvp-charts-section">
+            <div class="dvp-summary-chart" id="dvp-summary-chart"></div>
+            <div class="dvp-donut-chart-container" id="dvp-donut-container"></div>
+          </div>
+          
+          <!-- Totals with Trends -->
           <div class="dvp-totals" id="dvp-totals"></div>
+          
+          <!-- Footer -->
+          <div class="dvp-dashboard-footer">
+            <div class="dvp-footer-left">
+              <span class="dvp-footer-label">Last updated:</span>
+              <span class="dvp-footer-timestamp" id="dvp-footer-timestamp">—</span>
+              <span class="dvp-footer-separator">•</span>
+              <span class="dvp-footer-source">Data source: Sales Raw Data + RTL Snapshots</span>
+            </div>
+            <div class="dvp-footer-right">
+              <div class="dvp-footer-quote">"Driven by Excellence, Powered by Innovation"</div>
+              <div class="dvp-footer-brand">TOYOTA • ABDUL LATIF JAMEEL</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -13140,39 +13210,53 @@
     const cardsEl = $("#dvp-cards");
     cardsEl.innerHTML = data.cards.map((c) => {
       const status = dvpStatusFor(c.delivered, c.proforma);
+      const delTrend = c.prevDelivered ? ((c.delivered - c.prevDelivered) / c.prevDelivered * 100).toFixed(1) : 0;
+      const proTrend = c.prevProforma ? ((c.proforma - c.prevProforma) / c.prevProforma * 100).toFixed(1) : 0;
+      const trendIcon = delTrend >= 0 ? '↗' : '↘';
+      const trendClass = delTrend >= 0 ? 'trend-up' : 'trend-down';
+      
       const guestNote = c.id === "guest"
         ? `<p class="dvp-guest-note">${c.guestCount
           ? escapeHtml(String(c.guestCount)) + " advisor(s) marked Guest Exp in Admin"
           : "No Guest Exp advisors selected in Admin yet"}</p>`
         : "";
-      return `<article class="dvp-card theme-${escapeHtml(c.theme)}">
-        <div class="dvp-card-hero" style="--dvp-img:url('${escapeHtml(c.image)}')">
-          <div class="dvp-card-hero-copy">
-            <h3>${escapeHtml(c.title)}</h3>
-            <p>${escapeHtml(c.subtitle)}</p>
+      
+      return `<article class="dvp-card dvp-card-pro theme-${escapeHtml(c.theme)}">
+        <div class="dvp-card-header">
+          <div class="dvp-card-title-section">
+            <h3 class="dvp-card-title-pro">${escapeHtml(c.title)}</h3>
+            <p class="dvp-card-subtitle-pro">${escapeHtml(c.subtitle)}</p>
+          </div>
+          <div class="dvp-card-image-pro">
+            <img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.title)}" onerror="this.style.display='none'">
           </div>
         </div>
-        <div class="dvp-card-body">
-          <div class="dvp-kpi-row">
-            <div class="dvp-kpi is-del">
-              <span class="ico" aria-hidden="true">▣</span>
-              <div>
-                <span class="k">Delivered</span>
-                <span class="v">${escapeHtml(formatNumber(c.delivered))}</span>
+        
+        <div class="dvp-card-body-pro">
+          <div class="dvp-kpi-row-pro">
+            <div class="dvp-kpi-pro is-del">
+              <div class="dvp-kpi-label">Delivered</div>
+              <div class="dvp-kpi-value">${escapeHtml(formatNumber(c.delivered))}</div>
+              <div class="dvp-kpi-trend ${trendClass}">
+                <span class="trend-icon">${trendIcon}</span>
+                <span>${Math.abs(delTrend)}%</span>
               </div>
             </div>
-            <div class="dvp-kpi is-pro">
-              <span class="ico" aria-hidden="true">▤</span>
-              <div>
-                <span class="k">Pro-Forma</span>
-                <span class="v">${escapeHtml(formatNumber(c.proforma))}</span>
+            <div class="dvp-kpi-pro is-pro">
+              <div class="dvp-kpi-label">Pro-Forma</div>
+              <div class="dvp-kpi-value">${escapeHtml(formatNumber(c.proforma))}</div>
+              <div class="dvp-kpi-trend ${trendClass}">
+                <span class="trend-icon">${trendIcon}</span>
+                <span>${Math.abs(proTrend)}%</span>
               </div>
             </div>
           </div>
+          
           ${dvpCylHtml(c.delivered, c.proforma, c.theme)}
-          <div class="dvp-card-foot">
-            <span class="dvp-status-ico" aria-hidden="true">${status.icon}</span>
-            <span>${escapeHtml(status.text)}</span>
+          
+          <div class="dvp-card-status-pro">
+            <span class="dvp-status-icon-pro">${status.icon}</span>
+            <span class="dvp-status-text">${escapeHtml(status.text)}</span>
           </div>
           ${guestNote}
         </div>
@@ -13203,7 +13287,10 @@
     const chartEl = $("#dvp-summary-chart");
     if (chartEl) {
       chartEl.innerHTML = `
-        <h4>All Channels Overview</h4>
+        <div class="dvp-chart-header">
+          <h4 class="dvp-chart-title">All Channels Overview</h4>
+          <p class="dvp-chart-subtitle">Delivered vs Pro-Forma by Channel</p>
+        </div>
         <div class="dvp-summary-bars">
           ${data.cards.map(c => {
             const delWidth = Math.max(20, (c.delivered / maxDel) * 100);
@@ -13223,7 +13310,110 @@
             `;
           }).join("")}
         </div>
+        <div class="dvp-chart-legend">
+          <div class="dvp-legend-item">
+            <span class="dvp-legend-color" style="background: #4ade80"></span>
+            <span>Delivered</span>
+          </div>
+          <div class="dvp-legend-item">
+            <span class="dvp-legend-color" style="background: #ef4444"></span>
+            <span>Pro-Forma</span>
+          </div>
+        </div>
       `;
+    }
+
+    // Render donut chart for Total Sales by Channel
+    const donutEl = $("#dvp-donut-container");
+    if (donutEl) {
+      const totalSales = data.cards.reduce((sum, c) => sum + c.delivered, 0);
+      const colors = {
+        lexus: '#1f2937',
+        telesales: '#3b82f6',
+        b2c: '#d97706',
+        guest: '#7c3aed'
+      };
+      
+      let currentAngle = -90;
+      const slices = data.cards.map(c => {
+        const percentage = totalSales > 0 ? (c.delivered / totalSales * 100) : 0;
+        const angle = (percentage / 100) * 360;
+        const slice = {
+          title: c.title,
+          value: c.delivered,
+          percentage: percentage.toFixed(1),
+          color: colors[c.id] || '#94a3b8',
+          startAngle: currentAngle,
+          endAngle: currentAngle + angle
+        };
+        currentAngle += angle;
+        return slice;
+      });
+
+      donutEl.innerHTML = `
+        <div class="dvp-chart-header">
+          <h4 class="dvp-chart-title">Total Sales (All Channels)</h4>
+          <p class="dvp-chart-subtitle">Distribution by Channel</p>
+        </div>
+        <div class="dvp-donut-chart">
+          <svg viewBox="0 0 200 200" class="dvp-donut-svg">
+            ${slices.map(s => {
+              const start = (s.startAngle * Math.PI) / 180;
+              const end = (s.endAngle * Math.PI) / 180;
+              const cx = 100;
+              const cy = 100;
+              const radius = 70;
+              const innerRadius = 45;
+              
+              const x1 = cx + radius * Math.cos(start);
+              const y1 = cy + radius * Math.sin(start);
+              const x2 = cx + radius * Math.cos(end);
+              const y2 = cy + radius * Math.sin(end);
+              const x3 = cx + innerRadius * Math.cos(end);
+              const y3 = cy + innerRadius * Math.sin(end);
+              const x4 = cx + innerRadius * Math.cos(start);
+              const y4 = cy + innerRadius * Math.sin(start);
+              
+              const largeArc = (s.endAngle - s.startAngle) > 180 ? 1 : 0;
+              
+              return `
+                <path d="M ${x1},${y1} A ${radius},${radius} 0 ${largeArc},1 ${x2},${y2} L ${x3},${y3} A ${innerRadius},${innerRadius} 0 ${largeArc},0 ${x4},${y4} Z" 
+                      fill="${s.color}" 
+                      class="dvp-donut-slice"
+                      data-title="${escapeHtml(s.title)}"
+                      data-value="${s.value}"
+                      data-percentage="${s.percentage}">
+                </path>
+              `;
+            }).join("")}
+            <circle cx="100" cy="100" r="45" fill="#fff"/>
+            <text x="100" y="95" text-anchor="middle" class="dvp-donut-center-value">${escapeHtml(formatNumber(totalSales))}</text>
+            <text x="100" y="110" text-anchor="middle" class="dvp-donut-center-label">Total</text>
+          </svg>
+          <div class="dvp-donut-legend">
+            ${slices.map(s => `
+              <div class="dvp-donut-legend-item">
+                <span class="dvp-legend-color" style="background: ${s.color}"></span>
+                <span class="dvp-legend-text">${escapeHtml(s.title)}</span>
+                <span class="dvp-legend-value">${s.percentage}%</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    // Update footer timestamp
+    const footerTs = $("#dvp-footer-timestamp");
+    if (footerTs) {
+      footerTs.textContent = new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Riyadh',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
   }
 
