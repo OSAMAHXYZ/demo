@@ -1181,7 +1181,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day N = Data Uploader file for that date · Col J age 0 = Tot/RES · Admin Push = today · day-end locks yesterday</span>
+                <span class="hint" id="bas-month-hint">Day N = that day’s RTL file only · empty day = no file · Admin Push = today only</span>
               </div>
             </div>
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
@@ -11029,22 +11029,15 @@
    * - Day N file (Data Uploader for that calendar date, or Admin Push for today):
    *   Tot = allocation-matched cars with Col J age 0 (or blank age).
    *   RES = same, Search Area = Retail Electronic Sales.
-   * - Days without a file: fall back to live RTL Col J age inference.
-   * - Live Admin Push always archives as today; when the Riyadh day ends the last
-   *   snapshot for that day stays locked on the server.
+   * - Days without a file stay empty (no live-RTL age fill-in) once any day file exists.
+   * - If the month has no day files yet, fall back to live RTL Col J age inference.
+   * - Admin Push only archives as today.
    */
   function buildBasMonthlyData() {
     const ctx = basMonthContext();
     const pack = getCachedRtlActiveMonth(ctx.monthKey);
     const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : null;
     const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
-    const fileDays = new Set();
-    if (hasDayFiles) {
-      Object.keys(dayFiles).forEach((dateKey) => {
-        const dayNum = Number(String(dateKey).slice(8, 10));
-        if (dayNum >= 1 && dayNum <= 31) fileDays.add(dayNum);
-      });
-    }
 
     const matched = [];
     let mode = hasDayFiles ? "daily" : "age";
@@ -11114,39 +11107,35 @@
           });
         });
       }
-    }
-
-    // Live RTL age fallback for days that do not yet have an uploader/admin day file.
-    const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
-    rtlRows.forEach((car) => {
-      const leaf = matchRtlToAllocLeaf(car);
-      if (!leaf) return;
-      const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
-      if (!collDate) return;
-      if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
-      const collectionDay = collDate.getDate();
-      if (fileDays.has(collectionDay)) return; // that day already locked to its uploader file
-
-      const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
-      matched.push({
-        ...car,
-        seg: leaf.seg,
-        allocProduct: leaf.product,
-        allocSfx: leaf.sfx,
-        leafId: leaf.id,
-        allocation: Number(allocationValues[leaf.id]) || 0,
-        collectionDate: collDate,
-        collectionDay,
-        collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-        isTodayArrival: age === 0,
-        isLate: age != null && age >= 1,
-        age,
-        _fromDayFile: false,
+    } else {
+      // No day files yet — infer collection day from live RTL Col J ages only.
+      const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
+      rtlRows.forEach((car) => {
+        const leaf = matchRtlToAllocLeaf(car);
+        if (!leaf) return;
+        const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
+        if (!collDate) return;
+        if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+        const collectionDay = collDate.getDate();
+        const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+        matched.push({
+          ...car,
+          seg: leaf.seg,
+          allocProduct: leaf.product,
+          allocSfx: leaf.sfx,
+          leafId: leaf.id,
+          allocation: Number(allocationValues[leaf.id]) || 0,
+          collectionDate: collDate,
+          collectionDay,
+          collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          isTodayArrival: age === 0,
+          isLate: age != null && age >= 1,
+          age,
+          _fromDayFile: false,
+        });
       });
-    });
-    if (!hasDayFiles && matched.length) mode = "age";
-    else if (hasDayFiles && rtlRows.length) mode = "hybrid";
-    else if (hasDayFiles) mode = "daily";
+      if (matched.length) mode = "age";
+    }
 
     const byLeaf = emptyBasLeafRows();
     const arrivalMatched = matched.filter((car) => !car._lateOnly);
@@ -11236,12 +11225,10 @@
       const rangeNote = live && (live.preset === "this_month" || live.preset === "today")
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
-      if (mode === "hybrid") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) from Data Uploader · other days from live RTL age · day N = Col J age 0 · today day ${ctx.todayDay}`;
-      } else if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · day N = age 0 from that day's RTL (Uploader) · Admin Push = today only · today day ${ctx.todayDay}`;
+      if (mode === "daily") {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · empty days stay empty · day N = age 0 from that day's RTL · Admin Push = today only · today day ${ctx.todayDay}`;
       } else {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · save a day in Data Uploader to lock that day · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · drop day files in Data Uploader to lock each day · today day ${ctx.todayDay}`;
       }
     }
 
