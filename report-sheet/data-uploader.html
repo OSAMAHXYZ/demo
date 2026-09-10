@@ -391,7 +391,11 @@
       <section class="card">
         <h2>Saved snapshots</h2>
         <p class="sub">Append-only archive. Each save creates a new timestamped entry — previous snapshots are kept.</p>
-        <div class="actions" style="margin-top:0">
+        <div class="field">
+          <label for="snap-filter">Filter by date / time / VIN count</label>
+          <input id="snap-filter" type="search" placeholder="Search snapshots…" />
+        </div>
+        <div class="actions">
           <button type="button" id="btn-refresh">Refresh list</button>
         </div>
         <div class="status" id="list-status">Loading…</div>
@@ -436,6 +440,47 @@
         </table>
       </div>
     </section>
+
+    <section class="card full">
+      <h2>Retail Electronic Sales tracker</h2>
+      <p class="sub">Track all VINs in Retail Electronic Sales category. Shows VINs that left this category (moved to other search areas).</p>
+      <div class="row">
+        <div class="field">
+          <label for="res-from">From day</label>
+          <select id="res-from"></select>
+        </div>
+        <div class="field">
+          <label for="res-to">To day</label>
+          <select id="res-to"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="res-filter">Search area filter (leave empty for "retail electronic sales")</label>
+        <input id="res-filter" type="text" placeholder="retail electronic sales" />
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-res-compare">Track category</button>
+        <button type="button" id="btn-export-res" disabled>Export Excel</button>
+      </div>
+      <div class="status" id="res-status"></div>
+      <div class="kpis" id="res-kpis" hidden>
+        <div class="kpi"><div class="lab">Total in category (from)</div><div class="val" id="res-total-from">0</div></div>
+        <div class="kpi"><div class="lab">Total in category (to)</div><div class="val" id="res-total-to">0</div></div>
+        <div class="kpi"><div class="lab">Removed from category</div><div class="val" id="res-removed">0</div></div>
+        <div class="kpi"><div class="lab">Still in category</div><div class="val" id="res-same">0</div></div>
+      </div>
+      <div class="tabs" id="res-tabs" hidden>
+        <button type="button" class="active" data-res-tab="all-from">All VINs (from day)</button>
+        <button type="button" data-res-tab="all-to">All VINs (to day)</button>
+        <button type="button" data-res-tab="removed">Removed from category</button>
+      </div>
+      <div class="table-wrap" id="res-wrap" hidden>
+        <table>
+          <thead id="res-head"></thead>
+          <tbody id="res-body"></tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -453,6 +498,8 @@
   let snapshots = [];
   let lastCompare = null;
   let cmpTab = "added";
+  let lastResCompare = null;
+  let resTab = "all-from";
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -811,7 +858,23 @@
       list.innerHTML = `<li><span class="muted">Push RTL from Admin or save here to start the archive.</span></li>`;
       return;
     }
-    list.innerHTML = snapshots.map((s) => {
+    
+    const filterQuery = String($("#snap-filter")?.value || "").trim().toLowerCase();
+    const filtered = !filterQuery
+      ? snapshots
+      : snapshots.filter((s) => {
+          const label = snapLabel(s).toLowerCase();
+          const id = (s.id || s.date || "").toLowerCase();
+          const fileName = (s.fileName || "").toLowerCase();
+          return label.includes(filterQuery) || id.includes(filterQuery) || fileName.includes(filterQuery);
+        });
+    
+    if (filtered.length === 0) {
+      list.innerHTML = `<li><span class="muted">No snapshots match your filter.</span></li>`;
+      return;
+    }
+    
+    list.innerHTML = filtered.map((s) => {
       const id = s.id || s.date || "";
       const canDelete = id.includes("T");
       return `
@@ -824,6 +887,7 @@
           ${canDelete
             ? `<button type="button" data-del="${escapeHtml(id)}">Delete</button>`
             : `<span class="muted">legacy</span>`}
+          <button type="button" class="btn-use-date" data-date="${escapeHtml(s.date || s.id.split('T')[0] || '')}">Use date</button>
         </div>
       </li>`;
     }).join("");
@@ -834,6 +898,8 @@
       const id = s.id || s.date || "";
       return `<option value="${escapeHtml(id)}">${escapeHtml(snapLabel(s))}</option>`;
     }).join("");
+    
+    // Fill day-by-day compare selects
     const from = $("#cmp-from");
     const to = $("#cmp-to");
     const prevFrom = from.value;
@@ -847,6 +913,21 @@
     } else if (snapshots.length === 1) {
       from.value = ids[0];
       to.value = ids[0];
+    }
+    
+    // Fill Retail Electronic Sales selects
+    const resFrom = $("#res-from");
+    const resTo = $("#res-to");
+    const prevResFrom = resFrom.value;
+    const prevResTo = resTo.value;
+    resFrom.innerHTML = opts || `<option value="">—</option>`;
+    resTo.innerHTML = opts || `<option value="">—</option>`;
+    if (snapshots.length >= 2) {
+      resFrom.value = prevResFrom && ids.includes(prevResFrom) ? prevResFrom : ids[1];
+      resTo.value = prevResTo && ids.includes(prevResTo) ? prevResTo : ids[0];
+    } else if (snapshots.length === 1) {
+      resFrom.value = ids[0];
+      resTo.value = ids[0];
     }
   }
 
@@ -973,20 +1054,33 @@
     }
   });
 
+  $("#snap-filter").addEventListener("input", renderSnapList);
+
   $("#btn-refresh").addEventListener("click", () => loadMeta());
 
   $("#snap-list").addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-del]");
-    if (!btn) return;
-    const id = btn.getAttribute("data-del");
-    if (!id || !confirm(`Delete RTL snapshot ${id}? This cannot be undone.`)) return;
-    try {
-      const res = await fetch(`${API_DELETE}/${encodeURIComponent(id)}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      await loadMeta();
-    } catch (err) {
-      setStatus($("#list-status"), err.message || "Delete failed", "err");
+    const delBtn = e.target.closest("[data-del]");
+    if (delBtn) {
+      const id = delBtn.getAttribute("data-del");
+      if (!id || !confirm(`Delete RTL snapshot ${id}? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`${API_DELETE}/${encodeURIComponent(id)}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        await loadMeta();
+      } catch (err) {
+        setStatus($("#list-status"), err.message || "Delete failed", "err");
+      }
+      return;
+    }
+    
+    const dateBtn = e.target.closest(".btn-use-date");
+    if (dateBtn) {
+      const date = dateBtn.getAttribute("data-date");
+      if (date) {
+        $("#snap-date").value = date;
+        setStatus($("#scan-status"), `Date set to ${date} from saved snapshot.`, "ok");
+      }
     }
   });
 
@@ -1057,6 +1151,181 @@
       XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
     });
     XLSX.writeFile(wb, `RTL-compare-${lastCompare.fromDate}-to-${lastCompare.toDate}.xlsx`);
+  });
+
+  // Retail Electronic Sales tracker
+  function renderResTab() {
+    if (!lastResCompare) return;
+    const map = {
+      "all-from": lastResCompare.allFrom || [],
+      "all-to": lastResCompare.allTo || [],
+      "removed": lastResCompare.removed || [],
+    };
+    const rows = map[resTab] || [];
+    const head = $("#res-head");
+    const body = $("#res-body");
+
+    // Build header from first row with details
+    const firstRow = rows.find(r => r.details) || rows[0];
+    const detailKeys = firstRow && firstRow.details ? Object.keys(firstRow.details) : [];
+    
+    head.innerHTML = `<tr>
+      <th>VIN</th>
+      <th>Product</th>
+      <th>Suffix</th>
+      <th>Year</th>
+      <th>Ext</th>
+      <th>Int</th>
+      <th>Age</th>
+      <th>Usage</th>
+      <th>Status</th>
+      <th>Secondary Status</th>
+      <th>Location</th>
+      <th>Vehicle Search Area</th>
+      ${resTab === "removed" ? "<th>New Search Area</th>" : ""}
+      ${detailKeys.slice(0, 5).map(k => `<th>${escapeHtml(k)}</th>`).join("")}
+    </tr>`;
+
+    body.innerHTML = rows.map((r) => `
+      <tr>
+        <td class="mono">${escapeHtml(r.vin)}</td>
+        <td>${escapeHtml(r.product || "—")}</td>
+        <td>${escapeHtml(r.suffix || "—")}</td>
+        <td>${escapeHtml(r.year || "—")}</td>
+        <td>${escapeHtml(r.ext || "—")}</td>
+        <td>${escapeHtml(r.int || "—")}</td>
+        <td>${escapeHtml(r.age || "—")}</td>
+        <td>${escapeHtml(r.usage || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(r.status || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(r.secondaryStatus || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(r.location || "—")}</td>
+        <td class="wrap-cell">${escapeHtml(r.vehicleSearchArea || "—")}</td>
+        ${resTab === "removed" ? `<td class="wrap-cell">${escapeHtml(r.newSearchArea || "—")}</td>` : ""}
+        ${detailKeys.slice(0, 5).map(k => `<td class="wrap-cell">${escapeHtml((r.details && r.details[k]) || "—")}</td>`).join("")}
+      </tr>
+    `).join("") || `<tr><td colspan="15" class="muted">None</td></tr>`;
+
+    document.querySelectorAll("#res-tabs button").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.resTab === resTab);
+    });
+  }
+
+  $("#btn-res-compare").addEventListener("click", async () => {
+    const from = $("#res-from").value;
+    const to = $("#res-to").value;
+    const filter = ($("#res-filter").value || "retail electronic sales").trim().toLowerCase();
+    
+    if (!from || !to) {
+      setStatus($("#res-status"), "Need two saved days to compare.", "err");
+      return;
+    }
+    
+    setStatus($("#res-status"), "Loading snapshots and analyzing…");
+    try {
+      // Fetch both snapshots with full data
+      const [resFrom, resTo] = await Promise.all([
+        fetch(`/api/rtl-daily/${encodeURIComponent(from)}`, { cache: "no-store" }).then(r => r.json()),
+        fetch(`/api/rtl-daily/${encodeURIComponent(to)}`, { cache: "no-store" }).then(r => r.json())
+      ]);
+      
+      if (!resFrom.vehicles || !resTo.vehicles) {
+        throw new Error("Could not load vehicle data from snapshots");
+      }
+      
+      // Filter vehicles in the category
+      const fromFiltered = resFrom.vehicles.filter(v => 
+        (v.vehicleSearchArea || "").toLowerCase().includes(filter)
+      );
+      const toFiltered = resTo.vehicles.filter(v => 
+        (v.vehicleSearchArea || "").toLowerCase().includes(filter)
+      );
+      
+      // Find removed (VINs that were in category but are no longer)
+      const toVinMap = new Map(resTo.vehicles.map(v => [v.vin, v]));
+      const removed = fromFiltered
+        .filter(v => {
+          const newVin = toVinMap.get(v.vin);
+          return newVin && !(newVin.vehicleSearchArea || "").toLowerCase().includes(filter);
+        })
+        .map(v => ({
+          ...v,
+          newSearchArea: (toVinMap.get(v.vin)?.vehicleSearchArea || "Not found")
+        }));
+      
+      lastResCompare = {
+        allFrom: fromFiltered,
+        allTo: toFiltered,
+        removed: removed,
+        fromCount: fromFiltered.length,
+        toCount: toFiltered.length,
+        removedCount: removed.length,
+        fromDate: from,
+        toDate: to,
+        filter: filter
+      };
+      
+      resTab = "all-from";
+      $("#res-total-from").textContent = String(fromFiltered.length);
+      $("#res-total-to").textContent = String(toFiltered.length);
+      $("#res-removed").textContent = String(removed.length);
+      $("#res-same").textContent = String(fromFiltered.length - removed.length);
+      $("#res-kpis").hidden = false;
+      $("#res-tabs").hidden = false;
+      $("#res-wrap").hidden = false;
+      $("#btn-export-res").disabled = false;
+      renderResTab();
+      
+      setStatus(
+        $("#res-status"),
+        `Tracked "${filter}" · From: ${fromFiltered.length} VINs · To: ${toFiltered.length} VINs · Removed: ${removed.length}`,
+        "ok"
+      );
+    } catch (err) {
+      setStatus($("#res-status"), err.message || "Analysis failed", "err");
+    }
+  });
+
+  $("#res-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-res-tab]");
+    if (!btn) return;
+    resTab = btn.dataset.resTab;
+    renderResTab();
+  });
+
+  $("#btn-export-res").addEventListener("click", () => {
+    if (!lastResCompare || typeof XLSX === "undefined") return;
+    const wb = XLSX.utils.book_new();
+    
+    const sheets = [
+      ["All From Day", lastResCompare.allFrom || []],
+      ["All To Day", lastResCompare.allTo || []],
+      ["Removed From Category", lastResCompare.removed || []],
+    ];
+    
+    sheets.forEach(([name, rows]) => {
+      const normalized = rows.map((r) => {
+        const base = {
+          VIN: r.vin,
+          Product: r.product || "",
+          Suffix: r.suffix || "",
+          Year: r.year || "",
+          Exterior: r.ext || "",
+          Interior: r.int || "",
+          Age: r.age || "",
+          Usage: r.usage || "",
+          Status: r.status || "",
+          "Secondary Status": r.secondaryStatus || "",
+          Location: r.location || "",
+          "Vehicle Search Area": r.vehicleSearchArea || "",
+        };
+        if (r.newSearchArea) base["New Search Area"] = r.newSearchArea;
+        return { ...base, ...(r.details || {}) };
+      });
+      const ws = XLSX.utils.json_to_sheet(normalized.length ? normalized : [{ Note: "None" }]);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    });
+    
+    XLSX.writeFile(wb, `RTL-category-${lastResCompare.filter.replace(/\s+/g, "-")}-${lastResCompare.fromDate}-to-${lastResCompare.toDate}.xlsx`);
   });
 
   loadMeta();
