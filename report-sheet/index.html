@@ -14,7 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910dvplegend1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910bofull2" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -587,14 +588,14 @@
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-top5" data-expand="chart-bo-top5" role="button" tabindex="0" aria-label="Open Back Orders by Model wide view">
                 <div class="pbi-viz-head">
                   <h2>Back Orders by Model</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-top5" title="Open full model list with details">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-top5" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-top5"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-status-card bo-tap" data-chart-id="chart-bo-status" data-expand="chart-bo-status" role="button" tabindex="0" aria-label="Open Order Status wide view">
                 <div class="pbi-viz-head">
                   <h2>Order Status</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-status" title="Open wide status detail">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-status" title="Open full detail">Full detail</button>
                 </div>
                 <div class="bo-donut-wrap">
                   <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
@@ -617,7 +618,7 @@
               <article class="card pbi-viz bo-aging-panel bo-tap" data-chart-id="chart-bo-aging-buckets" data-expand="chart-bo-aging-buckets" role="button" tabindex="0" aria-label="Open Aging Breakdown wide view">
                 <div class="pbi-viz-head">
                   <h2>Aging Breakdown</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets" title="Open wide aging detail">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-aging-buckets"></canvas></div></div>
               </article>
@@ -640,28 +641,28 @@
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-salestype" data-expand="chart-bo-salestype" role="button" tabindex="0" style="margin:0" aria-label="Open Sales Type wide view">
                 <div class="pbi-viz-head">
                   <h2>Sales Type · Confirmed vs Not Confirmed</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-salestype" title="Open wide sales type detail">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-salestype" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-salestype"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-backlog" data-expand="chart-bo-backlog" role="button" tabindex="0" style="margin:0" aria-label="Open backlog wide view">
                 <div class="pbi-viz-head">
                   <h2>Top 10 Products by Backlog</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-backlog" title="Open full backlog list">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-backlog" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-aging" data-expand="chart-bo-aging" role="button" tabindex="0" style="margin:0" aria-label="Open aging by product wide view">
                 <div class="pbi-viz-head">
                   <h2>Average Aging by Product (Days)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging" title="Open full aging list">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-contrib" data-expand="chart-bo-contrib" role="button" tabindex="0" style="margin:0" aria-label="Open contribution wide view">
                 <div class="pbi-viz-head">
                   <h2>Contribution by Product</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-contrib" title="Open full contribution list">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-contrib" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-contrib"></canvas></div></div>
               </article>
@@ -683,14 +684,14 @@
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-car-sfx" data-expand="chart-bo-car-sfx" role="button" tabindex="0" style="margin:0" aria-label="Open suffix BO wide view">
                 <div class="pbi-viz-head">
                   <h2>BO by suffix (this car)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx" title="Open all suffixes">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-sfx"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-car-pay" data-expand="chart-bo-car-pay" role="button" tabindex="0" style="margin:0" aria-label="Open payment mix wide view">
                 <div class="pbi-viz-head">
                   <h2>Cash · Bank · Employee · Fleet</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay" title="Open payment mix detail">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-pay"></canvas></div></div>
               </article>
@@ -715,14 +716,14 @@
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-sfx" data-expand="chart-bo-sfx" role="button" tabindex="0" style="margin:0" aria-label="Open SFX demand wide view">
                 <div class="pbi-viz-head">
                   <h2>SFX / Grade demand (Top 12)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx" title="Open all SFX grades">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx"></canvas></div></div>
               </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-sfx-confirm" data-expand="chart-bo-sfx-confirm" role="button" tabindex="0" style="margin:0" aria-label="Open SFX confirmation wide view">
                 <div class="pbi-viz-head">
                   <h2>SFX confirmation rate</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm" title="Open all SFX confirmation rates">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx-confirm"></canvas></div></div>
               </article>
@@ -733,7 +734,7 @@
               <article class="card pbi-viz bo-span-2 bo-tap" data-chart-id="chart-bo-confirm" data-expand="chart-bo-confirm" role="button" tabindex="0" style="margin:0" hidden aria-label="Open confirmation by product wide view">
                 <div class="pbi-viz-head">
                   <h2>Confirmation by product</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-confirm" title="Open full confirmation list">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-confirm" title="Open full detail">Full detail</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-confirm"></canvas></div></div>
               </article>
@@ -5740,8 +5741,15 @@
       return;
     }
     if (sourceId === "chart-sr-cancelcount") sourceId = "chart-cancel";
-    const snap = chartSnapshots[sourceId];
-    if (!snap) return;
+    // BO charts: always rebuild full-detail snap so Wide never reuses the compact Top-N card data.
+    let snap = String(sourceId).startsWith("chart-bo-")
+      ? (buildBoWideSnapshot(sourceId) || chartSnapshots[sourceId])
+      : chartSnapshots[sourceId];
+    if (!snap) {
+      console.warn("[wide] no snapshot for", sourceId);
+      return;
+    }
+    chartSnapshots[sourceId] = snap;
     hideWideTableMode();
     hideWidePerfExtra();
     hideWideCancelExtra();
@@ -5759,14 +5767,17 @@
     }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     const baseTitle = titleEl ? titleEl.textContent : "Chart";
+    const itemN = (snap.labels || []).length;
     $("#pbi-wide-title").textContent = isCancel
       ? "Cancellation % · Cancelled BOs"
       : isBo
-        ? `${baseTitle} · Full detail`
+        ? `${baseTitle} · Full detail (${itemN} item${itemN === 1 ? "" : "s"})`
         : baseTitle;
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
+    backdrop.removeAttribute("hidden");
     backdrop.classList.add("show");
+    document.body.classList.add("pbi-wide-open");
 
     const n = (snap.labels || []).length;
     const horizontal = !!(snap.extra && snap.extra.horizontal);
@@ -5860,6 +5871,7 @@
     if (!backdrop) return;
     backdrop.classList.remove("show");
     backdrop.hidden = true;
+    document.body.classList.remove("pbi-wide-open");
     const totals = $("#pbi-wide-totals");
     if (totals) {
       totals.hidden = true;
@@ -9399,6 +9411,130 @@
       confirmPct: a.confirmPct,
       avgAging: a.avgAging,
     }));
+  }
+
+  /** Rebuild full-detail Wide snapshot for BO charts from current filters (not the compact Top-N card). */
+  function buildBoWideSnapshot(sourceId) {
+    const d = window._data;
+    if (!d || !Array.isArray(d.bos)) return null;
+    const list = filteredBos(d);
+    const aggs = typeof productAgg === "function" ? productAgg(list) : [];
+    const m = boMetrics(list);
+    const allProducts = aggs.slice();
+    const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
+      .map(([salesType, items]) => ({ salesType, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    const sfxAll = [...groupBoBy(list, (b) => b.sfx).entries()]
+      .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+      .sort((a, b) => b.total - a.total);
+    const buckets = agingBucketCounts(list);
+    const agingAll = aggs.slice().sort((a, b) => b.avgAging - a.avgAging);
+    const totalBo = m.total || allProducts.reduce((s, a) => s + a.total, 0) || 1;
+
+    const pack = (type, labels, values, extra) => ({
+      type,
+      labels: labels ? labels.slice() : [],
+      values: Array.isArray(values) ? values.slice() : values,
+      extra: cloneChartExtra(extra || {}),
+    });
+
+    switch (sourceId) {
+      case "chart-bo-top5":
+      case "chart-bo-backlog":
+      case "chart-bo-confirm":
+        return pack("bar", allProducts.map((a) => a.product), null, {
+          horizontal: sourceId !== "chart-bo-confirm",
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        });
+      case "chart-bo-status":
+        return pack("doughnut",
+          [`Confirmed ${+(m.confirmPct * 100).toFixed(1)}%`, `Not Confirmed ${+((1 - m.confirmPct) * 100).toFixed(1)}%`],
+          [m.confirmed || 0, m.notConfirmed || 0],
+          {
+            legend: true,
+            cutout: "62%",
+            backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+          });
+      case "chart-bo-aging-buckets":
+        return pack("bar", buckets.map((b) => b.label), buckets.map((b) => b.count), {
+          backgroundColor: buckets.map((b) => b.color),
+          showValues: true,
+        });
+      case "chart-bo-aging":
+        return pack("bar", agingAll.map((a) => a.product), agingAll.map((a) => a.avgAging), {
+          horizontal: true,
+          valueSuffix: "d",
+          showValues: true,
+          backgroundColor: agingAll.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+          rowMeta: boProductRowMeta(agingAll),
+        });
+      case "chart-bo-contrib":
+        return pack("bar", allProducts.map((a) => a.product), allProducts.map((a) => +((a.total / totalBo) * 100).toFixed(1)), {
+          horizontal: true,
+          backgroundColor: "rgba(235, 10, 30, 0.85)",
+          valueSuffix: "%",
+          showValues: true,
+          rowMeta: boProductRowMeta(allProducts),
+        });
+      case "chart-bo-salestype":
+        return pack("bar", typeRows.map((r) => r.salesType), null, {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(typeRows),
+          rowMeta: typeRows.map((r) => ({
+            name: r.salesType,
+            total: r.total,
+            confirmed: r.confirmed,
+            notConfirmed: r.notConfirmed,
+            confirmPct: r.confirmPct,
+            avgAging: r.avgAging,
+          })),
+        });
+      case "chart-bo-sfx":
+        return pack("bar", sfxAll.map((r) => r.sfx), null, {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxAll),
+          rowMeta: boSfxRowMeta(sfxAll),
+        });
+      case "chart-bo-sfx-confirm":
+        return pack("bar", sfxAll.map((r) => r.sfx), sfxAll.map((r) => +(r.confirmPct * 100).toFixed(1)), {
+          horizontal: true,
+          max: 100,
+          valueSuffix: "%",
+          showValues: true,
+          backgroundColor: sfxAll.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+          rowMeta: boSfxRowMeta(sfxAll),
+        });
+      case "chart-bo-car-sfx": {
+        if (!boView.car) return chartSnapshots[sourceId] || null;
+        const carRows = list.filter((b) => b.product === boView.car);
+        const sfxRows = [...groupBoBy(carRows, (b) => b.sfx || "—").entries()]
+          .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
+          .sort((a, b) => b.total - a.total);
+        return pack("bar", sfxRows.map((r) => r.sfx), null, {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxRows),
+          rowMeta: boSfxRowMeta(sfxRows),
+        });
+      }
+      case "chart-bo-car-pay": {
+        if (!boView.car) return chartSnapshots[sourceId] || null;
+        const carRows = list.filter((b) => b.product === boView.car);
+        const pay = countPayTypes(carRows);
+        const payLabels = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0);
+        const payValues = payLabels.map((t) => pay[t] || 0);
+        return pack("doughnut", payLabels, payValues, { legend: true, cutout: "62%" });
+      }
+      default:
+        return null;
+    }
   }
 
   function renderBoCharts(list, aggs, metrics) {

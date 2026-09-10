@@ -861,21 +861,25 @@ button:disabled {
 
 .pbi-expand {
   appearance: none;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--navy);
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #be123c;
   border-radius: 8px;
   padding: 4px 10px;
   font: inherit;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   flex-shrink: 0;
+  letter-spacing: 0.01em;
+  z-index: 2;
+  position: relative;
 }
 
 .pbi-expand:hover {
-  border-color: var(--navy);
+  border-color: #eb0a1e;
   background: #fff;
+  color: #eb0a1e;
 }
 
 .chart-scroll {
@@ -926,8 +930,13 @@ button:disabled {
   padding: 24px;
 }
 
-.pbi-wide-backdrop.show {
-  display: flex;
+.pbi-wide-backdrop.show,
+.pbi-wide-backdrop.show[hidden] {
+  display: flex !important;
+}
+
+body.pbi-wide-open {
+  overflow: hidden;
 }
 
 .pbi-wide-modal {
