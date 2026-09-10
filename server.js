@@ -435,9 +435,8 @@ function readRtlSnapshotFile(fp, fallbackId) {
       || '';
     if (!id) return null;
     const date = normalizeDateKey(parsed.date) || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : '');
-    const asOfDate = normalizeDateKey(parsed.asOfDate)
-      || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : '')
-      || date;
+    // Ages in a day file are relative to the schedule day it is assigned to (not upload time).
+    const asOfDate = normalizeDateKey(parsed.asOfDate) || date;
     return {
       id,
       date,
@@ -617,7 +616,7 @@ function saveRtlDailyIndex(index) {
 
 /** Mark a specific snapshot as the active RTL file for a calendar day (Use date).
  * Optional dateOverride reassigns the snapshot to another schedule day.
- * asOfDate (extract day for Col J ages) is preserved so Tot/RES still count correctly.
+ * Ages (Col J) are treated as relative to that schedule day.
  */
 function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const direct = normalizeRtlSnapshotId(idOrDate);
@@ -630,12 +629,9 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const date = override || prevDate;
   if (!date || !isValidRtlDateKey(date)) return null;
 
-  // Ages in the Excel are relative to the extract day. Keep asOfDate when re-pinning
-  // so schedule day N can still derive age-0 arrivals from a file uploaded later.
-  const asOfDate = normalizeDateKey(snap.asOfDate) || prevDate || date
-    || (DATE_KEY_RE.test(String(snap.id).slice(0, 10)) ? String(snap.id).slice(0, 10) : date);
+  // Pinning to a schedule day means this Excel is that day's stock extract → ages as-of that day.
+  const asOfDate = date;
 
-  // Persist schedule-day reassignment onto the snapshot file when needed.
   if (prevDate !== date || normalizeDateKey(snap.asOfDate) !== asOfDate) {
     snap.date = date;
     snap.asOfDate = asOfDate;
@@ -663,13 +659,11 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
     });
   }
   const activeByDay = { ...(index.activeByDay || {}) };
-  // Clear this id from other days, then pin to the chosen schedule day.
   for (const [dk, sid] of Object.entries(activeByDay)) {
     if (sid === snap.id && dk !== date) delete activeByDay[dk];
   }
   activeByDay[date] = snap.id;
   const normalized = normalizeRtlActiveByDay(activeByDay, snapshots);
-  // Force the explicit pin even if normalize would drop a mismatch (date already updated).
   normalized[date] = snap.id;
   saveRtlDailyIndex({ snapshots, activeByDay: normalized });
   return {
@@ -912,11 +906,10 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   }
 
   const name = String(fileName || '').trim();
-  // Schedule day (date) = day chosen in the uploader.
-  // asOfDate = day Col J ages are relative to. Past schedule days uploaded later
-  // almost always use today's extract ages, so asOfDate stays the upload day.
+  // Schedule day = day chosen in Data Uploader (or today for Admin Push).
+  // Col J ages in that Excel are relative to that same schedule day → age 0 = arrivals that day.
   const uploadedOn = riyadhDateTimeParts(at).dateKey;
-  const asOfDate = (date && uploadedOn && date < uploadedOn) ? uploadedOn : date;
+  const asOfDate = date;
   const snap = {
     id,
     date,
@@ -1139,6 +1132,63 @@ function todayIsoRiyadh() {
     month: '2-digit',
     day: '2-digit'
   }).format(new Date());
+}
+
+/**
+ * When the Riyadh calendar day rolls over:
+ * - Prior days keep their last active snapshot (Admin Push / Uploader).
+ * - If yesterday has no day file yet but live RTL is on disk, snapshot it as yesterday
+ *   so the ended day is locked with that extract (age 0 = that day's arrivals).
+ */
+function ensureRtlDayRollover() {
+  try {
+    ensureRtlDailyDirs();
+    const today = todayIsoRiyadh();
+    const statePath = path.join(RTL_DAILY_DIR, 'rollover.json');
+    let prev = '';
+    try {
+      if (fs.existsSync(statePath)) {
+        const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        prev = normalizeDateKey(parsed && parsed.dateKey) || '';
+      }
+    } catch {
+      prev = '';
+    }
+    if (prev === today) return { ok: true, today, rolled: false };
+
+    if (prev && prev < today) {
+      const ended = prev;
+      const hasEnded = Boolean(resolveRtlActiveIdForDay(ended));
+      if (!hasEnded) {
+        const liveRtl = reportSheetFilePath('rtl');
+        if (liveRtl && fs.existsSync(liveRtl)) {
+          try {
+            const buf = fs.readFileSync(liveRtl);
+            const vehicles = scanRtlStockBuffer(buf);
+            if (vehicles.length) {
+              persistRtlDailySnapshot({
+                dateKey: ended,
+                vehicles,
+                fileName: 'day-end-rollover.xlsx',
+                source: 'day-end-rollover',
+                excelBuffer: buf
+              });
+            }
+          } catch (err) {
+            console.error('[rtl-daily] day-end rollover snapshot failed', err);
+          }
+        }
+      }
+    }
+
+    const tmp = `${statePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ dateKey: today, at: Date.now() }, null, 2), 'utf8');
+    fs.renameSync(tmp, statePath);
+    return { ok: true, today, rolled: Boolean(prev && prev < today), ended: prev && prev < today ? prev : '' };
+  } catch (err) {
+    console.error('[rtl-daily] ensureRtlDayRollover', err);
+    return { ok: false, error: err.message || String(err) };
+  }
 }
 
 function companyNameKey(name) {
@@ -3014,6 +3064,7 @@ app.get('/api/report-sheet/file/:slot', (req, res) => {
 app.post('/api/report-sheet/push', (req, res) => {
   try {
     ensureReportSheetDirs();
+    ensureRtlDayRollover();
     const body = req.body || {};
     const at = Date.now();
     const filesIn = body.files && typeof body.files === 'object' ? body.files : {};
@@ -3038,7 +3089,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       if (id === 'rtl') {
         try {
           const vehicles = scanRtlStockBuffer(buf);
-          // Always append a permanent timestamped snapshot (never overwrite history).
+          // Live Push always archives as TODAY (Riyadh). Past days use Data Uploader.
           rtlSnapshot = persistRtlDailySnapshot({
             dateKey: todayIsoRiyadh(),
             vehicles,
@@ -3108,6 +3159,7 @@ app.post('/api/report-sheet/clear', (_req, res) => {
 /** RTL daily VIN/product/suffix archive — does not touch live dashboard slots. */
 app.get('/api/rtl-daily/meta', (_req, res) => {
   try {
+    ensureRtlDayRollover();
     const index = loadRtlDailyIndex();
     const activeByDay = index.activeByDay || {};
     const snapshots = listRtlSnapshotsNewestFirst().map((s) => ({
@@ -3117,6 +3169,7 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
     return res.json({
       snapshots,
       activeByDay,
+      today: todayIsoRiyadh(),
       persistentRoot: PERSISTENT_ROOT,
       archiveDir: RTL_DAILY_DIR
     });
@@ -3129,6 +3182,7 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
 /** One active RTL file per calendar day for a month (schedule day columns). */
 app.get('/api/rtl-daily/active-month', (req, res) => {
   try {
+    ensureRtlDayRollover();
     const month = String(req.query.month || '').trim();
     const pack = loadRtlActiveMonth(month);
     if (!pack) {
