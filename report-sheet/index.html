@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910bo1screen" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910bowide1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -584,17 +584,17 @@
           <div class="bo-fit-main">
             <div class="bo-row bo-row-insights">
               <article class="card bo-insights" id="bo-insights"></article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-top5">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-top5" data-expand="chart-bo-top5" role="button" tabindex="0" aria-label="Open Back Orders by Model wide view">
                 <div class="pbi-viz-head">
                   <h2>Back Orders by Model</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-top5">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-top5" title="Open full model list with details">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-top5"></canvas></div></div>
               </article>
-              <article class="card pbi-viz bo-status-card" data-chart-id="chart-bo-status">
+              <article class="card pbi-viz bo-status-card bo-tap" data-chart-id="chart-bo-status" data-expand="chart-bo-status" role="button" tabindex="0" aria-label="Open Order Status wide view">
                 <div class="pbi-viz-head">
                   <h2>Order Status</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-status">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-status" title="Open wide status detail">Wide</button>
                 </div>
                 <div class="bo-donut-wrap">
                   <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
@@ -614,10 +614,10 @@
                 </div>
                 <div class="table-wrap bo-product-table-wrap" id="bo-product-table"></div>
               </article>
-              <article class="card pbi-viz bo-aging-panel" data-chart-id="chart-bo-aging-buckets">
+              <article class="card pbi-viz bo-aging-panel bo-tap" data-chart-id="chart-bo-aging-buckets" data-expand="chart-bo-aging-buckets" role="button" tabindex="0" aria-label="Open Aging Breakdown wide view">
                 <div class="pbi-viz-head">
                   <h2>Aging Breakdown</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets" title="Open wide aging detail">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-aging-buckets"></canvas></div></div>
               </article>
@@ -637,31 +637,31 @@
               <span class="hint">Optional deep-dive visuals</span>
             </summary>
             <div class="bo-row bo-row-bottom">
-              <article class="card pbi-viz" data-chart-id="chart-bo-salestype" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-salestype" data-expand="chart-bo-salestype" role="button" tabindex="0" style="margin:0" aria-label="Open Sales Type wide view">
                 <div class="pbi-viz-head">
                   <h2>Sales Type · Confirmed vs Not Confirmed</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-salestype">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-salestype" title="Open wide sales type detail">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-salestype"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-backlog" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-backlog" data-expand="chart-bo-backlog" role="button" tabindex="0" style="margin:0" aria-label="Open backlog wide view">
                 <div class="pbi-viz-head">
                   <h2>Top 10 Products by Backlog</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-backlog">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-backlog" title="Open full backlog list">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-aging" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-aging" data-expand="chart-bo-aging" role="button" tabindex="0" style="margin:0" aria-label="Open aging by product wide view">
                 <div class="pbi-viz-head">
                   <h2>Average Aging by Product (Days)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging" title="Open full aging list">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-contrib" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-contrib" data-expand="chart-bo-contrib" role="button" tabindex="0" style="margin:0" aria-label="Open contribution wide view">
                 <div class="pbi-viz-head">
                   <h2>Contribution by Product</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-contrib">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-contrib" title="Open full contribution list">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-contrib"></canvas></div></div>
               </article>
@@ -680,17 +680,17 @@
             </div>
             <div class="bo-car-summary" id="bo-car-summary"></div>
             <div class="bo-car-charts">
-              <article class="card pbi-viz" data-chart-id="chart-bo-car-sfx" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-car-sfx" data-expand="chart-bo-car-sfx" role="button" tabindex="0" style="margin:0" aria-label="Open suffix BO wide view">
                 <div class="pbi-viz-head">
                   <h2>BO by suffix (this car)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx" title="Open all suffixes">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-sfx"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-car-pay" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-car-pay" data-expand="chart-bo-car-pay" role="button" tabindex="0" style="margin:0" aria-label="Open payment mix wide view">
                 <div class="pbi-viz-head">
                   <h2>Cash · Bank · Employee · Fleet</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay" title="Open payment mix detail">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-pay"></canvas></div></div>
               </article>
@@ -712,17 +712,17 @@
                 <h2>Sales type analysis</h2>
                 <div class="table-wrap" id="bo-salestype-table"></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-sfx" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-sfx" data-expand="chart-bo-sfx" role="button" tabindex="0" style="margin:0" aria-label="Open SFX demand wide view">
                 <div class="pbi-viz-head">
                   <h2>SFX / Grade demand (Top 12)</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx" title="Open all SFX grades">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-sfx-confirm" style="margin:0">
+              <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-sfx-confirm" data-expand="chart-bo-sfx-confirm" role="button" tabindex="0" style="margin:0" aria-label="Open SFX confirmation wide view">
                 <div class="pbi-viz-head">
                   <h2>SFX confirmation rate</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm" title="Open all SFX confirmation rates">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx-confirm"></canvas></div></div>
               </article>
@@ -730,10 +730,10 @@
                 <h2>SFX / Grade demand table</h2>
                 <div class="table-wrap" id="bo-sfx-table"></div>
               </article>
-              <article class="card pbi-viz bo-span-2" data-chart-id="chart-bo-confirm" style="margin:0" hidden>
+              <article class="card pbi-viz bo-span-2 bo-tap" data-chart-id="chart-bo-confirm" data-expand="chart-bo-confirm" role="button" tabindex="0" style="margin:0" hidden aria-label="Open confirmation by product wide view">
                 <div class="pbi-viz-head">
                   <h2>Confirmation by product</h2>
-                  <button type="button" class="pbi-expand" data-expand="chart-bo-confirm">Wide</button>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-confirm" title="Open full confirmation list">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-confirm"></canvas></div></div>
               </article>
@@ -4823,6 +4823,26 @@
     },
   };
 
+  function cloneChartExtra(opts) {
+    const o = opts || {};
+    return JSON.parse(JSON.stringify({
+      backgroundColor: o.backgroundColor,
+      datasets: o.datasets,
+      empKeys: o.empKeys,
+      clickable: o.clickable,
+      horizontal: o.horizontal,
+      legend: o.legend,
+      max: o.max,
+      showValues: o.showValues,
+      valueSuffix: o.valueSuffix,
+      categoryExtras: o.categoryExtras,
+      rowMeta: o.rowMeta,
+      dualValueAxis: o.dualValueAxis,
+      stacked: o.stacked,
+      cutout: o.cutout,
+    }));
+  }
+
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
@@ -4838,27 +4858,23 @@
     const valueSuffix = opts.valueSuffix != null ? opts.valueSuffix : "";
     const seriesCount = (opts.datasets && opts.datasets.length) || 1;
     const thicknessSeries = opts.stacked ? 1 : seriesCount;
-    chartSnapshots[id] = {
-      type,
-      labels: labels ? labels.slice() : [],
-      values: Array.isArray(values) ? values.slice() : values,
-      extra: JSON.parse(JSON.stringify({
-        ...opts,
-        backgroundColor: opts.backgroundColor,
-        datasets: opts.datasets,
-        empKeys: opts.empKeys,
-        clickable: opts.clickable,
-        horizontal: opts.horizontal,
-        legend: opts.legend,
-        max: opts.max,
-        showValues: opts.showValues,
-        valueSuffix: opts.valueSuffix,
-        categoryExtras: opts.categoryExtras,
-        rowMeta: opts.rowMeta,
-        dualValueAxis: opts.dualValueAxis,
-        stacked: opts.stacked,
-      })),
-    };
+    // Compact cards may show Top N; `_wide` stores the full detail snapshot for Wide modal.
+    if (opts._wide) {
+      const w = opts._wide;
+      chartSnapshots[id] = {
+        type: w.type || type,
+        labels: w.labels ? w.labels.slice() : (labels ? labels.slice() : []),
+        values: Array.isArray(w.values) ? w.values.slice() : (w.values != null ? w.values : (Array.isArray(values) ? values.slice() : values)),
+        extra: cloneChartExtra(w.extra != null ? w.extra : opts),
+      };
+    } else {
+      chartSnapshots[id] = {
+        type,
+        labels: labels ? labels.slice() : [],
+        values: Array.isArray(values) ? values.slice() : values,
+        extra: cloneChartExtra(opts),
+      };
+    }
     sizeChartScrollBox(id, labelCount, horizontal && type === "bar", thicknessSeries);
 
     const datasetsExtra = { ...opts };
@@ -4875,6 +4891,7 @@
     delete datasetsExtra.dualValueAxis;
     delete datasetsExtra.stacked;
     delete datasetsExtra.cutout;
+    delete datasetsExtra._wide;
     const softScale = {
       beginAtZero: true,
       stacked: !!opts.stacked,
@@ -5197,6 +5214,50 @@
               colLabel: "Target",
             });
           }
+          if (m.total != null && cols.length === 1) {
+            cells.unshift({
+              text: formatNumber(m.total),
+              tip: `Total BO: ${formatNumber(m.total)}`,
+              multi: true,
+              colLabel: "Total",
+            });
+          }
+          if (m.confirmed != null) {
+            cells.push({
+              text: formatNumber(m.confirmed),
+              tip: `Confirmed: ${formatNumber(m.confirmed)}`,
+              multi: true,
+              colLabel: "Conf",
+            });
+          }
+          if (m.notConfirmed != null) {
+            cells.push({
+              text: formatNumber(m.notConfirmed),
+              tip: `Not confirmed: ${formatNumber(m.notConfirmed)}`,
+              multi: true,
+              colLabel: "Not",
+            });
+          }
+          if (m.confirmPct != null) {
+            const pct = Number(m.confirmPct);
+            const pctText = Number.isFinite(pct)
+              ? ((pct <= 1 ? pct * 100 : pct).toFixed(1) + "%")
+              : "—";
+            cells.push({
+              text: pctText,
+              tip: `Confirmation rate: ${pctText}`,
+              multi: true,
+              colLabel: "Conf %",
+            });
+          }
+          if (m.avgAging != null) {
+            cells.push({
+              text: formatNumber(m.avgAging) + "d",
+              tip: `Avg aging: ${formatNumber(m.avgAging)} days`,
+              multi: true,
+              colLabel: "Aging",
+            });
+          }
           if (m.del != null) {
             cells.push({
               text: formatNumber(m.del),
@@ -5241,7 +5302,12 @@
 
     const headLabels = [];
     if (meta && meta.some((m) => m && m.target != null)) headLabels.push("Target");
+    if (meta && meta.some((m) => m && m.total != null) && cols.length === 1) headLabels.push("Total");
     cols.forEach((c) => headLabels.push(c.label));
+    if (meta && meta.some((m) => m && m.confirmed != null)) headLabels.push("Conf");
+    if (meta && meta.some((m) => m && m.notConfirmed != null)) headLabels.push("Not");
+    if (meta && meta.some((m) => m && m.confirmPct != null)) headLabels.push("Conf %");
+    if (meta && meta.some((m) => m && m.avgAging != null)) headLabels.push("Aging");
     if (meta && meta.some((m) => m && m.del != null)) headLabels.push("Del");
     if (meta && meta.some((m) => m && m.prof != null)) headLabels.push("Prof");
     if (meta && meta.some((m) => m && m.cancelled != null)) headLabels.push("Cancelled");
@@ -5682,15 +5748,20 @@
     const modal = document.querySelector(".pbi-wide-modal");
     const isPerf = sourceId === "chart-sr-perf";
     const isCancel = sourceId === "chart-cancel";
+    const isBo = String(sourceId).startsWith("chart-bo-");
     if (modal) {
       modal.classList.toggle("pbi-wide-modal--perf", isPerf);
       modal.classList.toggle("pbi-wide-modal--cancel", isCancel);
+      modal.classList.toggle("pbi-wide-modal--bo", isBo);
       modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
+    const baseTitle = titleEl ? titleEl.textContent : "Chart";
     $("#pbi-wide-title").textContent = isCancel
       ? "Cancellation % · Cancelled BOs"
-      : (titleEl ? titleEl.textContent : "Chart");
+      : isBo
+        ? `${baseTitle} · Full detail`
+        : baseTitle;
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
     backdrop.classList.add("show");
@@ -5702,27 +5773,39 @@
     const wideCanvas = document.getElementById("pbi-wide-canvas");
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-      const fit = fitHorizontalChartHeight(n, seriesN, {
-        preferredRow: isPerf
-          ? (seriesN >= 2 ? 42 : 32)
-          : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
-        minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
-        maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : 0.78),
-        chromePx: isPerf ? 90 : (isCancel ? 160 : 80),
-        pad: isPerf ? 72 : 56,
-      });
-      box.style.height = fit.height + "px";
-      box.style.minHeight = fit.height + "px";
-      if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      if (isBo && n > 10) {
+        const rowPx = seriesN >= 2 ? 30 : 26;
+        const height = Math.max(280, n * rowPx + 64);
+        box.style.height = height + "px";
+        box.style.minHeight = height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(rowPx);
+        scroll.style.maxHeight = Math.max(280, Math.floor(window.innerHeight * 0.58)) + "px";
+        scroll.classList.add("is-scroll");
+      } else {
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: isPerf
+            ? (seriesN >= 2 ? 42 : 32)
+            : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+          minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+          maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : (isBo ? 0.7 : 0.78)),
+          chromePx: isPerf ? 90 : (isCancel ? 160 : (isBo ? 110 : 80)),
+          pad: isPerf ? 72 : 56,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+        scroll.style.maxHeight = "";
+        scroll.classList.remove("is-scroll");
+      }
+    } else if (snap.type === "doughnut") {
+      box.style.height = isBo ? "440px" : "380px";
       scroll.style.maxHeight = "";
       scroll.classList.remove("is-scroll");
-    } else if (snap.type === "doughnut") {
-      box.style.height = "380px";
-      scroll.style.maxHeight = "";
       if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
     } else {
-      box.style.height = "420px";
+      box.style.height = isBo ? "480px" : "420px";
       scroll.style.maxHeight = "";
+      scroll.classList.remove("is-scroll");
       if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
     }
     const hint = $("#pbi-wide-hint");
@@ -5734,6 +5817,8 @@
           ? "Cancel % & Gap above · Cancelled BOs below · click a bar to filter"
           : isProfDel
             ? "Daily Proforma (Col P) vs Delivery (Col V) · day of month"
+          : isBo
+            ? "Full list with Confirmed / Not Confirmed / aging · scroll if needed · Numbers on the right"
           : horizontal && n > 1
             ? "All names on one screen · Numbers on the right · click a bar to filter"
         : "Numbers beside the chart · Close or press Esc";
@@ -5743,18 +5828,20 @@
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
-      const fit = fitHorizontalChartHeight(n, seriesN, {
-        preferredRow: isPerf
-          ? (seriesN >= 2 ? 42 : 32)
-          : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
-        minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
-        maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : 0.78),
-        chromePx: isPerf ? 90 : (isCancel ? 160 : 80),
-        pad: isPerf ? 72 : 56,
-      });
-      box.style.height = fit.height + "px";
-      box.style.minHeight = fit.height + "px";
-      if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      if (!(isBo && n > 10)) {
+        const fit = fitHorizontalChartHeight(n, seriesN, {
+          preferredRow: isPerf
+            ? (seriesN >= 2 ? 42 : 32)
+            : (seriesN >= 2 || (snap.extra && snap.extra.categoryExtras) ? 36 : 28),
+          minRow: isPerf ? (seriesN >= 2 ? 24 : 20) : (seriesN >= 2 ? 18 : 15),
+          maxViewportFrac: isPerf ? 0.62 : (isCancel ? 0.52 : (isBo ? 0.7 : 0.78)),
+          chromePx: isPerf ? 90 : (isCancel ? 160 : (isBo ? 110 : 80)),
+          pad: isPerf ? 72 : 56,
+        });
+        box.style.height = fit.height + "px";
+        box.style.minHeight = fit.height + "px";
+        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(fit.rowPx);
+      }
       if (charts["pbi-wide-canvas"] && typeof charts["pbi-wide-canvas"].resize === "function") {
         charts["pbi-wide-canvas"].resize();
       }
@@ -5793,12 +5880,18 @@
     if (table) table.innerHTML = "";
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
-      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
     const box = $("#pbi-wide-box");
     if (box) {
       box.classList.remove("icc-wide-cars");
       box.style.height = "";
+      box.style.minHeight = "";
+    }
+    const scroll = $("#pbi-wide-scroll");
+    if (scroll) {
+      scroll.classList.remove("is-scroll");
+      scroll.style.maxHeight = "";
     }
     if (charts["pbi-wide-canvas"]) {
       charts["pbi-wide-canvas"].destroy();
@@ -9170,11 +9263,30 @@
     upsertChart("chart-bo-car-sfx", "bar", topSfx.map((r) => r.sfx), topSfx.map((r) => r.total), {
       horizontal: true,
       backgroundColor: "rgba(17, 17, 17, 0.88)",
+      _wide: {
+        labels: sfxRows.map((r) => r.sfx),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxRows),
+          rowMeta: boSfxRowMeta(sfxRows),
+        },
+      },
     });
-    upsertChart("chart-bo-car-pay", "doughnut",
-      ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0),
-      ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0).map((t) => pay[t] || 0)
-    );
+    const payLabels = ["Cash", "Bank", "Employee", "Fleet", "ALJUF"].filter((t) => (pay[t] || 0) > 0);
+    const payValues = payLabels.map((t) => pay[t] || 0);
+    upsertChart("chart-bo-car-pay", "doughnut", payLabels, payValues, {
+      _wide: {
+        labels: payLabels,
+        values: payValues,
+        extra: {
+          legend: true,
+          cutout: "62%",
+        },
+      },
+    });
     renderBoCarRowsTable(allBos, boView.car, rowsTableEl, rowsFootEl);
   }
 
@@ -9246,16 +9358,70 @@
     });
   }
 
+  function boConfirmDatasets(rows) {
+    return [
+      {
+        label: "Confirmed",
+        data: rows.map((r) => r.confirmed),
+        backgroundColor: "rgba(13, 148, 136, 0.85)",
+        borderWidth: 0,
+        borderRadius: 4,
+      },
+      {
+        label: "Not Confirmed",
+        data: rows.map((r) => r.notConfirmed),
+        backgroundColor: "rgba(235, 10, 30, 0.82)",
+        borderWidth: 0,
+        borderRadius: 4,
+      },
+    ];
+  }
+
+  function boProductRowMeta(rows) {
+    return rows.map((a) => ({
+      name: a.product,
+      total: a.total,
+      confirmed: a.confirmed,
+      notConfirmed: a.notConfirmed,
+      confirmPct: a.confirmPct,
+      avgAging: a.avgAging,
+    }));
+  }
+
+  function boSfxRowMeta(rows) {
+    return rows.map((a) => ({
+      name: a.sfx,
+      total: a.total,
+      confirmed: a.confirmed,
+      notConfirmed: a.notConfirmed,
+      confirmPct: a.confirmPct,
+      avgAging: a.avgAging,
+    }));
+  }
+
   function renderBoCharts(list, aggs, metrics) {
     const m = metrics || boMetrics(list);
     const top5 = aggs.slice(0, 5);
+    const allProducts = aggs.slice();
     upsertChart("chart-bo-top5", "bar", top5.map((a) => a.product), top5.map((a) => a.total), {
       horizontal: true,
       backgroundColor: top5.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(148, 163, 184, 0.85)"),
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
     });
 
     const confPct = +(m.confirmPct * 100).toFixed(1);
     const notPct = +((1 - m.confirmPct) * 100).toFixed(1);
+    const buckets = agingBucketCounts(list);
     upsertChart("chart-bo-status", "doughnut",
       [`Confirmed ${confPct}%`, `Not Confirmed ${notPct}%`],
       [m.confirmed || 0, m.notConfirmed || 0],
@@ -9263,6 +9429,19 @@
         legend: true,
         cutout: "72%",
         backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+        _wide: {
+          labels: [
+            `Confirmed ${confPct}%`,
+            `Not Confirmed ${notPct}%`,
+          ],
+          values: [m.confirmed || 0, m.notConfirmed || 0],
+          type: "doughnut",
+          extra: {
+            legend: true,
+            cutout: "62%",
+            backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+          },
+        },
       }
     );
     const center = $("#bo-status-center");
@@ -9271,9 +9450,16 @@
       center.innerHTML = `<strong>${formatNumber(m.total)}</strong><span>Total Orders</span>`;
     }
 
-    const buckets = agingBucketCounts(list);
     upsertChart("chart-bo-aging-buckets", "bar", buckets.map((b) => b.label), buckets.map((b) => b.count), {
       backgroundColor: buckets.map((b) => b.color),
+      _wide: {
+        labels: buckets.map((b) => b.label),
+        values: buckets.map((b) => b.count),
+        extra: {
+          backgroundColor: buckets.map((b) => b.color),
+          showValues: true,
+        },
+      },
     });
 
     const top = aggs.slice(0, 10);
@@ -9281,6 +9467,17 @@
     upsertChart("chart-bo-backlog", "bar", labels, top.map((a) => a.total), {
       horizontal: true,
       backgroundColor: top.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(235, 10, 30, 0.72)"),
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
     });
 
     const confLabels = aggs.slice(0, 12).map((a) => a.product);
@@ -9302,12 +9499,34 @@
           borderRadius: 4,
         },
       ],
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: null,
+        extra: {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(allProducts),
+          rowMeta: boProductRowMeta(allProducts),
+        },
+      },
     });
 
     const agingRows = aggs.slice().sort((a, b) => b.avgAging - a.avgAging).slice(0, 12);
+    const agingAll = aggs.slice().sort((a, b) => b.avgAging - a.avgAging);
     upsertChart("chart-bo-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
       horizontal: true,
       backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+      _wide: {
+        labels: agingAll.map((a) => a.product),
+        values: agingAll.map((a) => a.avgAging),
+        extra: {
+          horizontal: true,
+          valueSuffix: "d",
+          showValues: true,
+          backgroundColor: agingAll.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+          rowMeta: boProductRowMeta(agingAll),
+        },
+      },
     });
 
     const contrib = aggs.slice(0, 10);
@@ -9316,6 +9535,24 @@
       backgroundColor: "rgba(235, 10, 30, 0.85)",
       valueSuffix: "%",
       showValues: true,
+      _wide: {
+        labels: allProducts.map((a) => a.product),
+        values: allProducts.map((a) => +((a.total / totalBo) * 100).toFixed(1)),
+        extra: {
+          horizontal: true,
+          backgroundColor: "rgba(235, 10, 30, 0.85)",
+          valueSuffix: "%",
+          showValues: true,
+          rowMeta: allProducts.map((a) => ({
+            name: a.product,
+            total: a.total,
+            confirmed: a.confirmed,
+            notConfirmed: a.notConfirmed,
+            confirmPct: a.confirmPct,
+            avgAging: a.avgAging,
+          })),
+        },
+      },
     });
 
     const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
@@ -9339,20 +9576,60 @@
           borderRadius: 4,
         },
       ],
+      _wide: {
+        labels: typeRows.map((r) => r.salesType),
+        values: null,
+        extra: {
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(typeRows),
+          rowMeta: typeRows.map((r) => ({
+            name: r.salesType,
+            total: r.total,
+            confirmed: r.confirmed,
+            notConfirmed: r.notConfirmed,
+            confirmPct: r.confirmPct,
+            avgAging: r.avgAging,
+          })),
+        },
+      },
     });
 
-    const sfxRows = [...groupBoBy(list, (b) => b.sfx).entries()]
+    const sfxAll = [...groupBoBy(list, (b) => b.sfx).entries()]
       .map(([sfx, items]) => ({ sfx, ...boMetrics(items) }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 12);
+      .sort((a, b) => b.total - a.total);
+    const sfxRows = sfxAll.slice(0, 12);
     upsertChart("chart-bo-sfx", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => r.total), {
       horizontal: true,
       backgroundColor: "rgba(17, 17, 17, 0.88)",
+      _wide: {
+        labels: sfxAll.map((r) => r.sfx),
+        values: null,
+        extra: {
+          horizontal: true,
+          legend: true,
+          stacked: true,
+          datasets: boConfirmDatasets(sfxAll),
+          rowMeta: boSfxRowMeta(sfxAll),
+        },
+      },
     });
     upsertChart("chart-bo-sfx-confirm", "bar", sfxRows.map((r) => r.sfx), sfxRows.map((r) => +(r.confirmPct * 100).toFixed(1)), {
       horizontal: true,
       max: 100,
       backgroundColor: sfxRows.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+      _wide: {
+        labels: sfxAll.map((r) => r.sfx),
+        values: sfxAll.map((r) => +(r.confirmPct * 100).toFixed(1)),
+        extra: {
+          horizontal: true,
+          max: 100,
+          valueSuffix: "%",
+          showValues: true,
+          backgroundColor: sfxAll.map((r) => r.confirmPct >= 0.7 ? "rgba(13, 148, 136, 0.85)" : r.confirmPct >= 0.4 ? "rgba(180, 83, 9, 0.85)" : "rgba(235, 10, 30, 0.88)"),
+          rowMeta: boSfxRowMeta(sfxAll),
+        },
+      },
     });
   }
 
@@ -15286,6 +15563,7 @@
       const expand = e.target.closest("[data-expand]");
       if (expand) {
         e.preventDefault();
+        e.stopPropagation();
         openWideChart(expand.getAttribute("data-expand"));
         return;
       }
@@ -15313,6 +15591,13 @@
         boView.sfx = sfx.getAttribute("data-bo-sfx") || "";
         if (window._data) renderBoDashboard(window._data);
       }
+    });
+    boDashEl.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tap = e.target.closest(".bo-tap[data-expand]");
+      if (!tap || e.target.closest("button, a, input, select")) return;
+      e.preventDefault();
+      openWideChart(tap.getAttribute("data-expand"));
     });
     boDashEl.addEventListener("dblclick", (e) => {
       const viz = e.target.closest("[data-chart-id]");
