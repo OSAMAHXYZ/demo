@@ -8603,6 +8603,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   min-height: 420px;
 }
 .dvp-card.theme-lexus { background: #141414; border-color: #2a2a2a; color: #f8fafc; }
+.dvp-card.theme-telesales { background: #e0f2fe; border-color: #bae6fd; }
 .dvp-card.theme-b2c { background: #f4efe6; border-color: #e7dfd2; }
 .dvp-card.theme-guest { background: #ece8f8; border-color: #ddd6fe; }
 .dvp-card-hero {

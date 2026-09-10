@@ -12947,15 +12947,31 @@
     return /lexus|\bes\s*3|\bes\s*2|\brx\s*\d|\blx\s*\d|\bgx\s*\d|\bnx\s*\d|\bux\s*\d|\bls\s*\d|\blc\s*\d/i.test(blob);
   }
 
+  function isTelesalesSaleRow(r) {
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const key = nameKey(salesmanName);
+    if (!key) return false;
+    const meta = employeeMeta(salesmanName);
+    return meta && meta.plant && /telesales/i.test(meta.plant);
+  }
+
   function dvpBucketForSaleRow(r, guestKeys) {
-    const key = nameKey(rosterSalesmanName(r._salesmanRaw || r.salesman));
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const key = nameKey(salesmanName);
     if (key && guestKeys.has(key)) return "guest";
     if (isLexusSaleRow(r)) return "lexus";
-    return "b2c";
+    const notAssigned = salesmanName.toLowerCase() === "not assigned";
+    if (notAssigned) return "b2c";
+    return "telesales";
   }
 
   function countDvpBucket(rows, live, prevMonthKey, period, guestKeys) {
-    const out = { lexus: { delivered: 0, proforma: 0 }, b2c: { delivered: 0, proforma: 0 }, guest: { delivered: 0, proforma: 0 } };
+    const out = { 
+      lexus: { delivered: 0, proforma: 0 }, 
+      telesales: { delivered: 0, proforma: 0 },
+      b2c: { delivered: 0, proforma: 0 }, 
+      guest: { delivered: 0, proforma: 0 } 
+    };
     (rows || []).forEach((r) => {
       const bucket = dvpBucketForSaleRow(r, guestKeys);
       if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) out[bucket].delivered += 1;
@@ -12997,9 +13013,20 @@
         prevProforma: prev.lexus.proforma,
       },
       {
+        id: "telesales",
+        title: "Telesales",
+        subtitle: "All employees sales channel",
+        theme: "telesales",
+        image: "../images/cars/camry.png",
+        delivered: cur.telesales.delivered,
+        proforma: cur.telesales.proforma,
+        prevDelivered: prev.telesales.delivered,
+        prevProforma: prev.telesales.proforma,
+      },
+      {
         id: "b2c",
         title: "B2C Sales",
-        subtitle: "Retail · eCommerce · Telesales",
+        subtitle: "Not assigned · Retail · eCommerce",
         theme: "b2c",
         image: "../images/cars/camry.png",
         delivered: cur.b2c.delivered,
