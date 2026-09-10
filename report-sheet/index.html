@@ -1204,6 +1204,10 @@
           <div class="pbi-wide-numbers-list" id="pbi-wide-numbers-list"></div>
         </aside>
       </div>
+      <div class="pbi-wide-resize-handle" id="pbi-wide-resize-handle" hidden>
+        <div class="pbi-wide-resize-line"></div>
+        <div class="pbi-wide-resize-grip" title="Drag to resize chart height"></div>
+      </div>
       <div class="pbi-wide-perf-extra" id="pbi-wide-perf-extra" hidden>
         <div class="pbi-wide-perf-volume" id="pbi-wide-perf-volume"></div>
         <div class="pbi-wide-salestype">
@@ -5271,6 +5275,8 @@
       body.hidden = false;
       body.classList.remove("pbi-wide-body--chart-only");
     }
+    const resizeHandle = $("#pbi-wide-resize-handle");
+    if (resizeHandle) resizeHandle.hidden = false;
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
@@ -5552,6 +5558,10 @@
       modal.classList.toggle("pbi-wide-modal--cancel", isCancel);
       modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
+    const resizeHandle = $("#pbi-wide-resize-handle");
+    if (resizeHandle) {
+      resizeHandle.hidden = !(isPerf || isCancel);
+    }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     $("#pbi-wide-title").textContent = isCancel
       ? "Cancellation % · Cancelled BOs"
@@ -5650,7 +5660,11 @@
     if (body) {
       body.hidden = false;
       body.classList.add("pbi-wide-body--chart-only");
+      body.style.minHeight = "";
+      body.style.maxHeight = "";
     }
+    const resizeHandle = $("#pbi-wide-resize-handle");
+    if (resizeHandle) resizeHandle.hidden = true;
     hideWideTableMode();
     hideWidePerfExtra();
     hideWideCancelExtra();
@@ -14874,6 +14888,78 @@
       }
     }
   });
+
+  // Wide chart resize functionality
+  (function() {
+    const resizeHandle = $("#pbi-wide-resize-handle");
+    if (!resizeHandle) return;
+    
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    let chartBody = null;
+
+    function startResize(e) {
+      e.preventDefault();
+      isResizing = true;
+      startY = e.clientY || (e.touches && e.touches[0].clientY);
+      chartBody = $("#pbi-wide-body");
+      if (!chartBody) return;
+      
+      const computed = window.getComputedStyle(chartBody);
+      startHeight = parseInt(computed.minHeight || computed.height || "400");
+      
+      resizeHandle.classList.add("is-dragging");
+      document.body.style.cursor = "ns-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    function doResize(e) {
+      if (!isResizing || !chartBody) return;
+      e.preventDefault();
+      
+      const currentY = e.clientY || (e.touches && e.touches[0].clientY);
+      const deltaY = currentY - startY;
+      const newHeight = Math.max(300, Math.min(startHeight + deltaY, window.innerHeight * 0.8));
+      
+      chartBody.style.minHeight = newHeight + "px";
+      chartBody.style.maxHeight = "none";
+      
+      // Trigger chart resize if needed
+      const canvas = $("#pbi-wide-canvas");
+      if (canvas && typeof charts !== "undefined") {
+        const chartId = Object.keys(charts).find(id => charts[id] && charts[id].canvas === canvas);
+        if (chartId && charts[chartId] && typeof charts[chartId].resize === "function") {
+          setTimeout(() => charts[chartId].resize(), 50);
+        }
+      }
+    }
+
+    function stopResize() {
+      if (!isResizing) return;
+      isResizing = false;
+      resizeHandle.classList.remove("is-dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      
+      // Final chart resize
+      const canvas = $("#pbi-wide-canvas");
+      if (canvas && typeof charts !== "undefined") {
+        const chartId = Object.keys(charts).find(id => charts[id] && charts[id].canvas === canvas);
+        if (chartId && charts[chartId] && typeof charts[chartId].resize === "function") {
+          charts[chartId].resize();
+        }
+      }
+    }
+
+    resizeHandle.addEventListener("mousedown", startResize);
+    resizeHandle.addEventListener("touchstart", startResize);
+    document.addEventListener("mousemove", doResize);
+    document.addEventListener("touchmove", doResize);
+    document.addEventListener("mouseup", stopResize);
+    document.addEventListener("touchend", stopResize);
+  })();
+
   $("#sr-csv-btn").addEventListener("click", exportTelesalesSchedule);
   function onEmpTableClick(e) {
     const tr = e.target.closest("tr.emp-row");
