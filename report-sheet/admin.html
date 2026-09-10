@@ -697,16 +697,29 @@
 
       renderTargetsPanel();
       renderAllocationPanel();
+      const slotCount = Object.keys(filesBySlot).length;
+      if (!slotCount) {
+        setStatus("Pushed settings only — upload at least one Excel file, then Push again.", "err");
+        return;
+      }
       const srOk = dataStamp.hasSales;
       const rtlNote = server && server.rtlDaily
         ? ` · RTL archive ${server.rtlDaily.id || server.rtlDaily.date} (${server.rtlDaily.count} VINs${server.rtlDaily.excelSaved ? " +xlsx" : ""})`
         : "";
+      const serverNote = server
+        ? ""
+        : " · server was offline (saved in this browser only)";
       setStatus(
         srOk
-          ? `Pushed to live — all devices will update${rtlNote}`
-          : `Pushed to live — add Sales Raw for Sales Report${rtlNote}`,
-        "ok"
+          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${serverNote}`
+          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${serverNote}`,
+        server ? "ok" : "busy"
       );
+      // Open / focus the live dashboard so Push visibly loads the panels
+      try {
+        const live = window.open("index.html", "alj-report-sheet-live");
+        if (live) live.focus();
+      } catch { /* popup blocked — user can open Live Dashboard manually */ }
     } catch (err) {
       showError(err.message || String(err));
     }

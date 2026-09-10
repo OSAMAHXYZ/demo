@@ -164,19 +164,23 @@
     const files = {};
     const slots = Array.isArray(meta && meta.slots) ? meta.slots : [];
     const names = (meta && meta.fileNames) || {};
-    for (const id of slots) {
-      if (!SLOT_IDS.includes(id)) continue;
-      const res = await fetch(`${API_FILE}/${encodeURIComponent(id)}`, { cache: "no-store" });
-      if (!res.ok) continue;
-      const buffer = await res.arrayBuffer();
-      if (!buffer || !buffer.byteLength) continue;
-      let name = names[id] || `${id}.xlsx`;
-      const hdr = res.headers.get("X-Report-Sheet-Name");
-      if (hdr) {
-        try { name = decodeURIComponent(hdr); } catch { /* keep */ }
+    await Promise.all(slots.map(async (id) => {
+      if (!SLOT_IDS.includes(id)) return;
+      try {
+        const res = await fetch(`${API_FILE}/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const buffer = await res.arrayBuffer();
+        if (!buffer || !buffer.byteLength) return;
+        let name = names[id] || `${id}.xlsx`;
+        const hdr = res.headers.get("X-Report-Sheet-Name");
+        if (hdr) {
+          try { name = decodeURIComponent(hdr); } catch { /* keep */ }
+        }
+        files[id] = { name, buffer, size: buffer.byteLength };
+      } catch {
+        /* skip failed slot */
       }
-      files[id] = { name, buffer, size: buffer.byteLength };
-    }
+    }));
     return files;
   }
 

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="data-store.js"></script>
+  <script src="data-store.js?v=20260910fast1"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
@@ -3660,13 +3660,21 @@
     return XLSX.read(buffer, { type: "array", cellDates: true });
   }
 
-  async function hydrateSlotsFromAdmin() {
+  async function hydrateSlotsFromAdmin(opts) {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const skipSync = !!options.skipSync;
+    if (!skipSync) {
     try {
       await Store.syncFromServer();
     } catch {
       /* fall back to local IndexedDB */
     }
+    }
     const payload = await Store.loadWorkbookFiles();
+    return applyWorkbookPayload(payload);
+  }
+
+  async function applyWorkbookPayload(payload) {
     SLOT_DEFS.forEach((d) => {
       slots[d.id] = { file: null, rows: [], name: "" };
       if (d.id === "central") {
@@ -3686,7 +3694,7 @@
     }
     $("#load-banner").classList.add("show");
     $("#load-banner").textContent = "Reading shared workbooks…";
-    setStatus("Loading from server…", "busy");
+    setStatus("Loading workbooks…", "busy");
     try {
       for (const d of SLOT_DEFS) {
         const f = payload.files[d.id];
@@ -3707,6 +3715,8 @@
           slot.vsndSheet = accessoriesVsndSheetName(wb) || "";
         }
         slots[d.id] = slot;
+        // Let the browser paint between large Excel parses
+        await new Promise((r) => setTimeout(r, 0));
       }
       invalidateStockAvailabilityCache();
       invalidateIccCache();
@@ -6477,9 +6487,10 @@
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "allocationaudit") renderAllocationAudit();
     if (panelId === "boallocstock" && window._data) {
-      invalidateRtlActiveMonthCache();
       renderBoAllocStockDashboard(window._data);
     }
+    if (panelId === "bodashboard" && window._data) renderBoDashboard(window._data);
+  }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
   const SR_DATE_FILTER_KEY = "toyota_sr_date_filter_v1";
@@ -10428,7 +10439,7 @@
 
     // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
     const monthKey = basMonthContext().monthKey;
-    ensureRtlActiveMonth(monthKey, true).then((pack) => {
+    ensureRtlActiveMonth(monthKey, false).then((pack) => {
       if (!pack || activePanel !== "boallocstock") return;
       if (!window._data) return;
       const nextRows = filteredBasRows(buildBasRows(window._data));
@@ -14589,7 +14600,9 @@
     setStatus("Allocation Audit Excel exported", "ok");
   }
 
-  function buildDashboard() {
+  function buildDashboard(opts) {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const progressive = options.progressive !== false;
     showError("");
     refreshTargetsFromAdmin();
     if (!hasAnyPushedFiles()) {
@@ -14609,37 +14622,77 @@
     else activePanel = "dashboard"; // stock-only (or no preferred inputs) → Stock & BO Dashboard, not Stock Dashboard
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
-    renderKpis(d);
-    renderCharts(d);
-    renderBoDashboard(d);
-    renderBoAllocStockDashboard(d);
-    renderStockDashboard();
-    renderReservedVehiclesTracker();
-    aaLastSeenCache.loaded = false;
-    renderAllocationAudit();
-    ensureAaRtlLastSeen().then(() => {
-      if (activePanel === "allocationaudit") renderAllocationAudit();
-    });
-    invalidateIccCache();
-    if (hasSummaryInputs()) renderSummaryDashboard();
-    if (hasSalesReportInputs()) {
-      window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
-    renderSalesReportKpis(d.salesReport);
-      syncSrDateControls(d.salesReport);
-      refreshSalesSelection();
+
+    const paintActive = () => {
+      if (activePanel === "summary") renderSummaryDashboard();
+      else if (activePanel === "salesreport" && hasSalesReportInputs()) {
+        window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+        renderSalesReportKpis(d.salesReport);
+        syncSrDateControls(d.salesReport);
+        refreshSalesSelection();
+      } else if (activePanel === "bodashboard") renderBoDashboard(d);
+      else if (activePanel === "boallocstock") renderBoAllocStockDashboard(d);
+      else if (activePanel === "stockdashboard") renderStockDashboard();
+      else if (activePanel === "reservedvehicles") renderReservedVehiclesTracker();
+      else if (activePanel === "allocationaudit") renderAllocationAudit();
+      else {
+        renderKpis(d);
+        renderCharts(d);
+        renderTabs();
+        renderTable(d);
+      }
+      if (activePanel !== "salesreport") {
+        if (hasSalesReportInputs()) {
+          window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+          syncSrDateControls(d.salesReport);
+        } else {
+          clearSalesReportUi();
+          window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
+          syncGlobalDateControls(window._globalLivePeriod);
+        }
+      }
+      setStatus(
+        hasBackOrder() || hasStockFiles() || hasSalesReportInputs()
+          ? "Live dashboard ready"
+          : "Dashboard ready · Push files from Admin",
+        "ok"
+      );
+    };
+
+    const paintRest = () => {
+      if (activePanel !== "bodashboard") renderBoDashboard(d);
+      if (activePanel !== "boallocstock") renderBoAllocStockDashboard(d);
+      if (activePanel !== "stockdashboard") renderStockDashboard();
+      if (activePanel !== "reservedvehicles") renderReservedVehiclesTracker();
+      aaLastSeenCache.loaded = false;
+      if (activePanel !== "allocationaudit") renderAllocationAudit();
+      ensureAaRtlLastSeen().then(() => {
+        if (activePanel === "allocationaudit") renderAllocationAudit();
+      });
+      invalidateIccCache();
+      if (activePanel !== "summary" && hasSummaryInputs()) renderSummaryDashboard();
+      if (activePanel !== "salesreport") {
+        if (hasSalesReportInputs()) {
+          window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
+          renderSalesReportKpis(d.salesReport);
+          syncSrDateControls(d.salesReport);
+          refreshSalesSelection();
+        }
+      }
+      if (activePanel !== "dashboard") {
+        renderKpis(d);
+        renderCharts(d);
+        renderTabs();
+        renderTable(d);
+      }
+    };
+
+    paintActive();
+    if (progressive) {
+      setTimeout(paintRest, 0);
     } else {
-      clearSalesReportUi();
-      window._globalLivePeriod = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
-      syncGlobalDateControls(window._globalLivePeriod);
+      paintRest();
     }
-    renderTabs();
-    renderTable(d);
-    setStatus(
-      hasBackOrder() || hasStockFiles() || hasSalesReportInputs()
-        ? "Live dashboard ready"
-        : "Dashboard ready · Push files from Admin",
-      "ok"
-    );
   }
 
   function clearAll() {
@@ -14682,17 +14735,57 @@
       try { await refreshInFlight; } catch { /* ignore */ }
     }
     showError("");
+    setStatus(reason || "Opening…", "busy");
     refreshInFlight = (async () => {
     try {
-      const ok = await hydrateSlotsFromAdmin();
-      if (!ok) {
+      // Fast path: paint from IndexedDB cache first (no network wait).
+      let painted = false;
+      const localPayload = await Store.loadWorkbookFiles();
+      if (localPayload && localPayload.files && Object.keys(localPayload.files).length) {
+        const okLocal = await applyWorkbookPayload(localPayload);
+        if (okLocal) {
+          buildDashboard({ progressive: true });
+          painted = true;
+          setStatus(reason || "Opening cached data…", "ok");
+        }
+      }
+
+      // Then sync from server; rebuild only if files changed.
+      let sync = null;
+      try {
+        sync = await Store.syncFromServer();
+      } catch {
+        sync = null;
+      }
+
+      if (sync && sync.cleared) {
         clearAll();
         setStatus(reason || "Waiting for Admin Push");
         return;
       }
-      buildDashboard();
+
+      if (sync && !sync.cached) {
+        const ok = await hydrateSlotsFromAdmin({ skipSync: true });
+        if (!ok) {
+          if (!painted) {
+            clearAll();
+            setStatus(reason || "Waiting for Admin Push");
+          }
+          return;
+        }
+        buildDashboard({ progressive: true });
+      } else if (!painted) {
+        const ok = await hydrateSlotsFromAdmin({ skipSync: true });
+        if (!ok) {
+          clearAll();
+          setStatus(reason || "Waiting for Admin Push");
+          return;
+        }
+        buildDashboard({ progressive: true });
+      }
+
       if (reason) setStatus(reason, "ok");
-        else setStatus("Synced from server", "ok");
+        else setStatus(painted && sync && sync.cached ? "Ready (cached)" : "Synced from server", "ok");
         const badge = $("#live-badge");
         if (badge) {
           badge.textContent = "Manual";
@@ -14805,7 +14898,17 @@
     if (msg.type === "admin-pushed" || msg.type === "targets-pushed") {
       lastPushAt = Number(msg.targetsAt || msg.at) || Date.now();
       lastDataPushAt = Number(msg.at) || lastDataPushAt;
-      markUpdateAvailable(msg.type === "admin-pushed" ? "New Admin Push available" : "New targets available");
+      // Auto-load so Push to live opens the dashboard without an extra click
+      if (msg.type === "admin-pushed") {
+        setStatus("Admin Push received · loading…", "busy");
+        const run = $("#run-btn");
+        if (run) run.disabled = false;
+        refreshFromAdmin("Loaded from Admin Push").catch(() => {
+          markUpdateAvailable("New Admin Push available");
+        });
+      } else {
+        markUpdateAvailable("New targets available");
+      }
     }
   }
 
@@ -14829,7 +14932,12 @@
       const at = Number(Store.readDataPushStamp().at) || 0;
       if (at && at !== lastDataPushAt) {
         lastDataPushAt = at;
-        markUpdateAvailable("New workbook push");
+        setStatus("Workbook push detected · loading…", "busy");
+        const run = $("#run-btn");
+        if (run) run.disabled = false;
+        refreshFromAdmin("Loaded from Admin Push").catch(() => {
+          markUpdateAvailable("New workbook push");
+        });
       }
     }
   });
