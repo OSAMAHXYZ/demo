@@ -124,6 +124,7 @@
 
         <div id="dvp-board" class="dvp-board" hidden>
           <div class="dvp-cards" id="dvp-cards"></div>
+          <div class="dvp-summary-chart" id="dvp-summary-chart"></div>
           <div class="dvp-totals" id="dvp-totals"></div>
         </div>
       </div>
@@ -13181,6 +13182,35 @@
         <span class="v">${t.ratio == null ? "—" : t.ratio.toFixed(1) + "%"}</span>
         ${dvpTrendChip(t.ratioTrend)}
       </div>`;
+
+    // Render summary chart
+    const maxDel = Math.max(...data.cards.map(c => c.delivered), 1);
+    const maxPro = Math.max(...data.cards.map(c => c.proforma), 1);
+    const chartEl = $("#dvp-summary-chart");
+    if (chartEl) {
+      chartEl.innerHTML = `
+        <h4>All Channels Overview</h4>
+        <div class="dvp-summary-bars">
+          ${data.cards.map(c => {
+            const delWidth = Math.max(20, (c.delivered / maxDel) * 100);
+            const proWidth = Math.max(20, (c.proforma / maxPro) * 100);
+            return `
+              <div class="dvp-summary-bar-row">
+                <div class="dvp-summary-bar-label">${escapeHtml(c.title)}</div>
+                <div class="dvp-summary-bar-track">
+                  <div class="dvp-summary-bar-fill is-del" style="width: ${delWidth}%">
+                    <span>${escapeHtml(formatNumber(c.delivered))} Del</span>
+                  </div>
+                  <div class="dvp-summary-bar-fill is-pro" style="width: ${proWidth}%">
+                    <span>${escapeHtml(formatNumber(c.proforma))} Prof</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
   }
 
   function exportIccExcel() {
