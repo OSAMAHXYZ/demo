@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910bowide1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910dvplegend1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -5008,7 +5008,9 @@
           : undefined,
         plugins: {
           legend: {
-            display: type === "doughnut" || opts.legend === true || !!(opts.datasets && opts.datasets.length > 1),
+            display: opts.legend === false
+              ? false
+              : (opts.legend === true || type === "doughnut" || !!(opts.datasets && opts.datasets.length > 1)),
             labels: { color: "#64748b", font: { size: 12, family: fontFamily }, boxWidth: 12, padding: 14 },
           },
           tooltip: {
