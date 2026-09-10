@@ -818,11 +818,14 @@ function loadRtlDailySnapshot(idOrDate) {
   // Legacy single-file-per-day
   const legacy = readRtlSnapshotFile(rtlDailySnapshotPath(dateKey), dateKey);
   if (legacy) return legacy;
-  // Newest snapshot for that calendar day
+  // Newest snapshot for that calendar day - find all snapshots for the date and pick the most recent
   const index = loadRtlDailyIndex();
-  const match = index.snapshots.find((s) => s.date === dateKey);
-  if (!match) return null;
-  return readRtlSnapshotFile(rtlDailySnapshotPath(match.id), match.id);
+  const matches = index.snapshots.filter((s) => s.date === dateKey);
+  if (!matches.length) return null;
+  // Sort by timestamp descending (newest first) and take the first one
+  matches.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
+  const newest = matches[0];
+  return readRtlSnapshotFile(rtlDailySnapshotPath(newest.id), newest.id);
 }
 
 function listRtlSnapshotsNewestFirst() {
