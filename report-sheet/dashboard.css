@@ -4940,6 +4940,17 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-day-pill.has-file .bas-day-num {
   color: #15803d;
 }
+.bas-day-pill.has-file-empty {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.15);
+}
+.bas-day-pill.has-file-empty .bas-day-num {
+  color: #b45309;
+}
+.bas-day-pill.has-file-empty .bas-day-count {
+  color: #b45309;
+}
 
 .bas-day-pill:hover:not(.is-future) {
   transform: translateY(-2px);

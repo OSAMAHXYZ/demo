@@ -757,8 +757,13 @@ function scanRtlStockBuffer(buffer) {
   } catch {
     return [];
   }
-  const sheetName = wb.SheetNames && wb.SheetNames[0];
-  if (!sheetName) return [];
+  const names = wb.SheetNames || [];
+  if (!names.length) return [];
+  // Prefer an RTL / stock sheet when workbooks include cover tabs.
+  const sheetName =
+    names.find((n) => /rtl/i.test(String(n || '')))
+    || names.find((n) => /stock|مخزون|retail/i.test(String(n || '')))
+    || names[0];
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!matrix.length) return [];
@@ -3089,7 +3094,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       if (id === 'rtl') {
         try {
           const vehicles = scanRtlStockBuffer(buf);
-          // Live Push always archives as TODAY (Riyadh). Past days use Data Uploader.
+          // Live Push always archives as TODAY (Riyadh) only — past schedule days stay on Data Uploader day files.
           rtlSnapshot = persistRtlDailySnapshot({
             dateKey: todayIsoRiyadh(),
             vehicles,
@@ -3325,19 +3330,36 @@ app.post('/api/rtl-daily/save', (req, res) => {
         excelBuffer = null;
       }
     }
+    // Prefer server-side Col J scan from the Excel so age 0 / RES match Admin Push.
+    let vehicles = vehiclesIn;
+    if (excelBuffer && excelBuffer.length) {
+      try {
+        const scanned = scanRtlStockBuffer(excelBuffer);
+        if (scanned.length) vehicles = scanned;
+      } catch (scanErr) {
+        console.error('[rtl-daily/save] excel rescan failed, using client vehicles', scanErr);
+      }
+    }
     const snap = persistRtlDailySnapshot({
       dateKey,
-      vehicles: vehiclesIn,
+      vehicles,
       fileName: body.fileName,
       source: body.source || 'uploader',
       excelBuffer
     });
+    const age0 = (snap.vehicles || []).filter((v) => {
+      const a = String(v?.age ?? '').trim();
+      if (!a) return true;
+      const n = Number(String(a).replace(/[, ]/g, ''));
+      return Number.isFinite(n) ? n === 0 : a === '0';
+    }).length;
     return res.json({
       ok: true,
       id: snap.id,
       date: snap.date,
       asOfDate: snap.asOfDate,
       count: snap.count,
+      age0,
       at: snap.at,
       excelSaved: snap.excelSaved
     });

@@ -333,6 +333,122 @@
       color: #fff;
     }
     .muted { color: var(--muted); font-size: 0.85rem; }
+    .day-cal-card { margin-bottom: 16px; }
+    .day-cal-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 12px 18px;
+      margin-bottom: 14px;
+    }
+    .day-cal-toolbar .field {
+      margin: 0;
+      min-width: 180px;
+    }
+    .day-cal-toolbar .status {
+      flex: 1 1 220px;
+      margin: 0;
+      min-height: 1.2em;
+    }
+    .day-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .day-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .day-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    .day-box {
+      position: relative;
+      appearance: none;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 6px;
+      min-height: 104px;
+      padding: 10px 10px 12px;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 14px;
+      background: #f8fafc;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .day-box:hover {
+      border-color: #94a3b8;
+      background: #fff;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+    }
+    .day-box.is-selected {
+      border-style: solid;
+      border-color: #3b82f6;
+      background: #eff6ff;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .day-box.is-filled {
+      border-style: solid;
+      border-color: #86efac;
+      background: linear-gradient(180deg, #f0fdf4, #fff);
+    }
+    .day-box.is-filled.is-selected {
+      border-color: #3b82f6;
+    }
+    .day-box.is-dragover {
+      border-color: var(--toyota);
+      border-style: solid;
+      background: #fff1f2;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(235, 10, 30, 0.12);
+    }
+    .day-box.is-busy {
+      opacity: 0.72;
+      pointer-events: none;
+    }
+    .day-box.is-today .day-box-num::after {
+      content: "Today";
+      margin-left: 6px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--toyota);
+      vertical-align: middle;
+    }
+    .day-box-num {
+      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: #0f172a;
+    }
+    .day-box-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .day-box-meta strong {
+      display: block;
+      color: #047857;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+    .day-box-hint {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .day-box.is-filled .day-box-hint { color: #15803d; }
   </style>
 </head>
 <body>
@@ -352,16 +468,30 @@
     </div>
 
     <p class="note">
-      <b>Schedule days:</b> Day 1 uses the RTL Excel you save for <b>1 September</b> (Col J age 0 = that day’s arrivals). Day 2 → 2 September, and so on.
-      <b>Admin Push to Live</b> always archives as <b>today</b> (Riyadh). When the day ends, that last snapshot stays locked for the ended day.
+      <b>Day boxes:</b> Each day is its <b>own RTL file</b>. Drop Day 1’s extract on box 1, Day 2 on box 2, etc.
+      Col J age 0 (or blank) = that day’s arrivals · Allocation <b>Tot</b> / <b>RES</b>.
       <br/><br/>
-      <b>Tot</b> = age 0 (or blank age) matched to allocation · <b>RES</b> = same with Search Area = Retail Electronic Sales.
-      Select the schedule date → scan → Append. Or select a date and click <b>Use date</b> on an archive file to pin it.
+      <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — it never overwrites past day boxes.
+      If a green day shows <b>0</b>, re-drop that day’s RTL extract (age 0 rows required).
     </p>
+
+    <section class="card full day-cal-card">
+      <h2>Schedule month · drop RTL on each day</h2>
+      <p class="sub">Each box is one calendar day. Drag &amp; drop an RTL Excel/CSV onto a day to scan and save it for that date. Green boxes already have an active file.</p>
+      <div class="day-cal-toolbar">
+        <div class="field">
+          <label for="cal-month">Month</label>
+          <input id="cal-month" type="month" />
+        </div>
+        <div class="status" id="day-cal-status">Drop an RTL file onto a day box.</div>
+      </div>
+      <div class="day-grid" id="day-grid" aria-label="RTL day drop boxes"></div>
+      <input id="day-file-input" type="file" hidden accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" />
+    </section>
 
     <div class="date-banner" id="date-banner">
       <div class="date-banner-content">
-        <span class="date-banner-label">📅 Data will be saved for:</span>
+        <span class="date-banner-label">Selected day · saves as:</span>
         <strong class="date-banner-date" id="date-banner-display"></strong>
       </div>
     </div>
@@ -369,10 +499,10 @@
     <div class="grid">
       <section class="card">
         <h2>Scan RTL sheet</h2>
-        <p class="sub">Reads every column from the RTL sheet for each VIN (product, suffix, year, colors, age, usage, status, location, vehicle search area, and all other headers).</p>
+        <p class="sub">Optional preview before Append. Dropping on a day box above scans and saves automatically.</p>
 
         <div class="field" style="margin-bottom: 16px;">
-          <label for="snap-date" style="font-size: 0.9rem;">Select snapshot date</label>
+          <label for="snap-date" style="font-size: 0.9rem;">Snapshot date (synced with selected day)</label>
           <input id="snap-date" type="date" style="font-size: 1rem; font-weight: 600; padding: 0.75rem;" />
         </div>
 
@@ -536,6 +666,9 @@
   let cmpTab = "added";
   let lastResCompare = null;
   let resTab = "all-from";
+  let selectedDayKey = "";
+  let busyDayKey = "";
+  let pickDayKey = "";
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -559,6 +692,168 @@
 
   function todayRiyadh() {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
+  }
+
+  function monthKeyFromDate(dateStr) {
+    const s = String(dateStr || "");
+    return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : "";
+  }
+
+  function daysInMonth(year, month1to12) {
+    return new Date(year, month1to12, 0).getDate();
+  }
+
+  function dateKeyForDay(monthKey, day) {
+    const mk = String(monthKey || "");
+    if (!/^\d{4}-\d{2}$/.test(mk)) return "";
+    const d = Math.max(1, Math.min(31, Number(day) || 0));
+    if (!d) return "";
+    return `${mk}-${String(d).padStart(2, "0")}`;
+  }
+
+  function countAge0(vehicles) {
+    return (vehicles || []).filter((v) => {
+      const a = String(v?.age ?? "").trim();
+      if (!a) return true;
+      const n = Number(a);
+      return Number.isFinite(n) ? n === 0 : a === "0";
+    }).length;
+  }
+
+  function activeSnapForDay(dateKey) {
+    if (!dateKey) return null;
+    const activeId = activeByDay[dateKey];
+    if (activeId) {
+      const hit = snapshots.find((s) => (s.id || s.date) === activeId);
+      if (hit) return hit;
+    }
+    const daySnaps = snapshots
+      .filter((s) => (s.date || "") === dateKey)
+      .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0));
+    return daySnaps[0] || null;
+  }
+
+  function selectScheduleDay(dateKey, { syncMonth = true } = {}) {
+    if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+    selectedDayKey = dateKey;
+    const snapDate = $("#snap-date");
+    if (snapDate) snapDate.value = dateKey;
+    if (syncMonth) {
+      const cal = $("#cal-month");
+      if (cal) cal.value = monthKeyFromDate(dateKey);
+    }
+    updateDateBanner();
+    renderDayGrid();
+  }
+
+  function renderDayGrid() {
+    const grid = $("#day-grid");
+    if (!grid) return;
+    const cal = $("#cal-month");
+    const mk = (cal && cal.value) || monthKeyFromDate(todayRiyadh());
+    const [ys, ms] = mk.split("-");
+    const y = Number(ys);
+    const m = Number(ms);
+    const dim = daysInMonth(y, m);
+    const today = todayRiyadh();
+
+    grid.innerHTML = Array.from({ length: dim }, (_, i) => {
+      const day = i + 1;
+      const dateKey = dateKeyForDay(mk, day);
+      const snap = activeSnapForDay(dateKey);
+      const filled = Boolean(snap);
+      const selected = selectedDayKey === dateKey;
+      const busy = busyDayKey === dateKey;
+      const isToday = dateKey === today;
+      const classes = [
+        "day-box",
+        filled ? "is-filled" : "",
+        selected ? "is-selected" : "",
+        busy ? "is-busy" : "",
+        isToday ? "is-today" : "",
+      ].filter(Boolean).join(" ");
+      const meta = filled
+        ? `<div class="day-box-meta"><strong>${Number(snap.count) || 0} VINs</strong>${escapeHtml(snap.fileName || "Active file")}</div>`
+        : `<div class="day-box-meta">No file yet</div>`;
+      const hint = busy ? "Saving…" : filled ? "Drop to replace" : "Drop RTL here";
+      return `
+        <button type="button" class="${classes}" data-day="${day}" data-date="${escapeHtml(dateKey)}" aria-label="Day ${day} ${dateKey}">
+          <div class="day-box-num">${day}</div>
+          ${meta}
+          <div class="day-box-hint">${hint}</div>
+        </button>`;
+    }).join("");
+  }
+
+  function setDayCalStatus(text, kind) {
+    setStatus($("#day-cal-status"), text, kind);
+  }
+
+  async function ingestRtlFileForDay(file, dateKey, { autoSave = true } = {}) {
+    if (!file) throw new Error("No file selected");
+    if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+      throw new Error("Invalid schedule day");
+    }
+    selectScheduleDay(dateKey);
+    busyDayKey = dateKey;
+    renderDayGrid();
+    setDayCalStatus(`Scanning Day ${Number(dateKey.slice(8, 10))} · ${file.name}…`);
+    setStatus($("#scan-status"), `Scanning for ${formatDateDisplay(dateKey)}…`);
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const result = scanRtlWorkbook(wb);
+      scanned = result.vehicles;
+      scannedHeaders = result.headers || [];
+      scannedExtraHeaders = result.extraHeaders || [];
+      scannedFileName = file.name;
+      scannedExcelBase64 = arrayBufferToBase64(buf);
+      $("#kpi-rows").textContent = String(result.rowsRead || 0);
+      renderPreview();
+
+      const age0 = countAge0(scanned);
+      const dayNum = Number(dateKey.slice(8, 10));
+      setStatus(
+        $("#scan-status"),
+        `✓ Scanned ${scanned.length} VIN(s) · ${age0} age 0 · Day ${dayNum} (${formatDateDisplay(dateKey)}).`,
+        "ok"
+      );
+
+      if (!autoSave) {
+        setDayCalStatus(`Day ${dayNum} scanned — click Append snapshot to save.`, "ok");
+        return { saved: false, count: scanned.length, age0 };
+      }
+
+      setDayCalStatus(`Saving Day ${dayNum}…`);
+      const res = await fetch(API_SAVE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateKey,
+          fileName: scannedFileName,
+          vehicles: scanned,
+          excelBase64: scannedExcelBase64 || undefined,
+          source: "uploader-day-box",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setStatus(
+        $("#scan-status"),
+        `✓ Saved ${data.count} VIN(s) · ${data.age0 != null ? data.age0 : age0} age 0 for Day ${dayNum}. Refresh Allocation to update Tot/RES.`,
+        "ok"
+      );
+      setDayCalStatus(
+        `Day ${dayNum} saved · ${data.count} VINs · ${data.age0 != null ? data.age0 : age0} age 0.`,
+        "ok"
+      );
+      await loadMeta();
+      return { saved: true, count: data.count, age0 };
+    } finally {
+      busyDayKey = "";
+      renderDayGrid();
+    }
   }
 
   function formatDateDisplay(dateStr) {
@@ -883,6 +1178,7 @@
       activeByDay = data.activeByDay && typeof data.activeByDay === "object" ? data.activeByDay : {};
       const activeDays = Object.keys(activeByDay).length;
       renderSnapList();
+      renderDayGrid();
       fillCompareSelects();
       setStatus(
         $("#list-status"),
@@ -1029,10 +1325,104 @@
   }
 
   $("#snap-date").value = todayRiyadh();
+  selectedDayKey = $("#snap-date").value;
+  {
+    const cal = $("#cal-month");
+    if (cal) cal.value = monthKeyFromDate(selectedDayKey);
+  }
   updateDateBanner();
+  renderDayGrid();
+
+  $("#cal-month")?.addEventListener("change", () => {
+    const mk = $("#cal-month").value;
+    const day = selectedDayKey ? Number(selectedDayKey.slice(8, 10)) : 1;
+    const dim = daysInMonth(Number(mk.slice(0, 4)), Number(mk.slice(5, 7)));
+    const nextDay = Math.min(Math.max(1, day || 1), dim);
+    selectScheduleDay(dateKeyForDay(mk, nextDay), { syncMonth: false });
+  });
+
+  $("#day-grid")?.addEventListener("click", (e) => {
+    const box = e.target.closest(".day-box");
+    if (!box) return;
+    const dateKey = box.getAttribute("data-date") || "";
+    selectScheduleDay(dateKey);
+    setDayCalStatus(`Day ${Number(dateKey.slice(8, 10))} selected · drop an RTL file here, or double-click to browse.`);
+  });
+
+  $("#day-grid")?.addEventListener("dblclick", (e) => {
+    const box = e.target.closest(".day-box");
+    if (!box) return;
+    const dateKey = box.getAttribute("data-date") || "";
+    selectScheduleDay(dateKey);
+    pickDayKey = dateKey;
+    const input = $("#day-file-input");
+    if (input) {
+      input.value = "";
+      input.click();
+    }
+  });
+
+  $("#day-file-input")?.addEventListener("change", async () => {
+    const file = $("#day-file-input").files && $("#day-file-input").files[0];
+    const dateKey = pickDayKey || selectedDayKey;
+    if (!file || !dateKey) return;
+    try {
+      await ingestRtlFileForDay(file, dateKey, { autoSave: true });
+    } catch (err) {
+      setDayCalStatus(err.message || "Upload failed", "err");
+      setStatus($("#scan-status"), err.message || "Upload failed", "err");
+    } finally {
+      $("#day-file-input").value = "";
+      pickDayKey = "";
+    }
+  });
+
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((evt) => {
+    $("#day-grid")?.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  $("#day-grid")?.addEventListener("dragenter", (e) => {
+    const box = e.target.closest(".day-box");
+    if (box) box.classList.add("is-dragover");
+  });
+  $("#day-grid")?.addEventListener("dragover", (e) => {
+    const box = e.target.closest(".day-box");
+    document.querySelectorAll(".day-box.is-dragover").forEach((el) => {
+      if (el !== box) el.classList.remove("is-dragover");
+    });
+    if (box) box.classList.add("is-dragover");
+  });
+  $("#day-grid")?.addEventListener("dragleave", (e) => {
+    const box = e.target.closest(".day-box");
+    if (!box) return;
+    // Only clear when leaving the box entirely
+    if (!box.contains(e.relatedTarget)) box.classList.remove("is-dragover");
+  });
+  $("#day-grid")?.addEventListener("drop", async (e) => {
+    const box = e.target.closest(".day-box");
+    document.querySelectorAll(".day-box.is-dragover").forEach((el) => el.classList.remove("is-dragover"));
+    if (!box) return;
+    const dateKey = box.getAttribute("data-date") || "";
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) {
+      setDayCalStatus("Drop an RTL Excel/CSV file.", "err");
+      return;
+    }
+    try {
+      await ingestRtlFileForDay(file, dateKey, { autoSave: true });
+    } catch (err) {
+      setDayCalStatus(err.message || "Upload failed", "err");
+      setStatus($("#scan-status"), err.message || "Upload failed", "err");
+    }
+  });
 
   $("#snap-date").addEventListener("change", () => {
-    updateDateBanner();
+    const v = $("#snap-date").value;
+    if (v) selectScheduleDay(v);
+    else updateDateBanner();
   });
 
   $("#btn-scan").addEventListener("click", async () => {
@@ -1046,23 +1436,8 @@
       setStatus($("#scan-status"), "Please select a snapshot date first.", "err");
       return;
     }
-    setStatus($("#scan-status"), "Scanning…");
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellDates: true });
-      const result = scanRtlWorkbook(wb);
-      scanned = result.vehicles;
-      scannedHeaders = result.headers || [];
-      scannedExtraHeaders = result.extraHeaders || [];
-      scannedFileName = file.name;
-      scannedExcelBase64 = arrayBufferToBase64(buf);
-      $("#kpi-rows").textContent = String(result.rowsRead || 0);
-      renderPreview();
-      setStatus(
-        $("#scan-status"),
-        `✓ Scanned ${scanned.length} unique VIN(s) · ${scannedHeaders.length} column(s) from ${file.name}. Ready to save for ${formatDateDisplay(selectedDate)}. Live dashboard is not affected.`,
-        "ok"
-      );
+      await ingestRtlFileForDay(file, selectedDate, { autoSave: false });
     } catch (err) {
       setStatus($("#scan-status"), err.message || "Scan failed", "err");
     }

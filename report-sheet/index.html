@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910bodesign3" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910rtday3" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -11294,17 +11294,18 @@
           isFuture ? "is-future" : "",
           total || retail ? "has-cars" : "",
           hasFile ? "has-file" : "",
+          hasFile && !(total || retail) ? "has-file-empty" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · active RTL file (${formatNumber(fileVins)} VINs)` : ""} · Total ${total} · Retail Electronic Sales ${retail}">
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs in file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · 0 age-0 matched to plan — re-drop that day's RTL extract" : ""} · Tot ${total} · RES ${retail}">
           <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
               <span class="bas-day-part-lab">Tot</span>
-              <span class="bas-day-count bas-day-count-total">${total || "—"}</span>
+              <span class="bas-day-count bas-day-count-total">${hasFile ? (total || "0") : (total || "—")}</span>
             </span>
             <span class="bas-day-part">
               <span class="bas-day-part-lab">RES</span>
-              <span class="bas-day-count bas-day-count-retail">${retail || "—"}</span>
+              <span class="bas-day-count bas-day-count-retail">${hasFile ? (retail || "0") : (retail || "—")}</span>
             </span>
           </span>
         </div>`;
