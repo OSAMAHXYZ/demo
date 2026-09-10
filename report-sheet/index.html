@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910bofull2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910bodesign3" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -544,7 +544,7 @@
           <header class="bo-dash-header">
             <div class="bo-dash-brand">
               <p class="bo-dash-eyebrow">Abdul Latif Jameel Motors</p>
-              <h1 class="bo-dash-title">BD Dashboard</h1>
+              <h1 class="bo-dash-title">BO Dashboard</h1>
               <p class="bo-dash-subtitle">Back Order Performance &amp; Analysis</p>
             </div>
             <div class="bo-dash-meta">
@@ -598,8 +598,14 @@
                   <button type="button" class="pbi-expand" data-expand="chart-bo-status" title="Open full detail">Full detail</button>
                 </div>
                 <div class="bo-donut-wrap">
-                  <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
-                  <p class="bo-donut-center" id="bo-status-center" hidden></p>
+                  <div class="chart-scroll">
+                    <div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div>
+                    <p class="bo-donut-center" id="bo-status-center" hidden></p>
+                  </div>
+                </div>
+                <div class="bo-status-legend" aria-hidden="true">
+                  <span><i class="ok"></i> Confirmed</span>
+                  <span><i class="bad"></i> Not Confirmed</span>
                 </div>
               </article>
             </div>
@@ -9564,8 +9570,8 @@
       [`Confirmed ${confPct}%`, `Not Confirmed ${notPct}%`],
       [m.confirmed || 0, m.notConfirmed || 0],
       {
-        legend: true,
-        cutout: "72%",
+        legend: false,
+        cutout: "70%",
         backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
         _wide: {
           labels: [
