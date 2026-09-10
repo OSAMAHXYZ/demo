@@ -286,6 +286,40 @@
     }
     .snap-list strong { font-family: "Space Grotesk", Outfit, sans-serif; }
     .snap-list .meta { color: var(--muted); font-size: 0.8rem; }
+    .snap-list li.snap-active {
+      border-color: #86efac;
+      background: #f0fdf4;
+    }
+    .snap-list li.snap-day-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+      padding: 6px 4px 2px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .snap-list li.snap-day-head strong {
+      font-size: 0.82rem;
+      color: #0f172a;
+    }
+    .badge-active {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #166534;
+      background: #dcfce7;
+      vertical-align: middle;
+    }
+    .btn-use-date:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
     .full { margin-top: 16px; }
     .tabs {
       display: flex;
@@ -318,11 +352,12 @@
     </div>
 
     <p class="note">
-      <b>Step 1:</b> Select the date you want to associate with your data. <b>Step 2:</b> Upload and scan the RTL file. <b>Step 3:</b> Click "Append snapshot" to save.
+      <b>Step 1:</b> Select the calendar date for this RTL file (e.g. day 1 of the month). <b>Step 2:</b> Upload and scan. <b>Step 3:</b> Append snapshot — that day becomes active with this file (last save wins).
+      Use <b>Use date</b> to pin an older file as the active one for that schedule day.
       <br/><br/>
-      Manual archive tool. <b>Admin Push to Live</b> also appends a permanent timestamped RTL snapshot automatically
-      (VIN + date + Vehicle Search Area + original Excel). History is never overwritten by a later push.
-      Saving here does <b>not</b> change the live Sales Report dashboard.
+      <b>Admin Push to Live</b> also appends a permanent snapshot for <b>today’s date</b> (Riyadh) and marks it active for that day.
+      Multiple files per day stay in the archive; the Allocation monthly schedule uses <b>one file per day</b>, not every upload.
+      Saving here does <b>not</b> change the live Sales Report dashboard slots.
     </p>
 
     <div class="date-banner" id="date-banner">
@@ -390,7 +425,7 @@
 
       <section class="card">
         <h2>Saved snapshots</h2>
-        <p class="sub">Append-only archive. Each save creates a new timestamped entry — previous snapshots are kept.</p>
+        <p class="sub">Append-only archive. Multiple uploads stay on disk; the schedule uses <b>one active file per calendar day</b> (last Push / Append that day, or the file you pick with <b>Use date</b>).</p>
         <div class="field">
           <label for="snap-filter">Filter by date / time / VIN count</label>
           <input id="snap-filter" type="search" placeholder="Search snapshots…" />
@@ -489,6 +524,7 @@
   const API_SAVE = "/api/rtl-daily/save";
   const API_COMPARE = "/api/rtl-daily/compare";
   const API_DELETE = "/api/rtl-daily";
+  const API_USE = "/api/rtl-daily/use";
 
   let scanned = [];
   let scannedFileName = "";
@@ -496,6 +532,7 @@
   let scannedHeaders = [];
   let scannedExtraHeaders = [];
   let snapshots = [];
+  let activeByDay = {};
   let lastCompare = null;
   let cmpTab = "added";
   let lastResCompare = null;
@@ -515,18 +552,10 @@
 
   function snapLabel(s) {
     const id = s.id || s.date || "";
-    // Show the selected calendar date prominently, with save time as secondary info
-    const calendarDate = s.date || id.split('T')[0] || "";
-    const saveTime = s.at
-      ? new Date(s.at).toLocaleTimeString("en-GB", { timeZone: "Asia/Riyadh", hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      : "";
-    const displayDate = calendarDate
-      ? new Date(calendarDate + 'T12:00:00').toLocaleDateString("en-US", { year: 'numeric', month: '2-digit', day: '2-digit' })
-      : "";
-    const label = displayDate || id;
-    return saveTime 
-      ? `${label}, ${saveTime} · ${s.count || 0} VINs`
-      : `${label} · ${s.count || 0} VINs`;
+    const when = s.at
+      ? new Date(s.at).toLocaleString("en-GB", { timeZone: "Asia/Riyadh" })
+      : (s.date || "");
+    return `${when || id} · ${s.count || 0} VINs`;
   }
 
   function todayRiyadh() {
@@ -852,9 +881,16 @@
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
       const data = await res.json();
       snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
+      activeByDay = data.activeByDay && typeof data.activeByDay === "object" ? data.activeByDay : {};
+      const activeDays = Object.keys(activeByDay).length;
       renderSnapList();
       fillCompareSelects();
-      setStatus($("#list-status"), snapshots.length ? `${snapshots.length} snapshot(s) saved` : "No snapshots yet");
+      setStatus(
+        $("#list-status"),
+        snapshots.length
+          ? `${snapshots.length} snapshot(s) · ${activeDays} active day(s) for schedule`
+          : "No snapshots yet"
+      );
     } catch (err) {
       setStatus($("#list-status"), err.message || "Failed to load", "err");
     }
@@ -881,23 +917,40 @@
       list.innerHTML = `<li><span class="muted">No snapshots match your filter.</span></li>`;
       return;
     }
-    
-    list.innerHTML = filtered.map((s) => {
+
+    const byDay = new Map();
+    filtered.forEach((s) => {
       const id = s.id || s.date || "";
-      const canDelete = id.includes("T");
-      return `
-      <li>
+      const dateKey = s.date || (id.includes("T") ? id.split("T")[0] : id);
+      if (!byDay.has(dateKey)) byDay.set(dateKey, []);
+      byDay.get(dateKey).push(s);
+    });
+    const dayKeys = [...byDay.keys()].sort((a, b) => String(b).localeCompare(String(a)));
+
+    list.innerHTML = dayKeys.map((dateKey) => {
+      const daySnaps = byDay.get(dateKey) || [];
+      const activeId = activeByDay[dateKey] || "";
+      const dayNum = dateKey && dateKey.length >= 10 ? Number(dateKey.slice(8, 10)) : null;
+      const header = `<li class="snap-day-head"><strong>Schedule day ${dayNum || "?"} · ${escapeHtml(formatDateDisplay(dateKey))}</strong><span class="muted">${daySnaps.length} file(s)${activeId ? " · 1 active" : ""}</span></li>`;
+      const items = daySnaps.map((s) => {
+        const id = s.id || s.date || "";
+        const canDelete = id.includes("T");
+        const isActive = Boolean(s.active || (dateKey && activeByDay[dateKey] === id));
+        return `
+      <li${isActive ? ' class="snap-active"' : ""}>
         <div>
-          <strong>${escapeHtml(snapLabel(s))}</strong>
+          <strong>${escapeHtml(snapLabel(s))}${isActive ? ' <span class="badge-active">Active for day</span>' : ""}</strong>
           <div class="meta">${escapeHtml(id)}${s.fileName ? " · " + escapeHtml(s.fileName) : ""}${s.source ? " · " + escapeHtml(s.source) : ""}</div>
         </div>
         <div class="actions" style="margin:0">
           ${canDelete
             ? `<button type="button" data-del="${escapeHtml(id)}">Delete</button>`
             : `<span class="muted">legacy</span>`}
-          <button type="button" class="btn-use-date" data-date="${escapeHtml(s.date || s.id.split('T')[0] || '')}">Use date</button>
+          <button type="button" class="btn-use-date" data-id="${escapeHtml(id)}" data-date="${escapeHtml(dateKey || "")}"${isActive ? " disabled" : ""}>${isActive ? "In use" : "Use date"}</button>
         </div>
       </li>`;
+      }).join("");
+      return header + items;
     }).join("");
   }
 
@@ -1084,10 +1137,36 @@
     
     const dateBtn = e.target.closest(".btn-use-date");
     if (dateBtn) {
-      const date = dateBtn.getAttribute("data-date");
-      if (date) {
-        $("#snap-date").value = date;
-        setStatus($("#scan-status"), `Date set to ${date} from saved snapshot.`, "ok");
+      const id = dateBtn.getAttribute("data-id") || "";
+      const date = dateBtn.getAttribute("data-date") || "";
+      if (!id) {
+        setStatus($("#list-status"), "Missing snapshot id.", "err");
+        return;
+      }
+      dateBtn.disabled = true;
+      setStatus($("#list-status"), "Setting active file for schedule day…");
+      try {
+        const res = await fetch(API_USE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        if (date) {
+          $("#snap-date").value = date;
+          updateDateBanner();
+        }
+        const dayNum = date && date.length >= 10 ? Number(date.slice(8, 10)) : null;
+        setStatus(
+          $("#scan-status"),
+          `✓ Schedule day ${dayNum || "?"} (${data.date || date}) now uses only this file · ${data.count || 0} VINs · ${data.id || id}`,
+          "ok"
+        );
+        await loadMeta();
+      } catch (err) {
+        dateBtn.disabled = false;
+        setStatus($("#list-status"), err.message || "Use date failed", "err");
       }
     }
   });

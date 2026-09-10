@@ -9,13 +9,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260909acc2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910dvp1" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -101,101 +100,80 @@
       <div class="panel-section dvp-summary" id="panel-summary" style="display:none">
         <header class="dvp-head">
           <div class="dvp-brand">
-            <img class="dvp-logo" src="../images/logo/toyota.png" alt="" width="44" height="44" onerror="this.style.display='none'" />
             <div>
-              <p class="dvp-eyebrow">Abdul Latif Jameel Motors</p>
               <h2 class="dvp-title">Sales Performance</h2>
-              <p class="dvp-sub">Delivered vs Proforma</p>
+              <p class="dvp-sub">Delivered vs Proforma by Channel</p>
             </div>
           </div>
           <div class="dvp-head-meta">
-            <div class="dvp-asof">
-              <span class="lab">As of</span>
-              <strong id="dvp-asof">—</strong>
+            <div class="dvp-filter-chip dvp-asof" title="Report period">
+              <span class="dvp-filter-ico" aria-hidden="true">📅</span>
+              <div>
+                <span class="lab">Date</span>
+                <strong id="dvp-asof">—</strong>
+              </div>
             </div>
+            <label class="dvp-filter-chip" for="dvp-f-showroom">
+              <span class="dvp-filter-ico" aria-hidden="true">◎</span>
+              <select id="dvp-f-showroom" aria-label="Filter by showroom">
+                <option value="">All Showrooms</option>
+              </select>
+            </label>
+            <label class="dvp-filter-chip" for="dvp-f-model">
+              <span class="dvp-filter-ico" aria-hidden="true">▦</span>
+              <select id="dvp-f-model" aria-label="Filter by model">
+                <option value="">All Models</option>
+              </select>
+            </label>
             <button type="button" class="btn" id="dvp-refresh-btn">Refresh</button>
+            <div class="dvp-head-logo">
+              <img src="../images/logo/toyota.png" alt="" width="36" height="36" onerror="this.style.display='none'" />
+              <span>ALJ · Abdul Latif Jameel</span>
+            </div>
           </div>
         </header>
 
         <div class="dvp-empty card" id="dvp-empty" hidden>
           <h3>Delivered vs Proforma</h3>
-          <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · B2C · Guest Experience totals.</p>
+          <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · Telesales · B2C · Experience Automall totals.</p>
           <p class="foot">Mark Guest Experience advisors in Admin → Employees → <b>Guest Exp</b>, then Push to live.</p>
         </div>
 
         <div id="dvp-board" class="dvp-board" hidden>
-          <!-- Professional Dashboard Header -->
-          <div class="dvp-professional-header">
-            <div class="dvp-header-brand">
-              <div class="dvp-brand-logo-text">ABDUL LATIF JAMEEL MOTORS</div>
-              <div class="dvp-brand-subtitle">TOYOTA</div>
-            </div>
-            <div class="dvp-header-title-section">
-              <h2 class="dvp-dashboard-title">Sales Performance</h2>
-              <div class="dvp-header-controls">
-                <div class="dvp-filter-group">
-                  <label class="dvp-filter-label">
-                    <iconify-icon icon="mdi:calendar"></iconify-icon>
-                    Date
-                  </label>
-                  <select class="dvp-filter-select" id="dvp-date-filter">
-                    <option value="current">Current Period</option>
-                    <option value="prev">Previous Period</option>
-                    <option value="ytd">Year to Date</option>
-                  </select>
+          <div class="dvp-cards" id="dvp-cards"></div>
+
+          <div class="dvp-mid">
+            <article class="card dvp-overview-card">
+              <div class="dvp-overview-head">
+                <div>
+                  <h3>All Channels Overview</h3>
+                  <p class="hint">Delivered and Proforma by Channel</p>
                 </div>
-                <div class="dvp-filter-group">
-                  <label class="dvp-filter-label">
-                    <iconify-icon icon="mdi:map-marker"></iconify-icon>
-                    Location
-                  </label>
-                  <select class="dvp-filter-select" id="dvp-location-filter">
-                    <option value="all">All Locations</option>
-                    <option value="riyadh">Riyadh</option>
-                    <option value="jeddah">Jeddah</option>
-                  </select>
-                </div>
-                <div class="dvp-filter-group">
-                  <label class="dvp-filter-label">
-                    <iconify-icon icon="mdi:car"></iconify-icon>
-                    Model
-                  </label>
-                  <select class="dvp-filter-select" id="dvp-model-filter">
-                    <option value="all">All Models</option>
-                    <option value="camry">Camry</option>
-                    <option value="corolla">Corolla</option>
-                    <option value="rav4">RAV4</option>
-                  </select>
+                <div class="dvp-legend" aria-hidden="true">
+                  <span class="dvp-leg is-del"><i></i>Delivered</span>
+                  <span class="dvp-leg is-pro"><i></i>Pro-Forma</span>
                 </div>
               </div>
-            </div>
+              <div class="chart-box dvp-overview-box"><canvas id="chart-dvp-overview"></canvas></div>
+            </article>
+            <article class="card dvp-share-card">
+              <h3>Total Sales (All Channels)</h3>
+              <div class="dvp-share-layout">
+                <div class="dvp-donut-wrap">
+                  <div class="chart-box dvp-share-box"><canvas id="chart-dvp-share"></canvas></div>
+                  <p class="dvp-donut-center" id="dvp-donut-center" hidden></p>
+                </div>
+                <ul class="dvp-share-legend" id="dvp-share-legend"></ul>
+              </div>
+            </article>
           </div>
 
-          <!-- Channel Cards -->
-          <div class="dvp-cards" id="dvp-cards"></div>
-          
-          <!-- Charts Section -->
-          <div class="dvp-charts-section">
-            <div class="dvp-summary-chart" id="dvp-summary-chart"></div>
-            <div class="dvp-donut-chart-container" id="dvp-donut-container"></div>
-          </div>
-          
-          <!-- Totals with Trends -->
           <div class="dvp-totals" id="dvp-totals"></div>
-          
-          <!-- Footer -->
-          <div class="dvp-dashboard-footer">
-            <div class="dvp-footer-left">
-              <span class="dvp-footer-label">Last updated:</span>
-              <span class="dvp-footer-timestamp" id="dvp-footer-timestamp">—</span>
-              <span class="dvp-footer-separator">•</span>
-              <span class="dvp-footer-source">Data source: Sales Raw Data + RTL Snapshots</span>
-            </div>
-            <div class="dvp-footer-right">
-              <div class="dvp-footer-quote">"Driven by Excellence, Powered by Innovation"</div>
-              <div class="dvp-footer-brand">TOYOTA • ABDUL LATIF JAMEEL</div>
-            </div>
-          </div>
+
+          <footer class="dvp-foot">
+            <p class="dvp-foot-left">Last updated: <strong id="dvp-last-updated">—</strong> · Data synced from Admin Push</p>
+            <p class="dvp-foot-right">TOYOTA · ABDUL LATIF JAMEEL MOTORS</p>
+          </footer>
         </div>
       </div>
 
@@ -562,130 +540,194 @@
         </div>
 
         <div id="bo-dash" class="bo-dash" hidden>
+          <header class="bo-dash-header">
+            <div class="bo-dash-brand">
+              <p class="bo-dash-eyebrow">Abdul Latif Jameel Motors</p>
+              <h1 class="bo-dash-title">BD Dashboard</h1>
+              <p class="bo-dash-subtitle">Back Order Performance &amp; Analysis</p>
+            </div>
+            <div class="bo-dash-meta">
+              <div class="bo-dash-daterange" id="bo-date-range" title="Global report date range">—</div>
+              <div class="bo-dash-updated">
+                <span class="bo-live-dot" aria-hidden="true"></span>
+                <span>Last updated <strong id="bo-last-updated">—</strong></span>
+              </div>
+              <div class="bo-dash-logo">
+                <img src="../images/logo/toyota.png" alt="ALJ Motors" width="40" height="40" onerror="this.style.display='none'" />
+                <span>ALJ Motors</span>
+              </div>
+            </div>
+          </header>
+
           <div class="bo-toolbar">
-            <input id="bo-search" type="search" placeholder="Search product / SFX / salesman…" />
-            <select id="bo-f-product"><option value="">All products</option></select>
-            <select id="bo-f-category"><option value="">All categories</option></select>
-            <select id="bo-f-scope"><option value="">All sales scopes</option></select>
-            <select id="bo-f-channel"><option value="">All channels</option></select>
-            <select id="bo-f-type"><option value="">All sales types</option></select>
-            <select id="bo-f-sfx"><option value="">All SFX / grades</option></select>
-            <select id="bo-f-confirm">
+            <select id="bo-f-product" aria-label="Product"><option value="">All Products</option></select>
+            <select id="bo-f-category" aria-label="Category"><option value="">All Categories</option></select>
+            <select id="bo-f-year" aria-label="Model Year"><option value="">All Model Years</option></select>
+            <select id="bo-f-channel" aria-label="Showroom"><option value="">All Showrooms</option></select>
+            <select id="bo-f-type" aria-label="Sales Type"><option value="">All Sales Types</option></select>
+            <input id="bo-search" type="search" placeholder="Search product / SFX / salesman…" aria-label="Search back orders" />
+            <select id="bo-f-scope" hidden aria-hidden="true"><option value="">All sales scopes</option></select>
+            <select id="bo-f-sfx" hidden aria-hidden="true"><option value="">All SFX / grades</option></select>
+            <select id="bo-f-confirm" hidden aria-hidden="true">
               <option value="">All confirmation</option>
               <option value="yes">Confirmed</option>
               <option value="no">Not confirmed</option>
             </select>
-            <button type="button" id="bo-clear-filters" class="btn">Clear filters</button>
-            <button type="button" id="bo-excel-btn" class="btn-primary">Export Excel</button>
+            <div class="bo-toolbar-actions">
+              <button type="button" id="bo-clear-filters" class="btn bo-btn-clear">Clear Filter</button>
+              <button type="button" id="bo-excel-btn" class="btn-primary bo-btn-export">Export Excel</button>
+            </div>
           </div>
 
           <div class="bo-kpis" id="bo-kpis"></div>
 
-          <div class="bo-insights card" id="bo-insights"></div>
+          <div class="bo-row bo-row-insights">
+            <article class="card bo-insights" id="bo-insights"></article>
+            <article class="card pbi-viz" data-chart-id="chart-bo-top5">
+              <div class="pbi-viz-head">
+                <h2>Back Orders by Model (Top 5)</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-top5">Wide</button>
+              </div>
+              <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-top5"></canvas></div></div>
+            </article>
+            <article class="card pbi-viz bo-status-card" data-chart-id="chart-bo-status">
+              <div class="pbi-viz-head">
+                <h2>Order Status</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-status">Wide</button>
+              </div>
+              <div class="bo-donut-wrap">
+                <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
+                <p class="bo-donut-center" id="bo-status-center" hidden></p>
+              </div>
+            </article>
+          </div>
 
           <div class="bo-strategic" id="bo-strategic"></div>
 
-          <div class="bo-grid">
-            <article class="card bo-span-2">
-              <div class="pbi-viz-head">
-                <h2>Each product · BO / Confirmed / Not confirmed / Avg aging</h2>
-                <span class="hint">Click a product row to open suffix &amp; payment mix</span>
+          <div class="bo-row bo-row-mid">
+            <article class="card bo-product-panel">
+              <div class="pbi-viz-head bo-product-head">
+                <div>
+                  <h2>Back Orders by Product</h2>
+                  <span class="hint">Click a product to open drill-down</span>
+                </div>
+                <button type="button" class="btn bo-view-all" id="bo-view-all-products" title="Show full product table">View All</button>
               </div>
-              <div class="table-wrap" id="bo-product-table"></div>
+              <div class="table-wrap bo-product-table-wrap" id="bo-product-table"></div>
             </article>
+            <div class="bo-side-stack">
+              <article class="card pbi-viz" data-chart-id="chart-bo-aging-buckets">
+                <div class="pbi-viz-head">
+                  <h2>Aging Breakdown</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-aging-buckets"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-salestype">
+                <div class="pbi-viz-head">
+                  <h2>Sales Type · Confirmed vs Not Confirmed</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-salestype">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-salestype"></canvas></div></div>
+              </article>
+            </div>
+          </div>
 
-            <article class="card bo-span-2" id="bo-car-detail">
-              <div class="pbi-viz-head">
-                <h2>Choose car · suffix &amp; payment mix</h2>
-              </div>
-              <div class="bo-car-pick">
-                <label for="bo-car-select">Product / car</label>
-                <select id="bo-car-select"><option value="">Select a product…</option></select>
-                <button type="button" id="bo-car-clear" class="btn">Clear selection</button>
-              </div>
-              <div class="bo-car-summary" id="bo-car-summary"></div>
-              <div class="bo-car-charts">
-                <article class="card pbi-viz" data-chart-id="chart-bo-car-sfx" style="margin:0">
-                  <div class="pbi-viz-head">
-                    <h2>BO by suffix (this car)</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx">Wide</button>
-                  </div>
-                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-sfx"></canvas></div></div>
-                </article>
-                <article class="card pbi-viz" data-chart-id="chart-bo-car-pay" style="margin:0">
-                  <div class="pbi-viz-head">
-                    <h2>Cash · Bank · Employee · Fleet</h2>
-                    <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay">Wide</button>
-                  </div>
-                  <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-pay"></canvas></div></div>
-                </article>
-              </div>
-              <h3 class="bo-subhead">Suffix breakdown for selected car</h3>
-              <div class="table-wrap" id="bo-car-sfx-table"></div>
-              <h3 class="bo-subhead">All back order rows for selected car</h3>
-              <p class="hint" style="margin:0 0 8px">Every column from the uploaded Back Order file for this product.</p>
-              <div class="table-wrap" id="bo-car-rows-table"></div>
-              <p class="foot" id="bo-car-rows-foot"></p>
-            </article>
-
+          <div class="bo-row bo-row-bottom">
             <article class="card pbi-viz" data-chart-id="chart-bo-backlog">
               <div class="pbi-viz-head">
-                <h2>Top 10 product backlog</h2>
+                <h2>Top 10 Products by Backlog</h2>
                 <button type="button" class="pbi-expand" data-expand="chart-bo-backlog">Wide</button>
               </div>
               <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
             </article>
-
-            <article class="card pbi-viz" data-chart-id="chart-bo-confirm">
-              <div class="pbi-viz-head">
-                <h2>Confirmation by product</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-confirm">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-confirm"></canvas></div></div>
-            </article>
-
             <article class="card pbi-viz" data-chart-id="chart-bo-aging">
               <div class="pbi-viz-head">
-                <h2>Average aging by product</h2>
+                <h2>Average Aging by Product (Days)</h2>
                 <button type="button" class="pbi-expand" data-expand="chart-bo-aging">Wide</button>
               </div>
               <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
             </article>
-
-            <article class="card pbi-viz" data-chart-id="chart-bo-salestype">
+            <article class="card pbi-viz" data-chart-id="chart-bo-contrib">
               <div class="pbi-viz-head">
-                <h2>Sales type · Confirmed vs Not</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-salestype">Wide</button>
+                <h2>Contribution by Product</h2>
+                <button type="button" class="pbi-expand" data-expand="chart-bo-contrib">Wide</button>
               </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-salestype"></canvas></div></div>
-            </article>
-
-        <article class="card">
-              <h2>Sales type analysis</h2>
-              <div class="table-wrap" id="bo-salestype-table"></div>
-            </article>
-
-            <article class="card pbi-viz" data-chart-id="chart-bo-sfx">
-              <div class="pbi-viz-head">
-                <h2>SFX / Grade demand (Top 12)</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-sfx">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx"></canvas></div></div>
-            </article>
-
-            <article class="card pbi-viz" data-chart-id="chart-bo-sfx-confirm">
-              <div class="pbi-viz-head">
-                <h2>SFX confirmation rate</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx-confirm"></canvas></div></div>
-            </article>
-
-            <article class="card bo-span-2">
-              <h2>SFX / Grade demand table</h2>
-              <div class="table-wrap" id="bo-sfx-table"></div>
+              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-contrib"></canvas></div></div>
             </article>
           </div>
+
+          <details class="bo-drilldown card" id="bo-car-detail">
+            <summary class="bo-drilldown-summary">
+              <span>Product drill-down · suffix &amp; payment mix</span>
+              <span class="hint">Select a product from the table or below</span>
+            </summary>
+            <div class="bo-car-pick">
+              <label for="bo-car-select">Product / car</label>
+              <select id="bo-car-select"><option value="">Select a product…</option></select>
+              <button type="button" id="bo-car-clear" class="btn">Clear selection</button>
+            </div>
+            <div class="bo-car-summary" id="bo-car-summary"></div>
+            <div class="bo-car-charts">
+              <article class="card pbi-viz" data-chart-id="chart-bo-car-sfx" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>BO by suffix (this car)</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-sfx">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-sfx"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-car-pay" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>Cash · Bank · Employee · Fleet</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-car-pay">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-car-pay"></canvas></div></div>
+              </article>
+            </div>
+            <h3 class="bo-subhead">Suffix breakdown for selected car</h3>
+            <div class="table-wrap" id="bo-car-sfx-table"></div>
+            <h3 class="bo-subhead">All back order rows for selected car</h3>
+            <p class="hint" style="margin:0 0 8px">Every column from the uploaded Back Order file for this product.</p>
+            <div class="table-wrap" id="bo-car-rows-table"></div>
+            <p class="foot" id="bo-car-rows-foot"></p>
+          </details>
+
+          <details class="bo-drilldown card">
+            <summary class="bo-drilldown-summary">
+              <span>Sales type &amp; SFX detail tables</span>
+            </summary>
+            <div class="bo-grid">
+              <article class="card" style="margin:0">
+                <h2>Sales type analysis</h2>
+                <div class="table-wrap" id="bo-salestype-table"></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-sfx" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>SFX / Grade demand (Top 12)</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-sfx-confirm" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>SFX confirmation rate</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-sfx-confirm">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-sfx-confirm"></canvas></div></div>
+              </article>
+              <article class="card bo-span-2" style="margin:0">
+                <h2>SFX / Grade demand table</h2>
+                <div class="table-wrap" id="bo-sfx-table"></div>
+              </article>
+              <article class="card pbi-viz bo-span-2" data-chart-id="chart-bo-confirm" style="margin:0" hidden>
+                <div class="pbi-viz-head">
+                  <h2>Confirmation by product</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-confirm">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-confirm"></canvas></div></div>
+              </article>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -1024,7 +1066,7 @@
             <article class="card act-card">
               <div class="pbi-viz-head">
                 <h2>Monthly RTL Collection</h2>
-                <span class="hint" id="act-monthly-hint">Only months present in RTL age data</span>
+                <span class="hint" id="act-monthly-hint">Active RTL file per calendar day</span>
               </div>
               <div class="chart-box act-chart-box act-chart-box--month"><canvas id="chart-act-monthly"></canvas></div>
               <div class="act-monthly-kpis" id="act-monthly-kpis"></div>
@@ -1121,7 +1163,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Retail Electronic Sales only · RTL Col J · collected date = today − age</span>
+                <span class="hint" id="bas-month-hint">One active RTL file per calendar day · Use date / last push · age 0 = that day’s arrivals</span>
               </div>
             </div>
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
@@ -1273,10 +1315,6 @@
           <h3 class="pbi-wide-numbers-title">Numbers</h3>
           <div class="pbi-wide-numbers-list" id="pbi-wide-numbers-list"></div>
         </aside>
-      </div>
-      <div class="pbi-wide-resize-handle" id="pbi-wide-resize-handle" hidden>
-        <div class="pbi-wide-resize-line"></div>
-        <div class="pbi-wide-resize-grip" title="Drag to resize chart height"></div>
       </div>
       <div class="pbi-wide-perf-extra" id="pbi-wide-perf-extra" hidden>
         <div class="pbi-wide-perf-volume" id="pbi-wide-perf-volume"></div>
@@ -4815,6 +4853,7 @@
     delete datasetsExtra.rowMeta;
     delete datasetsExtra.dualValueAxis;
     delete datasetsExtra.stacked;
+    delete datasetsExtra.cutout;
     const softScale = {
       beginAtZero: true,
       stacked: !!opts.stacked,
@@ -4887,7 +4926,7 @@
         labels,
         datasets: (opts.datasets || [{
           data: values,
-          backgroundColor: type === "doughnut" ? colors : (opts.backgroundColor || "rgba(235, 10, 30, 0.88)"),
+          backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : "rgba(235, 10, 30, 0.88)"),
           borderWidth: type === "doughnut" ? 3 : 0,
           borderColor: type === "doughnut" ? "#fff" : undefined,
           borderRadius: type === "bar" ? 4 : 0,
@@ -4905,6 +4944,7 @@
         indexAxis: horizontal ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
+        ...(type === "doughnut" && opts.cutout ? { cutout: opts.cutout } : {}),
         animation: { duration: 320, easing: "easeOutQuart" },
         layout: {
           padding: {
@@ -5345,8 +5385,6 @@
       body.hidden = false;
       body.classList.remove("pbi-wide-body--chart-only");
     }
-    const resizeHandle = $("#pbi-wide-resize-handle");
-    if (resizeHandle) resizeHandle.hidden = false;
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
@@ -5628,10 +5666,6 @@
       modal.classList.toggle("pbi-wide-modal--cancel", isCancel);
       modal.classList.remove("pbi-wide-modal--accessories", "pbi-wide-modal--table");
     }
-    const resizeHandle = $("#pbi-wide-resize-handle");
-    if (resizeHandle) {
-      resizeHandle.hidden = !(isPerf || isCancel);
-    }
     const titleEl = document.querySelector(`[data-chart-id="${sourceId}"] h2`);
     $("#pbi-wide-title").textContent = isCancel
       ? "Cancellation % · Cancelled BOs"
@@ -5730,11 +5764,7 @@
     if (body) {
       body.hidden = false;
       body.classList.add("pbi-wide-body--chart-only");
-      body.style.minHeight = "";
-      body.style.maxHeight = "";
     }
-    const resizeHandle = $("#pbi-wide-resize-handle");
-    if (resizeHandle) resizeHandle.hidden = true;
     hideWideTableMode();
     hideWidePerfExtra();
     hideWideCancelExtra();
@@ -5814,11 +5844,12 @@
 
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
+      if (p.id === "stockdashboard") return false; // hidden from nav; panel code kept
       if (p.id === "salesreport") return hasSalesReportInputs();
       if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
       if (p.id === "allocationaudit") return true;
-      // BO + Stock Dashboard always visible — empty state when BO file missing
+      // BO + Allocation + Stock & BO Dashboard always visible — empty state when files missing
       return true;
     });
   }
@@ -6323,10 +6354,10 @@
     appendObjectSheet(wb, "2 Confirmed BO vs Alloc", basRowsToExcel(confRows));
     appendObjectSheet(wb, "2 Confirmed Gap Highlights", basGapHighlightRows(confRows, "Confirmed BO"));
 
-    if (slotHasRows("rtl")) {
-      const { ctx, rows, matched } = buildBasMonthlyData();
+    if (slotHasRows("rtl") || (getCachedRtlActiveMonth(basMonthContext().monthKey))) {
+      const { ctx, rows, matched, mode } = buildBasMonthlyData();
       const filteredRows = filteredBasMonthlyRows(rows);
-      const retailCars = buildRetailElectronicSalesCars(ctx);
+      const retailCars = buildRetailElectronicSalesCars(ctx, mode === "daily" ? getCachedRtlActiveMonth(ctx.monthKey) : null);
       appendObjectSheet(wb, "3 Monthly Collection Plan", filteredRows.map((r) => ({
         Seg: r.seg || "",
         Product: r.product || "",
@@ -8695,6 +8726,7 @@
     search: "",
     product: "",
     category: "",
+    year: "",
     scope: "",
     channel: "",
     type: "",
@@ -8735,8 +8767,11 @@
     }
     if (boView.product) list = list.filter((b) => b.product === boView.product);
     if (boView.category) list = list.filter((b) => b.category === boView.category);
+    if (boView.year) list = list.filter((b) => String(b.year || "") === String(boView.year));
     if (boView.scope) list = list.filter((b) => b.salesScope === boView.scope);
-    if (boView.channel) list = list.filter((b) => b.salesChannel === boView.channel);
+    if (boView.channel) {
+      list = list.filter((b) => b.salesChannel === boView.channel || b.salesScope === boView.channel);
+    }
     if (boView.type) list = list.filter((b) => b.salesType === boView.type);
     if (boView.sfx) list = list.filter((b) => b.sfx === boView.sfx);
     if (boView.confirm === "yes") list = list.filter((b) => b.confirmed);
@@ -8794,19 +8829,34 @@
     return "ok";
   }
 
-  function renderBoKpis(m) {
+  function renderBoKpis(m, extras) {
+    const x = extras || {};
+    const returned = Number(x.returned) || 0;
+    const pipeline = m.notConfirmed;
     const cards = [
-      { lab: "Total Back Orders", val: m.total, sub: "open orders", status: "ok" },
-      { lab: "Confirmed", val: m.confirmed, sub: "allocated", status: "ok" },
-      { lab: "Not Confirmed", val: m.notConfirmed, sub: "waiting allocation", status: m.notConfirmed ? "warn" : "ok" },
-      { lab: "Confirmation %", val: (m.confirmPct * 100).toFixed(1) + "%", sub: "confirmed ÷ total", status: kpiStatus("confirm", m) },
-      { lab: "Orders >30 Days", val: m.over30, sub: "aging risk", status: kpiStatus("over30", m) },
-      { lab: "Orders >60 Days", val: m.over60, sub: "critical aging", status: kpiStatus("over60", m) },
-      { lab: "Average Aging", val: m.avgAging, sub: "days", status: kpiStatus("aging", m) },
+      { lab: "Total Back Orders", val: m.total, sub: "open backlog", status: "ok", tone: "blue", icon: "boxes" },
+      { lab: "Confirmed", val: m.confirmed, sub: "allocated", status: "ok", tone: "green", icon: "check" },
+      { lab: "Not Confirmed", val: m.notConfirmed, sub: "awaiting allocation", status: m.notConfirmed ? "warn" : "ok", tone: "orange", icon: "clock" },
+      { lab: "Confirmation Rate", val: (m.confirmPct * 100).toFixed(1) + "%", sub: "confirmed ÷ total", status: kpiStatus("confirm", m), tone: "teal", icon: "pct" },
+      { lab: "Avg. Waiting Days", val: m.avgAging, sub: "average aging", status: kpiStatus("aging", m), tone: "red", icon: "wait" },
+      { lab: "Cars in Pipeline", val: pipeline, sub: "not yet confirmed", status: pipeline ? "warn" : "ok", tone: "slate", icon: "pipe" },
+      { lab: "Returned Orders", val: returned, sub: hasCancelledBO() ? "cancelled BOs" : "no cancel file", status: returned ? "bad" : "ok", tone: "rose", icon: "return" },
     ];
+    const icons = {
+      boxes: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Zm9 1.2L6.2 6.1 12 3.4l5.8 2.7L12 8.7Zm-7.2 1.3v6.7L11 20v-6.8L4.8 10Zm14.4 0L13 13.2V20l6.2-3.1v-6.7Z"/></svg>',
+      check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.2 16.6 4.8 12.2l1.4-1.4 3 3 8-8 1.4 1.4-9.4 9.4Z"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 10.4 3.2 1.9-.9 1.5L11 13.2V7h2v5.4Z"/></svg>',
+      pct: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm9 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM18 5.4 6.4 18.2l-1.5-1.4L16.5 4l1.5 1.4Z"/></svg>',
+      wait: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a9 9 0 0 0-9 9c0 4.2 2.9 7.7 6.8 8.7L8 22h8l-1.8-2.3c3.9-1 6.8-4.5 6.8-8.7a9 9 0 0 0-9-9Zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm-1 2v6l4.5 2.7.9-1.5L13 11.2V6H11Z"/></svg>',
+      pipe: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 7h7v3H4V7Zm9 0h7v3h-7V7ZM4 14h7v3H4v-3Zm9 0h7v3h-7v-3ZM7 10h3v4H7v-4Zm7 0h3v4h-3v-4Z"/></svg>',
+      return: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 7V3L3 10l7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z"/></svg>',
+    };
     $("#bo-kpis").innerHTML = cards.map((c) => `
-      <div class="bo-kpi ${c.status}">
-        <div class="lab">${c.lab}</div>
+      <div class="bo-kpi ${c.status} tone-${c.tone}">
+        <div class="bo-kpi-top">
+          <span class="bo-kpi-icon">${icons[c.icon] || ""}</span>
+          <div class="lab">${c.lab}</div>
+        </div>
         <div class="val">${typeof c.val === "number" ? formatNumber(c.val) : escapeHtml(String(c.val))}</div>
         <div class="sub">${escapeHtml(c.sub)}</div>
       </div>`).join("");
@@ -8816,7 +8866,7 @@
     const el = $("#bo-insights");
     if (!el) return;
     if (!list.length) {
-      el.innerHTML = "<h2>Executive insights</h2><p class=\"foot\">No back orders match the current filters.</p>";
+      el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><p class="foot">No back orders match the current filters.</p>`;
       return;
     }
     const byProd = productAgg(list);
@@ -8827,54 +8877,70 @@
     const share = top && m.total ? ((top.total / m.total) * 100).toFixed(1) : "0";
     const pct30 = m.total ? ((m.over30 / m.total) * 100).toFixed(1) : "0";
     const pct60 = m.total ? ((m.over60 / m.total) * 100).toFixed(1) : "0";
+    const typeRows = [...groupBoBy(list, (b) => `${b.product} · ${b.salesType || "—"}`).entries()]
+      .map(([label, items]) => ({ label, ...boMetrics(items) }))
+      .filter((r) => r.total >= 3)
+      .sort((a, b) => a.confirmPct - b.confirmPct);
+    const weakMix = typeRows[0];
     const bullets = [
       top ? `<b>${escapeHtml(top.product)}</b> contributes the largest share of total backlog (${share}%).` : null,
       lowestConfirm ? `<b>${escapeHtml(lowestConfirm.product)}</b> has the lowest confirmation rate (${(lowestConfirm.confirmPct * 100).toFixed(1)}%).` : null,
+      weakMix ? `<b>${escapeHtml(weakMix.label)}</b> shows weak confirmation among product × sales-type mixes (${(weakMix.confirmPct * 100).toFixed(1)}%).` : null,
       highestAging ? `<b>${escapeHtml(highestAging.product)}</b> shows the highest average aging (${highestAging.avgAging} days).` : null,
       `Overall confirmation is <b>${(m.confirmPct * 100).toFixed(1)}%</b> — ${m.confirmPct >= 0.7 ? "healthy" : m.confirmPct >= 0.4 ? "needs attention" : "at risk"}.`,
       `Orders older than 30 days: <b>${pct30}%</b> · older than 60 days: <b>${pct60}%</b>.`,
       best ? `<b>${escapeHtml(best.product)}</b> is among the strongest allocation performers (${(best.confirmPct * 100).toFixed(1)}% confirmed).` : null,
-    ].filter(Boolean);
-    el.innerHTML = `<h2>Executive insights</h2><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+    ].filter(Boolean).slice(0, 6);
+    el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
+  }
+
+  function boCarImageUrl(product) {
+    const file = typeof resolveCarImageFile === "function" ? resolveCarImageFile(product) : "";
+    if (!file) return "";
+    const bases = typeof carImageBases === "function" ? carImageBases() : ["../images/cars/"];
+    return bases[0] + encodeURI(file);
   }
 
   function renderBoStrategic(list) {
     const el = $("#bo-strategic");
     if (!el) return;
     const cards = STRATEGIC_PRODUCTS.map((key) => {
-          const rows2 = list.filter((b) => {
-            const p = String(b.product || "").toUpperCase().replace(/\s+/g, "");
-            const k = String(key).toUpperCase().replace(/\s+/g, "");
-            return p.includes(k);
-          });
+      const rows2 = list.filter((b) => {
+        const p = String(b.product || "").toUpperCase().replace(/\s+/g, "");
+        const k = String(key).toUpperCase().replace(/\s+/g, "");
+        return p.includes(k);
+      });
       const m = boMetrics(rows2);
       const label = key === "RAV 4" ? "RAV4" : key;
-      return { label, m, has: rows2.length > 0 };
-    }).filter((c, i, arr) => {
-      // dedupe RAV4 / RAV 4
-      if (c.label === "RAV4" && arr.find((x) => x.label === "RAV4" && x !== c)) return c.has;
-      return true;
+      return { label, key, m, has: rows2.length > 0, sampleProduct: rows2[0]?.product || key };
     });
-    // unique by label
     const seen = new Set();
     const unique = cards.filter((c) => {
       if (seen.has(c.label)) return false;
       seen.add(c.label);
       return true;
     });
-    el.innerHTML = unique.map((c) => `
-      <div class="bo-strat card ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}">
-        <div class="bo-strat-name">${escapeHtml(c.label)}</div>
-        <div class="bo-strat-grid">
-          <div><span>Total BO</span><b>${formatNumber(c.m.total)}</b></div>
-          <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
-          <div><span>Not Conf.</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
-          <div><span>Conf %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
-          <div><span>&gt;30d</span><b>${formatNumber(c.m.over30)}</b></div>
-          <div><span>&gt;60d</span><b>${formatNumber(c.m.over60)}</b></div>
-          <div><span>Avg age</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+    el.innerHTML = unique.map((c) => {
+      const img = boCarImageUrl(c.sampleProduct) || boCarImageUrl(c.label);
+      return `
+      <button type="button" class="bo-strat card ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}" data-bo-product="${escapeHtml(c.sampleProduct)}">
+        <div class="bo-strat-head">
+          <div class="bo-strat-name">${escapeHtml(c.label)}</div>
         </div>
-      </div>`).join("");
+        <div class="bo-strat-visual">
+          ${img
+            ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(c.label)}" loading="lazy" onerror="this.style.display='none'" />`
+            : `<div class="bo-strat-placeholder">${escapeHtml(c.label.slice(0, 1))}</div>`}
+        </div>
+        <div class="bo-strat-grid">
+          <div><span>Total</span><b>${formatNumber(c.m.total)}</b></div>
+          <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
+          <div><span>Not Confirmed</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
+          <div><span>Confirmation %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
+          <div class="bo-strat-span"><span>Avg. Aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+        </div>
+      </button>`;
+    }).join("");
   }
 
   function renderBoProductTable(aggs, totals) {
@@ -8894,37 +8960,14 @@
     if (!totals) {
       t.confirmPct = t.total ? t.confirmed / t.total : 0;
     }
-    const summary = `
-      <div class="bo-product-totals">
-        <div class="bo-product-total">
-          <span class="lab">Total BO</span>
-          <span class="val">${formatNumber(t.total)}</span>
-        </div>
-        <div class="bo-product-total ok">
-          <span class="lab">Confirmed</span>
-          <span class="val">${formatNumber(t.confirmed)}</span>
-        </div>
-        <div class="bo-product-total${t.notConfirmed ? " warn" : " ok"}">
-          <span class="lab">Not Confirmed</span>
-          <span class="val">${formatNumber(t.notConfirmed)}</span>
-        </div>
-        <div class="bo-product-total">
-          <span class="lab">Confirmation %</span>
-          <span class="val">${(t.confirmPct * 100).toFixed(1)}%</span>
-        </div>
-        <div class="bo-product-total">
-          <span class="lab">Avg Aging</span>
-          <span class="val">${formatNumber(t.avgAging || 0)}d</span>
-        </div>
-      </div>`;
-    el.innerHTML = `${summary}<table class="bo-table">
+    el.innerHTML = `<table class="bo-table">
       <thead><tr>
         <th>Product</th>
         <th class="num">Total BO</th>
         <th class="num">Confirmed</th>
         <th class="num">Not Confirmed</th>
-        <th class="num">Avg Aging</th>
-        <th class="num">Conf %</th>
+        <th class="num">Avg. Aging (Days)</th>
+        <th class="num">Confirmation %</th>
       </tr></thead>
       <tbody>${aggs.map((a) => {
         const active = a.product === boView.car ? " active" : "";
@@ -8933,7 +8976,7 @@
           <td class="num"><b>${formatNumber(a.total)}</b></td>
           <td class="num">${formatNumber(a.confirmed)}</td>
           <td class="num">${formatNumber(a.notConfirmed)}</td>
-          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}d</td>
+          <td class="num ${heatAging(a.avgAging)}">${formatNumber(a.avgAging)}</td>
           <td class="num ${heatConfirm(a.confirmPct)}">${(a.confirmPct * 100).toFixed(1)}%</td>
         </tr>`;
       }).join("")}</tbody>
@@ -8942,7 +8985,7 @@
         <td class="num"><b>${formatNumber(t.total)}</b></td>
         <td class="num"><b>${formatNumber(t.confirmed)}</b></td>
         <td class="num"><b>${formatNumber(t.notConfirmed)}</b></td>
-        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}d</b></td>
+        <td class="num ${heatAging(t.avgAging || 0)}"><b>${formatNumber(t.avgAging || 0)}</b></td>
         <td class="num ${heatConfirm(t.confirmPct)}"><b>${(t.confirmPct * 100).toFixed(1)}%</b></td>
       </tr></tfoot>
     </table>`;
@@ -9162,13 +9205,59 @@
     </table>`;
   }
 
-  function renderBoCharts(list, aggs) {
+  function agingBucketCounts(list) {
+    const buckets = [
+      { label: "0-30", min: 0, max: 30, color: "rgba(235, 10, 30, 0.9)" },
+      { label: "31-60", min: 31, max: 60, color: "rgba(234, 88, 12, 0.9)" },
+      { label: "61-90", min: 61, max: 90, color: "rgba(202, 138, 4, 0.9)" },
+      { label: "91-180", min: 91, max: 180, color: "rgba(56, 189, 248, 0.9)" },
+      { label: ">180", min: 181, max: Infinity, color: "rgba(30, 64, 175, 0.92)" },
+    ];
+    return buckets.map((b) => {
+      const count = list.filter((row) => {
+        const age = Number(row.aging);
+        if (!Number.isFinite(age)) return false;
+        return age >= b.min && age <= b.max;
+      }).length;
+      return { ...b, count };
+    });
+  }
+
+  function renderBoCharts(list, aggs, metrics) {
+    const m = metrics || boMetrics(list);
+    const top5 = aggs.slice(0, 5);
+    upsertChart("chart-bo-top5", "bar", top5.map((a) => a.product), top5.map((a) => a.total), {
+      horizontal: true,
+      backgroundColor: top5.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(148, 163, 184, 0.85)"),
+    });
+
+    const confPct = +(m.confirmPct * 100).toFixed(1);
+    const notPct = +((1 - m.confirmPct) * 100).toFixed(1);
+    upsertChart("chart-bo-status", "doughnut",
+      [`Confirmed ${confPct}%`, `Not Confirmed ${notPct}%`],
+      [m.confirmed || 0, m.notConfirmed || 0],
+      {
+        legend: true,
+        cutout: "72%",
+        backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+      }
+    );
+    const center = $("#bo-status-center");
+    if (center) {
+      center.hidden = false;
+      center.innerHTML = `<strong>${formatNumber(m.total)}</strong><span>Total Orders</span>`;
+    }
+
+    const buckets = agingBucketCounts(list);
+    upsertChart("chart-bo-aging-buckets", "bar", buckets.map((b) => b.label), buckets.map((b) => b.count), {
+      backgroundColor: buckets.map((b) => b.color),
+    });
+
     const top = aggs.slice(0, 10);
     const labels = top.map((a) => a.product);
-    const maxIdx = 0;
     upsertChart("chart-bo-backlog", "bar", labels, top.map((a) => a.total), {
       horizontal: true,
-      backgroundColor: top.map((_, i) => i === maxIdx ? "rgba(235, 10, 30, 0.9)" : "rgba(17, 17, 17, 0.85)"),
+      backgroundColor: top.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(235, 10, 30, 0.72)"),
     });
 
     const confLabels = aggs.slice(0, 12).map((a) => a.product);
@@ -9192,10 +9281,18 @@
       ],
     });
 
-    const agingRows = aggs.slice(0, 12);
+    const agingRows = aggs.slice().sort((a, b) => b.avgAging - a.avgAging).slice(0, 12);
     upsertChart("chart-bo-aging", "bar", agingRows.map((a) => a.product), agingRows.map((a) => a.avgAging), {
       horizontal: true,
-      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(235, 10, 30, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(13, 148, 136, 0.85)"),
+      backgroundColor: agingRows.map((a) => a.avgAging > 60 ? "rgba(120, 53, 15, 0.9)" : a.avgAging > 30 ? "rgba(180, 83, 9, 0.85)" : "rgba(146, 64, 14, 0.75)"),
+    });
+
+    const contrib = aggs.slice(0, 10);
+    const totalBo = m.total || contrib.reduce((s, a) => s + a.total, 0) || 1;
+    upsertChart("chart-bo-contrib", "bar", contrib.map((a) => a.product), contrib.map((a) => +((a.total / totalBo) * 100).toFixed(1)), {
+      backgroundColor: "rgba(235, 10, 30, 0.85)",
+      valueSuffix: "%",
+      showValues: true,
     });
 
     const typeRows = [...groupBoBy(list, (b) => b.salesType).entries()]
@@ -9924,8 +10021,17 @@
     const dailySide = $("#act-daily-side");
     const monthKpis = $("#act-monthly-kpis");
     let pack = metrics.monthPack;
-    if (!pack && typeof buildBasMonthlyData === "function" && typeof slotHasRows === "function" && slotHasRows("rtl")) {
-      try { pack = buildBasMonthlyData(); } catch (_) { pack = null; }
+    if (!pack && typeof buildBasMonthlyData === "function") {
+      try {
+        const hasRtl = typeof slotHasRows === "function" && slotHasRows("rtl");
+        const ctx = typeof basMonthContext === "function" ? basMonthContext() : null;
+        const cached = ctx && typeof getCachedRtlActiveMonth === "function"
+          ? getCachedRtlActiveMonth(ctx.monthKey)
+          : null;
+        if (hasRtl || (cached && cached.days && Object.keys(cached.days).length)) {
+          pack = buildBasMonthlyData();
+        }
+      } catch (_) { pack = null; }
     }
     if (pack) {
       const ctx = pack.ctx;
@@ -10018,7 +10124,11 @@
       const monthId = "chart-act-monthly";
       destroyActChart(monthId);
       const monthHint = $("#act-monthly-hint");
-      if (monthHint) monthHint.textContent = `${ctx.monthLabel} · from RTL age dates (no fabricated history)`;
+      if (monthHint) {
+        monthHint.textContent = pack.mode === "daily"
+          ? `${ctx.monthLabel} · ${pack.activeDayCount || 0} active day file(s) · age-0 arrivals`
+          : `${ctx.monthLabel} · from live RTL Col J age (no daily archive yet)`;
+      }
       const monthCanvas = document.getElementById(monthId);
       if (monthCanvas) {
         charts[monthId] = new Chart(monthCanvas, {
@@ -10301,6 +10411,22 @@
     });
     renderBasMonthlyCollection(d);
     renderBasAllocatedVehicles(d);
+
+    // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
+    const monthKey = basMonthContext().monthKey;
+    ensureRtlActiveMonth(monthKey).then((pack) => {
+      if (!pack || activePanel !== "boallocstock") return;
+      if (!window._data) return;
+      const nextRows = filteredBasRows(buildBasRows(window._data));
+      const nextMetrics = computeBasTowerMetrics(window._data, nextRows);
+      actTowerCache = Object.assign(nextMetrics, { allRows: buildBasRows(window._data) });
+      renderBasKpis(nextRows, {
+        totalDemand: nextMetrics.totalDemand,
+        lateRtl: nextMetrics.lateRtl,
+      });
+      renderBasTowerCharts(nextMetrics);
+      renderBasMonthlyCollection(window._data);
+    });
   }
 
   function basMonthContext(refDate) {
@@ -10317,7 +10443,8 @@
     if (live && live.rangeTo && (live.preset === "this_month" || live.preset === "today")) {
       todayDay = Math.min(todayDay, live.rangeTo.getDate());
     }
-    return { y, m, monthLabel, daysInMonth, todayDay, today: ref, live };
+    const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+    return { y, m, monthLabel, daysInMonth, todayDay, today: ref, live, monthKey };
   }
 
   function inferCollectionDateFromAge(age, today) {
@@ -10340,35 +10467,83 @@
     return null;
   }
 
-  function buildBasMonthlyData() {
-    const ctx = basMonthContext();
-    const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
-    const matched = [];
+  /** Cached active RTL file per calendar day for the schedule month. */
+  let rtlActiveMonthCache = { month: "", pack: null, loading: null, error: "" };
 
-    rtlRows.forEach((car) => {
-      const leaf = matchRtlToAllocLeaf(car);
-      if (!leaf) return;
-      const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
-      if (!collDate) return;
-      if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+  function invalidateRtlActiveMonthCache() {
+    rtlActiveMonthCache = { month: "", pack: null, loading: null, error: "" };
+  }
 
-      const age = car.ageing == null ? null : Math.floor(car.ageing);
-      matched.push({
-        ...car,
-        seg: leaf.seg,
-        allocProduct: leaf.product,
-        allocSfx: leaf.sfx,
-        leafId: leaf.id,
-        allocation: Number(allocationValues[leaf.id]) || 0,
-        collectionDate: collDate,
-        collectionDay: collDate.getDate(),
-        collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-        isTodayArrival: age === 0,
-        isLate: age != null && age >= 1,
-        age,
+  function getCachedRtlActiveMonth(monthKey) {
+    if (!monthKey) return null;
+    if (rtlActiveMonthCache.month === monthKey && rtlActiveMonthCache.pack) {
+      return rtlActiveMonthCache.pack;
+    }
+    return null;
+  }
+
+  function ensureRtlActiveMonth(monthKey) {
+    const mk = String(monthKey || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(mk)) return Promise.resolve(null);
+    if (rtlActiveMonthCache.month === mk && rtlActiveMonthCache.pack) {
+      return Promise.resolve(rtlActiveMonthCache.pack);
+    }
+    if (rtlActiveMonthCache.loading && rtlActiveMonthCache.month === mk) {
+      return rtlActiveMonthCache.loading;
+    }
+    rtlActiveMonthCache.month = mk;
+    rtlActiveMonthCache.error = "";
+    rtlActiveMonthCache.loading = fetch(`/api/rtl-daily/active-month?month=${encodeURIComponent(mk)}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || res.statusText || "Failed to load daily RTL");
+        }
+        return res.json();
+      })
+      .then((pack) => {
+        if (rtlActiveMonthCache.month === mk) {
+          rtlActiveMonthCache.pack = pack && pack.days ? pack : { month: mk, days: {}, activeByDay: {} };
+          rtlActiveMonthCache.loading = null;
+        }
+        return rtlActiveMonthCache.pack;
+      })
+      .catch((err) => {
+        if (rtlActiveMonthCache.month === mk) {
+          rtlActiveMonthCache.loading = null;
+          rtlActiveMonthCache.error = err.message || "RTL daily unavailable";
+          rtlActiveMonthCache.pack = null;
+        }
+        return null;
       });
-    });
+    return rtlActiveMonthCache.loading;
+  }
 
+  function mapRtlDailyVehicle(v, dateKey, snapId, i) {
+    const ageRaw = v && (v.age != null ? v.age : v.ageing);
+    const ageNum = toNumber(ageRaw);
+    const product = cellToString(v && v.product).trim() || "—";
+    const suffix = normalizeProductSuffix(product, cellToString(v && (v.suffix || v.sfx)).trim() || "—");
+    return {
+      id: `rtl-day-${dateKey}-${i}`,
+      source: "RTL-daily",
+      product,
+      vin: extractVinValue(v && v.vin) || cellToString(v && v.vin).trim().toUpperCase(),
+      suffix,
+      year: cellToString(v && v.year).trim(),
+      ext: cellToString(v && v.ext).trim(),
+      int: cellToString(v && v.int).trim(),
+      ageing: Number.isFinite(ageNum) && ageNum >= 0 ? ageNum : null,
+      usage: cellToString(v && v.usage).trim() || "—",
+      location: cellToString(v && v.location).trim() || "—",
+      status: cellToString(v && v.status).trim(),
+      searchAreaDesc: cellToString(v && (v.vehicleSearchArea || v.searchAreaDesc)).trim(),
+      snapshotDate: dateKey,
+      snapshotId: snapId || "",
+    };
+  }
+
+  function emptyBasLeafRows() {
     const byLeaf = new Map();
     ALLOCATION_ROWS.forEach((leaf) => {
       if (leaf.kind !== "leaf") return;
@@ -10385,63 +10560,169 @@
         cars: [],
       });
     });
+    return byLeaf;
+  }
 
-    matched.forEach((car) => {
-      const row = byLeaf.get(car.leafId);
-      if (!row) return;
-      row.mtd += 1;
-      if (car.collectionDay >= 1 && car.collectionDay <= 30) row.dayCounts[car.collectionDay] += 1;
-      if (car.isLate) row.late += 1;
-      if (car.isTodayArrival) row.age0 += 1;
-      row.cars.push(car);
-    });
+  function pushBasMonthCar(byLeaf, car) {
+    const row = byLeaf.get(car.leafId);
+    if (!row) return;
+    row.mtd += 1;
+    if (car.collectionDay >= 1 && car.collectionDay <= 30) row.dayCounts[car.collectionDay] += 1;
+    if (car.isLate) row.late += 1;
+    if (car.isTodayArrival) row.age0 += 1;
+    row.cars.push(car);
+  }
 
-    // Plan grid / KPIs: Retail Electronic Sales only
-    const byLeafRetail = new Map();
-    ALLOCATION_ROWS.forEach((leaf) => {
-      if (leaf.kind !== "leaf") return;
-      byLeafRetail.set(leaf.id, {
-        id: leaf.id,
-        seg: leaf.seg,
-        product: leaf.product,
-        sfx: leaf.sfx,
-        allocation: Number(allocationValues[leaf.id]) || 0,
-        dayCounts: Array(31).fill(0),
-        mtd: 0,
-        late: 0,
-        age0: 0,
-        cars: [],
+  /**
+   * Monthly RTL schedule:
+   * Prefer one active file per calendar day (Use date / last push that day).
+   * Day N column = age-0 RES cars from that day's active file only.
+   * Fallback: live RTL Col J age inference when no daily archive for the month.
+   */
+  function buildBasMonthlyData() {
+    const ctx = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctx.monthKey);
+    const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : null;
+    const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
+
+    const matched = [];
+    let mode = "age";
+
+    if (hasDayFiles) {
+      mode = "daily";
+      Object.keys(dayFiles).sort().forEach((dateKey) => {
+        const dayNum = Number(String(dateKey).slice(8, 10));
+        if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 31) return;
+        if (dayNum > ctx.daysInMonth) return;
+        const snap = dayFiles[dateKey];
+        const vehicles = (snap && snap.vehicles) || [];
+        const collDate = new Date(ctx.y, ctx.m, dayNum);
+        const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+        vehicles.forEach((v, i) => {
+          const car = mapRtlDailyVehicle(v, dateKey, snap.id, i);
+          const leaf = matchRtlToAllocLeaf(car);
+          if (!leaf) return;
+          const age = car.ageing == null ? null : Math.floor(car.ageing);
+          // Only age-0 units count as that day's arrivals (full inventory is not re-counted every day).
+          if (age !== 0) return;
+          matched.push({
+            ...car,
+            seg: leaf.seg,
+            allocProduct: leaf.product,
+            allocSfx: leaf.sfx,
+            leafId: leaf.id,
+            allocation: Number(allocationValues[leaf.id]) || 0,
+            collectionDate: collDate,
+            collectionDay: dayNum,
+            collectionLabel: collLabel,
+            isTodayArrival: dayNum === ctx.todayDay,
+            isLate: false,
+            age,
+          });
+        });
       });
-    });
-    const matchedRetail = matched.filter((car) => isRetailElectronicSales(car.searchAreaDesc));
-    matchedRetail.forEach((car) => {
+
+      // Late = age ≥ 1 in today's active file (RES), not re-spread across past day columns.
+      const todayKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
+      const todaySnap = dayFiles[todayKey];
+      if (todaySnap && Array.isArray(todaySnap.vehicles)) {
+        todaySnap.vehicles.forEach((v, i) => {
+          const car = mapRtlDailyVehicle(v, todayKey, todaySnap.id, `late-${i}`);
+          const leaf = matchRtlToAllocLeaf(car);
+          if (!leaf) return;
+          const age = car.ageing == null ? null : Math.floor(car.ageing);
+          if (age == null || age < 1) return;
+          if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+          matched.push({
+            ...car,
+            seg: leaf.seg,
+            allocProduct: leaf.product,
+            allocSfx: leaf.sfx,
+            leafId: leaf.id,
+            allocation: Number(allocationValues[leaf.id]) || 0,
+            collectionDate: inferCollectionDateFromAge(age, ctx.today),
+            collectionDay: ctx.todayDay,
+            collectionLabel: ctx.today.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            isTodayArrival: false,
+            isLate: true,
+            age,
+            _lateOnly: true,
+          });
+        });
+      }
+    } else {
+      const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
+      rtlRows.forEach((car) => {
+        const leaf = matchRtlToAllocLeaf(car);
+        if (!leaf) return;
+        const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
+        if (!collDate) return;
+        if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+
+        const age = car.ageing == null ? null : Math.floor(car.ageing);
+        matched.push({
+          ...car,
+          seg: leaf.seg,
+          allocProduct: leaf.product,
+          allocSfx: leaf.sfx,
+          leafId: leaf.id,
+          allocation: Number(allocationValues[leaf.id]) || 0,
+          collectionDate: collDate,
+          collectionDay: collDate.getDate(),
+          collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          isTodayArrival: age === 0,
+          isLate: age != null && age >= 1,
+          age,
+        });
+      });
+    }
+
+    const byLeaf = emptyBasLeafRows();
+    const arrivalMatched = matched.filter((car) => !car._lateOnly);
+    arrivalMatched.forEach((car) => pushBasMonthCar(byLeaf, car));
+
+    const byLeafRetail = emptyBasLeafRows();
+    const matchedRetailArrivals = arrivalMatched.filter((car) => isRetailElectronicSales(car.searchAreaDesc));
+    matchedRetailArrivals.forEach((car) => pushBasMonthCar(byLeafRetail, car));
+
+    // Attach late counts onto retail rows (today's file only in daily mode).
+    const lateCars = matched.filter((car) => car.isLate && isRetailElectronicSales(car.searchAreaDesc));
+    lateCars.forEach((car) => {
       const row = byLeafRetail.get(car.leafId);
-      if (!row) return;
-      row.mtd += 1;
-      if (car.collectionDay >= 1 && car.collectionDay <= 30) row.dayCounts[car.collectionDay] += 1;
-      if (car.isLate) row.late += 1;
-      if (car.isTodayArrival) row.age0 += 1;
-      row.cars.push(car);
+      if (row) row.late += 1;
+      const rowAll = byLeaf.get(car.leafId);
+      if (rowAll) rowAll.late += 1;
     });
 
     const dayTotals = Array(31).fill(0);
     const dayRetailTotals = Array(31).fill(0);
-    matched.forEach((car) => {
+    const dayHasFile = Array(31).fill(false);
+    arrivalMatched.forEach((car) => {
       if (car.collectionDay < 1 || car.collectionDay > 30) return;
       dayTotals[car.collectionDay] += 1;
       if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[car.collectionDay] += 1;
     });
+    if (hasDayFiles) {
+      Object.keys(dayFiles).forEach((dateKey) => {
+        const dayNum = Number(String(dateKey).slice(8, 10));
+        if (dayNum >= 1 && dayNum <= 30) dayHasFile[dayNum] = true;
+      });
+    }
 
-    const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0);
-    const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0);
+    const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
+    const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     return {
       ctx,
       rows,
       rowsAll,
-      matched: matchedRetail,
-      matchedAll: matched,
+      matched: matchedRetailArrivals,
+      matchedAll: arrivalMatched,
+      lateCars,
       dayTotals,
       dayRetailTotals,
+      dayHasFile,
+      mode,
+      activeDayCount: hasDayFiles ? Object.keys(dayFiles).length : 0,
     };
   }
 
@@ -10463,20 +10744,27 @@
     const section = $("#bas-month-section");
     if (!section) return;
 
-    if (!slotHasRows("rtl")) {
+    const ctxProbe = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctxProbe.monthKey);
+    const hasDaily = pack && pack.days && Object.keys(pack.days).length > 0;
+    if (!slotHasRows("rtl") && !hasDaily) {
       section.hidden = true;
       return;
     }
     section.hidden = false;
 
-    const { ctx, rows, matched, dayTotals, dayRetailTotals } = buildBasMonthlyData();
+    const { ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, mode, activeDayCount, lateCars } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
       const live = ctx.live || window._globalLivePeriod;
       const rangeNote = live && (live.preset === "this_month" || live.preset === "today")
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
-      hint.textContent = `${ctx.monthLabel}${rangeNote} · Retail Electronic Sales only · RTL Col J · collected = today − age · today is day ${ctx.todayDay}`;
+      if (mode === "daily") {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} active day file(s) · day N = age-0 RES from that day's RTL (Use date / last push) · today day ${ctx.todayDay}`;
+      } else {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · push RTL or Use date in Data Uploader to lock one file per day · today day ${ctx.todayDay}`;
+      }
     }
 
     const filteredRows = filteredBasMonthlyRows(rows);
@@ -10485,22 +10773,23 @@
       if (!row) return false;
       return filteredRows.some((fr) => fr.id === row.id);
     });
+    const filteredLate = (lateCars || []).filter((car) => filteredRows.some((fr) => fr.id === car.leafId));
 
     const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
     const age0Total = filteredMatched.filter((c) => c.isTodayArrival).length;
-    const lateTotal = filteredMatched.filter((c) => c.isLate).length;
+    const lateTotal = filteredLate.length || filteredMatched.filter((c) => c.isLate).length;
     const gap = planTotal - mtdTotal;
 
     const kpiEl = $("#bas-month-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
-        { label: "Month", val: ctx.monthLabel, sub: `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
+        { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
         { label: "Age 0 today", val: formatNumber(age0Total), sub: "RES · collected today", cls: age0Total ? "ok" : "" },
         { label: "Collected MTD", val: formatNumber(mtdTotal), sub: "Retail Electronic Sales", cls: "ok" },
         { label: "Plan total", val: formatNumber(planTotal), sub: "E-Sales allocation" },
         { label: "MTD gap", val: (gap > 0 ? "+" : "") + formatNumber(gap), sub: gap >= 0 ? "Plan above RES collected" : "RES collected above plan", cls: gap >= 0 ? "warn" : "ok" },
-        { label: "Late in RTL", val: formatNumber(lateTotal), sub: "RES · age ≥ 1", cls: lateTotal ? "bad" : "ok" },
+        { label: "Late in RTL", val: formatNumber(lateTotal), sub: "RES · age ≥ 1 today", cls: lateTotal ? "bad" : "ok" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
           <div class="lbl">${k.label}</div>
@@ -10518,15 +10807,17 @@
         const retail = (dayRetailTotals && dayRetailTotals[day]) || 0;
         const isToday = day === ctx.todayDay;
         const isFuture = day > ctx.todayDay;
+        const hasFile = dayHasFile && dayHasFile[day];
         const cls = [
           "bas-day-pill",
           "bas-day-pill-split",
           isToday ? "is-today" : "",
           isFuture ? "is-future" : "",
           total || retail ? "has-cars" : "",
+          hasFile ? "has-file" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day} · Total ${total} · Retail Electronic Sales ${retail}">
-          <span class="bas-day-num">${day}</span>
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? " · active RTL file" : ""} · Total ${total} · Retail Electronic Sales ${retail}">
+          <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
               <span class="bas-day-part-lab">Tot</span>
@@ -10542,13 +10833,13 @@
       stripEl.innerHTML = stripHtml;
     }
 
-    renderRetailElectronicSalesPanel(ctx);
+    renderRetailElectronicSalesPanel(ctx, mode === "daily" ? pack : null);
 
     const tableEl = $("#bas-month-table");
     const footEl = $("#bas-month-foot");
     if (tableEl) {
       if (!filteredRows.length) {
-        tableEl.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales rows match filters.</p>`;
+        tableEl.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales rows match filters.${mode === "daily" ? " Active day files drive columns 1–30 (age 0 only)." : ""}</p>`;
       } else {
         const dayHeaders = Array.from({ length: 30 }, (_, i) => {
           const day = i + 1;
@@ -10607,7 +10898,9 @@
         </table>`;
       }
       if (footEl) {
-        footEl.textContent = `${formatNumber(filteredMatched.length)} Retail Electronic Sales units matched to plan · ${formatNumber(age0Total)} age 0 today · scroll for days 1–30`;
+        footEl.textContent = mode === "daily"
+          ? `${formatNumber(filteredMatched.length)} RES age-0 arrivals from active day files · ${formatNumber(age0Total)} today · ${formatNumber(lateTotal)} late · scroll days 1–30`
+          : `${formatNumber(filteredMatched.length)} Retail Electronic Sales units matched to plan · ${formatNumber(age0Total)} age 0 today · scroll for days 1–30`;
       }
     }
 
@@ -10633,18 +10926,19 @@
 
     const lateEl = $("#bas-late-table");
     if (lateEl) {
-      const lateCars = filteredMatched.filter((c) => c.isLate).sort((a, b) => (b.age || 0) - (a.age || 0));
-      if (!lateCars.length) {
-        lateEl.innerHTML = `<p class="foot" style="padding:12px">No late cars (all matched RTL units have age 0).</p>`;
+      const lateList = (filteredLate.length ? filteredLate : filteredMatched.filter((c) => c.isLate))
+        .sort((a, b) => (b.age || 0) - (a.age || 0) || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!lateList.length) {
+        lateEl.innerHTML = `<p class="foot" style="padding:12px">No late (age ≥ 1) Retail Electronic Sales cars in today's active RTL file.</p>`;
       } else {
         lateEl.innerHTML = `<table class="bas-table">
           <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Collected</th><th>Status</th><th>Location</th></tr></thead>
-          <tbody>${lateCars.map((c) => `<tr class="bas-row-below">
-            <td>${escapeHtml(c.allocProduct)}</td>
-            <td>${escapeHtml(c.allocSfx)}</td>
+          <tbody>${lateList.map((c) => `<tr class="bas-row-below">
+            <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+            <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
             <td>${escapeHtml(c.vin || "—")}</td>
-            <td class="num bas-gap-neg">${formatNumber(c.age)}d</td>
-            <td>${escapeHtml(c.collectionLabel)}</td>
+            <td class="num bas-gap-neg">${formatNumber(c.age)}${c.age != null ? "d" : ""}</td>
+            <td>${escapeHtml(c.collectionLabel || "—")}</td>
             <td><span class="badge bad">Late · ${formatNumber(c.age)}d in RTL</span></td>
             <td>${escapeHtml(c.location || "—")}</td>
           </tr>`).join("")}</tbody>
@@ -10659,23 +10953,24 @@
         const dayCars = filteredMatched.filter((c) => c.collectionDay === day);
         const isToday = day === ctx.todayDay;
         const isFuture = day > ctx.todayDay;
+        const hasFile = dayHasFile && dayHasFile[day];
         const openAttr = isToday && dayCars.length ? " open" : "";
         const summaryCls = isToday ? "bas-day-summary is-today" : isFuture ? "bas-day-summary is-future" : "bas-day-summary";
         const dateLabel = new Date(ctx.y, ctx.m, day).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
         const body = dayCars.length
           ? `<table class="bas-table bas-day-inner">
-              <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Late?</th></tr></thead>
-              <tbody>${dayCars.map((c) => `<tr class="${c.isLate ? "bas-row-below" : "bas-row-above"}">
+              <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Note</th></tr></thead>
+              <tbody>${dayCars.map((c) => `<tr class="bas-row-above">
                 <td>${escapeHtml(c.allocProduct)}</td>
                 <td>${escapeHtml(c.allocSfx)}</td>
                 <td>${escapeHtml(c.vin || "—")}</td>
                 <td class="num">${formatNumber(c.age)}</td>
-                <td>${c.isLate ? `<span class="badge bad">Late · ${formatNumber(c.age)}d</span>` : `<span class="badge ok">Age 0 · new</span>`}</td>
+                <td><span class="badge ok">Age 0 · day ${day} file</span></td>
               </tr>`).join("")}</tbody>
             </table>`
-          : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : "No cars collected this day"}</p>`;
+          : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : (hasFile ? "Active file for this day · no age-0 RES matched to plan" : "No active RTL file for this day")}</p>`;
         sectionsHtml += `<details class="bas-day-detail"${openAttr}>
-          <summary class="${summaryCls}"><span class="bas-day-summary-num">Day ${day}</span><span class="bas-day-summary-date">${dateLabel}</span><span class="bas-day-summary-count">${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</span></summary>
+          <summary class="${summaryCls}"><span class="bas-day-summary-num">Day ${day}</span><span class="bas-day-summary-date">${dateLabel}${hasFile ? " · file" : ""}</span><span class="bas-day-summary-count">${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</span></summary>
           ${body}
         </details>`;
       }
@@ -10695,26 +10990,46 @@
     if (dash) dash.hidden = false;
 
     const all = d.bos || [];
-    fillBoSelect("#bo-f-product", new Set(all.map((b) => b.product).filter(Boolean)), boView.product, "All products");
-    fillBoSelect("#bo-f-category", new Set(all.map((b) => b.category).filter(Boolean)), boView.category, "All categories");
+    const showrooms = new Set();
+    all.forEach((b) => {
+      if (b.salesChannel && b.salesChannel !== "—") showrooms.add(b.salesChannel);
+      if (b.salesScope && b.salesScope !== "—") showrooms.add(b.salesScope);
+    });
+    fillBoSelect("#bo-f-product", new Set(all.map((b) => b.product).filter(Boolean)), boView.product, "All Products");
+    fillBoSelect("#bo-f-category", new Set(all.map((b) => b.category).filter(Boolean)), boView.category, "All Categories");
+    fillBoSelect("#bo-f-year", new Set(all.map((b) => b.year).filter(Boolean)), boView.year, "All Model Years");
+    fillBoSelect("#bo-f-channel", showrooms, boView.channel, "All Showrooms");
+    fillBoSelect("#bo-f-type", new Set(all.map((b) => b.salesType).filter(Boolean)), boView.type, "All Sales Types");
     fillBoSelect("#bo-f-scope", new Set(all.map((b) => b.salesScope).filter(Boolean)), boView.scope, "All sales scopes");
-    fillBoSelect("#bo-f-channel", new Set(all.map((b) => b.salesChannel).filter(Boolean)), boView.channel, "All channels");
-    fillBoSelect("#bo-f-type", new Set(all.map((b) => b.salesType).filter(Boolean)), boView.type, "All sales types");
     fillBoSelect("#bo-f-sfx", new Set(all.map((b) => b.sfx).filter(Boolean)), boView.sfx, "All SFX / grades");
     if ($("#bo-f-confirm")) $("#bo-f-confirm").value = boView.confirm || "";
     if ($("#bo-search")) $("#bo-search").value = boView.search || "";
 
+    const updated = $("#bo-last-updated");
+    if (updated) updated.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+    const rangeEl = $("#bo-date-range");
+    if (rangeEl) {
+      const live = window._globalLivePeriod || (typeof ensureGlobalLivePeriod === "function" ? ensureGlobalLivePeriod() : null);
+      rangeEl.textContent = (live && live.rangeLabel) || (typeof globalDatePresetLabel === "function"
+        ? globalDatePresetLabel((globalDateFilter && globalDateFilter.preset) || "today")
+        : "—");
+    }
+
     const list = filteredBos(d);
     const m = boMetrics(list);
     const aggs = productAgg(list);
-    renderBoKpis(m);
+    const returned = Array.isArray(d.cancelled) ? d.cancelled.length : 0;
+    renderBoKpis(m, { returned });
     renderBoInsights(list, m);
     renderBoStrategic(list);
     renderBoProductTable(aggs, m);
     renderBoCarDetail(all, list);
     renderBoSalesTypeTable(list);
     renderBoSfxTable(list);
-    renderBoCharts(list, aggs);
+    renderBoCharts(list, aggs, m);
+
+    const detail = $("#bo-car-detail");
+    if (detail && boView.car) detail.open = true;
   }
 
   /* ——— Stock Dashboard · same layout as BO Dashboard ——— */
@@ -10792,8 +11107,34 @@
     return s === "retail electronic sales" || s.includes("retail electronic sales");
   }
 
-  function buildRetailElectronicSalesCars(ctx) {
+  function buildRetailElectronicSalesCars(ctx, dayPack) {
     const today = (ctx && ctx.today) || saudiToday();
+    const todayKey = ctx && ctx.monthKey
+      ? `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`
+      : "";
+    const todaySnap = dayPack && dayPack.days && todayKey ? dayPack.days[todayKey] : null;
+    if (todaySnap && Array.isArray(todaySnap.vehicles)) {
+      return todaySnap.vehicles
+        .map((v, i) => mapRtlDailyVehicle(v, todayKey, todaySnap.id, i))
+        .filter((car) => isRetailElectronicSales(car.searchAreaDesc))
+        .map((car) => {
+          const leaf = matchRtlToAllocLeaf(car);
+          const age = car.ageing == null ? null : Math.floor(car.ageing);
+          return {
+            ...car,
+            seg: leaf ? leaf.seg : "—",
+            collectionDate: today,
+            collectionDay: ctx.todayDay,
+            collectionLabel: today.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            age,
+          };
+        })
+        .sort((a, b) => {
+          const aa = a.age == null ? 9999 : a.age;
+          const bb = b.age == null ? 9999 : b.age;
+          return aa - bb || String(a.product).localeCompare(String(b.product));
+        });
+    }
     return mapStockInv(slots.rtl.rows || [], "RTL")
       .filter((car) => isRetailElectronicSales(car.searchAreaDesc))
       .map((car) => {
@@ -10817,18 +11158,18 @@
       });
   }
 
-  function renderRetailElectronicSalesPanel(ctx) {
+  function renderRetailElectronicSalesPanel(ctx, dayPack) {
     const panel = $("#bas-retail-panel");
     const tableEl = $("#bas-retail-table");
     const footEl = $("#bas-retail-foot");
     const totalEl = $("#bas-retail-total");
     if (!panel || !tableEl) return;
 
-    const cars = buildRetailElectronicSalesCars(ctx);
+    const cars = buildRetailElectronicSalesCars(ctx, dayPack || null);
     if (totalEl) totalEl.textContent = formatNumber(cars.length);
 
     if (!cars.length) {
-      tableEl.innerHTML = `<p class="foot" style="padding:16px">No RTL cars with Search Area Desc = Retail Electronic Sales.</p>`;
+      tableEl.innerHTML = `<p class="foot" style="padding:16px">No RTL cars with Search Area Desc = Retail Electronic Sales${dayPack ? " in today's active day file" : ""}.</p>`;
       if (footEl) footEl.textContent = "0 cars";
       return;
     }
@@ -10857,7 +11198,7 @@
     </table>`;
 
     if (footEl) {
-      footEl.textContent = `${formatNumber(cars.length)} cars · Retail Electronic Sales · age 0: ${formatNumber(age0)} · late: ${formatNumber(late)}`;
+      footEl.textContent = `${formatNumber(cars.length)} cars · Retail Electronic Sales${dayPack ? " · today's active file" : ""} · age 0: ${formatNumber(age0)} · late: ${formatNumber(late)}`;
     }
   }
 
@@ -13070,18 +13411,88 @@
     return ((cur - prev) / Math.abs(prev)) * 100;
   }
 
-  function dvpStatusFor(delivered, proforma) {
-    if (delivered <= 0 && proforma <= 0) return { icon: "○", text: "No activity in period" };
-    if (delivered >= proforma && delivered > 0) return { icon: "★", text: "Strong delivery conversion" };
-    if (proforma > delivered * 1.5) return { icon: "◎", text: "Proforma pipeline building" };
-    return { icon: "◆", text: "Good momentum" };
+  function dvpStatusFor(delivered, proforma, id) {
+    const tips = {
+      lexus: { icon: "⏱", title: "Building pipeline", tip: "Increase conversion from pro-forma to deliveries." },
+      telesales: { icon: "↗", title: "Strong demand", tip: "Maintain momentum and close more pro-forma." },
+      b2c: { icon: "◎", title: "Growing opportunities", tip: "Improve delivery rate and customer follow-up." },
+      guest: { icon: "★", title: "High engagement", tip: "Convert guest interest into confirmed orders." },
+    };
+    if (delivered <= 0 && proforma <= 0) {
+      return { icon: "○", title: "No activity", tip: "No delivered or proforma activity in this period." };
+    }
+    if (tips[id]) {
+      if (delivered >= proforma && delivered > 0 && id !== "b2c") {
+        return { icon: "★", title: "Strong delivery conversion", tip: tips[id].tip };
+      }
+      if (proforma > delivered * 1.5) {
+        return { icon: "◎", title: "Proforma pipeline building", tip: tips[id].tip };
+      }
+      return tips[id];
+    }
+    if (delivered >= proforma && delivered > 0) return { icon: "★", title: "Strong delivery conversion", tip: "Keep closing the gap." };
+    if (proforma > delivered * 1.5) return { icon: "◎", title: "Proforma pipeline building", tip: "Focus on conversion." };
+    return { icon: "◆", title: "Good momentum", tip: "Stay the course." };
+  }
+
+  let dvpView = { showroom: "", model: "" };
+
+  function dvpSaleShowroom(r) {
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const meta = employeeMeta(salesmanName);
+    const plant = cellToString(r.plant || r.Plant || (meta && meta.plant) || "").trim();
+    return plant || "—";
+  }
+
+  function dvpSaleModel(r) {
+    const raw = cellToString(
+      r.product || r.Product || r.model || r.Model || r["Vehicle Model"] || r["vehicle model"] || ""
+    ).trim();
+    if (raw) return raw;
+    const blob = salesRowProductBlob(r);
+    return blob ? blob.split(/\s+/).slice(0, 4).join(" ") : "—";
+  }
+
+  function filterDvpSalesRows(rows) {
+    let list = rows || [];
+    if (dvpView.showroom) {
+      list = list.filter((r) => dvpSaleShowroom(r) === dvpView.showroom);
+    }
+    if (dvpView.model) {
+      list = list.filter((r) => dvpSaleModel(r) === dvpView.model);
+    }
+    return list;
+  }
+
+  function populateDvpFilters(rows) {
+    const showSel = $("#dvp-f-showroom");
+    const modelSel = $("#dvp-f-model");
+    const showrooms = [...new Set((rows || []).map(dvpSaleShowroom).filter((x) => x && x !== "—"))].sort((a, b) => a.localeCompare(b));
+    const models = [...new Set((rows || []).map(dvpSaleModel).filter((x) => x && x !== "—"))].sort((a, b) => a.localeCompare(b));
+    if (showSel) {
+      const cur = dvpView.showroom || "";
+      showSel.innerHTML = `<option value="">All Showrooms</option>` + showrooms.map((s) =>
+        `<option value="${escapeHtml(s)}"${s === cur ? " selected" : ""}>${escapeHtml(s)}</option>`
+      ).join("");
+      if (cur && !showrooms.includes(cur)) dvpView.showroom = "";
+    }
+    if (modelSel) {
+      const cur = dvpView.model || "";
+      const capped = models.slice(0, 120);
+      modelSel.innerHTML = `<option value="">All Models</option>` + capped.map((m) =>
+        `<option value="${escapeHtml(m)}"${m === cur ? " selected" : ""}>${escapeHtml(m)}</option>`
+      ).join("");
+      if (cur && !models.includes(cur)) dvpView.model = "";
+    }
   }
 
   function buildDeliveredVsProformaSummary() {
     const live = window._globalLivePeriod || ensureGlobalLivePeriod();
     const prevMonthKey = live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : "");
     const guestKeys = guestExpEmployeeKeys();
-    const rows = slots.sales.rows || [];
+    const allRows = slots.sales.rows || [];
+    populateDvpFilters(allRows);
+    const rows = filterDvpSalesRows(allRows);
     const cur = countDvpBucket(rows, live, prevMonthKey, "month", guestKeys);
     const prev = countDvpBucket(rows, live, prevMonthKey, "prev", guestKeys);
 
@@ -13089,7 +13500,8 @@
       {
         id: "lexus",
         title: "Lexus Sales",
-        subtitle: "Luxury brand channel",
+        subtitle: "Luxury Beyond Ordinary",
+        brand: "LEXUS",
         theme: "lexus",
         image: "../images/cars/crown.png",
         delivered: cur.lexus.delivered,
@@ -13100,7 +13512,8 @@
       {
         id: "telesales",
         title: "Telesales",
-        subtitle: "All employees sales channel",
+        subtitle: "All anywhere sales channel",
+        brand: "TOYOTA",
         theme: "telesales",
         image: "../images/cars/camry.png",
         delivered: cur.telesales.delivered,
@@ -13111,9 +13524,10 @@
       {
         id: "b2c",
         title: "B2C Sales",
-        subtitle: "Not assigned · Retail · eCommerce",
+        subtitle: "Direct to Customer",
+        brand: "TOYOTA",
         theme: "b2c",
-        image: "../images/cars/camry.png",
+        image: "../images/cars/fortuner.png",
         delivered: cur.b2c.delivered,
         proforma: cur.b2c.proforma,
         prevDelivered: prev.b2c.delivered,
@@ -13123,6 +13537,7 @@
         id: "guest",
         title: "Experience Automall",
         subtitle: "Guest Experience Center",
+        brand: "TOYOTA",
         theme: "guest",
         image: "../images/cars/alj-register.png",
         delivered: cur.guest.delivered,
@@ -13164,14 +13579,14 @@
           <span class="dvp-cyl-val">${escapeHtml(formatNumber(delivered))}</span>
           <div class="dvp-cyl-bar is-del"></div>
         </div>
-        <span class="dvp-cyl-lab">Del</span>
+        <span class="dvp-cyl-lab">Delivered</span>
       </div>
       <div class="dvp-cyl">
         <div class="dvp-cyl-stack" style="height:${hPro}%">
           <span class="dvp-cyl-val">${escapeHtml(formatNumber(proforma))}</span>
           <div class="dvp-cyl-bar is-pro"></div>
         </div>
-        <span class="dvp-cyl-lab">Prof</span>
+        <span class="dvp-cyl-lab">Pro-Forma</span>
       </div>
     </div>`;
   }
@@ -13182,6 +13597,65 @@
     const abs = Math.abs(delta);
     const txt = `${up ? "+" : "−"}${abs >= 10 ? abs.toFixed(0) : abs.toFixed(1)}%`;
     return `<span class="dvp-trend ${up ? "is-up" : "is-down"}">${up ? "▲" : "▼"} ${txt} vs last period</span>`;
+  }
+
+  function renderDvpCharts(data) {
+    const cards = data.cards || [];
+    const labels = cards.map((c) => c.title.replace(/\s+Sales$/, "").replace("Experience Automall", "Automall"));
+    upsertChart("chart-dvp-overview", "bar", labels, null, {
+      horizontal: true,
+      stacked: true,
+      legend: false,
+      showValues: true,
+      datasets: [
+        {
+          label: "Delivered",
+          data: cards.map((c) => c.delivered),
+          backgroundColor: "rgba(107, 114, 128, 0.92)",
+          borderRadius: 4,
+          borderSkipped: false,
+        },
+        {
+          label: "Pro-Forma",
+          data: cards.map((c) => c.proforma),
+          backgroundColor: "rgba(235, 10, 30, 0.92)",
+          borderRadius: 4,
+          borderSkipped: false,
+        },
+      ],
+    });
+
+    const shareColors = {
+      lexus: "#1f2937",
+      telesales: "#3b82f6",
+      b2c: "#c4a574",
+      guest: "#7c3aed",
+    };
+    const shareLabels = cards.map((c) => c.title);
+    const shareValues = cards.map((c) => c.delivered);
+    const shareBg = cards.map((c) => shareColors[c.id] || "#94a3b8");
+    const totalDel = data.totals.delivered || 0;
+    upsertChart("chart-dvp-share", "doughnut", shareLabels, shareValues, {
+      legend: false,
+      cutout: "72%",
+      backgroundColor: shareBg,
+    });
+    const center = $("#dvp-donut-center");
+    if (center) {
+      center.hidden = false;
+      center.innerHTML = `<strong>${escapeHtml(formatNumber(totalDel))}</strong><span>Total Delivered</span>`;
+    }
+    const legend = $("#dvp-share-legend");
+    if (legend) {
+      legend.innerHTML = cards.map((c, i) => {
+        const pct = totalDel > 0 ? ((c.delivered / totalDel) * 100).toFixed(1) : "0.0";
+        return `<li>
+          <span class="swatch" style="background:${escapeHtml(shareBg[i])}"></span>
+          <span class="name">${escapeHtml(c.title)}</span>
+          <span class="meta">${escapeHtml(formatNumber(c.delivered))} (${pct}%)</span>
+        </li>`;
+      }).join("");
+    }
   }
 
   function renderSummaryDashboard() {
@@ -13206,215 +13680,85 @@
       const live = data.live || {};
       asof.textContent = live.rangeLabel || live.label || cellToString(live.now) || "—";
     }
+    const updated = $("#dvp-last-updated");
+    if (updated) {
+      const now = new Date();
+      updated.textContent = now.toLocaleString(undefined, {
+        day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+    }
 
     const cardsEl = $("#dvp-cards");
     cardsEl.innerHTML = data.cards.map((c) => {
-      const status = dvpStatusFor(c.delivered, c.proforma);
-      const delTrend = c.prevDelivered ? ((c.delivered - c.prevDelivered) / c.prevDelivered * 100).toFixed(1) : 0;
-      const proTrend = c.prevProforma ? ((c.proforma - c.prevProforma) / c.prevProforma * 100).toFixed(1) : 0;
-      const trendIcon = delTrend >= 0 ? '↗' : '↘';
-      const trendClass = delTrend >= 0 ? 'trend-up' : 'trend-down';
-      
+      const status = dvpStatusFor(c.delivered, c.proforma, c.id);
       const guestNote = c.id === "guest"
         ? `<p class="dvp-guest-note">${c.guestCount
           ? escapeHtml(String(c.guestCount)) + " advisor(s) marked Guest Exp in Admin"
           : "No Guest Exp advisors selected in Admin yet"}</p>`
         : "";
-      
-      return `<article class="dvp-card dvp-card-pro theme-${escapeHtml(c.theme)}">
-        <div class="dvp-card-header">
-          <div class="dvp-card-title-section">
-            <h3 class="dvp-card-title-pro">${escapeHtml(c.title)}</h3>
-            <p class="dvp-card-subtitle-pro">${escapeHtml(c.subtitle)}</p>
-          </div>
-          <div class="dvp-card-image-pro">
-            <img src="${escapeHtml(c.image)}" alt="${escapeHtml(c.title)}" onerror="this.style.display='none'">
+      return `<article class="dvp-card theme-${escapeHtml(c.theme)}">
+        <div class="dvp-card-hero" style="--dvp-img:url('${escapeHtml(c.image)}')">
+          <div class="dvp-card-hero-copy">
+            <span class="dvp-brand-pill">${escapeHtml(c.brand || "TOYOTA")}</span>
+            <h3>${escapeHtml(c.title)}</h3>
+            <p>${escapeHtml(c.subtitle)}</p>
           </div>
         </div>
-        
-        <div class="dvp-card-body-pro">
-          <div class="dvp-kpi-row-pro">
-            <div class="dvp-kpi-pro is-del">
-              <div class="dvp-kpi-label">Delivered</div>
-              <div class="dvp-kpi-value">${escapeHtml(formatNumber(c.delivered))}</div>
-              <div class="dvp-kpi-trend ${trendClass}">
-                <span class="trend-icon">${trendIcon}</span>
-                <span>${Math.abs(delTrend)}%</span>
+        <div class="dvp-card-body">
+          <div class="dvp-kpi-row">
+            <div class="dvp-kpi is-del">
+              <span class="ico" aria-hidden="true">▣</span>
+              <div>
+                <span class="k">Delivered</span>
+                <span class="v">${escapeHtml(formatNumber(c.delivered))}</span>
               </div>
             </div>
-            <div class="dvp-kpi-pro is-pro">
-              <div class="dvp-kpi-label">Pro-Forma</div>
-              <div class="dvp-kpi-value">${escapeHtml(formatNumber(c.proforma))}</div>
-              <div class="dvp-kpi-trend ${trendClass}">
-                <span class="trend-icon">${trendIcon}</span>
-                <span>${Math.abs(proTrend)}%</span>
+            <div class="dvp-kpi is-pro">
+              <span class="ico" aria-hidden="true">▤</span>
+              <div>
+                <span class="k">Pro-Forma</span>
+                <span class="v">${escapeHtml(formatNumber(c.proforma))}</span>
               </div>
             </div>
           </div>
-          
           ${dvpCylHtml(c.delivered, c.proforma, c.theme)}
-          
-          <div class="dvp-card-status-pro">
-            <span class="dvp-status-icon-pro">${status.icon}</span>
-            <span class="dvp-status-text">${escapeHtml(status.text)}</span>
-          </div>
           ${guestNote}
+          <div class="dvp-card-foot">
+            <span class="dvp-status-ico" aria-hidden="true">${status.icon}</span>
+            <div class="dvp-status-copy">
+              <strong>${escapeHtml(status.title)}</strong>
+              <span>${escapeHtml(status.tip)}</span>
+            </div>
+          </div>
         </div>
       </article>`;
     }).join("");
 
+    renderDvpCharts(data);
+
     const t = data.totals;
     $("#dvp-totals").innerHTML = `
-      <div class="dvp-total-card">
+      <div class="dvp-total-card is-del">
+        <span class="dvp-total-ico" aria-hidden="true">▣</span>
         <span class="k">Total Delivered</span>
         <span class="v">${escapeHtml(formatNumber(t.delivered))}</span>
         ${dvpTrendChip(t.delTrend)}
       </div>
-      <div class="dvp-total-card">
+      <div class="dvp-total-card is-pro">
+        <span class="dvp-total-ico" aria-hidden="true">▤</span>
         <span class="k">Total Proforma</span>
         <span class="v">${escapeHtml(formatNumber(t.proforma))}</span>
         ${dvpTrendChip(t.proTrend)}
       </div>
       <div class="dvp-total-card is-ratio">
+        <span class="dvp-total-ico" aria-hidden="true">◎</span>
         <span class="k">Delivery / Proforma Ratio</span>
         <span class="v">${t.ratio == null ? "—" : t.ratio.toFixed(1) + "%"}</span>
         ${dvpTrendChip(t.ratioTrend)}
+      </div>
+      <div class="dvp-quote" role="note">
+        <p>“Turning opportunities into journeys.”</p>
       </div>`;
-
-    // Render summary chart
-    const maxDel = Math.max(...data.cards.map(c => c.delivered), 1);
-    const maxPro = Math.max(...data.cards.map(c => c.proforma), 1);
-    const chartEl = $("#dvp-summary-chart");
-    if (chartEl) {
-      chartEl.innerHTML = `
-        <div class="dvp-chart-header">
-          <h4 class="dvp-chart-title">All Channels Overview</h4>
-          <p class="dvp-chart-subtitle">Delivered vs Pro-Forma by Channel</p>
-        </div>
-        <div class="dvp-summary-bars">
-          ${data.cards.map(c => {
-            const delWidth = Math.max(20, (c.delivered / maxDel) * 100);
-            const proWidth = Math.max(20, (c.proforma / maxPro) * 100);
-            return `
-              <div class="dvp-summary-bar-row">
-                <div class="dvp-summary-bar-label">${escapeHtml(c.title)}</div>
-                <div class="dvp-summary-bar-track">
-                  <div class="dvp-summary-bar-fill is-del" style="width: ${delWidth}%">
-                    <span>${escapeHtml(formatNumber(c.delivered))} Del</span>
-                  </div>
-                  <div class="dvp-summary-bar-fill is-pro" style="width: ${proWidth}%">
-                    <span>${escapeHtml(formatNumber(c.proforma))} Prof</span>
-                  </div>
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-        <div class="dvp-chart-legend">
-          <div class="dvp-legend-item">
-            <span class="dvp-legend-color" style="background: #4ade80"></span>
-            <span>Delivered</span>
-          </div>
-          <div class="dvp-legend-item">
-            <span class="dvp-legend-color" style="background: #ef4444"></span>
-            <span>Pro-Forma</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Render donut chart for Total Sales by Channel
-    const donutEl = $("#dvp-donut-container");
-    if (donutEl) {
-      const totalSales = data.cards.reduce((sum, c) => sum + c.delivered, 0);
-      const colors = {
-        lexus: '#1f2937',
-        telesales: '#3b82f6',
-        b2c: '#d97706',
-        guest: '#7c3aed'
-      };
-      
-      let currentAngle = -90;
-      const slices = data.cards.map(c => {
-        const percentage = totalSales > 0 ? (c.delivered / totalSales * 100) : 0;
-        const angle = (percentage / 100) * 360;
-        const slice = {
-          title: c.title,
-          value: c.delivered,
-          percentage: percentage.toFixed(1),
-          color: colors[c.id] || '#94a3b8',
-          startAngle: currentAngle,
-          endAngle: currentAngle + angle
-        };
-        currentAngle += angle;
-        return slice;
-      });
-
-      donutEl.innerHTML = `
-        <div class="dvp-chart-header">
-          <h4 class="dvp-chart-title">Total Sales (All Channels)</h4>
-          <p class="dvp-chart-subtitle">Distribution by Channel</p>
-        </div>
-        <div class="dvp-donut-chart">
-          <svg viewBox="0 0 200 200" class="dvp-donut-svg">
-            ${slices.map(s => {
-              const start = (s.startAngle * Math.PI) / 180;
-              const end = (s.endAngle * Math.PI) / 180;
-              const cx = 100;
-              const cy = 100;
-              const radius = 70;
-              const innerRadius = 45;
-              
-              const x1 = cx + radius * Math.cos(start);
-              const y1 = cy + radius * Math.sin(start);
-              const x2 = cx + radius * Math.cos(end);
-              const y2 = cy + radius * Math.sin(end);
-              const x3 = cx + innerRadius * Math.cos(end);
-              const y3 = cy + innerRadius * Math.sin(end);
-              const x4 = cx + innerRadius * Math.cos(start);
-              const y4 = cy + innerRadius * Math.sin(start);
-              
-              const largeArc = (s.endAngle - s.startAngle) > 180 ? 1 : 0;
-              
-              return `
-                <path d="M ${x1},${y1} A ${radius},${radius} 0 ${largeArc},1 ${x2},${y2} L ${x3},${y3} A ${innerRadius},${innerRadius} 0 ${largeArc},0 ${x4},${y4} Z" 
-                      fill="${s.color}" 
-                      class="dvp-donut-slice"
-                      data-title="${escapeHtml(s.title)}"
-                      data-value="${s.value}"
-                      data-percentage="${s.percentage}">
-                </path>
-              `;
-            }).join("")}
-            <circle cx="100" cy="100" r="45" fill="#fff"/>
-            <text x="100" y="95" text-anchor="middle" class="dvp-donut-center-value">${escapeHtml(formatNumber(totalSales))}</text>
-            <text x="100" y="110" text-anchor="middle" class="dvp-donut-center-label">Total</text>
-          </svg>
-          <div class="dvp-donut-legend">
-            ${slices.map(s => `
-              <div class="dvp-donut-legend-item">
-                <span class="dvp-legend-color" style="background: ${s.color}"></span>
-                <span class="dvp-legend-text">${escapeHtml(s.title)}</span>
-                <span class="dvp-legend-value">${s.percentage}%</span>
-              </div>
-            `).join("")}
-          </div>
-        </div>
-      `;
-    }
-
-    // Update footer timestamp
-    const footerTs = $("#dvp-footer-timestamp");
-    if (footerTs) {
-      footerTs.textContent = new Date().toLocaleString('en-US', {
-        timeZone: 'Asia/Riyadh',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    }
   }
 
   function exportIccExcel() {
@@ -14212,6 +14556,7 @@
       setStatus("Waiting for Admin Push");
       return;
     }
+    invalidateRtlActiveMonthCache();
     const d = data();
     window._data = d;
     $("#dashboard").classList.add("show");
@@ -14221,8 +14566,7 @@
     switchNav("dashboard");
     if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
-    else if (hasStockFiles()) activePanel = "stockdashboard";
-    else activePanel = "dashboard";
+    else activePanel = "dashboard"; // stock-only (or no preferred inputs) → Stock & BO Dashboard, not Stock Dashboard
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
     renderKpis(d);
@@ -14616,6 +14960,20 @@
     if (dvpRefresh) {
       dvpRefresh.addEventListener("click", () => refreshFromAdmin("Summary refreshed"));
     }
+    const dvpShow = $("#dvp-f-showroom");
+    if (dvpShow) {
+      dvpShow.addEventListener("change", () => {
+        dvpView.showroom = dvpShow.value || "";
+        renderSummaryDashboard();
+      });
+    }
+    const dvpModel = $("#dvp-f-model");
+    if (dvpModel) {
+      dvpModel.addEventListener("change", () => {
+        dvpView.model = dvpModel.value || "";
+        renderSummaryDashboard();
+      });
+    }
     const themeBtn = $("#icc-theme-toggle");
     if (themeBtn) {
       themeBtn.addEventListener("click", () => {
@@ -14824,6 +15182,7 @@
   [
     ["#bo-f-product", "product"],
     ["#bo-f-category", "category"],
+    ["#bo-f-year", "year"],
     ["#bo-f-scope", "scope"],
     ["#bo-f-channel", "channel"],
     ["#bo-f-type", "type"],
@@ -14840,8 +15199,18 @@
   const boClearEl = $("#bo-clear-filters");
   if (boClearEl) {
     boClearEl.addEventListener("click", () => {
-      boView = { search: "", product: "", category: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "" };
+      boView = { search: "", product: "", category: "", year: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "" };
       refreshBoFromFilters();
+    });
+  }
+  const boViewAll = $("#bo-view-all-products");
+  if (boViewAll) {
+    boViewAll.addEventListener("click", () => {
+      const wrap = $("#bo-product-table");
+      if (wrap) {
+        wrap.classList.toggle("is-expanded");
+        wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     });
   }
   const boCarSelect = $("#bo-car-select");
@@ -15078,78 +15447,6 @@
       }
     }
   });
-
-  // Wide chart resize functionality
-  (function() {
-    const resizeHandle = $("#pbi-wide-resize-handle");
-    if (!resizeHandle) return;
-    
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-    let chartBody = null;
-
-    function startResize(e) {
-      e.preventDefault();
-      isResizing = true;
-      startY = e.clientY || (e.touches && e.touches[0].clientY);
-      chartBody = $("#pbi-wide-body");
-      if (!chartBody) return;
-      
-      const computed = window.getComputedStyle(chartBody);
-      startHeight = parseInt(computed.minHeight || computed.height || "400");
-      
-      resizeHandle.classList.add("is-dragging");
-      document.body.style.cursor = "ns-resize";
-      document.body.style.userSelect = "none";
-    }
-
-    function doResize(e) {
-      if (!isResizing || !chartBody) return;
-      e.preventDefault();
-      
-      const currentY = e.clientY || (e.touches && e.touches[0].clientY);
-      const deltaY = currentY - startY;
-      const newHeight = Math.max(300, Math.min(startHeight + deltaY, window.innerHeight * 0.8));
-      
-      chartBody.style.minHeight = newHeight + "px";
-      chartBody.style.maxHeight = "none";
-      
-      // Trigger chart resize if needed
-      const canvas = $("#pbi-wide-canvas");
-      if (canvas && typeof charts !== "undefined") {
-        const chartId = Object.keys(charts).find(id => charts[id] && charts[id].canvas === canvas);
-        if (chartId && charts[chartId] && typeof charts[chartId].resize === "function") {
-          setTimeout(() => charts[chartId].resize(), 50);
-        }
-      }
-    }
-
-    function stopResize() {
-      if (!isResizing) return;
-      isResizing = false;
-      resizeHandle.classList.remove("is-dragging");
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      
-      // Final chart resize
-      const canvas = $("#pbi-wide-canvas");
-      if (canvas && typeof charts !== "undefined") {
-        const chartId = Object.keys(charts).find(id => charts[id] && charts[id].canvas === canvas);
-        if (chartId && charts[chartId] && typeof charts[chartId].resize === "function") {
-          charts[chartId].resize();
-        }
-      }
-    }
-
-    resizeHandle.addEventListener("mousedown", startResize);
-    resizeHandle.addEventListener("touchstart", startResize);
-    document.addEventListener("mousemove", doResize);
-    document.addEventListener("touchmove", doResize);
-    document.addEventListener("mouseup", stopResize);
-    document.addEventListener("touchend", stopResize);
-  })();
-
   $("#sr-csv-btn").addEventListener("click", exportTelesalesSchedule);
   function onEmpTableClick(e) {
     const tr = e.target.closest("tr.emp-row");

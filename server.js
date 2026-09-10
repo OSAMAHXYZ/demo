@@ -464,6 +464,57 @@ function listRtlSnapshotIdsOnDisk() {
     .filter((id) => normalizeRtlSnapshotId(id) || normalizeDateKey(id));
 }
 
+/** Newest snapshot id per calendar day (Riyadh date key). */
+function deriveRtlActiveByDay(snapshots) {
+  const byDay = {};
+  const sorted = (Array.isArray(snapshots) ? snapshots : []).slice().sort(
+    (a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id))
+  );
+  for (const s of sorted) {
+    const d = normalizeDateKey(s.date) || (DATE_KEY_RE.test(String(s.id || '').slice(0, 10)) ? String(s.id).slice(0, 10) : '');
+    if (!d || byDay[d]) continue;
+    byDay[d] = s.id;
+  }
+  return byDay;
+}
+
+/**
+ * Keep explicit Use-date / last-push pointers when still valid; fill gaps with newest-per-day.
+ * Day semantics: one active RTL file per calendar day for schedule usage.
+ */
+function normalizeRtlActiveByDay(raw, snapshots) {
+  const byId = new Map();
+  for (const s of snapshots || []) {
+    if (s && s.id) byId.set(s.id, s);
+  }
+  const out = {};
+  const rawObj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  for (const [date, id] of Object.entries(rawObj)) {
+    const dk = normalizeDateKey(date);
+    const sid = normalizeRtlSnapshotId(id) || normalizeDateKey(id);
+    if (!dk || !sid) continue;
+    const snap = byId.get(sid);
+    if (!snap) continue;
+    const snapDate = normalizeDateKey(snap.date) || (DATE_KEY_RE.test(String(snap.id).slice(0, 10)) ? String(snap.id).slice(0, 10) : '');
+    if (snapDate && snapDate !== dk) continue;
+    out[dk] = sid;
+  }
+  const derived = deriveRtlActiveByDay(snapshots);
+  for (const [d, id] of Object.entries(derived)) {
+    if (!out[d]) out[d] = id;
+  }
+  return out;
+}
+
+function resolveRtlActiveIdForDay(dateKey, index) {
+  const dk = normalizeDateKey(dateKey);
+  if (!dk) return '';
+  const idx = index || loadRtlDailyIndex();
+  const pointed = idx.activeByDay && idx.activeByDay[dk];
+  if (pointed && (normalizeRtlSnapshotId(pointed) || normalizeDateKey(pointed))) return pointed;
+  return deriveRtlActiveByDay(idx.snapshots)[dk] || '';
+}
+
 /** Rebuild index from disk so history survives a lost/corrupt index.json. */
 function rebuildRtlDailyIndexFromDisk() {
   const snaps = [];
@@ -481,8 +532,9 @@ function rebuildRtlDailyIndexFromDisk() {
     });
   }
   snaps.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
-  saveRtlDailyIndex({ snapshots: snaps });
-  return { snapshots: snaps };
+  const activeByDay = deriveRtlActiveByDay(snaps);
+  saveRtlDailyIndex({ snapshots: snaps, activeByDay });
+  return { snapshots: snaps, activeByDay };
 }
 
 function loadRtlDailyIndex() {
@@ -529,8 +581,14 @@ function loadRtlDailyIndex() {
     snapshots = [...byId.values()].sort(
       (a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id))
     );
-    if (dirty) saveRtlDailyIndex({ snapshots });
-    return { snapshots };
+    const activeByDay = normalizeRtlActiveByDay(parsed?.activeByDay, snapshots);
+    const prevActive = parsed?.activeByDay && typeof parsed.activeByDay === 'object'
+      ? JSON.stringify(parsed.activeByDay)
+      : '';
+    if (dirty || prevActive !== JSON.stringify(activeByDay)) {
+      saveRtlDailyIndex({ snapshots, activeByDay });
+    }
+    return { snapshots, activeByDay };
   } catch {
     return rebuildRtlDailyIndexFromDisk();
   }
@@ -538,12 +596,36 @@ function loadRtlDailyIndex() {
 
 function saveRtlDailyIndex(index) {
   ensureRtlDailyDirs();
+  const snapshots = Array.isArray(index?.snapshots) ? index.snapshots : [];
   const payload = {
-    snapshots: Array.isArray(index?.snapshots) ? index.snapshots : []
+    snapshots,
+    activeByDay: normalizeRtlActiveByDay(index?.activeByDay, snapshots)
   };
   const tmp = `${RTL_DAILY_INDEX}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
   fs.renameSync(tmp, RTL_DAILY_INDEX);
+}
+
+/** Mark a specific snapshot as the active RTL file for its calendar day (Use date). */
+function setRtlActiveSnapshot(idOrDate) {
+  const direct = normalizeRtlSnapshotId(idOrDate);
+  const snap = direct
+    ? readRtlSnapshotFile(rtlDailySnapshotPath(direct), direct)
+    : loadRtlDailySnapshot(idOrDate);
+  if (!snap || !snap.id || !snap.date) return null;
+  const index = loadRtlDailyIndex();
+  const activeByDay = { ...(index.activeByDay || {}) };
+  activeByDay[snap.date] = snap.id;
+  saveRtlDailyIndex({ snapshots: index.snapshots, activeByDay });
+  return {
+    id: snap.id,
+    date: snap.date,
+    at: snap.at,
+    count: snap.count,
+    fileName: snap.fileName,
+    source: snap.source,
+    activeByDay
+  };
 }
 
 function sanitizeRtlVehicle(raw) {
@@ -803,7 +885,10 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   const rest = index.snapshots.filter((s) => s.id !== id);
   rest.push(entry);
   rest.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
-  saveRtlDailyIndex({ snapshots: rest });
+  // Active file for that calendar day = this push/save (last file wins).
+  const activeByDay = { ...(index.activeByDay || {}) };
+  activeByDay[date] = id;
+  saveRtlDailyIndex({ snapshots: rest, activeByDay });
   return snap;
 }
 
@@ -815,17 +900,67 @@ function loadRtlDailySnapshot(idOrDate) {
   }
   const dateKey = normalizeDateKey(idOrDate);
   if (!dateKey) return null;
+  // Prefer explicit active pointer for the day (Use date / last push).
+  const index = loadRtlDailyIndex();
+  const activeId = resolveRtlActiveIdForDay(dateKey, index);
+  if (activeId) {
+    const activeSnap = readRtlSnapshotFile(rtlDailySnapshotPath(activeId), activeId);
+    if (activeSnap) return activeSnap;
+  }
   // Legacy single-file-per-day
   const legacy = readRtlSnapshotFile(rtlDailySnapshotPath(dateKey), dateKey);
   if (legacy) return legacy;
-  // Newest snapshot for that calendar day - find all snapshots for the date and pick the most recent
-  const index = loadRtlDailyIndex();
+  // Newest snapshot for that calendar day
   const matches = index.snapshots.filter((s) => s.date === dateKey);
   if (!matches.length) return null;
-  // Sort by timestamp descending (newest first) and take the first one
   matches.sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0) || String(b.id).localeCompare(String(a.id)));
   const newest = matches[0];
   return readRtlSnapshotFile(rtlDailySnapshotPath(newest.id), newest.id);
+}
+
+/** True when YYYY-MM-DD is a real calendar day (local parts, no UTC shift). */
+function isValidRtlDateKey(dateKey) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ''));
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!y || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const probe = new Date(y, mo - 1, d);
+  return probe.getFullYear() === y && probe.getMonth() === mo - 1 && probe.getDate() === d;
+}
+
+/**
+ * Active RTL snapshot per calendar day for a YYYY-MM month (vehicles included).
+ * Schedule day N uses only the active file for that calendar day
+ * (last push/save that day, or the file pinned with Use date).
+ */
+function loadRtlActiveMonth(monthKey) {
+  const mk = String(monthKey || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(mk)) return null;
+  const index = loadRtlDailyIndex();
+  const days = {};
+  const activeByDay = {};
+  for (let day = 1; day <= 31; day += 1) {
+    const dateKey = `${mk}-${String(day).padStart(2, '0')}`;
+    if (!isValidRtlDateKey(dateKey)) continue;
+    const id = resolveRtlActiveIdForDay(dateKey, index);
+    if (!id) continue;
+    const snap = readRtlSnapshotFile(rtlDailySnapshotPath(id), id);
+    if (!snap) continue;
+    activeByDay[dateKey] = snap.id;
+    days[dateKey] = {
+      id: snap.id,
+      date: snap.date || dateKey,
+      at: snap.at,
+      count: snap.count,
+      fileName: snap.fileName,
+      source: snap.source,
+      excelSaved: snap.excelSaved,
+      vehicles: snap.vehicles || []
+    };
+  }
+  return { month: mk, days, activeByDay };
 }
 
 function listRtlSnapshotsNewestFirst() {
@@ -2908,15 +3043,65 @@ app.post('/api/report-sheet/clear', (_req, res) => {
 /** RTL daily VIN/product/suffix archive — does not touch live dashboard slots. */
 app.get('/api/rtl-daily/meta', (_req, res) => {
   try {
-    const snapshots = listRtlSnapshotsNewestFirst();
+    const index = loadRtlDailyIndex();
+    const activeByDay = index.activeByDay || {};
+    const snapshots = listRtlSnapshotsNewestFirst().map((s) => ({
+      ...s,
+      active: Boolean(s.date && activeByDay[s.date] === s.id)
+    }));
     return res.json({
       snapshots,
+      activeByDay,
       persistentRoot: PERSISTENT_ROOT,
       archiveDir: RTL_DAILY_DIR
     });
   } catch (err) {
     console.error('[rtl-daily/meta]', err);
     return res.status(500).json({ error: err.message || 'Failed to load RTL daily index' });
+  }
+});
+
+/** One active RTL file per calendar day for a month (schedule day columns). */
+app.get('/api/rtl-daily/active-month', (req, res) => {
+  try {
+    const month = String(req.query.month || '').trim();
+    const pack = loadRtlActiveMonth(month);
+    if (!pack) {
+      return res.status(400).json({ error: 'month query required as YYYY-MM' });
+    }
+    return res.json(pack);
+  } catch (err) {
+    console.error('[rtl-daily/active-month]', err);
+    return res.status(500).json({ error: err.message || 'Failed to load active month' });
+  }
+});
+
+/**
+ * Use date: pin a specific snapshot as the active RTL file for its calendar day.
+ * Schedule day N for that date then uses only this file (not every push that day).
+ */
+app.post('/api/rtl-daily/use', (req, res) => {
+  try {
+    const body = req.body || {};
+    const ref = String(body.id || body.date || '').trim();
+    if (!ref) {
+      return res.status(400).json({ error: 'id (snapshot id) is required' });
+    }
+    const result = setRtlActiveSnapshot(ref);
+    if (!result) return res.status(404).json({ error: 'Snapshot not found' });
+    return res.json({
+      ok: true,
+      id: result.id,
+      date: result.date,
+      count: result.count,
+      at: result.at,
+      fileName: result.fileName,
+      source: result.source,
+      activeByDay: result.activeByDay
+    });
+  } catch (err) {
+    console.error('[rtl-daily/use]', err);
+    return res.status(500).json({ error: err.message || 'Use date failed' });
   }
 });
 
@@ -3047,10 +3232,16 @@ app.delete('/api/rtl-daily/:id', (req, res) => {
     const xfp = rtlDailyExcelPath(id);
     if (xfp && fs.existsSync(xfp)) fs.unlinkSync(xfp);
     const index = loadRtlDailyIndex();
-    saveRtlDailyIndex({
-      snapshots: index.snapshots.filter((s) => s.id !== id)
-    });
-    return res.json({ ok: true, id });
+    const removed = index.snapshots.find((s) => s.id === id);
+    const snapshots = index.snapshots.filter((s) => s.id !== id);
+    const activeByDay = { ...(index.activeByDay || {}) };
+    if (removed && removed.date && activeByDay[removed.date] === id) {
+      delete activeByDay[removed.date];
+    }
+    // Re-derive missing days from remaining newest (last file per day).
+    const normalized = normalizeRtlActiveByDay(activeByDay, snapshots);
+    saveRtlDailyIndex({ snapshots, activeByDay: normalized });
+    return res.json({ ok: true, id, activeByDay: normalized });
   } catch (err) {
     console.error('[rtl-daily/delete]', err);
     return res.status(500).json({ error: err.message || 'Delete failed' });
