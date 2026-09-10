@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910dvp1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910bo1screen" />
 
 </head>
 <body class="live-app toyota-theme">
@@ -539,7 +539,7 @@
           <p class="foot" style="margin:0">Until then, Sales Dashboard can still run from Sales Raw alone.</p>
         </div>
 
-        <div id="bo-dash" class="bo-dash" hidden>
+        <div id="bo-dash" class="bo-dash bo-dash--fit" hidden>
           <header class="bo-dash-header">
             <div class="bo-dash-brand">
               <p class="bo-dash-eyebrow">Abdul Latif Jameel Motors</p>
@@ -581,81 +581,92 @@
 
           <div class="bo-kpis" id="bo-kpis"></div>
 
-          <div class="bo-row bo-row-insights">
-            <article class="card bo-insights" id="bo-insights"></article>
-            <article class="card pbi-viz" data-chart-id="chart-bo-top5">
-              <div class="pbi-viz-head">
-                <h2>Back Orders by Model (Top 5)</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-top5">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-top5"></canvas></div></div>
-            </article>
-            <article class="card pbi-viz bo-status-card" data-chart-id="chart-bo-status">
-              <div class="pbi-viz-head">
-                <h2>Order Status</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-status">Wide</button>
-              </div>
-              <div class="bo-donut-wrap">
-                <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
-                <p class="bo-donut-center" id="bo-status-center" hidden></p>
-              </div>
-            </article>
-          </div>
-
-          <div class="bo-strategic" id="bo-strategic"></div>
-
-          <div class="bo-row bo-row-mid">
-            <article class="card bo-product-panel">
-              <div class="pbi-viz-head bo-product-head">
-                <div>
-                  <h2>Back Orders by Product</h2>
-                  <span class="hint">Click a product to open drill-down</span>
+          <div class="bo-fit-main">
+            <div class="bo-row bo-row-insights">
+              <article class="card bo-insights" id="bo-insights"></article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-top5">
+                <div class="pbi-viz-head">
+                  <h2>Back Orders by Model</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-top5">Wide</button>
                 </div>
-                <button type="button" class="btn bo-view-all" id="bo-view-all-products" title="Show full product table">View All</button>
-              </div>
-              <div class="table-wrap bo-product-table-wrap" id="bo-product-table"></div>
-            </article>
-            <div class="bo-side-stack">
-              <article class="card pbi-viz" data-chart-id="chart-bo-aging-buckets">
+                <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-top5"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz bo-status-card" data-chart-id="chart-bo-status">
+                <div class="pbi-viz-head">
+                  <h2>Order Status</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-status">Wide</button>
+                </div>
+                <div class="bo-donut-wrap">
+                  <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-donut"><canvas id="chart-bo-status"></canvas></div></div>
+                  <p class="bo-donut-center" id="bo-status-center" hidden></p>
+                </div>
+              </article>
+            </div>
+
+            <div class="bo-row bo-row-main">
+              <article class="card bo-product-panel">
+                <div class="pbi-viz-head bo-product-head">
+                  <div>
+                    <h2>Back Orders by Product</h2>
+                    <span class="hint">Click a product to open drill-down</span>
+                  </div>
+                  <button type="button" class="btn bo-view-all" id="bo-view-all-products" title="Expand table height inside panel">View All</button>
+                </div>
+                <div class="table-wrap bo-product-table-wrap" id="bo-product-table"></div>
+              </article>
+              <article class="card pbi-viz bo-aging-panel" data-chart-id="chart-bo-aging-buckets">
                 <div class="pbi-viz-head">
                   <h2>Aging Breakdown</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-bo-aging-buckets">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-aging-buckets"></canvas></div></div>
               </article>
-              <article class="card pbi-viz" data-chart-id="chart-bo-salestype">
+              <aside class="card bo-model-panel">
+                <div class="bo-model-panel-head">
+                  <h2>Model Summary</h2>
+                  <span class="hint">Strategic models</span>
+                </div>
+                <div class="bo-strategic" id="bo-strategic"></div>
+              </aside>
+            </div>
+          </div>
+
+          <details class="bo-drilldown card bo-more-charts">
+            <summary class="bo-drilldown-summary">
+              <span>More charts · Sales type, backlog &amp; contribution</span>
+              <span class="hint">Optional deep-dive visuals</span>
+            </summary>
+            <div class="bo-row bo-row-bottom">
+              <article class="card pbi-viz" data-chart-id="chart-bo-salestype" style="margin:0">
                 <div class="pbi-viz-head">
                   <h2>Sales Type · Confirmed vs Not Confirmed</h2>
                   <button type="button" class="pbi-expand" data-expand="chart-bo-salestype">Wide</button>
                 </div>
                 <div class="chart-scroll"><div class="chart-box pbi-box bo-chart-sm"><canvas id="chart-bo-salestype"></canvas></div></div>
               </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-backlog" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>Top 10 Products by Backlog</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-backlog">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-aging" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>Average Aging by Product (Days)</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-aging">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
+              </article>
+              <article class="card pbi-viz" data-chart-id="chart-bo-contrib" style="margin:0">
+                <div class="pbi-viz-head">
+                  <h2>Contribution by Product</h2>
+                  <button type="button" class="pbi-expand" data-expand="chart-bo-contrib">Wide</button>
+                </div>
+                <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-contrib"></canvas></div></div>
+              </article>
             </div>
-          </div>
-
-          <div class="bo-row bo-row-bottom">
-            <article class="card pbi-viz" data-chart-id="chart-bo-backlog">
-              <div class="pbi-viz-head">
-                <h2>Top 10 Products by Backlog</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-backlog">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-backlog"></canvas></div></div>
-            </article>
-            <article class="card pbi-viz" data-chart-id="chart-bo-aging">
-              <div class="pbi-viz-head">
-                <h2>Average Aging by Product (Days)</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-aging">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-aging"></canvas></div></div>
-            </article>
-            <article class="card pbi-viz" data-chart-id="chart-bo-contrib">
-              <div class="pbi-viz-head">
-                <h2>Contribution by Product</h2>
-                <button type="button" class="pbi-expand" data-expand="chart-bo-contrib">Wide</button>
-              </div>
-              <div class="chart-scroll"><div class="chart-box pbi-box"><canvas id="chart-bo-contrib"></canvas></div></div>
-            </article>
-          </div>
+          </details>
 
           <details class="bo-drilldown card" id="bo-car-detail">
             <summary class="bo-drilldown-summary">
@@ -6465,7 +6476,10 @@
     if (panelId === "summary") renderSummaryDashboard();
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "allocationaudit") renderAllocationAudit();
-  }
+    if (panelId === "boallocstock" && window._data) {
+      invalidateRtlActiveMonthCache();
+      renderBoAllocStockDashboard(window._data);
+    }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
   const SR_DATE_FILTER_KEY = "toyota_sr_date_filter_v1";
@@ -8890,7 +8904,7 @@
       `Overall confirmation is <b>${(m.confirmPct * 100).toFixed(1)}%</b> — ${m.confirmPct >= 0.7 ? "healthy" : m.confirmPct >= 0.4 ? "needs attention" : "at risk"}.`,
       `Orders older than 30 days: <b>${pct30}%</b> · older than 60 days: <b>${pct60}%</b>.`,
       best ? `<b>${escapeHtml(best.product)}</b> is among the strongest allocation performers (${(best.confirmPct * 100).toFixed(1)}% confirmed).` : null,
-    ].filter(Boolean).slice(0, 6);
+    ].filter(Boolean).slice(0, 4);
     el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><ul class="bo-insight-list">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`;
   }
 
@@ -8923,21 +8937,19 @@
     el.innerHTML = unique.map((c) => {
       const img = boCarImageUrl(c.sampleProduct) || boCarImageUrl(c.label);
       return `
-      <button type="button" class="bo-strat card ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}" data-bo-product="${escapeHtml(c.sampleProduct)}">
-        <div class="bo-strat-head">
-          <div class="bo-strat-name">${escapeHtml(c.label)}</div>
-        </div>
-        <div class="bo-strat-visual">
+      <button type="button" class="bo-strat bo-strat--compact ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}" data-bo-product="${escapeHtml(c.sampleProduct)}">
+        <div class="bo-strat-identity">
           ${img
-            ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(c.label)}" loading="lazy" onerror="this.style.display='none'" />`
-            : `<div class="bo-strat-placeholder">${escapeHtml(c.label.slice(0, 1))}</div>`}
+            ? `<img class="bo-strat-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+            : `<span class="bo-strat-placeholder">${escapeHtml(c.label.slice(0, 1))}</span>`}
+          <span class="bo-strat-name">${escapeHtml(c.label)}</span>
         </div>
-        <div class="bo-strat-grid">
+        <div class="bo-strat-metrics">
           <div><span>Total</span><b>${formatNumber(c.m.total)}</b></div>
           <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
-          <div><span>Not Confirmed</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
-          <div><span>Confirmation %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
-          <div class="bo-strat-span"><span>Avg. Aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+          <div><span>Not Conf.</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
+          <div><span>Conf. %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
+          <div class="bo-strat-aging"><span>Avg Aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
         </div>
       </button>`;
     }).join("");
@@ -9559,7 +9571,9 @@
 
     let lateRtl = null;
     let monthPack = null;
-    if (slotHasRows("rtl")) {
+    const monthKey = basMonthContext().monthKey;
+    const hasDaily = Boolean(getCachedRtlActiveMonth(monthKey));
+    if (slotHasRows("rtl") || hasDaily) {
       monthPack = buildBasMonthlyData();
       const filteredMonth = filteredBasMonthlyRows(monthPack.rows);
       const filteredMatched = monthPack.matched.filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
@@ -10414,7 +10428,7 @@
 
     // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
     const monthKey = basMonthContext().monthKey;
-    ensureRtlActiveMonth(monthKey).then((pack) => {
+    ensureRtlActiveMonth(monthKey, true).then((pack) => {
       if (!pack || activePanel !== "boallocstock") return;
       if (!window._data) return;
       const nextRows = filteredBasRows(buildBasRows(window._data));
@@ -10482,13 +10496,13 @@
     return null;
   }
 
-  function ensureRtlActiveMonth(monthKey) {
+  function ensureRtlActiveMonth(monthKey, force) {
     const mk = String(monthKey || "").trim();
     if (!/^\d{4}-\d{2}$/.test(mk)) return Promise.resolve(null);
-    if (rtlActiveMonthCache.month === mk && rtlActiveMonthCache.pack) {
+    if (!force && rtlActiveMonthCache.month === mk && rtlActiveMonthCache.pack) {
       return Promise.resolve(rtlActiveMonthCache.pack);
     }
-    if (rtlActiveMonthCache.loading && rtlActiveMonthCache.month === mk) {
+    if (!force && rtlActiveMonthCache.loading && rtlActiveMonthCache.month === mk) {
       return rtlActiveMonthCache.loading;
     }
     rtlActiveMonthCache.month = mk;
@@ -10575,21 +10589,27 @@
 
   /**
    * Monthly RTL schedule:
-   * Prefer one active file per calendar day (Use date / last push that day).
-   * Day N column = age-0 RES cars from that day's active file only.
-   * Fallback: live RTL Col J age inference when no daily archive for the month.
+   * - Days with an active uploader/admin file: count that file alone (age 0 / missing age = arrivals that day).
+   * - Days without a file: fall back to live RTL Col J age inference.
+   * TOT = matched to allocation plan · RES = Retail Electronic Sales subset.
    */
   function buildBasMonthlyData() {
     const ctx = basMonthContext();
     const pack = getCachedRtlActiveMonth(ctx.monthKey);
     const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : null;
     const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
+    const fileDays = new Set();
+    if (hasDayFiles) {
+      Object.keys(dayFiles).forEach((dateKey) => {
+        const dayNum = Number(String(dateKey).slice(8, 10));
+        if (dayNum >= 1 && dayNum <= 31) fileDays.add(dayNum);
+      });
+    }
 
     const matched = [];
-    let mode = "age";
+    let mode = hasDayFiles ? "daily" : "age";
 
     if (hasDayFiles) {
-      mode = "daily";
       Object.keys(dayFiles).sort().forEach((dateKey) => {
         const dayNum = Number(String(dateKey).slice(8, 10));
         if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 31) return;
@@ -10602,9 +10622,12 @@
           const car = mapRtlDailyVehicle(v, dateKey, snap.id, i);
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
-          const age = car.ageing == null ? null : Math.floor(car.ageing);
-          // Only age-0 units count as that day's arrivals (full inventory is not re-counted every day).
-          if (age !== 0) return;
+          const ageRaw = car.ageing;
+          const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+          // Day file = that calendar day's stock extract.
+          // Age 0 (or blank age) = arrived that day. Age ≥ 1 stays in file but is not an arrival for the day column.
+          const isArrival = age == null || age === 0;
+          if (!isArrival) return;
           matched.push({
             ...car,
             seg: leaf.seg,
@@ -10617,7 +10640,8 @@
             collectionLabel: collLabel,
             isTodayArrival: dayNum === ctx.todayDay,
             isLate: false,
-            age,
+            age: age == null ? 0 : age,
+            _fromDayFile: true,
           });
         });
       });
@@ -10630,7 +10654,7 @@
           const car = mapRtlDailyVehicle(v, todayKey, todaySnap.id, `late-${i}`);
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
-          const age = car.ageing == null ? null : Math.floor(car.ageing);
+          const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
           if (age == null || age < 1) return;
           if (!isRetailElectronicSales(car.searchAreaDesc)) return;
           matched.push({
@@ -10647,35 +10671,43 @@
             isLate: true,
             age,
             _lateOnly: true,
+            _fromDayFile: true,
           });
         });
       }
-    } else {
-      const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
-      rtlRows.forEach((car) => {
-        const leaf = matchRtlToAllocLeaf(car);
-        if (!leaf) return;
-        const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
-        if (!collDate) return;
-        if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
-
-        const age = car.ageing == null ? null : Math.floor(car.ageing);
-        matched.push({
-          ...car,
-          seg: leaf.seg,
-          allocProduct: leaf.product,
-          allocSfx: leaf.sfx,
-          leafId: leaf.id,
-          allocation: Number(allocationValues[leaf.id]) || 0,
-          collectionDate: collDate,
-          collectionDay: collDate.getDate(),
-          collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-          isTodayArrival: age === 0,
-          isLate: age != null && age >= 1,
-          age,
-        });
-      });
     }
+
+    // Live RTL age fallback for days that do not yet have an uploader/admin day file.
+    const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
+    rtlRows.forEach((car) => {
+      const leaf = matchRtlToAllocLeaf(car);
+      if (!leaf) return;
+      const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
+      if (!collDate) return;
+      if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
+      const collectionDay = collDate.getDate();
+      if (fileDays.has(collectionDay)) return; // that day already locked to its uploader file
+
+      const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+      matched.push({
+        ...car,
+        seg: leaf.seg,
+        allocProduct: leaf.product,
+        allocSfx: leaf.sfx,
+        leafId: leaf.id,
+        allocation: Number(allocationValues[leaf.id]) || 0,
+        collectionDate: collDate,
+        collectionDay,
+        collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        isTodayArrival: age === 0,
+        isLate: age != null && age >= 1,
+        age,
+        _fromDayFile: false,
+      });
+    });
+    if (!hasDayFiles && matched.length) mode = "age";
+    else if (hasDayFiles && rtlRows.length) mode = "hybrid";
+    else if (hasDayFiles) mode = "daily";
 
     const byLeaf = emptyBasLeafRows();
     const arrivalMatched = matched.filter((car) => !car._lateOnly);
@@ -10685,7 +10717,7 @@
     const matchedRetailArrivals = arrivalMatched.filter((car) => isRetailElectronicSales(car.searchAreaDesc));
     matchedRetailArrivals.forEach((car) => pushBasMonthCar(byLeafRetail, car));
 
-    // Attach late counts onto retail rows (today's file only in daily mode).
+    // Attach late counts onto retail rows (today's file only in daily/hybrid mode).
     const lateCars = matched.filter((car) => car.isLate && isRetailElectronicSales(car.searchAreaDesc));
     lateCars.forEach((car) => {
       const row = byLeafRetail.get(car.leafId);
@@ -10697,6 +10729,7 @@
     const dayTotals = Array(31).fill(0);
     const dayRetailTotals = Array(31).fill(0);
     const dayHasFile = Array(31).fill(false);
+    const dayFileVinCount = Array(31).fill(0);
     arrivalMatched.forEach((car) => {
       if (car.collectionDay < 1 || car.collectionDay > 30) return;
       dayTotals[car.collectionDay] += 1;
@@ -10705,7 +10738,10 @@
     if (hasDayFiles) {
       Object.keys(dayFiles).forEach((dateKey) => {
         const dayNum = Number(String(dateKey).slice(8, 10));
-        if (dayNum >= 1 && dayNum <= 30) dayHasFile[dayNum] = true;
+        if (dayNum >= 1 && dayNum <= 30) {
+          dayHasFile[dayNum] = true;
+          dayFileVinCount[dayNum] = Number(dayFiles[dateKey].count) || ((dayFiles[dateKey].vehicles || []).length) || 0;
+        }
       });
     }
 
@@ -10721,6 +10757,7 @@
       dayTotals,
       dayRetailTotals,
       dayHasFile,
+      dayFileVinCount,
       mode,
       activeDayCount: hasDayFiles ? Object.keys(dayFiles).length : 0,
     };
@@ -10753,17 +10790,19 @@
     }
     section.hidden = false;
 
-    const { ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, mode, activeDayCount, lateCars } = buildBasMonthlyData();
+    const { ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount, mode, activeDayCount, lateCars } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
       const live = ctx.live || window._globalLivePeriod;
       const rangeNote = live && (live.preset === "this_month" || live.preset === "today")
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
-      if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} active day file(s) · day N = age-0 RES from that day's RTL (Use date / last push) · today day ${ctx.todayDay}`;
+      if (mode === "hybrid") {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) from Data Uploader · other days from live RTL age · today day ${ctx.todayDay}`;
+      } else if (mode === "daily") {
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} active day file(s) · day N = age-0 (or blank age) from that day's RTL · today day ${ctx.todayDay}`;
       } else {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · push RTL or Use date in Data Uploader to lock one file per day · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · save a day in Data Uploader to lock that day · today day ${ctx.todayDay}`;
       }
     }
 
@@ -10784,7 +10823,7 @@
     const kpiEl = $("#bas-month-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
-        { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
+        { label: "Month", val: ctx.monthLabel, sub: (mode === "daily" || mode === "hybrid") ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
         { label: "Age 0 today", val: formatNumber(age0Total), sub: "RES · collected today", cls: age0Total ? "ok" : "" },
         { label: "Collected MTD", val: formatNumber(mtdTotal), sub: "Retail Electronic Sales", cls: "ok" },
         { label: "Plan total", val: formatNumber(planTotal), sub: "E-Sales allocation" },
@@ -10808,6 +10847,7 @@
         const isToday = day === ctx.todayDay;
         const isFuture = day > ctx.todayDay;
         const hasFile = dayHasFile && dayHasFile[day];
+        const fileVins = (dayFileVinCount && dayFileVinCount[day]) || 0;
         const cls = [
           "bas-day-pill",
           "bas-day-pill-split",
@@ -10816,7 +10856,7 @@
           total || retail ? "has-cars" : "",
           hasFile ? "has-file" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? " · active RTL file" : ""} · Total ${total} · Retail Electronic Sales ${retail}">
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · active RTL file (${formatNumber(fileVins)} VINs)` : ""} · Total ${total} · Retail Electronic Sales ${retail}">
           <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
@@ -15148,7 +15188,10 @@
         boView.product = name;
         if (window._data) renderBoDashboard(window._data);
         const detail = $("#bo-car-detail");
-        if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (detail) {
+          detail.open = true;
+          detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
         return;
       }
       const typ = e.target.closest("[data-bo-type]");
@@ -15167,6 +15210,17 @@
       const viz = e.target.closest("[data-chart-id]");
       if (!viz) return;
       openWideChart(viz.getAttribute("data-chart-id"));
+    });
+    boDashEl.querySelectorAll("details.bo-drilldown").forEach((d) => {
+      d.addEventListener("toggle", () => {
+        requestAnimationFrame(() => {
+          Object.keys(charts || {}).forEach((id) => {
+            if (!String(id).startsWith("chart-bo")) return;
+            const ch = charts[id];
+            if (ch && typeof ch.resize === "function") ch.resize();
+          });
+        });
+      });
     });
   }
   function refreshBoFromFilters() {
@@ -15207,10 +15261,10 @@
   if (boViewAll) {
     boViewAll.addEventListener("click", () => {
       const wrap = $("#bo-product-table");
-      if (wrap) {
-        wrap.classList.toggle("is-expanded");
-        wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
+      if (!wrap) return;
+      const expanded = wrap.classList.toggle("is-expanded");
+      boViewAll.textContent = expanded ? "Compact" : "View All";
+      boViewAll.title = expanded ? "Use compact table height" : "Expand table height inside panel";
     });
   }
   const boCarSelect = $("#bo-car-select");

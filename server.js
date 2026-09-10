@@ -606,25 +606,62 @@ function saveRtlDailyIndex(index) {
   fs.renameSync(tmp, RTL_DAILY_INDEX);
 }
 
-/** Mark a specific snapshot as the active RTL file for its calendar day (Use date). */
-function setRtlActiveSnapshot(idOrDate) {
+/** Mark a specific snapshot as the active RTL file for a calendar day (Use date).
+ * Optional dateOverride reassigns the snapshot to another schedule day.
+ */
+function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const direct = normalizeRtlSnapshotId(idOrDate);
   const snap = direct
     ? readRtlSnapshotFile(rtlDailySnapshotPath(direct), direct)
     : loadRtlDailySnapshot(idOrDate);
-  if (!snap || !snap.id || !snap.date) return null;
+  if (!snap || !snap.id) return null;
+  const override = normalizeDateKey(dateOverride);
+  const date = override || normalizeDateKey(snap.date);
+  if (!date || !isValidRtlDateKey(date)) return null;
+
+  // Persist schedule-day reassignment onto the snapshot file when needed.
+  if (normalizeDateKey(snap.date) !== date) {
+    snap.date = date;
+    const fp = rtlDailySnapshotPath(snap.id);
+    const tmp = `${fp}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
+    fs.renameSync(tmp, fp);
+  }
+
   const index = loadRtlDailyIndex();
+  const snapshots = index.snapshots.map((s) => {
+    if (s.id !== snap.id) return s;
+    return { ...s, date };
+  });
+  if (!snapshots.some((s) => s.id === snap.id)) {
+    snapshots.push({
+      id: snap.id,
+      date,
+      at: snap.at,
+      count: snap.count,
+      fileName: snap.fileName,
+      source: snap.source,
+      excelSaved: snap.excelSaved
+    });
+  }
   const activeByDay = { ...(index.activeByDay || {}) };
-  activeByDay[snap.date] = snap.id;
-  saveRtlDailyIndex({ snapshots: index.snapshots, activeByDay });
+  // Clear this id from other days, then pin to the chosen schedule day.
+  for (const [dk, sid] of Object.entries(activeByDay)) {
+    if (sid === snap.id && dk !== date) delete activeByDay[dk];
+  }
+  activeByDay[date] = snap.id;
+  const normalized = normalizeRtlActiveByDay(activeByDay, snapshots);
+  // Force the explicit pin even if normalize would drop a mismatch (date already updated).
+  normalized[date] = snap.id;
+  saveRtlDailyIndex({ snapshots, activeByDay: normalized });
   return {
     id: snap.id,
-    date: snap.date,
+    date,
     at: snap.at,
     count: snap.count,
     fileName: snap.fileName,
     source: snap.source,
-    activeByDay
+    activeByDay: normalized
   };
 }
 
@@ -3083,12 +3120,19 @@ app.get('/api/rtl-daily/active-month', (req, res) => {
 app.post('/api/rtl-daily/use', (req, res) => {
   try {
     const body = req.body || {};
-    const ref = String(body.id || body.date || '').trim();
+    const id = String(body.id || '').trim();
+    const dateField = String(body.date || '').trim();
+    const ref = id || dateField;
     if (!ref) {
       return res.status(400).json({ error: 'id (snapshot id) is required' });
     }
-    const result = setRtlActiveSnapshot(ref);
-    if (!result) return res.status(404).json({ error: 'Snapshot not found' });
+    let dateOverride = String(body.scheduleDate || body.targetDate || body.dateKey || '').trim();
+    // When id is present and date is YYYY-MM-DD, treat date as the schedule day to pin.
+    if (!dateOverride && id && /^\d{4}-\d{2}-\d{2}$/.test(dateField)) {
+      dateOverride = dateField;
+    }
+    const result = setRtlActiveSnapshot(ref, dateOverride);
+    if (!result) return res.status(404).json({ error: 'Snapshot not found or invalid schedule date' });
     return res.json({
       ok: true,
       id: result.id,

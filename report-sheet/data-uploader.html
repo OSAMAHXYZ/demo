@@ -357,6 +357,7 @@
       <br/><br/>
       <b>Admin Push to Live</b> also appends a permanent snapshot for <b>today’s date</b> (Riyadh) and marks it active for that day.
       Multiple files per day stay in the archive; the Allocation monthly schedule uses <b>one file per day</b>, not every upload.
+      After saving, open <b>Allocation</b> on the live dashboard (or Refresh) — that day’s Tot / RES cards use this file’s counting logic (age 0 arrivals · Retail Electronic Sales).
       Saving here does <b>not</b> change the live Sales Report dashboard slots.
     </p>
 
@@ -425,7 +426,7 @@
 
       <section class="card">
         <h2>Saved snapshots</h2>
-        <p class="sub">Append-only archive. Multiple uploads stay on disk; the schedule uses <b>one active file per calendar day</b> (last Push / Append that day, or the file you pick with <b>Use date</b>).</p>
+        <p class="sub">Append-only archive. Multiple uploads stay on disk; the schedule uses <b>one active file per calendar day</b> (last Push / Append that day, or the file you pick with <b>Use date</b>). Open <b>Allocation</b> and refresh to see Tot / RES for that day.</p>
         <div class="field">
           <label for="snap-filter">Filter by date / time / VIN count</label>
           <input id="snap-filter" type="search" placeholder="Search snapshots…" />
@@ -1106,7 +1107,7 @@
       if (!res.ok) throw new Error(data.error || res.statusText);
       setStatus(
         $("#scan-status"),
-        `✓ Saved ${data.count} VIN(s) for ${formatDateDisplay(date)} as snapshot ${data.id || data.date}. Live dashboard unchanged.`,
+        `✓ Saved ${data.count} VIN(s) for schedule day ${formatDateDisplay(date)} as snapshot ${data.id || data.date}. This file is now active for that day — refresh Allocation · Stock to update Tot/RES.`,
         "ok"
       );
       await loadMeta();
@@ -1149,7 +1150,10 @@
         const res = await fetch(API_USE, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
+          body: JSON.stringify({
+            id,
+            scheduleDate: date || $("#snap-date").value || undefined,
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || res.statusText);
@@ -1157,10 +1161,12 @@
           $("#snap-date").value = date;
           updateDateBanner();
         }
-        const dayNum = date && date.length >= 10 ? Number(date.slice(8, 10)) : null;
+        const dayNum = (data.date || date) && String(data.date || date).length >= 10
+          ? Number(String(data.date || date).slice(8, 10))
+          : null;
         setStatus(
           $("#scan-status"),
-          `✓ Schedule day ${dayNum || "?"} (${data.date || date}) now uses only this file · ${data.count || 0} VINs · ${data.id || id}`,
+          `✓ Schedule day ${dayNum || "?"} (${data.date || date}) now uses only this file · ${data.count || 0} VINs · ${data.id || id}. Refresh Allocation dashboard to update Tot/RES.`,
           "ok"
         );
         await loadMeta();
