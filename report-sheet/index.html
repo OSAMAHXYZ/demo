@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910rtday3" />
+  <link rel="stylesheet" href="dashboard.css?v=20260910rtday4" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -11249,7 +11249,7 @@
     const kpiEl = $("#bas-month-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
-        { label: "Month", val: ctx.monthLabel, sub: (mode === "daily" || mode === "hybrid") ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
+        { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
         { label: "Age 0 today", val: formatNumber(age0Total), sub: "RES · collected today", cls: age0Total ? "ok" : "" },
         { label: "Collected MTD", val: formatNumber(mtdTotal), sub: "Retail Electronic Sales", cls: "ok" },
         { label: "Plan total", val: formatNumber(planTotal), sub: "E-Sales allocation" },
