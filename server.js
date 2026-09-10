@@ -435,9 +435,13 @@ function readRtlSnapshotFile(fp, fallbackId) {
       || '';
     if (!id) return null;
     const date = normalizeDateKey(parsed.date) || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : '');
+    const asOfDate = normalizeDateKey(parsed.asOfDate)
+      || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : '')
+      || date;
     return {
       id,
       date,
+      asOfDate,
       at: Number(parsed.at) || 0,
       fileName: String(parsed.fileName || ''),
       source: String(parsed.source || ''),
@@ -524,6 +528,7 @@ function rebuildRtlDailyIndexFromDisk() {
     snaps.push({
       id: snap.id,
       date: snap.date,
+      asOfDate: snap.asOfDate || snap.date,
       at: snap.at,
       count: snap.count,
       fileName: snap.fileName,
@@ -554,6 +559,9 @@ function loadRtlDailyIndex() {
       byId.set(id, {
         id,
         date: normalizeDateKey(s.date) || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : ''),
+        asOfDate: normalizeDateKey(s.asOfDate)
+          || normalizeDateKey(s.date)
+          || (DATE_KEY_RE.test(id.slice(0, 10)) ? id.slice(0, 10) : ''),
         at: Number(s.at) || 0,
         count: Number(s.count) || 0,
         fileName: String(s.fileName || ''),
@@ -570,6 +578,7 @@ function loadRtlDailyIndex() {
       byId.set(id, {
         id: snap.id,
         date: snap.date,
+        asOfDate: snap.asOfDate || snap.date,
         at: snap.at,
         count: snap.count,
         fileName: snap.fileName,
@@ -608,6 +617,7 @@ function saveRtlDailyIndex(index) {
 
 /** Mark a specific snapshot as the active RTL file for a calendar day (Use date).
  * Optional dateOverride reassigns the snapshot to another schedule day.
+ * asOfDate (extract day for Col J ages) is preserved so Tot/RES still count correctly.
  */
 function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const direct = normalizeRtlSnapshotId(idOrDate);
@@ -616,12 +626,19 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
     : loadRtlDailySnapshot(idOrDate);
   if (!snap || !snap.id) return null;
   const override = normalizeDateKey(dateOverride);
-  const date = override || normalizeDateKey(snap.date);
+  const prevDate = normalizeDateKey(snap.date);
+  const date = override || prevDate;
   if (!date || !isValidRtlDateKey(date)) return null;
 
+  // Ages in the Excel are relative to the extract day. Keep asOfDate when re-pinning
+  // so schedule day N can still derive age-0 arrivals from a file uploaded later.
+  const asOfDate = normalizeDateKey(snap.asOfDate) || prevDate || date
+    || (DATE_KEY_RE.test(String(snap.id).slice(0, 10)) ? String(snap.id).slice(0, 10) : date);
+
   // Persist schedule-day reassignment onto the snapshot file when needed.
-  if (normalizeDateKey(snap.date) !== date) {
+  if (prevDate !== date || normalizeDateKey(snap.asOfDate) !== asOfDate) {
     snap.date = date;
+    snap.asOfDate = asOfDate;
     const fp = rtlDailySnapshotPath(snap.id);
     const tmp = `${fp}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
@@ -631,12 +648,13 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const index = loadRtlDailyIndex();
   const snapshots = index.snapshots.map((s) => {
     if (s.id !== snap.id) return s;
-    return { ...s, date };
+    return { ...s, date, asOfDate };
   });
   if (!snapshots.some((s) => s.id === snap.id)) {
     snapshots.push({
       id: snap.id,
       date,
+      asOfDate,
       at: snap.at,
       count: snap.count,
       fileName: snap.fileName,
@@ -657,6 +675,7 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
   return {
     id: snap.id,
     date,
+    asOfDate,
     at: snap.at,
     count: snap.count,
     fileName: snap.fileName,
@@ -893,9 +912,16 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   }
 
   const name = String(fileName || '').trim();
+  // Schedule day (date) = day chosen in the uploader.
+  // asOfDate = day Col J ages are relative to. Past schedule days uploaded later
+  // almost always use today's extract ages, so asOfDate stays the upload day.
+  const uploadedOn = riyadhDateTimeParts(at).dateKey;
+  const asOfDate = (date && uploadedOn && date < uploadedOn) ? uploadedOn : date;
   const snap = {
     id,
     date,
+    asOfDate,
+    uploadedOn,
     at,
     fileName: name,
     source: String(source || '').trim(),
@@ -912,6 +938,7 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   const entry = {
     id,
     date,
+    asOfDate,
     at,
     count: list.length,
     fileName: name,
@@ -989,6 +1016,7 @@ function loadRtlActiveMonth(monthKey) {
     days[dateKey] = {
       id: snap.id,
       date: snap.date || dateKey,
+      asOfDate: snap.asOfDate || snap.date || dateKey,
       at: snap.at,
       count: snap.count,
       fileName: snap.fileName,
@@ -3137,6 +3165,7 @@ app.post('/api/rtl-daily/use', (req, res) => {
       ok: true,
       id: result.id,
       date: result.date,
+      asOfDate: result.asOfDate,
       count: result.count,
       at: result.at,
       fileName: result.fileName,
@@ -3253,6 +3282,7 @@ app.post('/api/rtl-daily/save', (req, res) => {
       ok: true,
       id: snap.id,
       date: snap.date,
+      asOfDate: snap.asOfDate,
       count: snap.count,
       at: snap.at,
       excelSaved: snap.excelSaved

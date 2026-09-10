@@ -352,12 +352,11 @@
     </div>
 
     <p class="note">
-      <b>Step 1:</b> Select the calendar date for this RTL file (e.g. day 1 of the month). <b>Step 2:</b> Upload and scan. <b>Step 3:</b> Append snapshot — that day becomes active with this file (last save wins).
-      Use <b>Use date</b> to pin an older file as the active one for that schedule day.
+      <b>Step 1:</b> Select the <b>schedule day</b> this RTL file should fill (e.g. day 3). <b>Step 2:</b> Upload and scan. <b>Step 3:</b> Append snapshot — that day becomes active (last save wins).
+      <b>Use date:</b> select the schedule day above, then click <b>Use date</b> on any archived file to pin it to that day.
       <br/><br/>
-      <b>Admin Push to Live</b> also appends a permanent snapshot for <b>today’s date</b> (Riyadh) and marks it active for that day.
-      Multiple files per day stay in the archive; the Allocation monthly schedule uses <b>one file per day</b>, not every upload.
-      After saving, open <b>Allocation</b> on the live dashboard (or Refresh) — that day’s Tot / RES cards use this file’s counting logic (age 0 arrivals · Retail Electronic Sales).
+      Tot / RES for that day count age-0 arrivals relative to the schedule day (if you upload today’s RTL for an earlier day, ages are adjusted automatically).
+      After saving, open <b>Allocation</b> on the live dashboard — day cards refresh from the uploader files.
       Saving here does <b>not</b> change the live Sales Report dashboard slots.
     </p>
 
@@ -941,7 +940,7 @@
       <li${isActive ? ' class="snap-active"' : ""}>
         <div>
           <strong>${escapeHtml(snapLabel(s))}${isActive ? ' <span class="badge-active">Active for day</span>' : ""}</strong>
-          <div class="meta">${escapeHtml(id)}${s.fileName ? " · " + escapeHtml(s.fileName) : ""}${s.source ? " · " + escapeHtml(s.source) : ""}</div>
+          <div class="meta">${escapeHtml(id)}${s.fileName ? " · " + escapeHtml(s.fileName) : ""}${s.source ? " · " + escapeHtml(s.source) : ""}${s.asOfDate && s.asOfDate !== dateKey ? ` · ages as-of ${escapeHtml(s.asOfDate)}` : ""}</div>
         </div>
         <div class="actions" style="margin:0">
           ${canDelete
@@ -1139,34 +1138,40 @@
     const dateBtn = e.target.closest(".btn-use-date");
     if (dateBtn) {
       const id = dateBtn.getAttribute("data-id") || "";
-      const date = dateBtn.getAttribute("data-date") || "";
+      const fileDate = dateBtn.getAttribute("data-date") || "";
+      // Prefer the date currently selected in the uploader — that is the schedule day
+      // the user wants this file to drive (e.g. day 3), not only the file's old date.
+      const selected = ($("#snap-date") && $("#snap-date").value) || "";
+      const scheduleDate = selected || fileDate;
       if (!id) {
         setStatus($("#list-status"), "Missing snapshot id.", "err");
         return;
       }
+      if (!scheduleDate) {
+        setStatus($("#list-status"), "Select a schedule date above, then click Use date.", "err");
+        return;
+      }
       dateBtn.disabled = true;
-      setStatus($("#list-status"), "Setting active file for schedule day…");
+      setStatus($("#list-status"), `Setting active file for schedule day ${formatDateDisplay(scheduleDate)}…`);
       try {
         const res = await fetch(API_USE, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id,
-            scheduleDate: date || $("#snap-date").value || undefined,
+            scheduleDate,
           }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || res.statusText);
-        if (date) {
-          $("#snap-date").value = date;
-          updateDateBanner();
-        }
-        const dayNum = (data.date || date) && String(data.date || date).length >= 10
-          ? Number(String(data.date || date).slice(8, 10))
+        $("#snap-date").value = data.date || scheduleDate;
+        updateDateBanner();
+        const dayNum = (data.date || scheduleDate) && String(data.date || scheduleDate).length >= 10
+          ? Number(String(data.date || scheduleDate).slice(8, 10))
           : null;
         setStatus(
           $("#scan-status"),
-          `✓ Schedule day ${dayNum || "?"} (${data.date || date}) now uses only this file · ${data.count || 0} VINs · ${data.id || id}. Refresh Allocation dashboard to update Tot/RES.`,
+          `✓ Schedule day ${dayNum || "?"} (${data.date || scheduleDate}) now uses this file · ${data.count || 0} VINs · ages as-of ${data.asOfDate || "file extract"} · ${data.id || id}. Open Allocation (or Refresh) to update Tot/RES.`,
           "ok"
         );
         await loadMeta();
@@ -1174,6 +1179,7 @@
         dateBtn.disabled = false;
         setStatus($("#list-status"), err.message || "Use date failed", "err");
       }
+      return;
     }
   });
 

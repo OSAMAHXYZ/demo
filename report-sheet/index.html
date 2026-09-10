@@ -10715,8 +10715,9 @@
     renderBasAllocatedVehicles(d);
 
     // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
+    // Force refresh so a newly saved day (e.g. day 3) is picked up without a full page reload.
     const monthKey = basMonthContext().monthKey;
-    ensureRtlActiveMonth(monthKey, false).then((pack) => {
+    ensureRtlActiveMonth(monthKey, true).then((pack) => {
       if (!pack || activePanel !== "boallocstock") return;
       if (!window._data) return;
       const nextRows = filteredBasRows(buildBasRows(window._data));
@@ -10822,8 +10823,12 @@
   }
 
   function mapRtlDailyVehicle(v, dateKey, snapId, i) {
-    const ageRaw = v && (v.age != null ? v.age : v.ageing);
-    const ageNum = toNumber(ageRaw);
+    const ageRaw = v && (v.age != null && String(v.age).trim() !== "" ? v.age : v.ageing);
+    let ageing = null;
+    if (ageRaw != null && String(ageRaw).trim() !== "" && String(ageRaw).trim() !== "—") {
+      const ageNum = Number(String(ageRaw).replace(/[, ]/g, ""));
+      if (Number.isFinite(ageNum) && ageNum >= 0) ageing = ageNum;
+    }
     const product = cellToString(v && v.product).trim() || "—";
     const suffix = normalizeProductSuffix(product, cellToString(v && (v.suffix || v.sfx)).trim() || "—");
     return {
@@ -10835,7 +10840,7 @@
       year: cellToString(v && v.year).trim(),
       ext: cellToString(v && v.ext).trim(),
       int: cellToString(v && v.int).trim(),
-      ageing: Number.isFinite(ageNum) && ageNum >= 0 ? ageNum : null,
+      ageing,
       usage: cellToString(v && v.usage).trim() || "—",
       location: cellToString(v && v.location).trim() || "—",
       status: cellToString(v && v.status).trim(),
@@ -10843,6 +10848,24 @@
       snapshotDate: dateKey,
       snapshotId: snapId || "",
     };
+  }
+
+  /** Calendar-day difference (UTC-safe via YYYY-MM-DD parts). */
+  function dateKeyDayDelta(laterKey, earlierKey) {
+    const a = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(laterKey || ""));
+    const b = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(earlierKey || ""));
+    if (!a || !b) return 0;
+    const later = Date.UTC(Number(a[1]), Number(a[2]) - 1, Number(a[3]));
+    const earlier = Date.UTC(Number(b[1]), Number(b[2]) - 1, Number(b[3]));
+    return Math.round((later - earlier) / 86400000);
+  }
+
+  /** Effective age on the schedule day, adjusting when the Excel ages are as-of a later extract day. */
+  function effectiveAgeForScheduleDay(age, scheduleDateKey, asOfDateKey) {
+    if (age == null || !Number.isFinite(age)) return null;
+    const delta = dateKeyDayDelta(asOfDateKey || scheduleDateKey, scheduleDateKey);
+    if (!delta) return Math.floor(age);
+    return Math.floor(age) - delta;
   }
 
   function emptyBasLeafRows() {
@@ -10904,6 +10927,8 @@
         if (dayNum > ctx.daysInMonth) return;
         const snap = dayFiles[dateKey];
         const vehicles = (snap && snap.vehicles) || [];
+        const asOfKey = (snap && (snap.asOfDate || snap.date)) || dateKey
+          || (snap && snap.id && String(snap.id).slice(0, 10)) || dateKey;
         const collDate = new Date(ctx.y, ctx.m, dayNum);
         const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
         vehicles.forEach((v, i) => {
@@ -10912,9 +10937,10 @@
           if (!leaf) return;
           const ageRaw = car.ageing;
           const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
-          // Day file = that calendar day's stock extract.
-          // Age 0 (or blank age) = arrived that day. Age ≥ 1 stays in file but is not an arrival for the day column.
-          const isArrival = age == null || age === 0;
+          // Adjust Col J age when the file was extracted on a later day than the schedule day
+          // (e.g. uploaded 10 Sep RTL for schedule day 3 → age 7 counts as day-3 arrival).
+          const effAge = effectiveAgeForScheduleDay(age, dateKey, asOfKey);
+          const isArrival = effAge == null || effAge === 0;
           if (!isArrival) return;
           matched.push({
             ...car,
@@ -10928,7 +10954,7 @@
             collectionLabel: collLabel,
             isTodayArrival: dayNum === ctx.todayDay,
             isLate: false,
-            age: age == null ? 0 : age,
+            age: effAge == null ? 0 : effAge,
             _fromDayFile: true,
           });
         });
@@ -10938,12 +10964,14 @@
       const todayKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
       const todaySnap = dayFiles[todayKey];
       if (todaySnap && Array.isArray(todaySnap.vehicles)) {
+        const todayAsOf = todaySnap.asOfDate || todaySnap.date || todayKey;
         todaySnap.vehicles.forEach((v, i) => {
           const car = mapRtlDailyVehicle(v, todayKey, todaySnap.id, `late-${i}`);
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
           const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
-          if (age == null || age < 1) return;
+          const effAge = effectiveAgeForScheduleDay(age, todayKey, todayAsOf);
+          if (effAge == null || effAge < 1) return;
           if (!isRetailElectronicSales(car.searchAreaDesc)) return;
           matched.push({
             ...car,
@@ -10952,12 +10980,12 @@
             allocSfx: leaf.sfx,
             leafId: leaf.id,
             allocation: Number(allocationValues[leaf.id]) || 0,
-            collectionDate: inferCollectionDateFromAge(age, ctx.today),
+            collectionDate: inferCollectionDateFromAge(effAge, ctx.today),
             collectionDay: ctx.todayDay,
             collectionLabel: ctx.today.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
             isTodayArrival: false,
             isLate: true,
-            age,
+            age: effAge,
             _lateOnly: true,
             _fromDayFile: true,
           });
@@ -11088,7 +11116,7 @@
       if (mode === "hybrid") {
         hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) from Data Uploader · other days from live RTL age · today day ${ctx.todayDay}`;
       } else if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} active day file(s) · day N = age-0 (or blank age) from that day's RTL · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} active day file(s) · day N = age-0 on that schedule day (ages adjusted if file extracted later) · today day ${ctx.todayDay}`;
       } else {
         hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · save a day in Data Uploader to lock that day · today day ${ctx.todayDay}`;
       }
