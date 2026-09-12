@@ -6205,6 +6205,33 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: #2563eb !important;
   color: #fff !important;
 }
+
+/* Theme toggle: dark chip in light mode, light chip in dark mode */
+.live-app .btn.theme-toggle,
+.live-app button.theme-toggle {
+  background: #111827 !important;
+  border-color: #111827 !important;
+  color: #f9fafb !important;
+  box-shadow: none !important;
+}
+.live-app .btn.theme-toggle:hover:not(:disabled),
+.live-app button.theme-toggle:hover:not(:disabled) {
+  background: #1f2937 !important;
+  border-color: #1f2937 !important;
+  color: #fff !important;
+}
+.live-app.theme-dark .btn.theme-toggle,
+.live-app.theme-dark button.theme-toggle {
+  background: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+  color: #111827 !important;
+}
+.live-app.theme-dark .btn.theme-toggle:hover:not(:disabled),
+.live-app.theme-dark button.theme-toggle:hover:not(:disabled) {
+  background: #fff !important;
+  border-color: #fff !important;
+  color: #000 !important;
+}
 .live-app.theme-dark .status {
   background: #243044;
   color: #cbd5e1;
@@ -7180,6 +7207,53 @@ body.admin-page #panel-allocation:not([hidden]) {
 .live-app.toyota-theme.theme-dark .icc-title,
 .live-app.toyota-theme.theme-dark .card h2 {
   color: #fff !important;
+}
+
+/* Charcoal buttons (not blue-slate) in Toyota dark */
+.live-app.toyota-theme.theme-dark .btn,
+.live-app.toyota-theme.theme-dark button.btn,
+.live-app.toyota-theme.theme-dark .sidebar-toggle,
+.live-app.toyota-theme.theme-dark .sidebar-collapse-btn,
+.live-app.toyota-theme.theme-dark select,
+.live-app.toyota-theme.theme-dark input,
+.live-app.toyota-theme.theme-dark .toolbar input,
+.live-app.toyota-theme.theme-dark .toolbar select {
+  background: #1a1a1a !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f3f4f6 !important;
+}
+.live-app.toyota-theme.theme-dark .btn-primary,
+.live-app.toyota-theme.theme-dark #run-btn.btn-primary,
+.live-app.toyota-theme.theme-dark #push-btn.btn-primary {
+  background: #eb0a1e !important;
+  border-color: #eb0a1e !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(235, 10, 30, 0.28) !important;
+}
+.live-app.toyota-theme.theme-dark .btn-primary:hover:not(:disabled),
+.live-app.toyota-theme.theme-dark #run-btn.btn-primary:hover:not(:disabled) {
+  background: #c40718 !important;
+  border-color: #c40718 !important;
+  color: #fff !important;
+}
+.live-app.toyota-theme.theme-dark .btn.theme-toggle,
+.live-app.toyota-theme.theme-dark button.theme-toggle {
+  background: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+  color: #111 !important;
+}
+.live-app.toyota-theme.theme-dark .btn.theme-toggle:hover:not(:disabled),
+.live-app.toyota-theme.theme-dark button.theme-toggle:hover:not(:disabled) {
+  background: #fff !important;
+  border-color: #fff !important;
+  color: #000 !important;
+}
+.live-app.toyota-theme.theme-dark .btn:disabled,
+.live-app.toyota-theme.theme-dark button.btn:disabled {
+  opacity: 0.55;
+}
+.live-app.toyota-theme.theme-dark .btn-primary:disabled {
+  opacity: 0.7;
 }
 
 
