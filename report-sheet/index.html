@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260910rtday4" />
+  <link rel="stylesheet" href="dashboard.css?v=20260912botable" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -788,15 +788,15 @@
         <div class="bo-empty card" id="aa-empty">
           <h2>Allocation Audit</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Compare Admin allocation vs Retail Electronic Sales arrivals, then trace each VIN in Sales Raw,
-            E-Sales المحجوز, All Retail المخزون المتاح, and RTL daily snapshots.
+            Compare Admin allocation vs Retail Electronic Sales arrivals, then trace each VIN from
+            <b>E-Sales sheet 2</b> (Col L VIN · Col F BO) in Sales Raw for proforma / invoice, advisor, status, and location.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Set allocation in <a href="admin.html">Admin</a> → <b>3 · Allocation Plan</b></li>
             <li>Upload slot <b>2 · RTL Stock</b> (Search Area = Retail Electronic Sales)</li>
-            <li>Upload slot <b>3 · Stock Central</b> (sheets المحجوز + المخزون المتاح)</li>
-            <li>Upload slot <b>4 · Sales Raw</b> for Proforma / Delivered status</li>
-            <li>Click <b>Push to live</b> (appends a permanent timestamped RTL snapshot — never overwrites history) · return here · <b>Refresh</b></li>
+            <li>Upload slot <b>3 · Stock Central</b> (sheet 2 / المحجوز · Col F BO · Col L VIN + المخزون المتاح)</li>
+            <li>Upload slot <b>4 · Sales Raw</b> for Proforma (Col P) / Invoice (Col V) · advisor (Col A)</li>
+            <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
 
@@ -809,13 +809,13 @@
             <div class="rv-head-actions">
               <select id="aa-filter-status" title="Filter VIN status">
                 <option value="">All statuses</option>
-                <option value="delivered">Delivered</option>
+                <option value="salesdate">Has proforma / invoice</option>
+                <option value="delivered">Delivered / Invoiced</option>
                 <option value="proforma">Proforma</option>
-                <option value="reserved">In المحجوز</option>
+                <option value="missing">Not in Sales Raw</option>
                 <option value="available">In المخزون المتاح</option>
-                <option value="missing">Not found (red)</option>
               </select>
-              <input id="aa-search" type="search" placeholder="Search product / suffix / VIN…" />
+              <input id="aa-search" type="search" placeholder="Search BO / VIN / advisor / product…" />
               <button type="button" id="aa-excel-btn" class="btn-primary">Export Excel</button>
             </div>
           </div>
@@ -832,8 +832,8 @@
           <article class="card aa-vin-card">
             <div class="pbi-viz-head">
               <div>
-                <h2>VIN audit trail</h2>
-                <span class="hint">Sales Raw · المحجوز · المخزون المتاح · last RTL snapshot day / location / search area</span>
+                <h2>VIN audit trail · E-Sales sheet 2</h2>
+                <span class="hint">Col L VIN · Col F BO → Sales Raw advisor · proforma (P) / invoice (V) · status · location</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-vin-wrap"></div>
@@ -3297,7 +3297,7 @@
     return sheetRows(workbook, preferred);
   }
 
-  /** E-Sales reserved sheet «المحجوز» — Col F order · Col L VIN. */
+  /** E-Sales reserved sheet — prefer named المحجوز, else workbook sheet 2 (index 1). Col F order · Col L VIN. */
   function esalesReservedSheetName(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return null;
@@ -3305,6 +3305,7 @@
       names.find((n) => /المحجوز/i.test(n) && /e[\s_-]*sales|esales/i.test(n)) ||
       names.find((n) => /المحجوز/i.test(n)) ||
       names.find((n) => /reserv/i.test(n) && /e[\s_-]*sales|esales|stock/i.test(n)) ||
+      names[1] ||
       null
     );
   }
@@ -3315,11 +3316,29 @@
     return sheetRows(workbook, sheetName).map((r, idx) => {
       const orderNumber = cellToString(cellByLetter(r, "F")).trim();
       const vin = extractVinValue(cellByLetter(r, "L")) || upperTrim(cellToString(cellByLetter(r, "L")));
+      const product = cellToString(cellByLetter(r, "B")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "G")).trim() || stockFieldByAlias(r, "suffix", []) || ""
+      );
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
       return {
         idx,
         sheet: sheetName,
         orderNumber,
         vin,
+        product,
+        suffix,
+        location,
+        searchArea,
         _raw: r,
       };
     }).filter((r) => r.orderNumber || r.vin);
@@ -9107,7 +9126,7 @@
       </tr></thead>
       <tbody>${aggs.map((a) => {
         const active = a.product === boView.car ? " active" : "";
-        return `<tr data-bo-product="${escapeHtml(a.product)}" class="bo-row${active}">
+        return `<tr data-bo-product="${escapeHtml(a.product)}" class="bo-prod-row${active}">
           <td><button type="button" class="bo-link" data-bo-product="${escapeHtml(a.product)}">${escapeHtml(a.product)}</button></td>
           <td class="num"><b>${formatNumber(a.total)}</b></td>
           <td class="num">${formatNumber(a.confirmed)}</td>
@@ -12195,30 +12214,43 @@
     (slots.sales.rows || []).forEach((r) => {
       const vin = extractVinValue(r.vin) || upperTrim(cellToString(r.vin));
       if (!vin || vin.length < 11) return;
+      const location = cellToString(r.location).trim()
+        || cellToString(r["Allocated Location"]).trim()
+        || cellToString(r["Location"]).trim()
+        || stockFieldByAlias(r, "location", [])
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || "";
       const entry = {
         delivered: hasDeliveryDate(r),
         invoiced: hasInvoiceDate(r),
         proformaDate: r.proformaDate,
-        invoiceDate: r.invoiceDate,
+        invoiceDate: r.invoiceDate || r.deliveryDate,
         deliveryDate: r.deliveryDate,
         salesman: resolveSalesmanName(r._salesmanRaw || r.salesman),
         secondaryStatus: cellToString(r.secondaryStatus).trim(),
+        location,
+        product: cellToString(r.product || r.Product || "").trim(),
+        salesType: cellToString(r.salesType || "").trim(),
       };
       const prev = byVin.get(vin);
       if (!prev) {
         byVin.set(vin, entry);
         return;
       }
+      // Prefer delivered/invoiced row; otherwise keep earliest proforma with advisor.
       if (entry.delivered && !prev.delivered) {
         byVin.set(vin, {
           ...entry,
           secondaryStatus: entry.secondaryStatus || prev.secondaryStatus || "",
+          location: entry.location || prev.location || "",
+          salesman: entry.salesman || prev.salesman || "",
         });
         return;
       }
-      if (!prev.secondaryStatus && entry.secondaryStatus) {
-        prev.secondaryStatus = entry.secondaryStatus;
-      }
+      if (!prev.salesman && entry.salesman) prev.salesman = entry.salesman;
+      if (!prev.secondaryStatus && entry.secondaryStatus) prev.secondaryStatus = entry.secondaryStatus;
+      if (!prev.location && entry.location) prev.location = entry.location;
+      if (!prev.proformaDate && entry.proformaDate) prev.proformaDate = entry.proformaDate;
     });
     return byVin;
   }
@@ -14673,16 +14705,34 @@
     const key = extractVinValue(vin) || upperTrim(vin);
     const sales = salesLookup.get(key);
     if (!sales) {
-      return { kind: "none", label: "—", detail: "Not in Sales Raw", cls: "na" };
+      return {
+        kind: "none",
+        label: "Not in Sales Raw",
+        detail: "No proforma / invoice date",
+        cls: "na",
+        salesman: "",
+        proformaDate: null,
+        invoiceDate: null,
+        deliveryDate: null,
+        location: "",
+        secondaryStatus: "",
+      };
     }
-    if (sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate))) {
+    const salesman = sales.salesman || "";
+    const location = sales.location || "";
+    const secondaryStatus = sales.secondaryStatus || "";
+    if (sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) || sales.invoiced) {
       return {
         kind: "delivered",
-        label: "Delivered",
-        detail: `Delivery ${formatRvDate(sales.deliveryDate)}`,
+        label: "Delivered / Invoiced",
+        detail: `Invoice ${formatRvDate(sales.invoiceDate || sales.deliveryDate)}`,
         cls: "ok",
+        salesman,
         proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
         deliveryDate: sales.deliveryDate,
+        location,
+        secondaryStatus,
       };
     }
     if (sales.proformaDate && parseDate(sales.proformaDate)) {
@@ -14691,23 +14741,33 @@
         label: "Proforma",
         detail: `Proforma ${formatRvDate(sales.proformaDate)}`,
         cls: "warn",
+        salesman,
         proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate,
         deliveryDate: sales.deliveryDate,
+        location,
+        secondaryStatus,
       };
     }
     return {
       kind: "sales",
-      label: "In Sales Raw",
-      detail: "No proforma / delivery date",
+      label: secondaryStatus || "In Sales Raw",
+      detail: "No proforma / invoice date",
       cls: "na",
+      salesman,
       proformaDate: sales.proformaDate,
+      invoiceDate: sales.invoiceDate,
       deliveryDate: sales.deliveryDate,
+      location,
+      secondaryStatus,
     };
   }
 
   function buildAllocationAuditPack() {
     const salesLookup = buildSalesVinLookup();
     const availableLookup = buildEsalesStockVinLookup();
+    const rtlLookup = buildRtlStockVinLookup();
+    const reservedRows = slots.central.reservedRows || [];
     const reservedSet = buildReservedVinSet();
     const lastSeen = aaLastSeenCache.lastSeen || {};
     const resCars = buildRetailElectronicSalesCars();
@@ -14730,42 +14790,78 @@
       });
     });
 
-    const vinRows = [];
-    const seenVin = new Set();
-
+    // Product summary still tracks RES (RTL Retail Electronic Sales) vs plan.
+    const seenResVin = new Set();
     resCars.forEach((car) => {
       const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seenResVin.has(vin)) return;
+      seenResVin.add(vin);
+      const leaf = matchRtlToAllocLeaf(car);
+      if (!leaf || !byLeaf.has(leaf.id)) return;
+      const sales = resolveAaSalesStatus(vin, salesLookup);
+      const sum = byLeaf.get(leaf.id);
+      sum.actual += 1;
+      if (sales.kind === "delivered") sum.delivered += 1;
+      if (sales.kind === "proforma") sum.proforma += 1;
+      if (reservedSet.has(vin)) sum.reserved += 1;
+      if (availableLookup.has(vin)) sum.available += 1;
+      if (sales.kind === "none" && !reservedSet.has(vin) && !availableLookup.has(vin)) sum.missing += 1;
+    });
+
+    // VIN audit trail = E-Sales sheet 2 (Col L VIN · Col F BO) × Sales Raw.
+    const vinRows = [];
+    const seenVin = new Set();
+    reservedRows.forEach((rec) => {
+      const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
       if (!vin || seenVin.has(vin)) return;
       seenVin.add(vin);
 
-      const leaf = matchRtlToAllocLeaf(car);
       const sales = resolveAaSalesStatus(vin, salesLookup);
-      const inReserved = reservedSet.has(vin);
       const avail = availableLookup.get(vin) || null;
-      const inAvailable = !!avail;
+      const rtl = rtlLookup.get(vin) || null;
       const snap = lastSeen[vin] || null;
-      const missing = sales.kind === "none" && !inReserved && !inAvailable;
+      const inReserved = true;
+      const inAvailable = !!avail;
+      const hasSalesDate = sales.kind === "delivered" || sales.kind === "proforma";
 
-      const whereBits = [];
-      if (sales.kind === "delivered" || sales.kind === "proforma" || sales.kind === "sales") {
-        whereBits.push(sales.label);
-      }
-      if (inReserved) whereBits.push("المحجوز");
-      if (inAvailable) whereBits.push("المخزون المتاح");
-      if (snap) whereBits.push(`RTL ${snap.date}`);
-      if (missing) whereBits.push("Not found");
+      const productHint = rec.product || (sales.product) || (snap && snap.product) || "";
+      const suffixHint = rec.suffix || (snap && snap.suffix) || "";
+      const leaf = matchRtlToAllocLeaf({
+        product: productHint,
+        suffix: suffixHint,
+      }) || null;
 
-      const row = {
+      const location = sales.location
+        || (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+        || (snap && snap.location)
+        || (avail ? cellToString(avail.location).trim() : "")
+        || rec.location
+        || "";
+
+      const statusLabel = hasSalesDate
+        ? sales.label
+        : (sales.secondaryStatus || sales.label || "Not in Sales Raw");
+
+      vinRows.push({
         vin,
-        product: leaf ? leaf.product : (car.product || "—"),
-        sfx: leaf ? leaf.sfx : (car.suffix || "—"),
-        seg: leaf ? leaf.seg : (car.seg || "—"),
+        orderNumber: String(rec.orderNumber || "").trim(),
+        product: leaf ? leaf.product : (productHint || "—"),
+        sfx: leaf ? leaf.sfx : (suffixHint || "—"),
+        seg: leaf ? leaf.seg : "—",
         leafId: leaf ? leaf.id : "",
         allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
-        age: car.age,
-        searchArea: car.searchAreaDesc || "",
-        liveLocation: car.location || "",
-        sales,
+        age: null,
+        searchArea: rec.searchArea || (snap && snap.vehicleSearchArea) || "",
+        liveLocation: location,
+        sales: {
+          ...sales,
+          label: statusLabel,
+        },
+        salesman: sales.salesman || "",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+        location,
+        currentStatus: statusLabel,
         inReserved,
         inAvailable,
         availableDetail: avail
@@ -14773,20 +14869,11 @@
           : "—",
         availableLocation: avail ? cellToString(avail.location).trim() : "",
         snap,
-        missing,
-        whereLabel: whereBits.join(" · ") || "—",
-      };
-      vinRows.push(row);
-
-      if (leaf && byLeaf.has(leaf.id)) {
-        const sum = byLeaf.get(leaf.id);
-        sum.actual += 1;
-        if (sales.kind === "delivered") sum.delivered += 1;
-        if (sales.kind === "proforma") sum.proforma += 1;
-        if (inReserved) sum.reserved += 1;
-        if (inAvailable) sum.available += 1;
-        if (missing) sum.missing += 1;
-      }
+        missing: sales.kind === "none",
+        whereLabel: hasSalesDate
+          ? `${sales.label}${sales.salesman ? ` · ${sales.salesman}` : ""}`
+          : (sales.kind === "sales" ? "In Sales Raw (no dates)" : "Not in Sales Raw"),
+      });
     });
 
     const summaryRows = [...byLeaf.values()]
@@ -14795,7 +14882,9 @@
       .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || String(a.product).localeCompare(String(b.product)));
 
     vinRows.sort((a, b) => {
-      if (a.missing !== b.missing) return a.missing ? -1 : 1;
+      const aHit = a.sales.kind === "delivered" || a.sales.kind === "proforma" ? 0 : 1;
+      const bHit = b.sales.kind === "delivered" || b.sales.kind === "proforma" ? 0 : 1;
+      if (aHit !== bHit) return aHit - bHit;
       return String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
     });
 
@@ -14804,13 +14893,14 @@
       vinRows,
       totals: {
         allocation: summaryRows.reduce((s, r) => s + r.allocation, 0),
-        actual: vinRows.length,
+        actual: seenResVin.size,
         delivered: vinRows.filter((r) => r.sales.kind === "delivered").length,
         proforma: vinRows.filter((r) => r.sales.kind === "proforma").length,
-        reserved: vinRows.filter((r) => r.inReserved).length,
+        reserved: vinRows.length,
         available: vinRows.filter((r) => r.inAvailable).length,
         missing: vinRows.filter((r) => r.missing).length,
         snapshots: aaLastSeenCache.snapshotCount || 0,
+        withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
       },
     };
   }
@@ -14824,8 +14914,12 @@
       if (st === "reserved" && !r.inReserved) return false;
       if (st === "available" && !r.inAvailable) return false;
       if (st === "missing" && !r.missing) return false;
+      if (st === "salesdate" && r.sales.kind !== "delivered" && r.sales.kind !== "proforma") return false;
       if (!q) return true;
-      const hay = [r.vin, r.product, r.sfx, r.seg, r.sales.label, r.whereLabel, r.snap && r.snap.location, r.snap && r.snap.vehicleSearchArea]
+      const hay = [
+        r.vin, r.orderNumber, r.product, r.sfx, r.seg, r.salesman, r.currentStatus,
+        r.sales.label, r.whereLabel, r.location, r.snap && r.snap.location,
+      ]
         .map((x) => String(x || "").toLowerCase())
         .join(" ");
       return hay.includes(q);
@@ -14854,10 +14948,10 @@
 
     const hint = $("#aa-live-hint");
     if (hint) {
-      const snapNote = aaLastSeenCache.error
-        ? ` · snapshots: ${aaLastSeenCache.error}`
-        : ` · ${totals.snapshots} RTL snapshot day(s)`;
-      hint.textContent = `RES actual ${totals.actual} · plan ${totals.allocation} · missing ${totals.missing}${snapNote}`;
+      const sheetNote = slots.central.reservedSheet
+        ? ` · E-Sales «${slots.central.reservedSheet}»`
+        : " · E-Sales sheet 2";
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.missing} not in Sales Raw${sheetNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -14865,11 +14959,11 @@
       kpis.innerHTML = [
         ["Allocation", totals.allocation, "ok"],
         ["Actual RES", totals.actual, "ok"],
+        ["E-Sales VINs", totals.reserved, "ok"],
+        ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
         ["Delivered", totals.delivered, "ok"],
-        ["Proforma", totals.proforma, "warn"],
-        ["المحجوز", totals.reserved, "ok"],
-        ["المخزون المتاح", totals.available, "ok"],
-        ["Not found", totals.missing, totals.missing ? "bad" : "ok"],
+        ["Proforma open", totals.proforma, "warn"],
+        ["Not in Sales Raw", totals.missing, totals.missing ? "bad" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
           <div class="lab">${escapeHtml(label)}</div>
@@ -14919,50 +15013,38 @@
     const vinWrap = $("#aa-vin-wrap");
     const foot = $("#aa-vin-foot");
     if (vinWrap) {
-      if (!filtered.length) {
-        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales VINs match the filters.</p>`;
+      if (!vinRows.length) {
+        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No E-Sales sheet 2 VINs found. Upload Stock Central (slot 3) with sheet 2 / المحجوز (Col L VIN · Col F BO), then Push to live.</p>`;
+      } else if (!filtered.length) {
+        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No E-Sales VINs match the filters.</p>`;
       } else {
         vinWrap.innerHTML = `<table class="data-table aa-table">
           <thead>
             <tr>
+              <th>BO (Col F)</th>
               <th>Product</th>
-              <th>VIN</th>
-              <th>Sales Raw</th>
-              <th>المحجوز</th>
-              <th>المخزون المتاح</th>
-              <th>Last RTL day</th>
-              <th>Last location</th>
-              <th>Vehicle search area</th>
-              <th>Where</th>
+              <th>VIN (Col L)</th>
+              <th>Sales advisor</th>
+              <th>Status</th>
+              <th>Proforma date</th>
+              <th>Invoice date</th>
+              <th>Location</th>
             </tr>
           </thead>
           <tbody>
             ${filtered.map((r) => {
-              const snapDate = r.snap ? r.snap.date : "—";
-              const snapLoc = r.snap && r.snap.location
-                ? r.snap.location
-                : (r.liveLocation && r.liveLocation !== "—" ? r.liveLocation : "—");
-              const snapArea = r.snap && r.snap.vehicleSearchArea
-                ? r.snap.vehicleSearchArea
-                : (r.searchArea || "—");
+              const statusCls = r.sales.cls || "na";
               return `<tr class="${r.missing ? "aa-row-missing" : ""}">
+                <td class="mono">${escapeHtml(r.orderNumber || "—")}</td>
                 <td><strong>${escapeHtml(r.product)}</strong>
-                  <div class="rv-muted">${escapeHtml(r.sfx || "")}${r.age != null ? ` · age ${escapeHtml(String(r.age))}` : ""}</div></td>
+                  <div class="rv-muted">${escapeHtml(r.sfx || "")}</div></td>
                 <td class="mono">${escapeHtml(r.vin)}</td>
-                <td><span class="rv-status rv-status-${escapeHtml(r.sales.cls)}">${escapeHtml(r.sales.label)}</span>
-                  <div class="rv-muted">${escapeHtml(r.sales.detail)}</div></td>
-                <td>${r.inReserved
-                  ? `<span class="rv-status rv-status-info">Yes</span>`
-                  : `<span class="rv-muted">No</span>`}</td>
-                <td>${r.inAvailable
-                  ? `<span class="rv-status rv-status-info">Yes</span><div class="rv-muted">${escapeHtml(r.availableDetail)}</div>`
-                  : `<span class="rv-muted">No</span>`}</td>
-                <td>${escapeHtml(snapDate)}</td>
-                <td>${escapeHtml(snapLoc)}</td>
-                <td>${escapeHtml(snapArea)}</td>
-                <td>${r.missing
-                  ? `<span class="aa-missing-flag">Not found</span>`
-                  : `<span class="rv-muted">${escapeHtml(r.whereLabel)}</span>`}</td>
+                <td>${escapeHtml(r.salesman || "—")}</td>
+                <td><span class="rv-status rv-status-${escapeHtml(statusCls)}">${escapeHtml(r.currentStatus || r.sales.label)}</span>
+                  <div class="rv-muted">${escapeHtml(r.sales.detail || "")}</div></td>
+                <td>${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
+                <td>${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
+                <td>${escapeHtml(r.location || "—")}</td>
               </tr>`;
             }).join("")}
           </tbody>
@@ -14970,7 +15052,7 @@
       }
     }
     if (foot) {
-      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} RES VINs · missing ${totals.missing}`;
+      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.missing} not in Sales Raw`;
     }
 
     if (!aaLastSeenCache.loaded) {
@@ -15000,19 +15082,18 @@
       Missing: r.missing,
     }));
     const vins = pack.vinRows.map((r) => ({
+      "BO (Col F)": r.orderNumber || "",
       Product: r.product,
       Suffix: r.sfx,
       VIN: r.vin,
-      "Sales Status": r.sales.label,
-      "Sales Detail": r.sales.detail,
-      "In Reserved (المحجوز)": r.inReserved ? "Yes" : "No",
+      "Sales Advisor": r.salesman || "",
+      Status: r.currentStatus || r.sales.label,
+      "Sales Detail": r.sales.detail || "",
+      "Proforma Date": r.proformaDate ? formatRvDate(r.proformaDate) : "",
+      "Invoice Date": r.invoiceDate ? formatRvDate(r.invoiceDate) : "",
+      Location: r.location || "",
       "In Available (المخزون المتاح)": r.inAvailable ? "Yes" : "No",
-      "Available Detail": r.availableDetail,
-      "Last RTL Day": r.snap ? r.snap.date : "",
-      "Last Location": (r.snap && r.snap.location) || r.liveLocation || "",
-      "Vehicle Search Area": (r.snap && r.snap.vehicleSearchArea) || r.searchArea || "",
-      Missing: r.missing ? "Yes" : "No",
-      Where: r.whereLabel,
+      "Not in Sales Raw": r.missing ? "Yes" : "No",
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");

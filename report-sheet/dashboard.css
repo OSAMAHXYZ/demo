@@ -2556,10 +2556,24 @@ body.pbi-wide-open {
 }
 
 .bo-car-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  display: block;
+  width: 100%;
   margin-bottom: 12px;
+}
+
+.bo-car-kpis {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  margin-bottom: 14px;
+}
+
+.bo-car-summary > .bo-kpi,
+.bo-car-kpis > .bo-kpi {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
 }
 
 .bo-car-charts {
@@ -2767,6 +2781,14 @@ body.pbi-wide-open {
   background: rgba(235, 10, 30, 0.06);
 }
 
+.bo-table tr.bo-prod-row {
+  display: table-row;
+}
+
+.bo-table tr.bo-prod-row > td {
+  display: table-cell;
+}
+
 .bo-car-pick {
   display: flex;
   flex-wrap: wrap;
@@ -2791,9 +2813,10 @@ body.pbi-wide-open {
 }
 
 .bo-car-kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
   margin-bottom: 14px;
 }
 
@@ -7018,9 +7041,11 @@ body.admin-page #panel-allocation:not([hidden]) {
 .live-app.toyota-theme .pbi-kpi .val,
 .live-app.toyota-theme .cancel-pct-panel .cancel-pct-gauge .val {
   font-family: var(--font-figure) !important;
-  font-size: clamp(1.8rem, 2.4vw, 2.5rem) !important;
+  font-size: clamp(1.35rem, 1.8vw, 1.85rem) !important;
   font-weight: 800 !important;
   letter-spacing: -0.04em !important;
+  line-height: 1.05 !important;
+  margin-top: 6px !important;
 }
 .live-app.toyota-theme .cancel-pct-panel.is-over .cancel-pct-gauge .val {
   color: #eb0a1e !important;
@@ -7030,9 +7055,6 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 .live-app.toyota-theme .cancel-pct-panel.is-empty .cancel-pct-gauge .val {
   color: #111 !important;
-}
-  line-height: 1.05 !important;
-  margin-top: 6px !important;
 }
 
 .live-app.toyota-theme .bo-kpi .lab,
