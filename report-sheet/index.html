@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913aavin1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913bofix1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913scroll2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -2460,13 +2460,18 @@
     const n = String(name || "").trim();
     if (!n) return false;
     if (/summary/i.test(n)) return false;
-    // "Fleet Back Orders", sheet codes like 7022, Arabic أسطول
-    return /fleet|أسطول|\b7022\b/i.test(n);
+    // Explicit Fleet / أسطول tab
+    if (/fleet|أسطول/i.test(n)) return true;
+    // Bare sheet code "7022", or "… 7022 …" together with BO wording
+    if (/^7022$/.test(n)) return true;
+    if (/\b7022\b/.test(n) && /back\s*order|backorder|\bbo\b/i.test(n)) return true;
+    return false;
   }
 
-  /** Skip Fleet sales-type rows only (do not scan plant/BO# for 7022 — that wiped retail). */
+  /** Skip Fleet sales-type rows only (sheet filter handles Fleet / 7022 tabs). */
   function isExcludedFleetBoRaw(r, get) {
-    const salesTypeRaw = cellToString(get(r, "salesType") || get(r, "custGroup"));
+    const salesTypeRaw = cellToString(get(r, "salesType"));
+    if (!salesTypeRaw) return false;
     if (inferSalesType(salesTypeRaw, false) === "Fleet") return true;
     return /fleet|أسطول/i.test(salesTypeRaw);
   }
@@ -2474,15 +2479,18 @@
   function backorderRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    // Historical: first sheet = retail BO. Never merge Fleet / 7022 sheets.
-    let preferred = names[0];
-    if (isFleetBoSheetName(preferred)) {
+    // Historical: first sheet = retail BO. Never merge Fleet sheets.
+    const nonFleet = names.filter((n) => !isFleetBoSheetName(n));
+    let preferred = "";
+    if (nonFleet.length) {
       preferred =
-        names.find((n) => /back\s*order|backorder/i.test(n) && !isFleetBoSheetName(n))
-        || names.find((n) => !isFleetBoSheetName(n))
-        || "";
+        nonFleet.find((n) => /back\s*order|backorder/i.test(n))
+        || (nonFleet.includes(names[0]) ? names[0] : nonFleet[0]);
+    } else {
+      // All tabs look like Fleet — still read first sheet; row filter drops Fleet sales types.
+      preferred = names[0];
     }
-    if (!preferred || isFleetBoSheetName(preferred)) return [];
+    if (!preferred) return [];
     return sheetRows(workbook, preferred);
   }
 

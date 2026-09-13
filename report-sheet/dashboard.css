@@ -1704,6 +1704,21 @@ body.pbi-wide-open {
   padding-bottom: 8px;
 }
 
+/* display:flex above must not override the hidden attribute */
+#bo-dash[hidden],
+#bo-dash.bo-dash--fit[hidden],
+#bas-dash[hidden],
+#stock-dash[hidden],
+#aa-dash[hidden],
+#rv-dash[hidden],
+#bo-empty[hidden],
+#bas-empty[hidden],
+#stock-empty[hidden],
+#aa-empty[hidden],
+#rv-empty[hidden] {
+  display: none !important;
+}
+
 #bo-dash.bo-dash--fit .bo-fit-main {
   display: flex;
   flex-direction: column;
