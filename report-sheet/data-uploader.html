@@ -468,16 +468,18 @@
     </div>
 
     <p class="note">
-      <b>Day boxes:</b> Each day is its <b>own RTL file</b>. Drop Day 1’s extract on box 1, Day 2 on box 2, etc.
-      Col J age 0 (or blank) = that day’s arrivals · Allocation <b>Tot</b> / <b>RES</b>.
+      <b>Day boxes:</b> Each day is its <b>own RTL file</b>. Drop Day 10’s extract on box 10, Day 12 on box 12, etc.
+      Only <b>Col J age 0</b> (or blank) from that file counts for that day’s Allocation <b>Tot</b> / <b>RES</b>.
       <br/><br/>
-      <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — it never overwrites past day boxes.
-      If a green day shows <b>0</b>, re-drop that day’s RTL extract (age 0 rows required).
+      Saves go to the <b>same server archive as Admin Push</b> (<code>report-sheet-data/rtl-daily</code>) — Excel + VIN snapshot stay on disk across code deploys when the Railway volume is mounted (<code>PERSISTENT_DATA_DIR=/data</code>).
+      <br/><br/>
+      <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — past days stay on their day boxes.
+      If a green day shows <b>0 age 0</b>, that file has no age-0 rows — re-drop that day’s RTL extract.
     </p>
 
     <section class="card full day-cal-card">
       <h2>Schedule month · drop RTL on each day</h2>
-      <p class="sub">Each box is one calendar day. Drag &amp; drop an RTL Excel/CSV onto a day to scan and save it for that date. Green boxes already have an active file.</p>
+      <p class="sub">Each box is one calendar day. Age 0 in that day’s file = Tot/RES for that day only. Green = active file saved.</p>
       <div class="day-cal-toolbar">
         <div class="field">
           <label for="cal-month">Month</label>
@@ -651,6 +653,7 @@
 (function () {
   const API_META = "/api/rtl-daily/meta";
   const API_SAVE = "/api/rtl-daily/save";
+  const API_SAVE_FILE = "/api/rtl-daily/save-file";
   const API_COMPARE = "/api/rtl-daily/compare";
   const API_DELETE = "/api/rtl-daily";
   const API_USE = "/api/rtl-daily/use";
@@ -658,6 +661,7 @@
   let scanned = [];
   let scannedFileName = "";
   let scannedExcelBase64 = "";
+  let scannedFileBlob = null;
   let scannedHeaders = [];
   let scannedExtraHeaders = [];
   let snapshots = [];
@@ -669,6 +673,8 @@
   let selectedDayKey = "";
   let busyDayKey = "";
   let pickDayKey = "";
+  let monthAge0ByDay = {};
+  let monthVinByDay = {};
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -772,12 +778,20 @@
         busy ? "is-busy" : "",
         isToday ? "is-today" : "",
       ].filter(Boolean).join(" ");
+      const age0 =
+        monthAge0ByDay[dateKey] != null
+          ? Number(monthAge0ByDay[dateKey])
+          : (snap && snap.age0 != null ? Number(snap.age0) : null);
+      const vins =
+        monthVinByDay[dateKey] != null
+          ? Number(monthVinByDay[dateKey])
+          : (snap ? Number(snap.count) || 0 : 0);
       const meta = filled
-        ? `<div class="day-box-meta"><strong>${Number(snap.count) || 0} VINs</strong>${escapeHtml(snap.fileName || "Active file")}</div>`
+        ? `<div class="day-box-meta"><strong>${age0 != null ? age0 : "—"} age 0</strong>${vins} VINs · ${escapeHtml(snap.fileName || "Active file")}</div>`
         : `<div class="day-box-meta">No file yet</div>`;
       const hint = busy ? "Saving…" : filled ? "Drop to replace" : "Drop RTL here";
       return `
-        <button type="button" class="${classes}" data-day="${day}" data-date="${escapeHtml(dateKey)}" aria-label="Day ${day} ${dateKey}">
+        <button type="button" class="${classes}" data-day="${day}" data-date="${escapeHtml(dateKey)}" aria-label="Day ${day} ${dateKey}${filled ? ` · ${age0 != null ? age0 : 0} age 0` : ""}">
           <div class="day-box-num">${day}</div>
           ${meta}
           <div class="day-box-hint">${hint}</div>
@@ -787,6 +801,46 @@
 
   function setDayCalStatus(text, kind) {
     setStatus($("#day-cal-status"), text, kind);
+  }
+
+  async function saveRtlToServer({ dateKey, fileName, source, fileBlob, excelBase64, vehicles }) {
+    // Prefer binary upload (same durability as Admin Push Excel on disk).
+    if (fileBlob && (fileBlob instanceof Blob || fileBlob instanceof File) && fileBlob.size > 0) {
+      const buf = await fileBlob.arrayBuffer();
+      const qs = new URLSearchParams({
+        date: dateKey,
+        fileName: fileName || "rtl.xlsx",
+        source: source || "uploader",
+      });
+      const res = await fetch(`${API_SAVE_FILE}?${qs.toString()}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-File-Name": encodeURIComponent(fileName || "rtl.xlsx"),
+        },
+        body: buf,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+    if (!excelBase64) {
+      throw new Error("Excel file required — drop/select the RTL file again so it is stored on the server.");
+    }
+    const res = await fetch(API_SAVE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: dateKey,
+        fileName: fileName || "rtl.xlsx",
+        vehicles: vehicles || [],
+        excelBase64,
+        source: source || "uploader",
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   }
 
   async function ingestRtlFileForDay(file, dateKey, { autoSave = true } = {}) {
@@ -808,6 +862,7 @@
       scannedHeaders = result.headers || [];
       scannedExtraHeaders = result.extraHeaders || [];
       scannedFileName = file.name;
+      scannedFileBlob = file;
       scannedExcelBase64 = arrayBufferToBase64(buf);
       $("#kpi-rows").textContent = String(result.rowsRead || 0);
       renderPreview();
@@ -825,27 +880,22 @@
         return { saved: false, count: scanned.length, age0 };
       }
 
-      setDayCalStatus(`Saving Day ${dayNum}…`);
-      const res = await fetch(API_SAVE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: dateKey,
-          fileName: scannedFileName,
-          vehicles: scanned,
-          excelBase64: scannedExcelBase64 || undefined,
-          source: "uploader-day-box",
-        }),
+      setDayCalStatus(`Saving Day ${dayNum} to server archive…`);
+      const data = await saveRtlToServer({
+        dateKey,
+        fileName: scannedFileName,
+        source: "uploader-day-box",
+        fileBlob: file,
+        excelBase64: scannedExcelBase64,
+        vehicles: scanned,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || res.statusText);
       setStatus(
         $("#scan-status"),
-        `✓ Saved ${data.count} VIN(s) · ${data.age0 != null ? data.age0 : age0} age 0 for Day ${dayNum}. Refresh Allocation to update Tot/RES.`,
+        `✓ Saved ${data.count} VIN(s) · ${data.age0 != null ? data.age0 : age0} age 0 for Day ${dayNum} on server${data.excelSaved ? " (Excel stored)" : ""}. Refresh Allocation to update Tot/RES.`,
         "ok"
       );
       setDayCalStatus(
-        `Day ${dayNum} saved · ${data.count} VINs · ${data.age0 != null ? data.age0 : age0} age 0.`,
+        `Day ${dayNum} saved on server · ${data.count} VINs · ${data.age0 != null ? data.age0 : age0} age 0.`,
         "ok"
       );
       await loadMeta();
@@ -1168,6 +1218,25 @@
     $("#btn-clear-preview").disabled = !scanned.length;
   }
 
+  async function loadMonthDayStats(monthKey) {
+    const mk = String(monthKey || "").trim() || monthKeyFromDate(todayRiyadh());
+    monthAge0ByDay = {};
+    monthVinByDay = {};
+    try {
+      const res = await fetch(`/api/rtl-daily/active-month?month=${encodeURIComponent(mk)}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const pack = await res.json();
+      Object.entries(pack.days || {}).forEach(([dateKey, snap]) => {
+        monthVinByDay[dateKey] = Number(snap.count) || ((snap.vehicles || []).length) || 0;
+        monthAge0ByDay[dateKey] = Number.isFinite(Number(snap.age0))
+          ? Number(snap.age0)
+          : countAge0(snap.vehicles || []);
+      });
+    } catch {
+      /* ignore — day boxes still show from meta */
+    }
+  }
+
   async function loadMeta() {
     setStatus($("#list-status"), "Loading…");
     try {
@@ -1177,6 +1246,9 @@
       snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
       activeByDay = data.activeByDay && typeof data.activeByDay === "object" ? data.activeByDay : {};
       const activeDays = Object.keys(activeByDay).length;
+      const cal = $("#cal-month");
+      const mk = (cal && cal.value) || monthKeyFromDate(todayRiyadh());
+      await loadMonthDayStats(mk);
       renderSnapList();
       renderDayGrid();
       fillCompareSelects();
@@ -1333,11 +1405,12 @@
   updateDateBanner();
   renderDayGrid();
 
-  $("#cal-month")?.addEventListener("change", () => {
+  $("#cal-month")?.addEventListener("change", async () => {
     const mk = $("#cal-month").value;
     const day = selectedDayKey ? Number(selectedDayKey.slice(8, 10)) : 1;
     const dim = daysInMonth(Number(mk.slice(0, 4)), Number(mk.slice(5, 7)));
     const nextDay = Math.min(Math.max(1, day || 1), dim);
+    await loadMonthDayStats(mk);
     selectScheduleDay(dateKeyForDay(mk, nextDay), { syncMonth: false });
   });
 
@@ -1449,6 +1522,7 @@
     scanned = [];
     scannedFileName = "";
     scannedExcelBase64 = "";
+    scannedFileBlob = null;
     scannedHeaders = [];
     scannedExtraHeaders = [];
     $("#rtl-file").value = "";
@@ -1463,24 +1537,23 @@
       setStatus($("#scan-status"), "Please select a snapshot date.", "err");
       return;
     }
-    setStatus($("#scan-status"), `Saving snapshot for ${formatDateDisplay(date)}…`);
+    if (!scannedFileBlob && !scannedExcelBase64) {
+      setStatus($("#scan-status"), "Excel file required — choose the RTL file again before saving.", "err");
+      return;
+    }
+    setStatus($("#scan-status"), `Saving snapshot for ${formatDateDisplay(date)} to server archive…`);
     try {
-      const res = await fetch(API_SAVE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          fileName: scannedFileName,
-          vehicles: scanned,
-          excelBase64: scannedExcelBase64 || undefined,
-          source: "uploader",
-        }),
+      const data = await saveRtlToServer({
+        dateKey: date,
+        fileName: scannedFileName,
+        source: "uploader",
+        fileBlob: scannedFileBlob,
+        excelBase64: scannedExcelBase64,
+        vehicles: scanned,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || res.statusText);
       setStatus(
         $("#scan-status"),
-        `✓ Saved ${data.count} VIN(s) for schedule day ${formatDateDisplay(date)} as snapshot ${data.id || data.date}. This file is now active for that day — refresh Allocation · Stock to update Tot/RES.`,
+        `✓ Saved ${data.count} VIN(s) for schedule day ${formatDateDisplay(date)} as snapshot ${data.id || data.date}${data.excelSaved ? " · Excel on server" : ""}. Refresh Allocation · Stock to update Tot/RES.`,
         "ok"
       );
       await loadMeta();

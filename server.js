@@ -339,6 +339,49 @@ function ensureRtlDailyDirs() {
   ensureReportSheetDirs();
   if (!fs.existsSync(RTL_DAILY_DIR)) fs.mkdirSync(RTL_DAILY_DIR, { recursive: true });
   if (!fs.existsSync(RTL_DAILY_FILES_DIR)) fs.mkdirSync(RTL_DAILY_FILES_DIR, { recursive: true });
+  const byDay = path.join(RTL_DAILY_DIR, 'by-day');
+  if (!fs.existsSync(byDay)) fs.mkdirSync(byDay, { recursive: true });
+}
+
+/** Stable active Excel+pointer for a calendar day (survives like Admin live rtl.xlsx). */
+function rtlDailyByDayExcelPath(dateKey) {
+  const key = normalizeDateKey(dateKey);
+  if (!key) return '';
+  return path.join(RTL_DAILY_DIR, 'by-day', `${key}.xlsx`);
+}
+
+function rtlDailyByDayMetaPath(dateKey) {
+  const key = normalizeDateKey(dateKey);
+  if (!key) return '';
+  return path.join(RTL_DAILY_DIR, 'by-day', `${key}.json`);
+}
+
+function mirrorRtlActiveDayFiles(snap, excelPath) {
+  if (!snap || !snap.date) return;
+  ensureRtlDailyDirs();
+  const metaFp = rtlDailyByDayMetaPath(snap.date);
+  const xfp = rtlDailyByDayExcelPath(snap.date);
+  if (metaFp) {
+    const tmp = `${metaFp}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({
+      id: snap.id,
+      date: snap.date,
+      asOfDate: snap.asOfDate || snap.date,
+      at: snap.at,
+      count: snap.count,
+      age0: snap.age0,
+      fileName: snap.fileName || '',
+      source: snap.source || '',
+      excelSaved: Boolean(snap.excelSaved),
+      archiveExcel: snap.excelSaved ? path.basename(rtlDailyExcelPath(snap.id) || '') : ''
+    }, null, 2), 'utf8');
+    fs.renameSync(tmp, metaFp);
+  }
+  if (excelPath && xfp && fs.existsSync(excelPath)) {
+    const xtmp = `${xfp}.${process.pid}.tmp`;
+    fs.copyFileSync(excelPath, xtmp);
+    fs.renameSync(xtmp, xfp);
+  }
 }
 
 function normalizeDateKey(value) {
@@ -666,6 +709,11 @@ function setRtlActiveSnapshot(idOrDate, dateOverride) {
   const normalized = normalizeRtlActiveByDay(activeByDay, snapshots);
   normalized[date] = snap.id;
   saveRtlDailyIndex({ snapshots, activeByDay: normalized });
+  const archivedExcel = rtlDailyExcelPath(snap.id);
+  mirrorRtlActiveDayFiles(
+    { ...snap, date, asOfDate, age0: snap.age0 },
+    archivedExcel && fs.existsSync(archivedExcel) ? archivedExcel : ''
+  );
   return {
     id: snap.id,
     date,
@@ -902,12 +950,14 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   }
 
   let excelSaved = false;
+  let savedExcelPath = '';
   if (excelBuffer && Buffer.isBuffer(excelBuffer) && excelBuffer.length) {
     const xfp = rtlDailyExcelPath(id);
     const xtmp = `${xfp}.${process.pid}.tmp`;
     fs.writeFileSync(xtmp, excelBuffer);
     fs.renameSync(xtmp, xfp);
     excelSaved = true;
+    savedExcelPath = xfp;
   }
 
   const name = String(fileName || '').trim();
@@ -915,6 +965,12 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   // Col J ages in that Excel are relative to that same schedule day → age 0 = arrivals that day.
   const uploadedOn = riyadhDateTimeParts(at).dateKey;
   const asOfDate = date;
+  const age0 = list.filter((v) => {
+    const a = String(v?.age ?? '').trim();
+    if (!a) return true;
+    const n = Number(String(a).replace(/[, ]/g, ''));
+    return Number.isFinite(n) ? n === 0 : a === '0';
+  }).length;
   const snap = {
     id,
     date,
@@ -925,6 +981,7 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
     source: String(source || '').trim(),
     excelSaved,
     count: list.length,
+    age0,
     vehicles: list
   };
   const fp = rtlDailySnapshotPath(id);
@@ -939,6 +996,7 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
     asOfDate,
     at,
     count: list.length,
+    age0,
     fileName: name,
     source: snap.source,
     excelSaved
@@ -951,6 +1009,8 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   const activeByDay = { ...(index.activeByDay || {}) };
   activeByDay[date] = id;
   saveRtlDailyIndex({ snapshots: rest, activeByDay });
+  // Stable by-day Excel mirror (same durability idea as Admin live files/rtl.xlsx).
+  mirrorRtlActiveDayFiles(snap, savedExcelPath);
   return snap;
 }
 
@@ -1017,6 +1077,14 @@ function loadRtlActiveMonth(monthKey) {
       asOfDate: snap.asOfDate || snap.date || dateKey,
       at: snap.at,
       count: snap.count,
+      age0: Number.isFinite(Number(snap.age0))
+        ? Number(snap.age0)
+        : (snap.vehicles || []).filter((v) => {
+          const a = String(v?.age ?? '').trim();
+          if (!a) return true;
+          const n = Number(String(a).replace(/[, ]/g, ''));
+          return Number.isFinite(n) ? n === 0 : a === '0';
+        }).length,
       fileName: snap.fileName,
       source: snap.source,
       excelSaved: snap.excelSaved,
@@ -3031,6 +3099,57 @@ app.post('/api/delivery-inventory/restore-export-bin', express.raw({ limit: '80m
   }
 });
 
+/**
+ * Data Uploader / day-box binary save — same disk path family as Admin Push RTL archive.
+ * Stores timestamped snapshot + Excel under report-sheet-data/rtl-daily (PERSISTENT_ROOT).
+ * Query: date=YYYY-MM-DD&fileName=...&source=uploader-day-box
+ */
+app.post('/api/rtl-daily/save-file', express.raw({ limit: '80mb', type: '*/*' }), (req, res) => {
+  try {
+    const buf = req.body && Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!buf.length) {
+      return res.status(400).json({ error: 'RTL Excel file required' });
+    }
+    const dateKey = normalizeDateKey(req.query.date) || todayIsoRiyadh();
+    const fileName = decodeURIComponent(String(
+      req.query.fileName || req.headers['x-filename'] || req.headers['x-file-name'] || 'rtl.xlsx'
+    ).trim()) || 'rtl.xlsx';
+    const source = String(req.query.source || 'uploader-day-box').trim() || 'uploader-day-box';
+    let vehicles = [];
+    try {
+      vehicles = scanRtlStockBuffer(buf);
+    } catch (scanErr) {
+      console.error('[rtl-daily/save-file] scan failed', scanErr);
+      return res.status(400).json({ error: scanErr.message || 'Failed to scan RTL Excel' });
+    }
+    if (!vehicles.length) {
+      return res.status(400).json({ error: 'No VINs found in RTL Excel' });
+    }
+    const snap = persistRtlDailySnapshot({
+      dateKey,
+      vehicles,
+      fileName,
+      source,
+      excelBuffer: buf
+    });
+    return res.json({
+      ok: true,
+      id: snap.id,
+      date: snap.date,
+      asOfDate: snap.asOfDate,
+      count: snap.count,
+      age0: snap.age0,
+      at: snap.at,
+      excelSaved: snap.excelSaved,
+      persistentRoot: PERSISTENT_ROOT,
+      byDayExcel: rtlDailyByDayExcelPath(snap.date)
+    });
+  } catch (err) {
+    console.error('[rtl-daily/save-file]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
 app.use(express.json({ limit: '80mb' }));
 
 /** Shared Sales Report push — same snapshot for every laptop on this server. */
@@ -3322,6 +3441,7 @@ app.post('/api/rtl-daily/save', (req, res) => {
     const body = req.body || {};
     const dateKey = normalizeDateKey(body.date) || todayIsoRiyadh();
     const vehiclesIn = Array.isArray(body.vehicles) ? body.vehicles : [];
+    const source = String(body.source || 'uploader').trim() || 'uploader';
     let excelBuffer = null;
     if (body.excelBase64) {
       try {
@@ -3329,6 +3449,12 @@ app.post('/api/rtl-daily/save', (req, res) => {
       } catch {
         excelBuffer = null;
       }
+    }
+    // Uploader must store the Excel on disk like Admin Push (survives across deploys on the volume).
+    if (/^uploader/i.test(source) && (!excelBuffer || !excelBuffer.length)) {
+      return res.status(400).json({
+        error: 'Excel file required. Drop/select the RTL file again so it is stored on the server (same archive as Admin Push).'
+      });
     }
     // Prefer server-side Col J scan from the Excel so age 0 / RES match Admin Push.
     let vehicles = vehiclesIn;
@@ -3344,7 +3470,7 @@ app.post('/api/rtl-daily/save', (req, res) => {
       dateKey,
       vehicles,
       fileName: body.fileName,
-      source: body.source || 'uploader',
+      source,
       excelBuffer
     });
     const age0 = (snap.vehicles || []).filter((v) => {
@@ -3359,9 +3485,10 @@ app.post('/api/rtl-daily/save', (req, res) => {
       date: snap.date,
       asOfDate: snap.asOfDate,
       count: snap.count,
-      age0,
+      age0: snap.age0 != null ? snap.age0 : age0,
       at: snap.at,
-      excelSaved: snap.excelSaved
+      excelSaved: snap.excelSaved,
+      byDayExcel: rtlDailyByDayExcelPath(snap.date)
     });
   } catch (err) {
     console.error('[rtl-daily/save]', err);

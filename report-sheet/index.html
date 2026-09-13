@@ -1181,13 +1181,13 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day N = that day’s RTL file only · empty day = no file · Admin Push = today only</span>
+                <span class="hint" id="bas-month-hint">Day N Tot/RES = Col J age 0 from that day’s RTL file only · Admin Push = today only</span>
               </div>
             </div>
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily arrivals · days 1–30 · Total / Retail Electronic Sales</p>
+              <p class="bas-day-panel-label">Daily arrivals · days 1–30 · Tot = age 0 in that day’s file · RES = age 0 Retail Electronic Sales</p>
               <div class="bas-day-strip-wrap">
                 <div class="bas-day-strip" id="bas-day-strip"></div>
               </div>
@@ -11043,11 +11043,17 @@
     row.cars.push(car);
   }
 
+  /** Col J age 0 (or blank) = arrival for that day file. */
+  function isRtlDayFileArrival(age) {
+    return age == null || !Number.isFinite(age) || Math.floor(age) === 0;
+  }
+
   /**
    * Monthly RTL schedule:
    * - Day N file (Data Uploader for that calendar date, or Admin Push for today):
-   *   Tot = allocation-matched cars with Col J age 0 (or blank age).
-   *   RES = same, Search Area = Retail Electronic Sales.
+   *   Tot = ALL Col J age 0 (or blank) VINs in that day's file.
+   *   RES = same + Search Area = Retail Electronic Sales.
+   *   Product tables still require allocation-plan match.
    * - Days without a file stay empty (no live-RTL age fill-in) once any day file exists.
    * - If the month has no day files yet, fall back to live RTL Col J age inference.
    * - Admin Push only archives as today.
@@ -11059,6 +11065,11 @@
     const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
 
     const matched = [];
+    const dayTotals = Array(31).fill(0);
+    const dayRetailTotals = Array(31).fill(0);
+    const dayHasFile = Array(31).fill(false);
+    const dayFileVinCount = Array(31).fill(0);
+    const dayAge0Count = Array(31).fill(0);
     let mode = hasDayFiles ? "daily" : "age";
 
     if (hasDayFiles) {
@@ -11070,15 +11081,23 @@
         const vehicles = (snap && snap.vehicles) || [];
         const collDate = new Date(ctx.y, ctx.m, dayNum);
         const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+        if (dayNum >= 1 && dayNum <= 30) {
+          dayHasFile[dayNum] = true;
+          dayFileVinCount[dayNum] = Number(snap.count) || vehicles.length || 0;
+        }
         vehicles.forEach((v, i) => {
           const car = mapRtlDailyVehicle(v, dateKey, snap.id, i);
-          const leaf = matchRtlToAllocLeaf(car);
-          if (!leaf) return;
           const ageRaw = car.ageing;
           const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
-          // Day-file Col J is relative to that schedule day (Sept 1 file → age 0 = day 1 arrivals).
-          const isArrival = age == null || age === 0;
-          if (!isArrival) return;
+          // Day-file Col J is relative to that schedule day (Day 10 file → age 0 = day 10).
+          if (!isRtlDayFileArrival(age)) return;
+          if (dayNum >= 1 && dayNum <= 30) {
+            dayTotals[dayNum] += 1;
+            dayAge0Count[dayNum] += 1;
+            if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[dayNum] += 1;
+          }
+          const leaf = matchRtlToAllocLeaf(car);
+          if (!leaf) return;
           matched.push({
             ...car,
             seg: leaf.seg,
@@ -11097,7 +11116,7 @@
         });
       });
 
-      // Late = age ≥ 1 in today's active file (RES only).
+      // Late = age ≥ 1 in today's active file (RES only) — does not add to day Tot/RES.
       const todayKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
       const todaySnap = dayFiles[todayKey];
       if (todaySnap && Array.isArray(todaySnap.vehicles)) {
@@ -11108,6 +11127,7 @@
           const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
           if (age == null || age < 1) return;
           if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+          const arrivedOn = inferCollectionDateFromAge(age, ctx.today);
           matched.push({
             ...car,
             seg: leaf.seg,
@@ -11115,9 +11135,11 @@
             allocSfx: leaf.sfx,
             leafId: leaf.id,
             allocation: Number(allocationValues[leaf.id]) || 0,
-            collectionDate: inferCollectionDateFromAge(age, ctx.today),
-            collectionDay: ctx.todayDay,
-            collectionLabel: ctx.today.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            collectionDate: arrivedOn || ctx.today,
+            collectionDay: arrivedOn ? arrivedOn.getDate() : null,
+            collectionLabel: arrivedOn
+              ? arrivedOn.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+              : "—",
             isTodayArrival: false,
             isLate: true,
             age,
@@ -11137,6 +11159,11 @@
         if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
         const collectionDay = collDate.getDate();
         const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+        if (collectionDay >= 1 && collectionDay <= 30) {
+          dayTotals[collectionDay] += 1;
+          if (isRtlDayFileArrival(age)) dayAge0Count[collectionDay] += 1;
+          if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[collectionDay] += 1;
+        }
         matched.push({
           ...car,
           seg: leaf.seg,
@@ -11164,7 +11191,7 @@
     const matchedRetailArrivals = arrivalMatched.filter((car) => isRetailElectronicSales(car.searchAreaDesc));
     matchedRetailArrivals.forEach((car) => pushBasMonthCar(byLeafRetail, car));
 
-    // Attach late counts onto retail rows (today's file only in daily/hybrid mode).
+    // Attach late counts onto retail rows (today's file only in daily mode).
     const lateCars = matched.filter((car) => car.isLate && isRetailElectronicSales(car.searchAreaDesc));
     lateCars.forEach((car) => {
       const row = byLeafRetail.get(car.leafId);
@@ -11172,25 +11199,6 @@
       const rowAll = byLeaf.get(car.leafId);
       if (rowAll) rowAll.late += 1;
     });
-
-    const dayTotals = Array(31).fill(0);
-    const dayRetailTotals = Array(31).fill(0);
-    const dayHasFile = Array(31).fill(false);
-    const dayFileVinCount = Array(31).fill(0);
-    arrivalMatched.forEach((car) => {
-      if (car.collectionDay < 1 || car.collectionDay > 30) return;
-      dayTotals[car.collectionDay] += 1;
-      if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[car.collectionDay] += 1;
-    });
-    if (hasDayFiles) {
-      Object.keys(dayFiles).forEach((dateKey) => {
-        const dayNum = Number(String(dateKey).slice(8, 10));
-        if (dayNum >= 1 && dayNum <= 30) {
-          dayHasFile[dayNum] = true;
-          dayFileVinCount[dayNum] = Number(dayFiles[dateKey].count) || ((dayFiles[dateKey].vehicles || []).length) || 0;
-        }
-      });
-    }
 
     const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
@@ -11205,6 +11213,7 @@
       dayRetailTotals,
       dayHasFile,
       dayFileVinCount,
+      dayAge0Count,
       mode,
       activeDayCount: hasDayFiles ? Object.keys(dayFiles).length : 0,
     };
@@ -11245,7 +11254,7 @@
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
       if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · empty days stay empty · day N = age 0 from that day's RTL · Admin Push = today only · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · day N Tot/RES = age 0 (Col J) from that day's RTL only · Admin Push = today only · today day ${ctx.todayDay}`;
       } else {
         hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · drop day files in Data Uploader to lock each day · today day ${ctx.todayDay}`;
       }
@@ -11302,7 +11311,7 @@
           hasFile ? "has-file" : "",
           hasFile && !(total || retail) ? "has-file-empty" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs in file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · 0 age-0 matched to plan — re-drop that day's RTL extract" : ""} · Tot ${total} · RES ${retail}">
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · file has no Col J age 0 rows — drop that day's RTL extract" : ""} · Tot ${total} · RES ${retail}">
           <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
@@ -11606,14 +11615,18 @@
         .map((car) => {
           const leaf = matchRtlToAllocLeaf(car);
           const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+          const isAge0Arrival = age == null || age === 0;
+          const arrivedOn = isAge0Arrival ? today : inferCollectionDateFromAge(age, today);
           return {
             ...car,
             seg: leaf ? leaf.seg : "—",
-            collectionDate: today,
-            collectionDay: ctx.todayDay,
-            collectionLabel: today.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            collectionDate: arrivedOn || today,
+            collectionDay: arrivedOn ? arrivedOn.getDate() : ctx.todayDay,
+            collectionLabel: arrivedOn
+              ? arrivedOn.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+              : "—",
             age,
-            isAge0Arrival: age == null || age === 0,
+            isAge0Arrival,
           };
         })
         .sort((a, b) => {
