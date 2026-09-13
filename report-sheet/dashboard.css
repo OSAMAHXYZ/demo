@@ -1365,7 +1365,7 @@ body.pbi-wide-open {
 .acc-summary-board {
   margin: 0 0 12px;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #d7dee8;
   background: linear-gradient(180deg, #f4f6f8, #ebeff4);
 }
@@ -8689,6 +8689,8 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-color: #2f211b !important;
   color: #fff;
   box-shadow: 0 8px 22px rgba(47, 33, 27, 0.28) !important;
+  overflow: visible;
+  height: auto;
 }
 .sr-mock-acc .sr-mock-card-title,
 .sr-mock-acc .sr-mock-card-sub { color: #f8fafc; }
@@ -8736,6 +8738,39 @@ body.admin-page #panel-allocation:not([hidden]) {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 10px 14px;
+}
+.sr-mock-acc .acc-sum-remain-inline,
+.acc-sum-remain-inline {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 0 0;
+}
+.sr-mock-acc .acc-sum-remain-inline .k,
+.acc-sum-remain-inline .k {
+  display: block !important;
+  font-size: 0.68rem !important;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78) !important;
+  opacity: 1 !important;
+}
+.sr-mock-acc .acc-sum-remain-inline .v,
+.acc-sum-remain-inline .v {
+  font-size: 1.35rem !important;
+  font-weight: 800;
+  color: #fff !important;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.acc-summary-board--wide .acc-sum-remain-inline .k {
+  color: #7c2d12 !important;
+}
+.acc-summary-board--wide .acc-sum-remain-inline .v {
+  color: #7c2d12 !important;
 }
 .sr-mock-acc .acc-summary-pct-text .v.acc-sum-pct-combined,
 .acc-sum-pct-combined {
@@ -8785,15 +8820,10 @@ body.admin-page #panel-allocation:not([hidden]) {
 .sr-mock-acc .acc-summary-cols,
 .sr-mock-acc .acc-summary-cols--detail {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px !important;
   background: transparent !important;
-}
-@media (max-width: 720px) {
-  .sr-mock-acc .acc-summary-cols,
-  .sr-mock-acc .acc-summary-cols--detail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  overflow: visible !important;
 }
 @media (max-width: 420px) {
   .sr-mock-acc .acc-summary-cols,
@@ -8808,6 +8838,12 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: #fff !important;
   text-align: left;
   border: 1px solid rgba(255,255,255,0.08);
+  min-width: 0;
+}
+.sr-mock-acc .acc-summary-cell--remain,
+.acc-summary-cell--remain {
+  background: linear-gradient(180deg, #c4a574 0%, #b45309 55%, #7c2d12 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
 }
 .sr-mock-acc .acc-summary-cell .k {
   color: rgba(255, 255, 255, 0.78) !important;

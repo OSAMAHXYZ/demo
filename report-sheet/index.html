@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913refresh1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913accrem2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913refresh1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -299,6 +299,10 @@
                       <span class="k">Ach %</span>
                       <span class="v" id="acc-sum-pct">—</span>
                       <span class="v acc-sum-pct-combined" id="acc-sum-pct-combined" title="(Achieved + In Progress) ÷ Target">—</span>
+                      <span class="acc-sum-remain-inline" title="Target − Achieved − In Progress">
+                        <span class="k">Remaining</span>
+                        <span class="v" id="acc-sum-remaining-hero">—</span>
+                      </span>
                     </div>
                     <div class="sr-acc-progress-track" aria-hidden="true">
                       <div class="sr-acc-progress-fill" id="sr-acc-progress-fill" style="width:0%"></div>
@@ -318,7 +322,7 @@
                       <span class="k">In Progress</span>
                       <span class="v" id="acc-sum-progress">—</span>
                     </div>
-                    <div class="acc-summary-cell">
+                    <div class="acc-summary-cell acc-summary-cell--remain">
                       <span class="k">Remaining</span>
                       <span class="v" id="acc-sum-remaining">—</span>
                     </div>
@@ -5438,6 +5442,7 @@
     const soldEl = $("#acc-sum-achieved");
     const progressEl = $("#acc-sum-progress");
     const remainingEl = $("#acc-sum-remaining");
+    const remainingHeroEl = $("#acc-sum-remaining-hero");
     const pctEl = $("#acc-sum-pct");
     const combinedEl = $("#acc-sum-pct-combined");
     const fillEl = $("#sr-acc-progress-fill");
@@ -5451,6 +5456,7 @@
       remainingEl.textContent = formatNumber(sum.remaining || 0);
       remainingEl.title = "Target − Achieved − In Progress";
     }
+    if (remainingHeroEl) remainingHeroEl.textContent = formatNumber(sum.remaining || 0);
     if (pctEl) {
       pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
       pctEl.title = "Achieved ÷ Target";
@@ -5485,6 +5491,10 @@
             <span class="v">${achTxt}</span>
             <span class="v acc-sum-pct-combined">${combTxt}</span>
             <span class="k acc-sum-combined-lab">Ach + In Progress</span>
+            <span class="acc-sum-remain-inline" title="Target − Achieved − In Progress">
+              <span class="k">Remaining</span>
+              <span class="v">${formatNumber(sum.remaining || 0)}</span>
+            </span>
           </div>
         </div>
         <div class="acc-summary-cols acc-summary-cols--detail">
@@ -5500,7 +5510,7 @@
             <span class="k">In Progress</span>
             <span class="v">${formatNumber(sum.inProgress || 0)}</span>
           </div>
-          <div class="acc-summary-cell">
+          <div class="acc-summary-cell acc-summary-cell--remain">
             <span class="k">Remaining</span>
             <span class="v" title="Target − Achieved − In Progress">${formatNumber(sum.remaining || 0)}</span>
           </div>
