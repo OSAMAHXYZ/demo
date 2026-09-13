@@ -9345,6 +9345,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   border: 1px solid #e8eef5;
 }
 #sr-day-kpi-block {
+  display: none !important; /* hide Day to date KPI boxes; Month to date stays */
   border-color: rgba(37, 99, 235, 0.22);
   box-shadow: inset 3px 0 0 #2563eb;
 }

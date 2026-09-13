@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913accrem" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913hidedaykpi" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913ops1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -1371,7 +1371,7 @@
   const MAX_ROWS = 4000;
 
   const SLOT_DEFS = [
-    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "BO + Fleet sheets" },
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "Retail BO sheet · Fleet / 7022 excluded" },
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
@@ -2444,14 +2444,42 @@
     return /^(yes|y|1|true)$/i.test(String(v ?? "").trim());
   }
 
+  function isFleetBoSheetName(name) {
+    const n = String(name || "").trim();
+    if (!n) return false;
+    if (/summary/i.test(n)) return false;
+    // "Fleet Back Orders", sheet codes like 7022, Arabic أسطول
+    return /fleet|أسطول|\b7022\b/i.test(n);
+  }
+
+  /** Skip Fleet BO rows so Allocation / BO dashboards count retail only. */
+  function isExcludedFleetBoRaw(r, get) {
+    const salesTypeRaw = cellToString(get(r, "salesType") || get(r, "custGroup"));
+    if (inferSalesType(salesTypeRaw, false) === "Fleet") return true;
+    const hay = [
+      salesTypeRaw,
+      cellToString(get(r, "salesChannel") || get(r, "plant")),
+      cellToString(get(r, "salesScope")),
+      cellToString(get(r, "customer")),
+      cellToString(get(r, "category")),
+      cellToString(get(r, "boNumber")),
+    ].join(" ").toLowerCase();
+    if (/fleet|أسطول/.test(hay)) return true;
+    if (/\b7022\b/.test(hay)) return true;
+    return false;
+  }
+
   function backorderRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    const first = names[0];
-    const fleet = names.filter((n, i) => i > 0 && /fleet/i.test(n) && !/summary/i.test(n));
-    const combined = [];
-    [first, ...fleet].forEach((sn) => sheetRows(workbook, sn).forEach((row) => combined.push(row)));
-    return combined;
+    // Never merge Fleet / 7022 sheets — retail BO sheet only (first sheet historically).
+    const preferred =
+      names.find((n) => /back\s*order|backorder|\bbo\b/i.test(n) && !isFleetBoSheetName(n))
+      || (names[0] && !isFleetBoSheetName(names[0]) ? names[0] : "")
+      || names.find((n) => !isFleetBoSheetName(n) && !/summary/i.test(n))
+      || "";
+    if (!preferred || isFleetBoSheetName(preferred)) return [];
+    return sheetRows(workbook, preferred);
   }
 
   /**
@@ -3440,8 +3468,12 @@
   }
 
   function mapBo(rows) {
-    const get = buildFieldGetter(rows[0] || {});
-    return rows.map((r, i) => {
+    const get0 = buildFieldGetter(rows[0] || {});
+    const sample = (rows || []).find((r) => !isExcludedFleetBoRaw(r, get0)) || rows[0] || {};
+    const get = sample === rows[0] ? get0 : buildFieldGetter(sample);
+    const out = [];
+    (rows || []).forEach((r, i) => {
+      if (isExcludedFleetBoRaw(r, get)) return;
       const orderDate = parseDate(get(r, "orderDate"));
       const agingFromCol = toNumber(get(r, "agingDays"));
       const aging = agingFromCol > 0
@@ -3454,10 +3486,11 @@
       const suffix = normalizeProductSuffix(product, rawSuffix);
       const paid = isPaid(get(r, "paid"));
       const salesType = inferSalesType(get(r, "salesType"), paid);
+      if (salesType === "Fleet") return;
       const category = cellToString(get(r, "category")) || (product ? String(product).split(/\s+/)[0] : "—");
       const salesChannel = cellToString(get(r, "salesChannel") || get(r, "plant")) || "—";
       const salesScope = cellToString(get(r, "salesScope")) || salesChannel || "—";
-      return {
+      out.push({
         id: i,
         boNumber: cellToString(get(r, "boNumber")),
         customer: cellToString(get(r, "customer")),
@@ -3479,8 +3512,9 @@
         orderDateObj: orderDate,
         aging,
         vin: extractVinValue(get(r, "vin")) || cellToString(get(r, "vin")).trim().toUpperCase(),
-      };
+      });
     });
+    return out;
   }
 
   function mapStock(rows, source) {
@@ -11988,8 +12022,16 @@
     );
   }
 
+  function filterOutFleetBoRows(rows) {
+    if (!Array.isArray(rows) || !rows.length) return [];
+    const get0 = buildFieldGetter(rows[0] || {});
+    const sample = rows.find((r) => !isExcludedFleetBoRaw(r, get0)) || rows[0];
+    const get = sample === rows[0] ? get0 : buildFieldGetter(sample || {});
+    return rows.filter((r) => !isExcludedFleetBoRaw(r, get));
+  }
+
   function rawBoRows() {
-    return slots.backorder.rows || [];
+    return filterOutFleetBoRows(slots.backorder.rows || []);
   }
 
   function stockDisplayLabel(sample, letter) {
@@ -12041,7 +12083,8 @@
   }
 
   function buildMatchedCars(boRows, rtlRows, secondaryRows, opts = {}) {
-    const getBo = buildFieldGetter(boRows[0] || {});
+    const retailBo = filterOutFleetBoRows(boRows);
+    const getBo = buildFieldGetter(retailBo[0] || {});
     const getRtl = buildFieldGetter(rtlRows[0] || {});
     const getSec = buildFieldGetter(secondaryRows[0] || {});
     const confirmedOnly = !!opts.confirmedOnly;
@@ -12066,7 +12109,7 @@
         ? productSuffixKey(product, suffix)
         : fullKey(product, suffix, year, ext, intc);
 
-    const bos = (boRows || []).map((r, idx) => {
+    const bos = (retailBo || []).map((r, idx) => {
       const product = upperTrim(getBo(r, "product") || cellByLetter(r, "B"));
       const rawSuffix = upperTrim(getBo(r, "suffix") || getBo(r, "sfx") || cellByLetter(r, "G"));
       const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
@@ -12397,8 +12440,9 @@
   }
 
   function extractBoColorOrders(rows) {
-    const getBo = buildFieldGetter(rows[0] || {});
-    return (rows || []).map((r, idx) => {
+    const retail = filterOutFleetBoRows(rows);
+    const getBo = buildFieldGetter(retail[0] || {});
+    return (retail || []).map((r, idx) => {
       const product = cellToString(cellByLetter(r, "L") || getBo(r, "product")).trim();
       const rawSuffix = cellToString(cellByLetter(r, "M") || getBo(r, "suffix") || getBo(r, "sfx")).trim();
       const suffix = normalizeProductSuffix(product, rawSuffix);
@@ -13024,6 +13068,7 @@
   function invalidateIccCache() {
     iccCache = null;
     iccCacheKey = "";
+    actTowerCache = null;
   }
 
   function iccFiltersFromView() {
@@ -14481,7 +14526,7 @@
   function getBoOrderLookupEngine() {
     const Bo = window.BoOrderLookup;
     if (!Bo) return null;
-    const rows = slots.backorder.rows || [];
+    const rows = rawBoRows();
     if (!rows.length) return null;
     const headers = Array.isArray(rows[0].__headers) && rows[0].__headers.length
       ? rows[0].__headers.slice()
