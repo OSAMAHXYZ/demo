@@ -1383,7 +1383,7 @@
   const MAX_ROWS = 4000;
 
   const SLOT_DEFS = [
-    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "Retail BO sheet · Fleet / 7022 excluded" },
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "First sheet only (no Fleet / 7022)" },
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
@@ -2456,32 +2456,18 @@
     return /^(yes|y|1|true)$/i.test(String(v ?? "").trim());
   }
 
-  function isFleetBoSheetName(name) {
-    const n = String(name || "").trim();
-    if (!n) return false;
-    if (/summary/i.test(n)) return false;
-    return /fleet|أسطول|\b7022\b/i.test(n);
-  }
-
-  /** Kept for callers; Fleet tabs are excluded in backorderRows — count every row on the loaded sheet(s). */
-  function isExcludedFleetBoRaw() {
-    return false;
-  }
-
   /**
-   * Back Order file — same as before: read the first sheet in full.
-   * Do not merge Fleet / 7022 tabs. If sheet 1 is a Fleet tab, use the next non-Fleet sheet.
+   * Back Order Excel for BO Dashboard:
+   * Always read sheet 1 only (same sheetRows mapping).
+   * Never merge Fleet Back Orders / 7022 or any later tabs.
    */
   function backorderRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    const first = names[0];
-    const sheetName = isFleetBoSheetName(first)
-      ? (names.find((n) => !isFleetBoSheetName(n)) || first)
-      : first;
+    const sheetName = names[0];
     const rows = sheetRows(workbook, sheetName);
     if (typeof console !== "undefined" && console.info) {
-      console.info("[BO sheet]", sheetName, "rows:", rows.length, "tabs:", names.join(" | "));
+      console.info("[BO sheet]", sheetName, "rows:", rows.length, "(first sheet only · Fleet/7022 tabs ignored)");
     }
     return rows;
   }
