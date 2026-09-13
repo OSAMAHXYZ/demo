@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913accrem2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913dvpvin" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913refresh1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -1980,8 +1980,8 @@
   }
 
   const HEADER_ALIASES = {
-    product: ["product", "model", "item", "vehicle model", "car model"],
-    suffix: ["alj suffix", "suffix", "tmc suffix"],
+    product: ["product", "vehicle model", "car model", "المادة", "المنتج", "model", "item"],
+    suffix: ["alj suffix", "alj sfx", "اللاحقة", "suffix", "tmc suffix"],
     year: ["model year", "year", "my"],
     ext: ["exterior color  1", "exterior color 1", "exterior color", "ext color", "ext. color"],
     int: ["interior color 1", "interior color", "inter color 1", "int color"],
@@ -2008,7 +2008,7 @@
     salesScope: ["sales scope", "scope", "business scope", "region scope"],
     salesChannel: ["sales channel", "channel", "distribution channel", "sales plant"],
     salesType: ["sales type", "payment type", "finance type", "deal type", "type of sale", "sale type", "payment method"],
-    sfx: ["sfx", "grade", "alj suffix", "tmc suffix", "suffix", "variant", "trim"],
+    sfx: ["alj suffix", "alj sfx", "sfx", "grade", "suffix", "tmc suffix", "variant", "trim"],
     agingDays: ["aging", "aging days", "age days", "days aging", "bo aging", "allocation ageing", "allocation aging"],
     searchAreaDesc: ["search area desc", "search area description", "vehicle search area desc", "search area"],
     vehicleSearchArea: ["vehicle search area", "veh search area", "vehicle search area desc"],
@@ -2100,7 +2100,15 @@
         const aliases = HEADER_ALIASES[aliasKey] || [aliasKey];
         let found = null;
         for (const alias of aliases) {
-          found = normKeys.find((k) => k.n === alias) || normKeys.find((k) => k.n.includes(alias));
+          found = normKeys.find((k) => k.n === alias);
+          if (found) break;
+          if (alias.length < 4) continue;
+          found = normKeys.find((k) => {
+            if (!k.n.includes(alias)) return false;
+            if (alias === "model" && /year|yr/.test(k.n)) return false;
+            if (alias === "suffix" && /tmc/.test(k.n) && aliases.includes("alj suffix")) return false;
+            return true;
+          });
           if (found) break;
         }
         cache[aliasKey] = found ? found.raw : null;
@@ -3461,6 +3469,23 @@
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Other";
   }
 
+  /** Product + ALJ suffix from a BO row. Col B / Col G when headers don't alias. */
+  function boRowProductSuffix(row, get) {
+    const g = get || buildFieldGetter(row || {});
+    let product = cellToString(g(row, "product")).trim();
+    if (!product || /^\d{4}$/.test(product) || /^(model\s*year|year)$/i.test(product)) {
+      product = cellToString(cellByLetter(row, "B")).trim();
+    }
+    product = product.replace(/^TOYOTA\s+/i, "").trim();
+    let rawSuffix = cellToString(g(row, "suffix")).trim();
+    if (!rawSuffix) rawSuffix = cellToString(g(row, "sfx")).trim();
+    const colG = cellToString(cellByLetter(row, "G")).trim();
+    // TMC codes are long (AXVA70-…); Allocation plan uses short ALJ sfx (AA, G2, …).
+    if (colG && (!rawSuffix || (rawSuffix.length > 12 && colG.length <= 12))) rawSuffix = colG;
+    if (!rawSuffix) rawSuffix = colG;
+    return { product, rawSuffix };
+  }
+
   function mapBo(rows) {
     const get = buildFieldGetter(rows[0] || {});
     return (rows || []).map((r, i) => {
@@ -3471,8 +3496,9 @@
         : (orderDate ? Math.max(0, Math.round((Date.now() - orderDate.getTime()) / 86400000)) : null);
       const confirmRaw = boConfirmRaw(r, get);
       const confirmed = isConfirmedFlag(confirmRaw);
-      const product = cellToString(get(r, "product"));
-      const rawSuffix = cellToString(get(r, "sfx") || get(r, "suffix"));
+      const mapped = boRowProductSuffix(r, get);
+      const product = mapped.product;
+      const rawSuffix = mapped.rawSuffix;
       const suffix = normalizeProductSuffix(product, rawSuffix);
       const paid = isPaid(get(r, "paid"));
       const salesType = inferSalesType(get(r, "salesType"), paid);
@@ -9882,7 +9908,7 @@
   }
 
   function productMatchesAlloc(boProduct, allocProduct) {
-    const b = allocProductKey(boProduct);
+    const b = allocProductKey(boProduct).replace(/^TOYOTA\s+/, "");
     const a = allocProductKey(allocProduct);
     if (!a || !b || b === "—") return false;
     if (b === a) return true;
@@ -9915,8 +9941,18 @@
       return allocSfxParts(allocSfx).some((v) => fortunerSuffixKey(v) === bKey);
     }
 
-    // Exact only on full sfx or slash-parts ("L1 / DSL" ↔ L1 or DSL). No substring (EE ≠ FREE).
-    return allocSfxParts(allocSfx).some((v) => allocCompact(v) === bC);
+    const allocParts = allocSfxParts(allocSfx).map(allocCompact).filter(Boolean);
+    if (allocParts.some((p) => p === bC)) return true;
+
+    // "AA 2.5" / "AA-HEV" → token AA matches plan AA. "FREE" does not match EE.
+    const boTokens = [
+      bC,
+      ...b.split(/[\s\/,&._-]+/).map(allocCompact).filter(Boolean),
+    ];
+    return allocParts.some((p) => {
+      if (p.length <= 1) return bC === p;
+      return boTokens.includes(p);
+    });
   }
 
   function basBoUnitCount(bo) {
@@ -9931,13 +9967,30 @@
     if (opts.confirmedOnly) bos = bos.filter((bo) => bo.confirmed);
     const stockRows = [...(d.rtl || []), ...(d.central || [])];
     const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
+    const boByLeaf = new Map();
+    leaves.forEach((row) => boByLeaf.set(row.id, 0));
+    bos.forEach((bo) => {
+      const units = basBoUnitCount(bo);
+      let best = null;
+      let bestLen = -1;
+      leaves.forEach((row) => {
+        if (!productMatchesAlloc(bo.product, row.product)) return;
+        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx, row.product || bo.product)) return;
+        const len = allocCompact(row.sfx).length;
+        if (len > bestLen) {
+          best = row;
+          bestLen = len;
+        }
+      });
+      if (best) boByLeaf.set(best.id, (boByLeaf.get(best.id) || 0) + units);
+    });
+    if (typeof console !== "undefined" && console.info) {
+      const matchedUnits = [...boByLeaf.values()].reduce((s, n) => s + n, 0);
+      console.info("[ACT BO match]", { boRows: bos.length, matchedUnits });
+    }
     return leaves.map((row) => {
       const allocation = Number(allocationValues[row.id]) || 0;
-      const boCount = bos.reduce((sum, bo) => {
-        if (!productMatchesAlloc(bo.product, row.product)) return sum;
-        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx, row.product || bo.product)) return sum;
-        return sum + basBoUnitCount(bo);
-      }, 0);
+      const boCount = boByLeaf.get(row.id) || 0;
       const stockCount = stockRows.filter((s) =>
         productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx, row.product || s.product)
       ).length;
@@ -12105,9 +12158,9 @@
         : fullKey(product, suffix, year, ext, intc);
 
     const bos = (retailBo || []).map((r, idx) => {
-      const product = upperTrim(getBo(r, "product") || cellByLetter(r, "B"));
-      const rawSuffix = upperTrim(getBo(r, "suffix") || getBo(r, "sfx") || cellByLetter(r, "G"));
-      const suffix = upperTrim(normalizeProductSuffix(product, rawSuffix));
+      const mapped = boRowProductSuffix(r, getBo);
+      const product = upperTrim(mapped.product);
+      const suffix = upperTrim(normalizeProductSuffix(product, mapped.rawSuffix));
       const year = String(getBo(r, "year") || cellByLetter(r, "F") || "").trim();
       const ext = cellToString(getBo(r, "ext") || cellByLetter(r, "H"));
       const intc = cellToString(getBo(r, "int") || cellByLetter(r, "I"));
@@ -13963,19 +14016,43 @@
     return "telesales";
   }
 
-  function countDvpBucket(rows, live, prevMonthKey, period, guestKeys) {
-    const out = { 
-      lexus: { delivered: 0, proforma: 0 }, 
-      telesales: { delivered: 0, proforma: 0 },
-      b2c: { delivered: 0, proforma: 0 }, 
-      guest: { delivered: 0, proforma: 0 } 
+  function dvpVinRecord(r) {
+    const vin = extractVinValue(r && r.vin) || extractVinValue(
+      Object.values(r || {}).find((v) => extractVinValue(v))
+    ) || "";
+    return {
+      vin: vin || "—",
+      salesman: rosterSalesmanName(r._salesmanRaw || r.salesman) || cellToString(r.salesman).trim() || "—",
+      plant: dvpSaleShowroom(r),
+      product: dvpSaleModel(r),
+      proformaDate: r.proformaDate || "",
+      deliveryDate: r.deliveryDate || "",
+    };
+  }
+
+  function collectDvpBuckets(rows, live, prevMonthKey, period, guestKeys) {
+    const empty = () => ({ delivered: [], proforma: [] });
+    const lists = {
+      lexus: empty(),
+      telesales: empty(),
+      b2c: empty(),
+      guest: empty(),
     };
     (rows || []).forEach((r) => {
       const bucket = dvpBucketForSaleRow(r, guestKeys);
-      if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) out[bucket].delivered += 1;
-      if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) out[bucket].proforma += 1;
+      if (!lists[bucket]) return;
+      const rec = dvpVinRecord(r);
+      if (salesIsDeliveryInPeriod(r, live, period, prevMonthKey)) lists[bucket].delivered.push(rec);
+      if (salesIsProformaInPeriod(r, live, period, prevMonthKey)) lists[bucket].proforma.push(rec);
     });
-    return out;
+    const counts = {};
+    Object.keys(lists).forEach((id) => {
+      counts[id] = {
+        delivered: lists[id].delivered.length,
+        proforma: lists[id].proforma.length,
+      };
+    });
+    return { counts, lists };
   }
 
   function dvpTrendPct(cur, prev) {
@@ -14065,8 +14142,10 @@
     const allRows = slots.sales.rows || [];
     populateDvpFilters(allRows);
     const rows = filterDvpSalesRows(allRows);
-    const cur = countDvpBucket(rows, live, prevMonthKey, "month", guestKeys);
-    const prev = countDvpBucket(rows, live, prevMonthKey, "prev", guestKeys);
+    const packed = collectDvpBuckets(rows, live, prevMonthKey, "month", guestKeys);
+    const prevPacked = collectDvpBuckets(rows, live, prevMonthKey, "prev", guestKeys);
+    const cur = packed.counts;
+    const prev = prevPacked.counts;
 
     const cards = [
       {
@@ -14130,6 +14209,7 @@
     return {
       live,
       cards,
+      lists: packed.lists,
       totals: {
         delivered: totalDel,
         proforma: totalPro,
@@ -14141,26 +14221,126 @@
     };
   }
 
-  function dvpCylHtml(delivered, proforma, theme) {
+  function dvpCylHtml(delivered, proforma, theme, channelId) {
     const max = Math.max(delivered, proforma, 1);
     const hDel = Math.max(8, Math.round((delivered / max) * 100));
     const hPro = Math.max(8, Math.round((proforma / max) * 100));
-    return `<div class="dvp-cyls dvp-cyls--${escapeHtml(theme)}" aria-hidden="true">
-      <div class="dvp-cyl">
+    const ch = escapeHtml(channelId || "");
+    return `<div class="dvp-cyls dvp-cyls--${escapeHtml(theme)}">
+      <button type="button" class="dvp-cyl" data-dvp-channel="${ch}" data-dvp-metric="delivered" aria-label="Show delivered VINs">
         <div class="dvp-cyl-stack" style="height:${hDel}%">
           <span class="dvp-cyl-val">${escapeHtml(formatNumber(delivered))}</span>
           <div class="dvp-cyl-bar is-del"></div>
         </div>
         <span class="dvp-cyl-lab">Delivered</span>
-      </div>
-      <div class="dvp-cyl">
+      </button>
+      <button type="button" class="dvp-cyl" data-dvp-channel="${ch}" data-dvp-metric="proforma" aria-label="Show proforma VINs">
         <div class="dvp-cyl-stack" style="height:${hPro}%">
           <span class="dvp-cyl-val">${escapeHtml(formatNumber(proforma))}</span>
           <div class="dvp-cyl-bar is-pro"></div>
         </div>
         <span class="dvp-cyl-lab">Pro-Forma</span>
-      </div>
+      </button>
     </div>`;
+  }
+
+  let dvpLastPack = null;
+  const DVP_CHANNEL_LABELS = {
+    lexus: "Lexus Sales",
+    telesales: "Telesales",
+    b2c: "B2C Sales",
+    guest: "Experience Automall",
+    all: "All Channels",
+  };
+
+  function dvpListFor(channelId, metric) {
+    const lists = (dvpLastPack && dvpLastPack.lists) || {};
+    const key = metric === "proforma" ? "proforma" : "delivered";
+    if (channelId === "all") {
+      return ["lexus", "telesales", "b2c", "guest"].flatMap((id) => (lists[id] && lists[id][key]) || []);
+    }
+    return (lists[channelId] && lists[channelId][key]) || [];
+  }
+
+  function openDvpVinDrill(channelId, metric) {
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+    const metricLabel = metric === "proforma" ? "Pro-Forma" : "Delivered";
+    const channelLabel = DVP_CHANNEL_LABELS[channelId] || channelId;
+    const list = dvpListFor(channelId, metric);
+    if (titleEl) titleEl.textContent = `${channelLabel} · ${metricLabel}`;
+    if (subEl) subEl.textContent = `${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"} · Sales Raw`;
+    if (!list.length) {
+      bodyEl.innerHTML = `<p class="foot">No related VINs for this number.</p>`;
+    } else {
+      bodyEl.innerHTML = `
+        <div class="aa-drill-toolbar">
+          <span class="aa-drill-count">${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"}</span>
+          <button type="button" class="btn" id="aa-drill-copy">Copy VINs</button>
+        </div>
+        <div class="table-wrap aa-drill-table-wrap">
+          <table class="data-table aa-table aa-drill-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>VIN</th>
+                <th>Advisor</th>
+                <th>Showroom</th>
+                <th>Model</th>
+                <th>Proforma</th>
+                <th>Delivery</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((v, i) => `
+                <tr>
+                  <td class="num">${i + 1}</td>
+                  <td class="mono">${escapeHtml(v.vin)}</td>
+                  <td>${escapeHtml(v.salesman || "—")}</td>
+                  <td>${escapeHtml(v.plant || "—")}</td>
+                  <td>${escapeHtml(v.product || "—")}</td>
+                  <td>${escapeHtml(v.proformaDate ? formatRvDate(v.proformaDate) : "—")}</td>
+                  <td>${escapeHtml(v.deliveryDate ? formatRvDate(v.deliveryDate) : "—")}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+      const copyBtn = bodyEl.querySelector("#aa-drill-copy");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", async () => {
+          const text = list.map((v) => v.vin).filter((vin) => vin && vin !== "—").join("\n");
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(text);
+            } else {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              ta.remove();
+            }
+            setStatus(`Copied ${list.length} VIN${list.length === 1 ? "" : "s"}`, "ok");
+          } catch {
+            setStatus("Could not copy VINs", "busy");
+          }
+        });
+      }
+    }
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
+  function onDvpMetricClick(e) {
+    const btn = e.target.closest("[data-dvp-channel][data-dvp-metric]");
+    if (!btn) return;
+    e.preventDefault();
+    openDvpVinDrill(btn.getAttribute("data-dvp-channel"), btn.getAttribute("data-dvp-metric"));
   }
 
   function dvpTrendChip(delta) {
@@ -14196,6 +14376,22 @@
         },
       ],
     });
+    const overview = charts["chart-dvp-overview"];
+    if (overview && overview.options) {
+      overview.options.onHover = (evt, els) => {
+        if (evt && evt.native && evt.native.target) {
+          evt.native.target.style.cursor = els.length ? "pointer" : "default";
+        }
+      };
+      overview.options.onClick = (_evt, els) => {
+        if (!els.length) return;
+        const hit = els[0];
+        const card = cards[hit.index];
+        if (!card) return;
+        openDvpVinDrill(card.id, hit.datasetIndex === 1 ? "proforma" : "delivered");
+      };
+      overview.update("none");
+    }
 
     const shareColors = {
       lexus: "#1f2937",
@@ -14212,6 +14408,20 @@
       cutout: "72%",
       backgroundColor: shareBg,
     });
+    const share = charts["chart-dvp-share"];
+    if (share && share.options) {
+      share.options.onHover = (evt, els) => {
+        if (evt && evt.native && evt.native.target) {
+          evt.native.target.style.cursor = els.length ? "pointer" : "default";
+        }
+      };
+      share.options.onClick = (_evt, els) => {
+        if (!els.length) return;
+        const card = cards[els[0].index];
+        if (card) openDvpVinDrill(card.id, "delivered");
+      };
+      share.update("none");
+    }
     const center = $("#dvp-donut-center");
     if (center) {
       center.hidden = false;
@@ -14222,9 +14432,11 @@
       legend.innerHTML = cards.map((c, i) => {
         const pct = totalDel > 0 ? ((c.delivered / totalDel) * 100).toFixed(1) : "0.0";
         return `<li>
-          <span class="swatch" style="background:${escapeHtml(shareBg[i])}"></span>
-          <span class="name">${escapeHtml(c.title)}</span>
-          <span class="meta">${escapeHtml(formatNumber(c.delivered))} (${pct}%)</span>
+          <button type="button" class="dvp-share-hit" data-dvp-channel="${escapeHtml(c.id)}" data-dvp-metric="delivered">
+            <span class="swatch" style="background:${escapeHtml(shareBg[i])}"></span>
+            <span class="name">${escapeHtml(c.title)}</span>
+            <span class="meta">${escapeHtml(formatNumber(c.delivered))} (${pct}%)</span>
+          </button>
         </li>`;
       }).join("");
     }
@@ -14248,6 +14460,7 @@
     if (board) board.hidden = false;
 
     const data = buildDeliveredVsProformaSummary();
+    dvpLastPack = data;
     if (asof) {
       const live = data.live || {};
       asof.textContent = live.rangeLabel || live.label || cellToString(live.now) || "—";
@@ -14278,22 +14491,22 @@
         </div>
         <div class="dvp-card-body">
           <div class="dvp-kpi-row">
-            <div class="dvp-kpi is-del">
+            <button type="button" class="dvp-kpi is-del" data-dvp-channel="${escapeHtml(c.id)}" data-dvp-metric="delivered" aria-label="Show ${escapeHtml(c.title)} delivered VINs">
               <span class="ico" aria-hidden="true">▣</span>
               <div>
                 <span class="k">Delivered</span>
                 <span class="v">${escapeHtml(formatNumber(c.delivered))}</span>
               </div>
-            </div>
-            <div class="dvp-kpi is-pro">
+            </button>
+            <button type="button" class="dvp-kpi is-pro" data-dvp-channel="${escapeHtml(c.id)}" data-dvp-metric="proforma" aria-label="Show ${escapeHtml(c.title)} proforma VINs">
               <span class="ico" aria-hidden="true">▤</span>
               <div>
                 <span class="k">Pro-Forma</span>
                 <span class="v">${escapeHtml(formatNumber(c.proforma))}</span>
               </div>
-            </div>
+            </button>
           </div>
-          ${dvpCylHtml(c.delivered, c.proforma, c.theme)}
+          ${dvpCylHtml(c.delivered, c.proforma, c.theme, c.id)}
           ${guestNote}
           <div class="dvp-card-foot">
             <span class="dvp-status-ico" aria-hidden="true">${status.icon}</span>
@@ -14310,18 +14523,18 @@
 
     const t = data.totals;
     $("#dvp-totals").innerHTML = `
-      <div class="dvp-total-card is-del">
+      <button type="button" class="dvp-total-card is-del" data-dvp-channel="all" data-dvp-metric="delivered" aria-label="Show all delivered VINs">
         <span class="dvp-total-ico" aria-hidden="true">▣</span>
         <span class="k">Total Delivered</span>
         <span class="v">${escapeHtml(formatNumber(t.delivered))}</span>
         ${dvpTrendChip(t.delTrend)}
-      </div>
-      <div class="dvp-total-card is-pro">
+      </button>
+      <button type="button" class="dvp-total-card is-pro" data-dvp-channel="all" data-dvp-metric="proforma" aria-label="Show all proforma VINs">
         <span class="dvp-total-ico" aria-hidden="true">▤</span>
         <span class="k">Total Proforma</span>
         <span class="v">${escapeHtml(formatNumber(t.proforma))}</span>
         ${dvpTrendChip(t.proTrend)}
-      </div>
+      </button>
       <div class="dvp-total-card is-ratio">
         <span class="dvp-total-ico" aria-hidden="true">◎</span>
         <span class="k">Delivery / Proforma Ratio</span>
@@ -15883,6 +16096,12 @@
         renderSummaryDashboard();
       });
     }
+    const dvpCards = $("#dvp-cards");
+    if (dvpCards) dvpCards.addEventListener("click", onDvpMetricClick);
+    const dvpTotals = $("#dvp-totals");
+    if (dvpTotals) dvpTotals.addEventListener("click", onDvpMetricClick);
+    const dvpShareLegend = $("#dvp-share-legend");
+    if (dvpShareLegend) dvpShareLegend.addEventListener("click", onDvpMetricClick);
     const themeBtn = $("#icc-theme-toggle");
     if (themeBtn) {
       themeBtn.addEventListener("click", () => {
