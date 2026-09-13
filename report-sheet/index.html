@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913bofix1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913bocount1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913scroll2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -2459,39 +2459,70 @@
   function isFleetBoSheetName(name) {
     const n = String(name || "").trim();
     if (!n) return false;
-    if (/summary/i.test(n)) return false;
-    // Explicit Fleet / أسطول tab
+    if (/summary|cover|instruction|index/i.test(n)) return false;
     if (/fleet|أسطول/i.test(n)) return true;
-    // Bare sheet code "7022", or "… 7022 …" together with BO wording
     if (/^7022$/.test(n)) return true;
     if (/\b7022\b/.test(n) && /back\s*order|backorder|\bbo\b/i.test(n)) return true;
     return false;
   }
 
-  /** Skip Fleet sales-type rows only (sheet filter handles Fleet / 7022 tabs). */
-  function isExcludedFleetBoRaw(r, get) {
-    const salesTypeRaw = cellToString(get(r, "salesType"));
+  function isBoDetailSheetName(name) {
+    const n = String(name || "").trim();
+    if (!n || isFleetBoSheetName(n)) return false;
+    if (/summary|cover|instruction|index|pivot/i.test(n)) return false;
+    return /back\s*order|backorder/i.test(n);
+  }
+
+  /** Sales Type cell only — avoid greedy header aliases that wiped retail BO counts. */
+  function boSalesTypeRaw(row) {
+    const letter = findHeaderLetter(row, [
+      (n) => n === "sales type" || n === "sale type" || n === "type of sale",
+      (n) => n === "payment type" || n === "deal type",
+    ]);
+    if (!letter) return "";
+    return cellByLetter(row, letter);
+  }
+
+  /** Skip only clear Fleet sales-type rows (Fleet tabs are skipped in backorderRows). */
+  function isExcludedFleetBoRaw(r) {
+    const salesTypeRaw = cellToString(boSalesTypeRaw(r));
     if (!salesTypeRaw) return false;
     if (inferSalesType(salesTypeRaw, false) === "Fleet") return true;
-    return /fleet|أسطول/i.test(salesTypeRaw);
+    return /^(fleet|أسطول)\b/i.test(salesTypeRaw.trim());
   }
 
   function backorderRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    // Historical: first sheet = retail BO. Never merge Fleet sheets.
+
+    // Never merge Fleet tabs. Prefer a named Back Order detail sheet (not Summary).
     const nonFleet = names.filter((n) => !isFleetBoSheetName(n));
-    let preferred = "";
-    if (nonFleet.length) {
-      preferred =
-        nonFleet.find((n) => /back\s*order|backorder/i.test(n))
-        || (nonFleet.includes(names[0]) ? names[0] : nonFleet[0]);
-    } else {
-      // All tabs look like Fleet — still read first sheet; row filter drops Fleet sales types.
-      preferred = names[0];
+    const pool = nonFleet.length ? nonFleet : [names[0]];
+    const preferred =
+      pool.find((n) => isBoDetailSheetName(n))
+      || pool.find((n) => !/summary|cover|instruction|index|pivot/i.test(n))
+      || pool[0];
+
+    let bestName = preferred;
+    let bestRows = sheetRows(workbook, preferred);
+
+    // Cover/summary tabs are often first and nearly empty — pick the densest non-fleet sheet.
+    if (bestRows.length < 5 && pool.length > 1) {
+      for (const n of pool) {
+        if (n === preferred) continue;
+        if (/summary|cover|instruction|index|pivot/i.test(n) && bestRows.length > 0) continue;
+        const rows = sheetRows(workbook, n);
+        if (rows.length > bestRows.length) {
+          bestRows = rows;
+          bestName = n;
+        }
+      }
     }
-    if (!preferred) return [];
-    return sheetRows(workbook, preferred);
+
+    if (typeof console !== "undefined" && console.info) {
+      console.info("[BO sheet]", bestName, "rows:", bestRows.length, "tabs:", names.join(" | "));
+    }
+    return bestRows;
   }
 
   /**
@@ -3480,12 +3511,10 @@
   }
 
   function mapBo(rows) {
-    const get0 = buildFieldGetter(rows[0] || {});
-    const sample = (rows || []).find((r) => !isExcludedFleetBoRaw(r, get0)) || rows[0] || {};
-    const get = sample === rows[0] ? get0 : buildFieldGetter(sample);
+    const get = buildFieldGetter(rows[0] || {});
     const out = [];
     (rows || []).forEach((r, i) => {
-      if (isExcludedFleetBoRaw(r, get)) return;
+      if (isExcludedFleetBoRaw(r)) return;
       const orderDate = parseDate(get(r, "orderDate"));
       const agingFromCol = toNumber(get(r, "agingDays"));
       const aging = agingFromCol > 0
@@ -3497,7 +3526,7 @@
       const rawSuffix = cellToString(get(r, "sfx") || get(r, "suffix"));
       const suffix = normalizeProductSuffix(product, rawSuffix);
       const paid = isPaid(get(r, "paid"));
-      const salesType = inferSalesType(get(r, "salesType"), paid);
+      const salesType = inferSalesType(boSalesTypeRaw(r), paid);
       if (salesType === "Fleet") return;
       const category = cellToString(get(r, "category")) || (product ? String(product).split(/\s+/)[0] : "—");
       const salesChannel = cellToString(get(r, "salesChannel") || get(r, "plant")) || "—";
@@ -11562,7 +11591,12 @@
     if ($("#bo-search")) $("#bo-search").value = boView.search || "";
 
     const updated = $("#bo-last-updated");
-    if (updated) updated.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+    if (updated) {
+      const rawN = (slots.backorder.rows || []).length;
+      const mappedN = all.length;
+      const stamp = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
+      updated.textContent = `${stamp} · ${formatNumber(mappedN)} BO` + (rawN !== mappedN ? ` (${formatNumber(rawN)} file rows)` : "");
+    }
     const rangeEl = $("#bo-date-range");
     if (rangeEl) {
       const live = window._globalLivePeriod || (typeof ensureGlobalLivePeriod === "function" ? ensureGlobalLivePeriod() : null);
@@ -12036,10 +12070,7 @@
 
   function filterOutFleetBoRows(rows) {
     if (!Array.isArray(rows) || !rows.length) return [];
-    const get0 = buildFieldGetter(rows[0] || {});
-    const sample = rows.find((r) => !isExcludedFleetBoRaw(r, get0)) || rows[0];
-    const get = sample === rows[0] ? get0 : buildFieldGetter(sample || {});
-    return rows.filter((r) => !isExcludedFleetBoRaw(r, get));
+    return rows.filter((r) => !isExcludedFleetBoRaw(r));
   }
 
   function rawBoRows() {
