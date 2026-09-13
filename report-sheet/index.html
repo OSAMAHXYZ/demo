@@ -2452,32 +2452,24 @@
     return /fleet|أسطول|\b7022\b/i.test(n);
   }
 
-  /** Skip Fleet BO rows so Allocation / BO dashboards count retail only. */
+  /** Skip Fleet sales-type rows only (do not scan plant/BO# for 7022 — that wiped retail). */
   function isExcludedFleetBoRaw(r, get) {
     const salesTypeRaw = cellToString(get(r, "salesType") || get(r, "custGroup"));
     if (inferSalesType(salesTypeRaw, false) === "Fleet") return true;
-    const hay = [
-      salesTypeRaw,
-      cellToString(get(r, "salesChannel") || get(r, "plant")),
-      cellToString(get(r, "salesScope")),
-      cellToString(get(r, "customer")),
-      cellToString(get(r, "category")),
-      cellToString(get(r, "boNumber")),
-    ].join(" ").toLowerCase();
-    if (/fleet|أسطول/.test(hay)) return true;
-    if (/\b7022\b/.test(hay)) return true;
-    return false;
+    return /fleet|أسطول/i.test(salesTypeRaw);
   }
 
   function backorderRows(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
-    // Never merge Fleet / 7022 sheets — retail BO sheet only (first sheet historically).
-    const preferred =
-      names.find((n) => /back\s*order|backorder|\bbo\b/i.test(n) && !isFleetBoSheetName(n))
-      || (names[0] && !isFleetBoSheetName(names[0]) ? names[0] : "")
-      || names.find((n) => !isFleetBoSheetName(n) && !/summary/i.test(n))
-      || "";
+    // Historical: first sheet = retail BO. Never merge Fleet / 7022 sheets.
+    let preferred = names[0];
+    if (isFleetBoSheetName(preferred)) {
+      preferred =
+        names.find((n) => /back\s*order|backorder/i.test(n) && !isFleetBoSheetName(n))
+        || names.find((n) => !isFleetBoSheetName(n))
+        || "";
+    }
     if (!preferred || isFleetBoSheetName(preferred)) return [];
     return sheetRows(workbook, preferred);
   }
