@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260912darkbtn" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913accrem" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913ops1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -317,6 +317,10 @@
                     <div class="acc-summary-cell">
                       <span class="k">In Progress</span>
                       <span class="v" id="acc-sum-progress">—</span>
+                    </div>
+                    <div class="acc-summary-cell">
+                      <span class="k">Remaining</span>
+                      <span class="v" id="acc-sum-remaining">—</span>
                     </div>
                   </div>
                 </div>
@@ -5385,7 +5389,8 @@
       const p = Number(inProgress) || 0;
       const ach = achPct != null ? Number(achPct) : (q > 0 ? s / q : null);
       const combinedPct = q > 0 ? (s + p) / q : null;
-      return { quota: q, sold: s, inProgress: p, achPct: ach, combinedPct };
+      const remaining = Math.max(0, q - s - p);
+      return { quota: q, sold: s, inProgress: p, remaining, achPct: ach, combinedPct };
     };
     if (srView.selectedKey && list[0]) {
       const r = list[0];
@@ -5414,6 +5419,7 @@
     const targetEl = $("#acc-sum-target");
     const soldEl = $("#acc-sum-achieved");
     const progressEl = $("#acc-sum-progress");
+    const remainingEl = $("#acc-sum-remaining");
     const pctEl = $("#acc-sum-pct");
     const combinedEl = $("#acc-sum-pct-combined");
     const fillEl = $("#sr-acc-progress-fill");
@@ -5423,6 +5429,10 @@
     if (targetEl) targetEl.textContent = formatNumber(sum.quota);
     if (soldEl) soldEl.textContent = formatNumber(sum.sold);
     if (progressEl) progressEl.textContent = formatNumber(sum.inProgress || 0);
+    if (remainingEl) {
+      remainingEl.textContent = formatNumber(sum.remaining || 0);
+      remainingEl.title = "Target − Achieved − In Progress";
+    }
     if (pctEl) {
       pctEl.textContent = pctNum == null ? "—" : (pctNum.toFixed(1) + "%");
       pctEl.title = "Achieved ÷ Target";
@@ -5471,6 +5481,10 @@
           <div class="acc-summary-cell">
             <span class="k">In Progress</span>
             <span class="v">${formatNumber(sum.inProgress || 0)}</span>
+          </div>
+          <div class="acc-summary-cell">
+            <span class="k">Remaining</span>
+            <span class="v" title="Target − Achieved − In Progress">${formatNumber(sum.remaining || 0)}</span>
           </div>
         </div>
       </div>`;

@@ -1432,12 +1432,12 @@ body.pbi-wide-open {
 }
 .acc-summary-cols {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   background: #f8fafc;
 }
 .acc-summary-cols--detail {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .acc-summary-cell {
   display: flex;
@@ -8750,11 +8750,17 @@ body.admin-page #panel-allocation:not([hidden]) {
 .sr-mock-acc .acc-summary-cols,
 .sr-mock-acc .acc-summary-cols--detail {
   display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px !important;
   background: transparent !important;
 }
-@media (max-width: 520px) {
+@media (max-width: 720px) {
+  .sr-mock-acc .acc-summary-cols,
+  .sr-mock-acc .acc-summary-cols--detail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
   .sr-mock-acc .acc-summary-cols,
   .sr-mock-acc .acc-summary-cols--detail {
     grid-template-columns: 1fr;
