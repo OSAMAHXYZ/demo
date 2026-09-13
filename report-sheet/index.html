@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913basfold" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913supplygap" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913basfold" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -1043,22 +1043,32 @@
           <div class="bo-kpis bas-kpi-row act-kpi-row" id="bas-kpis"></div>
 
           <div class="act-main-grid">
-            <article class="card act-card act-hero-bars">
-              <div class="pbi-viz-head">
+            <article class="card act-card act-hero-bars act-supply-card">
+              <div class="pbi-viz-head act-supply-head">
                 <div>
-                  <h2>Allocation vs Back Orders by Product</h2>
-                  <span class="hint">Sorted by gap · click a product for details</span>
-          </div>
-                <label class="act-sort-lab">Sort
-                  <select id="act-sort-gap">
-                    <option value="gap" selected>By Gap</option>
-                    <option value="bo">By Back Orders</option>
-                    <option value="alloc">By Allocation</option>
-                    <option value="stock">By Stock</option>
-                  </select>
-                </label>
+                  <h2>Supply Gap by Product</h2>
+                  <span class="hint">Where customer demand exceeds available and allocated vehicles</span>
+                </div>
+                <div class="act-supply-tools">
+                  <label class="act-sort-lab">Sort
+                    <select id="act-sort-gap">
+                      <option value="gap" selected>Biggest Gap</option>
+                      <option value="bo">Highest Back Orders</option>
+                      <option value="stock">Highest Stock</option>
+                      <option value="lowcov">Lowest Coverage</option>
+                      <option value="bestcov">Best Coverage</option>
+                    </select>
+                  </label>
+                  <button type="button" class="btn act-supply-viewall" id="act-supply-viewall" hidden>View all</button>
+                </div>
               </div>
-              <div class="chart-box act-chart-box act-chart-box--bars"><canvas id="chart-act-product-bars"></canvas></div>
+              <div class="act-supply-layout">
+                <div class="act-supply-chart">
+                  <div class="chart-box act-chart-box act-chart-box--bars"><canvas id="chart-act-product-bars"></canvas></div>
+                </div>
+                <aside class="act-supply-insight" id="act-supply-insight" aria-live="polite"></aside>
+              </div>
+              <div class="act-supply-rest" id="act-supply-rest" hidden></div>
             </article>
 
             <article class="card act-card act-hero-quad">
@@ -9877,7 +9887,7 @@
   }
 
   /* ——— BO & Allocation & Stock gap dashboard ——— */
-  let basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: "shortfall", sortGap: "gap" };
+  let basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: "shortfall", sortGap: "gap", barShowAll: false };
   let basAllocView = { search: "", salesStatus: "", source: "", score: "" };
   const ACT_CONFIG = {
     coverageSplit: 1.0,
@@ -10117,6 +10127,121 @@
     });
   }
 
+  function actSupplyGapOf(p) {
+    return (Number(p && p.boCount) || 0) - (Number(p && p.allocation) || 0) - (Number(p && p.stockCount) || 0);
+  }
+
+  function actSupplyCoverPct(p) {
+    const bo = Number(p && p.boCount) || 0;
+    if (!bo) return null;
+    return (((Number(p.allocation) || 0) + (Number(p.stockCount) || 0)) / bo) * 100;
+  }
+
+  function actFormatSupplyGap(p) {
+    const gap = actSupplyGapOf(p);
+    const n = formatNumber(Math.abs(gap));
+    if (gap > 0) return `${n} short`;
+    if (gap < 0) return `${n} surplus`;
+    return "0";
+  }
+
+  function actFormatCoverPct(p) {
+    const cov = actSupplyCoverPct(p);
+    return cov == null ? "—" : `${Math.round(cov)}%`;
+  }
+
+  function actSupplyStatus(p) {
+    const cov = actSupplyCoverPct(p);
+    if (cov == null) {
+      return actSupplyGapOf(p) > 0
+        ? { key: "attention", icon: "🟠", label: "Attention — moderate coverage" }
+        : { key: "healthy", icon: "🟢", label: "Healthy — strong coverage" };
+    }
+    if (cov < 50) return { key: "critical", icon: "🔴", label: "Critical — very low coverage" };
+    if (cov < 90) return { key: "attention", icon: "🟠", label: "Attention — moderate coverage" };
+    return { key: "healthy", icon: "🟢", label: "Healthy — strong coverage" };
+  }
+
+  function sortSupplyGapProducts(list, sortKey) {
+    const rows = [...(list || [])];
+    rows.sort((a, b) => {
+      if (sortKey === "bo") return b.boCount - a.boCount || actSupplyGapOf(b) - actSupplyGapOf(a);
+      if (sortKey === "stock") return b.stockCount - a.stockCount || actSupplyGapOf(b) - actSupplyGapOf(a);
+      if (sortKey === "lowcov" || sortKey === "bestcov") {
+        const ca = actSupplyCoverPct(a);
+        const cb = actSupplyCoverPct(b);
+        if (ca == null && cb == null) return actSupplyGapOf(b) - actSupplyGapOf(a);
+        if (ca == null) return 1;
+        if (cb == null) return -1;
+        return sortKey === "lowcov" ? ca - cb : cb - ca;
+      }
+      return actSupplyGapOf(b) - actSupplyGapOf(a) || b.boCount - a.boCount;
+    });
+    return rows;
+  }
+
+  function renderActSupplyInsight(barSorted) {
+    const el = $("#act-supply-insight");
+    if (!el) return;
+    const ranked = [...(barSorted || [])].sort((a, b) => actSupplyGapOf(b) - actSupplyGapOf(a) || b.boCount - a.boCount);
+    const p = ranked[0];
+    if (!p) {
+      el.innerHTML = `<p class="act-supply-empty">No product demand to rank yet.</p>`;
+      el.onclick = null;
+      return;
+    }
+    const gap = actSupplyGapOf(p);
+    const st = actSupplyStatus(p);
+    el.innerHTML = `
+      <p class="act-supply-kicker">${st.icon} Highest Supply Gap</p>
+      <h3 class="act-supply-product">${escapeHtml(p.product)}</h3>
+      <p class="act-supply-gap ${gap > 0 ? "is-short" : "is-ok"}">Gap: <strong>${formatNumber(gap)}</strong> units</p>
+      <dl class="act-supply-metrics">
+        <div><dt>Back Orders</dt><dd>${formatNumber(p.boCount)}</dd></div>
+        <div><dt>Available Stock</dt><dd>${formatNumber(p.stockCount)}</dd></div>
+        <div><dt>Allocated</dt><dd>${formatNumber(p.allocation)}</dd></div>
+        <div><dt>Coverage</dt><dd>${actFormatCoverPct(p)}</dd></div>
+      </dl>
+      <p class="act-supply-status is-${st.key}">${st.icon} ${escapeHtml(st.label)}</p>
+      <p class="act-supply-click">Click for product detail</p>`;
+    el.onclick = () => actSelectProduct(p.product);
+  }
+
+  function renderActSupplyRest(barSorted) {
+    const el = $("#act-supply-rest");
+    const btn = $("#act-supply-viewall");
+    const rows = barSorted || [];
+    if (btn) {
+      btn.hidden = rows.length <= 5;
+      btn.textContent = basView.barShowAll ? "Show top 5" : `View all ${formatNumber(rows.length)}`;
+    }
+    if (!el) return;
+    if (!basView.barShowAll || rows.length <= 5) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const rest = rows.slice(5);
+    el.hidden = false;
+    el.innerHTML = `
+      <p class="act-supply-rest-label">Remaining products · ${formatNumber(rest.length)}</p>
+      <div class="act-supply-rest-list">${rest.map((p) => {
+        const gap = actSupplyGapOf(p);
+        const st = actSupplyStatus(p);
+        return `<button type="button" class="act-supply-rest-row" data-act-product="${escapeHtml(p.product)}">
+          <span class="act-supply-rest-name">${st.icon} ${escapeHtml(p.product)}</span>
+          <span>BO ${formatNumber(p.boCount)}</span>
+          <span>Stock ${formatNumber(p.stockCount)}</span>
+          <span>Alloc ${formatNumber(p.allocation)}</span>
+          <span class="${gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">Gap ${gap > 0 ? formatNumber(gap) : actFormatSupplyGap(p)}</span>
+          <span>${actFormatCoverPct(p)}</span>
+        </button>`;
+      }).join("")}</div>`;
+    el.querySelectorAll("[data-act-product]").forEach((btnRow) => {
+      btnRow.addEventListener("click", () => actSelectProduct(btnRow.getAttribute("data-act-product") || ""));
+    });
+  }
+
   function computeBasTowerMetrics(d, filteredRows) {
     const totalAlloc = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const matchedBo = filteredRows.reduce((s, r) => s + r.boCount, 0);
@@ -10225,11 +10350,11 @@
           : `<button type="button" class="btn-primary" id="act-drawer-filter">Filter tower to ${escapeHtml(product)}</button>`}
       </div>
       <div class="act-drawer-kpis">
-        <div><span class="lab">Allocation</span><strong>${formatNumber(agg.allocation)}</strong></div>
         <div><span class="lab">Back Orders</span><strong>${formatNumber(agg.boCount)}</strong></div>
         <div><span class="lab">Stock</span><strong>${formatNumber(agg.stockCount)}</strong></div>
-        <div><span class="lab">Gap</span><strong class="${agg.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(agg.gap)}</strong></div>
-        <div><span class="lab">Coverage</span><strong>${agg.boCount ? (agg.allocation / agg.boCount).toFixed(2) : "N/A"}</strong></div>
+        <div><span class="lab">Allocation</span><strong>${formatNumber(agg.allocation)}</strong></div>
+        <div><span class="lab">Supply Gap</span><strong class="${actSupplyGapOf(agg) > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${actFormatSupplyGap(agg)}</strong></div>
+        <div><span class="lab">Coverage</span><strong>${actFormatCoverPct(agg)}</strong></div>
         <div><span class="lab">Late RTL</span><strong>${formatNumber(late)}</strong></div>
       </div>
       <h4 class="act-drawer-h">SFX breakdown</h4>
@@ -10345,6 +10470,15 @@
     });
     products = products.filter((p) => p.allocation || p.boCount || p.stockCount).slice(0, 18);
 
+    const barSorted = sortSupplyGapProducts(
+      overviewByProduct.filter((p) => p.allocation || p.boCount || p.stockCount),
+      sortKey
+    );
+    const barShown = barSorted.slice(0, 5);
+    if (metrics) metrics.supplyBarRows = barSorted;
+    renderActSupplyInsight(barSorted);
+    renderActSupplyRest(barSorted);
+
     const resizeChart = (id) => {
       try {
         if (charts[id] && typeof charts[id].resize === "function") charts[id].resize();
@@ -10352,52 +10486,91 @@
     };
 
     try {
-    // Product grouped bars
+    // Product grouped bars — top 5 executive preview
     const barId = "chart-act-product-bars";
     destroyActChart(barId);
     const barCanvas = document.getElementById(barId);
     if (barCanvas) {
+      const actBarLabels = {
+        id: "actSupplyBarLabels",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          chart.data.datasets.forEach((ds, di) => {
+            const meta = chart.getDatasetMeta(di);
+            if (!meta || !meta.data) return;
+            meta.data.forEach((bar, i) => {
+              const v = Number(ds.data[i]) || 0;
+              if (v <= 0) return;
+              const props = bar.getProps(["x", "y", "base"], true);
+              const span = Math.abs((props.x || 0) - (props.base || 0));
+              if (span < 30) return;
+              const midX = ((props.base || 0) + (props.x || 0)) / 2;
+              ctx.save();
+              ctx.fillStyle = di === 2 ? "#0f172a" : "#fff";
+              ctx.font = "700 9px Outfit, sans-serif";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(formatNumber(v), midX, props.y);
+              ctx.restore();
+            });
+          });
+        },
+      };
       charts[barId] = new Chart(barCanvas, {
         type: "bar",
         data: {
-          labels: products.map((p) => p.product),
+          labels: barShown.map((p) => p.product),
           datasets: [
-            { label: "Allocation", data: products.map((p) => p.allocation), backgroundColor: "rgba(235,10,30,0.85)", borderRadius: 4 },
-            { label: "Back Orders", data: products.map((p) => p.boCount), backgroundColor: "rgba(15,23,42,0.85)", borderRadius: 4 },
-            { label: "Stock", data: products.map((p) => p.stockCount), backgroundColor: "rgba(96,165,250,0.85)", borderRadius: 4 },
+            { label: "Back Orders", data: barShown.map((p) => p.boCount), backgroundColor: "#111827", borderRadius: 4, maxBarThickness: 16, order: 1 },
+            { label: "Allocation", data: barShown.map((p) => p.allocation), backgroundColor: "#eb0a1e", borderRadius: 4, maxBarThickness: 16, order: 2 },
+            { label: "Stock", data: barShown.map((p) => p.stockCount), backgroundColor: "#60a5fa", borderRadius: 4, maxBarThickness: 16, order: 3 },
           ],
         },
         options: {
           indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { right: 8, left: 2 } },
+          interaction: { mode: "index", intersect: true },
+          datasets: { bar: { categoryPercentage: 0.72, barPercentage: 0.9 } },
           plugins: {
-            legend: { position: "top", labels: { boxWidth: 10, font: { size: 11 } } },
+            legend: {
+              position: "top",
+              align: "end",
+              labels: { boxWidth: 10, boxHeight: 10, font: { size: 11, weight: "700" }, padding: 12 },
+            },
             tooltip: {
               callbacks: {
                 afterBody(items) {
                   const i = items[0] && items[0].dataIndex;
-                  const p = products[i];
+                  const p = barShown[i];
                   if (!p) return "";
                   return [
-                    `Gap ${basFormatGap(p.gap)} · ${basGapLabel(p.status)}`,
-                    `Plan+Stock−BO ${p.netCover >= 0 ? "+" : ""}${p.netCover}`,
-                    `Coverage ${p.boCount ? (p.allocation / p.boCount).toFixed(2) : "N/A"}`,
+                    `Supply Gap ${actFormatSupplyGap(p)}`,
+                    `Coverage ${actFormatCoverPct(p)}`,
                   ];
                 },
               },
             },
           },
           scales: {
-            x: { beginAtZero: true, grid: { color: "rgba(148,163,184,0.15)" } },
-            y: { ticks: { font: { size: 11, weight: "600" } } },
+            x: { beginAtZero: true, grid: { color: "rgba(148,163,184,0.18)" }, ticks: { font: { size: 10 } } },
+            y: {
+              ticks: { font: { size: 11, weight: "700" }, color: "#111", autoSkip: false },
+              grid: { display: false },
+            },
+          },
+          onHover(evt, els) {
+            const t = evt.native && evt.native.target;
+            if (t && t.style) t.style.cursor = els.length ? "pointer" : "default";
           },
           onClick(evt, els) {
             if (!els.length) return;
-            const p = products[els[0].index];
+            const p = barShown[els[0].index];
             if (p) actSelectProduct(p.product);
           },
         },
+        plugins: [actBarLabels],
       });
       resizeChart(barId);
     }
@@ -10942,7 +11115,12 @@
 
     const stamp = $("#act-refresh-time");
     if (stamp) stamp.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
-    if ($("#act-sort-gap")) $("#act-sort-gap").value = basView.sortGap || "gap";
+    if ($("#act-sort-gap")) {
+      const sel = $("#act-sort-gap");
+      const v = basView.sortGap || "gap";
+      sel.value = [...sel.options].some((o) => o.value === v) ? v : "gap";
+      if (sel.value !== v) basView.sortGap = sel.value;
+    }
 
     const allRows = buildBasRows(d);
     const confirmedAllRows = buildBasRows(d, { confirmedOnly: true });
@@ -16422,7 +16600,7 @@
   const basClearEl = $("#bas-clear-filters");
   if (basClearEl) {
     basClearEl.addEventListener("click", () => {
-      basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: basView.alertTab || "shortfall", sortGap: basView.sortGap || "gap" };
+      basView = { search: "", seg: "", product: "", sfx: "", status: "", alertTab: basView.alertTab || "shortfall", sortGap: basView.sortGap || "gap", barShowAll: false };
       basAllocView = { search: "", salesStatus: "", source: "", score: "" };
       refreshBasFromFilters();
     });
@@ -16440,6 +16618,15 @@
     actSort.addEventListener("change", () => {
       basView.sortGap = actSort.value || "gap";
       refreshBasFromFilters();
+    });
+  }
+  const actViewAll = $("#act-supply-viewall");
+  if (actViewAll) {
+    actViewAll.addEventListener("click", () => {
+      basView.barShowAll = !basView.barShowAll;
+      const rows = (actTowerCache && actTowerCache.supplyBarRows) || [];
+      if (rows.length) renderActSupplyRest(rows);
+      else refreshBasFromFilters();
     });
   }
   document.querySelectorAll(".act-alert-tab").forEach((btn) => {
