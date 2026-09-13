@@ -10191,7 +10191,8 @@ body.admin-page #panel-allocation:not([hidden]) {
   background: #fff;
 }
 .aa-table-wrap {
-  overflow: auto;
+  overflow: visible;
+  max-height: none;
   border: 1px solid #eef2f7;
   border-radius: 12px;
   margin-top: 8px;
@@ -10240,4 +10241,69 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-radius: 10px;
   background: #fff;
   font: inherit;
+}
+.aa-num-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 4px;
+  margin: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.35);
+  text-underline-offset: 3px;
+}
+.aa-num-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  text-decoration-color: #2563eb;
+}
+.aa-num-btn.aa-gap-neg { color: #b91c1c; }
+.aa-num-btn.aa-gap-pos { color: #15803d; }
+.aa-num-zero {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+.aa-summary-hint {
+  margin: 8px 2px 0;
+  font-size: 0.78rem;
+}
+.aa-drill-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.aa-drill-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.aa-drill-count {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+}
+.aa-drill-table-wrap {
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+}
+.aa-drill-drawer {
+  z-index: 95;
+}
+#aa-drill-backdrop {
+  z-index: 94;
 }
