@@ -4534,7 +4534,7 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-section-head {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 14px;
   margin-bottom: 14px;
   padding: 12px 16px;
@@ -4542,6 +4542,43 @@ body.admin-page #panel-allocation:not([hidden]) {
   text-align: center;
   background: linear-gradient(180deg, #f7fbfe, #fff);
   border-radius: 12px;
+}
+details.bas-section-card {
+  padding: 10px 12px;
+}
+details.bas-section-card > summary.bas-section-head {
+  list-style: none;
+  cursor: pointer;
+  margin: 0;
+  user-select: none;
+  border-bottom: 0;
+}
+details.bas-section-card > summary.bas-section-head:hover {
+  background: linear-gradient(180deg, #eef6fc, #f8fbfe);
+}
+details.bas-section-card > summary.bas-section-head::-webkit-details-marker {
+  display: none;
+}
+details.bas-section-card[open] {
+  padding: 18px 18px 14px;
+}
+details.bas-section-card[open] > summary.bas-section-head {
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.bas-fold-chev {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform .2s ease;
+}
+details.bas-section-card[open] > summary .bas-fold-chev {
+  transform: rotate(180deg);
+}
+.bas-section-body {
+  min-width: 0;
 }
 
 .bas-section-head .pbi-viz-head {
@@ -4737,9 +4774,9 @@ body.admin-page #panel-allocation:not([hidden]) {
 }
 
 /* Allocation detail tables: grow with content so page scroll reaches every row */
-.bas-section-all > .bas-table-wrap,
-.bas-section-conf > .bas-table-wrap,
-.bas-section-alloc > .bas-table-wrap,
+.bas-section-all .bas-table-wrap,
+.bas-section-conf .bas-table-wrap,
+.bas-section-alloc .bas-table-wrap,
 #bas-table.bas-table-wrap,
 #bas-conf-table.bas-table-wrap,
 #bas-alloc-table.bas-table-wrap {
@@ -5344,9 +5381,13 @@ body.admin-page #panel-allocation:not([hidden]) {
 
 @media (max-width: 720px) {
   .bas-section-head {
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 10px;
     text-align: center;
+  }
+  .bas-fold-chev {
+    margin-left: auto;
   }
 
   .bas-section-head .pbi-viz-head {
@@ -7679,11 +7720,10 @@ body.admin-page #panel-allocation:not([hidden]) {
 .act-alert-tab.active { background: #eb0a1e; border-color: #eb0a1e; color: #fff; }
 .act-alert-table { max-height: 240px; overflow: auto; }
 .act-sort-lab { font-size: .78rem; font-weight: 700; color: #64748b; }
-.act-details-block { padding: 12px 14px; }
-.act-details-block > summary {
-  cursor: pointer; font-weight: 800; color: #111; margin-bottom: 12px;
+.act-details-block { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.act-details-block .bas-section-card {
+  margin: 0 0 10px;
 }
-.act-details-block[open] > summary { margin-bottom: 14px; }
 .act-drawer-kpis {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
 }

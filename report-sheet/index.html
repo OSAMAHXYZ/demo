@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913dvpvin" />
-  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913refresh1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913basfold" />
+  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913basfold" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -1137,17 +1137,18 @@
             </article>
           </div>
 
-          <details class="card act-details-block" open>
-            <summary>Detailed allocation tables · All BO · Confirmed · Monthly · Matched VINs</summary>
+          <div class="act-details-block">
 
-          <article class="card bas-section-card bas-section-all">
-            <div class="bas-section-head">
+          <details class="card bas-section-card bas-section-all">
+            <summary class="bas-section-head">
               <span class="bas-section-badge">1</span>
               <div class="pbi-viz-head">
                 <h2>All back orders vs allocation</h2>
                 <span class="hint">Gap = BO − Allocation · exact product + suffix match</span>
               </div>
-            </div>
+              <span class="bas-fold-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="bas-section-body">
             <div class="bo-toolbar bas-table-filters" id="bas-table-filters">
               <label class="bas-filter-label" for="bas-f-car">Car
                 <select id="bas-f-car"><option value="">All cars</option></select>
@@ -1160,16 +1161,19 @@
             <div class="bas-result-strip" id="bas-table-summary" aria-live="polite"></div>
             <div class="table-wrap bas-table-wrap" id="bas-table"></div>
             <p class="foot bas-foot" id="bas-foot"></p>
-        </article>
+            </div>
+        </details>
 
-          <article class="card bas-section-card bas-section-conf bas-conf-block">
-            <div class="bas-section-head">
+          <details class="card bas-section-card bas-section-conf bas-conf-block">
+            <summary class="bas-section-head">
               <span class="bas-section-badge">2</span>
               <div class="pbi-viz-head">
                 <h2>Confirmed back orders vs allocation</h2>
                 <span class="hint">Only confirmed / allocated BO rows</span>
               </div>
-            </div>
+              <span class="bas-fold-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="bas-section-body">
             <div class="bo-toolbar bas-table-filters" id="bas-conf-table-filters">
               <label class="bas-filter-label" for="bas-f-car-conf">Car
                 <select id="bas-f-car-conf"><option value="">All cars</option></select>
@@ -1183,16 +1187,19 @@
             <div class="bo-insights bas-insights-panel bas-insights-nested" id="bas-conf-insights"></div>
             <div class="table-wrap bas-table-wrap" id="bas-conf-table"></div>
             <p class="foot bas-foot" id="bas-conf-foot"></p>
-          </article>
+            </div>
+          </details>
 
-          <article class="card bas-section-card bas-section-month bas-month-block" id="bas-month-section">
-            <div class="bas-section-head">
+          <details class="card bas-section-card bas-section-month bas-month-block" id="bas-month-section">
+            <summary class="bas-section-head">
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
                 <span class="hint" id="bas-month-hint">Day N Tot/RES = Col J age 0 from that day’s RTL file only · Admin Push = today only</span>
               </div>
-            </div>
+              <span class="bas-fold-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="bas-section-body">
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
@@ -1235,16 +1242,19 @@
               <p class="bas-day-panel-label">Day-by-day breakdown</p>
               <div class="bas-day-sections" id="bas-day-sections"></div>
             </div>
-          </article>
+            </div>
+          </details>
 
-          <article class="card bas-section-card bas-section-alloc" id="bas-alloc-section">
-            <div class="bas-section-head">
+          <details class="card bas-section-card bas-section-alloc" id="bas-alloc-section">
+            <summary class="bas-section-head">
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
                 <span class="hint">RTL then E-Sales · paired colors · live status</span>
               </div>
-            </div>
+              <span class="bas-fold-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="bas-section-body">
             <div class="bas-alloc-toolbar">
               <input type="search" id="bas-alloc-search" placeholder="Search…" autocomplete="off" />
               <select id="bas-alloc-f-score">
@@ -1269,8 +1279,9 @@
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-alloc-kpis"></div>
             <div class="table-wrap bas-table-wrap" id="bas-alloc-table"></div>
             <p class="foot bas-foot" id="bas-alloc-foot"></p>
-          </article>
+            </div>
           </details>
+          </div>
         </div>
 
         <aside class="act-drawer" id="act-drawer" aria-hidden="true" hidden>
