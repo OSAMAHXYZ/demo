@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913supplygap" />
-  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913basfold" />
+  <link rel="stylesheet" href="dashboard.css?v=20260913allocfix" />
+  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913allocfix" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -1151,12 +1151,14 @@
 
           <details class="card bas-section-card bas-section-all">
             <summary class="bas-section-head">
+              <div class="bas-section-head-inner">
               <span class="bas-section-badge">1</span>
               <div class="pbi-viz-head">
                 <h2>All back orders vs allocation</h2>
                 <span class="hint">Gap = BO − Allocation · exact product + suffix match</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
+              </div>
             </summary>
             <div class="bas-section-body">
             <div class="bo-toolbar bas-table-filters" id="bas-table-filters">
@@ -1176,12 +1178,14 @@
 
           <details class="card bas-section-card bas-section-conf bas-conf-block">
             <summary class="bas-section-head">
+              <div class="bas-section-head-inner">
               <span class="bas-section-badge">2</span>
               <div class="pbi-viz-head">
                 <h2>Confirmed back orders vs allocation</h2>
                 <span class="hint">Only confirmed / allocated BO rows</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
+              </div>
             </summary>
             <div class="bas-section-body">
             <div class="bo-toolbar bas-table-filters" id="bas-conf-table-filters">
@@ -1202,12 +1206,14 @@
 
           <details class="card bas-section-card bas-section-month bas-month-block" id="bas-month-section">
             <summary class="bas-section-head">
+              <div class="bas-section-head-inner">
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
                 <span class="hint" id="bas-month-hint">Day N Tot/RES = Col J age 0 from that day’s RTL file only · Admin Push = today only</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
+              </div>
             </summary>
             <div class="bas-section-body">
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
@@ -1257,12 +1263,14 @@
 
           <details class="card bas-section-card bas-section-alloc" id="bas-alloc-section">
             <summary class="bas-section-head">
+              <div class="bas-section-head-inner">
               <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
                 <span class="hint">RTL then E-Sales · paired colors · live status</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
+              </div>
             </summary>
             <div class="bas-section-body">
             <div class="bas-alloc-toolbar">
@@ -12957,8 +12965,6 @@
     const esalesCount = allRows.filter((r) => r.source === "E-Sales").length;
     const hi = allRows.filter((r) => (r.matchScore || 0) >= 80).length;
 
-    const rtlRaw = extractRtlColorStock(slots.rtl.rows || []);
-    const esalesRaw = extractEsalesColorStock(slots.central.rows || []);
     const countUsage = (list) => {
       const map = new Map();
       let filled = 0;
@@ -12976,8 +12982,8 @@
         top: top ? `${top[0]} (${top[1]})` : "",
       };
     };
-    const rtlUsage = countUsage(rtlRaw);
-    const esalesUsage = countUsage(esalesRaw);
+    const rtlUsage = countUsage(allRows.filter((r) => r.source === "RTL"));
+    const esalesUsage = countUsage(allRows.filter((r) => r.source === "E-Sales"));
 
     const periodSub = live && live.rangeLabel
       ? live.rangeLabel
@@ -12985,7 +12991,7 @@
 
     const headHint = section.querySelector(".bas-section-head .hint");
     if (headHint) {
-      headHint.textContent = `RTL Col L status · age J · usage K · loc Q · E-Sales usage K · age L · color pairs · ${periodSub}`;
+      headHint.textContent = `Paired colors · RTL then E-Sales · ${periodSub}`;
     }
 
     const kpiEl = $("#bas-alloc-kpis");
@@ -13001,16 +13007,16 @@
           label: "RTL Usage",
           val: formatNumber(rtlUsage.filled),
           sub: rtlUsage.top
-            ? `Col K · ${rtlUsage.filled}/${rtlUsage.total} · top ${rtlUsage.top}`
-            : `Col K from RTL raw · ${formatNumber(rtlUsage.total)} rows`,
+            ? `Matched RTL · Col K · ${rtlUsage.top}`
+            : "Col K on matched RTL VINs",
           cls: rtlUsage.filled ? "ok" : "",
         },
         {
           label: "E-Sales Usage",
           val: formatNumber(esalesUsage.filled),
           sub: esalesUsage.top
-            ? `Col K · ${esalesUsage.filled}/${esalesUsage.total} · top ${esalesUsage.top}`
-            : `Col K from E-Sales raw · ${formatNumber(esalesUsage.total)} rows`,
+            ? `Matched E-Sales · Col K · ${esalesUsage.top}`
+            : "Col K on matched E-Sales VINs",
           cls: esalesUsage.filled ? "ok" : "",
         },
         { label: "In period", val: formatNumber(inPeriod), sub: `${formatNumber(outside)} outside · ${formatNumber(na)} NA`, cls: inPeriod ? "ok" : "" },

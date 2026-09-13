@@ -621,12 +621,16 @@ body.live-app {
 /* Allocation “All / Confirmed / Matched” tables — full height, page scrolls */
 .live-app.toyota-theme .bas-section-all .bas-table-wrap,
 .live-app.toyota-theme .bas-section-conf .bas-table-wrap,
-.live-app.toyota-theme .bas-section-alloc .bas-table-wrap,
 .live-app.toyota-theme #bas-table.bas-table-wrap,
-.live-app.toyota-theme #bas-conf-table.bas-table-wrap,
-.live-app.toyota-theme #bas-alloc-table.bas-table-wrap {
+.live-app.toyota-theme #bas-conf-table.bas-table-wrap {
   max-height: none !important;
   overflow: visible !important;
+}
+.live-app.toyota-theme .bas-section-alloc .bas-table-wrap,
+.live-app.toyota-theme #bas-alloc-table.bas-table-wrap {
+  max-height: none !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
 }
 
 .live-app.toyota-theme .bas-section-card {

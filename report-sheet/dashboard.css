@@ -4491,6 +4491,10 @@ body.admin-page #panel-allocation:not([hidden]) {
 .bas-kpi-row-compact {
   margin: 4px 0 14px;
 }
+#bas-alloc-kpis.bo-kpis,
+#bas-alloc-kpis.bas-kpi-row {
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+}
 
 .bas-dash .bo-kpi {
   background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
@@ -4552,6 +4556,18 @@ details.bas-section-card > summary.bas-section-head {
   margin: 0;
   user-select: none;
   border-bottom: 0;
+  display: block;
+}
+.bas-section-head-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.bas-section-head-inner .pbi-viz-head {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 details.bas-section-card > summary.bas-section-head:hover {
   background: linear-gradient(180deg, #eef6fc, #f8fbfe);
@@ -4603,11 +4619,14 @@ details.bas-section-card[open] > summary .bas-fold-chev {
 
 .bas-section-head .pbi-viz-head .hint {
   display: block;
-  max-width: 56ch;
+  max-width: none;
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.4;
   color: var(--muted);
+}
+details.bas-section-card > summary .pbi-viz-head h2 {
+  margin: 0 !important;
 }
 
 .bas-table-filters {
@@ -4733,6 +4752,9 @@ details.bas-section-card[open] > summary .bas-fold-chev {
   max-width: 320px;
 }
 
+.bas-alloc-table {
+  min-width: 1180px;
+}
 .bas-alloc-table .bas-vin {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 0.78rem;
@@ -4776,12 +4798,16 @@ details.bas-section-card[open] > summary .bas-fold-chev {
 /* Allocation detail tables: grow with content so page scroll reaches every row */
 .bas-section-all .bas-table-wrap,
 .bas-section-conf .bas-table-wrap,
-.bas-section-alloc .bas-table-wrap,
 #bas-table.bas-table-wrap,
-#bas-conf-table.bas-table-wrap,
-#bas-alloc-table.bas-table-wrap {
+#bas-conf-table.bas-table-wrap {
   max-height: none;
   overflow: visible;
+}
+.bas-section-alloc .bas-table-wrap,
+#bas-alloc-table.bas-table-wrap {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .bas-table-wrap .foot {
@@ -5380,7 +5406,8 @@ details.bas-section-card[open] > summary .bas-fold-chev {
 }
 
 @media (max-width: 720px) {
-  .bas-section-head {
+  .bas-section-head,
+  .bas-section-head-inner {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 10px;
