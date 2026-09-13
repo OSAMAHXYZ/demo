@@ -542,7 +542,7 @@
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
-            <li>Upload slot <b>1 · Back Order</b></li>
+            <li>Upload slot <b>1 · Back Order</b> · first worksheet only (back orders 7022)</li>
             <li>Click <b>Push to live</b></li>
             <li>Return here and click <b>Refresh</b></li>
           </ol>
@@ -1408,7 +1408,7 @@
   const MAX_ROWS = 4000;
 
   const SLOT_DEFS = [
-    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "First sheet only (no Fleet / 7022)" },
+    { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "First worksheet only · back orders 7022" },
     { id: "rtl", n: 2, title: "RTL Stock", ar: "مخزون التجزئة", blurb: "Retail available stock" },
     { id: "central", n: 3, title: "Stock E-Sales", ar: "مخزون المبيعات الإلكترونية", blurb: "E-Sales / central stock · fallback after RTL for matched vehicles" },
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
@@ -2251,13 +2251,38 @@
     return toNumber(v) > 0;
   }
 
-  async function readFileToWorkbook(file) {
+  async function readFileToWorkbook(file, opts) {
     const buffer = await file.arrayBuffer();
     if (detectFileType(file) === "csv") {
       const text = new TextDecoder("utf-8").decode(buffer);
-      return XLSX.read(text, { type: "string", FS: ",", cellDates: true });
+      return isolateWorkbookFirstSheet(
+        XLSX.read(text, Object.assign(xlsxReadOpts("string", opts), { FS: "," })),
+        opts
+      );
     }
-    return XLSX.read(buffer, { type: "array", cellDates: true });
+    return isolateWorkbookFirstSheet(
+      XLSX.read(buffer, xlsxReadOpts("array", opts)),
+      opts
+    );
+  }
+
+  function xlsxReadOpts(type, opts) {
+    const readOpts = { type, cellDates: true };
+    if (opts && opts.firstSheetOnly) readOpts.sheets = 0;
+    return readOpts;
+  }
+
+  /** Drop every worksheet after tab 1 so later BO/Fleet sheets cannot be read or merged. */
+  function isolateWorkbookFirstSheet(workbook, opts) {
+    if (!workbook || !(opts && opts.firstSheetOnly)) return workbook;
+    const names = workbook.SheetNames || [];
+    if (names.length <= 1) return workbook;
+    const keep = names[0];
+    names.slice(1).forEach((name) => {
+      try { delete workbook.Sheets[name]; } catch (_) { /* ignore */ }
+    });
+    workbook.SheetNames = keep ? [keep] : [];
+    return workbook;
   }
 
   function expandSheetRange(sheet, minLastColLetter) {
@@ -2490,17 +2515,18 @@
   }
 
   /**
-   * Back Order Excel for BO Dashboard:
-   * Always read sheet 1 only (same sheetRows mapping).
-   * Never merge Fleet Back Orders / 7022 or any later tabs.
+   * Back Order Excel for BO Dashboard and every other BO consumer:
+   * Read worksheet 1 only (typically named "back orders 7022").
+   * Do not import, merge, reference, or calculate from any later tab.
    */
   function backorderRows(workbook) {
+    isolateWorkbookFirstSheet(workbook, { firstSheetOnly: true });
     const names = workbook.SheetNames || [];
     if (!names.length) return [];
     const sheetName = names[0];
     const rows = sheetRows(workbook, sheetName);
     if (typeof console !== "undefined" && console.info) {
-      console.info("[BO sheet]", sheetName, "rows:", rows.length, "(first sheet only · Fleet/7022 tabs ignored)");
+      console.info("[BO sheet]", sheetName, "rows:", rows.length, "(first worksheet only)");
     }
     return rows;
   }
@@ -3751,13 +3777,19 @@
     }
   }
 
-  function bufferToWorkbook(name, buffer) {
+  function bufferToWorkbook(name, buffer, opts) {
     const lower = String(name || "").toLowerCase();
     if (lower.endsWith(".csv")) {
       const text = new TextDecoder("utf-8").decode(buffer);
-      return XLSX.read(text, { type: "string", FS: ",", cellDates: true });
+      return isolateWorkbookFirstSheet(
+        XLSX.read(text, Object.assign(xlsxReadOpts("string", opts), { FS: "," })),
+        opts
+      );
     }
-    return XLSX.read(buffer, { type: "array", cellDates: true });
+    return isolateWorkbookFirstSheet(
+      XLSX.read(buffer, xlsxReadOpts("array", opts)),
+      opts
+    );
   }
 
   async function hydrateSlotsFromAdmin(opts) {
@@ -3799,12 +3831,13 @@
       for (const d of SLOT_DEFS) {
         const f = payload.files[d.id];
         if (!f || !f.buffer) continue;
-        const wb = bufferToWorkbook(f.name, f.buffer);
+        const wb = bufferToWorkbook(f.name, f.buffer, { firstSheetOnly: d.id === "backorder" });
         const rows = rowsForSlot(d.id, wb);
         const slot = {
           file: { name: f.name, size: f.size || f.buffer.byteLength },
           rows,
           name: f.name,
+          sheet: d.id === "backorder" ? ((wb.SheetNames || [])[0] || "") : "",
         };
         if (d.id === "central") {
           slot.reservedRows = esalesReservedStockRows(wb);
@@ -11790,7 +11823,8 @@
       const rawN = (slots.backorder.rows || []).length;
       const mappedN = all.length;
       const stamp = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
-      updated.textContent = `${stamp} · ${formatNumber(mappedN)} BO` + (rawN !== mappedN ? ` (${formatNumber(rawN)} file rows)` : "");
+      const sheet = slots.backorder.sheet ? ` · ${slots.backorder.sheet}` : " · first worksheet";
+      updated.textContent = `${stamp} · ${formatNumber(mappedN)} BO${sheet}` + (rawN !== mappedN ? ` (${formatNumber(rawN)} file rows)` : "");
     }
     const rangeEl = $("#bo-date-range");
     if (rangeEl) {
