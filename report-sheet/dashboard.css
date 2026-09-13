@@ -4513,7 +4513,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   padding: 18px 18px 14px;
   border: 1px solid #d8e2ec;
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible; /* do not clip scrollable tables inside */
 }
 
 .bas-section-head {
@@ -4714,8 +4714,22 @@ body.admin-page #panel-allocation:not([hidden]) {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: auto;
-  max-height: min(520px, 62vh);
+  max-height: min(72vh, 820px);
   background: #fff;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Allocation detail tables: grow with content so page scroll reaches every row */
+.bas-section-all > .bas-table-wrap,
+.bas-section-conf > .bas-table-wrap,
+.bas-section-alloc > .bas-table-wrap,
+#bas-table.bas-table-wrap,
+#bas-conf-table.bas-table-wrap,
+#bas-alloc-table.bas-table-wrap {
+  max-height: none;
+  overflow: visible;
 }
 
 .bas-table-wrap .foot {

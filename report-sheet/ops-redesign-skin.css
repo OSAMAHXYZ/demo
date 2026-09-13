@@ -605,7 +605,7 @@ body.live-app {
 .live-app.toyota-theme .acc-remain-table-wrap {
   overflow: auto !important;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
 }
 
 .live-app.toyota-theme .sr-schedule .xl-table-wrap.sr-sched-wrap {
@@ -615,7 +615,26 @@ body.live-app {
 .live-app.toyota-theme .table-wrap,
 .live-app.toyota-theme .bas-table-wrap,
 .live-app.toyota-theme .icc-table-wrap {
-  max-height: min(70vh, 720px);
+  max-height: min(72vh, 820px);
+}
+
+/* Allocation “All / Confirmed / Matched” tables — full height, page scrolls */
+.live-app.toyota-theme .bas-section-all > .bas-table-wrap,
+.live-app.toyota-theme .bas-section-conf > .bas-table-wrap,
+.live-app.toyota-theme .bas-section-alloc > .bas-table-wrap,
+.live-app.toyota-theme #bas-table.bas-table-wrap,
+.live-app.toyota-theme #bas-conf-table.bas-table-wrap,
+.live-app.toyota-theme #bas-alloc-table.bas-table-wrap {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.live-app.toyota-theme .bas-section-card {
+  overflow: visible !important;
+}
+
+.live-app.toyota-theme .act-details-block {
+  overflow: visible !important;
 }
 
 .live-app.toyota-theme .sr-fold {
