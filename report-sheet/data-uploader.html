@@ -6,32 +6,33 @@
   <title>Data Uploader — RTL Daily Archive</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
-      --bg: #f4f6f8;
-      --ink: #111827;
-      --muted: #64748b;
-      --line: #e5eaf1;
+      --bg: #f3f1ec;
+      --ink: #18191c;
+      --muted: #77736c;
+      --line: #e5e1da;
       --card: #ffffff;
       --toyota: #eb0a1e;
       --ok: #047857;
       --warn: #c2410c;
       --info: #1d4ed8;
+      --ops-shadow: 0 12px 38px rgba(32, 31, 28, 0.045);
+      --ops-radius: 22px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: Outfit, system-ui, sans-serif;
+      font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(1200px 500px at 10% -10%, rgba(235, 10, 30, 0.08), transparent 55%),
-        linear-gradient(180deg, #fafbfc 0%, var(--bg) 40%, #eef2f6 100%);
+      background: var(--bg);
+      text-rendering: optimizeLegibility;
     }
     .wrap {
-      max-width: 1440px;
+      max-width: 1540px;
       margin: 0 auto;
       padding: 28px 20px 48px;
     }
@@ -55,7 +56,7 @@
     }
     .brand strong {
       display: block;
-      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-family: "Manrope", "IBM Plex Sans Arabic", sans-serif;
       font-size: 1.35rem;
       letter-spacing: -0.02em;
     }
@@ -64,19 +65,20 @@
     .nav-links a {
       text-decoration: none;
       color: var(--ink);
-      border: 1px solid var(--line);
+      border: 1px solid rgba(0,0,0,.08);
       background: #fff;
-      padding: 0.45rem 0.8rem;
-      border-radius: 10px;
+      padding: 0.55rem 0.9rem;
+      border-radius: 12px;
       font-size: 0.85rem;
       font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
     }
     .note {
       margin: 0 0 18px;
       padding: 12px 14px;
-      border-radius: 12px;
-      background: #fff7ed;
-      border: 1px solid #fed7aa;
+      border-radius: 14px;
+      background: #fff7f7;
+      border: 1px solid rgba(235, 10, 30, 0.18);
       color: #9a3412;
       font-size: 0.9rem;
       line-height: 1.45;
@@ -84,10 +86,10 @@
     .date-banner {
       margin: 0 0 18px;
       padding: 14px 16px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-      border: 2px solid #3b82f6;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,.065);
+      box-shadow: var(--ops-shadow);
     }
     .date-banner-content {
       display: flex;
@@ -97,13 +99,13 @@
     }
     .date-banner-label {
       font-size: 0.95rem;
-      color: #1e40af;
+      color: var(--muted);
       font-weight: 600;
     }
     .date-banner-date {
-      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-family: "Manrope", sans-serif;
       font-size: 1.25rem;
-      color: #1e3a8a;
+      color: var(--ink);
       letter-spacing: -0.01em;
     }
     .grid {
@@ -116,15 +118,16 @@
     }
     .card {
       background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,.065);
+      border-radius: var(--ops-radius);
       padding: 18px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+      box-shadow: var(--ops-shadow);
     }
     .card h2 {
       margin: 0 0 6px;
-      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-family: "Manrope", "IBM Plex Sans Arabic", sans-serif;
       font-size: 1.1rem;
+      letter-spacing: -0.02em;
     }
     .card p.sub {
       margin: 0 0 14px;
@@ -145,13 +148,19 @@
     input[type="file"],
     input[type="date"],
     input[type="search"],
+    input[type="month"],
     select {
       width: 100%;
       padding: 0.65rem 0.75rem;
-      border: 1px solid #d7dee8;
-      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 12px;
       font: inherit;
       background: #fff;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: rgba(235, 10, 30, 0.35);
+      box-shadow: 0 0 0 4px rgba(235, 10, 30, 0.06);
     }
     .row {
       display: grid;
@@ -167,17 +176,19 @@
     button {
       font: inherit;
       font-weight: 700;
-      border-radius: 10px;
-      border: 1px solid var(--line);
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,.08);
       background: #fff;
       color: var(--ink);
       padding: 0.6rem 0.95rem;
       cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
     }
     button.primary {
       background: var(--toyota);
       border-color: var(--toyota);
       color: #fff;
+      box-shadow: 0 10px 28px rgba(235, 10, 30, 0.22);
     }
     button:disabled {
       opacity: 0.55;
@@ -210,7 +221,7 @@
     .kpi .lab { font-size: 0.72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
     .kpi .val {
       margin-top: 4px;
-      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-family: "Manrope", "IBM Plex Sans Arabic", sans-serif;
       font-size: 1.35rem;
       font-weight: 700;
     }
@@ -284,7 +295,7 @@
       border-radius: 12px;
       background: #fafbfc;
     }
-    .snap-list strong { font-family: "Space Grotesk", Outfit, sans-serif; }
+    .snap-list strong { font-family: "Manrope", "IBM Plex Sans Arabic", sans-serif; }
     .snap-list .meta { color: var(--muted); font-size: 0.8rem; }
     .snap-list li.snap-active {
       border-color: #86efac;
@@ -421,7 +432,7 @@
       vertical-align: middle;
     }
     .day-box-num {
-      font-family: "Space Grotesk", Outfit, sans-serif;
+      font-family: "Manrope", "IBM Plex Sans Arabic", sans-serif;
       font-size: 1.35rem;
       font-weight: 700;
       letter-spacing: -0.03em;
