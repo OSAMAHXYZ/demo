@@ -428,7 +428,7 @@
   border: 1px solid rgba(0, 0, 0, 0.065) !important;
   border-radius: 18px !important;
   background: #fff !important;
-  overflow: hidden;
+  overflow: auto; /* keep scroll — hidden was clipping Schedule / data tables */
   box-shadow: var(--ops-shadow) !important;
 }
 
@@ -568,4 +568,69 @@
 }
 .live-app.toyota-theme.theme-dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.18);
+}
+
+/* ─── Flexible scroll — data, Schedule, charts ─── */
+html:has(body.live-app),
+body.live-app {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: auto;
+  min-height: 100%;
+}
+
+.live-app.toyota-theme .app-frame {
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
+}
+
+.live-app.toyota-theme .app-main,
+.live-app.toyota-theme .app-content,
+.live-app.toyota-theme #dashboard.show {
+  overflow: visible;
+  min-height: 0;
+}
+
+.live-app.toyota-theme .table-wrap,
+.live-app.toyota-theme .bas-table-wrap,
+.live-app.toyota-theme .icc-table-wrap,
+.live-app.toyota-theme .xl-table-wrap,
+.live-app.toyota-theme .sr-table-scroll,
+.live-app.toyota-theme .sr-sched-wrap,
+.live-app.toyota-theme .bas-month-table-wrap,
+.live-app.toyota-theme .bo-product-table-wrap,
+.live-app.toyota-theme .act-alert-table,
+.live-app.toyota-theme .pbi-wide-table-wrap,
+.live-app.toyota-theme .acc-remain-table-wrap {
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.live-app.toyota-theme .sr-schedule .xl-table-wrap.sr-sched-wrap {
+  max-height: min(78vh, 880px) !important;
+}
+
+.live-app.toyota-theme .table-wrap,
+.live-app.toyota-theme .bas-table-wrap,
+.live-app.toyota-theme .icc-table-wrap {
+  max-height: min(70vh, 720px);
+}
+
+.live-app.toyota-theme .sr-fold {
+  overflow: visible !important;
+}
+
+.live-app.toyota-theme .sr-sched-table-card {
+  overflow: visible !important;
+}
+
+.live-app.toyota-theme .chart-scroll.is-scroll,
+.live-app.toyota-theme #bo-dash.bo-dash--fit .chart-scroll.is-scroll,
+.live-app.toyota-theme .sr-panel .chart-scroll.is-scroll {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  max-height: min(70vh, 720px) !important;
+  -webkit-overflow-scrolling: touch;
 }

@@ -2077,8 +2077,14 @@ body.pbi-wide-open {
 #bo-dash.bo-dash--fit .chart-scroll {
   flex: 0 0 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 8px 12px;
+}
+
+#bo-dash.bo-dash--fit .chart-scroll.is-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(70vh, 720px);
 }
 
 #bo-dash.bo-dash--fit .bo-status-card {
@@ -8800,7 +8806,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   border-radius: 12px;
   border: 1px solid #e8eef5;
   background: #f8fafc;
-  overflow: hidden;
+  overflow: visible;
 }
 .sr-fold-summary {
   list-style: none;
@@ -9206,10 +9212,12 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 800;
 }
 .sr-schedule .xl-table-wrap.sr-sched-wrap {
-  max-height: min(62vh, 640px);
+  max-height: min(78vh, 880px);
+  overflow: auto;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  -webkit-overflow-scrolling: touch;
 }
 .sr-sched-table th {
   background: #f1f5f9 !important;
