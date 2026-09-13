@@ -384,6 +384,64 @@ function mirrorRtlActiveDayFiles(snap, excelPath) {
   }
 }
 
+/**
+ * If index/snapshots were wiped on redeploy but by-day/*.xlsx mirrors remain
+ * (same durable folder as Admin live files), rebuild active days from those Excels.
+ */
+function rehydrateRtlFromByDayMirrors() {
+  ensureRtlDailyDirs();
+  const byDayDir = path.join(RTL_DAILY_DIR, 'by-day');
+  if (!fs.existsSync(byDayDir)) return { restored: 0 };
+  let names = [];
+  try {
+    names = fs.readdirSync(byDayDir);
+  } catch {
+    return { restored: 0 };
+  }
+  const index = loadRtlDailyIndex();
+  let restored = 0;
+  for (const name of names) {
+    const m = /^(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(String(name || ''));
+    if (!m) continue;
+    const dateKey = m[1];
+    if (!isValidRtlDateKey(dateKey)) continue;
+    const liveIndex = loadRtlDailyIndex();
+    const activeId = resolveRtlActiveIdForDay(dateKey, liveIndex);
+    if (activeId) {
+      const snapPath = rtlDailySnapshotPath(activeId);
+      if (snapPath && fs.existsSync(snapPath)) continue;
+    }
+    const xfp = rtlDailyByDayExcelPath(dateKey);
+    if (!xfp || !fs.existsSync(xfp)) continue;
+    let meta = null;
+    const metaFp = rtlDailyByDayMetaPath(dateKey);
+    if (metaFp && fs.existsSync(metaFp)) {
+      try {
+        meta = JSON.parse(fs.readFileSync(metaFp, 'utf8'));
+      } catch {
+        meta = null;
+      }
+    }
+    try {
+      const buf = fs.readFileSync(xfp);
+      const vehicles = scanRtlStockBuffer(buf);
+      if (!vehicles.length) continue;
+      persistRtlDailySnapshot({
+        dateKey,
+        vehicles,
+        fileName: (meta && meta.fileName) || `${dateKey}.xlsx`,
+        source: (meta && meta.source) || 'by-day-rehydrate',
+        excelBuffer: buf,
+        at: Number(meta && meta.at) || Date.now()
+      });
+      restored += 1;
+    } catch (err) {
+      console.error('[rtl-daily] by-day rehydrate failed', dateKey, err);
+    }
+  }
+  return { restored };
+}
+
 function normalizeDateKey(value) {
   const s = String(value || '').trim();
   if (DATE_KEY_RE.test(s)) return s;
@@ -3284,6 +3342,7 @@ app.post('/api/report-sheet/clear', (_req, res) => {
 app.get('/api/rtl-daily/meta', (_req, res) => {
   try {
     ensureRtlDayRollover();
+    const hydrated = rehydrateRtlFromByDayMirrors();
     const index = loadRtlDailyIndex();
     const activeByDay = index.activeByDay || {};
     const snapshots = listRtlSnapshotsNewestFirst().map((s) => ({
@@ -3295,7 +3354,9 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
       activeByDay,
       today: todayIsoRiyadh(),
       persistentRoot: PERSISTENT_ROOT,
-      archiveDir: RTL_DAILY_DIR
+      archiveDir: RTL_DAILY_DIR,
+      byDayDir: path.join(RTL_DAILY_DIR, 'by-day'),
+      rehydratedDays: Number(hydrated && hydrated.restored) || 0
     });
   } catch (err) {
     console.error('[rtl-daily/meta]', err);
@@ -3303,10 +3364,40 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
   }
 });
 
+/** Download the stable by-day Excel mirror (Admin-style durable file). */
+app.get('/api/rtl-daily/by-day/:date/excel', (req, res) => {
+  try {
+    const dateKey = normalizeDateKey(req.params.date);
+    if (!dateKey || !isValidRtlDateKey(dateKey)) {
+      return res.status(400).json({ error: 'Invalid date' });
+    }
+    const xfp = rtlDailyByDayExcelPath(dateKey);
+    if (!xfp || !fs.existsSync(xfp)) {
+      return res.status(404).json({ error: `No by-day Excel for ${dateKey}` });
+    }
+    let fileName = `${dateKey}.xlsx`;
+    const metaFp = rtlDailyByDayMetaPath(dateKey);
+    if (metaFp && fs.existsSync(metaFp)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaFp, 'utf8'));
+        if (meta && meta.fileName) fileName = String(meta.fileName);
+      } catch { /* ignore */ }
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(xfp);
+  } catch (err) {
+    console.error('[rtl-daily/by-day/excel]', err);
+    return res.status(500).json({ error: err.message || 'Download failed' });
+  }
+});
+
 /** One active RTL file per calendar day for a month (schedule day columns). */
 app.get('/api/rtl-daily/active-month', (req, res) => {
   try {
     ensureRtlDayRollover();
+    rehydrateRtlFromByDayMirrors();
     const month = String(req.query.month || '').trim();
     const pack = loadRtlActiveMonth(month);
     if (!pack) {
@@ -5542,6 +5633,10 @@ server.listen(PORT, () => {
   migrateLegacyRtlDailyDir();
   try {
     loadRtlDailyIndex();
+    const hydrated = rehydrateRtlFromByDayMirrors();
+    if (hydrated && hydrated.restored) {
+      console.log(`[rtl-daily] rehydrated ${hydrated.restored} day(s) from by-day Excel mirrors`);
+    }
   } catch (err) {
     console.error('[rtl-daily] index rebuild failed', err);
   }
@@ -5550,4 +5645,5 @@ server.listen(PORT, () => {
   console.log(`[delivery] persistent root: ${PERSISTENT_ROOT}`);
   console.log(`[delivery] data file: ${DATA_FILE}`);
   console.log(`[delivery] RTL archive (append-only): ${RTL_DAILY_DIR}`);
+  console.log(`[delivery] RTL by-day mirrors: ${path.join(RTL_DAILY_DIR, 'by-day')}`);
 });

@@ -482,7 +482,9 @@
       <b>Day boxes:</b> Each day is its <b>own RTL file</b>. Drop Day 10’s extract on box 10, Day 12 on box 12, etc.
       Only <b>Col J age 0</b> (or blank) from that file counts for that day’s Allocation <b>Tot</b> / <b>RES</b>.
       <br/><br/>
-      Saves go to the <b>same server archive as Admin Push</b> (<code>report-sheet-data/rtl-daily</code>) — Excel + VIN snapshot stay on disk across code deploys when the Railway volume is mounted (<code>PERSISTENT_DATA_DIR=/data</code>).
+      Saves go to the <b>same server archive as Admin Push</b> (<code>report-sheet-data/rtl-daily</code> + stable <code>by-day/YYYY-MM-DD.xlsx</code>).
+      This browser also keeps a backup (like Admin), so after a code deploy you can click <b>Restore browser backups</b> instead of re-dropping every day.
+      On Railway, mount a volume and set <code>PERSISTENT_DATA_DIR=/data</code> so day files survive redeploys.
       <br/><br/>
       <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — past days stay on their day boxes.
       If a green day shows <b>0 age 0</b>, that file has no age-0 rows — re-drop that day’s RTL extract.
@@ -495,6 +497,9 @@
         <div class="field">
           <label for="cal-month">Month</label>
           <input id="cal-month" type="month" />
+        </div>
+        <div class="actions" style="margin:0;align-items:flex-end">
+          <button type="button" id="btn-restore-browser" title="Re-upload day Excels saved in this browser after a server redeploy">Restore browser backups</button>
         </div>
         <div class="status" id="day-cal-status">Drop an RTL file onto a day box.</div>
       </div>
@@ -668,6 +673,9 @@
   const API_COMPARE = "/api/rtl-daily/compare";
   const API_DELETE = "/api/rtl-daily";
   const API_USE = "/api/rtl-daily/use";
+  const RTL_IDB_NAME = "toyota_rtl_daily_files_v1";
+  const RTL_IDB_STORE = "day_files";
+  const RTL_IDB_KEY = "by_date_v1";
 
   let scanned = [];
   let scannedFileName = "";
@@ -697,6 +705,88 @@
       binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
     }
     return btoa(binary);
+  }
+
+  function openRtlIdb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(RTL_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(RTL_IDB_STORE)) db.createObjectStore(RTL_IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
+    });
+  }
+
+  function idbGetRtlDays() {
+    return openRtlIdb().then(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(RTL_IDB_STORE, "readonly");
+          const req = tx.objectStore(RTL_IDB_STORE).get(RTL_IDB_KEY);
+          req.onsuccess = () => resolve(req.result && typeof req.result === "object" ? req.result : {});
+          req.onerror = () => reject(req.error);
+        })
+    );
+  }
+
+  function idbSetRtlDays(map) {
+    return openRtlIdb().then(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(RTL_IDB_STORE, "readwrite");
+          tx.objectStore(RTL_IDB_STORE).put(map || {}, RTL_IDB_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        })
+    );
+  }
+
+  /** Browser backup (same idea as Admin IndexedDB workbooks) so redeploys can restore. */
+  async function cacheDayFileInBrowser(dateKey, { fileName, buffer, count, age0, source }) {
+    if (!dateKey || !buffer) return;
+    try {
+      const all = await idbGetRtlDays();
+      all[dateKey] = {
+        fileName: fileName || `${dateKey}.xlsx`,
+        buffer,
+        count: Number(count) || 0,
+        age0: age0 != null ? Number(age0) : null,
+        source: source || "uploader",
+        at: Date.now(),
+      };
+      await idbSetRtlDays(all);
+    } catch (err) {
+      console.warn("[rtl-daily] browser cache failed", err);
+    }
+  }
+
+  async function restoreBrowserDayFilesToServer() {
+    const local = await idbGetRtlDays();
+    const dates = Object.keys(local || {}).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (!dates.length) return { restored: 0, skipped: 0 };
+    let restored = 0;
+    let skipped = 0;
+    for (const dateKey of dates.sort()) {
+      if (activeByDay[dateKey]) {
+        skipped += 1;
+        continue;
+      }
+      const pack = local[dateKey];
+      if (!pack || !pack.buffer) continue;
+      const blob = new Blob([pack.buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      await saveRtlToServer({
+        dateKey,
+        fileName: pack.fileName || `${dateKey}.xlsx`,
+        source: "uploader-browser-restore",
+        fileBlob: blob,
+      });
+      restored += 1;
+    }
+    return { restored, skipped };
   }
 
   function snapLabel(s) {
@@ -816,8 +906,11 @@
 
   async function saveRtlToServer({ dateKey, fileName, source, fileBlob, excelBase64, vehicles }) {
     // Prefer binary upload (same durability as Admin Push Excel on disk).
+    let saved = null;
+    let bufferForCache = null;
     if (fileBlob && (fileBlob instanceof Blob || fileBlob instanceof File) && fileBlob.size > 0) {
       const buf = await fileBlob.arrayBuffer();
+      bufferForCache = buf;
       const qs = new URLSearchParams({
         date: dateKey,
         fileName: fileName || "rtl.xlsx",
@@ -833,25 +926,42 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText);
-      return data;
+      saved = data;
+    } else {
+      if (!excelBase64) {
+        throw new Error("Excel file required — drop/select the RTL file again so it is stored on the server.");
+      }
+      const res = await fetch(API_SAVE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateKey,
+          fileName: fileName || "rtl.xlsx",
+          vehicles: vehicles || [],
+          excelBase64,
+          source: source || "uploader",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      saved = data;
+      try {
+        const bin = atob(excelBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        bufferForCache = bytes.buffer;
+      } catch { /* ignore */ }
     }
-    if (!excelBase64) {
-      throw new Error("Excel file required — drop/select the RTL file again so it is stored on the server.");
-    }
-    const res = await fetch(API_SAVE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: dateKey,
-        fileName: fileName || "rtl.xlsx",
-        vehicles: vehicles || [],
-        excelBase64,
+    if (bufferForCache) {
+      await cacheDayFileInBrowser(dateKey, {
+        fileName: fileName || (saved && saved.fileName) || "rtl.xlsx",
+        buffer: bufferForCache,
+        count: saved && saved.count,
+        age0: saved && saved.age0,
         source: source || "uploader",
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    return data;
+      });
+    }
+    return saved;
   }
 
   async function ingestRtlFileForDay(file, dateKey, { autoSave = true } = {}) {
@@ -1248,7 +1358,7 @@
     }
   }
 
-  async function loadMeta() {
+  async function loadMeta({ autoRestore = true } = {}) {
     setStatus($("#list-status"), "Loading…");
     try {
       const res = await fetch(API_META, { cache: "no-store" });
@@ -1256,6 +1366,46 @@
       const data = await res.json();
       snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
       activeByDay = data.activeByDay && typeof data.activeByDay === "object" ? data.activeByDay : {};
+      let restoreNote = "";
+      if (Number(data.rehydratedDays) > 0) {
+        restoreNote = ` · reloaded ${data.rehydratedDays} day(s) from by-day Excel`;
+      }
+      if (autoRestore) {
+        try {
+          const r = await restoreBrowserDayFilesToServer();
+          if (r.restored > 0) {
+            restoreNote += ` · restored ${r.restored} from this browser`;
+            const res2 = await fetch(API_META, { cache: "no-store" });
+            if (res2.ok) {
+              const data2 = await res2.json();
+              snapshots = Array.isArray(data2.snapshots) ? data2.snapshots : snapshots;
+              activeByDay = data2.activeByDay && typeof data2.activeByDay === "object" ? data2.activeByDay : activeByDay;
+            }
+          }
+        } catch (restoreErr) {
+          console.warn("[rtl-daily] browser restore", restoreErr);
+        }
+      }
+      // Keep browser backups in sync with server by-day Excels (incl. Admin Push → today).
+      try {
+        const local = await idbGetRtlDays();
+        for (const dateKey of Object.keys(activeByDay || {})) {
+          if (local[dateKey] && local[dateKey].buffer) continue;
+          const excelRes = await fetch(`/api/rtl-daily/by-day/${encodeURIComponent(dateKey)}/excel`, { cache: "no-store" });
+          if (!excelRes.ok) continue;
+          const buf = await excelRes.arrayBuffer();
+          const snap = snapshots.find((s) => (s.date || "") === dateKey && s.active) || snapshots.find((s) => (s.date || "") === dateKey);
+          await cacheDayFileInBrowser(dateKey, {
+            fileName: (snap && snap.fileName) || `${dateKey}.xlsx`,
+            buffer: buf,
+            count: snap && snap.count,
+            age0: snap && snap.age0,
+            source: "server-sync",
+          });
+        }
+      } catch (syncErr) {
+        console.warn("[rtl-daily] browser sync", syncErr);
+      }
       const activeDays = Object.keys(activeByDay).length;
       const cal = $("#cal-month");
       const mk = (cal && cal.value) || monthKeyFromDate(todayRiyadh());
@@ -1266,8 +1416,8 @@
       setStatus(
         $("#list-status"),
         snapshots.length
-          ? `${snapshots.length} snapshot(s) · ${activeDays} active day(s) for schedule`
-          : "No snapshots yet"
+          ? `${snapshots.length} snapshot(s) · ${activeDays} active day(s) for schedule${restoreNote}`
+          : `No snapshots yet${restoreNote}`
       );
     } catch (err) {
       setStatus($("#list-status"), err.message || "Failed to load", "err");
@@ -1576,6 +1726,25 @@
   $("#snap-filter").addEventListener("input", renderSnapList);
 
   $("#btn-refresh").addEventListener("click", () => loadMeta());
+
+  $("#btn-restore-browser")?.addEventListener("click", async () => {
+    setDayCalStatus("Restoring day files from this browser…");
+    try {
+      // Force restore even if activeByDay already has entries? User asked restore — only missing days.
+      const r = await restoreBrowserDayFilesToServer();
+      await loadMeta({ autoRestore: false });
+      setDayCalStatus(
+        r.restored
+          ? `Restored ${r.restored} day file(s) to server${r.skipped ? ` · ${r.skipped} already on server` : ""}.`
+          : r.skipped
+            ? `Nothing to restore · ${r.skipped} day(s) already on server.`
+            : "No browser backups found yet — drop RTL on day boxes once to create them.",
+        r.restored ? "ok" : ""
+      );
+    } catch (err) {
+      setDayCalStatus(err.message || "Restore failed", "err");
+    }
+  });
 
   $("#snap-list").addEventListener("click", async (e) => {
     const delBtn = e.target.closest("[data-del]");
