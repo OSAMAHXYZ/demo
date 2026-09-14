@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260914rvnext"></script>
+  <script src="lib/bo-order-lookup.js?v=20260914rvspec"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260914resp2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914resp2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914resp2" />
@@ -15558,8 +15558,9 @@
     const totalPro = cards.reduce((s, c) => s + c.proforma, 0);
     const prevDel = cards.reduce((s, c) => s + c.prevDelivered, 0);
     const prevPro = cards.reduce((s, c) => s + c.prevProforma, 0);
-    const ratio = totalPro > 0 ? (totalDel / totalPro) * 100 : (totalDel > 0 ? 100 : null);
-    const prevRatio = prevPro > 0 ? (prevDel / prevPro) * 100 : null;
+    // (Delivered + Proforma) / Delivered
+    const ratio = totalDel > 0 ? ((totalDel + totalPro) / totalDel) * 100 : null;
+    const prevRatio = prevDel > 0 ? ((prevDel + prevPro) / prevDel) * 100 : null;
 
     return {
       live,
@@ -16277,6 +16278,10 @@
     return reserved.map((rec) => {
       const orderNumber = String(rec.orderNumber || "").trim();
       const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
+      const product = cellToString(rec.product).trim();
+      const suffix = normalizeProductSuffix(product, rec.suffix);
+      const ext = cellToString(rec.ext).trim();
+      const intc = cellToString(rec.int).trim();
       const status = resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup);
       const salesDetail = findSalesRawDetailForVin(vin);
       const rtlDetail = findRtlVinHit(rtlLookup, vin);
@@ -16284,34 +16289,59 @@
       let queue = null;
       let queueError = "";
       let orderDetails = null;
-      if (!orderNumber) {
-        queueError = "Missing order (Col F)";
+      let matchMethod = "";
+      if (!orderNumber && !vin && !(product && suffix && ext && intc)) {
+        queueError = "Missing order / VIN / product-suffix-colors";
       } else if (!engine) {
         queueError = hasBackOrder() ? "BO lookup unavailable" : "Push Back Order for queue";
       } else {
-        const cacheKey = orderNumber.toLowerCase();
+        const cacheKey = [
+          orderNumber.toLowerCase(),
+          (vin || "").toLowerCase(),
+          upperTrim(product),
+          upperTrim(suffix),
+          upperTrim(ext),
+          upperTrim(intc),
+        ].join("|");
         if (queueCache.has(cacheKey)) {
           const cached = queueCache.get(cacheKey);
           queue = cached && cached.queue ? cached.queue : null;
           orderDetails = cached || null;
+          matchMethod = cached && cached.matchMethod ? cached.matchMethod : "";
         } else {
           try {
-            const found = engine.lookupOrder(orderNumber);
+            const found = typeof engine.lookupReservedVehicle === "function"
+              ? engine.lookupReservedVehicle({
+                orderNumber,
+                product,
+                suffix,
+                exteriorColor: ext,
+                interiorColor: intc,
+                vin,
+              })
+              : (orderNumber ? engine.lookupOrder(orderNumber) : null);
             orderDetails = found || null;
             queue = found && found.queue ? found.queue : null;
+            matchMethod = found && found.matchMethod ? found.matchMethod : (found ? "order" : "");
           } catch (err) {
             queue = null;
             orderDetails = null;
+            matchMethod = "";
           }
           queueCache.set(cacheKey, orderDetails);
         }
-        if (!queue) queueError = "Order not found in BO file";
+        if (!queue) {
+          queueError = "No BO match for order / VIN / product+suffix+colors";
+        } else if (queue.specMatched && !queue.inBoFile && (queue.queueResult && queue.queueResult.position == null)) {
+          queueError = ""; // spec queue still shown (peer orders)
+        }
       }
 
       const qr = queue && queue.queueResult ? queue.queueResult : null;
       const nextInQueue = resolveReservedNextInQueue(queue);
       const pairQueues = queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : [];
       const values = queue && queue.values ? queue.values : null;
+      const inBoQueue = qr && qr.position != null;
 
       return {
         orderNumber,
@@ -16320,13 +16350,14 @@
         queue,
         orderDetails,
         queueError,
+        matchMethod,
         position: qr && qr.position != null ? qr.position : null,
         ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : null,
         totalQueue: qr && qr.totalQueueSize != null ? qr.totalQueueSize : null,
-        product: rec.product || (qr ? qr.product : "") || (values ? values.product : "") || "",
-        suffix: rec.suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
-        ext: rec.ext || (values ? values.extColor1 : "") || "",
-        int: rec.int || (values ? values.intColor1 : "") || "",
+        product: product || (qr ? qr.product : "") || (values ? values.product : "") || "",
+        suffix: suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
+        ext: ext || (values ? values.extColor1 : "") || "",
+        int: intc || (values ? values.intColor1 : "") || "",
         location: rec.location || "",
         searchArea: rec.searchArea || "",
         sheet: rec.sheet || slots.central.reservedSheet || "",
@@ -16335,6 +16366,8 @@
         salesDetail,
         rtlDetail,
         reservationDate: qr ? qr.reservationDate : (values ? values.reservationDate : ""),
+        inBoQueue: !!inBoQueue,
+        specQueueOnly: !!(queue && queue.specMatched && !inBoQueue),
       };
     });
   }
@@ -16345,7 +16378,7 @@
     const q = String(rvView.search || "").trim().toLowerCase();
     const st = String(rvView.status || "").trim();
     const rows = buildReservedVehicleRows();
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       if (st === "proforma" && !(r.status && r.status.hasProforma && r.status.label === "Proforma")) return false;
       if (st === "noproforma" && !(r.status && r.status.label === "No Proforma")) return false;
       if (st === "delivered" && !(r.status && r.status.label === "Delivered")) return false;
@@ -16359,6 +16392,16 @@
         r.status && r.status.label, r.status && r.status.detail,
       ].map((x) => String(x || "").toLowerCase()).join(" ");
       return hay.includes(q);
+    });
+    // In-queue BO matches first (by rank), then remaining reserved rows
+    return filtered.slice().sort((a, b) => {
+      const aQ = a.position != null ? 0 : 1;
+      const bQ = b.position != null ? 0 : 1;
+      if (aQ !== bQ) return aQ - bQ;
+      if (a.position != null && b.position != null && a.position !== b.position) {
+        return a.position - b.position;
+      }
+      return String(a.orderNumber || "").localeCompare(String(b.orderNumber || ""), undefined, { numeric: true });
     });
   }
 
@@ -16410,7 +16453,7 @@
     }
 
     if (hint) {
-      hint.textContent = `${sheetName} · Col F order · L VIN · I product · J suffix · M/N colors · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
+      hint.textContent = `${sheetName} · Col F/L/I/J/M/N → BO queue (order · VIN · product/suffix/colors) · ${allRows.length} reserved · ${withQueue} in queue first · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
     }
 
     if (kpis) {
@@ -16440,7 +16483,8 @@
 
     const body = rows.map((r) => {
       const nextSlots = [0, 1, 2].map((i) => r.nextInQueue[i] || null);
-      const nextHtml = r.position == null && !r.nextInQueue.length
+      const hasNext = r.nextInQueue && r.nextInQueue.length;
+      const nextHtml = r.position == null && !hasNext
         ? `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`
         : `<ol class="rv-next-list">${nextSlots.map((n, i) => {
             if (!n) {
@@ -16471,15 +16515,26 @@
           ).join("")}</div>`
         : "";
 
+      const matchNote = r.matchMethod === "vin" ? " · matched by VIN"
+        : r.matchMethod === "spec-order" ? " · matched by product/suffix/color"
+        : r.matchMethod === "spec" ? " · product/suffix/color queue"
+        : "";
+
       const posLabel = r.position != null
         ? `<span class="rv-pos">${escapeHtml(String(r.position))}</span>
-           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead</span>
+           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead${escapeHtml(matchNote)}</span>
            <div class="rv-muted">${escapeHtml(formatRvDate(r.reservationDate))}</div>`
-        : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
+        : (r.specQueueOnly && (r.totalQueue != null || hasNext)
+          ? `<span class="rv-muted">Not in BO file · ${escapeHtml(String(r.totalQueue ?? 0))} in same product/suffix/color queue${escapeHtml(matchNote)}</span>`
+          : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`);
 
       const colorLine = [r.ext, r.int].filter(Boolean).join(" / ");
+      const rowCls = [
+        r.status && r.status.label === "No Proforma" ? "rv-row-noprof" : "",
+        r.position != null ? "rv-row-inqueue" : "",
+      ].filter(Boolean).join(" ");
 
-      return `<tr class="${r.status && r.status.label === "No Proforma" ? "rv-row-noprof" : ""}">
+      return `<tr class="${escapeHtml(rowCls)}">
         <td>
           <strong class="mono">${escapeHtml(r.orderNumber || "—")}</strong>
           <div class="rv-muted">${escapeHtml(r.product || "—")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div>

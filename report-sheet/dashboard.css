@@ -9835,6 +9835,12 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .rv-table tbody tr.rv-row-noprof {
   background: #fff7f7;
 }
+.rv-table tbody tr.rv-row-inqueue {
+  background: #eff6ff;
+}
+.rv-table tbody tr.rv-row-inqueue td:first-child {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
 .rv-vin-btn {
   appearance: none;
   border: 0;

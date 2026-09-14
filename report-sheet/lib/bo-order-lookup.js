@@ -70,9 +70,20 @@ class BoOrderLookup {
     return prioritized.length > 0 ? prioritized : headers;
 }
 
+  normalizeOrderNeedle(orderNumber) {
+    let s = String(orderNumber ?? '').trim();
+    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
+    return this.normalizeText(s);
+  }
+
   findOrderRow(rows, orderNumber, headers) {
-    const needle = this.normalizeText(orderNumber);
+    const needle = this.normalizeOrderNeedle(orderNumber);
     if (!needle) return null;
+
+    const rowMatches = (raw) => {
+      const n = this.normalizeOrderNeedle(raw);
+      return n && (n === needle || n.replace(/^0+/, '') === needle.replace(/^0+/, ''));
+    };
 
     const backOrderCol = this.resolveColumn(headers, [
         /^back\s*order\s*number$/i,
@@ -82,7 +93,7 @@ class BoOrderLookup {
 
     if (backOrderCol) {
         for (const row of rows) {
-            if (this.normalizeText(row[backOrderCol]) === needle) {
+            if (rowMatches(row[backOrderCol])) {
                 return { row, matchedColumn: backOrderCol };
             }
         }
@@ -92,7 +103,7 @@ class BoOrderLookup {
     const candidateColumns = this.resolveOrderColumns(headers);
     for (const row of rows) {
         for (const columnName of candidateColumns) {
-            if (this.normalizeText(row[columnName]) === needle) {
+            if (rowMatches(row[columnName])) {
                 return { row, matchedColumn: columnName };
             }
         }
@@ -992,6 +1003,256 @@ class BoOrderLookup {
       queueSizeBeforeAdding: exact.matchingTotal,
       matchedRequirements: productInput + ' + ' + suffixInput + ' + ' + extInput + '/' + intInput,
       rule: 'Same Product+Suffix; exterior may appear in Exterior Color 1ΓÇô3; interior may appear in Interior Color 1ΓÇô3. * on a BO row matches any concrete color on that side (DMG/* counts in DMG/20 and DMG/30). Response is matching reservation count (not a rank).'
+    };
+  }
+
+  productKeyLoose(value) {
+    return this.normalizeText(value).replace(/^toyota\s+/, '').replace(/[^a-z0-9]/g, '');
+  }
+
+  suffixKeyLoose(value) {
+    return this.normalizeText(value).replace(/[^a-z0-9]/g, '');
+  }
+
+  colorKeyLoose(value) {
+    return this.normalizeText(value).replace(/[^a-z0-9*]/g, '');
+  }
+
+  extractVinFromRow(row, headers) {
+    const vinCol = this.resolveColumn(headers, [
+      /^vin$/i,
+      /^vin\s*(no|number|#)?$/i,
+      /vehicle\s*identification/i,
+      /chassis/i
+    ]);
+    const candidates = [];
+    if (vinCol) candidates.push(row[vinCol]);
+    if (Array.isArray(row.__cells)) {
+      row.__cells.forEach((c) => candidates.push(c));
+    }
+    Object.keys(row || {}).forEach((k) => {
+      if (String(k).startsWith('__')) return;
+      candidates.push(row[k]);
+    });
+    for (const c of candidates) {
+      const cleaned = String(c ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (cleaned.length >= 17) return cleaned.slice(0, 17);
+      if (cleaned.length >= 8 && cleaned.length <= 17) return cleaned;
+    }
+    return '';
+  }
+
+  vinsMatch(a, b) {
+    const x = String(a || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const y = String(b || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!x || !y) return false;
+    if (x === y) return true;
+    if (x.length >= 8 && y.length >= 8 && (x.endsWith(y) || y.endsWith(x) || x.slice(-8) === y.slice(-8))) {
+      return true;
+    }
+    return false;
+  }
+
+  findOrderRowByVin(vin) {
+    const needle = String(vin || '').trim();
+    if (!needle) return null;
+    const headers = this.headers;
+    const rows = this.rows;
+    for (const row of rows) {
+      const rowVin = this.extractVinFromRow(row, headers);
+      if (rowVin && this.vinsMatch(needle, rowVin)) {
+        const orderCol = this.resolveBackOrderColumn(headers, null)
+          || this.resolveColumn(headers, [/^back\s*order\s*number$/i, /order\s*number/i, /order\s*no/i]);
+        return { row, matchedColumn: orderCol || null, vin: rowVin };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build queue analysis from reserved vehicle attributes (product + suffix + ext/int),
+   * same rules as order-number lookup in bo-order-lookup.html.
+   */
+  buildQueueFromVehicleSpec({ product, suffix, exteriorColor, interiorColor, orderNumber }) {
+    const productInput = String(product || '').trim();
+    const suffixInput = String(suffix || '').trim();
+    const extInput = String(exteriorColor || '').trim();
+    const intInput = String(interiorColor || '').trim();
+    if (!productInput || !suffixInput || !extInput || !intInput) return null;
+
+    const headers = this.headers;
+    const rows = this.rows;
+    const productColumn = this.resolveColumn(headers, [/^product$/i, /product/i, /model/i, /description/i]);
+    const suffixColumn = this.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
+    const dateColumn = this.resolveReservationCreatedDateColumn(headers);
+    const orderColumn = this.resolveBackOrderColumn(headers, null);
+    const ext1 = this.resolvePriorityColumn(headers, 'ext', 1);
+    const int1 = this.resolvePriorityColumn(headers, 'int', 1);
+    const ext2 = this.resolvePriorityColumn(headers, 'ext', 2);
+    const int2 = this.resolvePriorityColumn(headers, 'int', 2);
+    const ext3 = this.resolvePriorityColumn(headers, 'ext', 3);
+    const int3 = this.resolvePriorityColumn(headers, 'int', 3);
+    if (!productColumn || !suffixColumn || !ext1 || !int1) return null;
+
+    const extCols = [ext1, ext2, ext3];
+    const intCols = [int1, int2, int3];
+    const allEntries = this.mergeOrderEntries(
+      rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols
+    );
+
+    const productNorm = this.productKeyLoose(productInput);
+    const suffixNorm = this.suffixKeyLoose(suffixInput);
+    const refPair = {
+      tier: 1,
+      exterior: extInput,
+      interior: intInput,
+      extNorm: this.normalizeText(extInput),
+      intNorm: this.normalizeText(intInput)
+    };
+
+    const queue = this.sortQueueEntries(
+      allEntries.filter((entry) => {
+        if (this.productKeyLoose(entry.product) !== productNorm) return false;
+        if (this.suffixKeyLoose(entry.suffix) !== suffixNorm) return false;
+        return this.entryMatchesRefPair(entry.pairs, refPair);
+      })
+    );
+
+    const orderNorm = this.normalizeOrderNeedle(orderNumber);
+    const posIdx = orderNorm
+      ? queue.findIndex((e) => e.orderNorm === orderNorm || this.normalizeOrderNeedle(e.orderNumber) === orderNorm)
+      : -1;
+    const position = posIdx >= 0 ? posIdx + 1 : null;
+
+    const pairQueues = this.buildPairQueuesForRefPair(
+      allEntries,
+      refPair,
+      this.normalizeText(productInput),
+      this.normalizeText(suffixInput),
+      productColumn,
+      suffixColumn,
+      orderNorm || ''
+    );
+
+    // When reserved order is not in BO, still surface the matching product/suffix/color queue
+    // (first 3 peers) so the tracker mirrors bo-order-lookup.html combo checks.
+    const nextFrom = position != null ? posIdx + 1 : 0;
+    const nextInQueue = queue.slice(nextFrom, nextFrom + 3).map((e, i) => ({
+      orderNumber: e.orderNumber,
+      reservationDate: e.reservationDateRaw,
+      product: e.product,
+      suffix: e.suffix,
+      queuePosition: (position != null ? posIdx + 2 + i : i + 1),
+      pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
+    }));
+
+    return {
+      columns: {
+        orderColumn,
+        productColumn,
+        suffixColumn,
+        dateColumn,
+        extColorPriority1: ext1,
+        interiorColorPriority1: int1,
+        extColorPriority2: ext2,
+        interiorColorPriority2: int2,
+        extColorPriority3: ext3,
+        interiorColorPriority3: int3
+      },
+      values: {
+        orderNumber: orderNumber || '',
+        product: productInput,
+        suffix: suffixInput,
+        reservationDate: '',
+        extColor1: extInput,
+        intColor1: intInput,
+        extColor2: '',
+        intColor2: '',
+        extColor3: '',
+        intColor3: ''
+      },
+      referencePairs: [{ exterior: extInput, interior: intInput, tier: 1 }],
+      pairQueues,
+      queueResult: {
+        position,
+        ordersAhead: position != null ? position - 1 : queue.length,
+        totalQueueSize: queue.length,
+        reservationDate: posIdx >= 0 ? queue[posIdx].reservationDateRaw : '',
+        product: productInput,
+        suffix: suffixInput
+      },
+      nextInQueue,
+      queuePreview: queue.slice(0, 100).map((e) => ({
+        orderNumber: e.orderNumber,
+        reservationDate: e.reservationDateRaw,
+        product: e.product,
+        suffix: e.suffix,
+        pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
+      })),
+      queueRule:
+        'Spec match: same Product + Suffix; Ext/Int from reserved Col M/N matched against BO Ext/Int 1–3 (* = any). Sorted by reservation date, then back order number.',
+      specMatched: true,
+      inBoFile: position != null
+    };
+  }
+
+  /**
+   * Reserved Vehicles Tracker lookup:
+   * 1) Back Order Number · 2) VIN · 3) Product + Suffix + Ext/Int (bo-order-lookup rules)
+   */
+  lookupReservedVehicle({ orderNumber, product, suffix, exteriorColor, interiorColor, vin } = {}) {
+    const headers = this.headers;
+    const rows = this.rows;
+
+    if (orderNumber) {
+      const byOrder = this.lookupOrder(orderNumber);
+      if (byOrder) return { ...byOrder, matchMethod: 'order' };
+    }
+
+    if (vin) {
+      const vinHit = this.findOrderRowByVin(vin);
+      if (vinHit && vinHit.row) {
+        const orderCol = vinHit.matchedColumn
+          || this.resolveBackOrderColumn(headers, null);
+        const on = orderCol ? String(vinHit.row[orderCol] ?? '').trim() : '';
+        if (on) {
+          const byVinOrder = this.lookupOrder(on);
+          if (byVinOrder) return { ...byVinOrder, matchMethod: 'vin', matchedVin: vinHit.vin };
+        }
+        const queueAnalysis = this.buildQueueAnalysis(rows, vinHit.row, headers, orderCol);
+        return {
+          found: true,
+          orderNumber: on || String(orderNumber || '').trim(),
+          matchedColumn: orderCol,
+          details: vinHit.row,
+          orderUnits: [],
+          orderUnitCount: 0,
+          queue: queueAnalysis,
+          matchMethod: 'vin',
+          matchedVin: vinHit.vin
+        };
+      }
+    }
+
+    const specQueue = this.buildQueueFromVehicleSpec({
+      product,
+      suffix,
+      exteriorColor,
+      interiorColor,
+      orderNumber
+    });
+    if (!specQueue) return null;
+
+    return {
+      found: !!specQueue.inBoFile,
+      orderNumber: String(orderNumber || '').trim(),
+      matchedColumn: null,
+      details: null,
+      orderUnits: [],
+      orderUnitCount: 0,
+      queue: specQueue,
+      matchMethod: specQueue.inBoFile ? 'spec-order' : 'spec',
+      specMatched: true
     };
   }
 
