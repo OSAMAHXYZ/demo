@@ -4,6 +4,57 @@
  * overflow containment, and breakpoint adaptation.
  */
 
+/* ─── Sidebar: stay full-height while page scrolls ───
+   overflow-x:hidden on ancestors breaks position:sticky, which left a
+   cut-off light strip under the sidebar when scrolling long pages. */
+@media (min-width: 901px) {
+  .live-app .app-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    align-self: auto;
+    z-index: 40;
+  }
+
+  .live-app .app-main {
+    margin-left: var(--sidebar-w);
+    width: auto;
+    max-width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .live-app.sidebar-collapsed .app-main {
+    margin-left: var(--sidebar-w-collapsed);
+  }
+
+  .live-app .app-frame {
+    /* Sidebar is fixed; main column owns horizontal space */
+    display: block;
+    min-height: 100vh;
+  }
+
+  .live-app .page-foot {
+    margin-left: 0;
+    padding-left: clamp(12px, 2vw, 24px);
+    padding-right: clamp(12px, 2vw, 24px);
+    text-align: left;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 900px) {
+  .live-app .app-main {
+    margin-left: 0;
+  }
+}
+
 /* ─── Global page containment ─── */
 html {
   overflow-x: hidden;
