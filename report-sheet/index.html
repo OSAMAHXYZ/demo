@@ -12310,10 +12310,20 @@
     return upperTrim(s);
   }
 
+  function boeIsEmployeeSalesType(row) {
+    const get = buildFieldGetter(row || {});
+    const paid = isPaid(get(row, "paid"));
+    const salesType = inferSalesType(get(row, "salesType"), paid);
+    if (salesType === "Employee") return true;
+    const raw = upperTrim(cellToString(get(row, "salesType")));
+    return /employee|emp|موظف|staff/.test(raw);
+  }
+
   function buildBoeDupMaps(rawRows) {
     const fMap = new Map();
     const tMap = new Map();
     (rawRows || []).forEach((r) => {
+      if (boeIsEmployeeSalesType(r)) return;
       const f = boeDupKey(cellByLetter(r, "F"));
       if (f) fMap.set(f, (fMap.get(f) || 0) + 1);
       const t = boeDupKey(cellByLetter(r, "T"));
@@ -12338,6 +12348,7 @@
 
   function buildBoErrorsPack() {
     const rawRows = slots.backorder.rows || [];
+    const checkedRows = rawRows.filter((r) => !boeIsEmployeeSalesType(r));
     const { fMap, tMap } = buildBoeDupMaps(rawRows);
     const BOE_ERROR_DEFS = getBoeErrorDefs();
     const rows = [];
@@ -12352,6 +12363,8 @@
       const paid = isPaid(get(r, "paid"));
       const salesTypeRaw = get(r, "salesType");
       const salesType = inferSalesType(salesTypeRaw, paid);
+      // Employee sales type is excluded from all BO Errors rules
+      if (salesType === "Employee" || boeIsEmployeeSalesType(r)) return;
       const colF = cellToString(cellByLetter(r, "F")).trim();
       const colH = cellToString(cellByLetter(r, "H")).trim();
       const colJ = cellToString(cellByLetter(r, "J")).trim();
@@ -12450,9 +12463,10 @@
       || String(a.boNumber).localeCompare(String(b.boNumber)));
 
     const totals = {
-      totalBos: rawRows.length,
+      totalBos: checkedRows.length,
+      skippedEmployee: Math.max(0, rawRows.length - checkedRows.length),
       errorRows: rows.length,
-      cleanRows: Math.max(0, rawRows.length - rows.length),
+      cleanRows: Math.max(0, checkedRows.length - rows.length),
       critical: rows.filter((r) => r.severity === "critical").length,
       warn: rows.filter((r) => r.severity === "warn").length,
       info: rows.filter((r) => r.severity === "info").length,
@@ -12616,7 +12630,7 @@
 
     const hint = $("#boe-live-hint");
     if (hint) {
-      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning`;
+      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning · Employee sales type ignored (${formatNumber(totals.skippedEmployee || 0)})`;
     }
 
     const kpis = $("#boe-kpis");
