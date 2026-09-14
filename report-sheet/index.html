@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914boerrors" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914rvsheets" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914boerrors" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -813,14 +813,15 @@
         <div class="bo-empty card" id="rv-empty">
           <h2>Reserved Vehicles Tracker</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Reads <b>E-Sales المحجوز</b> from Central Stock (order Col F · VIN Col L), ranks each order with the BO queue algorithm, and shows Sales Raw / RTL / E-Sales stock status per VIN.
+            Reads <b>E-Sales المحجوز</b> only from Stock E-Sales (order <b>Col F</b> · VIN <b>Col L</b> · product <b>Col I</b> · suffix <b>Col J</b> · ext <b>Col M</b> · int <b>Col N</b>),
+            ranks each order with the BO queue algorithm, shows the next 3 queue orders, and checks Sales Raw for proforma.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
-            <li>Upload slot <b>3 · Stock Central</b> (must include sheet <b>E-Sales المحجوز</b>)</li>
-            <li>Upload slot <b>1 · Back Order</b> for queue position</li>
-            <li>Upload slot <b>2 · RTL Stock</b> and/or All Retail available stock for VIN location fallback</li>
-            <li>Upload slot <b>4 · Sales Raw</b> for proforma / delivery dates (optional)</li>
+            <li>Upload slot <b>3 · Stock Central / E-Sales</b> (must include sheet <b>E-Sales المحجوز</b>)</li>
+            <li>Upload slot <b>1 · Back Order</b> for queue position (same logic as bo-order-lookup)</li>
+            <li>Upload slot <b>4 · Sales Raw</b> for Proforma (Col P) / Delivery (Col V)</li>
+            <li>Upload slot <b>2 · RTL Stock</b> optional for VIN location fallback</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
@@ -829,13 +830,24 @@
           <div class="rv-head">
             <div>
               <h2 class="rv-title">Reserved Vehicles Tracker</h2>
-              <p class="rv-sub" id="rv-live-hint">Central · المحجوز · BO queue · Sales Raw status</p>
+              <p class="rv-sub" id="rv-live-hint">E-Sales المحجوز · BO queue · Sales Raw proforma</p>
             </div>
             <div class="rv-head-actions">
-              <input id="rv-search" type="search" placeholder="Search order / VIN…" />
+              <select id="rv-filter-status" title="Filter VIN status">
+                <option value="">All statuses</option>
+                <option value="proforma">Has Proforma</option>
+                <option value="noproforma">No Proforma</option>
+                <option value="delivered">Delivered</option>
+                <option value="rtl">RTL Stock</option>
+                <option value="missing">Not found</option>
+                <option value="queue">In BO queue</option>
+                <option value="noqueue">Not in BO file</option>
+              </select>
+              <input id="rv-search" type="search" placeholder="Search order / VIN / product…" />
               <button type="button" id="rv-excel-btn" class="btn-primary">Export Excel</button>
             </div>
           </div>
+          <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
           <div class="bo-kpis" id="rv-kpis"></div>
           <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
           <p class="foot" id="rv-table-foot"></p>
@@ -2111,6 +2123,8 @@
       base.reservedSheet = "";
       base.displayRows = [];
       base.displaySheet = "";
+      base.sheetNames = [];
+      base.availableSheet = "";
     }
     if (s.id === "accessories") {
       base.vsndRows = [];
@@ -3443,15 +3457,16 @@
     return sheetRows(workbook, preferred);
   }
 
-  /** E-Sales reserved sheet — prefer named المحجوز, else workbook sheet 2 (index 1). Col F order · Col L VIN. */
+  /** E-Sales reserved sheet — only «E-Sales المحجوز» (order F · VIN L · product I · suffix J · ext M · int N). */
   function esalesReservedSheetName(workbook) {
     const names = workbook.SheetNames || [];
     if (!names.length) return null;
     return (
+      names.find((n) => /^e[\s_-]*sales\s*المحجوز$/i.test(String(n).trim())) ||
+      names.find((n) => /e[\s_-]*sales/i.test(n) && /المحجوز/i.test(n)) ||
       names.find((n) => /المحجوز/i.test(n) && /e[\s_-]*sales|esales/i.test(n)) ||
+      names.find((n) => /^المحجوز$/i.test(String(n).trim())) ||
       names.find((n) => /المحجوز/i.test(n)) ||
-      names.find((n) => /reserv/i.test(n) && /e[\s_-]*sales|esales|stock/i.test(n)) ||
-      names[1] ||
       null
     );
   }
@@ -3549,15 +3564,29 @@
     const sheetName = esalesReservedSheetName(workbook);
     if (!sheetName || !workbook.Sheets[sheetName]) return [];
     return sheetRows(workbook, sheetName).map((r, idx) => {
-      const orderNumber = cellToString(cellByLetter(r, "F")).trim();
-      const vin = extractVinValue(cellByLetter(r, "L")) || upperTrim(cellToString(cellByLetter(r, "L")));
-      const product = cellToString(cellByLetter(r, "B")).trim()
+      const orderRaw = cellByLetter(r, "F");
+      let orderNumber = cellToString(orderRaw).trim();
+      if (/^\d+\.0+$/.test(orderNumber)) orderNumber = orderNumber.replace(/\.0+$/, "");
+      const vin = extractVinValue(cellByLetter(r, "L"))
+        || upperTrim(cellToString(cellByLetter(r, "L")));
+      // Col I product · Col J suffix · Col M exterior · Col N interior
+      const product = cellToString(cellByLetter(r, "I")).trim()
+        || cellToString(cellByLetter(r, "B")).trim()
         || stockFieldByAlias(r, "product", [])
         || "";
       const suffix = normalizeProductSuffix(
         product,
-        cellToString(cellByLetter(r, "G")).trim() || stockFieldByAlias(r, "suffix", []) || ""
+        cellToString(cellByLetter(r, "J")).trim()
+          || cellToString(cellByLetter(r, "G")).trim()
+          || stockFieldByAlias(r, "suffix", [])
+          || ""
       );
+      const ext = cellToString(cellByLetter(r, "M")).trim()
+        || stockFieldByAlias(r, "ext", [])
+        || "";
+      const int = cellToString(cellByLetter(r, "N")).trim()
+        || stockFieldByAlias(r, "int", [])
+        || "";
       const location = cellToString(cellByLetter(r, "Q")).trim()
         || stockFieldByAlias(r, "allocatedLocation", [])
         || stockFieldByAlias(r, "location", [])
@@ -3572,6 +3601,8 @@
         vin,
         product,
         suffix,
+        ext,
+        int,
         location,
         searchArea,
         _raw: r,
@@ -3967,6 +3998,8 @@
         slots[d.id].reservedSheet = "";
         slots[d.id].displayRows = [];
         slots[d.id].displaySheet = "";
+        slots[d.id].sheetNames = [];
+        slots[d.id].availableSheet = "";
       }
       if (d.id === "accessories") {
         slots[d.id].vsndRows = [];
@@ -3999,6 +4032,14 @@
           slot.reservedSheet = esalesReservedSheetName(wb) || "";
           slot.displayRows = esalesDisplayStockRows(wb);
           slot.displaySheet = esalesDisplaySheetName(wb) || "";
+          slot.sheetNames = (wb.SheetNames || []).slice();
+          slot.availableSheet = (() => {
+            const names = wb.SheetNames || [];
+            return names.find((n) => /المخزون\s*المتاح/i.test(n))
+              || names.find((n) => /all\s*retail/i.test(n))
+              || names[2]
+              || "";
+          })();
         }
         if (d.id === "accessories") {
           slot.vsndRows = accessoriesVsndRows(wb);
@@ -15645,42 +15686,62 @@
   function resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup) {
     const key = extractVinValue(vin) || upperTrim(vin);
     if (!key) {
-      return { kind: "empty", label: "No VIN", detail: "—", cls: "na" };
+      return { kind: "empty", label: "No VIN", detail: "—", cls: "na", hasProforma: false };
     }
-    const sales = salesLookup.get(key);
+    let sales = salesLookup.get(key) || null;
+    if (!sales && salesLookup && salesLookup.size) {
+      const tail = key.length >= 8 ? key.slice(-8) : key;
+      for (const [sv, row] of salesLookup.entries()) {
+        if (sv === key || key.endsWith(sv) || sv.endsWith(key) || (tail && sv.slice(-8) === tail)) {
+          sales = row;
+          break;
+        }
+      }
+    }
     if (sales) {
-      const bits = [];
-      if (sales.proformaDate && parseDate(sales.proformaDate)) {
-        bits.push(`Proforma ${formatRvDate(sales.proformaDate)}`);
-      }
-      if (sales.deliveryDate && parseDate(sales.deliveryDate)) {
-        bits.push(`Delivery ${formatRvDate(sales.deliveryDate)}`);
-      }
-      if (bits.length) {
-        const cls = sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) ? "ok" : "warn";
+      const hasProforma = !!(sales.proformaDate && parseDate(sales.proformaDate));
+      const hasDelivery = !!(sales.delivered || (sales.deliveryDate && parseDate(sales.deliveryDate)) || sales.invoiced);
+      if (hasDelivery) {
         return {
           kind: "sales",
-          label: bits[0].startsWith("Delivery") ? "Delivered" : "Proforma",
-          detail: bits.join(" · "),
-          cls,
+          label: "Delivered",
+          detail: `Invoice/Delivery ${formatRvDate(sales.invoiceDate || sales.deliveryDate)}${hasProforma ? ` · Proforma ${formatRvDate(sales.proformaDate)}` : ""}`,
+          cls: "ok",
+          hasProforma,
+          proformaDate: sales.proformaDate,
+          deliveryDate: sales.deliveryDate || sales.invoiceDate,
+          salesman: sales.salesman || "",
+        };
+      }
+      if (hasProforma) {
+        return {
+          kind: "sales",
+          label: "Proforma",
+          detail: `Proforma ${formatRvDate(sales.proformaDate)}${sales.salesman ? ` · ${sales.salesman}` : ""}`,
+          cls: "warn",
+          hasProforma: true,
           proformaDate: sales.proformaDate,
           deliveryDate: sales.deliveryDate,
+          salesman: sales.salesman || "",
         };
       }
       return {
         kind: "sales",
-        label: "In Sales Raw",
-        detail: "No proforma / delivery date",
-        cls: "na",
+        label: "No Proforma",
+        detail: "In Sales Raw · no proforma / delivery date",
+        cls: "bad",
+        hasProforma: false,
+        salesman: sales.salesman || "",
       };
     }
-    const rtl = rtlLookup.get(key);
+    const rtl = rtlLookup.get(key) || findRtlVinHit(rtlLookup, key);
     if (rtl) {
       return {
         kind: "rtl",
         label: "RTL Stock",
-        detail: reservedStockStatusDetail(rtl, "In RTL stock"),
+        detail: reservedStockStatusDetail(rtl, "In RTL stock · no Sales Raw"),
         cls: "info",
+        hasProforma: false,
         secondaryStatus: cellToString(rtl.secondaryStatus).trim(),
         location: cellToString(rtl.location).trim(),
       };
@@ -15690,8 +15751,9 @@
       return {
         kind: "stock",
         label: "E-Sales stock",
-        detail: reservedStockStatusDetail(stock, "In available stock"),
+        detail: reservedStockStatusDetail(stock, "In available stock · no Sales Raw"),
         cls: "info",
+        hasProforma: false,
         secondaryStatus: cellToString(stock.secondaryStatus).trim(),
         location: cellToString(stock.location).trim(),
       };
@@ -15701,6 +15763,7 @@
       label: "Not found",
       detail: "Not in Sales Raw, RTL Stock, or All Retail available stock",
       cls: "na",
+      hasProforma: false,
     };
   }
 
@@ -15730,6 +15793,7 @@
 
       let queue = null;
       let queueError = "";
+      let orderDetails = null;
       if (!orderNumber) {
         queueError = "Missing order (Col F)";
       } else if (!engine) {
@@ -15737,15 +15801,19 @@
       } else {
         const cacheKey = orderNumber.toLowerCase();
         if (queueCache.has(cacheKey)) {
-          queue = queueCache.get(cacheKey);
+          const cached = queueCache.get(cacheKey);
+          queue = cached && cached.queue ? cached.queue : null;
+          orderDetails = cached || null;
         } else {
           try {
             const found = engine.lookupOrder(orderNumber);
+            orderDetails = found || null;
             queue = found && found.queue ? found.queue : null;
           } catch (err) {
             queue = null;
+            orderDetails = null;
           }
-          queueCache.set(cacheKey, queue);
+          queueCache.set(cacheKey, orderDetails);
         }
         if (!queue) queueError = "Order not found in BO file";
       }
@@ -15753,34 +15821,49 @@
       const qr = queue && queue.queueResult ? queue.queueResult : null;
       const nextInQueue = queue && Array.isArray(queue.nextInQueue) ? queue.nextInQueue : [];
       const pairQueues = queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : [];
+      const values = queue && queue.values ? queue.values : null;
 
       return {
         orderNumber,
         vin,
         status,
         queue,
+        orderDetails,
         queueError,
         position: qr && qr.position != null ? qr.position : null,
         ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : null,
         totalQueue: qr && qr.totalQueueSize != null ? qr.totalQueueSize : null,
-        product: qr ? qr.product : (queue && queue.values ? queue.values.product : ""),
-        suffix: qr ? qr.suffix : (queue && queue.values ? queue.values.suffix : ""),
+        product: rec.product || (qr ? qr.product : "") || (values ? values.product : "") || "",
+        suffix: rec.suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
+        ext: rec.ext || (values ? values.extColor1 : "") || "",
+        int: rec.int || (values ? values.intColor1 : "") || "",
+        sheet: rec.sheet || slots.central.reservedSheet || "",
         nextInQueue,
         pairQueues,
+        reservationDate: qr ? qr.reservationDate : (values ? values.reservationDate : ""),
       };
     });
   }
 
-  let rvView = { search: "" };
+  let rvView = { search: "", status: "" };
 
   function filteredReservedVehicleRows() {
     const q = String(rvView.search || "").trim().toLowerCase();
+    const st = String(rvView.status || "").trim();
     const rows = buildReservedVehicleRows();
-    if (!q) return rows;
     return rows.filter((r) => {
-      const hay = [r.orderNumber, r.vin, r.product, r.suffix, r.status.label, r.status.detail]
-        .map((x) => String(x || "").toLowerCase())
-        .join(" ");
+      if (st === "proforma" && !(r.status && r.status.hasProforma && r.status.label === "Proforma")) return false;
+      if (st === "noproforma" && !(r.status && r.status.label === "No Proforma")) return false;
+      if (st === "delivered" && !(r.status && r.status.label === "Delivered")) return false;
+      if (st === "rtl" && !(r.status && r.status.kind === "rtl")) return false;
+      if (st === "missing" && !(r.status && (r.status.kind === "missing" || r.status.kind === "empty"))) return false;
+      if (st === "queue" && r.position == null) return false;
+      if (st === "noqueue" && r.position != null) return false;
+      if (!q) return true;
+      const hay = [
+        r.orderNumber, r.vin, r.product, r.suffix, r.ext, r.int,
+        r.status && r.status.label, r.status && r.status.detail,
+      ].map((x) => String(x || "").toLowerCase()).join(" ");
       return hay.includes(q);
     });
   }
@@ -15792,6 +15875,7 @@
     const foot = $("#rv-table-foot");
     const kpis = $("#rv-kpis");
     const hint = $("#rv-live-hint");
+    const sheetsEl = $("#rv-sheets");
     if (!empty || !dash || !wrap) return;
 
     if (!hasReservedVehiclesInputs()) {
@@ -15806,26 +15890,43 @@
     dash.hidden = false;
 
     const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
+    const sheetNames = Array.isArray(slots.central.sheetNames) ? slots.central.sheetNames : [];
     const allRows = buildReservedVehicleRows();
     const rows = filteredReservedVehicleRows();
     const withQueue = allRows.filter((r) => r.position != null).length;
-    const withSales = allRows.filter((r) => r.status.kind === "sales").length;
-    const withRtl = allRows.filter((r) => r.status.kind === "rtl").length;
-    const withStock = allRows.filter((r) => r.status.kind === "stock").length;
-    const missing = allRows.filter((r) => r.status.kind === "missing" || r.status.kind === "empty").length;
+    const withProforma = allRows.filter((r) => r.status && r.status.hasProforma && r.status.label === "Proforma").length;
+    const noProforma = allRows.filter((r) => r.status && r.status.label === "No Proforma").length;
+    const delivered = allRows.filter((r) => r.status && r.status.label === "Delivered").length;
+    const withRtl = allRows.filter((r) => r.status && r.status.kind === "rtl").length;
+    const missing = allRows.filter((r) => r.status && (r.status.kind === "missing" || r.status.kind === "empty")).length;
+
+    if (sheetsEl) {
+      if (!sheetNames.length) {
+        sheetsEl.innerHTML = `<span class="rv-sheet-chip is-active">${escapeHtml(sheetName)}</span>`;
+      } else {
+        sheetsEl.innerHTML = `<span class="rv-sheets-lab">Stock E-Sales sheets</span>` + sheetNames.map((n) => {
+          const active = n === sheetName;
+          const isReserved = /المحجوز/i.test(n);
+          const isDisplay = /display\s*central/i.test(n);
+          const isAvail = /المخزون\s*المتاح|all\s*retail/i.test(n);
+          const tag = active ? " · used" : (isReserved ? " · reserved" : (isDisplay ? " · display" : (isAvail ? " · available" : "")));
+          return `<span class="rv-sheet-chip${active ? " is-active" : ""}" title="${escapeHtml(n)}">${escapeHtml(n)}${escapeHtml(tag)}</span>`;
+        }).join("");
+      }
+    }
 
     if (hint) {
-      hint.textContent = `${sheetName} · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "optional"} · RTL ${slotHasRows("rtl") ? "ready" : "optional"}`;
+      hint.textContent = `${sheetName} · Col F order · L VIN · I product · J suffix · M/N colors · ${allRows.length} reserved · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
     }
 
     if (kpis) {
       kpis.innerHTML = [
         ["Reserved", allRows.length, "ok"],
         ["In queue", withQueue, "ok"],
-        ["Sales Raw", withSales, "warn"],
-        ["RTL Stock", withRtl, "ok"],
-        ["E-Sales stock", withStock, "ok"],
-        ["Not found", missing, missing ? "warn" : "ok"],
+        ["Proforma", withProforma, withProforma ? "warn" : "ok"],
+        ["No Proforma", noProforma, noProforma ? "bad" : "ok"],
+        ["Delivered", delivered, "ok"],
+        ["RTL / Not found", withRtl + missing, missing ? "warn" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
           <div class="lab">${escapeHtml(label)}</div>
@@ -15834,21 +15935,28 @@
     }
 
     if (!rows.length) {
-      wrap.innerHTML = `<p class="foot" style="padding:16px">No reserved rows match the search.</p>`;
+      wrap.innerHTML = `<p class="foot" style="padding:16px">No reserved rows match the filters.</p>`;
       if (foot) foot.textContent = "0 rows";
       return;
     }
 
     const body = rows.map((r) => {
       const nextHtml = r.nextInQueue.length
-        ? `<ol class="rv-next-list">${r.nextInQueue.map((n, i) =>
-            `<li><span class="rv-next-rank">#${i + 1}</span> <strong>${escapeHtml(n.orderNumber || "—")}</strong>
-              <span class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</span></li>`
-          ).join("")}</ol>`
+        ? `<ol class="rv-next-list">${r.nextInQueue.map((n, i) => {
+            const pairs = Array.isArray(n.pairs) && n.pairs.length
+              ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
+              : "";
+            return `<li>
+              <span class="rv-next-rank">#${i + 1}</span>
+              <strong class="mono">${escapeHtml(n.orderNumber || "—")}</strong>
+              <div class="rv-muted">${escapeHtml(n.product || "")}${n.suffix ? " · " + escapeHtml(n.suffix) : ""}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
+              <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</div>
+            </li>`;
+          }).join("")}</ol>`
         : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
 
       const pairHtml = r.pairQueues.length
-        ? `<div class="rv-pair-chips">${r.pairQueues.slice(0, 3).map((pq) =>
+        ? `<div class="rv-pair-chips">${r.pairQueues.slice(0, 4).map((pq) =>
             `<span class="rv-pair-chip" title="Tier ${escapeHtml(String(pq.tier ?? ""))}">
               <b>Q${escapeHtml(String(pq.position ?? "—"))}</b>
               ${escapeHtml(String(pq.exterior ?? ""))}/${escapeHtml(String(pq.interior ?? ""))}
@@ -15859,35 +15967,43 @@
 
       const posLabel = r.position != null
         ? `<span class="rv-pos">${escapeHtml(String(r.position))}</span>
-           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead</span>`
+           <span class="rv-muted">of ${escapeHtml(String(r.totalQueue ?? "—"))} · ${escapeHtml(String(r.ordersAhead ?? 0))} ahead</span>
+           <div class="rv-muted">${escapeHtml(formatRvDate(r.reservationDate))}</div>`
         : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
 
-      return `<tr>
-        <td><strong>${escapeHtml(r.orderNumber || "—")}</strong>
-          <div class="rv-muted">${escapeHtml(r.product || "")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div></td>
+      const colorLine = [r.ext, r.int].filter(Boolean).join(" / ");
+
+      return `<tr class="${r.status && r.status.label === "No Proforma" ? "rv-row-noprof" : ""}">
+        <td>
+          <strong class="mono">${escapeHtml(r.orderNumber || "—")}</strong>
+          <div class="rv-muted">${escapeHtml(r.product || "—")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div>
+          ${colorLine ? `<div class="rv-muted">Ext/Int ${escapeHtml(colorLine)}</div>` : ""}
+        </td>
         <td class="mono">${escapeHtml(r.vin || "—")}</td>
         <td>${posLabel}${pairHtml}</td>
         <td>${nextHtml}</td>
-        <td><span class="rv-status rv-status-${escapeHtml(r.status.cls)}">${escapeHtml(r.status.label)}</span>
-          <div class="rv-muted">${escapeHtml(r.status.detail)}</div></td>
+        <td>
+          <span class="rv-status rv-status-${escapeHtml(r.status.cls)}">${escapeHtml(r.status.label)}</span>
+          <div class="rv-muted">${escapeHtml(r.status.detail || "")}</div>
+        </td>
       </tr>`;
     }).join("");
 
     wrap.innerHTML = `<table class="data-table rv-table">
       <thead>
         <tr>
-          <th>Order (Col F)</th>
+          <th>Order (Col F) · Product I/J · Color M/N</th>
           <th>VIN (Col L)</th>
-          <th>Current queue</th>
+          <th>Current queue · BO lookup</th>
           <th>Next 3 in queue</th>
-          <th>VIN status</th>
+          <th>VIN status · Sales Raw</th>
         </tr>
       </thead>
       <tbody>${body}</tbody>
     </table>`;
 
     if (foot) {
-      foot.textContent = `Showing ${rows.length} of ${allRows.length} reserved vehicles · sheet ${sheetName}`;
+      foot.textContent = `Showing ${rows.length} of ${allRows.length} · sheet «${sheetName}» · ${sheetNames.length} workbook sheet(s)`;
     }
   }
 
@@ -15901,14 +16017,23 @@
       VIN: r.vin,
       Product: r.product || "",
       Suffix: r.suffix || "",
+      Exterior: r.ext || "",
+      Interior: r.int || "",
+      Sheet: r.sheet || "",
       "Queue Position": r.position != null ? r.position : "",
       "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
       "Total Queue": r.totalQueue != null ? r.totalQueue : "",
+      "Reservation Date": r.reservationDate ? formatRvDate(r.reservationDate) : "",
       "Next 1": r.nextInQueue[0] ? r.nextInQueue[0].orderNumber : "",
+      "Next 1 Detail": r.nextInQueue[0]
+        ? `${r.nextInQueue[0].product || ""} ${r.nextInQueue[0].suffix || ""}`.trim()
+        : "",
       "Next 2": r.nextInQueue[1] ? r.nextInQueue[1].orderNumber : "",
       "Next 3": r.nextInQueue[2] ? r.nextInQueue[2].orderNumber : "",
-      "Status": r.status.label,
+      "VIN Status": r.status.label,
       "Status Detail": r.status.detail,
+      Proforma: r.status.hasProforma ? "Yes" : "No",
+      "Proforma Date": r.status.proformaDate ? formatRvDate(r.status.proformaDate) : "",
       "Queue Note": r.queueError || "",
     }));
     const wb = XLSX.utils.book_new();
@@ -16925,6 +17050,8 @@
         slots[d.id].reservedSheet = "";
         slots[d.id].displayRows = [];
         slots[d.id].displaySheet = "";
+        slots[d.id].sheetNames = [];
+        slots[d.id].availableSheet = "";
       }
       if (d.id === "accessories") {
         slots[d.id].vsndRows = [];
@@ -17833,6 +17960,13 @@
   if (rvSearchEl) {
     rvSearchEl.addEventListener("input", (e) => {
       rvView.search = e.target.value;
+      renderReservedVehiclesTracker();
+    });
+  }
+  const rvStatusEl = $("#rv-filter-status");
+  if (rvStatusEl) {
+    rvStatusEl.addEventListener("change", (e) => {
+      rvView.status = e.target.value;
       renderReservedVehiclesTracker();
     });
   }
