@@ -460,6 +460,23 @@
       letter-spacing: 0.04em;
     }
     .day-box.is-filled .day-box-hint { color: #15803d; }
+
+    /* Responsive polish (layout only) */
+    html, body { overflow-x: hidden; max-width: 100%; }
+    .wrap { width: 100%; max-width: min(1540px, 100%); box-sizing: border-box; }
+    .top, .row, .nav-links, .brand { min-width: 0; max-width: 100%; }
+    .top { flex-wrap: wrap; gap: 12px; }
+    .table-wrap { max-width: 100%; overflow: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { width: 100%; }
+    @media (max-width: 900px) {
+      .wrap { padding: 18px 12px 36px; }
+      .top { align-items: flex-start; }
+      .nav-links { width: 100%; flex-wrap: wrap; }
+    }
+    @media (max-width: 640px) {
+      .kpis { grid-template-columns: 1fr 1fr; }
+      button, .nav-links a { max-width: 100%; }
+    }
   </style>
 </head>
 <body>
