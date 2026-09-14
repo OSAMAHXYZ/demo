@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js?v=20260910fast1"></script>
   <script src="allocation-plan-data.js"></script>
@@ -799,7 +799,7 @@
             <div class="pbi-viz-head">
               <div>
                 <h2>Error schedule</h2>
-                <span class="hint">One row per Back Order with issues · click a row to open the full BO record · red = critical</span>
+                <span class="hint">All error rows in file order · scroll the page · filter by error chip · click a row for full BO · Export adds Error Definition + red cells</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="boe-table-wrap"></div>
@@ -12254,7 +12254,7 @@
       rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} color`, severity: "critical" },
       rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: `RAV4 (not SH/VH) ${qrs} = 20`, severity: "critical" },
       dup_ship_to: { id: "dup_ship_to", label: `Duplicate ${ship}`, severity: "critical" },
-      col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe`, severity: "critical" },
+      col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe (except EB2C)`, severity: "critical" },
       camry_nop_00_20: { id: "camry_nop_00_20", label: `CAMRY ${nop} = 00 or 20`, severity: "critical" },
       lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
       veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28`, severity: "critical" },
@@ -12391,6 +12391,21 @@
     return m ? m[1] : year;
   }
 
+  function boeYearColLetter(row) {
+    return findHeaderLetter(row, [
+      (n) => n === "model year" || n === "model yr" || n === "my",
+      (n) => n === "year",
+    ]) || "";
+  }
+
+  function boeMatchingColorLetters(row, letters, banned) {
+    const set = banned instanceof Set ? banned : new Set(banned);
+    return (letters || []).filter((L) => {
+      const t = boeToken(cellByLetter(row, L));
+      return t && set.has(t);
+    });
+  }
+
   function buildBoErrorsPack() {
     const rawRows = slots.backorder.rows || [];
     const checkedRows = rawRows.filter((r) => !boeIsEmployeeSalesType(r));
@@ -12406,8 +12421,9 @@
       const suffix = normalizeProductSuffix(product, mapped.rawSuffix || cellToString(cellByLetter(r, "G")).trim());
       const sfxKey = boeToken(suffix);
       const salesType = boeSalesTypeForErrors(r);
-      // Employee sales type is excluded from all BO Errors rules
-      if (salesType === "Employee" || boeIsEmployeeSalesType(r)) return;
+      const isEmployee = salesType === "Employee" || boeIsEmployeeSalesType(r);
+      const colA = cellToString(cellByLetter(r, "A")).trim();
+      const colATok = boeToken(colA);
       const colF = cellToString(cellByLetter(r, "F")).trim();
       const colH = cellToString(cellByLetter(r, "H")).trim();
       const colJ = cellToString(cellByLetter(r, "J")).trim();
@@ -12416,69 +12432,91 @@
       const nop = ["N", "O", "P"].map((L) => cellToString(cellByLetter(r, L)).trim());
       const qrs = ["Q", "R", "S"].map((L) => cellToString(cellByLetter(r, L)).trim());
       const year = boeYearValue(r, get);
+      const yearLetter = boeYearColLetter(r);
       const boNumber = colF || cellToString(get(r, "boNumber")).trim();
       const salesman = resolveSalesmanName(get(r, "salesman"));
 
       const errors = [];
-      const pushErr = (id) => {
+      const errorLetters = new Set();
+      const pushErr = (id, letters) => {
         const def = BOE_ERROR_DEFS[id];
         if (!def) return;
         if (errors.some((e) => e.id === id)) return;
         errors.push(def);
         typeCounts[id] += 1;
+        (letters || []).forEach((L) => {
+          if (L) errorLetters.add(String(L).toUpperCase());
+        });
       };
 
-      const fKey = boeDupKey(colF);
-      if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f");
-
-      const shipKey = boeDupKey(colShip);
-      if (shipLetter && shipKey && (shipMap.get(shipKey) || 0) > 1) pushErr("dup_ship_to");
-
-      // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank
-      if (
-        salesType !== "ALJUF"
-        && salesType !== "Bank"
-        && boeIsProduct(product, ["CAMRY", "LC300", "LC70"])
-      ) {
-        const jTok = boeToken(colJ);
-        if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j");
-      }
-
-      // Bank / ALJUF: only Confirm Flag (Col H). Ignore المبلغ المدفوع entirely.
-      if (salesType === "ALJUF" || salesType === "Bank") {
-        if (!boeIsConfirmedColH(r)) pushErr("sales_type_not_confirmed");
-      }
-
-      if (boeIsRav4(product)) {
-        if (boeColsHaveAny(r, ["N", "O", "P"], ["040"])) pushErr("rav4_nop_040");
-        if (sfxKey === "SH" && boeColsHaveAny(r, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN)) {
-          pushErr("rav4_sh_forbidden_color");
-        }
-        if (sfxKey !== "SH" && sfxKey !== "VH" && boeColsHaveAny(r, ["Q", "R", "S"], ["20"])) {
-          pushErr("rav4_other_sfx_qrs_20");
-        }
-      }
-
+      // CRM Lead Source: all rows, ignore only when Col A is EB2C
       const abTok = boeToken(colAB);
-      if (isBlankBoField(colAB) || abTok === "ALJRE") pushErr("col_ab_aljre_or_blank");
-
-      if (boeIsProduct(product, ["CAMRY"]) && boeColsHaveAny(r, ["N", "O", "P"], ["00", "20"])) {
-        pushErr("camry_nop_00_20");
-      }
-      if (boeIsProduct(product, ["LC300"]) && boeColsHaveAny(r, ["N", "O", "P"], ["00", "20"])) {
-        pushErr("lc300_nop_00_20");
-      }
-      if (boeIsProduct(product, ["VELOZ"]) && boeColsHaveAny(r, ["N", "O", "P"], ["S28"])) {
-        pushErr("veloz_nop_s28");
-      }
-      if (boeIsProduct(product, ["CROWN"]) && boeColsHaveAny(r, ["Q", "R", "S"], ["20"])) {
-        pushErr("crown_qrs_20");
+      if (colATok !== "EB2C" && (isBlankBoField(colAB) || abTok === "ALJRE")) {
+        pushErr("col_ab_aljre_or_blank", ["AB"]);
       }
 
-      if (boeIsCorollaCross(product)) {
-        if (year !== "2026" && year !== "2025") pushErr("bad_model_year");
-      } else if (year !== "2026") {
-        pushErr("bad_model_year");
+      // Employee sales type: only CRM Lead rule above applies
+      if (!isEmployee) {
+        const fKey = boeDupKey(colF);
+        if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f", ["F"]);
+
+        const shipKey = boeDupKey(colShip);
+        if (shipLetter && shipKey && (shipMap.get(shipKey) || 0) > 1) {
+          pushErr("dup_ship_to", [shipLetter]);
+        }
+
+        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank
+        if (
+          salesType !== "ALJUF"
+          && salesType !== "Bank"
+          && boeIsProduct(product, ["CAMRY", "LC300", "LC70"])
+        ) {
+          const jTok = boeToken(colJ);
+          if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j", ["J"]);
+        }
+
+        // Bank / ALJUF: only Confirm Flag (Col H). Ignore المبلغ المدفوع entirely.
+        if (salesType === "ALJUF" || salesType === "Bank") {
+          if (!boeIsConfirmedColH(r)) pushErr("sales_type_not_confirmed", ["H"]);
+        }
+
+        if (boeIsRav4(product)) {
+          const hit040 = boeMatchingColorLetters(r, ["N", "O", "P"], ["040"]);
+          if (hit040.length) pushErr("rav4_nop_040", hit040);
+          if (sfxKey === "SH") {
+            const hitForbidden = boeMatchingColorLetters(r, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN);
+            if (hitForbidden.length) pushErr("rav4_sh_forbidden_color", hitForbidden);
+          }
+          if (sfxKey !== "SH" && sfxKey !== "VH") {
+            const hit20 = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+            if (hit20.length) pushErr("rav4_other_sfx_qrs_20", hit20);
+          }
+        }
+
+        if (boeIsProduct(product, ["CAMRY"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["00", "20"]);
+          if (hit.length) pushErr("camry_nop_00_20", hit);
+        }
+        if (boeIsProduct(product, ["LC300"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["00", "20"]);
+          if (hit.length) pushErr("lc300_nop_00_20", hit);
+        }
+        if (boeIsProduct(product, ["VELOZ"])) {
+          const hit = boeMatchingColorLetters(r, ["N", "O", "P"], ["S28"]);
+          if (hit.length) pushErr("veloz_nop_s28", hit);
+        }
+        if (boeIsProduct(product, ["CROWN"])) {
+          const hit = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
+          if (hit.length) pushErr("crown_qrs_20", hit);
+        }
+
+        if (boeIsCorollaCross(product)) {
+          if (year !== "2026" && year !== "2025") {
+            pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
+          }
+        } else if (year !== "2026") {
+          pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
+        }
       }
 
       if (!errors.length) return;
@@ -12492,6 +12530,7 @@
         salesman: salesman || "—",
         year: year || "—",
         salesType: salesType || "—",
+        colA: colA || "—",
         colF: colF || "—",
         colH: colH || "—",
         colJ: colJ || "—",
@@ -12503,20 +12542,20 @@
         confirmed: boeIsConfirmedColH(r),
         errors,
         errorIds: errors.map((e) => e.id),
+        errorLetters: Array.from(errorLetters),
         severity: sevRank === 0 ? "critical" : sevRank === 1 ? "warn" : "info",
         sevRank,
       });
     });
 
-    rows.sort((a, b) => a.sevRank - b.sevRank
-      || String(a.product).localeCompare(String(b.product))
-      || String(a.boNumber).localeCompare(String(b.boNumber)));
+    // Keep Back Order file order (no severity/product sort)
+    rows.sort((a, b) => a.idx - b.idx);
 
     const totals = {
-      totalBos: checkedRows.length,
+      totalBos: rawRows.length,
       skippedEmployee: Math.max(0, rawRows.length - checkedRows.length),
       errorRows: rows.length,
-      cleanRows: Math.max(0, checkedRows.length - rows.length),
+      cleanRows: Math.max(0, rawRows.length - rows.length),
       critical: rows.filter((r) => r.severity === "critical").length,
       warn: rows.filter((r) => r.severity === "warn").length,
       info: rows.filter((r) => r.severity === "info").length,
@@ -12687,7 +12726,7 @@
 
     const hint = $("#boe-live-hint");
     if (hint) {
-      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning · Employee sales type ignored (${formatNumber(totals.skippedEmployee || 0)})`;
+      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee (${formatNumber(totals.skippedEmployee || 0)})`;
     }
 
     const kpis = $("#boe-kpis");
@@ -12772,6 +12811,14 @@
     }
   }
 
+  function boeExcelCellValue(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "boolean") return v;
+    return cellToString(v);
+  }
+
   function exportBoErrorsExcel() {
     if (!hasBackOrder()) {
       setStatus("No Back Order file to export", "busy");
@@ -12779,57 +12826,74 @@
     }
     const pack = boeLastPack || buildBoErrorsPack();
     const BOE_ERROR_DEFS = getBoeErrorDefs();
-    const colNames = {
-      f: boeColName("F"),
-      h: boeColName("H"),
-      j: boeColName("J"),
-      ship: boeShipToPartyName(),
-      ab: boeColName("AB"),
-      nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
-      qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
+    const rawRows = slots.backorder.rows || [];
+    if (!rawRows.length) {
+      setStatus("No Back Order rows to export", "busy");
+      return;
+    }
+
+    const headers = Array.isArray(rawRows[0].__headers) && rawRows[0].__headers.length
+      ? rawRows[0].__headers.slice()
+      : [];
+    const headerLabels = headers.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const errByIdx = new Map((pack.rows || []).map((r) => [r.idx, r]));
+    const aoa = [];
+    aoa.push([...headerLabels, "Error Definition"]);
+
+    const redStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFCDD2" } },
+      font: { color: { rgb: "B71C1C" }, bold: true },
     };
+    const redCells = [];
+
+    rawRows.forEach((raw, idx) => {
+      const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
+      const width = Math.max(headers.length, cells.length);
+      const row = [];
+      for (let i = 0; i < width; i += 1) {
+        row.push(boeExcelCellValue(cells[i] != null ? cells[i] : raw[headers[i]]));
+      }
+      while (row.length < headers.length) row.push("");
+      const err = errByIdx.get(idx);
+      const errText = err && err.errors && err.errors.length
+        ? err.errors.map((e) => e.label).join("; ")
+        : "";
+      row.push(errText);
+      aoa.push(row);
+
+      if (err) {
+        const excelRow = idx + 1; // header is row 0
+        (err.errorLetters || []).forEach((L) => {
+          const c = colLetterToIndex(L);
+          if (c >= 0 && c < headers.length) redCells.push({ r: excelRow, c });
+        });
+        // Error Definition column
+        redCells.push({ r: excelRow, c: headers.length });
+      }
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    redCells.forEach(({ r, c }) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+      ws[addr].s = redStyle;
+    });
+
+    // Reasonable column widths
+    ws["!cols"] = headerLabels.map(() => ({ wch: 14 })).concat([{ wch: 48 }]);
+
     const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
       Error: def.label,
       Severity: def.severity,
       Count: (pack.totals.typeCounts && pack.totals.typeCounts[def.id]) || 0,
     }));
-    const sampleRaw = (slots.backorder.rows || [])[0] || {};
-    const fullHeaders = Array.isArray(sampleRaw.__headers)
-      ? sampleRaw.__headers.slice()
-      : [];
-    const detail = pack.rows.map((r) => {
-      const raw = (slots.backorder.rows || [])[r.idx] || {};
-      const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
-      const base = {
-        Severity: r.severity,
-        Errors: (r.errors || []).map((e) => e.label).join("; "),
-        [colNames.f]: r.colF,
-        Product: r.product,
-        Suffix: r.sfx,
-        "Sales Type": r.salesType,
-        "Model Year": r.year,
-        [colNames.h]: r.colH,
-        [colNames.j]: r.colJ,
-        [colNames.nop]: r.nop,
-        [colNames.qrs]: r.qrs,
-        [colNames.ship]: r.colShip,
-        [colNames.ab]: r.colAB,
-        Salesman: r.salesman,
-      };
-      fullHeaders.forEach((h, i) => {
-        const key = cellToString(h).trim() || `Column ${indexToColLetter(i)}`;
-        const letter = indexToColLetter(i);
-        const exportKey = `${letter} · ${key}`;
-        if (Object.prototype.hasOwnProperty.call(base, exportKey)) return;
-        base[exportKey] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
-      });
-      return base;
-    });
+
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Back Order");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), "BO Errors");
-    downloadWorkbook(wb, `BO-Errors-${excelFileStamp()}`);
-    setStatus("BO Errors Excel exported", "ok");
+    const name = `BO-Errors-${excelFileStamp()}.xlsx`;
+    XLSX.writeFile(wb, name, { cellStyles: true, bookType: "xlsx" });
+    setStatus("BO Errors Excel exported · Error Definition + red cells", "ok");
   }
 
   function renderBoDashboard(d) {

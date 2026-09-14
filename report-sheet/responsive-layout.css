@@ -275,6 +275,12 @@ body.admin-page {
   overscroll-behavior-x: contain;
 }
 
+.live-app #boe-table-wrap.aa-table-wrap,
+.live-app #boe-table-wrap.table-wrap {
+  max-height: none;
+  overflow-y: visible;
+}
+
 .live-app .table-wrap table,
 .live-app .bas-table-wrap table,
 .live-app .icc-table-wrap table,

@@ -10977,6 +10977,13 @@ button.dvp-total-card:focus-visible {
   border-radius: 14px;
   background: #fff;
 }
+/* Full list on page scroll — no inner max-height box */
+#boe-table-wrap.table-wrap,
+#boe-table-wrap.aa-table-wrap {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
 .boe-table .boe-tags {
   display: flex;
   flex-wrap: wrap;
