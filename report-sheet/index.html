@@ -13,8 +13,8 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914rvsheets" />
+  <script src="lib/bo-order-lookup.js?v=20260914rvnext"></script>
+  <link rel="stylesheet" href="dashboard.css?v=20260914rvvin" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914boerrors" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -15778,6 +15778,82 @@
     return new Bo(rows, headers);
   }
 
+  function mapRvNextOrder(n, fallbackPos) {
+    if (!n) return null;
+    return {
+      orderNumber: n.orderNumber || "",
+      reservationDate: n.reservationDate || "",
+      product: n.product || "",
+      suffix: n.suffix || "",
+      queuePosition: n.queuePosition != null ? n.queuePosition : fallbackPos,
+      pairs: Array.isArray(n.pairs) ? n.pairs : [],
+      fromPair: n.fromPair || "",
+    };
+  }
+
+  /** Prefer main BO queue next-3; fill gaps from largest color-pair queues. */
+  function resolveReservedNextInQueue(queue) {
+    if (!queue) return [];
+    const next = [];
+    const seen = new Set();
+    const pushAll = (list, fromPair) => {
+      (Array.isArray(list) ? list : []).forEach((n) => {
+        if (next.length >= 3) return;
+        const key = String(n.orderNumber || "").trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        next.push(mapRvNextOrder({ ...n, fromPair: fromPair || n.fromPair || "" }, next.length + 1));
+      });
+    };
+    pushAll(queue.nextInQueue, "");
+    if (next.length < 3 && Array.isArray(queue.pairQueues)) {
+      const pairs = queue.pairQueues.slice().sort((a, b) => (b.totalQueueSize || 0) - (a.totalQueueSize || 0));
+      pairs.forEach((pq) => {
+        if (next.length >= 3) return;
+        const label = [pq.exterior, pq.interior].filter(Boolean).join("/") || "";
+        pushAll(pq.nextInQueue, label);
+      });
+    }
+    return next.slice(0, 3);
+  }
+
+  function findSalesRawDetailForVin(vin) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    const rows = slots.sales.rows || [];
+    let best = null;
+    for (let i = 0; i < rows.length; i += 1) {
+      const r = rows[i];
+      const rv = extractVinValue(r.vin) || upperTrim(cellToString(r.vin));
+      if (!rv) continue;
+      const match = rv === key || key.endsWith(rv) || rv.endsWith(key)
+        || (key.length >= 8 && rv.length >= 8 && key.slice(-8) === rv.slice(-8));
+      if (!match) continue;
+      const entry = {
+        vin: rv,
+        salesman: resolveSalesmanName(r._salesmanRaw || r.salesman),
+        product: cellToString(r.product || r.Product || "").trim(),
+        salesType: cellToString(r.salesType || "").trim(),
+        proformaDate: r.proformaDate,
+        deliveryDate: r.deliveryDate,
+        invoiceDate: r.invoiceDate || r.deliveryDate,
+        delivered: hasDeliveryDate(r),
+        invoiced: hasInvoiceDate(r),
+        location: cellToString(r.location).trim()
+          || cellToString(r["Allocated Location"]).trim()
+          || stockFieldByAlias(r, "location", [])
+          || "",
+        secondaryStatus: cellToString(r.secondaryStatus).trim(),
+        plant: cellToString(r.plant || "").trim(),
+      };
+      if (!best) best = entry;
+      if (entry.delivered && !best.delivered) best = entry;
+      if (!best.proformaDate && entry.proformaDate) best = { ...best, proformaDate: entry.proformaDate };
+      if (!best.salesman && entry.salesman) best = { ...best, salesman: entry.salesman };
+    }
+    return best;
+  }
+
   function buildReservedVehicleRows() {
     const reserved = slots.central.reservedRows || [];
     const salesLookup = buildSalesVinLookup();
@@ -15790,6 +15866,8 @@
       const orderNumber = String(rec.orderNumber || "").trim();
       const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
       const status = resolveReservedVinStatus(vin, salesLookup, rtlLookup, stockLookup);
+      const salesDetail = findSalesRawDetailForVin(vin);
+      const rtlDetail = findRtlVinHit(rtlLookup, vin);
 
       let queue = null;
       let queueError = "";
@@ -15819,7 +15897,7 @@
       }
 
       const qr = queue && queue.queueResult ? queue.queueResult : null;
-      const nextInQueue = queue && Array.isArray(queue.nextInQueue) ? queue.nextInQueue : [];
+      const nextInQueue = resolveReservedNextInQueue(queue);
       const pairQueues = queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : [];
       const values = queue && queue.values ? queue.values : null;
 
@@ -15837,9 +15915,13 @@
         suffix: rec.suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
         ext: rec.ext || (values ? values.extColor1 : "") || "",
         int: rec.int || (values ? values.intColor1 : "") || "",
+        location: rec.location || "",
+        searchArea: rec.searchArea || "",
         sheet: rec.sheet || slots.central.reservedSheet || "",
         nextInQueue,
         pairQueues,
+        salesDetail,
+        rtlDetail,
         reservationDate: qr ? qr.reservationDate : (values ? values.reservationDate : ""),
       };
     });
@@ -15940,20 +16022,32 @@
       return;
     }
 
+    window._rvRowsByVin = Object.fromEntries(
+      allRows.filter((r) => r.vin).map((r) => [r.vin, r])
+    );
+
     const body = rows.map((r) => {
-      const nextHtml = r.nextInQueue.length
-        ? `<ol class="rv-next-list">${r.nextInQueue.map((n, i) => {
+      const nextSlots = [0, 1, 2].map((i) => r.nextInQueue[i] || null);
+      const nextHtml = r.position == null && !r.nextInQueue.length
+        ? `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`
+        : `<ol class="rv-next-list">${nextSlots.map((n, i) => {
+            if (!n) {
+              return `<li class="rv-next-empty">
+                <span class="rv-next-rank">+${i + 1}</span>
+                <span class="rv-muted">No more orders after</span>
+              </li>`;
+            }
             const pairs = Array.isArray(n.pairs) && n.pairs.length
               ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
               : "";
+            const qPos = n.queuePosition != null ? `Q${n.queuePosition}` : `+${i + 1}`;
             return `<li>
-              <span class="rv-next-rank">#${i + 1}</span>
+              <span class="rv-next-rank">${escapeHtml(qPos)}</span>
               <strong class="mono">${escapeHtml(n.orderNumber || "—")}</strong>
               <div class="rv-muted">${escapeHtml(n.product || "")}${n.suffix ? " · " + escapeHtml(n.suffix) : ""}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
-              <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</div>
+              <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}${n.fromPair ? " · pair " + escapeHtml(n.fromPair) : ""}</div>
             </li>`;
-          }).join("")}</ol>`
-        : `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`;
+          }).join("")}</ol>`;
 
       const pairHtml = r.pairQueues.length
         ? `<div class="rv-pair-chips">${r.pairQueues.slice(0, 4).map((pq) =>
@@ -15979,7 +16073,9 @@
           <div class="rv-muted">${escapeHtml(r.product || "—")}${r.suffix ? " · " + escapeHtml(r.suffix) : ""}</div>
           ${colorLine ? `<div class="rv-muted">Ext/Int ${escapeHtml(colorLine)}</div>` : ""}
         </td>
-        <td class="mono">${escapeHtml(r.vin || "—")}</td>
+        <td class="mono">${r.vin
+          ? `<button type="button" class="rv-vin-btn" data-rv-vin="${escapeHtml(r.vin)}" title="View VIN details">${escapeHtml(r.vin)}</button>`
+          : "—"}</td>
         <td>${posLabel}${pairHtml}</td>
         <td>${nextHtml}</td>
         <td>
@@ -16005,6 +16101,120 @@
     if (foot) {
       foot.textContent = `Showing ${rows.length} of ${allRows.length} · sheet «${sheetName}» · ${sheetNames.length} workbook sheet(s)`;
     }
+  }
+
+  function openRvVinDetail(vin) {
+    const key = extractVinValue(vin) || upperTrim(vin);
+    const row = (window._rvRowsByVin && (window._rvRowsByVin[key] || window._rvRowsByVin[vin])) || null;
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+
+    if (!row) {
+      if (titleEl) titleEl.textContent = key || "VIN";
+      if (subEl) subEl.textContent = "Reserved Vehicles";
+      bodyEl.innerHTML = `<p class="foot">No details found for this VIN.</p>`;
+      backdrop.classList.add("show");
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      return;
+    }
+
+    const sales = row.salesDetail || findSalesRawDetailForVin(row.vin);
+    const rtl = row.rtlDetail || null;
+    const values = row.queue && row.queue.values ? row.queue.values : null;
+    const nextSlots = [0, 1, 2].map((i) => row.nextInQueue[i] || null);
+
+    if (titleEl) titleEl.textContent = row.vin || "VIN";
+    if (subEl) {
+      subEl.textContent = [
+        row.orderNumber ? `Order ${row.orderNumber}` : "",
+        row.product || "",
+        row.suffix || "",
+        row.status && row.status.label ? row.status.label : "",
+      ].filter(Boolean).join(" · ");
+    }
+
+    const kv = (label, value) => `
+      <div class="rv-detail-row">
+        <span class="dk">${escapeHtml(label)}</span>
+        <span class="dv">${escapeHtml(value == null || value === "" ? "—" : String(value))}</span>
+      </div>`;
+
+    const nextBlock = nextSlots.map((n, i) => {
+      if (!n) {
+        return `<li class="rv-next-empty"><span class="rv-next-rank">+${i + 1}</span> <span class="rv-muted">No more orders after</span></li>`;
+      }
+      const pairs = Array.isArray(n.pairs) && n.pairs.length
+        ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
+        : "";
+      return `<li>
+        <span class="rv-next-rank">${escapeHtml(n.queuePosition != null ? "Q" + n.queuePosition : "+" + (i + 1))}</span>
+        <strong class="mono">${escapeHtml(n.orderNumber)}</strong>
+        <div class="rv-muted">${escapeHtml([n.product, n.suffix].filter(Boolean).join(" · "))}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
+        <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</div>
+      </li>`;
+    }).join("");
+
+    bodyEl.innerHTML = `
+      <div class="rv-detail">
+        <div class="rv-detail-status">
+          <span class="rv-status rv-status-${escapeHtml(row.status.cls)}">${escapeHtml(row.status.label)}</span>
+          <span class="rv-muted">${escapeHtml(row.status.detail || "")}</span>
+        </div>
+
+        <h4 class="rv-detail-h">E-Sales المحجوز</h4>
+        <div class="rv-detail-grid">
+          ${kv("Order (Col F)", row.orderNumber)}
+          ${kv("VIN (Col L)", row.vin)}
+          ${kv("Product (Col I)", row.product)}
+          ${kv("Suffix (Col J)", row.suffix)}
+          ${kv("Ext color (Col M)", row.ext)}
+          ${kv("Int color (Col N)", row.int)}
+          ${kv("Location", row.location)}
+          ${kv("Search area", row.searchArea)}
+          ${kv("Sheet", row.sheet)}
+        </div>
+
+        <h4 class="rv-detail-h">BO queue</h4>
+        <div class="rv-detail-grid">
+          ${kv("Position", row.position != null ? `${row.position} of ${row.totalQueue ?? "—"}` : (row.queueError || "—"))}
+          ${kv("Orders ahead", row.ordersAhead != null ? row.ordersAhead : "—")}
+          ${kv("Reservation date", formatRvDate(row.reservationDate))}
+          ${kv("BO product", values && values.product ? values.product : "—")}
+          ${kv("BO suffix", values && values.suffix ? values.suffix : "—")}
+          ${kv("BO colors", values ? [values.extColor1, values.intColor1].filter(Boolean).join(" / ") : "—")}
+        </div>
+        <ol class="rv-next-list rv-detail-next">${nextBlock}</ol>
+
+        <h4 class="rv-detail-h">Sales Raw</h4>
+        <div class="rv-detail-grid">
+          ${kv("Proforma (Col P)", sales && sales.proformaDate ? formatRvDate(sales.proformaDate) : "—")}
+          ${kv("Delivery / Invoice (Col V)", sales && (sales.invoiceDate || sales.deliveryDate) ? formatRvDate(sales.invoiceDate || sales.deliveryDate) : "—")}
+          ${kv("Salesman", sales && sales.salesman ? sales.salesman : "—")}
+          ${kv("Product", sales && sales.product ? sales.product : "—")}
+          ${kv("Sales type", sales && sales.salesType ? sales.salesType : "—")}
+          ${kv("Location", sales && sales.location ? sales.location : "—")}
+          ${kv("Plant", sales && sales.plant ? sales.plant : "—")}
+          ${kv("In Sales Raw", sales ? "Yes" : "No")}
+        </div>
+
+        <h4 class="rv-detail-h">RTL Stock</h4>
+        <div class="rv-detail-grid">
+          ${kv("In RTL", rtl ? "Yes" : "No")}
+          ${kv("Status", rtl ? reservedStockStatusDetail(rtl, "In RTL") : "—")}
+          ${kv("Location", rtl && rtl.location ? rtl.location : "—")}
+          ${kv("Search area", rtl && rtl.searchArea ? rtl.searchArea : "—")}
+          ${kv("Usage", rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "—")}
+        </div>
+      </div>`;
+
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
   }
 
   function exportReservedVehiclesExcel() {
@@ -17968,6 +18178,14 @@
     rvStatusEl.addEventListener("change", (e) => {
       rvView.status = e.target.value;
       renderReservedVehiclesTracker();
+    });
+  }
+  const rvTableWrap = $("#rv-table-wrap");
+  if (rvTableWrap) {
+    rvTableWrap.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("[data-rv-vin]") : null;
+      if (!btn) return;
+      openRvVinDetail(btn.getAttribute("data-rv-vin"));
     });
   }
   [

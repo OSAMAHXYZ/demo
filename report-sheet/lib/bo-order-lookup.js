@@ -338,13 +338,22 @@ class BoOrderLookup {
     const queue = this.sortQueueEntries(filtered);
     const posIdx = queue.findIndex((e) => e.orderNorm === refOrderNorm);
     const position = posIdx >= 0 ? posIdx + 1 : null;
+    const mapNext = (e, i) => ({
+        orderNumber: e.orderNumber,
+        reservationDate: e.reservationDateRaw,
+        product: e.product,
+        suffix: e.suffix,
+        queuePosition: posIdx >= 0 ? posIdx + 2 + i : null,
+        pairs: (e.pairs || []).map((p) => ({ exterior: p.exterior, interior: p.interior }))
+    });
     return {
         tier: refPair.tier,
         exterior: refPair.exterior,
         interior: refPair.interior,
         position,
         ordersAhead: position != null ? position - 1 : null,
-        totalQueueSize: queue.length
+        totalQueueSize: queue.length,
+        nextInQueue: (posIdx >= 0 ? queue.slice(posIdx + 1, posIdx + 4) : []).map(mapNext)
     };
 }
 
@@ -594,11 +603,12 @@ class BoOrderLookup {
             suffix: refEntry.suffix
         },
         /** Orders immediately behind this one in the ranked queue (next 3). */
-        nextInQueue: (posIdx >= 0 ? queue.slice(posIdx + 1, posIdx + 4) : []).map((e) => ({
+        nextInQueue: (posIdx >= 0 ? queue.slice(posIdx + 1, posIdx + 4) : []).map((e, i) => ({
             orderNumber: e.orderNumber,
             reservationDate: e.reservationDateRaw,
             product: e.product,
             suffix: e.suffix,
+            queuePosition: posIdx + 2 + i,
             pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
         })),
         queuePreview: queue.slice(0, 100).map((e) => ({
