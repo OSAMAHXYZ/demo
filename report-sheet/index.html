@@ -12312,11 +12312,22 @@
 
   function boeIsEmployeeSalesType(row) {
     const get = buildFieldGetter(row || {});
-    const paid = isPaid(get(row, "paid"));
-    const salesType = inferSalesType(get(row, "salesType"), paid);
+    // Sales type only — never use المبلغ المدفوع / paid
+    const salesType = inferSalesType(get(row, "salesType"), false);
     if (salesType === "Employee") return true;
     const raw = upperTrim(cellToString(get(row, "salesType")));
     return /employee|emp|موظف|staff/.test(raw);
+  }
+
+  /** BO Errors sales type from Sales Type column only (ignore المبلغ المدفوع). */
+  function boeSalesTypeForErrors(row) {
+    const get = buildFieldGetter(row || {});
+    return inferSalesType(get(row, "salesType"), false);
+  }
+
+  /** Bank / ALJUF: Confirm Flag (Col H) only — paid amount is ignored. */
+  function boeIsConfirmedColH(row) {
+    return isConfirmedFlag(cellByLetter(row, "H"));
   }
 
   function buildBoeDupMaps(rawRows) {
@@ -12360,9 +12371,7 @@
       const product = mapped.product || cellToString(cellByLetter(r, "B")).trim();
       const suffix = normalizeProductSuffix(product, mapped.rawSuffix || cellToString(cellByLetter(r, "G")).trim());
       const sfxKey = boeToken(suffix);
-      const paid = isPaid(get(r, "paid"));
-      const salesTypeRaw = get(r, "salesType");
-      const salesType = inferSalesType(salesTypeRaw, paid);
+      const salesType = boeSalesTypeForErrors(r);
       // Employee sales type is excluded from all BO Errors rules
       if (salesType === "Employee" || boeIsEmployeeSalesType(r)) return;
       const colF = cellToString(cellByLetter(r, "F")).trim();
@@ -12396,8 +12405,9 @@
         if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j");
       }
 
+      // Bank / ALJUF: only Confirm Flag (Col H). Ignore المبلغ المدفوع entirely.
       if (salesType === "ALJUF" || salesType === "Bank") {
-        if (!isConfirmedFlag(colH)) pushErr("sales_type_not_confirmed");
+        if (!boeIsConfirmedColH(r)) pushErr("sales_type_not_confirmed");
       }
 
       if (boeIsRav4(product)) {
@@ -12450,7 +12460,7 @@
         colAB: colAB || "—",
         nop: nop.map((x) => x || "—").join(" / "),
         qrs: qrs.map((x) => x || "—").join(" / "),
-        confirmed: isConfirmedFlag(colH),
+        confirmed: boeIsConfirmedColH(r),
         errors,
         errorIds: errors.map((e) => e.id),
         severity: sevRank === 0 ? "critical" : sevRank === 1 ? "warn" : "info",
