@@ -1357,6 +1357,28 @@ body.pbi-wide-open {
 .pbi-wide-modal--table {
   width: min(1100px, 96vw);
 }
+.pbi-wide-modal--act-alerts {
+  width: min(1240px, 96vw);
+  max-height: 92vh;
+}
+.pbi-wide-modal--act-alerts .pbi-wide-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pbi-wide-modal--act-alerts #pbi-wide-hint {
+  flex-shrink: 0;
+  background: #fff;
+}
+.act-alert-tabs--wide {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 0 10px;
+  background: #fff;
+}
+.pbi-wide-modal--act-alerts .bas-table {
+  min-width: 760px;
+}
 
 .pbi-wide-modal--table .pbi-wide-body {
   display: none !important;
@@ -7635,6 +7657,10 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .act-kpi-row {
   display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 10px;
 }
+#bas-kpis.act-kpi-row .bo-kpi .sub {
+  white-space: normal;
+  line-height: 1.25;
+}
 .act-kpi { position: relative; text-align: left; padding-top: 28px; }
 .act-kpi-icon {
   position: absolute; top: 10px; left: 12px;
@@ -7660,7 +7686,12 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .act-chart-box--donut { height: 220px !important; min-height: 220px !important; }
 .act-chart-box--daily { height: 220px !important; min-height: 220px !important; flex: 1; }
 .act-chart-box--month { height: 240px !important; min-height: 240px !important; }
-.act-chart-box--res { height: 160px !important; min-height: 160px !important; }
+.act-chart-box--res { min-height: 160px; height: auto; }
+.act-res-chart-scroll {
+  max-height: 340px;
+  overflow: auto;
+  min-width: 0;
+}
 .act-chart-box--top { height: 240px !important; min-height: 240px !important; }
 .live-app .act-tower .chart-box.act-chart-box {
   height: auto; /* reset live-app height:auto; sizes come from modifiers below */
@@ -7670,7 +7701,7 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .live-app .act-tower .act-chart-box--donut { height: 220px !important; min-height: 220px !important; }
 .live-app .act-tower .act-chart-box--daily { height: 220px !important; min-height: 220px !important; }
 .live-app .act-tower .act-chart-box--month { height: 240px !important; min-height: 240px !important; }
-.live-app .act-tower .act-chart-box--res { height: 160px !important; min-height: 160px !important; }
+.live-app .act-tower .act-chart-box--res { min-height: 160px !important; height: auto !important; }
 .live-app .act-tower .act-chart-box--top { height: 240px !important; min-height: 240px !important; }
 .act-top-fallback {
   display: none;
@@ -7965,6 +7996,7 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .live-app.toyota-theme.theme-dark .act-supply-metrics dd,
 .live-app.toyota-theme.theme-dark .act-supply-rest-name,
 .live-app.toyota-theme.theme-dark .act-sort-lab select { color: #fff !important; }
+.live-app.toyota-theme.theme-dark .act-alert-tabs--wide { background: #111 !important; }
 /* ââ Sales Report Â· compact interactive pulse ââ */
 .sr-panel { display: flex; flex-direction: column; gap: 10px; }
 .sr-hero {

@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260913allocfix" />
-  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260913allocfix" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914display2" />
+  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914display2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -803,7 +803,7 @@
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Set allocation in <a href="admin.html">Admin</a> → <b>3 · Allocation Plan</b></li>
             <li>Upload slot <b>2 · RTL Stock</b> (Search Area = Retail Electronic Sales)</li>
-            <li>Upload slot <b>3 · Stock Central</b> (sheet 2 / المحجوز · Col F BO · Col L VIN + المخزون المتاح)</li>
+            <li>Upload slot <b>3 · Stock Central</b> (sheet 2 / المحجوز · Col F BO · Col L VIN + المخزون المتاح · Display Central 1)</li>
             <li>Upload slot <b>4 · Sales Raw</b> for Proforma (Col P) / Invoice (Col V) · advisor (Col A)</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
@@ -821,8 +821,9 @@
                 <option value="salesdate">Has proforma / invoice</option>
                 <option value="delivered">Delivered / Invoiced</option>
                 <option value="proforma">Proforma</option>
-                <option value="missing">Not in Sales Raw</option>
                 <option value="available">In المخزون المتاح</option>
+                <option value="display">Display · Display Central 1</option>
+                <option value="missing">Not in Sales Raw</option>
               </select>
               <input id="aa-search" type="search" placeholder="Search BO / VIN / advisor / product…" />
               <button type="button" id="aa-excel-btn" class="btn-primary">Export Excel</button>
@@ -1111,10 +1112,12 @@
             <article class="card act-card">
               <div class="pbi-viz-head">
                 <h2>Retail Electronic Sales</h2>
-                <span class="hint">Search Area = Retail Electronic Sales</span>
+                <span class="hint">All car types received · Search Area = Retail Electronic Sales</span>
               </div>
               <div class="act-res-kpis" id="act-res-kpis"></div>
-              <div class="chart-box act-chart-box act-chart-box--res"><canvas id="chart-act-res-top"></canvas></div>
+              <div class="act-res-chart-scroll">
+                <div class="chart-box act-chart-box act-chart-box--res" id="act-res-chart-box"><canvas id="chart-act-res-top"></canvas></div>
+              </div>
             </article>
           </div>
 
@@ -1137,6 +1140,7 @@
             <article class="card act-card act-alerts-card">
               <div class="pbi-viz-head">
                 <h2>Operational Alerts</h2>
+                <button type="button" class="pbi-expand" data-expand="act-alerts" id="act-alert-wide" title="Open full alerts table">Wide</button>
               </div>
               <div class="act-alert-tabs" id="act-alert-tabs" role="tablist">
                 <button type="button" class="act-alert-tab active" data-act-alert="shortfall">Shortfall</button>
@@ -2055,6 +2059,8 @@
     if (s.id === "central") {
       base.reservedRows = [];
       base.reservedSheet = "";
+      base.displayRows = [];
+      base.displaySheet = "";
     }
     if (s.id === "accessories") {
       base.vsndRows = [];
@@ -3400,6 +3406,95 @@
     );
   }
 
+  function esalesDisplaySheetName(workbook) {
+    const names = workbook.SheetNames || [];
+    if (!names.length) return null;
+    return (
+      names.find((n) => /display\s*central\s*1/i.test(n)) ||
+      names.find((n) => /display\s*central/i.test(n)) ||
+      names.find((n) => /display/i.test(n) && /central/i.test(n)) ||
+      names.find((n) => /^display\b/i.test(String(n).trim())) ||
+      names.find((n) => /عرض/.test(String(n)) && /central|سنترال|1/.test(String(n))) ||
+      null
+    );
+  }
+
+  function esalesDisplayVinFromRow(r) {
+    const vinHeader = findHeaderLetter(r, [
+      (n) => n === "vin" || n === "vin no" || n === "vin number" || n === "chassis",
+      (n) => n.includes("vin") || n.includes("chassis") || n.includes("شاسيه"),
+    ]);
+    const candidates = [];
+    if (vinHeader) candidates.push(cellByLetter(r, vinHeader));
+    ["L", "H", "E", "K", "J", "I", "F", "D", "C", "A"].forEach((letter) => {
+      candidates.push(cellByLetter(r, letter));
+    });
+    candidates.push(r.vin, stockFieldByAlias(r, "vin", []));
+    if (Array.isArray(r.__cells)) {
+      r.__cells.forEach((c) => candidates.push(c));
+    }
+    for (let i = 0; i < candidates.length; i += 1) {
+      const full = extractVinValue(candidates[i]);
+      if (full) return full;
+    }
+    // Display sheets sometimes store chassis tails (8–16 chars)
+    for (let i = 0; i < candidates.length; i += 1) {
+      const cleaned = String(candidates[i] ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (cleaned.length >= 8 && cleaned.length <= 17) return cleaned;
+    }
+    return "";
+  }
+
+  /** Display Central 1 rows are available unless clearly sold / delivered / unavailable. */
+  function isEsalesDisplayAvailable(r) {
+    const blob = [
+      stockPrimaryStatus(r),
+      stockSecondaryStatus(r),
+      stockFieldByAlias(r, "status", []),
+      cellToString(cellByLetter(r, "C")),
+      cellToString(cellByLetter(r, "M")),
+    ].join(" ").toLowerCase();
+    if (/display|عرض|showroom|معرض/.test(blob)) return true;
+    if (/not\s*avail|unavailable|غير\s*متاح/.test(blob)) return false;
+    if (/\b(sold|مباع|delivered|invoiced)\b/.test(blob) && !/avail|متاح/.test(blob)) return false;
+    return true;
+  }
+
+  function esalesDisplayStockRows(workbook) {
+    const sheetName = esalesDisplaySheetName(workbook);
+    if (!sheetName || !workbook.Sheets[sheetName]) return [];
+    return sheetRows(workbook, sheetName).map((r, idx) => {
+      const vin = esalesDisplayVinFromRow(r);
+      const product = cellToString(cellByLetter(r, "B")).trim()
+        || cellToString(cellByLetter(r, "D")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "G")).trim()
+          || cellToString(cellByLetter(r, "E")).trim()
+          || stockFieldByAlias(r, "suffix", [])
+          || ""
+      );
+      const location = cellToString(cellByLetter(r, "Q")).trim()
+        || stockFieldByAlias(r, "allocatedLocation", [])
+        || stockFieldByAlias(r, "location", [])
+        || "";
+      const status = stockPrimaryStatus(r) || stockSecondaryStatus(r) || stockFieldByAlias(r, "status", []) || "";
+      return {
+        idx,
+        sheet: sheetName,
+        vin,
+        product,
+        suffix,
+        location,
+        status,
+        available: isEsalesDisplayAvailable(r),
+        _raw: r,
+      };
+    }).filter((r) => r.vin);
+  }
+
   function esalesReservedStockRows(workbook) {
     const sheetName = esalesReservedSheetName(workbook);
     if (!sheetName || !workbook.Sheets[sheetName]) return [];
@@ -3820,6 +3915,8 @@
       if (d.id === "central") {
         slots[d.id].reservedRows = [];
         slots[d.id].reservedSheet = "";
+        slots[d.id].displayRows = [];
+        slots[d.id].displaySheet = "";
       }
       if (d.id === "accessories") {
         slots[d.id].vsndRows = [];
@@ -3850,6 +3947,8 @@
         if (d.id === "central") {
           slot.reservedRows = esalesReservedStockRows(wb);
           slot.reservedSheet = esalesReservedSheetName(wb) || "";
+          slot.displayRows = esalesDisplayStockRows(wb);
+          slot.displaySheet = esalesDisplaySheetName(wb) || "";
         }
         if (d.id === "accessories") {
           slot.vsndRows = accessoriesVsndRows(wb);
@@ -5487,6 +5586,7 @@
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
       modal.classList.remove("pbi-wide-modal--accessories");
+      modal.classList.remove("pbi-wide-modal--act-alerts");
     }
   }
 
@@ -5896,6 +5996,10 @@
       openWideAccessories();
       return;
     }
+    if (sourceId === "act-alerts") {
+      openWideActAlerts();
+      return;
+    }
     if (sourceId === "chart-sr-cancelcount") sourceId = "chart-cancel";
     // BO charts: always rebuild full-detail snap so Wide never reuses the compact Top-N card data.
     let snap = String(sourceId).startsWith("chart-bo-")
@@ -6050,7 +6154,7 @@
     if (table) table.innerHTML = "";
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
-      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories", "pbi-wide-modal--table");
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories", "pbi-wide-modal--table", "pbi-wide-modal--act-alerts");
     }
     const box = $("#pbi-wide-box");
     if (box) {
@@ -10101,6 +10205,7 @@
     const boLabel = opts.boLabel || "Matched Back Orders";
     const boSub = opts.boSub || "Same product + suffix";
     const lateRtl = opts.lateRtl != null ? opts.lateRtl : null;
+    const resReceived = opts.resReceived != null ? opts.resReceived : null;
     const totalDemand = opts.totalDemand != null ? opts.totalDemand : null;
 
     if (opts.compact) {
@@ -10126,7 +10231,17 @@
       { label: "Available Stock", val: formatNumber(totalStock), sub: "RTL + Central", icon: "◈" },
       { label: "Total Back Orders", val: totalDemand != null ? formatNumber(totalDemand) : formatNumber(totalBo), sub: totalDemand != null ? "Customer demand · BO file" : "Matched demand", icon: "▦" },
       { label: "Overall Gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad", icon: "⇄" },
-      { label: "Late in RTL", val: lateRtl != null ? formatNumber(lateRtl) : "N/A", sub: lateRtl != null ? "RES · age ≥ 1" : "Upload RTL stock", cls: lateRtl ? "bad" : "ok", icon: "⏱" },
+      {
+        label: "Received from RTL",
+        val: resReceived != null ? formatNumber(resReceived) : "N/A",
+        sub: resReceived != null
+          ? (lateRtl
+            ? `RES schedule · ${formatNumber(lateRtl)} late`
+            : "RES · schedule")
+          : "Upload RTL schedule",
+        cls: resReceived ? "ok" : "",
+        icon: "↓",
+      },
     ];
     el.innerHTML = cards.map((k) => `
       <article class="bo-kpi act-kpi${k.cls ? " " + k.cls : ""}">
@@ -10283,6 +10398,17 @@
     });
   }
 
+  /** Sum of schedule-day RES (age 0 Retail Electronic Sales) through today. */
+  function basScheduleResReceived(monthPack) {
+    if (!monthPack || !Array.isArray(monthPack.dayRetailTotals)) return null;
+    const today = (monthPack.ctx && monthPack.ctx.todayDay) || 31;
+    let n = 0;
+    for (let d = 1; d <= Math.min(30, today); d += 1) {
+      n += Number(monthPack.dayRetailTotals[d]) || 0;
+    }
+    return n;
+  }
+
   function computeBasTowerMetrics(d, filteredRows) {
     const totalAlloc = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const matchedBo = filteredRows.reduce((s, r) => s + r.boCount, 0);
@@ -10294,6 +10420,7 @@
     const totalDemand = (d.bos || []).reduce((s, bo) => s + basBoUnitCount(bo), 0);
 
     let lateRtl = null;
+    let resReceived = null;
     let monthPack = null;
     const monthKey = basMonthContext().monthKey;
     const hasDaily = Boolean(getCachedRtlActiveMonth(monthKey));
@@ -10301,7 +10428,9 @@
       monthPack = buildBasMonthlyData();
       const filteredMonth = filteredBasMonthlyRows(monthPack.rows);
       const filteredMatched = monthPack.matched.filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
-      lateRtl = filteredMatched.filter((c) => c.isLate).length;
+      const filteredLate = (monthPack.lateCars || []).filter((car) => filteredMonth.some((fr) => fr.id === car.leafId));
+      lateRtl = filteredLate.length || filteredMatched.filter((c) => c.isLate).length;
+      resReceived = basScheduleResReceived(monthPack);
       monthPack._filteredRows = filteredMonth;
       monthPack._filteredMatched = filteredMatched;
     }
@@ -10319,6 +10448,7 @@
       totalGap,
       totalDemand,
       lateRtl,
+      resReceived,
       below,
       above,
       match,
@@ -10337,6 +10467,7 @@
         Stock: totalStock,
         Gap: totalGap,
         LateRTL: lateRtl,
+        ResReceived: resReceived,
       });
     }
     return metrics;
@@ -10450,40 +10581,61 @@
     }
   }
 
-  function renderActAlertTable(metrics) {
-    const el = $("#act-alert-table");
-    if (!el) return;
-    const tab = basView.alertTab || "shortfall";
-    document.querySelectorAll(".act-alert-tab").forEach((b) => {
-      b.classList.toggle("active", b.getAttribute("data-act-alert") === tab);
+  function collectActLateCars(metrics) {
+    const pack = metrics && metrics.monthPack;
+    if (!pack) return [];
+    const fromLate = pack.lateCars || [];
+    const fromMatched = (pack._filteredMatched || pack.matched || []).filter((c) => c.isLate);
+    const seen = new Set();
+    const out = [];
+    fromLate.concat(fromMatched).forEach((c) => {
+      const key = `${c.vin || ""}|${c.age != null ? c.age : ""}|${c.leafId || ""}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(c);
     });
+    out.sort((a, b) => (Number(b.age) || 0) - (Number(a.age) || 0)
+      || String(a.allocProduct || a.product || "").localeCompare(String(b.allocProduct || b.product || "")));
+    return out;
+  }
+
+  function actAlertPlanRows(metrics, tab) {
+    const rows = (metrics && metrics.filteredRows) || [];
+    if (tab === "surplus") {
+      return rows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap);
+    }
+    return rows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap);
+  }
+
+  function buildActAlertTableHtml(metrics, tab, limit) {
     if (tab === "late") {
-      const lateCars = (metrics.monthPack && metrics.monthPack._filteredMatched)
-        ? metrics.monthPack._filteredMatched.filter((c) => c.isLate).slice(0, 20)
-        : [];
-      if (!lateCars.length) {
-        el.innerHTML = `<p class="foot" style="padding:12px">${metrics.monthPack ? "No late RES units." : "N/A · upload RTL stock"}</p>`;
-        return;
+      if (!metrics || !metrics.monthPack) {
+        return `<p class="foot" style="padding:12px">N/A · upload RTL stock</p>`;
       }
-      el.innerHTML = `<table class="bas-table"><thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Collection</th></tr></thead>
-        <tbody>${lateCars.map((c) => `<tr>
+      const all = collectActLateCars(metrics);
+      if (!all.length) return `<p class="foot" style="padding:12px">No late RES units.</p>`;
+      const cars = limit ? all.slice(0, limit) : all;
+      const foot = limit && all.length > limit
+        ? `<p class="foot" style="padding:8px 12px">Showing ${formatNumber(cars.length)} of ${formatNumber(all.length)} · open Wide for the full list</p>`
+        : "";
+      return `<table class="bas-table"><thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Collection</th></tr></thead>
+        <tbody>${cars.map((c) => `<tr>
           <td>${escapeHtml(c.allocProduct || c.product || "")}</td>
           <td>${escapeHtml(c.allocSfx || c.suffix || "")}</td>
           <td>${escapeHtml(c.vin || "")}</td>
           <td class="num">${c.age != null ? c.age : "—"}</td>
           <td>${escapeHtml(c.collectionLabel || "—")}</td>
-        </tr>`).join("")}</tbody></table>`;
-      return;
+        </tr>`).join("")}</tbody></table>${foot}`;
     }
-    const rows = tab === "surplus"
-      ? metrics.filteredRows.filter((r) => r.status === "above" && r.allocation > 0).sort((a, b) => a.gap - b.gap).slice(0, 15)
-      : metrics.filteredRows.filter((r) => r.status === "below" && r.boCount > 0).sort((a, b) => b.gap - a.gap).slice(0, 15);
-    if (!rows.length) {
-      el.innerHTML = `<p class="foot" style="padding:12px">No ${tab} rows.</p>`;
-      return;
-    }
-    el.innerHTML = `<table class="bas-table"><thead><tr>
-      <th>Product</th><th>SFX</th><th class="num">BO</th><th class="num">Allocation</th><th class="num">${tab === "surplus" ? "Surplus" : "Gap"}</th>
+    const all = actAlertPlanRows(metrics, tab);
+    if (!all.length) return `<p class="foot" style="padding:12px">No ${tab} rows.</p>`;
+    const rows = limit ? all.slice(0, limit) : all;
+    const gapHead = tab === "surplus" ? "Surplus" : "Gap";
+    const foot = limit && all.length > limit
+      ? `<p class="foot" style="padding:8px 12px">Showing ${formatNumber(rows.length)} of ${formatNumber(all.length)} · open Wide for the full list</p>`
+      : "";
+    return `<table class="bas-table"><thead><tr>
+      <th>Product</th><th>SFX</th><th class="num">BO</th><th class="num">Allocation</th><th class="num">${gapHead}</th>
     </tr></thead><tbody>${rows.map((r) => {
       const gapShow = tab === "surplus" ? Math.abs(r.gap) : r.gap;
       return `<tr>
@@ -10493,7 +10645,80 @@
         <td class="num">${formatNumber(r.allocation)}</td>
         <td class="num ${r.gap > 0 ? "bas-gap-neg" : "bas-gap-pos"}">${basFormatGap(tab === "surplus" ? -gapShow : r.gap)}</td>
       </tr>`;
-    }).join("")}</tbody></table>`;
+    }).join("")}</tbody></table>${foot}`;
+  }
+
+  function actAlertTabCount(metrics, tab) {
+    if (tab === "late") return collectActLateCars(metrics).length;
+    return actAlertPlanRows(metrics, tab).length;
+  }
+
+  function fillWideActAlerts() {
+    const metrics = actTowerCache;
+    const dest = $("#pbi-wide-table");
+    if (!dest || !metrics) return;
+    const tab = basView.alertTab || "shortfall";
+    const titles = { shortfall: "Shortfall", surplus: "Surplus", late: "Late RTL" };
+    const n = actAlertTabCount(metrics, tab);
+    const titleEl = $("#pbi-wide-title");
+    if (titleEl) titleEl.textContent = `Operational Alerts · ${titles[tab] || tab} (${formatNumber(n)})`;
+    const hint = $("#pbi-wide-hint");
+    if (hint) hint.textContent = "Full list · page card stays compact · Close or press Esc";
+    dest.innerHTML = `
+      <div class="act-alert-tabs act-alert-tabs--wide" id="act-alert-wide-tabs" role="tablist">
+        <button type="button" class="act-alert-tab${tab === "shortfall" ? " active" : ""}" data-act-alert-wide="shortfall">Shortfall</button>
+        <button type="button" class="act-alert-tab${tab === "surplus" ? " active" : ""}" data-act-alert-wide="surplus">Surplus</button>
+        <button type="button" class="act-alert-tab${tab === "late" ? " active" : ""}" data-act-alert-wide="late">Late RTL</button>
+      </div>
+      ${buildActAlertTableHtml(metrics, tab)}`;
+  }
+
+  function openWideActAlerts() {
+    const metrics = actTowerCache;
+    if (!metrics) return;
+    hideWidePerfExtra();
+    hideWideCancelExtra();
+    hideWideTableMode();
+
+    const wrap = $("#pbi-wide-table-wrap");
+    const dest = $("#pbi-wide-table");
+    const body = $("#pbi-wide-body");
+    const nums = $("#pbi-wide-numbers");
+    const totals = $("#pbi-wide-totals");
+    if (nums) nums.hidden = true;
+    if (totals) totals.hidden = true;
+    if (body) body.hidden = true;
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal) {
+      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories");
+      modal.classList.add("pbi-wide-modal--table", "pbi-wide-modal--act-alerts");
+    }
+    if (dest && wrap) {
+      fillWideActAlerts();
+      wrap.hidden = false;
+      wrap.classList.remove("pbi-wide-table-wrap--with-chart");
+    }
+    const backdrop = $("#pbi-wide-backdrop");
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.removeAttribute("hidden");
+      backdrop.classList.add("show");
+    }
+    document.body.classList.add("pbi-wide-open");
+  }
+
+  function renderActAlertTable(metrics) {
+    const el = $("#act-alert-table");
+    if (!el) return;
+    const tab = basView.alertTab || "shortfall";
+    document.querySelectorAll("#act-alert-tabs .act-alert-tab").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-act-alert") === tab);
+    });
+    el.innerHTML = buildActAlertTableHtml(metrics, tab, tab === "late" ? 20 : 15);
+    const modal = document.querySelector(".pbi-wide-modal");
+    if (modal && modal.classList.contains("pbi-wide-modal--act-alerts") && $("#pbi-wide-backdrop") && $("#pbi-wide-backdrop").classList.contains("show")) {
+      fillWideActAlerts();
+    }
   }
 
   async function renderBasTowerCharts(metrics) {
@@ -10752,21 +10977,20 @@
       resizeChart(healthId);
     }
 
-    // Status donut — use filtered metrics for status counts (respects tower filters)
+    // Status donut — suffix-row allocation status only (late RTL is a VIN count, not a suffix status)
     const donutId = "chart-act-status";
     destroyActChart(donutId);
-    const lateCount = metrics.lateRtl != null ? metrics.lateRtl : 0;
-    const donutData = [metrics.below, metrics.above, metrics.match, lateCount];
+    const donutData = [metrics.below, metrics.above, metrics.match];
     const donutTotal = metrics.below + metrics.above + metrics.match;
     const donutCanvas = document.getElementById(donutId);
     if (donutCanvas) {
       charts[donutId] = new Chart(donutCanvas, {
         type: "doughnut",
         data: {
-          labels: ["Below Plan", "Above Plan", "On Track", "Late in RTL"],
+          labels: ["Below Plan", "Above Plan", "On Track"],
           datasets: [{
             data: donutData,
-            backgroundColor: ["#eb0a1e", "#0f766e", "#2563eb", "#f59e0b"],
+            backgroundColor: ["#eb0a1e", "#0f766e", "#2563eb"],
             borderWidth: 0,
           }],
         },
@@ -10780,10 +11004,8 @@
               callbacks: {
                 label(ctx) {
                   const v = ctx.parsed || 0;
-                  const pct = ctx.dataIndex === 3
-                    ? (lateCount ? "units" : "n/a")
-                    : `${((v / (donutTotal || 1)) * 100).toFixed(0)}%`;
-                  return `${ctx.label}: ${v}${ctx.dataIndex === 3 ? "" : ` (${pct})`}`;
+                  const pct = `${((v / (donutTotal || 1)) * 100).toFixed(0)}%`;
+                  return `${ctx.label}: ${v} (${pct})`;
                 },
               },
             },
@@ -10797,7 +11019,7 @@
       mini.innerHTML = `
         <div class="act-mini bad"><span class="lab">Shortfall</span><strong>${formatNumber(metrics.below)}</strong><span class="sub">suffixes below</span></div>
         <div class="act-mini ok"><span class="lab">Surplus</span><strong>${formatNumber(metrics.above)}</strong><span class="sub">suffixes above</span></div>
-        <div class="act-mini warn"><span class="lab">Late RTL</span><strong>${metrics.lateRtl != null ? formatNumber(metrics.lateRtl) : "N/A"}</strong><span class="sub">RES age ≥ 1</span></div>
+        <div class="act-mini"><span class="lab">On Track</span><strong>${formatNumber(metrics.match)}</strong><span class="sub">suffixes equal</span></div>
         <div class="act-donut-center-note">Suffix rows ${formatNumber(donutTotal)}</div>`;
     }
 
@@ -10864,42 +11086,63 @@
       }
 
       const resKpis = $("#act-res-kpis");
-      const late = matched.filter((c) => c.isLate).length;
-      const resTotal = matched.length;
+      const late = (pack.lateCars || []).length || matched.filter((c) => c.isLate).length;
+      const resByProduct = Array.isArray(pack.resByProduct) ? pack.resByProduct.slice() : [];
+      const resTotal = resByProduct.reduce((s, x) => s + (Number(x[1]) || 0), 0);
       if (resKpis) {
         resKpis.innerHTML = [
-          ["Total RES", resTotal],
-          ["Collected MTD", mtdTotal],
-          ["Plan", planTotal],
+          ["Total RES", formatNumber(resTotal)],
+          ["Car types", formatNumber(resByProduct.length)],
+          ["Collected MTD", formatNumber(mtdTotal)],
+          ["Plan", formatNumber(planTotal)],
           ["Gap", (gap >= 0 ? "+" : "") + formatNumber(gap)],
-          ["Late", late],
+          ["Late", formatNumber(late)],
         ].map(([lab, val]) => `<div class="act-res-chip"><span class="lab">${lab}</span><strong>${escapeHtml(String(val))}</strong></div>`).join("");
       }
-      const byResProd = new Map();
-      matched.forEach((c) => {
-        const p = c.allocProduct || c.product || "—";
-        byResProd.set(p, (byResProd.get(p) || 0) + 1);
-      });
-      const topRes = [...byResProd.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+      let shownRes = resByProduct;
+      if (basView.product) shownRes = shownRes.filter((x) => x[0] === basView.product);
+      if (basView.search && basView.search.trim()) {
+        const q = basView.search.trim().toLowerCase();
+        shownRes = shownRes.filter((x) => String(x[0]).toLowerCase().includes(q));
+      }
       const resId = "chart-act-res-top";
       destroyActChart(resId);
       const resCanvas = document.getElementById(resId);
+      const resBox = $("#act-res-chart-box");
+      if (resBox) {
+        const n = Math.max(1, shownRes.length);
+        resBox.style.height = `${Math.max(160, n * 28 + 24)}px`;
+        resBox.style.minHeight = `${Math.max(160, n * 28 + 24)}px`;
+      }
       if (resCanvas) {
         charts[resId] = new Chart(resCanvas, {
           type: "bar",
           data: {
-            labels: topRes.length ? topRes.map((x) => x[0]) : ["No RES"],
-            datasets: [{ data: topRes.length ? topRes.map((x) => x[1]) : [0], backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
+            labels: shownRes.length ? shownRes.map((x) => x[0]) : ["No RES"],
+            datasets: [{ data: shownRes.length ? shownRes.map((x) => x[1]) : [0], backgroundColor: "rgba(235,10,30,0.8)", borderRadius: 4 }],
           },
           options: {
             indexAxis: "y",
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { beginAtZero: true } },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const v = ctx.parsed.x || 0;
+                    return `${formatNumber(v)} received`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: { beginAtZero: true, ticks: { precision: 0 } },
+              y: { ticks: { font: { size: 11, weight: "700" }, autoSkip: false } },
+            },
             onClick(evt, els) {
-              if (!els.length || !topRes.length) return;
-              actSelectProduct(topRes[els[0].index][0]);
+              if (!els.length || !shownRes.length) return;
+              actSelectProduct(shownRes[els[0].index][0]);
             },
           },
         });
@@ -11179,6 +11422,7 @@
     renderBasKpis(rows, {
       totalDemand: metrics.totalDemand,
       lateRtl: metrics.lateRtl,
+      resReceived: metrics.resReceived,
     });
     renderBasTowerCharts(metrics);
 
@@ -11215,6 +11459,7 @@
       renderBasKpis(nextRows, {
         totalDemand: nextMetrics.totalDemand,
         lateRtl: nextMetrics.lateRtl,
+        resReceived: nextMetrics.resReceived,
       });
       renderBasTowerCharts(nextMetrics);
       renderBasMonthlyCollection(window._data);
@@ -11398,6 +11643,14 @@
     const dayAge0Count = Array(31).fill(0);
     let mode = hasDayFiles ? "daily" : "age";
 
+    const resByProduct = new Map();
+    const addResProduct = (car, dayNum) => {
+      if (dayNum > ctx.todayDay) return;
+      if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+      const name = String(car.product || "—").trim() || "—";
+      resByProduct.set(name, (resByProduct.get(name) || 0) + 1);
+    };
+
     if (hasDayFiles) {
       Object.keys(dayFiles).sort().forEach((dateKey) => {
         const dayNum = Number(String(dateKey).slice(8, 10));
@@ -11422,6 +11675,7 @@
             dayAge0Count[dayNum] += 1;
             if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[dayNum] += 1;
           }
+          addResProduct(car, dayNum);
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
           matched.push({
@@ -11478,13 +11732,14 @@
       // No day files yet — infer collection day from live RTL Col J ages only.
       const rtlRows = mapStockInv(slots.rtl.rows || [], "RTL");
       rtlRows.forEach((car) => {
-        const leaf = matchRtlToAllocLeaf(car);
-        if (!leaf) return;
         const collDate = inferCollectionDateFromAge(car.ageing, ctx.today);
         if (!collDate) return;
         if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
         const collectionDay = collDate.getDate();
         const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
+        addResProduct(car, collectionDay);
+        const leaf = matchRtlToAllocLeaf(car);
+        if (!leaf) return;
         if (collectionDay >= 1 && collectionDay <= 30) {
           dayTotals[collectionDay] += 1;
           if (isRtlDayFileArrival(age)) dayAge0Count[collectionDay] += 1;
@@ -11540,6 +11795,7 @@
       dayHasFile,
       dayFileVinCount,
       dayAge0Count,
+      resByProduct: [...resByProduct.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))),
       mode,
       activeDayCount: hasDayFiles ? Object.keys(dayFiles).length : 0,
     };
@@ -15211,6 +15467,39 @@
     return set;
   }
 
+  function buildDisplayVinLookup() {
+    const byVin = new Map();
+    const byTail = new Map();
+    (slots.central.displayRows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin) || upperTrim(r.vin);
+      if (!vin) return;
+      if (!byVin.has(vin)) byVin.set(vin, r);
+      const tail = vin.length >= 8 ? vin.slice(-8) : vin;
+      if (tail && !byTail.has(tail)) byTail.set(tail, r);
+    });
+    return { byVin, byTail };
+  }
+
+  /** Match full VIN or chassis tail against Display Central 1 (available rows only when requireAvailable). */
+  function findDisplayVinHit(lookup, vin, { requireAvailable = true } = {}) {
+    if (!lookup || !lookup.byVin) return null;
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    const ok = (row) => row && (!requireAvailable || row.available);
+    const direct = lookup.byVin.get(key);
+    if (ok(direct)) return direct;
+    const tail = key.length >= 8 ? key.slice(-8) : key;
+    const byTail = lookup.byTail.get(tail);
+    if (ok(byTail)) return byTail;
+    // Reverse: Display row may store a shorter chassis that is a suffix of the RTL VIN
+    for (const [dv, row] of lookup.byVin.entries()) {
+      if (!ok(row)) continue;
+      if (key.endsWith(dv) || dv.endsWith(key)) return row;
+      if (key.length >= 8 && dv.length >= 8 && key.slice(-8) === dv.slice(-8)) return row;
+    }
+    return null;
+  }
+
   function resolveAaSalesStatus(vin, salesLookup) {
     const key = extractVinValue(vin) || upperTrim(vin);
     const sales = salesLookup.get(key);
@@ -15276,6 +15565,7 @@
   function buildAllocationAuditPack() {
     const salesLookup = buildSalesVinLookup();
     const availableLookup = buildEsalesStockVinLookup();
+    const displayLookup = buildDisplayVinLookup();
     const rtlLookup = buildRtlStockVinLookup();
     const reservedRows = slots.central.reservedRows || [];
     const reservedSet = buildReservedVinSet();
@@ -15288,6 +15578,7 @@
       proforma: [],
       reserved: [],
       available: [],
+      display: [],
       missing: [],
     });
 
@@ -15305,6 +15596,7 @@
         proforma: 0,
         reserved: 0,
         available: 0,
+        display: 0,
         missing: 0,
         vins: emptyVins(),
       });
@@ -15340,6 +15632,7 @@
         searchArea: car.searchAreaDesc || "",
         inReserved: reservedSet.has(vin),
         inAvailable: availableLookup.has(vin),
+        inDisplay: !!findDisplayVinHit(displayLookup, vin),
       };
       sum.actual += 1;
       sum.vins.actual.push(detail);
@@ -15359,7 +15652,16 @@
         sum.available += 1;
         sum.vins.available.push(detail);
       }
-      if (sales.kind === "none" && !reservedSet.has(vin) && !availableLookup.has(vin)) {
+      const displayHit = findDisplayVinHit(displayLookup, vin);
+      const inDisplay = !!displayHit;
+      if (inDisplay) {
+        sum.display += 1;
+        sum.vins.display.push({
+          ...detail,
+          status: "Display",
+          statusDetail: `${displayHit.sheet || "Display Central 1"}${displayHit.location ? ` · ${displayHit.location}` : ""}`,
+        });
+      } else if (sales.kind === "none" && !reservedSet.has(vin) && !availableLookup.has(vin)) {
         sum.missing += 1;
         sum.vins.missing.push(detail);
       }
@@ -15375,10 +15677,12 @@
 
       const sales = resolveAaSalesStatus(vin, salesLookup);
       const avail = availableLookup.get(vin) || null;
+      const displayHit = findDisplayVinHit(displayLookup, vin);
       const rtl = rtlLookup.get(vin) || null;
       const snap = lastSeen[vin] || null;
       const inReserved = true;
       const inAvailable = !!avail;
+      const inDisplay = !!displayHit;
       const hasSalesDate = sales.kind === "delivered" || sales.kind === "proforma";
 
       const productHint = rec.product || (sales.product) || (snap && snap.product) || "";
@@ -15389,15 +15693,23 @@
       }) || null;
 
       const location = sales.location
+        || (displayHit && displayHit.location)
         || (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
         || (snap && snap.location)
         || (avail ? cellToString(avail.location).trim() : "")
         || rec.location
         || "";
 
-      const statusLabel = hasSalesDate
+      let statusLabel = hasSalesDate
         ? sales.label
         : (sales.secondaryStatus || sales.label || "Not in Sales Raw");
+      let statusDetail = hasSalesDate
+        ? sales.detail
+        : (sales.kind === "sales" ? "In Sales Raw (no dates)" : "Not in Sales Raw");
+      if (!hasSalesDate && inDisplay) {
+        statusLabel = "Display";
+        statusDetail = `${displayHit.sheet || "Display Central 1"}${displayHit.location ? ` · ${displayHit.location}` : " · available"}`;
+      }
 
       vinRows.push({
         vin,
@@ -15413,6 +15725,8 @@
         sales: {
           ...sales,
           label: statusLabel,
+          detail: statusDetail,
+          cls: inDisplay && !hasSalesDate ? "info" : (sales.cls || "na"),
         },
         salesman: sales.salesman || "",
         proformaDate: sales.proformaDate,
@@ -15421,15 +15735,70 @@
         currentStatus: statusLabel,
         inReserved,
         inAvailable,
+        inDisplay,
         availableDetail: avail
           ? reservedStockStatusDetail(avail, "In available stock")
           : "—",
         availableLocation: avail ? cellToString(avail.location).trim() : "",
         snap,
-        missing: sales.kind === "none",
+        missing: sales.kind === "none" && !inDisplay,
         whereLabel: hasSalesDate
           ? `${sales.label}${sales.salesman ? ` · ${sales.salesman}` : ""}`
-          : (sales.kind === "sales" ? "In Sales Raw (no dates)" : "Not in Sales Raw"),
+          : (inDisplay ? "Display · Display Central 1" : (sales.kind === "sales" ? "In Sales Raw (no dates)" : "Not in Sales Raw")),
+      });
+    });
+
+    // Missing RES VINs found available on Display Central 1 → show as Display in the VIN schedule.
+    resCars.forEach((car) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seenVin.has(vin)) return;
+      const displayHit = findDisplayVinHit(displayLookup, vin);
+      if (!displayHit) return;
+      const sales = resolveAaSalesStatus(vin, salesLookup);
+      const hasSalesDate = sales.kind === "delivered" || sales.kind === "proforma";
+      if (hasSalesDate) return;
+      const avail = availableLookup.get(vin) || null;
+      if (reservedSet.has(vin) || avail) return;
+      seenVin.add(vin);
+      const rtl = rtlLookup.get(vin) || null;
+      const snap = lastSeen[vin] || null;
+      const leaf = matchRtlToAllocLeaf(car) || null;
+      const location = (displayHit.location)
+        || (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+        || cellToString(car.location || "").trim()
+        || (snap && snap.location)
+        || "";
+      const statusDetail = `${displayHit.sheet || "Display Central 1"}${displayHit.location ? ` · ${displayHit.location}` : " · available"}`;
+      vinRows.push({
+        vin,
+        orderNumber: "",
+        product: leaf ? leaf.product : (car.product || "—"),
+        sfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        seg: leaf ? leaf.seg : "—",
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        age: car.age != null ? car.age : (car.ageing != null ? car.ageing : null),
+        searchArea: car.searchAreaDesc || "",
+        liveLocation: location,
+        sales: {
+          ...sales,
+          label: "Display",
+          detail: statusDetail,
+          cls: "info",
+        },
+        salesman: sales.salesman || "",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+        location,
+        currentStatus: "Display",
+        inReserved: false,
+        inAvailable: false,
+        inDisplay: true,
+        availableDetail: "—",
+        availableLocation: "",
+        snap,
+        missing: false,
+        whereLabel: "Display · Display Central 1",
       });
     });
 
@@ -15455,6 +15824,7 @@
         proforma: vinRows.filter((r) => r.sales.kind === "proforma").length,
         reserved: vinRows.length,
         available: vinRows.filter((r) => r.inAvailable).length,
+        display: vinRows.filter((r) => r.inDisplay).length,
         missing: vinRows.filter((r) => r.missing).length,
         snapshots: aaLastSeenCache.snapshotCount || 0,
         withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
@@ -15472,6 +15842,7 @@
     proforma: "Proforma",
     reserved: "المحجوز",
     available: "Available stock",
+    display: "Display · Display Central 1",
     missing: "Missing",
   };
 
@@ -15604,6 +15975,7 @@
       if (st === "proforma" && r.sales.kind !== "proforma") return false;
       if (st === "reserved" && !r.inReserved) return false;
       if (st === "available" && !r.inAvailable) return false;
+      if (st === "display" && !r.inDisplay) return false;
       if (st === "missing" && !r.missing) return false;
       if (st === "salesdate" && r.sales.kind !== "delivered" && r.sales.kind !== "proforma") return false;
       if (!q) return true;
@@ -15643,7 +16015,10 @@
       const sheetNote = slots.central.reservedSheet
         ? ` · E-Sales «${slots.central.reservedSheet}»`
         : " · E-Sales sheet 2";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.missing} not in Sales Raw${sheetNote}`;
+      const displayNote = slots.central.displaySheet
+        ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
+        : "";
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${sheetNote}${displayNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -15655,6 +16030,7 @@
         ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
         ["Delivered", totals.delivered, "ok"],
         ["Proforma open", totals.proforma, "warn"],
+        ["Display", totals.display || 0, "ok"],
         ["Not in Sales Raw", totals.missing, totals.missing ? "bad" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
@@ -15680,6 +16056,7 @@
               <th class="num">Proforma</th>
               <th class="num">المحجوز</th>
               <th class="num">Available</th>
+              <th class="num">Display</th>
               <th class="num">Missing</th>
             </tr>
           </thead>
@@ -15695,6 +16072,7 @@
                 <td class="num">${aaNumButton(r.proforma, r.id, "proforma")}</td>
                 <td class="num">${aaNumButton(r.reserved, r.id, "reserved")}</td>
                 <td class="num">${aaNumButton(r.available, r.id, "available")}</td>
+                <td class="num">${aaNumButton(r.display, r.id, "display")}</td>
                 <td class="num">${aaNumButton(r.missing, r.id, "missing")}</td>
               </tr>`).join("")}
           </tbody>
@@ -15753,7 +16131,7 @@
       }
     }
     if (foot) {
-      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.missing} not in Sales Raw`;
+      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} schedule VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing`;
     }
 
     if (!aaLastSeenCache.loaded) {
@@ -15780,6 +16158,7 @@
       Proforma: r.proforma,
       Reserved: r.reserved,
       Available: r.available,
+      Display: r.display,
       Missing: r.missing,
     }));
     const vins = pack.vinRows.map((r) => ({
@@ -15794,6 +16173,7 @@
       "Invoice Date": r.invoiceDate ? formatRvDate(r.invoiceDate) : "",
       Location: r.location || "",
       "In Available (المخزون المتاح)": r.inAvailable ? "Yes" : "No",
+      "Display Central 1": r.inDisplay ? "Yes" : "No",
       "Not in Sales Raw": r.missing ? "Yes" : "No",
     }));
     const wb = XLSX.utils.book_new();
@@ -15904,6 +16284,8 @@
       if (d.id === "central") {
         slots[d.id].reservedRows = [];
         slots[d.id].reservedSheet = "";
+        slots[d.id].displayRows = [];
+        slots[d.id].displaySheet = "";
       }
       if (d.id === "accessories") {
         slots[d.id].vsndRows = [];
@@ -16669,13 +17051,32 @@
       else refreshBasFromFilters();
     });
   }
-  document.querySelectorAll(".act-alert-tab").forEach((btn) => {
+  document.querySelectorAll("#act-alert-tabs .act-alert-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       basView.alertTab = btn.getAttribute("data-act-alert") || "shortfall";
       if (actTowerCache) renderActAlertTable(actTowerCache);
       else refreshBasFromFilters();
     });
   });
+  const actAlertWide = $("#act-alert-wide");
+  if (actAlertWide) {
+    actAlertWide.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openWideActAlerts();
+    });
+  }
+  const wideTableWrap = $("#pbi-wide-table-wrap");
+  if (wideTableWrap) {
+    wideTableWrap.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-act-alert-wide]");
+      if (!tabBtn) return;
+      e.preventDefault();
+      basView.alertTab = tabBtn.getAttribute("data-act-alert-wide") || "shortfall";
+      if (actTowerCache) renderActAlertTable(actTowerCache);
+      else refreshBasFromFilters();
+    });
+  }
   const actRefresh = $("#act-refresh-btn");
   if (actRefresh) {
     actRefresh.addEventListener("click", () => {
