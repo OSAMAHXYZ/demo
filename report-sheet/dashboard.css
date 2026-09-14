@@ -10951,6 +10951,39 @@ button.dvp-total-card:focus-visible {
 
 /* --- BO Errors --- */
 .boe-dash { display: flex; flex-direction: column; gap: 14px; }
+.boe-employee-card {
+  padding: 14px 16px 16px;
+  border: 1px solid #e5eaf1;
+  border-radius: 14px;
+  background: #fff;
+}
+.boe-employee-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.boe-employee-actions select {
+  min-width: min(280px, 100%);
+  max-width: 420px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font: inherit;
+}
+.boe-employee-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.boe-emp-chip.is-active {
+  outline: 2px solid #0f766e;
+  outline-offset: 1px;
+  background: #ecfdf5;
+  border-color: #99f6e4;
+}
 .boe-type-chips {
   display: flex;
   flex-wrap: wrap;
@@ -11012,6 +11045,11 @@ button.dvp-total-card:focus-visible {
 .boe-tag.sev-critical { background: #fee2e2; color: #991b1b; }
 .boe-tag.sev-warn { background: #fef3c7; color: #92400e; }
 .boe-tag.sev-info { background: #e0e7ff; color: #3730a3; }
+.boe-ac-fix {
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 700;
+}
 .boe-sev {
   display: inline-block;
   padding: 0.15rem 0.5rem;

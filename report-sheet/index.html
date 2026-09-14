@@ -794,6 +794,21 @@
             </div>
           </div>
           <div class="bo-kpis" id="boe-kpis"></div>
+          <article class="card boe-employee-card" id="boe-employee-section">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>Filter by employee</h2>
+                <span class="hint">Show only Back Order errors for the selected sales employee</span>
+              </div>
+              <div class="boe-employee-actions">
+                <select id="boe-filter-employee" title="Filter by employee" aria-label="Filter BO errors by employee">
+                  <option value="">All employees</option>
+                </select>
+                <button type="button" id="boe-employee-clear" class="btn">Clear</button>
+              </div>
+            </div>
+            <div class="boe-employee-chips" id="boe-employee-chips" aria-label="Employees with errors"></div>
+          </article>
           <div class="boe-type-chips" id="boe-type-chips" aria-label="Error type breakdown"></div>
           <article class="card boe-table-card">
             <div class="pbi-viz-head">
@@ -12250,8 +12265,16 @@
   };
 
   const BOE_RAV4_SH_FORBIDDEN = new Set(["089", "1L6", "1M6", "4V8", "8X8", "6X7", "3T3"]);
+  /** Suggested replacement exterior codes for RAV4 SH (written to Col AC, green in export). */
+  const BOE_RAV4_SH_CORRECTIONS = {
+    "089": "2VP",
+    "1L6": "M22",
+    "4V8": "2SQ",
+    "8X8": "M40",
+    // 1M6, 6X7, 3T3: still flagged; no mapped correction
+  };
 
-  let boeView = { search: "", severity: "", type: "" };
+  let boeView = { search: "", severity: "", type: "", employee: "" };
   let boeLastPack = null;
 
   /** Resolve Excel letter → header name from the live Back Order file. */
@@ -12291,7 +12314,7 @@
       missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70)`, severity: "critical" },
       sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: `ALJUF/Bank not Confirmed (${h})`, severity: "critical" },
       rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
-      rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} color`, severity: "critical" },
+      rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} → Col AC correction`, severity: "critical" },
       rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: `RAV4 (not SH/VH) ${qrs} = 20`, severity: "critical" },
       dup_ship_to: { id: "dup_ship_to", label: `Duplicate ${ship}`, severity: "critical" },
       col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe (except EB2C)`, severity: "critical" },
@@ -12438,6 +12461,20 @@
     ]) || "";
   }
 
+  function boeRav4ShCorrectionValue(row) {
+    const hits = boeMatchingColorLetters(row, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN);
+    const corrections = [];
+    const seen = new Set();
+    hits.forEach((L) => {
+      const tok = boeToken(cellByLetter(row, L));
+      const fix = BOE_RAV4_SH_CORRECTIONS[tok];
+      if (!fix || seen.has(fix)) return;
+      seen.add(fix);
+      corrections.push(fix);
+    });
+    return { hitLetters: hits, correction: corrections.join(" / ") };
+  }
+
   function boeMatchingColorLetters(row, letters, banned) {
     const set = banned instanceof Set ? banned : new Set(banned);
     return (letters || []).filter((L) => {
@@ -12478,6 +12515,7 @@
 
       const errors = [];
       const errorLetters = new Set();
+      let acCorrection = "";
       const pushErr = (id, letters) => {
         const def = BOE_ERROR_DEFS[id];
         if (!def) return;
@@ -12524,8 +12562,11 @@
           const hit040 = boeMatchingColorLetters(r, ["N", "O", "P"], ["040"]);
           if (hit040.length) pushErr("rav4_nop_040", hit040);
           if (sfxKey === "SH") {
-            const hitForbidden = boeMatchingColorLetters(r, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN);
-            if (hitForbidden.length) pushErr("rav4_sh_forbidden_color", hitForbidden);
+            const shFix = boeRav4ShCorrectionValue(r);
+            if (shFix.hitLetters.length) {
+              pushErr("rav4_sh_forbidden_color", shFix.hitLetters);
+              if (shFix.correction) acCorrection = shFix.correction;
+            }
           }
           if (sfxKey !== "SH" && sfxKey !== "VH") {
             const hit20 = boeMatchingColorLetters(r, ["Q", "R", "S"], ["20"]);
@@ -12583,6 +12624,7 @@
         errors,
         errorIds: errors.map((e) => e.id),
         errorLetters: Array.from(errorLetters),
+        acCorrection: acCorrection || "",
         severity: sevRank === 0 ? "critical" : sevRank === 1 ? "warn" : "info",
         sevRank,
       });
@@ -12702,17 +12744,81 @@
     const q = String(boeView.search || "").trim().toLowerCase();
     const sev = String(boeView.severity || "").trim();
     const typ = String(boeView.type || "").trim();
+    const emp = String(boeView.employee || "").trim();
     return rows.filter((r) => {
+      if (emp) {
+        const key = nameKey(r.salesman);
+        if (key !== emp && String(r.salesman || "").trim() !== emp) return false;
+      }
       if (sev && r.severity !== sev) return false;
       if (typ && !(r.errorIds || []).includes(typ)) return false;
       if (!q) return true;
       const hay = [
         r.boNumber, r.product, r.sfx, r.salesman, r.salesType, r.year,
-        r.colF, r.colH, r.colJ, r.colShip, r.colAB, r.nop, r.qrs,
+        r.colF, r.colH, r.colJ, r.colShip, r.colAB, r.nop, r.qrs, r.acCorrection,
         ...(r.errors || []).map((e) => e.label),
       ].map((x) => String(x || "").toLowerCase()).join(" ");
       return hay.includes(q);
     });
+  }
+
+  function boeTotalsFromRows(rows) {
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
+    (rows || []).forEach((r) => {
+      (r.errorIds || []).forEach((id) => {
+        if (typeCounts[id] != null) typeCounts[id] += 1;
+      });
+    });
+    return {
+      errorRows: (rows || []).length,
+      critical: (rows || []).filter((r) => r.severity === "critical").length,
+      warn: (rows || []).filter((r) => r.severity === "warn").length,
+      info: (rows || []).filter((r) => r.severity === "info").length,
+      errorHits: Object.values(typeCounts).reduce((s, n) => s + n, 0),
+      typeCounts,
+    };
+  }
+
+  function populateBoeEmployeeFilter(rows) {
+    const sel = $("#boe-filter-employee");
+    const chips = $("#boe-employee-chips");
+    const counts = new Map();
+    (rows || []).forEach((r) => {
+      const name = String(r.salesman || "").trim();
+      if (!name || name === "—") return;
+      const key = nameKey(name) || name;
+      const prev = counts.get(key) || { name, key, n: 0 };
+      prev.n += 1;
+      if (!prev.name || prev.name === "—") prev.name = name;
+      counts.set(key, prev);
+    });
+    const list = Array.from(counts.values()).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+    const cur = String(boeView.employee || "").trim();
+    if (sel) {
+      const opts = [`<option value="">All employees (${formatNumber((rows || []).length)} errors)</option>`];
+      list.forEach((e) => {
+        opts.push(`<option value="${escapeHtml(e.key)}"${e.key === cur ? " selected" : ""}>${escapeHtml(e.name)} (${formatNumber(e.n)})</option>`);
+      });
+      sel.innerHTML = opts.join("");
+      if (cur && !counts.has(cur)) {
+        boeView.employee = "";
+        sel.value = "";
+      }
+    }
+    if (chips) {
+      if (!list.length) {
+        chips.innerHTML = `<span class="rv-muted">No employees on error rows</span>`;
+      } else {
+        chips.innerHTML = list.map((e) => {
+          const active = e.key === cur ? " is-active" : "";
+          return `<button type="button" class="boe-chip boe-emp-chip${active}" data-boe-employee="${escapeHtml(e.key)}" title="${escapeHtml(e.name)}">
+            <span class="boe-chip-lab">${escapeHtml(e.name)}</span>
+            <strong>${formatNumber(e.n)}</strong>
+          </button>`;
+        }).join("");
+      }
+    }
   }
 
   function populateBoeTypeFilter(totals) {
@@ -12751,6 +12857,13 @@
     const pack = buildBoErrorsPack();
     boeLastPack = pack;
     const { rows, totals } = pack;
+    const empKey = String(boeView.employee || "").trim();
+    const employeeScoped = empKey
+      ? rows.filter((r) => nameKey(r.salesman) === empKey || String(r.salesman || "").trim() === empKey)
+      : rows;
+    const viewTotals = empKey
+      ? { ...totals, ...boeTotalsFromRows(employeeScoped), cleanRows: totals.cleanRows }
+      : totals;
     const filtered = filteredBoeRows(rows);
     const BOE_ERROR_DEFS = getBoeErrorDefs();
     const colNames = {
@@ -12762,21 +12875,28 @@
       nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
       qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
     };
-    populateBoeTypeFilter(totals);
+    populateBoeEmployeeFilter(rows);
+    populateBoeTypeFilter(viewTotals);
 
+    const empLabel = empKey
+      ? (employeeScoped[0] && employeeScoped[0].salesman) || empKey
+      : "";
     const hint = $("#boe-live-hint");
     if (hint) {
-      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee (${formatNumber(totals.skippedEmployee || 0)})`;
+      const empNote = empKey
+        ? ` · employee ${empLabel} (${formatNumber(employeeScoped.length)} errors)`
+        : "";
+      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(viewTotals.critical)} critical · ${formatNumber(viewTotals.warn)} warning${empNote} · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee sales type (${formatNumber(totals.skippedEmployee || 0)})`;
     }
 
     const kpis = $("#boe-kpis");
     if (kpis) {
       kpis.innerHTML = [
         ["Total BOs", totals.totalBos, "ok"],
-        ["With errors", totals.errorRows, totals.errorRows ? "bad" : "ok"],
-        ["Critical", totals.critical, totals.critical ? "bad" : "ok"],
-        ["Warnings", totals.warn, totals.warn ? "warn" : "ok"],
-        ["Issue flags", totals.errorHits, totals.errorHits ? "warn" : "ok"],
+        [empKey ? "Employee errors" : "With errors", viewTotals.errorRows, viewTotals.errorRows ? "bad" : "ok"],
+        ["Critical", viewTotals.critical, viewTotals.critical ? "bad" : "ok"],
+        ["Warnings", viewTotals.warn, viewTotals.warn ? "warn" : "ok"],
+        ["Issue flags", viewTotals.errorHits, viewTotals.errorHits ? "warn" : "ok"],
         ["Clean BOs", totals.cleanRows, "ok"],
       ].map(([lab, val, status]) => `
         <div class="bo-kpi ${status}">
@@ -12788,7 +12908,7 @@
     const chips = $("#boe-type-chips");
     if (chips) {
       chips.innerHTML = Object.values(BOE_ERROR_DEFS).map((def) => {
-        const n = totals.typeCounts[def.id] || 0;
+        const n = (viewTotals.typeCounts && viewTotals.typeCounts[def.id]) || 0;
         const active = boeView.type === def.id ? " is-active" : "";
         return `<button type="button" class="boe-chip sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}">
           <span class="boe-chip-lab">${escapeHtml(def.label)}</span>
@@ -12803,13 +12923,14 @@
       if (!rows.length) {
         wrap.innerHTML = `<p class="foot" style="padding:16px">No BO errors found — all checked rules passed.</p>`;
       } else if (!filtered.length) {
-        wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters.</p>`;
+        wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters${empKey ? " for this employee" : ""}.</p>`;
       } else {
         wrap.innerHTML = `<table class="data-table aa-table boe-table">
           <thead>
             <tr>
               <th>Severity</th>
               <th>${escapeHtml(colNames.f)}</th>
+              <th>Employee</th>
               <th>Product</th>
               <th>SFX</th>
               <th>Sales type</th>
@@ -12820,6 +12941,7 @@
               <th>${escapeHtml(colNames.qrs)}</th>
               <th>${escapeHtml(colNames.ship)}</th>
               <th>${escapeHtml(colNames.ab)}</th>
+              <th>Col AC correction</th>
               <th>Errors</th>
             </tr>
           </thead>
@@ -12828,6 +12950,7 @@
               <tr class="boe-row sev-${escapeHtml(r.severity)} boe-row-click" data-boe-idx="${escapeHtml(String(r.idx))}" tabindex="0" role="button" title="Open full Back Order row">
                 <td><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
                 <td class="mono">${escapeHtml(r.colF)}</td>
+                <td>${escapeHtml(r.salesman || "—")}</td>
                 <td><strong>${escapeHtml(r.product)}</strong></td>
                 <td><span class="aa-sfx">${escapeHtml(r.sfx)}</span></td>
                 <td>${escapeHtml(r.salesType)}</td>
@@ -12838,6 +12961,7 @@
                 <td class="mono">${escapeHtml(r.qrs)}</td>
                 <td class="mono">${escapeHtml(r.colShip)}</td>
                 <td>${escapeHtml(r.colAB)}</td>
+                <td class="mono${r.acCorrection ? " boe-ac-fix" : ""}">${escapeHtml(r.acCorrection || "—")}</td>
                 <td class="boe-tags">${(r.errors || []).map((e) =>
                   `<span class="boe-tag sev-${escapeHtml(e.severity)}" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>`
                 ).join("")}</td>
@@ -12847,7 +12971,8 @@
       }
     }
     if (foot) {
-      foot.textContent = `Showing ${formatNumber(filtered.length)} of ${formatNumber(rows.length)} error BOs · ${formatNumber(totals.cleanRows)} clean · ${formatNumber(totals.errorHits)} issue flags`;
+      const empFoot = empKey ? ` · employee ${empLabel}` : "";
+      foot.textContent = `Showing ${formatNumber(filtered.length)} of ${formatNumber(viewTotals.errorRows)} error BOs${empFoot} · ${formatNumber(totals.errorRows)} total errors · ${formatNumber(totals.cleanRows)} clean · ${formatNumber(viewTotals.errorHits)} issue flags`;
     }
   }
 
@@ -12872,9 +12997,19 @@
       return;
     }
 
-    const headers = Array.isArray(rawRows[0].__headers) && rawRows[0].__headers.length
+    const AC_IDX = colLetterToIndex("AC");
+    let headers = Array.isArray(rawRows[0].__headers) && rawRows[0].__headers.length
       ? rawRows[0].__headers.slice()
       : [];
+    // Keep through Col AC only (drop AD–AI)
+    while (headers.length <= AC_IDX) {
+      headers.push(`Column ${indexToColLetter(headers.length)}`);
+    }
+    headers = headers.slice(0, AC_IDX + 1);
+    if (!cellToString(headers[AC_IDX]).trim() || /^column\s+ac$/i.test(cellToString(headers[AC_IDX]))) {
+      headers[AC_IDX] = "Color Correction";
+    }
+
     const headerLabels = headers.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const headerNorms = headerLabels.map((h) => normHeader(h));
     const errByIdx = new Map((pack.rows || []).map((r) => [r.idx, r]));
@@ -12885,13 +13020,17 @@
       fill: { patternType: "solid", fgColor: { rgb: "FFCDD2" } },
       font: { color: { rgb: "B71C1C" }, bold: true },
     };
+    const greenStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "C8E6C9" } },
+      font: { color: { rgb: "1B5E20" }, bold: true },
+    };
     const redCells = [];
+    const greenCells = [];
 
     const sanitizeBoeExportCell = (v, colIdx) => {
       const raw = boeExcelCellValue(v);
       const s = cellToString(raw).trim();
       if (!s) return "";
-      // Drop leaked header labels (e.g. empty Ext Color 2 filled from header row)
       if (headerNorms[colIdx] && normHeader(s) === headerNorms[colIdx]) return "";
       if (normHeader(s) === normHeader(headerLabels[colIdx])) return "";
       return raw;
@@ -12899,16 +13038,19 @@
 
     rawRows.forEach((raw, idx) => {
       const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
-      const width = Math.max(headers.length, cells.length);
       const row = [];
-      for (let i = 0; i < width; i += 1) {
+      for (let i = 0; i <= AC_IDX; i += 1) {
         const v = cells[i] != null && cells[i] !== "" ? cells[i] : raw[headers[i]];
         row.push(sanitizeBoeExportCell(v, i));
       }
-      while (row.length < headers.length) row.push("");
       // Skip rows that are empty after stripping leaked header labels
       if (row.every((v) => cellToString(v).trim() === "")) return;
+
       const err = errByIdx.get(idx);
+      if (err && err.acCorrection) {
+        row[AC_IDX] = err.acCorrection;
+      }
+
       const errText = err && err.errors && err.errors.length
         ? err.errors.map((e) => e.label).join("; ")
         : "";
@@ -12916,12 +13058,13 @@
       aoa.push(row);
 
       if (err) {
-        const excelRow = aoa.length - 1; // current data row after push (header is 0)
+        const excelRow = aoa.length - 1;
         (err.errorLetters || []).forEach((L) => {
           const c = colLetterToIndex(L);
-          if (c >= 0 && c < headers.length) redCells.push({ r: excelRow, c });
+          if (c >= 0 && c <= AC_IDX && c !== AC_IDX) redCells.push({ r: excelRow, c });
         });
-        redCells.push({ r: excelRow, c: headers.length });
+        redCells.push({ r: excelRow, c: headers.length }); // Error Definition
+        if (err.acCorrection) greenCells.push({ r: excelRow, c: AC_IDX });
       }
     });
 
@@ -12931,8 +13074,12 @@
       if (!ws[addr]) ws[addr] = { t: "s", v: "" };
       ws[addr].s = redStyle;
     });
+    greenCells.forEach(({ r, c }) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) ws[addr] = { t: "s", v: "" };
+      ws[addr].s = greenStyle;
+    });
 
-    // Reasonable column widths
     ws["!cols"] = headerLabels.map(() => ({ wch: 14 })).concat([{ wch: 48 }]);
 
     const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
@@ -12940,13 +13087,18 @@
       Severity: def.severity,
       Count: (pack.totals.typeCounts && pack.totals.typeCounts[def.id]) || 0,
     }));
+    summary.push({
+      Error: "RAV4 SH corrections (Col AC)",
+      Severity: "info",
+      Count: (pack.rows || []).filter((r) => r.acCorrection).length,
+    });
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Back Order");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
     const name = `BO-Errors-${excelFileStamp()}.xlsx`;
     XLSX.writeFile(wb, name, { cellStyles: true, bookType: "xlsx" });
-    setStatus("BO Errors Excel exported · Error Definition + red cells", "ok");
+    setStatus("BO Errors Excel exported · AC corrections green · AD–AI removed", "ok");
   }
 
   function renderBoDashboard(d) {
@@ -17972,6 +18124,30 @@
   if (boeType) {
     boeType.addEventListener("change", (e) => {
       boeView.type = e.target.value;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmp = $("#boe-filter-employee");
+  if (boeEmp) {
+    boeEmp.addEventListener("change", (e) => {
+      boeView.employee = e.target.value;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpClear = $("#boe-employee-clear");
+  if (boeEmpClear) {
+    boeEmpClear.addEventListener("click", () => {
+      boeView.employee = "";
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpChips = $("#boe-employee-chips");
+  if (boeEmpChips) {
+    boeEmpChips.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-boe-employee]");
+      if (!btn) return;
+      const next = btn.getAttribute("data-boe-employee") || "";
+      boeView.employee = boeView.employee === next ? "" : next;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
