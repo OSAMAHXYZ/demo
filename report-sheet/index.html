@@ -12204,7 +12204,7 @@
     Q: "Interior Color 1",
     R: "Interior Color 2",
     S: "Interior Color 3",
-    T: "Column T",
+    T: "Sold to Party",
     AB: "Column AB",
   };
 
@@ -12241,7 +12241,7 @@
     const f = boeColName("F");
     const h = boeColName("H");
     const j = boeColName("J");
-    const t = boeColName("T");
+    const ship = boeShipToPartyName();
     const ab = boeColName("AB");
     const nop = boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3");
     const qrs = boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3");
@@ -12252,7 +12252,7 @@
       rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
       rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} color`, severity: "critical" },
       rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: `RAV4 (not SH/VH) ${qrs} = 20`, severity: "critical" },
-      dup_col_t: { id: "dup_col_t", label: `Duplicate ${t}`, severity: "critical" },
+      dup_ship_to: { id: "dup_ship_to", label: `Duplicate ${ship}`, severity: "critical" },
       col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe`, severity: "critical" },
       camry_nop_00_20: { id: "camry_nop_00_20", label: `CAMRY ${nop} = 00 or 20`, severity: "critical" },
       lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
@@ -12310,6 +12310,36 @@
     return upperTrim(s);
   }
 
+  /** Find Excel column letter by header name on the live BO sheet. */
+  function boeFindColLetterByHeader(tests) {
+    const rows = slots.backorder.rows || [];
+    const headers = rows[0] && Array.isArray(rows[0].__headers) ? rows[0].__headers : [];
+    for (let i = 0; i < headers.length; i += 1) {
+      const n = normHeader(headers[i]);
+      if (!n) continue;
+      if ((tests || []).some((t) => t(n))) return indexToColLetter(i);
+    }
+    return "";
+  }
+
+  /** Duplicate party check uses Ship to Party (not Sold to Party). */
+  function boeShipToPartyLetter() {
+    return boeFindColLetterByHeader([
+      (n) => n === "ship to party" || n === "ship-to party" || n === "shipto party" || n === "ship to party name",
+      (n) => n.includes("ship") && n.includes("party") && !n.includes("sold"),
+      (n) => n === "ship to" || n === "ship-to" || n === "shipto",
+    ]);
+  }
+
+  function boeShipToPartyName() {
+    const letter = boeShipToPartyLetter();
+    if (letter) {
+      const name = boeColName(letter);
+      if (name && !/^column\s+/i.test(name)) return name;
+    }
+    return "Ship to Party";
+  }
+
   function boeIsEmployeeSalesType(row) {
     const get = buildFieldGetter(row || {});
     // Sales type only — never use المبلغ المدفوع / paid
@@ -12332,15 +12362,18 @@
 
   function buildBoeDupMaps(rawRows) {
     const fMap = new Map();
-    const tMap = new Map();
+    const shipMap = new Map();
+    const shipLetter = boeShipToPartyLetter();
     (rawRows || []).forEach((r) => {
       if (boeIsEmployeeSalesType(r)) return;
       const f = boeDupKey(cellByLetter(r, "F"));
       if (f) fMap.set(f, (fMap.get(f) || 0) + 1);
-      const t = boeDupKey(cellByLetter(r, "T"));
-      if (t) tMap.set(t, (tMap.get(t) || 0) + 1);
+      if (shipLetter) {
+        const ship = boeDupKey(cellByLetter(r, shipLetter));
+        if (ship) shipMap.set(ship, (shipMap.get(ship) || 0) + 1);
+      }
     });
-    return { fMap, tMap };
+    return { fMap, shipMap, shipLetter };
   }
 
   function boeYearValue(row, get) {
@@ -12360,7 +12393,7 @@
   function buildBoErrorsPack() {
     const rawRows = slots.backorder.rows || [];
     const checkedRows = rawRows.filter((r) => !boeIsEmployeeSalesType(r));
-    const { fMap, tMap } = buildBoeDupMaps(rawRows);
+    const { fMap, shipMap, shipLetter } = buildBoeDupMaps(rawRows);
     const BOE_ERROR_DEFS = getBoeErrorDefs();
     const rows = [];
     const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
@@ -12377,7 +12410,7 @@
       const colF = cellToString(cellByLetter(r, "F")).trim();
       const colH = cellToString(cellByLetter(r, "H")).trim();
       const colJ = cellToString(cellByLetter(r, "J")).trim();
-      const colT = cellToString(cellByLetter(r, "T")).trim();
+      const colShip = shipLetter ? cellToString(cellByLetter(r, shipLetter)).trim() : "";
       const colAB = cellToString(cellByLetter(r, "AB")).trim();
       const nop = ["N", "O", "P"].map((L) => cellToString(cellByLetter(r, L)).trim());
       const qrs = ["Q", "R", "S"].map((L) => cellToString(cellByLetter(r, L)).trim());
@@ -12397,8 +12430,8 @@
       const fKey = boeDupKey(colF);
       if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f");
 
-      const tKey = boeDupKey(colT);
-      if (tKey && (tMap.get(tKey) || 0) > 1) pushErr("dup_col_t");
+      const shipKey = boeDupKey(colShip);
+      if (shipLetter && shipKey && (shipMap.get(shipKey) || 0) > 1) pushErr("dup_ship_to");
 
       if (boeIsProduct(product, ["CAMRY", "LC300", "LC70"])) {
         const jTok = boeToken(colJ);
@@ -12456,7 +12489,8 @@
         colF: colF || "—",
         colH: colH || "—",
         colJ: colJ || "—",
-        colT: colT || "—",
+        colShip: colShip || "—",
+        shipLetter: shipLetter || "",
         colAB: colAB || "—",
         nop: nop.map((x) => x || "—").join(" / "),
         qrs: qrs.map((x) => x || "—").join(" / "),
@@ -12487,7 +12521,14 @@
     return { rows, totals };
   }
 
-  const BOE_HIGHLIGHT_LETTERS = new Set(["F", "H", "J", "N", "O", "P", "Q", "R", "S", "T", "AB"]);
+  const BOE_HIGHLIGHT_BASE = ["F", "H", "J", "N", "O", "P", "Q", "R", "S", "AB"];
+
+  function boeHighlightLetters() {
+    const set = new Set(BOE_HIGHLIGHT_BASE);
+    const ship = boeShipToPartyLetter();
+    if (ship) set.add(ship);
+    return set;
+  }
 
   function formatBoeCellDisplay(v) {
     if (v == null || v === "") return "—";
@@ -12541,7 +12582,7 @@
     const fieldRows = headers.map((h, i) => {
       const letter = indexToColLetter(i);
       const value = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
-      const hi = BOE_HIGHLIGHT_LETTERS.has(letter) ? " is-hot" : "";
+      const hi = boeHighlightLetters().has(letter) ? " is-hot" : "";
       return `<tr class="boe-detail-row${hi}">
         <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
         <td class="boe-detail-name">${escapeHtml(cellToString(h).trim() || `Column ${letter}`)}</td>
@@ -12582,7 +12623,7 @@
       if (!q) return true;
       const hay = [
         r.boNumber, r.product, r.sfx, r.salesman, r.salesType, r.year,
-        r.colF, r.colH, r.colJ, r.colT, r.colAB, r.nop, r.qrs,
+        r.colF, r.colH, r.colJ, r.colShip, r.colAB, r.nop, r.qrs,
         ...(r.errors || []).map((e) => e.label),
       ].map((x) => String(x || "").toLowerCase()).join(" ");
       return hay.includes(q);
@@ -12631,7 +12672,7 @@
       f: boeColName("F"),
       h: boeColName("H"),
       j: boeColName("J"),
-      t: boeColName("T"),
+      ship: boeShipToPartyName(),
       ab: boeColName("AB"),
       nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
       qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
@@ -12692,7 +12733,7 @@
               <th>${escapeHtml(colNames.j)}</th>
               <th>${escapeHtml(colNames.nop)}</th>
               <th>${escapeHtml(colNames.qrs)}</th>
-              <th>${escapeHtml(colNames.t)}</th>
+              <th>${escapeHtml(colNames.ship)}</th>
               <th>${escapeHtml(colNames.ab)}</th>
               <th>Errors</th>
             </tr>
@@ -12710,7 +12751,7 @@
                 <td>${escapeHtml(r.colJ)}</td>
                 <td class="mono">${escapeHtml(r.nop)}</td>
                 <td class="mono">${escapeHtml(r.qrs)}</td>
-                <td class="mono">${escapeHtml(r.colT)}</td>
+                <td class="mono">${escapeHtml(r.colShip)}</td>
                 <td>${escapeHtml(r.colAB)}</td>
                 <td class="boe-tags">${(r.errors || []).map((e) =>
                   `<span class="boe-tag sev-${escapeHtml(e.severity)}" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>`
@@ -12736,7 +12777,7 @@
       f: boeColName("F"),
       h: boeColName("H"),
       j: boeColName("J"),
-      t: boeColName("T"),
+      ship: boeShipToPartyName(),
       ab: boeColName("AB"),
       nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
       qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
@@ -12765,7 +12806,7 @@
         [colNames.j]: r.colJ,
         [colNames.nop]: r.nop,
         [colNames.qrs]: r.qrs,
-        [colNames.t]: r.colT,
+        [colNames.ship]: r.colShip,
         [colNames.ab]: r.colAB,
         Salesman: r.salesman,
       };
