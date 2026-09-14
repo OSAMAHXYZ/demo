@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260914rvnext"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914rvvin" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914boerules" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914boerrors" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -763,12 +763,11 @@
         <div class="bo-empty card" id="boe-empty">
           <h2>BO Errors</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Flags data problems in the Back Order file — missing fields, duplicates, no allocation match, weak stock match, and stale open BOs.
+            Flags Back Order rows that break the defined business rules (duplicates, product color rules, confirm, model year, Col AB).
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
             <li>Upload slot <b>1 · Back Order</b></li>
-            <li>Optionally upload <b>RTL / Central</b> for stock-match checks and set Allocation Plan in Admin</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
@@ -777,7 +776,7 @@
           <div class="rv-head">
             <div>
               <h2 class="rv-title">BO Errors</h2>
-              <p class="rv-sub" id="boe-live-hint">Back Order data quality · allocation · stock match</p>
+              <p class="rv-sub" id="boe-live-hint">Back Order rule checks · Col F/T duplicates · product color · confirm · year</p>
             </div>
             <div class="rv-head-actions">
               <select id="boe-filter-severity" title="Filter by severity">
@@ -12196,19 +12195,22 @@
 
   /* ——— BO Errors dashboard ——— */
   const BOE_ERROR_DEFS = {
-    missing_bo: { id: "missing_bo", label: "Missing BO number", severity: "critical" },
-    missing_product: { id: "missing_product", label: "Missing product", severity: "critical" },
-    missing_salesman: { id: "missing_salesman", label: "Missing salesman", severity: "critical" },
-    duplicate_bo: { id: "duplicate_bo", label: "Duplicate BO number", severity: "critical" },
-    missing_suffix: { id: "missing_suffix", label: "Missing suffix", severity: "warn" },
-    missing_year: { id: "missing_year", label: "Missing model year", severity: "warn" },
-    missing_ext: { id: "missing_ext", label: "Missing exterior", severity: "warn" },
-    missing_int: { id: "missing_int", label: "Missing interior", severity: "warn" },
-    no_plan: { id: "no_plan", label: "Not in allocation plan", severity: "warn" },
-    unmatched_stock: { id: "unmatched_stock", label: "No / weak stock match", severity: "warn" },
-    stale: { id: "stale", label: "Stale open BO (≥30d)", severity: "warn" },
-    not_confirmed: { id: "not_confirmed", label: "Not confirmed", severity: "info" },
+    dup_col_f: { id: "dup_col_f", label: "Duplicate Col F", severity: "critical" },
+    missing_col_j: { id: "missing_col_j", label: "Col J missing/0 (CAMRY·LC300·LC70)", severity: "critical" },
+    sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: "ALJUF/Bank not Confirmed (Col H)", severity: "critical" },
+    rav4_nop_040: { id: "rav4_nop_040", label: "RAV4 N/O/P = 040", severity: "critical" },
+    rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: "RAV4 SH forbidden N/O/P color", severity: "critical" },
+    rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: "RAV4 (not SH/VH) Q/R/S = 20", severity: "critical" },
+    dup_col_t: { id: "dup_col_t", label: "Duplicate Col T", severity: "critical" },
+    col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: "Col AB blank or ALJRe", severity: "critical" },
+    camry_nop_00_20: { id: "camry_nop_00_20", label: "CAMRY N/O/P = 00 or 20", severity: "critical" },
+    lc300_nop_00_20: { id: "lc300_nop_00_20", label: "LC300 N/O/P = 00 or 20", severity: "critical" },
+    veloz_nop_s28: { id: "veloz_nop_s28", label: "VELOZ N/O/P = S28", severity: "critical" },
+    crown_qrs_20: { id: "crown_qrs_20", label: "CROWN Q/R/S = 20", severity: "critical" },
+    bad_model_year: { id: "bad_model_year", label: "Model year not 2026", severity: "warn" },
   };
+
+  const BOE_RAV4_SH_FORBIDDEN = new Set(["089", "1L6", "1M6", "4V8", "8X8", "6X7", "3T3"]);
 
   let boeView = { search: "", severity: "", type: "" };
   let boeLastPack = null;
@@ -12218,74 +12220,176 @@
     return !s || s === "—" || s === "-" || s.toLowerCase() === "n/a";
   }
 
-  function buildBoErrorsPack(d) {
-    const bos = (d && d.matched && d.matched.length) ? d.matched : ((d && d.bos) || []);
-    const hasStock = !!(d && d.stock && d.stock.length);
-    const hasPlan = ALLOCATION_ROWS.some((r) => r.kind === "leaf");
-    const byBoNumber = new Map();
-    bos.forEach((b) => {
-      const key = String(b.boNumber || "").trim().toUpperCase();
-      if (!key) return;
-      if (!byBoNumber.has(key)) byBoNumber.set(key, []);
-      byBoNumber.get(key).push(b);
-    });
+  function boeToken(v) {
+    return upperTrim(cellToString(v)).replace(/[^A-Z0-9]/g, "");
+  }
 
+  function boeNormProductKey(product) {
+    return upperTrim(String(product || ""))
+      .replace(/^TOYOTA\s+/i, "")
+      .replace(/[^A-Z0-9]/g, "");
+  }
+
+  function boeIsProduct(product, aliases) {
+    const key = boeNormProductKey(product);
+    if (!key) return false;
+    return (aliases || []).some((a) => {
+      const ak = boeNormProductKey(a);
+      return key === ak || key.startsWith(ak) || key.includes(ak);
+    });
+  }
+
+  function boeIsRav4(product) {
+    return boeIsProduct(product, ["RAV4", "RAV 4"]);
+  }
+
+  function boeIsCorollaCross(product) {
+    return boeIsProduct(product, ["COROLLA CROSS", "COROLLACROSS"]);
+  }
+
+  function boeColsTokens(row, letters) {
+    return (letters || []).map((L) => boeToken(cellByLetter(row, L))).filter(Boolean);
+  }
+
+  function boeColsHaveAny(row, letters, banned) {
+    const set = banned instanceof Set ? banned : new Set(banned);
+    return boeColsTokens(row, letters).some((t) => set.has(t));
+  }
+
+  function boeDupKey(v) {
+    const s = cellToString(v).trim();
+    if (!s) return "";
+    if (/^\d+\.0+$/.test(s)) return s.replace(/\.0+$/, "");
+    return upperTrim(s);
+  }
+
+  function buildBoeDupMaps(rawRows) {
+    const fMap = new Map();
+    const tMap = new Map();
+    (rawRows || []).forEach((r) => {
+      const f = boeDupKey(cellByLetter(r, "F"));
+      if (f) fMap.set(f, (fMap.get(f) || 0) + 1);
+      const t = boeDupKey(cellByLetter(r, "T"));
+      if (t) tMap.set(t, (tMap.get(t) || 0) + 1);
+    });
+    return { fMap, tMap };
+  }
+
+  function boeYearValue(row, get) {
+    let year = cellToString(get(row, "year")).trim();
+    if (!year) {
+      const letter = findHeaderLetter(row, [
+        (n) => n === "model year" || n === "model yr" || n === "my",
+        (n) => n === "year",
+      ]);
+      if (letter) year = cellToString(cellByLetter(row, letter)).trim();
+    }
+    if (/^\d+\.0+$/.test(year)) year = year.replace(/\.0+$/, "");
+    const m = String(year).match(/(20\d{2})/);
+    return m ? m[1] : year;
+  }
+
+  function buildBoErrorsPack() {
+    const rawRows = slots.backorder.rows || [];
+    const { fMap, tMap } = buildBoeDupMaps(rawRows);
     const rows = [];
     const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
 
-    bos.forEach((b) => {
+    rawRows.forEach((r, idx) => {
+      const get = buildFieldGetter(r);
+      const mapped = boRowProductSuffix(r, get);
+      const product = mapped.product || cellToString(cellByLetter(r, "B")).trim();
+      const suffix = normalizeProductSuffix(product, mapped.rawSuffix || cellToString(cellByLetter(r, "G")).trim());
+      const sfxKey = boeToken(suffix);
+      const paid = isPaid(get(r, "paid"));
+      const salesTypeRaw = get(r, "salesType");
+      const salesType = inferSalesType(salesTypeRaw, paid);
+      const colF = cellToString(cellByLetter(r, "F")).trim();
+      const colH = cellToString(cellByLetter(r, "H")).trim();
+      const colJ = cellToString(cellByLetter(r, "J")).trim();
+      const colT = cellToString(cellByLetter(r, "T")).trim();
+      const colAB = cellToString(cellByLetter(r, "AB")).trim();
+      const nop = ["N", "O", "P"].map((L) => cellToString(cellByLetter(r, L)).trim());
+      const qrs = ["Q", "R", "S"].map((L) => cellToString(cellByLetter(r, L)).trim());
+      const year = boeYearValue(r, get);
+      const boNumber = colF || cellToString(get(r, "boNumber")).trim();
+      const salesman = resolveSalesmanName(get(r, "salesman"));
+
       const errors = [];
       const pushErr = (id) => {
         const def = BOE_ERROR_DEFS[id];
         if (!def) return;
+        if (errors.some((e) => e.id === id)) return;
         errors.push(def);
         typeCounts[id] += 1;
       };
 
-      if (isBlankBoField(b.boNumber)) pushErr("missing_bo");
-      if (isBlankBoField(b.product)) pushErr("missing_product");
-      if (isBlankBoField(b.salesman)) pushErr("missing_salesman");
-      if (isBlankBoField(b.sfx) && isBlankBoField(b.suffix)) pushErr("missing_suffix");
-      if (isBlankBoField(b.year)) pushErr("missing_year");
-      if (isBlankBoField(b.ext)) pushErr("missing_ext");
-      if (isBlankBoField(b.int)) pushErr("missing_int");
+      const fKey = boeDupKey(colF);
+      if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f");
 
-      const boKey = String(b.boNumber || "").trim().toUpperCase();
-      if (boKey && (byBoNumber.get(boKey) || []).length > 1) pushErr("duplicate_bo");
+      const tKey = boeDupKey(colT);
+      if (tKey && (tMap.get(tKey) || 0) > 1) pushErr("dup_col_t");
 
-      if (hasPlan && !isBlankBoField(b.product)) {
-        const leaf = matchRtlToAllocLeaf({ product: b.product, suffix: b.sfx || b.suffix });
-        if (!leaf) pushErr("no_plan");
+      if (boeIsProduct(product, ["CAMRY", "LC300", "LC70"])) {
+        const jTok = boeToken(colJ);
+        if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j");
       }
 
-      if (hasStock) {
-        const score = Number(b.matchScore);
-        const hasMatch = !!b.matchVin && Number.isFinite(score) && score >= 60;
-        if (!hasMatch) pushErr("unmatched_stock");
+      if (salesType === "ALJUF" || salesType === "Bank") {
+        if (!isConfirmedFlag(colH)) pushErr("sales_type_not_confirmed");
       }
 
-      if (!b.confirmed && Number(b.aging) >= 30) pushErr("stale");
-      if (!b.confirmed) pushErr("not_confirmed");
+      if (boeIsRav4(product)) {
+        if (boeColsHaveAny(r, ["N", "O", "P"], ["040"])) pushErr("rav4_nop_040");
+        if (sfxKey === "SH" && boeColsHaveAny(r, ["N", "O", "P"], BOE_RAV4_SH_FORBIDDEN)) {
+          pushErr("rav4_sh_forbidden_color");
+        }
+        if (sfxKey !== "SH" && sfxKey !== "VH" && boeColsHaveAny(r, ["Q", "R", "S"], ["20"])) {
+          pushErr("rav4_other_sfx_qrs_20");
+        }
+      }
+
+      const abTok = boeToken(colAB);
+      if (isBlankBoField(colAB) || abTok === "ALJRE") pushErr("col_ab_aljre_or_blank");
+
+      if (boeIsProduct(product, ["CAMRY"]) && boeColsHaveAny(r, ["N", "O", "P"], ["00", "20"])) {
+        pushErr("camry_nop_00_20");
+      }
+      if (boeIsProduct(product, ["LC300"]) && boeColsHaveAny(r, ["N", "O", "P"], ["00", "20"])) {
+        pushErr("lc300_nop_00_20");
+      }
+      if (boeIsProduct(product, ["VELOZ"]) && boeColsHaveAny(r, ["N", "O", "P"], ["S28"])) {
+        pushErr("veloz_nop_s28");
+      }
+      if (boeIsProduct(product, ["CROWN"]) && boeColsHaveAny(r, ["Q", "R", "S"], ["20"])) {
+        pushErr("crown_qrs_20");
+      }
+
+      if (boeIsCorollaCross(product)) {
+        if (year !== "2026" && year !== "2025") pushErr("bad_model_year");
+      } else if (year !== "2026") {
+        pushErr("bad_model_year");
+      }
 
       if (!errors.length) return;
       const sevRank = errors.some((e) => e.severity === "critical") ? 0
         : errors.some((e) => e.severity === "warn") ? 1 : 2;
       rows.push({
-        boNumber: b.boNumber || "",
-        product: b.product || "—",
-        sfx: b.sfx || b.suffix || "—",
-        salesman: b.salesman || "—",
-        year: b.year || "—",
-        ext: b.ext || "—",
-        int: b.int || "—",
-        aging: b.aging != null ? b.aging : null,
-        confirmed: !!b.confirmed,
-        vin: b.vin || "",
-        matchVin: b.matchVin || "",
-        matchScore: b.matchScore != null ? b.matchScore : null,
-        matchSource: b.matchSource || "",
-        salesType: b.salesType || "",
-        customer: b.customer || "",
+        idx,
+        boNumber: boNumber || "—",
+        product: product || "—",
+        sfx: suffix || "—",
+        salesman: salesman || "—",
+        year: year || "—",
+        salesType: salesType || "—",
+        colF: colF || "—",
+        colH: colH || "—",
+        colJ: colJ || "—",
+        colT: colT || "—",
+        colAB: colAB || "—",
+        nop: nop.map((x) => x || "—").join(" / "),
+        qrs: qrs.map((x) => x || "—").join(" / "),
+        confirmed: isConfirmedFlag(colH),
         errors,
         errorIds: errors.map((e) => e.id),
         severity: sevRank === 0 ? "critical" : sevRank === 1 ? "warn" : "info",
@@ -12294,21 +12398,18 @@
     });
 
     rows.sort((a, b) => a.sevRank - b.sevRank
-      || (Number(b.aging) || 0) - (Number(a.aging) || 0)
       || String(a.product).localeCompare(String(b.product))
       || String(a.boNumber).localeCompare(String(b.boNumber)));
 
     const totals = {
-      totalBos: bos.length,
+      totalBos: rawRows.length,
       errorRows: rows.length,
-      cleanRows: Math.max(0, bos.length - rows.length),
+      cleanRows: Math.max(0, rawRows.length - rows.length),
       critical: rows.filter((r) => r.severity === "critical").length,
       warn: rows.filter((r) => r.severity === "warn").length,
       info: rows.filter((r) => r.severity === "info").length,
       errorHits: Object.values(typeCounts).reduce((s, n) => s + n, 0),
       typeCounts,
-      hasStock,
-      hasPlan,
     };
 
     return { rows, totals };
@@ -12323,7 +12424,8 @@
       if (typ && !(r.errorIds || []).includes(typ)) return false;
       if (!q) return true;
       const hay = [
-        r.boNumber, r.product, r.sfx, r.salesman, r.vin, r.matchVin, r.customer,
+        r.boNumber, r.product, r.sfx, r.salesman, r.salesType, r.year,
+        r.colF, r.colH, r.colJ, r.colT, r.colAB, r.nop, r.qrs,
         ...(r.errors || []).map((e) => e.label),
       ].map((x) => String(x || "").toLowerCase()).join(" ");
       return hay.includes(q);
@@ -12346,7 +12448,7 @@
     }
   }
 
-  function renderBoErrorsDashboard(d) {
+  function renderBoErrorsDashboard() {
     const empty = $("#boe-empty");
     const dash = $("#boe-dash");
     if (!empty || !dash) return;
@@ -12362,7 +12464,7 @@
     empty.style.display = "none";
     dash.hidden = false;
 
-    const pack = buildBoErrorsPack(d || window._data || data());
+    const pack = buildBoErrorsPack();
     boeLastPack = pack;
     const { rows, totals } = pack;
     const filtered = filteredBoeRows(rows);
@@ -12370,7 +12472,7 @@
 
     const hint = $("#boe-live-hint");
     if (hint) {
-      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with issues · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning${totals.hasStock ? "" : " · upload stock for match checks"}`;
+      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(totals.critical)} critical · ${formatNumber(totals.warn)} warning`;
     }
 
     const kpis = $("#boe-kpis");
@@ -12380,7 +12482,7 @@
         ["With errors", totals.errorRows, totals.errorRows ? "bad" : "ok"],
         ["Critical", totals.critical, totals.critical ? "bad" : "ok"],
         ["Warnings", totals.warn, totals.warn ? "warn" : "ok"],
-        ["Info", totals.info, "ok"],
+        ["Issue flags", totals.errorHits, totals.errorHits ? "warn" : "ok"],
         ["Clean BOs", totals.cleanRows, "ok"],
       ].map(([lab, val, status]) => `
         <div class="bo-kpi ${status}">
@@ -12405,7 +12507,7 @@
     const foot = $("#boe-table-foot");
     if (wrap) {
       if (!rows.length) {
-        wrap.innerHTML = `<p class="foot" style="padding:16px">No BO errors found — Back Order file looks clean for the checked rules.</p>`;
+        wrap.innerHTML = `<p class="foot" style="padding:16px">No BO errors found — all checked rules passed.</p>`;
       } else if (!filtered.length) {
         wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters.</p>`;
       } else {
@@ -12413,32 +12515,38 @@
           <thead>
             <tr>
               <th>Severity</th>
-              <th>BO</th>
+              <th>Col F</th>
               <th>Product</th>
               <th>SFX</th>
-              <th>Salesman</th>
+              <th>Sales type</th>
+              <th>Year</th>
+              <th>Col H</th>
+              <th>Col J</th>
+              <th>N / O / P</th>
+              <th>Q / R / S</th>
+              <th>Col T</th>
+              <th>Col AB</th>
               <th>Errors</th>
-              <th class="num">Age</th>
-              <th>Match</th>
-              <th>VIN</th>
             </tr>
           </thead>
           <tbody>
             ${filtered.map((r) => `
               <tr class="boe-row sev-${escapeHtml(r.severity)}">
                 <td><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
-                <td class="mono">${escapeHtml(r.boNumber || "—")}</td>
+                <td class="mono">${escapeHtml(r.colF)}</td>
                 <td><strong>${escapeHtml(r.product)}</strong></td>
                 <td><span class="aa-sfx">${escapeHtml(r.sfx)}</span></td>
-                <td>${escapeHtml(r.salesman)}</td>
+                <td>${escapeHtml(r.salesType)}</td>
+                <td>${escapeHtml(r.year)}</td>
+                <td>${escapeHtml(r.colH)}</td>
+                <td>${escapeHtml(r.colJ)}</td>
+                <td class="mono">${escapeHtml(r.nop)}</td>
+                <td class="mono">${escapeHtml(r.qrs)}</td>
+                <td class="mono">${escapeHtml(r.colT)}</td>
+                <td>${escapeHtml(r.colAB)}</td>
                 <td class="boe-tags">${(r.errors || []).map((e) =>
                   `<span class="boe-tag sev-${escapeHtml(e.severity)}" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>`
                 ).join("")}</td>
-                <td class="num">${r.aging != null ? escapeHtml(String(r.aging)) : "—"}</td>
-                <td>${r.matchScore != null
-                  ? `<span class="mono">${escapeHtml(String(r.matchScore))}%</span>${r.matchVin ? `<div class="rv-muted mono">${escapeHtml(r.matchVin)}</div>` : ""}`
-                  : "—"}</td>
-                <td class="mono">${escapeHtml(r.vin || "—")}</td>
               </tr>`).join("")}
           </tbody>
         </table>`;
@@ -12454,7 +12562,7 @@
       setStatus("No Back Order file to export", "busy");
       return;
     }
-    const pack = boeLastPack || buildBoErrorsPack(window._data || data());
+    const pack = boeLastPack || buildBoErrorsPack();
     const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
       Error: def.label,
       Severity: def.severity,
@@ -12462,20 +12570,19 @@
     }));
     const detail = pack.rows.map((r) => ({
       Severity: r.severity,
-      "BO Number": r.boNumber,
+      "Col F": r.colF,
       Product: r.product,
       Suffix: r.sfx,
-      Salesman: r.salesman,
+      "Sales Type": r.salesType,
       Year: r.year,
-      Exterior: r.ext,
-      Interior: r.int,
-      Aging: r.aging,
-      Confirmed: r.confirmed ? "Yes" : "No",
+      "Col H": r.colH,
+      "Col J": r.colJ,
+      "N/O/P": r.nop,
+      "Q/R/S": r.qrs,
+      "Col T": r.colT,
+      "Col AB": r.colAB,
+      Salesman: r.salesman,
       Errors: (r.errors || []).map((e) => e.label).join("; "),
-      "Match %": r.matchScore != null ? r.matchScore : "",
-      "Match VIN": r.matchVin || "",
-      VIN: r.vin || "",
-      Customer: r.customer || "",
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
