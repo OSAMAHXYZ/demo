@@ -12433,7 +12433,12 @@
       const shipKey = boeDupKey(colShip);
       if (shipLetter && shipKey && (shipMap.get(shipKey) || 0) > 1) pushErr("dup_ship_to");
 
-      if (boeIsProduct(product, ["CAMRY", "LC300", "LC70"])) {
+      // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank
+      if (
+        salesType !== "ALJUF"
+        && salesType !== "Bank"
+        && boeIsProduct(product, ["CAMRY", "LC300", "LC70"])
+      ) {
         const jTok = boeToken(colJ);
         if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j");
       }
