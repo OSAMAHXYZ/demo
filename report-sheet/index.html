@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260909rv1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914display2" />
-  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914display2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914toptill" />
+  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914toptill" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -138,7 +138,7 @@
         <div class="dvp-empty card" id="dvp-empty" hidden>
           <h3>Delivered vs Proforma</h3>
           <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · Telesales · B2C · Experience Automall totals.</p>
-          <p class="foot">Mark Guest Experience advisors in Admin → Employees → <b>Guest Exp</b>, then Push to live.</p>
+          <p class="foot">Lexus counts only products <b>ESH, IS, LC, LSH, LX, LXH, NX, NXH, RX, RXH</b>. Mark Guest Experience advisors in Admin → Employees → <b>Guest Exp</b>, then Push to live.</p>
         </div>
 
         <div id="dvp-board" class="dvp-board" hidden>
@@ -823,7 +823,7 @@
                 <option value="proforma">Proforma</option>
                 <option value="available">In المخزون المتاح</option>
                 <option value="display">Display · Display Central 1</option>
-                <option value="missing">Not in Sales Raw</option>
+                <option value="missing">Missing · RTL lookup</option>
               </select>
               <input id="aa-search" type="search" placeholder="Search BO / VIN / advisor / product…" />
               <button type="button" id="aa-excel-btn" class="btn-primary">Export Excel</button>
@@ -842,8 +842,8 @@
           <article class="card aa-vin-card">
             <div class="pbi-viz-head">
               <div>
-                <h2>VIN audit trail · E-Sales sheet 2</h2>
-                <span class="hint">Col L VIN · Col F BO → Sales Raw advisor · proforma (P) / invoice (V) · status · location</span>
+                <h2>VIN schedule · status trail</h2>
+                <span class="hint">Missing (red) = RES VIN looked up in RTL · Display = Display Central 1 · click product Missing number for full RTL details</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-vin-wrap"></div>
@@ -11230,24 +11230,43 @@
             datasets: [{
               data: rows.map((r) => (field === "gap" ? r.gap : r[field])),
               backgroundColor: rows.map((r) => (typeof colorFn === "function" ? colorFn(r) : colorFn)),
-              borderRadius: 4,
+              borderRadius: 5,
+              barPercentage: 0.88,
+              categoryPercentage: 0.92,
             }],
           },
           options: {
             indexAxis: "y",
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { beginAtZero: true } },
+            layout: { padding: { top: 4, right: 8, bottom: 4, left: 2 } },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => formatNumber(ctx.raw) } },
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                grid: { color: "rgba(148,163,184,0.25)" },
+                ticks: { maxTicksLimit: 6, font: { size: 10 } },
+              },
+              y: {
+                grid: { display: false },
+                ticks: { font: { size: 11, weight: "600" }, autoSkip: false },
+              },
+            },
             onClick(evt, els) {
               if (!els.length) return;
               actSelectProduct(rows[els[0].index].product);
             },
           },
         });
-        resizeChart(id);
         const fb = document.getElementById(fallbackId);
         if (fb) fb.classList.remove("is-visible");
+        requestAnimationFrame(() => {
+          resizeChart(id);
+          requestAnimationFrame(() => resizeChart(id));
+        });
       } catch (err) {
         if (typeof console !== "undefined" && console.error) console.error("[ACT top chart]", id, err);
       }
@@ -14461,6 +14480,11 @@
     return keys;
   }
 
+  /** Lexus Sales channel — only these Sales Raw product codes (exact). */
+  const LEXUS_PRODUCT_CODES = new Set([
+    "ESH", "IS", "LC", "LSH", "LX", "LXH", "NX", "NXH", "RX", "RXH",
+  ]);
+
   function salesRowProductBlob(r) {
     if (!r) return "";
     const bits = [
@@ -14478,9 +14502,33 @@
     return bits.map((x) => cellToString(x)).filter(Boolean).join(" ");
   }
 
+  function compactProductCode(raw) {
+    return String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function isLexusProductCode(raw) {
+    const text = cellToString(raw).trim();
+    if (!text) return false;
+    const compact = compactProductCode(text);
+    if (LEXUS_PRODUCT_CODES.has(compact)) return true;
+    // First token only (e.g. "RX · …") — never prefix-match LC300 as LC
+    const first = text.split(/[\s|/\\,_·−-]+/).find(Boolean) || "";
+    return LEXUS_PRODUCT_CODES.has(compactProductCode(first));
+  }
+
   function isLexusSaleRow(r) {
+    if (!r) return false;
+    const fields = [
+      r.product, r.Product, r.model, r.Model,
+      r["Vehicle Model"], r["vehicle model"],
+      r.Material, r.material,
+    ];
+    if (fields.some((f) => isLexusProductCode(f))) return true;
+    // Fallback: any product-like token in the row that exactly matches a Lexus code
     const blob = salesRowProductBlob(r);
-    return /lexus|\bes\s*3|\bes\s*2|\brx\s*\d|\blx\s*\d|\bgx\s*\d|\bnx\s*\d|\bux\s*\d|\bls\s*\d|\blc\s*\d/i.test(blob);
+    if (!blob) return false;
+    return blob.split(/[\s|/\\,_·−-]+/).some((tok) => LEXUS_PRODUCT_CODES.has(compactProductCode(tok)))
+      || LEXUS_PRODUCT_CODES.has(compactProductCode(blob));
   }
 
   function isTelesalesSaleRow(r) {
@@ -14636,10 +14684,10 @@
       {
         id: "lexus",
         title: "Lexus Sales",
-        subtitle: "Luxury Beyond Ordinary",
+        subtitle: "ESH · IS · LC · LSH · LX · LXH · NX · NXH · RX · RXH",
         brand: "LEXUS",
         theme: "lexus",
-        image: "../images/cars/crown.png",
+        image: "../images/cars/lexus.jpg",
         delivered: cur.lexus.delivered,
         proforma: cur.lexus.proforma,
         prevDelivered: prev.lexus.delivered,
@@ -15122,26 +15170,97 @@
     (slots.rtl.rows || []).forEach((r, idx) => {
       const vin = extractVinValue(cellByLetter(r, "E"))
         || extractVinValue(r.vin)
+        || extractVinValue(stockFieldByAlias(r, "vin", []))
         || upperTrim(cellToString(r.vin));
       if (!vin) return;
       if (byVin.has(vin)) return;
       const secondaryStatus = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
       const location = cellToString(cellByLetter(r, "Q")).trim()
+        || cellToString(cellByLetter(r, "M")).trim()
         || stockFieldByAlias(r, "allocatedLocation", [])
         || stockFieldByAlias(r, "location", [])
         || "";
-      const status = stockPrimaryStatus(r) || "";
+      const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "D")).trim() || "";
+      const product = cellToString(cellByLetter(r, "B")).trim()
+        || stockFieldByAlias(r, "product", [])
+        || "";
+      const suffix = normalizeProductSuffix(
+        product,
+        cellToString(cellByLetter(r, "G")).trim() || stockFieldByAlias(r, "suffix", []) || ""
+      );
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "searchAreaDesc", [])
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
+      const ageingRaw = cellByLetter(r, "AF") || cellByLetter(r, "O") || stockFieldByAlias(r, "ageing", []);
+      const ageingNum = toNumber(ageingRaw);
+      const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
       byVin.set(vin, {
         idx: `RTL-${idx}`,
         source: "RTL",
         vin,
+        product,
+        suffix,
         secondaryStatus: secondaryStatus || "—",
         location: location || "—",
         status: status || "—",
+        searchArea: searchArea || "—",
+        ageing: Number.isFinite(ageingNum) && ageingNum >= 0 ? ageingNum : null,
+        usage: usage || "—",
         _raw: r,
       });
     });
     return byVin;
+  }
+
+  function findRtlVinHit(rtlLookup, vin) {
+    if (!rtlLookup) return null;
+    const key = extractVinValue(vin) || upperTrim(vin);
+    if (!key) return null;
+    if (rtlLookup.has(key)) return rtlLookup.get(key);
+    const tail = key.length >= 8 ? key.slice(-8) : key;
+    for (const [rv, row] of rtlLookup.entries()) {
+      if (rv === key) return row;
+      if (key.endsWith(rv) || rv.endsWith(key)) return row;
+      if (tail && rv.length >= 8 && rv.slice(-8) === tail) return row;
+    }
+    return null;
+  }
+
+  function rtlMissingDetail(rtl, car) {
+    if (!rtl && !car) return { inRtl: false, status: "Missing", statusDetail: "Not found in RTL file" };
+    const location = (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+      || cellToString(car && car.location || "").trim()
+      || "";
+    const status = (rtl && rtl.status && rtl.status !== "—" ? rtl.status : "")
+      || (rtl && rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "")
+      || "In RTL";
+    const secondary = rtl && rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "";
+    const searchArea = (rtl && rtl.searchArea && rtl.searchArea !== "—" ? rtl.searchArea : "")
+      || (car && car.searchAreaDesc) || "";
+    const age = car && car.age != null ? car.age
+      : (car && car.ageing != null ? car.ageing
+        : (rtl && rtl.ageing != null ? rtl.ageing : null));
+    const bits = [
+      "RTL file",
+      status,
+      secondary && secondary !== status ? secondary : "",
+      searchArea,
+      location,
+      age != null ? `Age ${age}d` : "",
+      rtl && rtl.usage && rtl.usage !== "—" ? `Usage ${rtl.usage}` : "",
+    ].filter(Boolean);
+    return {
+      inRtl: true,
+      status: "Missing · RTL",
+      statusDetail: bits.join(" · "),
+      rtlStatus: status,
+      rtlSecondary: secondary,
+      rtlLocation: location,
+      rtlSearchArea: searchArea,
+      rtlUsage: rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "",
+      age,
+    };
   }
 
   function reservedStockStatusDetail(stock, fallback) {
@@ -15662,8 +15781,17 @@
           statusDetail: `${displayHit.sheet || "Display Central 1"}${displayHit.location ? ` · ${displayHit.location}` : ""}`,
         });
       } else if (sales.kind === "none" && !reservedSet.has(vin) && !availableLookup.has(vin)) {
+        const rtlHit = findRtlVinHit(rtlLookup, vin) || rtl;
+        const miss = rtlMissingDetail(rtlHit, car);
         sum.missing += 1;
-        sum.vins.missing.push(detail);
+        sum.vins.missing.push({
+          ...detail,
+          ...miss,
+          location: miss.rtlLocation || detail.location || "",
+          searchArea: miss.rtlSearchArea || detail.searchArea || "",
+          age: miss.age != null ? miss.age : detail.age,
+          inRtl: !!miss.inRtl,
+        });
       }
     });
 
@@ -15802,17 +15930,75 @@
       });
     });
 
+    // Remaining missing RES VINs → schedule as Missing (red), with RTL file details when found.
+    resCars.forEach((car) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seenVin.has(vin)) return;
+      const sales = resolveAaSalesStatus(vin, salesLookup);
+      const hasSalesDate = sales.kind === "delivered" || sales.kind === "proforma";
+      if (hasSalesDate) return;
+      if (findDisplayVinHit(displayLookup, vin)) return;
+      if (reservedSet.has(vin) || availableLookup.has(vin)) return;
+      if (sales.kind !== "none") return;
+      seenVin.add(vin);
+      const rtlHit = findRtlVinHit(rtlLookup, vin);
+      const miss = rtlMissingDetail(rtlHit, car);
+      const snap = lastSeen[vin] || null;
+      const leaf = matchRtlToAllocLeaf(car) || null;
+      const location = miss.rtlLocation
+        || cellToString(car.location || "").trim()
+        || (snap && snap.location)
+        || "";
+      vinRows.push({
+        vin,
+        orderNumber: "",
+        product: leaf ? leaf.product : (car.product || "—"),
+        sfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        seg: leaf ? leaf.seg : "—",
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        age: miss.age != null ? miss.age : (car.age != null ? car.age : (car.ageing != null ? car.ageing : null)),
+        searchArea: miss.rtlSearchArea || car.searchAreaDesc || "",
+        liveLocation: location,
+        sales: {
+          ...sales,
+          label: miss.status,
+          detail: miss.statusDetail,
+          cls: "bad",
+        },
+        salesman: sales.salesman || "",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+        location,
+        currentStatus: miss.status,
+        inReserved: false,
+        inAvailable: false,
+        inDisplay: false,
+        inRtl: !!miss.inRtl,
+        rtlStatus: miss.rtlStatus || "",
+        rtlSecondary: miss.rtlSecondary || "",
+        availableDetail: "—",
+        availableLocation: "",
+        snap,
+        missing: true,
+        whereLabel: miss.inRtl ? "Missing · found in RTL" : "Missing · not in Sales / Display",
+      });
+    });
+
     const summaryRows = [...byLeaf.values()]
       .filter((r) => r.allocation > 0 || r.actual > 0)
       .map((r) => ({ ...r, gap: r.actual - r.allocation }))
       .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || String(a.product).localeCompare(String(b.product)));
 
     vinRows.sort((a, b) => {
+      if (!!b.missing !== !!a.missing) return a.missing ? -1 : 1;
       const aHit = a.sales.kind === "delivered" || a.sales.kind === "proforma" ? 0 : 1;
       const bHit = b.sales.kind === "delivered" || b.sales.kind === "proforma" ? 0 : 1;
       if (aHit !== bHit) return aHit - bHit;
       return String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
     });
+
+    const summaryMissing = summaryRows.reduce((s, r) => s + (Number(r.missing) || 0), 0);
 
     return {
       summaryRows,
@@ -15822,10 +16008,11 @@
         actual: seenResVin.size,
         delivered: vinRows.filter((r) => r.sales.kind === "delivered").length,
         proforma: vinRows.filter((r) => r.sales.kind === "proforma").length,
-        reserved: vinRows.length,
+        reserved: vinRows.filter((r) => r.inReserved).length,
         available: vinRows.filter((r) => r.inAvailable).length,
         display: vinRows.filter((r) => r.inDisplay).length,
-        missing: vinRows.filter((r) => r.missing).length,
+        missing: summaryMissing || vinRows.filter((r) => r.missing).length,
+        missingInRtl: vinRows.filter((r) => r.missing && r.inRtl).length,
         snapshots: aaLastSeenCache.snapshotCount || 0,
         withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
       },
@@ -15848,14 +16035,19 @@
 
   function aaNumButton(value, leafId, metric, extraClass) {
     const n = Number(value) || 0;
-    const cls = ["aa-num-btn", extraClass || ""].filter(Boolean).join(" ");
+    const cls = ["aa-num-btn", extraClass || "", metric === "missing" && n ? "aa-missing-btn" : ""]
+      .filter(Boolean)
+      .join(" ");
     if (metric === "allocation") {
       return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="allocation" title="Plan target — click for note">${escapeHtml(String(n))}</button>`;
     }
     if (!n && metric !== "gap") {
       return `<span class="aa-num-zero">${escapeHtml(String(n))}</span>`;
     }
-    return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="${escapeHtml(metric)}" title="Show related VINs">${escapeHtml(String(value))}</button>`;
+    const title = metric === "missing"
+      ? "Show missing VINs · RTL details"
+      : "Show related VINs";
+    return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="${escapeHtml(metric)}" title="${escapeHtml(title)}">${escapeHtml(String(value))}</button>`;
   }
 
   function closeAaVinDrill() {
@@ -15899,11 +16091,74 @@
       const list = (row.vins && row.vins[listKey]) ? row.vins[listKey] : [];
       const note = metric === "gap"
         ? `Gap ${row.gap} = Actual ${row.actual} − Allocation ${row.allocation}. Showing Actual RES VINs.`
-        : `${metricLabel} · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"}`;
+        : metric === "missing"
+          ? `Missing · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"} · searched in RTL file`
+          : `${metricLabel} · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"}`;
       if (titleEl) titleEl.textContent = productLabel;
       if (subEl) subEl.textContent = note;
       if (!list.length) {
         bodyEl.innerHTML = `<p class="foot">No related VINs for this number.</p>`;
+      } else if (metric === "missing") {
+        const inRtlCount = list.filter((v) => v.inRtl).length;
+        bodyEl.innerHTML = `
+          <div class="aa-drill-toolbar">
+            <span class="aa-drill-count">${formatNumber(list.length)} missing · ${formatNumber(inRtlCount)} found in RTL</span>
+            <button type="button" class="btn" id="aa-drill-copy">Copy VINs</button>
+          </div>
+          <p class="aa-drill-note">These RES VINs have no proforma/invoice and are not in المحجوز, Available, or Display Central 1. Details below come from the <b>RTL</b> file when the VIN is found there.</p>
+          <div class="table-wrap aa-drill-table-wrap">
+            <table class="data-table aa-table aa-drill-table aa-drill-missing">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>VIN</th>
+                  <th>In RTL</th>
+                  <th>RTL status</th>
+                  <th>Secondary</th>
+                  <th>Search area</th>
+                  <th>Location</th>
+                  <th>Age</th>
+                  <th>Usage</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${list.map((v, i) => `
+                  <tr class="${v.inRtl ? "aa-row-missing" : ""}">
+                    <td class="num">${i + 1}</td>
+                    <td class="mono">${escapeHtml(v.vin)}</td>
+                    <td>${v.inRtl ? `<span class="aa-missing-flag">Yes</span>` : `<span class="aa-num-zero">No</span>`}</td>
+                    <td>${escapeHtml(v.rtlStatus || v.status || "—")}
+                      ${v.statusDetail ? `<div class="rv-muted">${escapeHtml(v.statusDetail)}</div>` : ""}</td>
+                    <td>${escapeHtml(v.rtlSecondary || "—")}</td>
+                    <td>${escapeHtml(v.rtlSearchArea || v.searchArea || "—")}</td>
+                    <td>${escapeHtml(v.rtlLocation || v.location || "—")}</td>
+                    <td class="num">${v.age != null ? escapeHtml(String(v.age)) : "—"}</td>
+                    <td>${escapeHtml(v.rtlUsage || "—")}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>`;
+        const copyBtn = bodyEl.querySelector("#aa-drill-copy");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", async () => {
+            const text = list.map((v) => v.vin).join("\n");
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+              } else {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                ta.remove();
+              }
+              setStatus(`Copied ${list.length} VIN${list.length === 1 ? "" : "s"}`, "ok");
+            } catch {
+              setStatus("Could not copy VINs", "busy");
+            }
+          });
+        }
       } else {
         bodyEl.innerHTML = `
           <div class="aa-drill-toolbar">
@@ -16018,7 +16273,7 @@
       const displayNote = slots.central.displaySheet
         ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
         : "";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${sheetNote}${displayNote}`;
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""}${sheetNote}${displayNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -16031,7 +16286,7 @@
         ["Delivered", totals.delivered, "ok"],
         ["Proforma open", totals.proforma, "warn"],
         ["Display", totals.display || 0, "ok"],
-        ["Not in Sales Raw", totals.missing, totals.missing ? "bad" : "ok"],
+        ["Missing (RTL)", totals.missing, totals.missing ? "bad" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
           <div class="lab">${escapeHtml(label)}</div>
@@ -16044,7 +16299,7 @@
       if (!summaryRows.length) {
         sumWrap.innerHTML = `<p class="foot" style="padding:16px">No allocation plan rows with values, and no RES VINs matched.</p>`;
       } else {
-        sumWrap.innerHTML = `<table class="data-table aa-table">
+        sumWrap.innerHTML = `<table class="data-table aa-table aa-summary-table">
           <thead>
             <tr>
               <th>Product</th>
@@ -16057,14 +16312,14 @@
               <th class="num">المحجوز</th>
               <th class="num">Available</th>
               <th class="num">Display</th>
-              <th class="num">Missing</th>
+              <th class="num aa-th-missing">Missing</th>
             </tr>
           </thead>
           <tbody>
             ${summaryRows.map((r) => `
-              <tr>
+              <tr class="${r.missing ? "aa-row-has-missing" : ""}">
                 <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
-                <td>${escapeHtml(r.sfx || "—")}</td>
+                <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
                 <td class="num">${aaNumButton(r.allocation, r.id, "allocation")}</td>
                 <td class="num">${aaNumButton(r.actual, r.id, "actual")}</td>
                 <td class="num">${aaNumButton(r.gap, r.id, "gap", r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : "")}</td>
@@ -16073,11 +16328,11 @@
                 <td class="num">${aaNumButton(r.reserved, r.id, "reserved")}</td>
                 <td class="num">${aaNumButton(r.available, r.id, "available")}</td>
                 <td class="num">${aaNumButton(r.display, r.id, "display")}</td>
-                <td class="num">${aaNumButton(r.missing, r.id, "missing")}</td>
+                <td class="num aa-td-missing">${aaNumButton(r.missing, r.id, "missing")}</td>
               </tr>`).join("")}
           </tbody>
         </table>
-        <p class="foot aa-summary-hint">Click any number to open related RES VINs</p>`;
+        <p class="foot aa-summary-hint">Click any number to open related RES VINs · Missing (red) = searched in RTL file</p>`;
         if (!sumWrap.dataset.aaBound) {
           sumWrap.dataset.aaBound = "1";
           sumWrap.addEventListener("click", (e) => {
@@ -16095,35 +16350,45 @@
       if (!vinRows.length) {
         vinWrap.innerHTML = `<p class="foot" style="padding:16px">No E-Sales sheet 2 VINs found. Upload Stock Central (slot 3) with sheet 2 / المحجوز (Col L VIN · Col F BO), then Push to live.</p>`;
       } else if (!filtered.length) {
-        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No E-Sales VINs match the filters.</p>`;
+        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No schedule VINs match the filters.</p>`;
       } else {
-        vinWrap.innerHTML = `<table class="data-table aa-table">
+        vinWrap.innerHTML = `<table class="data-table aa-table aa-schedule-table">
           <thead>
             <tr>
-              <th>BO (Col F)</th>
+              <th>BO</th>
               <th>Product</th>
-              <th>VIN (Col L)</th>
-              <th>Sales advisor</th>
+              <th>VIN</th>
+              <th>Advisor</th>
               <th>Status</th>
-              <th>Proforma date</th>
-              <th>Invoice date</th>
-              <th>Location</th>
+              <th>Proforma</th>
+              <th>Invoice</th>
+              <th>Location / RTL</th>
             </tr>
           </thead>
           <tbody>
             ${filtered.map((r) => {
-              const statusCls = r.sales.cls || "na";
-              return `<tr class="${r.missing ? "aa-row-missing" : ""}">
-                <td class="mono">${escapeHtml(r.orderNumber || "—")}</td>
-                <td><strong>${escapeHtml(r.product)}</strong>
-                  <div class="rv-muted">${escapeHtml(r.sfx || "")}</div></td>
-                <td class="mono">${escapeHtml(r.vin)}</td>
+              const statusCls = r.missing ? "bad" : (r.sales.cls || "na");
+              const locBits = [
+                r.location || "",
+                r.missing && r.inRtl ? "RTL" : "",
+                r.age != null ? `Age ${r.age}d` : "",
+                r.searchArea || "",
+              ].filter(Boolean);
+              return `<tr class="${r.missing ? "aa-row-missing" : (r.inDisplay ? "aa-row-display" : "")}">
+                <td class="mono aa-bo">${escapeHtml(r.orderNumber || "—")}</td>
+                <td>
+                  <strong class="aa-prod">${escapeHtml(r.product)}</strong>
+                  <div class="aa-sfx-line"><span class="aa-sfx">${escapeHtml(r.sfx || "")}</span>${r.seg ? `<span class="aa-seg">${escapeHtml(r.seg)}</span>` : ""}</div>
+                </td>
+                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
                 <td>${escapeHtml(r.salesman || "—")}</td>
-                <td><span class="rv-status rv-status-${escapeHtml(statusCls)}">${escapeHtml(r.currentStatus || r.sales.label)}</span>
-                  <div class="rv-muted">${escapeHtml(r.sales.detail || "")}</div></td>
-                <td>${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
-                <td>${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
-                <td>${escapeHtml(r.location || "—")}</td>
+                <td>
+                  <span class="rv-status rv-status-${escapeHtml(statusCls)}">${escapeHtml(r.currentStatus || r.sales.label)}</span>
+                  <div class="rv-muted aa-status-detail">${escapeHtml(r.sales.detail || "")}</div>
+                </td>
+                <td class="aa-date">${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
+                <td class="aa-date">${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
+                <td class="aa-loc">${escapeHtml(locBits.join(" · ") || "—")}</td>
               </tr>`;
             }).join("")}
           </tbody>
@@ -16131,7 +16396,7 @@
       }
     }
     if (foot) {
-      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} schedule VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing`;
+      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} schedule VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""}`;
     }
 
     if (!aaLastSeenCache.loaded) {
@@ -16174,7 +16439,10 @@
       Location: r.location || "",
       "In Available (المخزون المتاح)": r.inAvailable ? "Yes" : "No",
       "Display Central 1": r.inDisplay ? "Yes" : "No",
-      "Not in Sales Raw": r.missing ? "Yes" : "No",
+      "In RTL": r.inRtl ? "Yes" : (r.missing ? "No" : ""),
+      "RTL Status": r.rtlStatus || "",
+      Missing: r.missing ? "Yes" : "No",
+      "Where": r.whereLabel || "",
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
