@@ -12194,26 +12194,73 @@
   }
 
   /* ——— BO Errors dashboard ——— */
-  const BOE_ERROR_DEFS = {
-    dup_col_f: { id: "dup_col_f", label: "Duplicate Col F", severity: "critical" },
-    missing_col_j: { id: "missing_col_j", label: "Col J missing/0 (CAMRY·LC300·LC70)", severity: "critical" },
-    sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: "ALJUF/Bank not Confirmed (Col H)", severity: "critical" },
-    rav4_nop_040: { id: "rav4_nop_040", label: "RAV4 N/O/P = 040", severity: "critical" },
-    rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: "RAV4 SH forbidden N/O/P color", severity: "critical" },
-    rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: "RAV4 (not SH/VH) Q/R/S = 20", severity: "critical" },
-    dup_col_t: { id: "dup_col_t", label: "Duplicate Col T", severity: "critical" },
-    col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: "Col AB blank or ALJRe", severity: "critical" },
-    camry_nop_00_20: { id: "camry_nop_00_20", label: "CAMRY N/O/P = 00 or 20", severity: "critical" },
-    lc300_nop_00_20: { id: "lc300_nop_00_20", label: "LC300 N/O/P = 00 or 20", severity: "critical" },
-    veloz_nop_s28: { id: "veloz_nop_s28", label: "VELOZ N/O/P = S28", severity: "critical" },
-    crown_qrs_20: { id: "crown_qrs_20", label: "CROWN Q/R/S = 20", severity: "critical" },
-    bad_model_year: { id: "bad_model_year", label: "Model year not 2026", severity: "warn" },
+  const BOE_COL_FALLBACK = {
+    F: "Back Order Number",
+    H: "Confirm Flag",
+    J: "Column J",
+    N: "Exterior Color 1",
+    O: "Exterior Color 2",
+    P: "Exterior Color 3",
+    Q: "Interior Color 1",
+    R: "Interior Color 2",
+    S: "Interior Color 3",
+    T: "Column T",
+    AB: "Column AB",
   };
 
   const BOE_RAV4_SH_FORBIDDEN = new Set(["089", "1L6", "1M6", "4V8", "8X8", "6X7", "3T3"]);
 
   let boeView = { search: "", severity: "", type: "" };
   let boeLastPack = null;
+
+  /** Resolve Excel letter → header name from the live Back Order file. */
+  function boeColName(letter) {
+    const L = String(letter || "").trim().toUpperCase();
+    const fallback = BOE_COL_FALLBACK[L] || `Column ${L}`;
+    const rows = slots.backorder.rows || [];
+    const headers = rows[0] && Array.isArray(rows[0].__headers) ? rows[0].__headers : [];
+    const idx = colLetterToIndex(L);
+    if (idx < 0 || idx >= headers.length) return fallback;
+    const h = cellToString(headers[idx]).trim();
+    if (!h || /^column\s+[a-z0-9]+$/i.test(h)) return fallback;
+    return h;
+  }
+
+  function boeColorGroupLabel(letters, compactFallback) {
+    const names = (letters || []).map((L) => boeColName(L));
+    const looksNumbered = names.every((n, i) => {
+      const num = String(i + 1);
+      return new RegExp(`(?:color|colour).*${num}\\b|\\b${num}\\b.*(?:color|colour)`, "i").test(n)
+        || n === BOE_COL_FALLBACK[letters[i]];
+    });
+    if (looksNumbered && compactFallback) return compactFallback;
+    return names.join(" / ");
+  }
+
+  function getBoeErrorDefs() {
+    const f = boeColName("F");
+    const h = boeColName("H");
+    const j = boeColName("J");
+    const t = boeColName("T");
+    const ab = boeColName("AB");
+    const nop = boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3");
+    const qrs = boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3");
+    return {
+      dup_col_f: { id: "dup_col_f", label: `Duplicate ${f}`, severity: "critical" },
+      missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70)`, severity: "critical" },
+      sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: `ALJUF/Bank not Confirmed (${h})`, severity: "critical" },
+      rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
+      rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} color`, severity: "critical" },
+      rav4_other_sfx_qrs_20: { id: "rav4_other_sfx_qrs_20", label: `RAV4 (not SH/VH) ${qrs} = 20`, severity: "critical" },
+      dup_col_t: { id: "dup_col_t", label: `Duplicate ${t}`, severity: "critical" },
+      col_ab_aljre_or_blank: { id: "col_ab_aljre_or_blank", label: `${ab} blank or ALJRe`, severity: "critical" },
+      camry_nop_00_20: { id: "camry_nop_00_20", label: `CAMRY ${nop} = 00 or 20`, severity: "critical" },
+      lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
+      veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28`, severity: "critical" },
+      crown_qrs_20: { id: "crown_qrs_20", label: `CROWN ${qrs} = 20`, severity: "critical" },
+      bad_model_year: { id: "bad_model_year", label: "Model Year not 2026", severity: "warn" },
+    };
+  }
 
   function isBlankBoField(v) {
     const s = cellToString(v).trim();
@@ -12292,6 +12339,7 @@
   function buildBoErrorsPack() {
     const rawRows = slots.backorder.rows || [];
     const { fMap, tMap } = buildBoeDupMaps(rawRows);
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
     const rows = [];
     const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
 
@@ -12435,6 +12483,7 @@
   function populateBoeTypeFilter(totals) {
     const sel = $("#boe-filter-type");
     if (!sel) return;
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
     const cur = boeView.type || "";
     const opts = [`<option value="">All error types</option>`];
     Object.values(BOE_ERROR_DEFS).forEach((def) => {
@@ -12468,6 +12517,16 @@
     boeLastPack = pack;
     const { rows, totals } = pack;
     const filtered = filteredBoeRows(rows);
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const colNames = {
+      f: boeColName("F"),
+      h: boeColName("H"),
+      j: boeColName("J"),
+      t: boeColName("T"),
+      ab: boeColName("AB"),
+      nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
+      qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
+    };
     populateBoeTypeFilter(totals);
 
     const hint = $("#boe-live-hint");
@@ -12515,17 +12574,17 @@
           <thead>
             <tr>
               <th>Severity</th>
-              <th>Col F</th>
+              <th>${escapeHtml(colNames.f)}</th>
               <th>Product</th>
               <th>SFX</th>
               <th>Sales type</th>
-              <th>Year</th>
-              <th>Col H</th>
-              <th>Col J</th>
-              <th>N / O / P</th>
-              <th>Q / R / S</th>
-              <th>Col T</th>
-              <th>Col AB</th>
+              <th>Model Year</th>
+              <th>${escapeHtml(colNames.h)}</th>
+              <th>${escapeHtml(colNames.j)}</th>
+              <th>${escapeHtml(colNames.nop)}</th>
+              <th>${escapeHtml(colNames.qrs)}</th>
+              <th>${escapeHtml(colNames.t)}</th>
+              <th>${escapeHtml(colNames.ab)}</th>
               <th>Errors</th>
             </tr>
           </thead>
@@ -12563,6 +12622,16 @@
       return;
     }
     const pack = boeLastPack || buildBoErrorsPack();
+    const BOE_ERROR_DEFS = getBoeErrorDefs();
+    const colNames = {
+      f: boeColName("F"),
+      h: boeColName("H"),
+      j: boeColName("J"),
+      t: boeColName("T"),
+      ab: boeColName("AB"),
+      nop: boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3"),
+      qrs: boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3"),
+    };
     const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
       Error: def.label,
       Severity: def.severity,
@@ -12570,17 +12639,17 @@
     }));
     const detail = pack.rows.map((r) => ({
       Severity: r.severity,
-      "Col F": r.colF,
+      [colNames.f]: r.colF,
       Product: r.product,
       Suffix: r.sfx,
       "Sales Type": r.salesType,
-      Year: r.year,
-      "Col H": r.colH,
-      "Col J": r.colJ,
-      "N/O/P": r.nop,
-      "Q/R/S": r.qrs,
-      "Col T": r.colT,
-      "Col AB": r.colAB,
+      "Model Year": r.year,
+      [colNames.h]: r.colH,
+      [colNames.j]: r.colJ,
+      [colNames.nop]: r.nop,
+      [colNames.qrs]: r.qrs,
+      [colNames.t]: r.colT,
+      [colNames.ab]: r.colAB,
       Salesman: r.salesman,
       Errors: (r.errors || []).map((e) => e.label).join("; "),
     }));
