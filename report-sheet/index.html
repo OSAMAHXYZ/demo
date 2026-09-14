@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260914rvsales"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914eu1" />
-  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu1" />
-  <link rel="stylesheet" href="responsive-layout.css?v=20260914eu1" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260914eu1" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914eu2" />
+  <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
+  <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260914eu2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -4784,10 +4784,9 @@
       || new Date(live.now.getFullYear(), live.now.getMonth() + 1, 0).getDate();
 
     // Proforma = Col P in period · Col V blank · Delivery = Col V in period
-    // Target = admin · Ach% = Delivery÷Target · Del+VSND = Proforma (open)
-    // Ach% (2) = Del+VSND÷Target · Diff = Target − Del+VSND
+    // Del+VSND = Proforma + Delivery · Ach% = Del+VSND÷Target · Diff = Target − Del+VSND
     const makeBlock = (proforma, delivery, target, cancelledCount, note, onVacation) => {
-      const delPlusVsnd = proforma; // Del+VSND mirrors Proforma
+      const delPlusVsnd = proforma + delivery; // Del+VSND = Proforma + Delivery
       if (onVacation) {
         return {
           Proforma: proforma,
@@ -4821,7 +4820,7 @@
         Proforma: proforma,
         Delivery: delivery,
         Target: target,
-        "Ach%": target ? pct1(deliveryAch) : "#DIV/0!",
+        "Ach%": target ? pct1(salesAch) : "#DIV/0!",
         "Del+VSND": delPlusVsnd,
         "Ach% (Sales)": target ? pct1(salesAch) : "#DIV/0!",
         Diff: diff,
@@ -4927,8 +4926,8 @@
     const totDayTarget = totTarget; // same admin target; only P/V are day-filtered
     const totProfPlusDel = totProformaMonth + totDeliveryMonth;
     const totVsnd = rowsFinal.reduce((s, r) => s + (Number(r.VSND) || 0), 0);
-    const totDelVsnd = totProformaMonth; // Del+VSND = Proforma
-    const totDelVsndDay = totProformaDay;
+    const totDelVsnd = totProformaMonth + totDeliveryMonth; // Del+VSND = Proforma + Delivery
+    const totDelVsndDay = totProformaDay + totDeliveryDay;
     const totCancelled = rowsFinal.reduce((s, r) => s + (Number(r["Cancelled BOs"]) || 0), 0);
     const totCancelledDay = rowsFinal.reduce((s, r) => s + (Number(r.day && r.day["Cancelled BOs"]) || 0), 0);
     const monthCancelBase = totDeliveryMonth + totCancelled;
@@ -7478,7 +7477,7 @@
         Proforma: t.proformaDay,
         Delivery: totDelivery,
         Target: totTarget,
-        "Ach%": totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+        "Ach%": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
         "Del+VSND": totDelVsnd,
         "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
         Diff: t.diffDay,
@@ -7501,7 +7500,7 @@
       Proforma: t.proformaMonth,
       Delivery: totDelivery,
       Target: totTarget,
-      "Ach%": totTarget ? ((totDelivery / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
+      "Ach%": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
       "Del+VSND": totDelVsnd,
       "Ach% (Sales)": totTarget ? ((totDelVsnd / totTarget) * 100).toFixed(1) + "%" : "#DIV/0!",
       Diff: t.diff,
@@ -7535,7 +7534,7 @@
     const cards = [
       { tone: "red", ico: "◎", lab: "Total Target", val: formatNumber(target), sub: isDay ? "Daily sales target" : "Monthly sales target" },
       { tone: "blue", ico: "△", lab: gapLabel, val: formatNumber(gapVal), sub: "Gap to target" },
-      { tone: "green", ico: "▣", lab: "Del + VSND", val: formatNumber(delVsnd), sub: isDay ? "Deliveries + VSND today" : "Deliveries + VSND MTD" },
+      { tone: "green", ico: "▣", lab: "Del + VSND", val: formatNumber(delVsnd), sub: isDay ? "Proforma + Delivery today" : "Proforma + Delivery MTD" },
       { tone: "rose", ico: "⇄", lab: "Total / Confirm", val: formatNumber(remainTotal) + " / " + formatNumber(remainConfirm), sub: "Remaining of allocation" },
       { tone: "violet", ico: "∑", lab: "Difference of Sales", val: formatNumber(diff), sub: "Target vs actual" },
       { tone: "orange", ico: "!", lab: "Gap (Allocation vs Actual)", val: formatNumber(allocGap), sub: "Difference" },
@@ -7562,7 +7561,7 @@
       } else {
         periodNote = "Current calendar month/day";
       }
-      hint.textContent = `Proforma=Col P + Col V blank · Delivery=Col V in period · ${periodNote} · Target=Admin · Del+VSND=Proforma`;
+      hint.textContent = `Proforma=Col P + Col V blank · Delivery=Col V in period · ${periodNote} · Target=Admin · Del+VSND=Proforma+Delivery · Ach%=Del+VSND÷Target`;
       const diag = sr.diag || {};
       if (diag.unmatchedNames > 0 && typeof console !== "undefined" && console.info) {
         console.info("[Sales name match]", {
@@ -7618,7 +7617,7 @@
       ? `${formatNumber(dayRows.length)} employees · Col P/V on end date (${live.label})`
       : live.source === "file"
         ? `${formatNumber(dayRows.length)} employees · Col P/V filtered to latest day in file (${live.label})`
-        : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma`;
+        : `${formatNumber(dayRows.length)} employees · Col P/V filtered to today · Target=Admin · Del+VSND=Proforma+Delivery`;
     renderXlTable(
       dayRows,
       buildTotalsObj(sr, "day"),
@@ -7631,7 +7630,7 @@
       buildTotalsObj(sr, "month"),
       "#sr-table-wrap",
       "#sr-table-foot",
-      `${formatNumber(monthRows.length)} employees · Proforma=Col P + Col V blank · Delivery=Col V · Ach%=Del÷Target · Del+VSND=Proforma · Diff=Target−Del+VSND`
+      `${formatNumber(monthRows.length)} employees · Proforma=Col P + Col V blank · Delivery=Col V · Del+VSND=Proforma+Delivery · Ach%=Del+VSND÷Target · Diff=Target−Del+VSND`
     );
 
     window._srExportRows = [
@@ -18328,9 +18327,9 @@
       const dark = mode === "dark";
       document.body.classList.toggle("theme-dark", dark);
       if (btn) {
-        btn.textContent = dark ? "Light" : "Dark";
+        btn.textContent = dark ? "Day" : "Dark";
         btn.setAttribute("aria-pressed", dark ? "true" : "false");
-        btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+        btn.title = dark ? "Switch to day mode" : "Switch to dark mode";
       }
       try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch { /* ignore */ }
     };
