@@ -9841,6 +9841,11 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .rv-table tbody tr.rv-row-inqueue td:first-child {
   box-shadow: inset 3px 0 0 #2563eb;
 }
+.rv-sales-emp {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
 .rv-vin-btn {
   appearance: none;
   border: 0;

@@ -354,6 +354,7 @@ class BoOrderLookup {
         reservationDate: e.reservationDateRaw,
         product: e.product,
         suffix: e.suffix,
+        salesman: e.salesman || this.salesmanFromRow(e.row, this._salesmanColumn || null) || '',
         queuePosition: posIdx >= 0 ? posIdx + 2 + i : null,
         pairs: (e.pairs || []).map((p) => ({ exterior: p.exterior, interior: p.interior }))
     });
@@ -497,6 +498,7 @@ class BoOrderLookup {
             orderNorm,
             product: productColumn ? anchorRow[productColumn] : '',
             suffix: suffixColumn ? anchorRow[suffixColumn] : '',
+            salesman: '',
             reservationDate: bestDate,
             reservationDateRaw: bestDateRaw || (dateColumn ? anchorRow[dateColumn] : ''),
             pairs: Array.from(pairMap.values()),
@@ -506,11 +508,41 @@ class BoOrderLookup {
     return entries;
 }
 
+  salesmanFromRow(row, salesmanColumn) {
+    if (!row) return '';
+    if (salesmanColumn && row[salesmanColumn] != null && String(row[salesmanColumn]).trim()) {
+      return String(row[salesmanColumn]).trim();
+    }
+    const headers = Array.isArray(row.__headers) ? row.__headers : Object.keys(row).filter((k) => !String(k).startsWith('__'));
+    const col = this.resolveColumn(headers, [
+      /^salesman\s*name$/i,
+      /^sales\s*employee$/i,
+      /^salesman$/i,
+      /sales\s*employee/i,
+      /advisor/i,
+      /consultant/i
+    ]);
+    return col ? String(row[col] ?? '').trim() : '';
+  }
+
+  resolveSalesmanColumn(headers) {
+    return this.resolveColumn(headers, [
+      /^salesman\s*name$/i,
+      /^sales\s*employee$/i,
+      /^salesman$/i,
+      /sales\s*employee/i,
+      /advisor/i,
+      /consultant/i
+    ]);
+  }
+
   buildQueueAnalysis(rows, matchedOrder, headers, orderMatchedColumn) {
     const productColumn = this.resolveColumn(headers, [/^product$/i, /product/i, /model/i, /description/i]);
     const suffixColumn = this.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
     const dateColumn = this.resolveReservationCreatedDateColumn(headers);
     const orderColumn = this.resolveBackOrderColumn(headers, orderMatchedColumn);
+    const salesmanColumn = this.resolveSalesmanColumn(headers);
+    this._salesmanColumn = salesmanColumn;
 
     const ext1 = this.resolvePriorityColumn(headers, 'ext', 1);
     const int1 = this.resolvePriorityColumn(headers, 'int', 1);
@@ -530,6 +562,10 @@ class BoOrderLookup {
         extCols,
         intCols
     );
+    // Attach salesman onto entries (column resolved above)
+    allEntries.forEach((e) => {
+      if (!e.salesman) e.salesman = this.salesmanFromRow(e.row, salesmanColumn);
+    });
 
     const refOrderNorm = this.normalizeText(orderColumn ? matchedOrder[orderColumn] : '');
     let refEntry = allEntries.find((e) => e.orderNorm === refOrderNorm);
@@ -619,6 +655,7 @@ class BoOrderLookup {
             reservationDate: e.reservationDateRaw,
             product: e.product,
             suffix: e.suffix,
+            salesman: e.salesman || this.salesmanFromRow(e.row, salesmanColumn) || '',
             queuePosition: posIdx + 2 + i,
             pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
         })),
@@ -627,6 +664,7 @@ class BoOrderLookup {
             reservationDate: e.reservationDateRaw,
             product: e.product,
             suffix: e.suffix,
+            salesman: e.salesman || this.salesmanFromRow(e.row, salesmanColumn) || '',
             pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
         })),
         queueRule:
@@ -1100,6 +1138,12 @@ class BoOrderLookup {
       rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols
     );
 
+    const salesmanColumn = this.resolveSalesmanColumn(headers);
+    this._salesmanColumn = salesmanColumn;
+    allEntries.forEach((e) => {
+      e.salesman = this.salesmanFromRow(e.row, salesmanColumn);
+    });
+
     const productNorm = this.productKeyLoose(productInput);
     const suffixNorm = this.suffixKeyLoose(suffixInput);
     const refPair = {
@@ -1142,6 +1186,7 @@ class BoOrderLookup {
       reservationDate: e.reservationDateRaw,
       product: e.product,
       suffix: e.suffix,
+      salesman: e.salesman || '',
       queuePosition: (position != null ? posIdx + 2 + i : i + 1),
       pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
     }));

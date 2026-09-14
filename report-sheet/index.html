@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260914rvspec"></script>
+  <script src="lib/bo-order-lookup.js?v=20260914rvsales"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260914resp2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914resp2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914resp2" />
@@ -2401,28 +2401,42 @@
     const sheet = workbook.Sheets[sheetName];
     // Keep Excel letters through AI so AD/AE stock columns are not dropped
     expandSheetRange(sheet, "AI");
-    const matrix = XLSX.utils.sheet_to_json(sheet, {
-      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
-    });
+    let range;
+    try {
+      range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    } catch {
+      range = { s: { r: 0, c: 0 }, e: { r: 0, c: colLetterToIndex("AI") } };
+    }
+    const minWidth = colLetterToIndex("AI") + 1;
+    const width = Math.max(minWidth, range.e.c - range.s.c + 1);
+    // Build rows with absolute sheet indices so sparse-cell backfill cannot
+    // accidentally read the header row (matrix index ≠ sheet row when blanks skip).
+    const matrix = [];
+    for (let R = range.s.r; R <= range.e.r; R += 1) {
+      const line = new Array(width);
+      let any = false;
+      for (let C = 0; C < width; C += 1) {
+        const v = sheetCellValue(sheet, R, C);
+        line[C] = v;
+        if (cellToString(v).trim() !== "") any = true;
+      }
+      if (!any) continue;
+      matrix.push({ sheetRow: R, line });
+    }
     if (!matrix.length) return [];
+
     let headerIdx = 0;
     let bestHits = -1;
     const scanLimit = Math.min(matrix.length, 40);
     for (let i = 0; i < scanLimit; i += 1) {
-      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      const cells = (matrix[i].line || []).map((c) => normHeader(c));
       if (!cells.some(Boolean)) continue;
       const hits = HEADER_MARKERS.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
       if (hits > bestHits) { bestHits = hits; headerIdx = i; }
       if (hits >= 3) break;
     }
-    const minWidth = colLetterToIndex("AI") + 1;
-    const headerRaw = padCells(matrix[headerIdx] || [], Math.max(minWidth, (matrix[headerIdx] || []).length));
-    for (let c = 0; c < headerRaw.length; c += 1) {
-      if (cellToString(headerRaw[c]).trim() === "") {
-        const direct = sheetCellValue(sheet, headerIdx, c);
-        if (cellToString(direct).trim() !== "") headerRaw[c] = direct;
-      }
-    }
+
+    const headerRaw = padCells(matrix[headerIdx].line || [], width);
     const headers = headerRaw.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const seen = {};
     const uniqueHeaders = headers.map((h) => {
@@ -2430,21 +2444,39 @@
       seen[h] += 1;
       return `${h} (${seen[h]})`;
     });
-    const width = uniqueHeaders.length;
+    const headerNorms = uniqueHeaders.map((h) => normHeader(h));
+
     const rows = [];
-    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
-      const line = padCells(matrix[r] || [], width);
-      // Prefer direct sheet cells for sparse / far-right columns (AD–AI)
-      for (let c = 0; c < width; c += 1) {
-        if (cellToString(line[c]).trim() !== "") continue;
-        const direct = sheetCellValue(sheet, r, c);
-        if (cellToString(direct).trim() !== "") line[c] = direct;
+    for (let i = headerIdx + 1; i < matrix.length; i += 1) {
+      const line = padCells(matrix[i].line || [], uniqueHeaders.length);
+      // Drop leftover sub-header rows (cell value equals its column header)
+      let headerLike = 0;
+      let nonEmpty = 0;
+      for (let c = 0; c < line.length; c += 1) {
+        const raw = cellToString(line[c]).trim();
+        if (!raw) continue;
+        nonEmpty += 1;
+        if (normHeader(raw) === headerNorms[c] || normHeader(raw) === normHeader(headers[c])) {
+          headerLike += 1;
+        }
+      }
+      if (nonEmpty > 0 && headerLike >= Math.min(3, nonEmpty) && headerLike / nonEmpty >= 0.5) {
+        continue;
+      }
+      // Never keep a cell whose value is literally that column's header label
+      for (let c = 0; c < line.length; c += 1) {
+        const raw = cellToString(line[c]).trim();
+        if (!raw) continue;
+        if (normHeader(raw) === headerNorms[c] || normHeader(raw) === normHeader(headers[c])) {
+          line[c] = "";
+        }
       }
       if (line.every((c) => cellToString(c).trim() === "")) continue;
       const obj = {};
-      uniqueHeaders.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ""; });
+      uniqueHeaders.forEach((h, idx) => { obj[h] = line[idx] != null ? line[idx] : ""; });
       obj.__cells = line;
       obj.__headers = uniqueHeaders;
+      obj.__sheetRow = matrix[i].sheetRow;
       rows.push(obj);
     }
     return rows;
@@ -3443,6 +3475,15 @@
     return m ? m[0] : "";
   }
 
+  /** Reserved sheet Col L — full VIN or chassis tail; hide junk like "37". */
+  function reservedVinFromCell(raw) {
+    const full = extractVinValue(raw);
+    if (full) return full;
+    const cleaned = String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (cleaned.length >= 8 && cleaned.length <= 16 && /[A-Z]/.test(cleaned)) return cleaned;
+    return "";
+  }
+
   /** E-Sales / central: prefer sheet 3 «المخزون المتاح all retail». */
   function esalesAvailableStockRows(workbook) {
     const names = workbook.SheetNames || [];
@@ -3567,8 +3608,7 @@
       const orderRaw = cellByLetter(r, "F");
       let orderNumber = cellToString(orderRaw).trim();
       if (/^\d+\.0+$/.test(orderNumber)) orderNumber = orderNumber.replace(/\.0+$/, "");
-      const vin = extractVinValue(cellByLetter(r, "L"))
-        || upperTrim(cellToString(cellByLetter(r, "L")));
+      const vin = reservedVinFromCell(cellByLetter(r, "L"));
       // Col I product · Col J suffix · Col M exterior · Col N interior
       const product = cellToString(cellByLetter(r, "I")).trim()
         || cellToString(cellByLetter(r, "B")).trim()
@@ -12836,6 +12876,7 @@
       ? rawRows[0].__headers.slice()
       : [];
     const headerLabels = headers.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const headerNorms = headerLabels.map((h) => normHeader(h));
     const errByIdx = new Map((pack.rows || []).map((r) => [r.idx, r]));
     const aoa = [];
     aoa.push([...headerLabels, "Error Definition"]);
@@ -12846,14 +12887,27 @@
     };
     const redCells = [];
 
+    const sanitizeBoeExportCell = (v, colIdx) => {
+      const raw = boeExcelCellValue(v);
+      const s = cellToString(raw).trim();
+      if (!s) return "";
+      // Drop leaked header labels (e.g. empty Ext Color 2 filled from header row)
+      if (headerNorms[colIdx] && normHeader(s) === headerNorms[colIdx]) return "";
+      if (normHeader(s) === normHeader(headerLabels[colIdx])) return "";
+      return raw;
+    };
+
     rawRows.forEach((raw, idx) => {
       const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
       const width = Math.max(headers.length, cells.length);
       const row = [];
       for (let i = 0; i < width; i += 1) {
-        row.push(boeExcelCellValue(cells[i] != null ? cells[i] : raw[headers[i]]));
+        const v = cells[i] != null && cells[i] !== "" ? cells[i] : raw[headers[i]];
+        row.push(sanitizeBoeExportCell(v, i));
       }
       while (row.length < headers.length) row.push("");
+      // Skip rows that are empty after stripping leaked header labels
+      if (row.every((v) => cellToString(v).trim() === "")) return;
       const err = errByIdx.get(idx);
       const errText = err && err.errors && err.errors.length
         ? err.errors.map((e) => e.label).join("; ")
@@ -12862,12 +12916,11 @@
       aoa.push(row);
 
       if (err) {
-        const excelRow = idx + 1; // header is row 0
+        const excelRow = aoa.length - 1; // current data row after push (header is 0)
         (err.errorLetters || []).forEach((L) => {
           const c = colLetterToIndex(L);
           if (c >= 0 && c < headers.length) redCells.push({ r: excelRow, c });
         });
-        // Error Definition column
         redCells.push({ r: excelRow, c: headers.length });
       }
     });
@@ -16198,10 +16251,38 @@
       reservationDate: n.reservationDate || "",
       product: n.product || "",
       suffix: n.suffix || "",
+      salesman: n.salesman || findBoSalesmanForOrder(n.orderNumber) || "",
       queuePosition: n.queuePosition != null ? n.queuePosition : fallbackPos,
       pairs: Array.isArray(n.pairs) ? n.pairs : [],
       fromPair: n.fromPair || "",
     };
+  }
+
+  function findBoSalesmanForOrder(orderNumber) {
+    const needle = String(orderNumber || "").trim().toLowerCase();
+    if (!needle) return "";
+    const rows = rawBoRows();
+    if (!rows.length) return "";
+    const sample = rows[0];
+    const headers = Array.isArray(sample.__headers) ? sample.__headers : [];
+    const orderLetter = findHeaderLetter(sample, [
+      (n) => n.includes("back order") && n.includes("number"),
+      (n) => n === "back order number" || n === "bo number" || n === "order number",
+    ]) || "F";
+    const salesLetter = findHeaderLetter(sample, [
+      (n) => n === "salesman name" || n === "salesman" || n === "sales employee",
+      (n) => n.includes("salesman") || n.includes("sales employee") || n === "advisor",
+    ]);
+    for (let i = 0; i < rows.length; i += 1) {
+      const r = rows[i];
+      const on = cellToString(cellByLetter(r, orderLetter)).trim().toLowerCase().replace(/\.0+$/, "");
+      if (on !== needle && on.replace(/^0+/, "") !== needle.replace(/^0+/, "")) continue;
+      let name = "";
+      if (salesLetter) name = cellToString(cellByLetter(r, salesLetter)).trim();
+      if (!name) name = cellToString(r.salesman || "").trim();
+      return resolveSalesmanName(name) || name || "";
+    }
+    return "";
   }
 
   /** Prefer main BO queue next-3; fill gaps from largest color-pair queues. */
@@ -16277,7 +16358,7 @@
 
     return reserved.map((rec) => {
       const orderNumber = String(rec.orderNumber || "").trim();
-      const vin = extractVinValue(rec.vin) || upperTrim(rec.vin);
+      const vin = reservedVinFromCell(rec.vin);
       const product = cellToString(rec.product).trim();
       const suffix = normalizeProductSuffix(product, rec.suffix);
       const ext = cellToString(rec.ext).trim();
@@ -16497,9 +16578,10 @@
               ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
               : "";
             const qPos = n.queuePosition != null ? `Q${n.queuePosition}` : `+${i + 1}`;
+            const salesEmp = n.salesman ? ` · ${n.salesman}` : "";
             return `<li>
               <span class="rv-next-rank">${escapeHtml(qPos)}</span>
-              <strong class="mono">${escapeHtml(n.orderNumber || "—")}</strong>
+              <strong class="mono">${escapeHtml(n.orderNumber || "—")}</strong>${salesEmp ? `<span class="rv-sales-emp">${escapeHtml(salesEmp)}</span>` : ""}
               <div class="rv-muted">${escapeHtml(n.product || "")}${n.suffix ? " · " + escapeHtml(n.suffix) : ""}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
               <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}${n.fromPair ? " · pair " + escapeHtml(n.fromPair) : ""}</div>
             </li>`;
@@ -16594,11 +16676,15 @@
     const rtl = row.rtlDetail || null;
     const values = row.queue && row.queue.values ? row.queue.values : null;
     const nextSlots = [0, 1, 2].map((i) => row.nextInQueue[i] || null);
+    const ownSalesman = (sales && sales.salesman)
+      || findBoSalesmanForOrder(row.orderNumber)
+      || "";
 
     if (titleEl) titleEl.textContent = row.vin || "VIN";
     if (subEl) {
       subEl.textContent = [
         row.orderNumber ? `Order ${row.orderNumber}` : "",
+        ownSalesman ? `Sales emp ${ownSalesman}` : "",
         row.product || "",
         row.suffix || "",
         row.status && row.status.label ? row.status.label : "",
@@ -16618,9 +16704,11 @@
       const pairs = Array.isArray(n.pairs) && n.pairs.length
         ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
         : "";
+      const emp = n.salesman || findBoSalesmanForOrder(n.orderNumber) || "";
       return `<li>
         <span class="rv-next-rank">${escapeHtml(n.queuePosition != null ? "Q" + n.queuePosition : "+" + (i + 1))}</span>
         <strong class="mono">${escapeHtml(n.orderNumber)}</strong>
+        ${emp ? `<span class="rv-sales-emp"> · ${escapeHtml(emp)}</span>` : ""}
         <div class="rv-muted">${escapeHtml([n.product, n.suffix].filter(Boolean).join(" · "))}${pairs ? " · " + escapeHtml(pairs) : ""}</div>
         <div class="rv-muted">${escapeHtml(formatRvDate(n.reservationDate))}</div>
       </li>`;
@@ -16636,6 +16724,7 @@
         <h4 class="rv-detail-h">E-Sales المحجوز</h4>
         <div class="rv-detail-grid">
           ${kv("Order (Col F)", row.orderNumber)}
+          ${kv("Sales employee", ownSalesman || "—")}
           ${kv("VIN (Col L)", row.vin)}
           ${kv("Product (Col I)", row.product)}
           ${kv("Suffix (Col J)", row.suffix)}
@@ -16646,7 +16735,7 @@
           ${kv("Sheet", row.sheet)}
         </div>
 
-        <h4 class="rv-detail-h">BO queue</h4>
+        <h4 class="rv-detail-h">BO queue · next orders</h4>
         <div class="rv-detail-grid">
           ${kv("Position", row.position != null ? `${row.position} of ${row.totalQueue ?? "—"}` : (row.queueError || "—"))}
           ${kv("Orders ahead", row.ordersAhead != null ? row.ordersAhead : "—")}
@@ -16659,9 +16748,9 @@
 
         <h4 class="rv-detail-h">Sales Raw</h4>
         <div class="rv-detail-grid">
+          ${kv("Sales employee", sales && sales.salesman ? sales.salesman : (ownSalesman || "—"))}
           ${kv("Proforma (Col P)", sales && sales.proformaDate ? formatRvDate(sales.proformaDate) : "—")}
           ${kv("Delivery / Invoice (Col V)", sales && (sales.invoiceDate || sales.deliveryDate) ? formatRvDate(sales.invoiceDate || sales.deliveryDate) : "—")}
-          ${kv("Salesman", sales && sales.salesman ? sales.salesman : "—")}
           ${kv("Product", sales && sales.product ? sales.product : "—")}
           ${kv("Sales type", sales && sales.salesType ? sales.salesType : "—")}
           ${kv("Location", sales && sales.location ? sales.location : "—")}
