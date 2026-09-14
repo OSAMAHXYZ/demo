@@ -1307,3 +1307,78 @@ body.uploader-enterprise button[type="submit"] {
 .live-app.toyota-theme.theme-dark .sidebar-mark {
   background: linear-gradient(145deg, var(--eu-accent), #c40718) !important;
 }
+
+/* Accessories Performance — readable on white (day) / dark surface cards.
+   Old skin used white title on brown card; enterprise skin made the card light. */
+.live-app.toyota-theme .sr-mock-acc {
+  background: var(--eu-surface) !important;
+  border-color: var(--eu-line) !important;
+  color: var(--eu-ink) !important;
+  box-shadow: var(--eu-shadow) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .sr-mock-card-title,
+.live-app.toyota-theme .sr-mock-acc .sr-mock-card-sub {
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .sr-mock-card-sub {
+  color: var(--eu-muted) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .pbi-expand {
+  background: var(--eu-surface-2) !important;
+  border-color: var(--eu-line) !important;
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .acc-summary-pct-hero,
+.live-app.toyota-theme .sr-mock-acc .acc-summary-pct-text .v {
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .acc-summary-pct-text .v.acc-sum-pct-combined,
+.live-app.toyota-theme .sr-mock-acc #acc-sum-pct {
+  color: var(--eu-accent) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .acc-sum-remain-inline .k {
+  color: var(--eu-muted) !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .acc-sum-remain-inline .v {
+  color: var(--eu-ink) !important;
+}
+
+/* Keep brown metric tiles high-contrast (white on copper) */
+.live-app.toyota-theme .sr-mock-acc .acc-summary-cell,
+.live-app.toyota-theme .sr-mock-acc .acc-summary-cell .k,
+.live-app.toyota-theme .sr-mock-acc .acc-summary-cell .v {
+  color: #fff !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc {
+  background: var(--eu-surface) !important;
+  border-color: var(--eu-line) !important;
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .sr-mock-card-title {
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .sr-mock-card-sub,
+.live-app.toyota-theme.theme-dark .sr-mock-acc .acc-sum-remain-inline .k {
+  color: var(--eu-muted) !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .pbi-expand {
+  background: var(--eu-surface-2) !important;
+  border-color: var(--eu-line) !important;
+  color: var(--eu-ink) !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .acc-summary-pct-text .v.acc-sum-pct-combined,
+.live-app.toyota-theme.theme-dark .sr-mock-acc #acc-sum-pct {
+  color: #ff5a66 !important;
+}
