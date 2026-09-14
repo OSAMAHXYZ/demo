@@ -11012,6 +11012,53 @@ button.dvp-total-card:focus-visible {
 .boe-row.sev-critical td {
   border-bottom-color: rgba(220, 38, 38, 0.14);
 }
+.boe-row-click {
+  cursor: pointer;
+}
+.boe-row-click:hover {
+  filter: brightness(0.985);
+}
+.boe-row-click:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+.boe-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.boe-detail-errors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.boe-detail-wrap {
+  max-height: min(70vh, 640px);
+}
+.boe-detail-table th,
+.boe-detail-table td {
+  vertical-align: top;
+}
+.boe-detail-letter {
+  width: 3.2rem;
+  color: #64748b;
+  font-weight: 600;
+}
+.boe-detail-name {
+  color: #334155;
+  font-weight: 600;
+  min-width: 10rem;
+}
+.boe-detail-val {
+  word-break: break-word;
+}
+.boe-detail-row.is-hot {
+  background: #eff6ff;
+}
+.boe-detail-row.is-hot .boe-detail-letter,
+.boe-detail-row.is-hot .boe-detail-name {
+  color: #1d4ed8;
+}
 .boe-dash .rv-head-actions {
   display: flex;
   flex-wrap: wrap;

@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260914rvnext"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914boerules" />
+  <link rel="stylesheet" href="dashboard.css?v=20260914boerow" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914boerrors" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -798,7 +798,7 @@
             <div class="pbi-viz-head">
               <div>
                 <h2>Error schedule</h2>
-                <span class="hint">One row per Back Order with issues · red = critical</span>
+                <span class="hint">One row per Back Order with issues · click a row to open the full BO record · red = critical</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="boe-table-wrap"></div>
@@ -12463,6 +12463,91 @@
     return { rows, totals };
   }
 
+  const BOE_HIGHLIGHT_LETTERS = new Set(["F", "H", "J", "N", "O", "P", "Q", "R", "S", "T", "AB"]);
+
+  function formatBoeCellDisplay(v) {
+    if (v == null || v === "") return "—";
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return formatRvDate(v) || cellToString(v);
+    const s = cellToString(v).trim();
+    return s || "—";
+  }
+
+  function openBoeRowDetail(rowIdx) {
+    const idx = Number(rowIdx);
+    const raw = (slots.backorder.rows || [])[idx];
+    const pack = boeLastPack || buildBoErrorsPack();
+    const errRow = (pack.rows || []).find((r) => r.idx === idx) || null;
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+
+    if (!raw) {
+      if (titleEl) titleEl.textContent = "Back Order row";
+      if (subEl) subEl.textContent = "BO Errors";
+      bodyEl.innerHTML = `<p class="foot">Row not found in the Back Order file.</p>`;
+      backdrop.classList.add("show");
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      return;
+    }
+
+    const headers = Array.isArray(raw.__headers) ? raw.__headers : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+    const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+    const boLabel = errRow ? (errRow.colF || errRow.boNumber) : formatBoeCellDisplay(cellByLetter(raw, "F"));
+
+    if (titleEl) titleEl.textContent = boLabel && boLabel !== "—" ? `BO ${boLabel}` : "Back Order row";
+    if (subEl) {
+      subEl.textContent = [
+        errRow && errRow.product ? errRow.product : "",
+        errRow && errRow.sfx ? errRow.sfx : "",
+        errRow ? `${(errRow.errors || []).length} error(s)` : "Full row",
+        `row #${idx + 1}`,
+      ].filter(Boolean).join(" · ");
+    }
+
+    const errorTags = errRow && errRow.errors && errRow.errors.length
+      ? `<div class="boe-detail-errors">${errRow.errors.map((e) =>
+          `<span class="boe-tag sev-${escapeHtml(e.severity)}">${escapeHtml(e.label)}</span>`
+        ).join("")}</div>`
+      : "";
+
+    const fieldRows = headers.map((h, i) => {
+      const letter = indexToColLetter(i);
+      const value = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+      const hi = BOE_HIGHLIGHT_LETTERS.has(letter) ? " is-hot" : "";
+      return `<tr class="boe-detail-row${hi}">
+        <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
+        <td class="boe-detail-name">${escapeHtml(cellToString(h).trim() || `Column ${letter}`)}</td>
+        <td class="boe-detail-val">${escapeHtml(value)}</td>
+      </tr>`;
+    }).join("");
+
+    bodyEl.innerHTML = `
+      <div class="boe-detail">
+        ${errorTags}
+        <p class="aa-drill-note">Full Back Order row · highlighted fields are used by error rules</p>
+        <div class="table-wrap aa-drill-table-wrap boe-detail-wrap">
+          <table class="data-table aa-table boe-detail-table">
+            <thead>
+              <tr>
+                <th>Col</th>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>${fieldRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
   function filteredBoeRows(rows) {
     const q = String(boeView.search || "").trim().toLowerCase();
     const sev = String(boeView.severity || "").trim();
@@ -12590,7 +12675,7 @@
           </thead>
           <tbody>
             ${filtered.map((r) => `
-              <tr class="boe-row sev-${escapeHtml(r.severity)}">
+              <tr class="boe-row sev-${escapeHtml(r.severity)} boe-row-click" data-boe-idx="${escapeHtml(String(r.idx))}" tabindex="0" role="button" title="Open full Back Order row">
                 <td><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
                 <td class="mono">${escapeHtml(r.colF)}</td>
                 <td><strong>${escapeHtml(r.product)}</strong></td>
@@ -12637,22 +12722,38 @@
       Severity: def.severity,
       Count: (pack.totals.typeCounts && pack.totals.typeCounts[def.id]) || 0,
     }));
-    const detail = pack.rows.map((r) => ({
-      Severity: r.severity,
-      [colNames.f]: r.colF,
-      Product: r.product,
-      Suffix: r.sfx,
-      "Sales Type": r.salesType,
-      "Model Year": r.year,
-      [colNames.h]: r.colH,
-      [colNames.j]: r.colJ,
-      [colNames.nop]: r.nop,
-      [colNames.qrs]: r.qrs,
-      [colNames.t]: r.colT,
-      [colNames.ab]: r.colAB,
-      Salesman: r.salesman,
-      Errors: (r.errors || []).map((e) => e.label).join("; "),
-    }));
+    const sampleRaw = (slots.backorder.rows || [])[0] || {};
+    const fullHeaders = Array.isArray(sampleRaw.__headers)
+      ? sampleRaw.__headers.slice()
+      : [];
+    const detail = pack.rows.map((r) => {
+      const raw = (slots.backorder.rows || [])[r.idx] || {};
+      const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
+      const base = {
+        Severity: r.severity,
+        Errors: (r.errors || []).map((e) => e.label).join("; "),
+        [colNames.f]: r.colF,
+        Product: r.product,
+        Suffix: r.sfx,
+        "Sales Type": r.salesType,
+        "Model Year": r.year,
+        [colNames.h]: r.colH,
+        [colNames.j]: r.colJ,
+        [colNames.nop]: r.nop,
+        [colNames.qrs]: r.qrs,
+        [colNames.t]: r.colT,
+        [colNames.ab]: r.colAB,
+        Salesman: r.salesman,
+      };
+      fullHeaders.forEach((h, i) => {
+        const key = cellToString(h).trim() || `Column ${indexToColLetter(i)}`;
+        const letter = indexToColLetter(i);
+        const exportKey = `${letter} · ${key}`;
+        if (Object.prototype.hasOwnProperty.call(base, exportKey)) return;
+        base[exportKey] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+      });
+      return base;
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), "BO Errors");
@@ -17603,6 +17704,21 @@
       const next = btn.getAttribute("data-boe-type") || "";
       boeView.type = boeView.type === next ? "" : next;
       if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeTableWrap = $("#boe-table-wrap");
+  if (boeTableWrap) {
+    boeTableWrap.addEventListener("click", (e) => {
+      const tr = e.target && e.target.closest ? e.target.closest("tr[data-boe-idx]") : null;
+      if (!tr) return;
+      openBoeRowDetail(tr.getAttribute("data-boe-idx"));
+    });
+    boeTableWrap.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const tr = e.target && e.target.closest ? e.target.closest("tr[data-boe-idx]") : null;
+      if (!tr) return;
+      e.preventDefault();
+      openBoeRowDetail(tr.getAttribute("data-boe-idx"));
     });
   }
   const basExcelBtn = $("#bas-excel-btn");
