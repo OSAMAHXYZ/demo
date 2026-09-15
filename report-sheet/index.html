@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260915aa2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260915aa3" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa2" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa3" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -926,7 +926,7 @@
               <div>
                 <p class="aa-cc-section-kicker">Current month</p>
                 <h3 class="aa-cc-section-title" id="aa-current-heading">Current Month — Allocation Audit</h3>
-                <p class="aa-cc-section-sub">VINs received in RTL during the current month (Col AG) · Retail Electronic Sales</p>
+                <p class="aa-cc-section-sub">All Retail Electronic Sales VINs from last pushed RTL · Col AG in the current computer month</p>
               </div>
             </div>
             <article class="card aa-summary-card aa-summary-current-card">
@@ -955,7 +955,7 @@
               <div>
                 <p class="aa-cc-section-kicker">Carryover</p>
                 <h3 class="aa-cc-section-title" id="aa-prior-heading">Previous Month — Carryover Audit</h3>
-                <p class="aa-cc-section-sub">RTL VINs received before the current month · does not affect current-month allocation</p>
+                <p class="aa-cc-section-sub">RES VINs from last pushed RTL whose Col AG is before this month · does not affect allocation achievement</p>
               </div>
             </div>
             <div class="aa-cc-kpis aa-cc-kpis--mini" id="aa-prior-kpis" aria-label="Previous month KPIs"></div>
@@ -18239,6 +18239,49 @@
     };
   }
 
+  /**
+   * UI count only: last pushed RTL · unique RES VINs · split by Col AG vs computer/live month.
+   * Does not change allocation matching or summary formulas.
+   */
+  function countAaRtlResFileByAgMonth() {
+    const monthKey = activeAaMonthKey();
+    const live = window._globalLivePeriod || todayKeys();
+    const today = (live && live.now) || saudiToday();
+    const monthLabel = today.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+    const seen = new Set();
+    let total = 0;
+    let current = 0;
+    let prior = 0;
+    let noAg = 0;
+
+    (slots.rtl.rows || []).forEach((r) => {
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "searchAreaDesc", [])
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
+      if (!isRetailElectronicSales(searchArea)) return;
+
+      const vin = extractVinValue(cellByLetter(r, "E"))
+        || extractVinValue(r.vin)
+        || extractVinValue(stockFieldByAlias(r, "vin", []))
+        || upperTrim(cellToString(r.vin));
+      if (!vin || seen.has(vin)) return;
+      seen.add(vin);
+      total += 1;
+
+      const agMonth = rtlAgMonthKey(r);
+      if (!agMonth) {
+        noAg += 1;
+        return;
+      }
+      if (agMonth === monthKey) current += 1;
+      else if (agMonth < monthKey) prior += 1;
+      else noAg += 1; // future AG relative to live month — keep visible in residual
+    });
+
+    return { total, current, prior, noAg, monthKey, monthLabel };
+  }
+
   function filteredAaRtlAgRows(rows) {
     const q = String(aaView.search || "").trim().toLowerCase();
     const st = String(aaView.status || "").trim();
@@ -18659,29 +18702,36 @@
     const curMetrics = sumAaSummaryMetrics(summaryRowsCurrent || []);
     const boardCur = countAaBoardMetrics(currentBoard);
     const boardPrior = countAaBoardMetrics(priorBoard);
+    const rtlRes = countAaRtlResFileByAgMonth();
+    // Display counts from last pushed RTL (RES + Col AG). Allocation Achievement keeps plan-matched actual.
+    const rtlThisMonth = rtlRes.current;
+    const rtlPriorMonths = rtlRes.prior;
+    const rtlFileTotal = rtlRes.total;
     const ach = curMetrics.allocation > 0
       ? `${Math.round((curMetrics.actual / curMetrics.allocation) * 1000) / 10}%`
       : "—";
-    const pendingCur = Math.max(0, curMetrics.actual - curMetrics.delivered);
 
     const hint = $("#aa-live-hint");
     if (hint) {
-      hint.textContent = `Current Month · ${formatNumber(boardCur.total)} RTL VINs · ${formatNumber(curMetrics.allocation)} Allocated · ${formatNumber(curMetrics.delivered)} Delivered · ${formatNumber(pendingCur)} Pending`;
+      const noAgNote = rtlRes.noAg ? ` · ${formatNumber(rtlRes.noAg)} no Col AG` : "";
+      hint.textContent = `Last RTL · RES ${formatNumber(rtlFileTotal)} · This month (Col AG ${rtlRes.monthLabel}) ${formatNumber(rtlThisMonth)} · Prior months ${formatNumber(rtlPriorMonths)}${noAgNote} · Plan ${formatNumber(curMetrics.allocation)}`;
     }
 
     renderAaKpiCards($("#aa-kpis"), [
       ["Allocation", formatNumber(curMetrics.allocation), "ok", "Current-month plan"],
-      ["RTL Received", formatNumber(curMetrics.actual || boardCur.total), "ok", "Unique RES VINs this month"],
-      ["Allocation Achievement", ach, "ok", "RTL actual vs allocation"],
-      ["Delivered", formatNumber(curMetrics.delivered), "ok", "In Sales Raw as delivered"],
-      ["Proforma / Invoice", formatNumber(curMetrics.proforma), "warn", "In Sales Raw · not delivered"],
-      ["E-Sales / المحجوز", formatNumber(curMetrics.reserved), "warn", "Reserved sheet"],
-      ["Display", formatNumber(curMetrics.display), "ok", "Display Central"],
-      ["Missing", formatNumber(curMetrics.missing), curMetrics.missing ? "bad" : "ok", "Unclassified"],
+      ["RES Total (RTL)", formatNumber(rtlFileTotal), "ok", "Last pushed RTL · Retail Electronic Sales"],
+      ["This Month", formatNumber(rtlThisMonth), "ok", `Col AG in ${rtlRes.monthLabel} · computer date`],
+      ["Prior Months", formatNumber(rtlPriorMonths), rtlPriorMonths ? "warn" : "ok", "Col AG before this month"],
+      ["Allocation Achievement", ach, "ok", `Plan-matched actual ${formatNumber(curMetrics.actual)} vs allocation`],
+      ["Delivered", formatNumber(boardCur.delivered), "ok", "This-month RES · Sales Raw delivered"],
+      ["Proforma / Invoice", formatNumber(boardCur.proforma), "warn", "This-month RES · Sales Raw proforma"],
+      ["E-Sales / المحجوز", formatNumber(boardCur.reserved), "warn", "This-month RES on reserved sheet"],
+      ["Display", formatNumber(boardCur.display), "ok", "This-month RES on Display Central"],
+      ["Missing", formatNumber(boardCur.missing), boardCur.missing ? "bad" : "ok", "This-month RES unclassified"],
     ], false);
 
     renderAaKpiCards($("#aa-prior-kpis"), [
-      ["Previous Month VINs", formatNumber(boardPrior.total), "ok"],
+      ["Previous Month VINs", formatNumber(rtlPriorMonths), "ok", "RES · Col AG before this month"],
       ["Delivered", formatNumber(boardPrior.delivered), "ok"],
       ["Proforma / Invoice", formatNumber(boardPrior.proforma), "warn"],
       ["E-Sales", formatNumber(boardPrior.reserved), "warn"],

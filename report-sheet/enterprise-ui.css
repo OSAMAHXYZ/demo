@@ -5,9 +5,9 @@
  * Load LAST after dashboard.css / ops-redesign-skin.css / responsive-layout.css.
  */
 
-/* ═══════════════════════════════════════════════════════════
-   Design tokens — cool graphite canvas + Toyota red accent
-   ═══════════════════════════════════════════════════════════ */
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+   Design tokens â cool graphite canvas + Toyota red accent
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme,
 .live-app.admin-page.toyota-theme {
   --eu-bg: #e9eef5;
@@ -100,9 +100,9 @@
   color: var(--eu-ink);
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
    App shell
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme .app-frame {
   background: transparent;
   min-height: 100vh;
@@ -283,9 +283,9 @@
   padding-inline: clamp(14px, 2vw, 28px) !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
    Buttons & controls
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme .btn,
 .live-app.toyota-theme button.btn,
 .live-app.toyota-theme .sr-sched-btn,
@@ -375,9 +375,9 @@
   border-color: #fde68a !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
    Cards, KPIs, panels
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme .card,
 .live-app.toyota-theme .pbi-viz,
 .live-app.toyota-theme .pbi-slicer,
@@ -522,9 +522,9 @@
   gap: 14px !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
    Tables
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme .table-wrap,
 .live-app.toyota-theme .aa-table-wrap,
 .live-app.toyota-theme .rv-table-wrap,
@@ -593,9 +593,9 @@
   letter-spacing: 0.01em;
 }
 
-/* ═══════════════════════════════════════════════════════════
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
    Filters, chips, tabs
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme .rv-head,
 .live-app.toyota-theme .boe-dash .rv-head,
 .live-app.toyota-theme .aa-dash .rv-head {
@@ -766,9 +766,9 @@
   box-shadow: var(--eu-shadow) !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Responsive — flexible, no page-level horizontal scroll
-   ═══════════════════════════════════════════════════════════ */
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+   Responsive â flexible, no page-level horizontal scroll
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme,
 .live-app.toyota-theme .app-frame,
 .live-app.toyota-theme .app-main {
@@ -845,7 +845,7 @@
   }
 }
 
-/* Filter toolbars — look integrated, not raw forms */
+/* Filter toolbars â look integrated, not raw forms */
 .live-app.toyota-theme .bo-filters,
 .live-app.toyota-theme .stock-filters,
 .live-app.toyota-theme .sr-filters,
@@ -895,7 +895,7 @@
   border: none !important;
 }
 
-/* Scrollbars — subtle */
+/* Scrollbars â subtle */
 .live-app.toyota-theme .table-wrap::-webkit-scrollbar,
 .live-app.toyota-theme .aa-table-wrap::-webkit-scrollbar,
 .live-app.toyota-theme .sidebar-nav::-webkit-scrollbar {
@@ -946,10 +946,10 @@ body.uploader-enterprise button[type="submit"] {
   box-shadow: 0 8px 20px rgba(235, 10, 30, 0.28) !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DARK MODE — .theme-dark (Day/Dark toggle)
+/* âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+   DARK MODE â .theme-dark (Day/Dark toggle)
    Harmonized with Toyota red accent (not generic blue)
-   ═══════════════════════════════════════════════════════════ */
+   âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
 .live-app.toyota-theme.theme-dark,
 .live-app.admin-page.toyota-theme.theme-dark {
   --eu-bg: #070b14;
@@ -1308,7 +1308,7 @@ body.uploader-enterprise button[type="submit"] {
   background: linear-gradient(145deg, var(--eu-accent), #c40718) !important;
 }
 
-/* Accessories Performance — solid black text on light surfaces (readable).
+/* Accessories Performance â solid black text on light surfaces (readable).
    Metric tiles use light backgrounds + black text (no white-on-brown). */
 .live-app.toyota-theme .sr-mock-acc {
   background: #ffffff !important;
@@ -1367,9 +1367,9 @@ body.uploader-enterprise button[type="submit"] {
   border: 1px solid #64748b !important;
 }
 
-/* Layer: track=remaining · combined(red)=achieved+in-progress · fill(black)=achieved */
+/* Layer: track=remaining Â· combined(red)=achieved+in-progress Â· fill(black)=achieved */
 .live-app.toyota-theme .sr-mock-acc .sr-acc-progress-fill {
-  background: #0f172a !important; /* Achieved — solid black */
+  background: #0f172a !important; /* Achieved â solid black */
   z-index: 2 !important;
 }
 
@@ -1384,7 +1384,7 @@ body.uploader-enterprise button[type="submit"] {
 }
 
 .live-app.toyota-theme.theme-dark .sr-mock-acc .sr-acc-progress-fill {
-  background: #f8fafc !important; /* Achieved — bright on dark card */
+  background: #f8fafc !important; /* Achieved â bright on dark card */
 }
 
 .live-app.toyota-theme.theme-dark .sr-mock-acc .sr-acc-progress-fill-combined {
@@ -1428,7 +1428,7 @@ body.uploader-enterprise button[type="submit"] {
   color: #f8fafc !important;
 }
 
-/* Allocation Audit � clickable RTL VIN rows */
+/* Allocation Audit  clickable RTL VIN rows */
 .live-app.toyota-theme tr.aa-rtl-prior-row,
 .live-app.toyota-theme tr.aa-rtl-sheet-row {
   cursor: pointer;
@@ -1528,7 +1528,7 @@ body.uploader-enterprise button[type="submit"] {
 
 .live-app.toyota-theme .aa-cc-kpis {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px !important;
 }
 
