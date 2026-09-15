@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260915aa3" />
+  <link rel="stylesheet" href="dashboard.css?v=20260915aa4" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa3" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa4" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -924,16 +924,16 @@
           <section class="aa-cc-section aa-cc-section--primary" aria-labelledby="aa-current-heading">
             <div class="aa-cc-section-head">
               <div>
-                <p class="aa-cc-section-kicker">Current month</p>
-                <h3 class="aa-cc-section-title" id="aa-current-heading">Current Month — Allocation Audit</h3>
-                <p class="aa-cc-section-sub">All Retail Electronic Sales VINs from last pushed RTL · Col AG in the current computer month</p>
+                <p class="aa-cc-section-kicker">Current month allocation</p>
+                <h3 class="aa-cc-section-title" id="aa-current-heading">Current Month Allocation</h3>
+                <p class="aa-cc-section-sub">RTL Col M = Retail Electronic Sales · Col AG allocation date in the current computer month</p>
               </div>
             </div>
             <article class="card aa-summary-card aa-summary-current-card">
               <div class="pbi-viz-head">
                 <div>
-                  <h2>Allocation vs actual</h2>
-                  <span class="hint">Existing product + suffix plan logic · current-month RES only · click a number for related VINs</span>
+                  <h2>Summary by Product + Suffix</h2>
+                  <span class="hint">Actual = current-month Col AG VINs only · click a number for related VINs</span>
                 </div>
               </div>
               <div class="table-wrap aa-table-wrap" id="aa-summary-current-wrap"></div>
@@ -941,7 +941,7 @@
             <article class="card aa-vin-board-card">
               <div class="pbi-viz-head">
                 <div>
-                  <h2>Current month VIN board</h2>
+                  <h2>Current Month VIN Schedule</h2>
                   <span class="hint">Sales Raw verification · status badges · click VIN for full audit trail</span>
                 </div>
               </div>
@@ -950,20 +950,21 @@
             </article>
           </section>
 
-          <section class="aa-cc-section aa-cc-section--carry" aria-labelledby="aa-prior-heading">
+          <section class="aa-cc-section aa-cc-section--free" aria-labelledby="aa-prior-heading">
             <div class="aa-cc-section-head">
               <div>
-                <p class="aa-cc-section-kicker">Carryover</p>
-                <h3 class="aa-cc-section-title" id="aa-prior-heading">Previous Month — Carryover Audit</h3>
-                <p class="aa-cc-section-sub">RES VINs from last pushed RTL whose Col AG is before this month · does not affect allocation achievement</p>
+                <p class="aa-cc-section-kicker">Free stock</p>
+                <h3 class="aa-cc-section-title" id="aa-prior-heading">Free Stock</h3>
+                <p class="aa-cc-section-sub">Retail Electronic Sales VINs without a current-month allocation date · does not affect allocation achievement</p>
               </div>
             </div>
-            <div class="aa-cc-kpis aa-cc-kpis--mini" id="aa-prior-kpis" aria-label="Previous month KPIs"></div>
-            <article class="card aa-vin-board-card">
+            <div class="aa-cc-kpis aa-cc-kpis--mini" id="aa-prior-kpis" aria-label="Free stock KPIs"></div>
+            <p class="aa-reconcile" id="aa-reconcile"></p>
+            <article class="card aa-vin-board-card aa-free-stock-card">
               <div class="pbi-viz-head">
                 <div>
-                  <h2>Carryover VIN board</h2>
-                  <span class="hint">Where is last month’s VIN now? · Sales Raw · E-Sales · Display</span>
+                  <h2>Free Stock VIN Schedule</h2>
+                  <span class="hint">Blank or non-current Col AG · Sales Raw · E-Sales · Display</span>
                 </div>
               </div>
               <div class="table-wrap aa-table-wrap aa-vin-board-wrap" id="aa-rtl-prior-wrap"></div>
@@ -17270,8 +17271,21 @@
   }
 
   /**
-   * RES VIN schedules split by Col AG month (Retail Electronic Sales only).
-   * mode: "current" = Col AG in active report month · "prior" = Col AG before that month
+   * Allocation Audit RES marker: RTL Column M must be Retail Electronic Sales.
+   * (Do not use arrival/collection date here — Col AG is the month split.)
+   */
+  function rtlAaResMarkerFromRaw(r) {
+    return cellToString(cellByLetter(r, "M")).trim();
+  }
+
+  function isRtlAaRetailElectronicSalesRow(r) {
+    return isRetailElectronicSales(rtlAaResMarkerFromRaw(r));
+  }
+
+  /**
+   * RES VIN schedules from last pushed RTL.
+   * Column M = Retail Electronic Sales · Column AG = Allocation Date month split.
+   * mode: "current" = AG in live/computer month · "free" = AG blank or not current month
    */
   function buildRtlAgMonthScheduleRows(salesLookup, mode) {
     const live = window._globalLivePeriod || todayKeys();
@@ -17283,11 +17297,7 @@
     const wantCurrent = mode === "current";
 
     (slots.rtl.rows || []).forEach((r, idx) => {
-      const searchArea = cellToString(cellByLetter(r, "P")).trim()
-        || stockFieldByAlias(r, "searchAreaDesc", [])
-        || stockFieldByAlias(r, "vehicleSearchArea", [])
-        || "";
-      // Allocation Audit schedules: Retail Electronic Sales only
+      const searchArea = rtlAaResMarkerFromRaw(r);
       if (!isRetailElectronicSales(searchArea)) return;
 
       const vin = extractVinValue(cellByLetter(r, "E"))
@@ -17299,11 +17309,11 @@
 
       const agDate = rtlAgDateFromRaw(r);
       const agMonth = agDate ? toYyyymm(agDate) : "";
-      if (!agMonth) return; // no usable Col AG → skip both schedules
+      const isCurrentMonth = !!agMonth && agMonth === monthKey;
       if (wantCurrent) {
-        if (agMonth !== monthKey) return;
-      } else if (!(agMonth < monthKey)) {
-        return;
+        if (!isCurrentMonth) return;
+      } else if (isCurrentMonth) {
+        return; // free stock = everything else (blank AG, prior, future)
       }
 
       const ageing = rtlAgeingFromRaw(r, null);
@@ -17316,30 +17326,34 @@
       );
       const leaf = matchRtlToAllocLeaf({ product, suffix });
       const location = cellToString(cellByLetter(r, "Q")).trim()
-        || cellToString(cellByLetter(r, "M")).trim()
         || stockFieldByAlias(r, "allocatedLocation", [])
         || stockFieldByAlias(r, "location", [])
         || "—";
       const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "D")).trim() || "—";
       const secondary = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
       const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
+      const modelYear = cellToString(cellByLetter(r, "C")).trim()
+        || stockFieldByAlias(r, "modelYear", [])
+        || stockFieldByAlias(r, "year", [])
+        || "—";
       const sales = resolveAaSalesStatus(vin, salesMap);
+      const agLabel = agDate
+        ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "No Allocation Date";
 
       rows.push({
         vin,
         product: leaf ? leaf.product : product,
         sfx: leaf ? leaf.sfx : (suffix || "—"),
         seg: leaf ? leaf.seg : "—",
+        modelYear: modelYear || "—",
         ageing,
         agDate,
-        agLabel: agDate
-          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-          : "—",
+        agLabel,
         agMonth,
+        hasAllocationDate: !!agDate,
         collectionDate: agDate,
-        collectionLabel: agDate
-          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-          : "—",
+        collectionLabel: agLabel,
         location: location || "—",
         status: status || "—",
         secondary: secondary || "",
@@ -17350,6 +17364,7 @@
         salesLabel: sales.label || "—",
         proformaDate: sales.proformaDate || null,
         invoiceDate: sales.invoiceDate || sales.deliveryDate || null,
+        bucket: wantCurrent ? "current" : "free",
         idx: `RTL-AG-${mode}-${idx}`,
         rawIdx: idx,
       });
@@ -17364,12 +17379,31 @@
     return rows;
   }
 
+  function buildRtlFreeStockScheduleRows(salesLookup) {
+    return buildRtlAgMonthScheduleRows(salesLookup, "free");
+  }
+
   function buildRtlPriorMonthScheduleRows(salesLookup) {
-    return buildRtlAgMonthScheduleRows(salesLookup, "prior");
+    // Alias kept for compatibility — free stock = RES Col M where AG ≠ current month (incl. blank).
+    return buildRtlFreeStockScheduleRows(salesLookup);
   }
 
   function buildRtlCurrentMonthScheduleRows(salesLookup) {
     return buildRtlAgMonthScheduleRows(salesLookup, "current");
+  }
+
+  /** Map AA RTL schedule rows into car-shaped objects for existing summary builders. */
+  function aaRtlScheduleRowsToCars(rows) {
+    return (rows || []).map((r) => ({
+      vin: r.vin,
+      product: r.product,
+      suffix: r.sfx,
+      location: r.location,
+      age: r.ageing,
+      ageing: r.ageing,
+      searchAreaDesc: r.searchArea,
+      _raw: (slots.rtl.rows || [])[r.rawIdx] || null,
+    }));
   }
 
   function findRtlSheetRowByVin(vin) {
@@ -17627,9 +17661,13 @@
     const resCars = buildRetailElectronicSalesCars();
     const summaryCtx = { salesLookup, availableLookup, displayLookup, rtlLookup, reservedSet };
 
+    // RTL master population for AA: Col M = RES · Col AG = current vs free stock
+    const rtlCurrentRows = buildRtlCurrentMonthScheduleRows(salesLookup);
+    const rtlPriorRows = buildRtlFreeStockScheduleRows(salesLookup);
+
     const allSummary = buildAaProductSummaryRows(resCars, summaryCtx);
-    const monthKey = activeAaMonthKey();
-    const currentMonthCars = resCars.filter((car) => resCarAgMonthKey(car, rtlLookup) === monthKey);
+    // Actual / gap for the visible allocation table = Current Month Allocation VINs only (Col M + AG)
+    const currentMonthCars = aaRtlScheduleRowsToCars(rtlCurrentRows);
     const currentSummary = buildAaProductSummaryRows(currentMonthCars, summaryCtx);
 
     // VIN audit trail = E-Sales sheet 2 (Col L VIN · Col F BO) × Sales Raw.
@@ -17835,8 +17873,6 @@
 
     const summaryMissing = summaryRows.reduce((s, r) => s + (Number(r.missing) || 0), 0);
     const summaryMissingCurrent = summaryRowsCurrent.reduce((s, r) => s + (Number(r.missing) || 0), 0);
-    const rtlCurrentRows = buildRtlCurrentMonthScheduleRows(salesLookup);
-    const rtlPriorRows = buildRtlPriorMonthScheduleRows(salesLookup);
 
     return {
       summaryRows,
@@ -17844,6 +17880,7 @@
       vinRows,
       rtlCurrentRows,
       rtlPriorRows,
+      rtlFreeRows: rtlPriorRows,
       totals: {
         allocation: summaryRows.reduce((s, r) => s + r.allocation, 0),
         actual: allSummary.seenResVinSize,
@@ -17860,6 +17897,8 @@
         withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
         rtlCurrent: rtlCurrentRows.length,
         rtlPrior: rtlPriorRows.length,
+        rtlFree: rtlPriorRows.length,
+        rtlResTotal: rtlCurrentRows.length + rtlPriorRows.length,
       },
     };
   }
@@ -18185,12 +18224,14 @@
       const inDisplay = !!displayHit;
       const missing = r.salesKind === "none" && !inReserved && !inAvailable && !inDisplay;
       const raw = r.rawIdx != null ? rtlRows[r.rawIdx] : null;
-      const modelYear = raw
-        ? (cellToString(cellByLetter(raw, "C")).trim()
-          || stockFieldByAlias(raw, "modelYear", [])
-          || stockFieldByAlias(raw, "year", [])
-          || "—")
-        : "—";
+      const modelYear = r.modelYear && r.modelYear !== "—"
+        ? r.modelYear
+        : (raw
+          ? (cellToString(cellByLetter(raw, "C")).trim()
+            || stockFieldByAlias(raw, "modelYear", [])
+            || stockFieldByAlias(raw, "year", [])
+            || "—")
+          : "—");
       const leaf = matchRtlToAllocLeaf({ product: r.product, suffix: r.sfx });
       const allocation = leaf ? (Number(allocationValues[leaf.id]) || 0) : 0;
       const enriched = {
@@ -18240,8 +18281,8 @@
   }
 
   /**
-   * UI count only: last pushed RTL · unique RES VINs · split by Col AG vs computer/live month.
-   * Does not change allocation matching or summary formulas.
+   * UI count only: last pushed RTL · Col M = RES · Col AG vs computer/live month.
+   * Free stock = blank AG or AG outside current month. current + free = total.
    */
   function countAaRtlResFileByAgMonth() {
     const monthKey = activeAaMonthKey();
@@ -18251,15 +18292,11 @@
     const seen = new Set();
     let total = 0;
     let current = 0;
-    let prior = 0;
+    let free = 0;
     let noAg = 0;
 
     (slots.rtl.rows || []).forEach((r) => {
-      const searchArea = cellToString(cellByLetter(r, "P")).trim()
-        || stockFieldByAlias(r, "searchAreaDesc", [])
-        || stockFieldByAlias(r, "vehicleSearchArea", [])
-        || "";
-      if (!isRetailElectronicSales(searchArea)) return;
+      if (!isRtlAaRetailElectronicSalesRow(r)) return;
 
       const vin = extractVinValue(cellByLetter(r, "E"))
         || extractVinValue(r.vin)
@@ -18270,16 +18307,24 @@
       total += 1;
 
       const agMonth = rtlAgMonthKey(r);
-      if (!agMonth) {
-        noAg += 1;
-        return;
+      if (agMonth && agMonth === monthKey) {
+        current += 1;
+      } else {
+        free += 1;
+        if (!agMonth) noAg += 1;
       }
-      if (agMonth === monthKey) current += 1;
-      else if (agMonth < monthKey) prior += 1;
-      else noAg += 1; // future AG relative to live month — keep visible in residual
     });
 
-    return { total, current, prior, noAg, monthKey, monthLabel };
+    return {
+      total,
+      current,
+      free,
+      prior: free,
+      noAg,
+      monthKey,
+      monthLabel,
+      ok: current + free === total,
+    };
   }
 
   function filteredAaRtlAgRows(rows) {
@@ -18343,7 +18388,7 @@
       }
       return null;
     };
-    return match(currentRows, "current") || match(priorRows, "prior");
+    return match(currentRows, "current") || match(priorRows, "free");
   }
 
   function renderAaVinHit(currentRows, priorRows) {
@@ -18361,12 +18406,12 @@
       hitEl.innerHTML = `
         <div class="aa-vin-hit-inner aa-vin-hit--miss">
           <div class="aa-vin-hit-title">VIN search</div>
-          <p class="aa-vin-hit-msg">No RTL RES VIN matching <span class="mono">${escapeHtml(q)}</span> in current or prior boards.</p>
+          <p class="aa-vin-hit-msg">No RTL RES VIN matching <span class="mono">${escapeHtml(q)}</span> in Current Month or Free Stock.</p>
         </div>`;
       return;
     }
     const r = hit.row;
-    const periodLabel = hit.period === "current" ? "Current Month" : "Previous Month / Carryover";
+    const periodLabel = hit.period === "current" ? "Current Month Allocation" : "Free Stock";
     hitEl.hidden = false;
     hitEl.innerHTML = `
       <div class="aa-vin-hit-inner">
@@ -18381,8 +18426,8 @@
         <div class="aa-vin-hit-grid">
           <div><span class="lab">Product</span><strong>${escapeHtml(r.product || "—")}</strong></div>
           <div><span class="lab">Suffix</span><strong>${escapeHtml(r.sfx || "—")}</strong></div>
-          <div><span class="lab">RTL Date</span><strong>${escapeHtml(r.agLabel || "—")}</strong></div>
-          <div><span class="lab">Allocation group</span><strong>${escapeHtml((r.product || "—") + " · " + (r.sfx || "—"))}</strong></div>
+          <div><span class="lab">Allocation Date</span><strong>${escapeHtml(r.agLabel || "No Allocation Date")}</strong></div>
+          <div><span class="lab">Bucket</span><strong>${escapeHtml(periodLabel)}</strong></div>
           <div><span class="lab">Sales Raw</span><strong>${r.salesFound ? "FOUND" : "NOT FOUND"}</strong></div>
           <div><span class="lab">Sales status</span><strong>${escapeHtml(r.salesLabel || "—")}</strong></div>
           <div><span class="lab">Delivered</span><strong>${r.salesKind === "delivered" ? "Yes" : "No"}</strong></div>
@@ -18438,9 +18483,9 @@
     if (titleEl) titleEl.textContent = "VIN DETAILS";
     if (subEl) {
       subEl.textContent = period === "current"
-        ? "Current month · Allocation Audit"
-        : period === "prior"
-          ? "Previous month · Carryover Audit"
+        ? "Current Month Allocation · Col AG"
+        : period === "free" || period === "prior"
+          ? "Free Stock · Col AG blank or not current month"
           : "Allocation Audit";
     }
 
@@ -18481,7 +18526,7 @@
             <div><span class="lab">Product</span><strong>${escapeHtml(row.product || "—")}</strong></div>
             <div><span class="lab">Suffix</span><strong>${escapeHtml(row.sfx || "—")}</strong></div>
             <div><span class="lab">Model Year</span><strong>${escapeHtml(row.modelYear || "—")}</strong></div>
-            <div><span class="lab">RTL Arrival</span><strong>${escapeHtml(row.agLabel || "—")}</strong></div>
+            <div><span class="lab">Allocation Date</span><strong>${escapeHtml(row.agLabel || "No Allocation Date")}</strong></div>
           </div>
           <hr class="aa-vin-detail-rule" />
           <h4 class="aa-vin-detail-h">Allocation</h4>
@@ -18586,20 +18631,20 @@
     const wrap = $(wrapSel);
     const foot = $(footSel);
     if (!wrap) return;
-    const isPrior = mode === "prior";
+    const isFree = mode === "free" || mode === "prior";
     if (!(allRows || []).length) {
       wrap.innerHTML = `<p class="foot" style="padding:16px">${escapeHtml(emptyMsg)}</p>`;
     } else if (!filteredRows.length) {
       wrap.innerHTML = `<p class="foot" style="padding:16px">No RTL VINs match the filters.</p>`;
     } else {
-      const head = isPrior
+      const head = isFree
         ? `<tr>
-            <th>Product</th><th>Suffix</th><th>VIN</th><th>RTL Date</th><th class="num">Age</th>
-            <th>Sales Raw</th><th>Status</th><th>Delivered</th><th>Proforma</th><th>E-Sales</th><th>Display</th>
+            <th>VIN</th><th>Product</th><th>Suffix</th><th>Model Year</th><th>Allocation Date</th><th class="num">Age</th>
+            <th>Sales Raw Status</th><th>Delivered</th><th>Proforma</th><th>E-Sales</th><th>Display</th>
           </tr>`
         : `<tr>
-            <th>Product</th><th>Suffix</th><th>VIN</th><th>Model Year</th><th>RTL Date</th>
-            <th>Status</th><th>Sales Raw Status</th><th>E-Sales</th><th>Display</th>
+            <th>VIN</th><th>Product</th><th>Suffix</th><th>Model Year</th><th>Allocation Date</th>
+            <th>Sales Raw Status</th><th>Delivered</th><th>Proforma</th><th>E-Sales</th><th>Display</th>
           </tr>`;
       wrap.innerHTML = `<table class="data-table aa-table aa-schedule-table aa-vin-board-table">
         <thead>${head}</thead>
@@ -18609,15 +18654,17 @@
               data-aa-rtl-idx="${escapeHtml(String(r.rawIdx))}"
               data-aa-rtl-vin="${escapeHtml(r.vin)}"
               title="Open VIN audit trail"`;
-            if (isPrior) {
+            const agText = r.agLabel || (r.hasAllocationDate === false ? "No Allocation Date" : "No Allocation Date");
+            const salesCell = aaSalesRawCell(r);
+            if (isFree) {
               return `<tr class="aa-vin-board-row" role="button" tabindex="0" ${common}>
+                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
                 <td><strong class="aa-prod">${escapeHtml(r.product)}</strong></td>
                 <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
-                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
-                <td class="aa-date">${escapeHtml(r.agLabel || "—")}</td>
+                <td>${escapeHtml(r.modelYear || "—")}</td>
+                <td class="aa-date">${escapeHtml(agText)}</td>
                 <td class="num">${r.ageing != null ? escapeHtml(String(r.ageing)) + "d" : "—"}</td>
-                <td>${aaSalesRawCell(r)}</td>
-                <td>${aaBadgeHtml(r.badge)}</td>
+                <td>${salesCell}</td>
                 <td>${aaYesNoPill(r.salesKind === "delivered")}</td>
                 <td>${aaYesNoPill(r.salesKind === "proforma")}</td>
                 <td>${aaYesNoPill(!!r.inReserved)}</td>
@@ -18625,13 +18672,14 @@
               </tr>`;
             }
             return `<tr class="aa-vin-board-row" role="button" tabindex="0" ${common}>
+              <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
               <td><strong class="aa-prod">${escapeHtml(r.product)}</strong></td>
               <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
-              <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
               <td>${escapeHtml(r.modelYear || "—")}</td>
-              <td class="aa-date">${escapeHtml(r.agLabel || "—")}</td>
-              <td>${aaBadgeHtml(r.badge)}</td>
-              <td>${aaSalesRawCell(r)}</td>
+              <td class="aa-date">${escapeHtml(agText)}</td>
+              <td>${salesCell}</td>
+              <td>${aaYesNoPill(r.salesKind === "delivered")}</td>
+              <td>${aaYesNoPill(r.salesKind === "proforma")}</td>
               <td>${aaYesNoPill(!!r.inReserved)}</td>
               <td>${aaYesNoPill(!!r.inDisplay)}</td>
             </tr>`;
@@ -18701,11 +18749,10 @@
     const filteredPrior = filteredAaRtlAgRows(priorBoard);
     const curMetrics = sumAaSummaryMetrics(summaryRowsCurrent || []);
     const boardCur = countAaBoardMetrics(currentBoard);
-    const boardPrior = countAaBoardMetrics(priorBoard);
+    const boardFree = countAaBoardMetrics(priorBoard);
     const rtlRes = countAaRtlResFileByAgMonth();
-    // Display counts from last pushed RTL (RES + Col AG). Allocation Achievement keeps plan-matched actual.
     const rtlThisMonth = rtlRes.current;
-    const rtlPriorMonths = rtlRes.prior;
+    const rtlFreeStock = rtlRes.free;
     const rtlFileTotal = rtlRes.total;
     const ach = curMetrics.allocation > 0
       ? `${Math.round((curMetrics.actual / curMetrics.allocation) * 1000) / 10}%`
@@ -18713,30 +18760,36 @@
 
     const hint = $("#aa-live-hint");
     if (hint) {
-      const noAgNote = rtlRes.noAg ? ` · ${formatNumber(rtlRes.noAg)} no Col AG` : "";
-      hint.textContent = `Last RTL · RES ${formatNumber(rtlFileTotal)} · This month (Col AG ${rtlRes.monthLabel}) ${formatNumber(rtlThisMonth)} · Prior months ${formatNumber(rtlPriorMonths)}${noAgNote} · Plan ${formatNumber(curMetrics.allocation)}`;
+      hint.textContent = `RTL Col M · RES ${formatNumber(rtlFileTotal)} = Current Month ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)} · Col AG ${rtlRes.monthLabel}`;
+    }
+
+    const reconcile = $("#aa-reconcile");
+    if (reconcile) {
+      const ok = rtlThisMonth + rtlFreeStock === rtlFileTotal;
+      reconcile.textContent = ok
+        ? `Reconciliation OK · Total RES ${formatNumber(rtlFileTotal)} = Current Month ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)}`
+        : `Reconciliation check · Total ${formatNumber(rtlFileTotal)} · Current ${formatNumber(rtlThisMonth)} · Free ${formatNumber(rtlFreeStock)}`;
+      reconcile.className = ok ? "aa-reconcile aa-reconcile--ok" : "aa-reconcile aa-reconcile--warn";
     }
 
     renderAaKpiCards($("#aa-kpis"), [
+      ["Total RES VINs", formatNumber(rtlFileTotal), "ok", "Last RTL · Col M = Retail Electronic Sales"],
+      ["Current Month Allocated", formatNumber(rtlThisMonth), "ok", `Col AG in ${rtlRes.monthLabel}`],
+      ["Free Stock", formatNumber(rtlFreeStock), rtlFreeStock ? "warn" : "ok", "Col AG blank or not current month"],
       ["Allocation", formatNumber(curMetrics.allocation), "ok", "Current-month plan"],
-      ["RES Total (RTL)", formatNumber(rtlFileTotal), "ok", "Last pushed RTL · Retail Electronic Sales"],
-      ["This Month", formatNumber(rtlThisMonth), "ok", `Col AG in ${rtlRes.monthLabel} · computer date`],
-      ["Prior Months", formatNumber(rtlPriorMonths), rtlPriorMonths ? "warn" : "ok", "Col AG before this month"],
-      ["Allocation Achievement", ach, "ok", `Plan-matched actual ${formatNumber(curMetrics.actual)} vs allocation`],
-      ["Delivered", formatNumber(boardCur.delivered), "ok", "This-month RES · Sales Raw delivered"],
-      ["Proforma / Invoice", formatNumber(boardCur.proforma), "warn", "This-month RES · Sales Raw proforma"],
-      ["E-Sales / المحجوز", formatNumber(boardCur.reserved), "warn", "This-month RES on reserved sheet"],
-      ["Display", formatNumber(boardCur.display), "ok", "This-month RES on Display Central"],
-      ["Missing", formatNumber(boardCur.missing), boardCur.missing ? "bad" : "ok", "This-month RES unclassified"],
+      ["Allocation Achievement", ach, "ok", `Plan-matched actual ${formatNumber(curMetrics.actual)} vs plan`],
+      ["Delivered", formatNumber(boardCur.delivered), "ok", "Current-month VINs · Sales Raw delivered"],
+      ["Proforma / Invoice", formatNumber(boardCur.proforma), "warn", "Current-month VINs · Sales Raw proforma"],
+      ["Missing", formatNumber(boardCur.missing), boardCur.missing ? "bad" : "ok", "Current-month VINs unclassified"],
     ], false);
 
     renderAaKpiCards($("#aa-prior-kpis"), [
-      ["Previous Month VINs", formatNumber(rtlPriorMonths), "ok", "RES · Col AG before this month"],
-      ["Delivered", formatNumber(boardPrior.delivered), "ok"],
-      ["Proforma / Invoice", formatNumber(boardPrior.proforma), "warn"],
-      ["E-Sales", formatNumber(boardPrior.reserved), "warn"],
-      ["Display", formatNumber(boardPrior.display), "ok"],
-      ["Still Pending", formatNumber(boardPrior.pending), boardPrior.pending ? "bad" : "ok"],
+      ["Free Stock VINs", formatNumber(rtlFreeStock), "ok", "Not in current-month Col AG"],
+      ["Delivered", formatNumber(boardFree.delivered), "ok"],
+      ["Proforma / Invoice", formatNumber(boardFree.proforma), "warn"],
+      ["E-Sales", formatNumber(boardFree.reserved), "warn"],
+      ["Display", formatNumber(boardFree.display), "ok"],
+      ["Still Pending", formatNumber(boardFree.pending), boardFree.pending ? "bad" : "ok"],
     ], true);
 
     paintAaSummaryTable($("#aa-summary-current-wrap"), summaryRowsCurrent || [], "current");
@@ -18750,8 +18803,8 @@
       "#aa-rtl-current-foot",
       currentBoard,
       filteredCurrent,
-      "No this-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG in the current month.",
-      "current-month RES VINs",
+      "No current-month allocation VINs. Need RTL Col M = Retail Electronic Sales and Col AG in the current month.",
+      "current-month allocation VINs",
       "current"
     );
     renderAaVinBoard(
@@ -18759,9 +18812,9 @@
       "#aa-rtl-prior-foot",
       priorBoard,
       filteredPrior,
-      "No prior-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG before the current month.",
-      "prior-month carryover VINs",
-      "prior"
+      "No free-stock VINs. Free stock = Col M Retail Electronic Sales with Col AG blank or outside the current month.",
+      "free stock VINs",
+      "free"
     );
 
     if (!aaLastSeenCache.loaded) {
@@ -18843,10 +18896,10 @@
     const rtlPrior = (pack.rtlPriorRows || []).map(mapRtlAgExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryCurrent), "Current Month AG");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryCurrent), "Alloc Summary Current");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vins), "VIN Audit");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "RES This Month AG");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RES Prior Months AG");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "Current Month VINs");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "Free Stock");
     downloadWorkbook(wb, `Allocation-Audit-${excelFileStamp()}`);
     setStatus("Allocation Audit Excel exported", "ok");
   }
