@@ -387,6 +387,7 @@ function mirrorRtlActiveDayFiles(snap, excelPath) {
 /**
  * If index/snapshots were wiped on redeploy but by-day/*.xlsx mirrors remain
  * (same durable folder as Admin live files), rebuild active days from those Excels.
+ * Fast path: skip Excel scans when every by-day file already has a live snapshot.
  */
 function rehydrateRtlFromByDayMirrors() {
   ensureRtlDailyDirs();
@@ -399,18 +400,27 @@ function rehydrateRtlFromByDayMirrors() {
     return { restored: 0 };
   }
   const index = loadRtlDailyIndex();
-  let restored = 0;
+  const need = [];
+
   for (const name of names) {
     const m = /^(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(String(name || ''));
     if (!m) continue;
     const dateKey = m[1];
     if (!isValidRtlDateKey(dateKey)) continue;
-    const liveIndex = loadRtlDailyIndex();
-    const activeId = resolveRtlActiveIdForDay(dateKey, liveIndex);
+    const activeId = resolveRtlActiveIdForDay(dateKey, index);
     if (activeId) {
       const snapPath = rtlDailySnapshotPath(activeId);
       if (snapPath && fs.existsSync(snapPath)) continue;
     }
+    const xfp = rtlDailyByDayExcelPath(dateKey);
+    if (!xfp || !fs.existsSync(xfp)) continue;
+    need.push(dateKey);
+  }
+
+  if (!need.length) return { restored: 0 };
+
+  let restored = 0;
+  for (const dateKey of need) {
     const xfp = rtlDailyByDayExcelPath(dateKey);
     if (!xfp || !fs.existsSync(xfp)) continue;
     let meta = null;

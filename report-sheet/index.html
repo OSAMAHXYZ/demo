@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260915aa5" />
+  <link rel="stylesheet" href="dashboard.css?v=20260915aa6" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa5" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -942,7 +942,7 @@
               <div class="pbi-viz-head">
                 <div>
                   <h2>Current Month VIN Schedule</h2>
-                  <span class="hint">Sales Raw verification · status badges · click VIN for full audit trail</span>
+                  <span class="hint">All plan-matched monthly collection VINs · Sales Raw status · click VIN for audit trail</span>
                 </div>
               </div>
               <div class="table-wrap aa-table-wrap aa-vin-board-wrap" id="aa-rtl-current-wrap"></div>
@@ -16704,6 +16704,9 @@
       return {
         orderNumber,
         vin,
+        salesman: findBoSalesmanForOrder(orderNumber)
+          || (salesDetail && (salesDetail.salesman || salesDetail._salesmanRaw))
+          || "",
         status,
         queue,
         comboQueue,
@@ -17098,30 +17101,49 @@
       setStatus("No reserved sheet data to export", "busy");
       return;
     }
-    const rows = buildReservedVehicleRows().map((r) => ({
-      Order: r.orderNumber,
-      VIN: r.vin,
-      Product: r.product || "",
-      Suffix: r.suffix || "",
-      Exterior: r.ext || "",
-      Interior: r.int || "",
-      Sheet: r.sheet || "",
-      "Queue Position": r.position != null ? r.position : "",
-      "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
-      "Total Queue": r.totalQueue != null ? r.totalQueue : "",
-      "Reservation Date": r.reservationDate ? formatRvDate(r.reservationDate) : "",
-      "Next 1": r.nextInQueue[0] ? r.nextInQueue[0].orderNumber : "",
-      "Next 1 Detail": r.nextInQueue[0]
-        ? `${r.nextInQueue[0].product || ""} ${r.nextInQueue[0].suffix || ""}`.trim()
-        : "",
-      "Next 2": r.nextInQueue[1] ? r.nextInQueue[1].orderNumber : "",
-      "Next 3": r.nextInQueue[2] ? r.nextInQueue[2].orderNumber : "",
-      "VIN Status": r.status.label,
-      "Status Detail": r.status.detail,
-      Proforma: r.status.hasProforma ? "Yes" : "No",
-      "Proforma Date": r.status.proformaDate ? formatRvDate(r.status.proformaDate) : "",
-      "Queue Note": r.queueError || "",
-    }));
+    const rows = buildReservedVehicleRows().map((r) => {
+      const employee = resolveSalesmanName(r.salesman)
+        || findBoSalesmanForOrder(r.orderNumber)
+        || (r.salesDetail && resolveSalesmanName(r.salesDetail.salesman || r.salesDetail._salesmanRaw))
+        || "";
+      const next1 = r.nextInQueue[0] || null;
+      const next2 = r.nextInQueue[1] || null;
+      const next3 = r.nextInQueue[2] || null;
+      return {
+        Order: r.orderNumber,
+        "Employee Name": employee || "",
+        VIN: r.vin,
+        Product: r.product || "",
+        Suffix: r.suffix || "",
+        Exterior: r.ext || "",
+        Interior: r.int || "",
+        Sheet: r.sheet || "",
+        "Queue Position": r.position != null ? r.position : "",
+        "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
+        "Total Queue": r.totalQueue != null ? r.totalQueue : "",
+        "Reservation Date": r.reservationDate ? formatRvDate(r.reservationDate) : "",
+        "Next 1": next1 ? next1.orderNumber : "",
+        "Next 1 Employee": next1
+          ? (resolveSalesmanName(next1.salesman) || findBoSalesmanForOrder(next1.orderNumber) || "")
+          : "",
+        "Next 1 Detail": next1
+          ? `${next1.product || ""} ${next1.suffix || ""}`.trim()
+          : "",
+        "Next 2": next2 ? next2.orderNumber : "",
+        "Next 2 Employee": next2
+          ? (resolveSalesmanName(next2.salesman) || findBoSalesmanForOrder(next2.orderNumber) || "")
+          : "",
+        "Next 3": next3 ? next3.orderNumber : "",
+        "Next 3 Employee": next3
+          ? (resolveSalesmanName(next3.salesman) || findBoSalesmanForOrder(next3.orderNumber) || "")
+          : "",
+        "VIN Status": r.status.label,
+        "Status Detail": r.status.detail,
+        Proforma: r.status.hasProforma ? "Yes" : "No",
+        "Proforma Date": r.status.proformaDate ? formatRvDate(r.status.proformaDate) : "",
+        "Queue Note": r.queueError || "",
+      };
+    });
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Reserved Vehicles");
@@ -17374,7 +17396,8 @@
   function buildRtlAgMonthScheduleRows(salesLookup, mode) {
     const salesMap = salesLookup || buildSalesVinLookup();
     const bas = buildBasMonthlyData();
-    const currentCars = bas.retailArrivalCars || [];
+    // Current month = plan-matched Monthly RTL collection RES (same total as Allocation dashboard Collected MTD / Actual RTL).
+    const currentCars = uniqueAaCarsByVin(bas.matched || []);
     const currentVinSet = new Set(
       currentCars.map((c) => extractVinValue(c.vin) || upperTrim(c.vin)).filter(Boolean)
     );
@@ -17391,7 +17414,7 @@
         });
     }
 
-    // Free stock = live RTL RES not in monthly collection current set
+    // Free stock = live RTL RES not in current-month plan-matched collection
     const freeRows = [];
     const seen = new Set();
     buildAaLiveResCars().forEach((car, i) => {
@@ -17407,6 +17430,18 @@
       return aa - bb || String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
     });
     return freeRows;
+  }
+
+  function uniqueAaCarsByVin(cars) {
+    const seen = new Set();
+    const out = [];
+    (cars || []).forEach((car) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seen.has(vin)) return;
+      seen.add(vin);
+      out.push(car);
+    });
+    return out;
   }
 
   function buildRtlFreeStockScheduleRows(salesLookup) {
@@ -18310,17 +18345,15 @@
   }
 
   /**
-   * UI counts aligned to Allocation dashboard Monthly RTL collection.
-   * current = unique RES from bas.retailArrivalCars
-   * free = live RTL RES not in that set
-   * total = current + free
+   * UI counts: Current Month = plan-matched Monthly RTL collection (matches Actual RTL / 131).
+   * Free = live RTL RES not in that set. Total = current + free.
    */
   function countAaRtlResFileByAgMonth() {
     const bas = buildBasMonthlyData();
     const monthLabel = (bas.ctx && bas.ctx.monthLabel)
       || ((window._globalLivePeriod && window._globalLivePeriod.now) || saudiToday())
         .toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-    const currentCars = bas.retailArrivalCars || [];
+    const currentCars = uniqueAaCarsByVin(bas.matched || []);
     const currentVinSet = new Set(
       currentCars.map((c) => extractVinValue(c.vin) || upperTrim(c.vin)).filter(Boolean)
     );
@@ -18775,7 +18808,7 @@
     const rtlFreeStock = rtlRes.free;
     const rtlFileTotal = rtlRes.total;
     const ach = curMetrics.allocation > 0
-      ? `${Math.round((curMetrics.actual / curMetrics.allocation) * 1000) / 10}%`
+      ? `${Math.round((rtlThisMonth / curMetrics.allocation) * 1000) / 10}%`
       : "—";
 
     const hint = $("#aa-live-hint");
@@ -18793,18 +18826,18 @@
     }
 
     renderAaKpiCards($("#aa-kpis"), [
-      ["Total RES VINs", formatNumber(rtlFileTotal), "ok", "Monthly collection + Free Stock"],
-      ["Current Month Allocated", formatNumber(rtlThisMonth), "ok", `Monthly RTL collection RES · ${rtlRes.monthLabel}`],
-      ["Free Stock", formatNumber(rtlFreeStock), rtlFreeStock ? "warn" : "ok", "Live RTL RES not in monthly collection"],
+      ["Total RES VINs", formatNumber(rtlFileTotal), "ok", "Current month + Free Stock"],
+      ["Current Month Allocated", formatNumber(rtlThisMonth), "ok", `Monthly RTL collection · plan-matched · ${rtlRes.monthLabel}`],
+      ["Free Stock", formatNumber(rtlFreeStock), rtlFreeStock ? "warn" : "ok", "Live RTL RES not in current month"],
       ["Allocation", formatNumber(curMetrics.allocation), "ok", "Current-month plan"],
-      ["Allocation Achievement", ach, "ok", `Plan-matched actual ${formatNumber(curMetrics.actual)} vs plan`],
+      ["Allocation Achievement", ach, "ok", `Actual ${formatNumber(rtlThisMonth)} vs plan ${formatNumber(curMetrics.allocation)}`],
       ["Delivered", formatNumber(boardCur.delivered), "ok", "Current-month VINs · Sales Raw delivered"],
       ["Proforma / Invoice", formatNumber(boardCur.proforma), "warn", "Current-month VINs · Sales Raw proforma"],
       ["Missing", formatNumber(boardCur.missing), boardCur.missing ? "bad" : "ok", "Current-month VINs unclassified"],
     ], false);
 
     renderAaKpiCards($("#aa-prior-kpis"), [
-      ["Free Stock VINs", formatNumber(rtlFreeStock), "ok", "Not in current-month Col AG"],
+      ["Free Stock VINs", formatNumber(rtlFreeStock), "ok", "Not in current-month collection"],
       ["Delivered", formatNumber(boardFree.delivered), "ok"],
       ["Proforma / Invoice", formatNumber(boardFree.proforma), "warn"],
       ["E-Sales", formatNumber(boardFree.reserved), "warn"],
