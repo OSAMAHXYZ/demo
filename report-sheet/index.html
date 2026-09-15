@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260915aa4" />
+  <link rel="stylesheet" href="dashboard.css?v=20260915aa5" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa4" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa5" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -926,14 +926,14 @@
               <div>
                 <p class="aa-cc-section-kicker">Current month allocation</p>
                 <h3 class="aa-cc-section-title" id="aa-current-heading">Current Month Allocation</h3>
-                <p class="aa-cc-section-sub">RTL Col M = Retail Electronic Sales · Col AG allocation date in the current computer month</p>
+                <p class="aa-cc-section-sub">Same VINs as Allocation dashboard · Monthly RTL collection · Retail Electronic Sales</p>
               </div>
             </div>
             <article class="card aa-summary-card aa-summary-current-card">
               <div class="pbi-viz-head">
                 <div>
                   <h2>Summary by Product + Suffix</h2>
-                  <span class="hint">Actual = current-month Col AG VINs only · click a number for related VINs</span>
+                  <span class="hint">Actual = Monthly RTL collection RES VINs only · click a number for related VINs</span>
                 </div>
               </div>
               <div class="table-wrap aa-table-wrap" id="aa-summary-current-wrap"></div>
@@ -955,7 +955,7 @@
               <div>
                 <p class="aa-cc-section-kicker">Free stock</p>
                 <h3 class="aa-cc-section-title" id="aa-prior-heading">Free Stock</h3>
-                <p class="aa-cc-section-sub">Retail Electronic Sales VINs without a current-month allocation date · does not affect allocation achievement</p>
+                <p class="aa-cc-section-sub">Live RTL Retail Electronic Sales VINs not in this month’s monthly collection · does not affect allocation achievement</p>
               </div>
             </div>
             <div class="aa-cc-kpis aa-cc-kpis--mini" id="aa-prior-kpis" aria-label="Free stock KPIs"></div>
@@ -964,7 +964,7 @@
               <div class="pbi-viz-head">
                 <div>
                   <h2>Free Stock VIN Schedule</h2>
-                  <span class="hint">Blank or non-current Col AG · Sales Raw · E-Sales · Display</span>
+                  <span class="hint">RES in live RTL outside Monthly RTL collection · Sales Raw · E-Sales · Display</span>
                 </div>
               </div>
               <div class="table-wrap aa-table-wrap aa-vin-board-wrap" id="aa-rtl-prior-wrap"></div>
@@ -11881,12 +11881,29 @@
     const hasDayFiles = dayFiles && Object.keys(dayFiles).length > 0;
 
     const matched = [];
+    const retailArrivalCars = [];
+    const retailArrivalSeen = new Set();
     const dayTotals = Array(31).fill(0);
     const dayRetailTotals = Array(31).fill(0);
     const dayHasFile = Array(31).fill(false);
     const dayFileVinCount = Array(31).fill(0);
     const dayAge0Count = Array(31).fill(0);
     let mode = hasDayFiles ? "daily" : "age";
+
+    const pushRetailArrival = (car, collDate, collectionDay, collLabel, extra) => {
+      if (collectionDay > ctx.todayDay) return;
+      if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || retailArrivalSeen.has(vin)) return;
+      retailArrivalSeen.add(vin);
+      retailArrivalCars.push({
+        ...car,
+        collectionDate: collDate,
+        collectionDay,
+        collectionLabel: collLabel,
+        ...(extra || {}),
+      });
+    };
 
     const resByProduct = new Map();
     const addResProduct = (car, dayNum) => {
@@ -11918,7 +11935,15 @@
           if (dayNum >= 1 && dayNum <= 30) {
             dayTotals[dayNum] += 1;
             dayAge0Count[dayNum] += 1;
-            if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[dayNum] += 1;
+            if (isRetailElectronicSales(car.searchAreaDesc)) {
+              dayRetailTotals[dayNum] += 1;
+              pushRetailArrival(car, collDate, dayNum, collLabel, {
+                age: age == null ? 0 : age,
+                isTodayArrival: dayNum === ctx.todayDay,
+                isLate: false,
+                _fromDayFile: true,
+              });
+            }
           }
           addResProduct(car, dayNum);
           const leaf = matchRtlToAllocLeaf(car);
@@ -11988,7 +12013,15 @@
         if (collectionDay >= 1 && collectionDay <= 30) {
           dayTotals[collectionDay] += 1;
           if (isRtlDayFileArrival(age)) dayAge0Count[collectionDay] += 1;
-          if (isRetailElectronicSales(car.searchAreaDesc)) dayRetailTotals[collectionDay] += 1;
+          if (isRetailElectronicSales(car.searchAreaDesc)) {
+            dayRetailTotals[collectionDay] += 1;
+            pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+              age,
+              isTodayArrival: age === 0,
+              isLate: age != null && age >= 1,
+              _fromDayFile: false,
+            });
+          }
         }
         matched.push({
           ...car,
@@ -12034,6 +12067,7 @@
       rowsAll,
       matched: matchedRetailArrivals,
       matchedAll: arrivalMatched,
+      retailArrivalCars,
       lateCars,
       dayTotals,
       dayRetailTotals,
@@ -17271,112 +17305,108 @@
   }
 
   /**
-   * Allocation Audit RES marker: RTL Column M must be Retail Electronic Sales.
-   * (Do not use arrival/collection date here — Col AG is the month split.)
+   * Allocation Audit schedules aligned to Allocation dashboard Monthly RTL collection.
+   * Current = unique RES VINs from buildBasMonthlyData().retailArrivalCars (same source as day RES / MTD).
+   * Free = live RTL RES VINs not in that current-month collection set.
+   * Sales Raw status still uses resolveAaSalesStatus (unchanged).
    */
-  function rtlAaResMarkerFromRaw(r) {
-    return cellToString(cellByLetter(r, "M")).trim();
+  function aaCarToScheduleRow(car, salesMap, bucket, idx) {
+    const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+    if (!vin) return null;
+    const product = car.product || "—";
+    const suffix = normalizeProductSuffix(product, car.suffix || car.sfx || "");
+    const leaf = matchRtlToAllocLeaf({ product, suffix: car.suffix || car.sfx || suffix });
+    const sales = resolveAaSalesStatus(vin, salesMap);
+    const collDate = car.collectionDate || null;
+    const agLabel = car.collectionLabel
+      || (collDate
+        ? collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "No Allocation Date");
+    const raw = car._raw || null;
+    let rawIdx = null;
+    if (raw && Array.isArray(slots.rtl.rows)) {
+      const i = slots.rtl.rows.indexOf(raw);
+      rawIdx = i >= 0 ? i : null;
+    }
+    if (rawIdx == null) {
+      const hit = findRtlSheetRowByVin(vin);
+      if (hit) {
+        rawIdx = hit.idx;
+      }
+    }
+    const modelYear = car.year
+      || (raw ? (cellToString(cellByLetter(raw, "C")).trim() || stockFieldByAlias(raw, "modelYear", []) || "") : "")
+      || "—";
+    return {
+      vin,
+      product: leaf ? leaf.product : product,
+      sfx: leaf ? leaf.sfx : (suffix || "—"),
+      seg: leaf ? leaf.seg : "—",
+      modelYear: modelYear || "—",
+      ageing: car.age != null ? car.age : (car.ageing != null ? car.ageing : null),
+      agDate: collDate,
+      agLabel,
+      agMonth: collDate ? toYyyymm(collDate) : "",
+      hasAllocationDate: !!collDate,
+      collectionDate: collDate,
+      collectionLabel: agLabel,
+      location: cellToString(car.location || "").trim() || "—",
+      status: car.status || "—",
+      secondary: "",
+      searchArea: car.searchAreaDesc || "Retail Electronic Sales",
+      usage: car.usage || "—",
+      salesman: sales.salesman || "",
+      salesKind: sales.kind || "none",
+      salesLabel: sales.label || "—",
+      proformaDate: sales.proformaDate || null,
+      invoiceDate: sales.invoiceDate || sales.deliveryDate || null,
+      bucket,
+      idx: `AA-${bucket}-${idx}`,
+      rawIdx,
+    };
   }
 
-  function isRtlAaRetailElectronicSalesRow(r) {
-    return isRetailElectronicSales(rtlAaResMarkerFromRaw(r));
+  function buildAaLiveResCars() {
+    return mapStockInv(slots.rtl.rows || [], "RTL")
+      .filter((car) => isRetailElectronicSales(car.searchAreaDesc));
   }
 
-  /**
-   * RES VIN schedules from last pushed RTL.
-   * Column M = Retail Electronic Sales · Column AG = Allocation Date month split.
-   * mode: "current" = AG in live/computer month · "free" = AG blank or not current month
-   */
   function buildRtlAgMonthScheduleRows(salesLookup, mode) {
-    const live = window._globalLivePeriod || todayKeys();
-    const today = (live && live.now) || saudiToday();
-    const monthKey = String((live && live.monthKey) || toYyyymm(today)).replace(/-/g, "");
     const salesMap = salesLookup || buildSalesVinLookup();
-    const rows = [];
-    const seen = new Set();
+    const bas = buildBasMonthlyData();
+    const currentCars = bas.retailArrivalCars || [];
+    const currentVinSet = new Set(
+      currentCars.map((c) => extractVinValue(c.vin) || upperTrim(c.vin)).filter(Boolean)
+    );
     const wantCurrent = mode === "current";
 
-    (slots.rtl.rows || []).forEach((r, idx) => {
-      const searchArea = rtlAaResMarkerFromRaw(r);
-      if (!isRetailElectronicSales(searchArea)) return;
+    if (wantCurrent) {
+      return currentCars
+        .map((car, i) => aaCarToScheduleRow(car, salesMap, "current", i))
+        .filter(Boolean)
+        .sort((a, b) => {
+          const ad = a.agDate ? a.agDate.getTime() : 0;
+          const bd = b.agDate ? b.agDate.getTime() : 0;
+          return bd - ad || String(a.product).localeCompare(String(b.product));
+        });
+    }
 
-      const vin = extractVinValue(cellByLetter(r, "E"))
-        || extractVinValue(r.vin)
-        || extractVinValue(stockFieldByAlias(r, "vin", []))
-        || upperTrim(cellToString(r.vin));
-      if (!vin || seen.has(vin)) return;
+    // Free stock = live RTL RES not in monthly collection current set
+    const freeRows = [];
+    const seen = new Set();
+    buildAaLiveResCars().forEach((car, i) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seen.has(vin) || currentVinSet.has(vin)) return;
       seen.add(vin);
-
-      const agDate = rtlAgDateFromRaw(r);
-      const agMonth = agDate ? toYyyymm(agDate) : "";
-      const isCurrentMonth = !!agMonth && agMonth === monthKey;
-      if (wantCurrent) {
-        if (!isCurrentMonth) return;
-      } else if (isCurrentMonth) {
-        return; // free stock = everything else (blank AG, prior, future)
-      }
-
-      const ageing = rtlAgeingFromRaw(r, null);
-      const product = cellToString(cellByLetter(r, "B")).trim()
-        || stockFieldByAlias(r, "product", [])
-        || "—";
-      const suffix = normalizeProductSuffix(
-        product,
-        cellToString(cellByLetter(r, "G")).trim() || stockFieldByAlias(r, "suffix", []) || ""
-      );
-      const leaf = matchRtlToAllocLeaf({ product, suffix });
-      const location = cellToString(cellByLetter(r, "Q")).trim()
-        || stockFieldByAlias(r, "allocatedLocation", [])
-        || stockFieldByAlias(r, "location", [])
-        || "—";
-      const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "D")).trim() || "—";
-      const secondary = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
-      const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
-      const modelYear = cellToString(cellByLetter(r, "C")).trim()
-        || stockFieldByAlias(r, "modelYear", [])
-        || stockFieldByAlias(r, "year", [])
-        || "—";
-      const sales = resolveAaSalesStatus(vin, salesMap);
-      const agLabel = agDate
-        ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-        : "No Allocation Date";
-
-      rows.push({
-        vin,
-        product: leaf ? leaf.product : product,
-        sfx: leaf ? leaf.sfx : (suffix || "—"),
-        seg: leaf ? leaf.seg : "—",
-        modelYear: modelYear || "—",
-        ageing,
-        agDate,
-        agLabel,
-        agMonth,
-        hasAllocationDate: !!agDate,
-        collectionDate: agDate,
-        collectionLabel: agLabel,
-        location: location || "—",
-        status: status || "—",
-        secondary: secondary || "",
-        searchArea: searchArea || "—",
-        usage: usage || "—",
-        salesman: sales.salesman || "",
-        salesKind: sales.kind || "none",
-        salesLabel: sales.label || "—",
-        proformaDate: sales.proformaDate || null,
-        invoiceDate: sales.invoiceDate || sales.deliveryDate || null,
-        bucket: wantCurrent ? "current" : "free",
-        idx: `RTL-AG-${mode}-${idx}`,
-        rawIdx: idx,
-      });
+      const row = aaCarToScheduleRow(car, salesMap, "free", i);
+      if (row) freeRows.push(row);
     });
-
-    rows.sort((a, b) => {
-      const ad = a.agDate ? a.agDate.getTime() : 0;
-      const bd = b.agDate ? b.agDate.getTime() : 0;
-      if (wantCurrent) return bd - ad || String(a.product).localeCompare(String(b.product));
-      return ad - bd || String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
+    freeRows.sort((a, b) => {
+      const aa = a.ageing == null ? 9999 : a.ageing;
+      const bb = b.ageing == null ? 9999 : b.ageing;
+      return aa - bb || String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
     });
-    return rows;
+    return freeRows;
   }
 
   function buildRtlFreeStockScheduleRows(salesLookup) {
@@ -17384,7 +17414,6 @@
   }
 
   function buildRtlPriorMonthScheduleRows(salesLookup) {
-    // Alias kept for compatibility — free stock = RES Col M where AG ≠ current month (incl. blank).
     return buildRtlFreeStockScheduleRows(salesLookup);
   }
 
@@ -17402,7 +17431,7 @@
       age: r.ageing,
       ageing: r.ageing,
       searchAreaDesc: r.searchArea,
-      _raw: (slots.rtl.rows || [])[r.rawIdx] || null,
+      _raw: r.rawIdx != null ? (slots.rtl.rows || [])[r.rawIdx] : null,
     }));
   }
 
@@ -18281,49 +18310,40 @@
   }
 
   /**
-   * UI count only: last pushed RTL · Col M = RES · Col AG vs computer/live month.
-   * Free stock = blank AG or AG outside current month. current + free = total.
+   * UI counts aligned to Allocation dashboard Monthly RTL collection.
+   * current = unique RES from bas.retailArrivalCars
+   * free = live RTL RES not in that set
+   * total = current + free
    */
   function countAaRtlResFileByAgMonth() {
-    const monthKey = activeAaMonthKey();
-    const live = window._globalLivePeriod || todayKeys();
-    const today = (live && live.now) || saudiToday();
-    const monthLabel = today.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-    const seen = new Set();
-    let total = 0;
-    let current = 0;
+    const bas = buildBasMonthlyData();
+    const monthLabel = (bas.ctx && bas.ctx.monthLabel)
+      || ((window._globalLivePeriod && window._globalLivePeriod.now) || saudiToday())
+        .toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+    const currentCars = bas.retailArrivalCars || [];
+    const currentVinSet = new Set(
+      currentCars.map((c) => extractVinValue(c.vin) || upperTrim(c.vin)).filter(Boolean)
+    );
+    const current = currentVinSet.size;
     let free = 0;
-    let noAg = 0;
-
-    (slots.rtl.rows || []).forEach((r) => {
-      if (!isRtlAaRetailElectronicSalesRow(r)) return;
-
-      const vin = extractVinValue(cellByLetter(r, "E"))
-        || extractVinValue(r.vin)
-        || extractVinValue(stockFieldByAlias(r, "vin", []))
-        || upperTrim(cellToString(r.vin));
-      if (!vin || seen.has(vin)) return;
-      seen.add(vin);
-      total += 1;
-
-      const agMonth = rtlAgMonthKey(r);
-      if (agMonth && agMonth === monthKey) {
-        current += 1;
-      } else {
-        free += 1;
-        if (!agMonth) noAg += 1;
-      }
+    const seenFree = new Set();
+    buildAaLiveResCars().forEach((car) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || seenFree.has(vin) || currentVinSet.has(vin)) return;
+      seenFree.add(vin);
+      free += 1;
     });
-
+    const total = current + free;
     return {
       total,
       current,
       free,
       prior: free,
-      noAg,
-      monthKey,
+      noAg: 0,
+      monthKey: (bas.ctx && bas.ctx.monthKey) || activeAaMonthKey(),
       monthLabel,
-      ok: current + free === total,
+      mode: bas.mode || "",
+      ok: true,
     };
   }
 
@@ -18760,22 +18780,22 @@
 
     const hint = $("#aa-live-hint");
     if (hint) {
-      hint.textContent = `RTL Col M · RES ${formatNumber(rtlFileTotal)} = Current Month ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)} · Col AG ${rtlRes.monthLabel}`;
+      hint.textContent = `Monthly RTL collection · RES ${formatNumber(rtlFileTotal)} = Current Month ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)} · ${rtlRes.monthLabel}${rtlRes.mode ? ` · ${rtlRes.mode}` : ""}`;
     }
 
     const reconcile = $("#aa-reconcile");
     if (reconcile) {
       const ok = rtlThisMonth + rtlFreeStock === rtlFileTotal;
       reconcile.textContent = ok
-        ? `Reconciliation OK · Total RES ${formatNumber(rtlFileTotal)} = Current Month ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)}`
+        ? `Reconciliation OK · Total RES ${formatNumber(rtlFileTotal)} = Monthly collection ${formatNumber(rtlThisMonth)} + Free Stock ${formatNumber(rtlFreeStock)}`
         : `Reconciliation check · Total ${formatNumber(rtlFileTotal)} · Current ${formatNumber(rtlThisMonth)} · Free ${formatNumber(rtlFreeStock)}`;
       reconcile.className = ok ? "aa-reconcile aa-reconcile--ok" : "aa-reconcile aa-reconcile--warn";
     }
 
     renderAaKpiCards($("#aa-kpis"), [
-      ["Total RES VINs", formatNumber(rtlFileTotal), "ok", "Last RTL · Col M = Retail Electronic Sales"],
-      ["Current Month Allocated", formatNumber(rtlThisMonth), "ok", `Col AG in ${rtlRes.monthLabel}`],
-      ["Free Stock", formatNumber(rtlFreeStock), rtlFreeStock ? "warn" : "ok", "Col AG blank or not current month"],
+      ["Total RES VINs", formatNumber(rtlFileTotal), "ok", "Monthly collection + Free Stock"],
+      ["Current Month Allocated", formatNumber(rtlThisMonth), "ok", `Monthly RTL collection RES · ${rtlRes.monthLabel}`],
+      ["Free Stock", formatNumber(rtlFreeStock), rtlFreeStock ? "warn" : "ok", "Live RTL RES not in monthly collection"],
       ["Allocation", formatNumber(curMetrics.allocation), "ok", "Current-month plan"],
       ["Allocation Achievement", ach, "ok", `Plan-matched actual ${formatNumber(curMetrics.actual)} vs plan`],
       ["Delivered", formatNumber(boardCur.delivered), "ok", "Current-month VINs · Sales Raw delivered"],
@@ -18803,8 +18823,8 @@
       "#aa-rtl-current-foot",
       currentBoard,
       filteredCurrent,
-      "No current-month allocation VINs. Need RTL Col M = Retail Electronic Sales and Col AG in the current month.",
-      "current-month allocation VINs",
+      "No monthly RTL collection RES VINs yet. Open Allocation dashboard or upload day RTL files / live RTL with Search Area = Retail Electronic Sales.",
+      "monthly RTL collection RES VINs",
       "current"
     );
     renderAaVinBoard(
@@ -18812,10 +18832,18 @@
       "#aa-rtl-prior-foot",
       priorBoard,
       filteredPrior,
-      "No free-stock VINs. Free stock = Col M Retail Electronic Sales with Col AG blank or outside the current month.",
+      "No free-stock VINs. Free stock = live RTL RES not already counted in Monthly RTL collection.",
       "free stock VINs",
       "free"
     );
+
+    // Load daily RTL month pack (same as Allocation dashboard) then refresh once ready.
+    const monthKey = basMonthContext().monthKey;
+    if (!getCachedRtlActiveMonth(monthKey)) {
+      ensureRtlActiveMonth(monthKey, false).then((pack) => {
+        if (pack && activePanel === "allocationaudit") renderAllocationAudit();
+      });
+    }
 
     if (!aaLastSeenCache.loaded) {
       ensureAaRtlLastSeen().then(() => {
