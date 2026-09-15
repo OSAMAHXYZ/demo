@@ -912,10 +912,19 @@
             <div class="pbi-viz-head">
               <div>
                 <h2>Product allocation vs actual</h2>
-                <span class="hint">Plan vs Retail Electronic Sales VINs currently in RTL</span>
+                <span class="hint">Plan vs all Retail Electronic Sales VINs currently in RTL</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-summary-wrap"></div>
+          </article>
+          <article class="card aa-summary-card aa-summary-current-card">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>Current month allocation vs actual</h2>
+                <span class="hint">Same columns · only RES VINs with Col AG in the current month</span>
+              </div>
+            </div>
+            <div class="table-wrap aa-table-wrap" id="aa-summary-current-wrap"></div>
           </article>
           <article class="card aa-rtl-current-card">
             <div class="pbi-viz-head">
@@ -17444,16 +17453,34 @@
     drawer.setAttribute("aria-hidden", "false");
   }
 
-  function buildAllocationAuditPack() {
-    const salesLookup = buildSalesVinLookup();
-    const availableLookup = buildEsalesStockVinLookup();
-    const displayLookup = buildDisplayVinLookup();
-    const rtlLookup = buildRtlStockVinLookup();
-    const reservedRows = slots.central.reservedRows || [];
-    const reservedSet = buildReservedVinSet();
-    const lastSeen = aaLastSeenCache.lastSeen || {};
-    const resCars = buildRetailElectronicSalesCars();
+  function activeAaMonthKey() {
+    const live = window._globalLivePeriod || todayKeys();
+    const today = (live && live.now) || saudiToday();
+    return String((live && live.monthKey) || toYyyymm(today)).replace(/-/g, "");
+  }
 
+  function resCarAgMonthKey(car, rtlLookup) {
+    if (car && car._raw) {
+      const mk = rtlAgMonthKey(car._raw);
+      if (mk) return mk;
+    }
+    const vin = extractVinValue(car && car.vin) || upperTrim(car && car.vin);
+    if (!vin) return "";
+    const hit = findRtlSheetRowByVin(vin);
+    if (hit && hit.raw) return rtlAgMonthKey(hit.raw);
+    if (rtlLookup) {
+      const rtl = findRtlVinHit(rtlLookup, vin);
+      if (rtl && rtl._raw) return rtlAgMonthKey(rtl._raw);
+    }
+    return "";
+  }
+
+  function buildAaProductSummaryRows(resCars, ctx) {
+    const salesLookup = ctx.salesLookup;
+    const availableLookup = ctx.availableLookup;
+    const displayLookup = ctx.displayLookup;
+    const rtlLookup = ctx.rtlLookup;
+    const reservedSet = ctx.reservedSet;
     const emptyVins = () => ({
       actual: [],
       delivered: [],
@@ -17484,9 +17511,8 @@
       });
     });
 
-    // Product summary still tracks RES (RTL Retail Electronic Sales) vs plan.
     const seenResVin = new Set();
-    resCars.forEach((car) => {
+    (resCars || []).forEach((car) => {
       const vin = extractVinValue(car.vin) || upperTrim(car.vin);
       if (!vin || seenResVin.has(vin)) return;
       seenResVin.add(vin);
@@ -17557,6 +17583,30 @@
         });
       }
     });
+
+    const summaryRows = [...byLeaf.values()]
+      .filter((r) => r.allocation > 0 || r.actual > 0)
+      .map((r) => ({ ...r, gap: r.actual - r.allocation }))
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || String(a.product).localeCompare(String(b.product)));
+
+    return { summaryRows, seenResVinSize: seenResVin.size };
+  }
+
+  function buildAllocationAuditPack() {
+    const salesLookup = buildSalesVinLookup();
+    const availableLookup = buildEsalesStockVinLookup();
+    const displayLookup = buildDisplayVinLookup();
+    const rtlLookup = buildRtlStockVinLookup();
+    const reservedRows = slots.central.reservedRows || [];
+    const reservedSet = buildReservedVinSet();
+    const lastSeen = aaLastSeenCache.lastSeen || {};
+    const resCars = buildRetailElectronicSalesCars();
+    const summaryCtx = { salesLookup, availableLookup, displayLookup, rtlLookup, reservedSet };
+
+    const allSummary = buildAaProductSummaryRows(resCars, summaryCtx);
+    const monthKey = activeAaMonthKey();
+    const currentMonthCars = resCars.filter((car) => resCarAgMonthKey(car, rtlLookup) === monthKey);
+    const currentSummary = buildAaProductSummaryRows(currentMonthCars, summaryCtx);
 
     // VIN audit trail = E-Sales sheet 2 (Col L VIN · Col F BO) × Sales Raw.
     const vinRows = [];
@@ -17748,10 +17798,8 @@
       });
     });
 
-    const summaryRows = [...byLeaf.values()]
-      .filter((r) => r.allocation > 0 || r.actual > 0)
-      .map((r) => ({ ...r, gap: r.actual - r.allocation }))
-      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap) || String(a.product).localeCompare(String(b.product)));
+    const summaryRows = allSummary.summaryRows;
+    const summaryRowsCurrent = currentSummary.summaryRows;
 
     vinRows.sort((a, b) => {
       if (!!b.missing !== !!a.missing) return a.missing ? -1 : 1;
@@ -17762,23 +17810,27 @@
     });
 
     const summaryMissing = summaryRows.reduce((s, r) => s + (Number(r.missing) || 0), 0);
+    const summaryMissingCurrent = summaryRowsCurrent.reduce((s, r) => s + (Number(r.missing) || 0), 0);
     const rtlCurrentRows = buildRtlCurrentMonthScheduleRows(salesLookup);
     const rtlPriorRows = buildRtlPriorMonthScheduleRows(salesLookup);
 
     return {
       summaryRows,
+      summaryRowsCurrent,
       vinRows,
       rtlCurrentRows,
       rtlPriorRows,
       totals: {
         allocation: summaryRows.reduce((s, r) => s + r.allocation, 0),
-        actual: seenResVin.size,
+        actual: allSummary.seenResVinSize,
+        actualCurrent: currentSummary.seenResVinSize,
         delivered: vinRows.filter((r) => r.sales.kind === "delivered").length,
         proforma: vinRows.filter((r) => r.sales.kind === "proforma").length,
         reserved: vinRows.filter((r) => r.inReserved).length,
         available: vinRows.filter((r) => r.inAvailable).length,
         display: vinRows.filter((r) => r.inDisplay).length,
         missing: summaryMissing || vinRows.filter((r) => r.missing).length,
+        missingCurrent: summaryMissingCurrent,
         missingInRtl: vinRows.filter((r) => r.missing && r.inRtl).length,
         snapshots: aaLastSeenCache.snapshotCount || 0,
         withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
@@ -17802,13 +17854,14 @@
     missing: "Missing",
   };
 
-  function aaNumButton(value, leafId, metric, extraClass) {
+  function aaNumButton(value, leafId, metric, extraClass, scope) {
     const n = Number(value) || 0;
     const cls = ["aa-num-btn", extraClass || "", metric === "missing" && n ? "aa-missing-btn" : ""]
       .filter(Boolean)
       .join(" ");
+    const scopeAttr = scope ? ` data-aa-scope="${escapeHtml(scope)}"` : "";
     if (metric === "allocation") {
-      return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="allocation" title="Plan target — click for note">${escapeHtml(String(n))}</button>`;
+      return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="allocation"${scopeAttr} title="Plan target — click for note">${escapeHtml(String(n))}</button>`;
     }
     if (!n && metric !== "gap") {
       return `<span class="aa-num-zero">${escapeHtml(String(n))}</span>`;
@@ -17816,7 +17869,7 @@
     const title = metric === "missing"
       ? "Show missing VINs · RTL details"
       : "Show related VINs";
-    return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="${escapeHtml(metric)}" title="${escapeHtml(title)}">${escapeHtml(String(value))}</button>`;
+    return `<button type="button" class="${cls}" data-aa-leaf="${escapeHtml(leafId)}" data-aa-metric="${escapeHtml(metric)}"${scopeAttr} title="${escapeHtml(title)}">${escapeHtml(String(value))}</button>`;
   }
 
   function closeAaVinDrill() {
@@ -17829,9 +17882,12 @@
     if (backdrop) backdrop.classList.remove("show");
   }
 
-  function openAaVinDrill(leafId, metric) {
+  function openAaVinDrill(leafId, metric, scope) {
     const pack = aaLastPack || buildAllocationAuditPack();
-    const row = (pack.summaryRows || []).find((r) => r.id === leafId);
+    const summaryList = scope === "current"
+      ? (pack.summaryRowsCurrent || [])
+      : (pack.summaryRows || []);
+    const row = summaryList.find((r) => r.id === leafId);
     const titleEl = $("#aa-drill-title");
     const subEl = $("#aa-drill-sub");
     const bodyEl = $("#aa-drill-body");
@@ -17841,6 +17897,7 @@
 
     const metricLabel = AA_METRIC_LABELS[metric] || metric;
     const productLabel = row ? `${row.product} · ${row.sfx}` : leafId;
+    const scopeNote = scope === "current" ? " · current month (Col AG)" : "";
 
     if (!row) {
       if (titleEl) titleEl.textContent = "VINs";
@@ -17848,21 +17905,21 @@
       bodyEl.innerHTML = `<p class="foot">Row not found.</p>`;
     } else if (metric === "allocation") {
       if (titleEl) titleEl.textContent = `${row.product} · ${row.sfx}`;
-      if (subEl) subEl.textContent = `Allocation plan = ${formatNumber(row.allocation)} (no VIN list)`;
+      if (subEl) subEl.textContent = `Allocation plan = ${formatNumber(row.allocation)} (no VIN list)${scopeNote}`;
       bodyEl.innerHTML = `
         <p class="aa-drill-note">Allocation is the Admin plan target for this product + suffix — it is not a VIN count.</p>
-        <p class="foot" style="margin:0 0 12px">Current Actual RES for this line: <strong>${formatNumber(row.actual)}</strong> · Gap: <strong>${escapeHtml(String(row.gap))}</strong></p>
-        <button type="button" class="btn-primary" id="aa-drill-show-actual" data-aa-leaf="${escapeHtml(row.id)}" data-aa-metric="actual">Show ${formatNumber(row.actual)} Actual RES VINs</button>`;
+        <p class="foot" style="margin:0 0 12px">Actual RES for this line${scope === "current" ? " (current month Col AG)" : ""}: <strong>${formatNumber(row.actual)}</strong> · Gap: <strong>${escapeHtml(String(row.gap))}</strong></p>
+        <button type="button" class="btn-primary" id="aa-drill-show-actual" data-aa-leaf="${escapeHtml(row.id)}" data-aa-metric="actual"${scope === "current" ? ' data-aa-scope="current"' : ""}>Show ${formatNumber(row.actual)} Actual RES VINs</button>`;
       const jump = bodyEl.querySelector("#aa-drill-show-actual");
-      if (jump) jump.addEventListener("click", () => openAaVinDrill(row.id, "actual"));
+      if (jump) jump.addEventListener("click", () => openAaVinDrill(row.id, "actual", scope || ""));
     } else {
       const listKey = metric === "gap" ? "actual" : metric;
       const list = (row.vins && row.vins[listKey]) ? row.vins[listKey] : [];
       const note = metric === "gap"
-        ? `Gap ${row.gap} = Actual ${row.actual} − Allocation ${row.allocation}. Showing Actual RES VINs.`
+        ? `Gap ${row.gap} = Actual ${row.actual} − Allocation ${row.allocation}. Showing Actual RES VINs${scopeNote}.`
         : metric === "missing"
-          ? `Missing · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"} · searched in RTL file`
-          : `${metricLabel} · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"}`;
+          ? `Missing · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"} · searched in RTL file${scopeNote}`
+          : `${metricLabel} · ${formatNumber(list.length)} VIN${list.length === 1 ? "" : "s"}${scopeNote}`;
       if (titleEl) titleEl.textContent = productLabel;
       if (subEl) subEl.textContent = note;
       if (!list.length) {
@@ -18140,7 +18197,7 @@
 
     const pack = buildAllocationAuditPack();
     aaLastPack = pack;
-    const { summaryRows, vinRows, rtlCurrentRows, rtlPriorRows, totals } = pack;
+    const { summaryRows, summaryRowsCurrent, vinRows, rtlCurrentRows, rtlPriorRows, totals } = pack;
     const filtered = filteredAaVinRows(vinRows);
     const filteredCurrent = filteredAaRtlAgRows(rtlCurrentRows || []);
     const filteredPrior = filteredAaRtlAgRows(rtlPriorRows || []);
@@ -18153,7 +18210,7 @@
       const displayNote = slots.central.displaySheet
         ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
         : "";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""} · ${totals.rtlCurrent || 0} RTL this month (Col AG) · ${totals.rtlPrior || 0} RTL prior (Col AG)${sheetNote}${displayNote}`;
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.actualCurrent || 0} RES this month (Col AG) · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing · ${totals.rtlCurrent || 0} RTL this month · ${totals.rtlPrior || 0} RTL prior${sheetNote}${displayNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -18161,6 +18218,7 @@
       kpis.innerHTML = [
         ["Allocation", totals.allocation, "ok"],
         ["Actual RES", totals.actual, "ok"],
+        ["RES this month", totals.actualCurrent || 0, "ok"],
         ["E-Sales VINs", totals.reserved, "ok"],
         ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
         ["Delivered", totals.delivered, "ok"],
@@ -18176,54 +18234,68 @@
     }
 
     const sumWrap = $("#aa-summary-wrap");
-    if (sumWrap) {
-      if (!summaryRows.length) {
-        sumWrap.innerHTML = `<p class="foot" style="padding:16px">No allocation plan rows with values, and no RES VINs matched.</p>`;
-      } else {
-        sumWrap.innerHTML = `<table class="data-table aa-table aa-summary-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Suffix</th>
-              <th class="num">Allocation</th>
-              <th class="num">Actual</th>
-              <th class="num">Gap</th>
-              <th class="num">Delivered</th>
-              <th class="num">Proforma</th>
-              <th class="num">المحجوز</th>
-              <th class="num">Available</th>
-              <th class="num">Display</th>
-              <th class="num aa-th-missing">Missing</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${summaryRows.map((r) => `
-              <tr class="${r.missing ? "aa-row-has-missing" : ""}">
-                <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
-                <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
-                <td class="num">${aaNumButton(r.allocation, r.id, "allocation")}</td>
-                <td class="num">${aaNumButton(r.actual, r.id, "actual")}</td>
-                <td class="num">${aaNumButton(r.gap, r.id, "gap", r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : "")}</td>
-                <td class="num">${aaNumButton(r.delivered, r.id, "delivered")}</td>
-                <td class="num">${aaNumButton(r.proforma, r.id, "proforma")}</td>
-                <td class="num">${aaNumButton(r.reserved, r.id, "reserved")}</td>
-                <td class="num">${aaNumButton(r.available, r.id, "available")}</td>
-                <td class="num">${aaNumButton(r.display, r.id, "display")}</td>
-                <td class="num aa-td-missing">${aaNumButton(r.missing, r.id, "missing")}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-        <p class="foot aa-summary-hint">Click any number to open related RES VINs · Missing (red) = searched in RTL file</p>`;
-        if (!sumWrap.dataset.aaBound) {
-          sumWrap.dataset.aaBound = "1";
-          sumWrap.addEventListener("click", (e) => {
-            const btn = e.target.closest("[data-aa-metric]");
-            if (!btn || !sumWrap.contains(btn)) return;
-            openAaVinDrill(btn.getAttribute("data-aa-leaf"), btn.getAttribute("data-aa-metric"));
-          });
-        }
+    const sumCurrentWrap = $("#aa-summary-current-wrap");
+
+    function paintAaSummaryTable(wrap, rows, scope) {
+      if (!wrap) return;
+      if (!rows.length) {
+        wrap.innerHTML = `<p class="foot" style="padding:16px">${scope === "current"
+          ? "No current-month RES VINs (Col AG) matched allocation rows."
+          : "No allocation plan rows with values, and no RES VINs matched."}</p>`;
+        return;
+      }
+      wrap.innerHTML = `<table class="data-table aa-table aa-summary-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Suffix</th>
+            <th class="num">Allocation</th>
+            <th class="num">Actual</th>
+            <th class="num">Gap</th>
+            <th class="num">Delivered</th>
+            <th class="num">Proforma</th>
+            <th class="num">المحجوز</th>
+            <th class="num">Available</th>
+            <th class="num">Display</th>
+            <th class="num aa-th-missing">Missing</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r) => `
+            <tr class="${r.missing ? "aa-row-has-missing" : ""}">
+              <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
+              <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
+              <td class="num">${aaNumButton(r.allocation, r.id, "allocation", "", scope)}</td>
+              <td class="num">${aaNumButton(r.actual, r.id, "actual", "", scope)}</td>
+              <td class="num">${aaNumButton(r.gap, r.id, "gap", r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : "", scope)}</td>
+              <td class="num">${aaNumButton(r.delivered, r.id, "delivered", "", scope)}</td>
+              <td class="num">${aaNumButton(r.proforma, r.id, "proforma", "", scope)}</td>
+              <td class="num">${aaNumButton(r.reserved, r.id, "reserved", "", scope)}</td>
+              <td class="num">${aaNumButton(r.available, r.id, "available", "", scope)}</td>
+              <td class="num">${aaNumButton(r.display, r.id, "display", "", scope)}</td>
+              <td class="num aa-td-missing">${aaNumButton(r.missing, r.id, "missing", "", scope)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <p class="foot aa-summary-hint">${scope === "current"
+        ? "Current month only (Col AG) · click any number for related VINs"
+        : "Click any number to open related RES VINs · Missing (red) = searched in RTL file"}</p>`;
+      if (!wrap.dataset.aaBound) {
+        wrap.dataset.aaBound = "1";
+        wrap.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-aa-metric]");
+          if (!btn || !wrap.contains(btn)) return;
+          openAaVinDrill(
+            btn.getAttribute("data-aa-leaf"),
+            btn.getAttribute("data-aa-metric"),
+            btn.getAttribute("data-aa-scope") || ""
+          );
+        });
       }
     }
+
+    paintAaSummaryTable(sumWrap, summaryRows || [], "");
+    paintAaSummaryTable(sumCurrentWrap, summaryRowsCurrent || [], "current");
 
     renderAaRtlAgSchedule(
       "#aa-rtl-current-wrap",
@@ -18324,6 +18396,20 @@
       Display: r.display,
       Missing: r.missing,
     }));
+    const summaryCurrent = (pack.summaryRowsCurrent || []).map((r) => ({
+      Product: r.product,
+      Suffix: r.sfx,
+      Segment: r.seg,
+      Allocation: r.allocation,
+      Actual: r.actual,
+      Gap: r.gap,
+      Delivered: r.delivered,
+      Proforma: r.proforma,
+      Reserved: r.reserved,
+      Available: r.available,
+      Display: r.display,
+      Missing: r.missing,
+    }));
     const vins = pack.vinRows.map((r) => ({
       "BO (Col F)": r.orderNumber || "",
       Product: r.product,
@@ -18362,6 +18448,7 @@
     const rtlPrior = (pack.rtlPriorRows || []).map(mapRtlAgExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryCurrent), "Current Month AG");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vins), "VIN Audit");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "RTL This Month AG");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RTL Prior Months AG");
