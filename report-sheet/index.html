@@ -917,11 +917,21 @@
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-summary-wrap"></div>
           </article>
+          <article class="card aa-rtl-current-card">
+            <div class="pbi-viz-head">
+              <div>
+                <h2>RTL stock · this month</h2>
+                <span class="hint">RTL VINs where Col AG date is in the current month · click a row for all sheet columns</span>
+              </div>
+            </div>
+            <div class="table-wrap aa-table-wrap" id="aa-rtl-current-wrap"></div>
+            <p class="foot" id="aa-rtl-current-foot"></p>
+          </article>
           <article class="card aa-rtl-prior-card">
             <div class="pbi-viz-head">
               <div>
                 <h2>RTL stock · prior months</h2>
-                <span class="hint">All RTL stock VINs collected before this month · excludes this month’s arrivals (age → collection date)</span>
+                <span class="hint">RTL VINs where Col AG date is before the current month · click a row for all sheet columns</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-rtl-prior-wrap"></div>
@@ -17196,19 +17206,51 @@
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
   }
 
-  /** RTL stock VINs whose collection date is before the active report month. */
-  function buildRtlPriorMonthScheduleRows(salesLookup) {
+  /** Parse RTL Col AG into a calendar date (Excel serial, Date, or text). */
+  function rtlAgDateFromRaw(r) {
+    const raw = cellByLetter(r, "AG");
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const fromSerial = excelSerialToDate(raw);
+      if (fromSerial) return fromSerial;
+    }
+    const d = parseDate(raw);
+    if (d) return d;
+    const s = cellToString(raw).trim();
+    if (!s) return null;
+    // 2026-09 / 2026/09 / 09-2026 / Sep-26 / Sept 2026
+    let m = s.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?$/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    m = s.match(/^(\d{1,2})[-/.](\d{4})$/);
+    if (m) return new Date(Number(m[2]), Number(m[1]) - 1, 1);
+    m = s.match(/^([A-Za-z]{3,9})[-/\s]+(\d{2}|\d{4})$/);
+    if (m) {
+      const mon = Date.parse(`${m[1]} 1, ${m[2].length === 2 ? `20${m[2]}` : m[2]}`);
+      if (!Number.isNaN(mon)) {
+        const dt = new Date(mon);
+        return new Date(dt.getFullYear(), dt.getMonth(), 1);
+      }
+    }
+    return null;
+  }
+
+  function rtlAgMonthKey(r) {
+    const d = rtlAgDateFromRaw(r);
+    return d ? toYyyymm(d) : "";
+  }
+
+  /**
+   * RTL stock VIN schedules split by Col AG month.
+   * mode: "current" = Col AG in active report month · "prior" = Col AG before that month
+   */
+  function buildRtlAgMonthScheduleRows(salesLookup, mode) {
     const live = window._globalLivePeriod || todayKeys();
     const today = (live && live.now) || saudiToday();
-    const monthKey = (live && live.monthKey) || toYyyymm(today);
-    const monthStart = (() => {
-      const [y, m] = String(monthKey).split("-").map(Number);
-      if (!y || !m) return new Date(today.getFullYear(), today.getMonth(), 1);
-      return new Date(y, m - 1, 1);
-    })();
+    const monthKey = String((live && live.monthKey) || toYyyymm(today)).replace(/-/g, "");
     const salesMap = salesLookup || buildSalesVinLookup();
     const rows = [];
     const seen = new Set();
+    const wantCurrent = mode === "current";
 
     (slots.rtl.rows || []).forEach((r, idx) => {
       const vin = extractVinValue(cellByLetter(r, "E"))
@@ -17218,12 +17260,16 @@
       if (!vin || seen.has(vin)) return;
       seen.add(vin);
 
-      const ageing = rtlAgeingFromRaw(r, null);
-      // Blank / 0 age = this month (or today) arrival → exclude.
-      if (ageing == null || ageing === 0) return;
-      const collected = inferCollectionDateFromAge(ageing, today);
-      if (!collected || collected >= monthStart) return;
+      const agDate = rtlAgDateFromRaw(r);
+      const agMonth = agDate ? toYyyymm(agDate) : "";
+      if (!agMonth) return; // no usable Col AG → skip both schedules
+      if (wantCurrent) {
+        if (agMonth !== monthKey) return;
+      } else if (!(agMonth < monthKey)) {
+        return;
+      }
 
+      const ageing = rtlAgeingFromRaw(r, null);
       const product = cellToString(cellByLetter(r, "B")).trim()
         || stockFieldByAlias(r, "product", [])
         || "—";
@@ -17252,8 +17298,15 @@
         sfx: leaf ? leaf.sfx : (suffix || "—"),
         seg: leaf ? leaf.seg : "—",
         ageing,
-        collectionDate: collected,
-        collectionLabel: collected.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+        agDate,
+        agLabel: agDate
+          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : "—",
+        agMonth,
+        collectionDate: agDate,
+        collectionLabel: agDate
+          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : "—",
         location: location || "—",
         status: status || "—",
         secondary: secondary || "",
@@ -17264,17 +17317,26 @@
         salesLabel: sales.label || "—",
         proformaDate: sales.proformaDate || null,
         invoiceDate: sales.invoiceDate || sales.deliveryDate || null,
-        idx: `RTL-PRIOR-${idx}`,
+        idx: `RTL-AG-${mode}-${idx}`,
         rawIdx: idx,
       });
     });
 
     rows.sort((a, b) => {
-      const aa = a.ageing == null ? -1 : a.ageing;
-      const bb = b.ageing == null ? -1 : b.ageing;
-      return bb - aa || String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
+      const ad = a.agDate ? a.agDate.getTime() : 0;
+      const bd = b.agDate ? b.agDate.getTime() : 0;
+      if (wantCurrent) return bd - ad || String(a.product).localeCompare(String(b.product));
+      return ad - bd || String(a.product).localeCompare(String(b.product)) || String(a.vin).localeCompare(String(b.vin));
     });
     return rows;
+  }
+
+  function buildRtlPriorMonthScheduleRows(salesLookup) {
+    return buildRtlAgMonthScheduleRows(salesLookup, "prior");
+  }
+
+  function buildRtlCurrentMonthScheduleRows(salesLookup) {
+    return buildRtlAgMonthScheduleRows(salesLookup, "current");
   }
 
   function findRtlSheetRowByVin(vin) {
@@ -17700,11 +17762,13 @@
     });
 
     const summaryMissing = summaryRows.reduce((s, r) => s + (Number(r.missing) || 0), 0);
+    const rtlCurrentRows = buildRtlCurrentMonthScheduleRows(salesLookup);
     const rtlPriorRows = buildRtlPriorMonthScheduleRows(salesLookup);
 
     return {
       summaryRows,
       vinRows,
+      rtlCurrentRows,
       rtlPriorRows,
       totals: {
         allocation: summaryRows.reduce((s, r) => s + r.allocation, 0),
@@ -17718,6 +17782,7 @@
         missingInRtl: vinRows.filter((r) => r.missing && r.inRtl).length,
         snapshots: aaLastSeenCache.snapshotCount || 0,
         withSalesDate: vinRows.filter((r) => r.sales.kind === "delivered" || r.sales.kind === "proforma").length,
+        rtlCurrent: rtlCurrentRows.length,
         rtlPrior: rtlPriorRows.length,
       },
     };
@@ -17972,7 +18037,7 @@
     });
   }
 
-  function filteredAaRtlPriorRows(rows) {
+  function filteredAaRtlAgRows(rows) {
     const q = String(aaView.search || "").trim().toLowerCase();
     const st = String(aaView.status || "").trim();
     return (rows || []).filter((r) => {
@@ -17982,12 +18047,79 @@
       if (st === "reserved" || st === "available" || st === "display" || st === "missing") return false;
       if (!q) return true;
       const hay = [
-        r.vin, r.product, r.sfx, r.seg, r.salesman, r.salesLabel, r.location, r.status, r.searchArea, r.usage,
+        r.vin, r.product, r.sfx, r.seg, r.salesman, r.salesLabel, r.location, r.status, r.searchArea, r.usage, r.agLabel,
       ]
         .map((x) => String(x || "").toLowerCase())
         .join(" ");
       return hay.includes(q);
     });
+  }
+
+  function filteredAaRtlPriorRows(rows) {
+    return filteredAaRtlAgRows(rows);
+  }
+
+  function renderAaRtlAgSchedule(wrapSel, footSel, allRows, filteredRows, emptyMsg, footLabel) {
+    const wrap = $(wrapSel);
+    const foot = $(footSel);
+    if (!wrap) return;
+    if (!(allRows || []).length) {
+      wrap.innerHTML = `<p class="foot" style="padding:16px">${escapeHtml(emptyMsg)}</p>`;
+    } else if (!filteredRows.length) {
+      wrap.innerHTML = `<p class="foot" style="padding:16px">No RTL VINs match the filters.</p>`;
+    } else {
+      wrap.innerHTML = `<table class="data-table aa-table aa-schedule-table aa-rtl-prior-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>VIN</th>
+            <th>Col AG</th>
+            <th class="num">Age</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th>Advisor</th>
+            <th>Proforma</th>
+            <th>Invoice</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredRows.map((r) => `
+            <tr class="aa-rtl-prior-row" role="button" tabindex="0" data-aa-rtl-idx="${escapeHtml(String(r.rawIdx))}" data-aa-rtl-vin="${escapeHtml(r.vin)}" title="Open all RTL sheet columns">
+              <td>
+                <strong class="aa-prod">${escapeHtml(r.product)}</strong>
+                <div class="aa-sfx-line"><span class="aa-sfx">${escapeHtml(r.sfx || "")}</span>${r.seg && r.seg !== "—" ? `<span class="aa-seg">${escapeHtml(r.seg)}</span>` : ""}</div>
+              </td>
+              <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
+              <td class="aa-date">${escapeHtml(r.agLabel || r.collectionLabel || "—")}</td>
+              <td class="num">${r.ageing != null ? escapeHtml(String(r.ageing)) + "d" : "—"}</td>
+              <td>${escapeHtml(r.location || "—")}${r.searchArea && r.searchArea !== "—" ? `<div class="rv-muted">${escapeHtml(r.searchArea)}</div>` : ""}</td>
+              <td><span class="aa-status ${r.salesKind === "delivered" ? "ok" : r.salesKind === "proforma" ? "warn" : "na"}">${escapeHtml(r.status || "—")}</span>${r.salesLabel && r.salesLabel !== "—" ? `<div class="rv-muted">${escapeHtml(r.salesLabel)}</div>` : ""}</td>
+              <td>${escapeHtml(r.salesman || "—")}</td>
+              <td class="aa-date">${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
+              <td class="aa-date">${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+      if (!wrap.dataset.aaPriorBound) {
+        wrap.dataset.aaPriorBound = "1";
+        const openFromTarget = (el) => {
+          const tr = el && el.closest ? el.closest("tr.aa-rtl-prior-row") : null;
+          if (!tr || !wrap.contains(tr)) return;
+          const idx = tr.getAttribute("data-aa-rtl-idx");
+          const vin = tr.getAttribute("data-aa-rtl-vin");
+          openAaRtlSheetDetail(idx != null && idx !== "" ? idx : vin);
+        };
+        wrap.addEventListener("click", (e) => openFromTarget(e.target));
+        wrap.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          openFromTarget(e.target);
+          e.preventDefault();
+        });
+      }
+    }
+    if (foot) {
+      foot.textContent = `Showing ${formatNumber(filteredRows.length)} of ${formatNumber((allRows || []).length)} ${footLabel} · click a row for all sheet columns`;
+    }
   }
 
   function renderAllocationAudit() {
@@ -18008,9 +18140,10 @@
 
     const pack = buildAllocationAuditPack();
     aaLastPack = pack;
-    const { summaryRows, vinRows, rtlPriorRows, totals } = pack;
+    const { summaryRows, vinRows, rtlCurrentRows, rtlPriorRows, totals } = pack;
     const filtered = filteredAaVinRows(vinRows);
-    const filteredPrior = filteredAaRtlPriorRows(rtlPriorRows || []);
+    const filteredCurrent = filteredAaRtlAgRows(rtlCurrentRows || []);
+    const filteredPrior = filteredAaRtlAgRows(rtlPriorRows || []);
 
     const hint = $("#aa-live-hint");
     if (hint) {
@@ -18020,7 +18153,7 @@
       const displayNote = slots.central.displaySheet
         ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
         : "";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""} · ${totals.rtlPrior || 0} RTL prior-month${sheetNote}${displayNote}`;
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""} · ${totals.rtlCurrent || 0} RTL this month (Col AG) · ${totals.rtlPrior || 0} RTL prior (Col AG)${sheetNote}${displayNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -18031,8 +18164,8 @@
         ["E-Sales VINs", totals.reserved, "ok"],
         ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
         ["Delivered", totals.delivered, "ok"],
-        ["Proforma open", totals.proforma, "warn"],
         ["Display", totals.display || 0, "ok"],
+        ["RTL this month", totals.rtlCurrent || 0, "ok"],
         ["RTL prior months", totals.rtlPrior || 0, "ok"],
         ["Missing (RTL)", totals.missing, totals.missing ? "bad" : "ok"],
       ].map(([label, value, status]) => `
@@ -18092,67 +18225,22 @@
       }
     }
 
-    const priorWrap = $("#aa-rtl-prior-wrap");
-    const priorFoot = $("#aa-rtl-prior-foot");
-    if (priorWrap) {
-      if (!(rtlPriorRows || []).length) {
-        priorWrap.innerHTML = `<p class="foot" style="padding:16px">No prior-month RTL stock VINs. Cars with age 0 / blank or collected this month are excluded.</p>`;
-      } else if (!filteredPrior.length) {
-        priorWrap.innerHTML = `<p class="foot" style="padding:16px">No prior-month RTL VINs match the filters.</p>`;
-      } else {
-        priorWrap.innerHTML = `<table class="data-table aa-table aa-schedule-table aa-rtl-prior-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>VIN</th>
-              <th class="num">Age</th>
-              <th>Collected</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Advisor</th>
-              <th>Proforma</th>
-              <th>Invoice</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filteredPrior.map((r) => `
-              <tr class="aa-rtl-prior-row" role="button" tabindex="0" data-aa-rtl-idx="${escapeHtml(String(r.rawIdx))}" data-aa-rtl-vin="${escapeHtml(r.vin)}" title="Open all RTL sheet columns">
-                <td>
-                  <strong class="aa-prod">${escapeHtml(r.product)}</strong>
-                  <div class="aa-sfx-line"><span class="aa-sfx">${escapeHtml(r.sfx || "")}</span>${r.seg && r.seg !== "—" ? `<span class="aa-seg">${escapeHtml(r.seg)}</span>` : ""}</div>
-                </td>
-                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
-                <td class="num">${r.ageing != null ? escapeHtml(String(r.ageing)) + "d" : "—"}</td>
-                <td class="aa-date">${escapeHtml(r.collectionLabel || "—")}</td>
-                <td>${escapeHtml(r.location || "—")}${r.searchArea && r.searchArea !== "—" ? `<div class="rv-muted">${escapeHtml(r.searchArea)}</div>` : ""}</td>
-                <td><span class="aa-status ${r.salesKind === "delivered" ? "ok" : r.salesKind === "proforma" ? "warn" : "na"}">${escapeHtml(r.status || "—")}</span>${r.salesLabel && r.salesLabel !== "—" ? `<div class="rv-muted">${escapeHtml(r.salesLabel)}</div>` : ""}</td>
-                <td>${escapeHtml(r.salesman || "—")}</td>
-                <td class="aa-date">${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
-                <td class="aa-date">${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>`;
-        if (!priorWrap.dataset.aaPriorBound) {
-          priorWrap.dataset.aaPriorBound = "1";
-          const openFromTarget = (el) => {
-            const tr = el && el.closest ? el.closest("tr.aa-rtl-prior-row") : null;
-            if (!tr || !priorWrap.contains(tr)) return;
-            const idx = tr.getAttribute("data-aa-rtl-idx");
-            const vin = tr.getAttribute("data-aa-rtl-vin");
-            openAaRtlSheetDetail(idx != null && idx !== "" ? idx : vin);
-          };
-          priorWrap.addEventListener("click", (e) => openFromTarget(e.target));
-          priorWrap.addEventListener("keydown", (e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            openFromTarget(e.target);
-            e.preventDefault();
-          });
-        }
-      }
-      if (priorFoot) {
-        priorFoot.textContent = `Showing ${formatNumber(filteredPrior.length)} of ${formatNumber((rtlPriorRows || []).length)} RTL VINs collected before this month · click a row for all sheet columns`;
-      }
-    }
+    renderAaRtlAgSchedule(
+      "#aa-rtl-current-wrap",
+      "#aa-rtl-current-foot",
+      rtlCurrentRows || [],
+      filteredCurrent,
+      "No this-month RTL VINs. Col AG must be a date in the current month.",
+      "RTL VINs with Col AG in the current month"
+    );
+    renderAaRtlAgSchedule(
+      "#aa-rtl-prior-wrap",
+      "#aa-rtl-prior-foot",
+      rtlPriorRows || [],
+      filteredPrior,
+      "No prior-month RTL VINs. Col AG must be a date before the current month.",
+      "RTL VINs with Col AG before the current month"
+    );
 
     const vinWrap = $("#aa-vin-wrap");
     const foot = $("#aa-vin-foot");
@@ -18254,13 +18342,13 @@
       Missing: r.missing ? "Yes" : "No",
       "Where": r.whereLabel || "",
     }));
-    const rtlPrior = (pack.rtlPriorRows || []).map((r) => ({
+    const mapRtlAgExport = (r) => ({
       Product: r.product,
       Suffix: r.sfx,
       Segment: r.seg,
       VIN: r.vin,
+      "Col AG": r.agLabel || "",
       Age: r.ageing != null ? r.ageing : "",
-      Collected: r.collectionLabel || "",
       Location: r.location || "",
       Status: r.status || "",
       "Search Area": r.searchArea || "",
@@ -18269,11 +18357,14 @@
       "Sales Status": r.salesLabel || "",
       "Proforma Date": r.proformaDate ? formatRvDate(r.proformaDate) : "",
       "Invoice Date": r.invoiceDate ? formatRvDate(r.invoiceDate) : "",
-    }));
+    });
+    const rtlCurrent = (pack.rtlCurrentRows || []).map(mapRtlAgExport);
+    const rtlPrior = (pack.rtlPriorRows || []).map(mapRtlAgExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vins), "VIN Audit");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RTL Prior Months");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "RTL This Month AG");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RTL Prior Months AG");
     downloadWorkbook(wb, `Allocation-Audit-${excelFileStamp()}`);
     setStatus("Allocation Audit Excel exported", "ok");
   }
