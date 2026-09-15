@@ -1362,7 +1362,33 @@ body.uploader-enterprise button[type="submit"] {
 }
 
 .live-app.toyota-theme .sr-mock-acc .sr-acc-progress-track {
-  background: #e2e8f0 !important;
+  background: #94a3b8 !important; /* Remaining */
+  height: 14px !important;
+  border: 1px solid #64748b !important;
+}
+
+/* Layer: track=remaining · combined(red)=achieved+in-progress · fill(black)=achieved */
+.live-app.toyota-theme .sr-mock-acc .sr-acc-progress-fill {
+  background: #0f172a !important; /* Achieved — solid black */
+  z-index: 2 !important;
+}
+
+.live-app.toyota-theme .sr-mock-acc .sr-acc-progress-fill-combined {
+  background: #eb0a1e !important; /* In Progress (visible past achieved) */
+  z-index: 1 !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .sr-acc-progress-track {
+  background: #475569 !important;
+  border-color: #64748b !important;
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .sr-acc-progress-fill {
+  background: #f8fafc !important; /* Achieved — bright on dark card */
+}
+
+.live-app.toyota-theme.theme-dark .sr-mock-acc .sr-acc-progress-fill-combined {
+  background: #ff2d3f !important;
 }
 
 /* Dark mode: light text on dark card (inverse of day black-on-white) */
