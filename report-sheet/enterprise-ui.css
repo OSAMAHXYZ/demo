@@ -1441,3 +1441,473 @@ body.uploader-enterprise button[type="submit"] {
 .live-app.toyota-theme.theme-dark tr.aa-rtl-sheet-row:hover {
   background: rgba(148, 163, 184, 0.12) !important;
 }
+
+/* -- Allocation Audit Control Center ------------------------------- */
+.live-app.toyota-theme .aa-control-center {
+  gap: 18px !important;
+}
+
+.live-app.toyota-theme .aa-cc-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding: 18px 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    radial-gradient(ellipse at 0% 0%, rgba(235, 0, 27, 0.06), transparent 55%);
+  border: 1px solid var(--eu-line);
+  border-radius: var(--eu-radius);
+  box-shadow: var(--eu-shadow);
+}
+
+.live-app.toyota-theme .aa-cc-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a1b1f;
+}
+
+.live-app.toyota-theme .aa-cc-title {
+  margin: 0;
+  font-family: var(--font-figure) !important;
+  font-size: clamp(1.45rem, 2.2vw, 1.85rem) !important;
+  font-weight: 750 !important;
+  letter-spacing: -0.03em;
+  color: var(--eu-ink) !important;
+  line-height: 1.15;
+}
+
+.live-app.toyota-theme .aa-cc-sub {
+  margin: 4px 0 0;
+  color: var(--eu-muted);
+  font-size: 0.92rem;
+}
+
+.live-app.toyota-theme .aa-cc-live {
+  margin: 10px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f4f7fb;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-app.toyota-theme .aa-cc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  max-width: 100%;
+}
+
+.live-app.toyota-theme .aa-cc-toolbar select,
+.live-app.toyota-theme .aa-cc-toolbar input[type="search"] {
+  min-height: 38px;
+  border: 1px solid #d5dee9;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--eu-ink);
+  padding: 0 12px;
+  font-size: 0.84rem;
+}
+
+.live-app.toyota-theme .aa-cc-toolbar input[type="search"] {
+  min-width: min(220px, 100%);
+  width: 220px;
+}
+
+.live-app.toyota-theme .aa-cc-kpis {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px !important;
+}
+
+.live-app.toyota-theme .aa-cc-kpis--mini {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 4px;
+}
+
+.live-app.toyota-theme .aa-cc-kpi {
+  position: relative;
+  overflow: hidden;
+  background: var(--eu-surface) !important;
+  border: 1px solid var(--eu-line) !important;
+  border-radius: var(--eu-radius) !important;
+  box-shadow: var(--eu-shadow) !important;
+  padding: 14px 16px !important;
+}
+
+.live-app.toyota-theme .aa-cc-kpi::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #cbd5e1;
+}
+
+.live-app.toyota-theme .aa-cc-kpi.ok::before { background: #16a34a; }
+.live-app.toyota-theme .aa-cc-kpi.warn::before { background: #d97706; }
+.live-app.toyota-theme .aa-cc-kpi.bad::before { background: #dc2626; }
+
+.live-app.toyota-theme .aa-cc-kpi .lab {
+  color: var(--eu-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-app.toyota-theme .aa-cc-kpi .val {
+  margin-top: 6px;
+  font-family: var(--font-figure) !important;
+  font-size: clamp(1.25rem, 1.8vw, 1.55rem) !important;
+  font-weight: 750 !important;
+  color: var(--eu-ink) !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.live-app.toyota-theme .aa-cc-kpi-hint {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--eu-muted);
+  line-height: 1.3;
+}
+
+.live-app.toyota-theme .aa-cc-kpi--mini .val {
+  font-size: 1.15rem !important;
+}
+
+.live-app.toyota-theme .aa-cc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.live-app.toyota-theme .aa-cc-section--carry {
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 2px solid #e2e8f0;
+}
+
+.live-app.toyota-theme .aa-cc-section-kicker {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9a1b1f;
+}
+
+.live-app.toyota-theme .aa-cc-section--carry .aa-cc-section-kicker {
+  color: #64748b;
+}
+
+.live-app.toyota-theme .aa-cc-section-title {
+  margin: 0;
+  font-family: var(--font-figure) !important;
+  font-size: clamp(1.15rem, 1.6vw, 1.35rem) !important;
+  font-weight: 750 !important;
+  color: var(--eu-ink) !important;
+  letter-spacing: -0.02em;
+}
+
+.live-app.toyota-theme .aa-cc-section-sub {
+  margin: 4px 0 0;
+  color: var(--eu-muted);
+  font-size: 0.86rem;
+}
+
+.live-app.toyota-theme .aa-vin-board-wrap {
+  max-height: min(520px, 62vh);
+  overflow: auto;
+}
+
+.live-app.toyota-theme .aa-vin-board-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc !important;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+
+.live-app.toyota-theme tr.aa-vin-board-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.live-app.toyota-theme tr.aa-vin-board-row:hover {
+  background: #f1f5f9 !important;
+}
+
+.live-app.toyota-theme .aa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.live-app.toyota-theme .aa-badge--ok {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.live-app.toyota-theme .aa-badge--info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.live-app.toyota-theme .aa-badge--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.live-app.toyota-theme .aa-badge--avail {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.live-app.toyota-theme .aa-badge--display {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.live-app.toyota-theme .aa-badge--bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.live-app.toyota-theme .aa-badge--na {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.live-app.toyota-theme .aa-yn {
+  display: inline-flex;
+  min-width: 2.4rem;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.live-app.toyota-theme .aa-yn--yes {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.live-app.toyota-theme .aa-yn--no {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.live-app.toyota-theme .aa-sr-found {
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: #047857;
+  letter-spacing: 0.04em;
+}
+
+.live-app.toyota-theme .aa-sr-miss {
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: #b91c1c;
+  letter-spacing: 0.04em;
+}
+
+.live-app.toyota-theme .aa-vin-hit {
+  border: 1px solid #dbe3ee;
+  border-radius: var(--eu-radius);
+  background: #fff;
+  box-shadow: var(--eu-shadow);
+  padding: 14px 16px;
+}
+
+.live-app.toyota-theme .aa-vin-hit-kicker {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9a1b1f;
+}
+
+.live-app.toyota-theme .aa-vin-hit-vin {
+  margin-top: 2px;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--eu-ink);
+}
+
+.live-app.toyota-theme .aa-vin-hit-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.live-app.toyota-theme .aa-vin-hit-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-top: 12px;
+}
+
+.live-app.toyota-theme .aa-vin-hit-grid .lab,
+.live-app.toyota-theme .aa-vin-detail-grid .lab {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--eu-muted);
+  margin-bottom: 2px;
+}
+
+.live-app.toyota-theme .aa-vin-hit--miss .aa-vin-hit-msg {
+  margin: 0;
+  color: var(--eu-muted);
+}
+
+.live-app.toyota-theme .aa-vin-detail-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.live-app.toyota-theme .aa-vin-detail-vin {
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.live-app.toyota-theme .aa-vin-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.live-app.toyota-theme .aa-vin-detail-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.live-app.toyota-theme .aa-vin-detail-h {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.live-app.toyota-theme .aa-vin-detail-rule {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 14px 0;
+}
+
+.live-app.toyota-theme .aa-vin-detail-actions {
+  margin-top: 16px;
+}
+
+.live-app.toyota-theme.theme-dark .aa-cc-header {
+  background:
+    linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)),
+    radial-gradient(ellipse at 0% 0%, rgba(235, 0, 27, 0.12), transparent 55%);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.live-app.toyota-theme.theme-dark .aa-cc-live {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+}
+
+.live-app.toyota-theme.theme-dark .aa-cc-toolbar select,
+.live-app.toyota-theme.theme-dark .aa-cc-toolbar input[type="search"] {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e2e8f0;
+}
+
+.live-app.toyota-theme.theme-dark .aa-vin-hit,
+.live-app.toyota-theme.theme-dark .aa-cc-kpi {
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+.live-app.toyota-theme.theme-dark .aa-vin-board-table thead th {
+  background: #0f172a !important;
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.2);
+}
+
+.live-app.toyota-theme.theme-dark tr.aa-vin-board-row:hover {
+  background: rgba(148, 163, 184, 0.1) !important;
+}
+
+.live-app.toyota-theme.theme-dark .aa-cc-section--carry {
+  border-top-color: rgba(148, 163, 184, 0.22);
+}
+
+@media (max-width: 1440px) {
+  .live-app.toyota-theme .aa-cc-kpis--mini {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .live-app.toyota-theme .aa-vin-hit-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .live-app.toyota-theme .aa-cc-kpis,
+  .live-app.toyota-theme .aa-cc-kpis--mini {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .live-app.toyota-theme .aa-vin-hit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .live-app.toyota-theme .aa-cc-toolbar input[type="search"] {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .live-app.toyota-theme .aa-cc-kpis,
+  .live-app.toyota-theme .aa-cc-kpis--mini,
+  .live-app.toyota-theme .aa-vin-detail-grid,
+  .live-app.toyota-theme .aa-vin-detail-grid--3 {
+    grid-template-columns: 1fr;
+  }
+}

@@ -14,10 +14,10 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260914eu2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260915aa2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
-  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
+  <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -887,72 +887,93 @@
           </ol>
         </div>
 
-        <div id="aa-dash" class="bo-dash aa-dash" hidden>
-          <div class="rv-head">
-            <div>
-              <h2 class="rv-title">Allocation Audit</h2>
-              <p class="rv-sub" id="aa-live-hint">Allocation · RES actual · Sales Raw · E-Sales · RTL snapshots</p>
+        <div id="aa-dash" class="bo-dash aa-dash aa-control-center" hidden>
+          <header class="aa-cc-header">
+            <div class="aa-cc-header-copy">
+              <p class="aa-cc-eyebrow">TOYOTA · ALJ MOTORS</p>
+              <h2 class="aa-cc-title">Allocation Audit</h2>
+              <p class="aa-cc-sub">RTL vehicle allocation and delivery audit</p>
+              <p class="aa-cc-live" id="aa-live-hint">Current Month · —</p>
             </div>
-            <div class="rv-head-actions">
-              <select id="aa-filter-status" title="Filter VIN status">
+            <div class="aa-cc-toolbar" role="search">
+              <select id="aa-filter-status" title="Filter VIN status" aria-label="Status filter">
                 <option value="">All statuses</option>
-                <option value="salesdate">Has proforma / invoice</option>
-                <option value="delivered">Delivered / Invoiced</option>
-                <option value="proforma">Proforma</option>
-                <option value="available">In المخزون المتاح</option>
-                <option value="display">Display · Display Central 1</option>
-                <option value="missing">Missing · RTL lookup</option>
+                <option value="delivered">Delivered</option>
+                <option value="proforma">Proforma / Invoice</option>
+                <option value="reserved">المحجوز</option>
+                <option value="available">Available</option>
+                <option value="display">Display</option>
+                <option value="missing">Missing</option>
+                <option value="salesdate">In Sales Raw</option>
               </select>
-              <input id="aa-search" type="search" placeholder="Search BO / VIN / advisor / product…" />
+              <select id="aa-filter-product" title="Filter product" aria-label="Product filter">
+                <option value="">All products</option>
+              </select>
+              <select id="aa-filter-suffix" title="Filter suffix" aria-label="Suffix filter">
+                <option value="">All suffixes</option>
+              </select>
+              <input id="aa-search" type="search" placeholder="Search VIN…" autocomplete="off" aria-label="VIN search" />
               <button type="button" id="aa-excel-btn" class="btn-primary">Export Excel</button>
             </div>
-          </div>
-          <div class="bo-kpis" id="aa-kpis"></div>
-          <article class="card aa-summary-card">
-            <div class="pbi-viz-head">
+          </header>
+
+          <div id="aa-vin-hit" class="aa-vin-hit" hidden></div>
+
+          <section class="aa-cc-kpis" id="aa-kpis" aria-label="Current month KPIs"></section>
+
+          <section class="aa-cc-section aa-cc-section--primary" aria-labelledby="aa-current-heading">
+            <div class="aa-cc-section-head">
               <div>
-                <h2>Product allocation vs actual</h2>
-                <span class="hint">Plan vs all Retail Electronic Sales VINs currently in RTL</span>
+                <p class="aa-cc-section-kicker">Current month</p>
+                <h3 class="aa-cc-section-title" id="aa-current-heading">Current Month — Allocation Audit</h3>
+                <p class="aa-cc-section-sub">VINs received in RTL during the current month (Col AG) · Retail Electronic Sales</p>
               </div>
             </div>
-            <div class="table-wrap aa-table-wrap" id="aa-summary-wrap"></div>
-          </article>
-          <article class="card aa-summary-card aa-summary-current-card">
-            <div class="pbi-viz-head">
+            <article class="card aa-summary-card aa-summary-current-card">
+              <div class="pbi-viz-head">
+                <div>
+                  <h2>Allocation vs actual</h2>
+                  <span class="hint">Existing product + suffix plan logic · current-month RES only · click a number for related VINs</span>
+                </div>
+              </div>
+              <div class="table-wrap aa-table-wrap" id="aa-summary-current-wrap"></div>
+            </article>
+            <article class="card aa-vin-board-card">
+              <div class="pbi-viz-head">
+                <div>
+                  <h2>Current month VIN board</h2>
+                  <span class="hint">Sales Raw verification · status badges · click VIN for full audit trail</span>
+                </div>
+              </div>
+              <div class="table-wrap aa-table-wrap aa-vin-board-wrap" id="aa-rtl-current-wrap"></div>
+              <p class="foot" id="aa-rtl-current-foot"></p>
+            </article>
+          </section>
+
+          <section class="aa-cc-section aa-cc-section--carry" aria-labelledby="aa-prior-heading">
+            <div class="aa-cc-section-head">
               <div>
-                <h2>Current month allocation vs actual</h2>
-                <span class="hint">Same columns · only RES VINs with Col AG in the current month</span>
+                <p class="aa-cc-section-kicker">Carryover</p>
+                <h3 class="aa-cc-section-title" id="aa-prior-heading">Previous Month — Carryover Audit</h3>
+                <p class="aa-cc-section-sub">RTL VINs received before the current month · does not affect current-month allocation</p>
               </div>
             </div>
-            <div class="table-wrap aa-table-wrap" id="aa-summary-current-wrap"></div>
-          </article>
-          <article class="card aa-rtl-current-card">
-            <div class="pbi-viz-head">
-              <div>
-                <h2>RES · this month</h2>
-                <span class="hint">Retail Electronic Sales only · Col AG in the current month · click a row for all sheet columns</span>
+            <div class="aa-cc-kpis aa-cc-kpis--mini" id="aa-prior-kpis" aria-label="Previous month KPIs"></div>
+            <article class="card aa-vin-board-card">
+              <div class="pbi-viz-head">
+                <div>
+                  <h2>Carryover VIN board</h2>
+                  <span class="hint">Where is last month’s VIN now? · Sales Raw · E-Sales · Display</span>
+                </div>
               </div>
-            </div>
-            <div class="table-wrap aa-table-wrap" id="aa-rtl-current-wrap"></div>
-            <p class="foot" id="aa-rtl-current-foot"></p>
-          </article>
-          <article class="card aa-rtl-prior-card">
-            <div class="pbi-viz-head">
-              <div>
-                <h2>RES · prior months</h2>
-                <span class="hint">Retail Electronic Sales only · Col AG before the current month · click a row for all sheet columns</span>
-              </div>
-            </div>
-            <div class="table-wrap aa-table-wrap" id="aa-rtl-prior-wrap"></div>
-            <p class="foot" id="aa-rtl-prior-foot"></p>
-          </article>
+              <div class="table-wrap aa-table-wrap aa-vin-board-wrap" id="aa-rtl-prior-wrap"></div>
+              <p class="foot" id="aa-rtl-prior-foot"></p>
+            </article>
+          </section>
+
+          <!-- Legacy containers kept for compatibility (hidden) -->
+          <div id="aa-summary-wrap" hidden></div>
           <article class="card aa-vin-card" hidden aria-hidden="true">
-            <div class="pbi-viz-head">
-              <div>
-                <h2>VIN schedule · status trail</h2>
-                <span class="hint">Missing (red) = RES VIN looked up in RTL · Display = Display Central 1 · click product Missing number for full RTL details</span>
-              </div>
-            </div>
             <div class="table-wrap aa-table-wrap" id="aa-vin-wrap"></div>
             <p class="foot" id="aa-vin-foot"></p>
           </article>
@@ -17073,7 +17094,7 @@
     setStatus("Reserved Vehicles Excel exported", "ok");
   }
 
-  let aaView = { search: "", status: "" };
+  let aaView = { search: "", status: "", product: "", suffix: "" };
   let aaLastSeenCache = { loaded: false, loading: null, lastSeen: {}, snapshotCount: 0, error: "" };
 
   async function ensureAaRtlLastSeen() {
@@ -18060,7 +18081,7 @@
       const tr = el && el.closest ? el.closest("tr.aa-rtl-sheet-row") : null;
       if (!tr || !root.contains(tr)) return;
       const vin = tr.getAttribute("data-aa-rtl-vin");
-      if (vin) openAaRtlSheetDetail(vin);
+      if (vin) openAaVinAuditDrawer(vin);
     };
     root.querySelectorAll("tr.aa-rtl-sheet-row").forEach((tr) => {
       tr.addEventListener("click", (e) => {
@@ -18078,6 +18099,8 @@
   function filteredAaVinRows(vinRows) {
     const q = String(aaView.search || "").trim().toLowerCase();
     const st = String(aaView.status || "").trim();
+    const prod = String(aaView.product || "").trim().toLowerCase();
+    const sfx = String(aaView.suffix || "").trim().toLowerCase();
     return vinRows.filter((r) => {
       if (st === "delivered" && r.sales.kind !== "delivered") return false;
       if (st === "proforma" && r.sales.kind !== "proforma") return false;
@@ -18086,6 +18109,8 @@
       if (st === "display" && !r.inDisplay) return false;
       if (st === "missing" && !r.missing) return false;
       if (st === "salesdate" && r.sales.kind !== "delivered" && r.sales.kind !== "proforma") return false;
+      if (prod && String(r.product || "").toLowerCase() !== prod) return false;
+      if (sfx && String(r.sfx || "").toLowerCase() !== sfx) return false;
       if (!q) return true;
       const hay = [
         r.vin, r.orderNumber, r.product, r.sfx, r.seg, r.salesman, r.currentStatus,
@@ -18097,17 +18122,143 @@
     });
   }
 
+  /** Presentation-only badge from existing Sales Raw / source flags (no new classification math). */
+  function aaResolveAuditBadge(r) {
+    if (r.salesKind === "delivered") {
+      return { key: "delivered", label: "Delivered", tone: "ok", dot: "🟢" };
+    }
+    if (r.salesKind === "proforma") {
+      return { key: "proforma", label: "Proforma", tone: "info", dot: "🔵" };
+    }
+    if (r.inReserved) {
+      return { key: "reserved", label: "المحجوز", tone: "warn", dot: "🟡" };
+    }
+    if (r.inAvailable) {
+      return { key: "available", label: "Available", tone: "avail", dot: "🟣" };
+    }
+    if (r.inDisplay) {
+      return { key: "display", label: "Display", tone: "display", dot: "⚪" };
+    }
+    if (r.salesKind === "none" || r.missing) {
+      return { key: "missing", label: "Missing", tone: "bad", dot: "🔴" };
+    }
+    return {
+      key: "sales",
+      label: r.salesLabel || "In Sales Raw",
+      tone: "na",
+      dot: "⚪",
+    };
+  }
+
+  function aaBadgeHtml(badge) {
+    const b = badge || { key: "na", label: "—", tone: "na", dot: "" };
+    return `<span class="aa-badge aa-badge--${escapeHtml(b.tone || "na")}" data-aa-badge="${escapeHtml(b.key || "")}">
+      <span class="aa-badge-dot" aria-hidden="true">${escapeHtml(b.dot || "")}</span>
+      <span class="aa-badge-label">${escapeHtml(b.label || "—")}</span>
+    </span>`;
+  }
+
+  function aaYesNoPill(yes) {
+    return yes
+      ? `<span class="aa-yn aa-yn--yes">YES</span>`
+      : `<span class="aa-yn aa-yn--no">NO</span>`;
+  }
+
+  function aaSalesRawCell(r) {
+    if (r.salesFound) {
+      return `<span class="aa-sr-found">FOUND</span><div class="rv-muted">${escapeHtml(r.salesLabel || "—")}</div>`;
+    }
+    return `<span class="aa-sr-miss">NOT FOUND</span><div class="rv-muted">Not in Sales Raw</div>`;
+  }
+
+  /** Enrich RTL schedule rows with existing lookups for UI badges only. */
+  function enrichAaRtlBoardRows(rows) {
+    const reservedSet = buildReservedVinSet();
+    const availableLookup = buildEsalesStockVinLookup();
+    const displayLookup = buildDisplayVinLookup();
+    const rtlRows = slots.rtl.rows || [];
+    return (rows || []).map((r) => {
+      const vin = r.vin;
+      const inReserved = reservedSet.has(vin);
+      const inAvailable = availableLookup.has(vin);
+      const displayHit = findDisplayVinHit(displayLookup, vin);
+      const inDisplay = !!displayHit;
+      const missing = r.salesKind === "none" && !inReserved && !inAvailable && !inDisplay;
+      const raw = r.rawIdx != null ? rtlRows[r.rawIdx] : null;
+      const modelYear = raw
+        ? (cellToString(cellByLetter(raw, "C")).trim()
+          || stockFieldByAlias(raw, "modelYear", [])
+          || stockFieldByAlias(raw, "year", [])
+          || "—")
+        : "—";
+      const leaf = matchRtlToAllocLeaf({ product: r.product, suffix: r.sfx });
+      const allocation = leaf ? (Number(allocationValues[leaf.id]) || 0) : 0;
+      const enriched = {
+        ...r,
+        inReserved,
+        inAvailable,
+        inDisplay,
+        missing,
+        salesFound: r.salesKind !== "none",
+        modelYear: modelYear || "—",
+        leafId: leaf ? leaf.id : "",
+        allocation,
+        displayDetail: displayHit
+          ? `${displayHit.sheet || "Display Central 1"}${displayHit.location ? ` · ${displayHit.location}` : ""}`
+          : "",
+      };
+      enriched.badge = aaResolveAuditBadge(enriched);
+      return enriched;
+    });
+  }
+
+  function sumAaSummaryMetrics(summaryRows) {
+    const rows = summaryRows || [];
+    return {
+      allocation: rows.reduce((s, r) => s + (Number(r.allocation) || 0), 0),
+      actual: rows.reduce((s, r) => s + (Number(r.actual) || 0), 0),
+      delivered: rows.reduce((s, r) => s + (Number(r.delivered) || 0), 0),
+      proforma: rows.reduce((s, r) => s + (Number(r.proforma) || 0), 0),
+      reserved: rows.reduce((s, r) => s + (Number(r.reserved) || 0), 0),
+      available: rows.reduce((s, r) => s + (Number(r.available) || 0), 0),
+      display: rows.reduce((s, r) => s + (Number(r.display) || 0), 0),
+      missing: rows.reduce((s, r) => s + (Number(r.missing) || 0), 0),
+    };
+  }
+
+  function countAaBoardMetrics(rows) {
+    const list = rows || [];
+    return {
+      total: list.length,
+      delivered: list.filter((r) => r.badge && r.badge.key === "delivered").length,
+      proforma: list.filter((r) => r.badge && r.badge.key === "proforma").length,
+      reserved: list.filter((r) => r.inReserved).length,
+      display: list.filter((r) => r.inDisplay).length,
+      pending: list.filter((r) => r.badge && r.badge.key !== "delivered").length,
+      missing: list.filter((r) => r.badge && r.badge.key === "missing").length,
+    };
+  }
+
   function filteredAaRtlAgRows(rows) {
     const q = String(aaView.search || "").trim().toLowerCase();
     const st = String(aaView.status || "").trim();
+    const prod = String(aaView.product || "").trim().toLowerCase();
+    const sfx = String(aaView.suffix || "").trim().toLowerCase();
     return (rows || []).filter((r) => {
-      if (st === "delivered" && r.salesKind !== "delivered") return false;
-      if (st === "proforma" && r.salesKind !== "proforma") return false;
+      if (prod && String(r.product || "").toLowerCase() !== prod) return false;
+      if (sfx && String(r.sfx || "").toLowerCase() !== sfx) return false;
+      if (st === "delivered" && !(r.badge && r.badge.key === "delivered")) return false;
+      if (st === "proforma" && !(r.badge && r.badge.key === "proforma")) return false;
+      if (st === "reserved" && !r.inReserved) return false;
+      if (st === "available" && !r.inAvailable) return false;
+      if (st === "display" && !r.inDisplay) return false;
+      if (st === "missing" && !(r.badge && r.badge.key === "missing")) return false;
       if (st === "salesdate" && r.salesKind !== "delivered" && r.salesKind !== "proforma") return false;
-      if (st === "reserved" || st === "available" || st === "display" || st === "missing") return false;
       if (!q) return true;
       const hay = [
-        r.vin, r.product, r.sfx, r.seg, r.salesman, r.salesLabel, r.location, r.status, r.searchArea, r.usage, r.agLabel,
+        r.vin, r.product, r.sfx, r.seg, r.salesman, r.salesLabel, r.location,
+        r.status, r.searchArea, r.usage, r.agLabel, r.modelYear,
+        r.badge && r.badge.label,
       ]
         .map((x) => String(x || "").toLowerCase())
         .join(" ");
@@ -18119,67 +18270,364 @@
     return filteredAaRtlAgRows(rows);
   }
 
-  function renderAaRtlAgSchedule(wrapSel, footSel, allRows, filteredRows, emptyMsg, footLabel) {
+  function fillAaFilterOptions(currentRows, priorRows) {
+    const prodSel = $("#aa-filter-product");
+    const sfxSel = $("#aa-filter-suffix");
+    if (!prodSel && !sfxSel) return;
+    const all = [...(currentRows || []), ...(priorRows || [])];
+    const products = [...new Set(all.map((r) => String(r.product || "").trim()).filter((p) => p && p !== "—"))].sort();
+    const suffixes = [...new Set(all.map((r) => String(r.sfx || "").trim()).filter((s) => s && s !== "—"))].sort();
+    const keepProd = String(aaView.product || "");
+    const keepSfx = String(aaView.suffix || "");
+    if (prodSel) {
+      prodSel.innerHTML = `<option value="">All products</option>${products.map((p) =>
+        `<option value="${escapeHtml(p)}"${p === keepProd ? " selected" : ""}>${escapeHtml(p)}</option>`).join("")}`;
+    }
+    if (sfxSel) {
+      sfxSel.innerHTML = `<option value="">All suffixes</option>${suffixes.map((s) =>
+        `<option value="${escapeHtml(s)}"${s === keepSfx ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}`;
+    }
+  }
+
+  function findAaBoardVin(vinQuery, currentRows, priorRows) {
+    const q = extractVinValue(vinQuery) || upperTrim(vinQuery);
+    if (!q || q.length < 6) return null;
+    const match = (list, period) => {
+      for (const r of list || []) {
+        const v = extractVinValue(r.vin) || upperTrim(r.vin);
+        if (!v) continue;
+        if (v === q || v.endsWith(q) || q.endsWith(v)) return { row: r, period };
+      }
+      return null;
+    };
+    return match(currentRows, "current") || match(priorRows, "prior");
+  }
+
+  function renderAaVinHit(currentRows, priorRows) {
+    const hitEl = $("#aa-vin-hit");
+    if (!hitEl) return;
+    const q = String(aaView.search || "").trim();
+    if (q.length < 6) {
+      hitEl.hidden = true;
+      hitEl.innerHTML = "";
+      return;
+    }
+    const hit = findAaBoardVin(q, currentRows, priorRows);
+    if (!hit) {
+      hitEl.hidden = false;
+      hitEl.innerHTML = `
+        <div class="aa-vin-hit-inner aa-vin-hit--miss">
+          <div class="aa-vin-hit-title">VIN search</div>
+          <p class="aa-vin-hit-msg">No RTL RES VIN matching <span class="mono">${escapeHtml(q)}</span> in current or prior boards.</p>
+        </div>`;
+      return;
+    }
+    const r = hit.row;
+    const periodLabel = hit.period === "current" ? "Current Month" : "Previous Month / Carryover";
+    hitEl.hidden = false;
+    hitEl.innerHTML = `
+      <div class="aa-vin-hit-inner">
+        <div class="aa-vin-hit-top">
+          <div>
+            <div class="aa-vin-hit-kicker">${escapeHtml(periodLabel)}</div>
+            <div class="aa-vin-hit-vin mono">${escapeHtml(r.vin)}</div>
+          </div>
+          ${aaBadgeHtml(r.badge)}
+          <button type="button" class="btn-primary aa-vin-hit-open" data-aa-open-vin="${escapeHtml(r.vin)}">Open audit</button>
+        </div>
+        <div class="aa-vin-hit-grid">
+          <div><span class="lab">Product</span><strong>${escapeHtml(r.product || "—")}</strong></div>
+          <div><span class="lab">Suffix</span><strong>${escapeHtml(r.sfx || "—")}</strong></div>
+          <div><span class="lab">RTL Date</span><strong>${escapeHtml(r.agLabel || "—")}</strong></div>
+          <div><span class="lab">Allocation group</span><strong>${escapeHtml((r.product || "—") + " · " + (r.sfx || "—"))}</strong></div>
+          <div><span class="lab">Sales Raw</span><strong>${r.salesFound ? "FOUND" : "NOT FOUND"}</strong></div>
+          <div><span class="lab">Sales status</span><strong>${escapeHtml(r.salesLabel || "—")}</strong></div>
+          <div><span class="lab">Delivered</span><strong>${r.salesKind === "delivered" ? "Yes" : "No"}</strong></div>
+          <div><span class="lab">E-Sales</span><strong>${r.inReserved ? "Yes" : "No"}</strong></div>
+          <div><span class="lab">Display</span><strong>${r.inDisplay ? "Yes" : "No"}</strong></div>
+          <div><span class="lab">Available</span><strong>${r.inAvailable ? "Yes" : "No"}</strong></div>
+        </div>
+      </div>`;
+    const btn = hitEl.querySelector("[data-aa-open-vin]");
+    if (btn) {
+      btn.addEventListener("click", () => openAaVinAuditDrawer(btn.getAttribute("data-aa-open-vin")));
+    }
+  }
+
+  function openAaVinAuditDrawer(vinOrIdx) {
+    const titleEl = $("#aa-drill-title");
+    const subEl = $("#aa-drill-sub");
+    const bodyEl = $("#aa-drill-body");
+    const drawer = $("#aa-drill-drawer");
+    const backdrop = $("#aa-drill-backdrop");
+    if (!bodyEl || !drawer || !backdrop) return;
+
+    let vin = "";
+    let rawIdx = null;
+    if (vinOrIdx != null && String(vinOrIdx).trim() !== "" && /^\d+$/.test(String(vinOrIdx).trim())) {
+      rawIdx = Number(vinOrIdx);
+      const raw = (slots.rtl.rows || [])[rawIdx];
+      if (raw) {
+        vin = extractVinValue(cellByLetter(raw, "E"))
+          || extractVinValue(raw.vin)
+          || upperTrim(cellToString(raw.vin))
+          || "";
+      }
+    } else {
+      vin = extractVinValue(vinOrIdx) || upperTrim(vinOrIdx);
+    }
+
+    const pack = aaLastPack || buildAllocationAuditPack();
+    const currentEnriched = enrichAaRtlBoardRows(pack.rtlCurrentRows || []);
+    const priorEnriched = enrichAaRtlBoardRows(pack.rtlPriorRows || []);
+    const hit = findAaBoardVin(vin, currentEnriched, priorEnriched);
+    const r = hit && hit.row;
+    const period = hit ? hit.period : "";
+    const salesLookup = buildSalesVinLookup();
+    const sales = resolveAaSalesStatus(vin, salesLookup);
+    const summaryList = period === "current"
+      ? (pack.summaryRowsCurrent || [])
+      : (pack.summaryRows || []);
+    const leafRow = r && r.leafId
+      ? summaryList.find((s) => s.id === r.leafId)
+      : null;
+
+    if (titleEl) titleEl.textContent = "VIN DETAILS";
+    if (subEl) {
+      subEl.textContent = period === "current"
+        ? "Current month · Allocation Audit"
+        : period === "prior"
+          ? "Previous month · Carryover Audit"
+          : "Allocation Audit";
+    }
+
+    if (!r && !vin) {
+      bodyEl.innerHTML = `<p class="foot">VIN not found.</p>`;
+    } else {
+      const row = r || {
+        vin,
+        product: "—",
+        sfx: "—",
+        modelYear: "—",
+        agLabel: "—",
+        salesFound: sales.kind !== "none",
+        salesLabel: sales.label,
+        salesKind: sales.kind,
+        inReserved: buildReservedVinSet().has(vin),
+        inAvailable: buildEsalesStockVinLookup().has(vin),
+        inDisplay: !!findDisplayVinHit(buildDisplayVinLookup(), vin),
+        badge: null,
+        allocation: 0,
+        leafId: "",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+        salesman: sales.salesman,
+      };
+      if (!row.badge) row.badge = aaResolveAuditBadge(row);
+      const alloc = leafRow ? Number(leafRow.allocation) || 0 : (Number(row.allocation) || 0);
+      const actual = leafRow ? Number(leafRow.actual) || 0 : "—";
+      const gap = leafRow ? leafRow.gap : "—";
+
+      bodyEl.innerHTML = `
+        <div class="aa-vin-detail">
+          <div class="aa-vin-detail-hero">
+            <div class="mono aa-vin-detail-vin">${escapeHtml(row.vin)}</div>
+            ${aaBadgeHtml(row.badge)}
+          </div>
+          <div class="aa-vin-detail-grid">
+            <div><span class="lab">Product</span><strong>${escapeHtml(row.product || "—")}</strong></div>
+            <div><span class="lab">Suffix</span><strong>${escapeHtml(row.sfx || "—")}</strong></div>
+            <div><span class="lab">Model Year</span><strong>${escapeHtml(row.modelYear || "—")}</strong></div>
+            <div><span class="lab">RTL Arrival</span><strong>${escapeHtml(row.agLabel || "—")}</strong></div>
+          </div>
+          <hr class="aa-vin-detail-rule" />
+          <h4 class="aa-vin-detail-h">Allocation</h4>
+          <div class="aa-vin-detail-grid aa-vin-detail-grid--3">
+            <div><span class="lab">Allocation</span><strong>${escapeHtml(String(alloc))}</strong></div>
+            <div><span class="lab">Current month actual</span><strong>${escapeHtml(String(actual))}</strong></div>
+            <div><span class="lab">Gap</span><strong>${escapeHtml(String(gap))}</strong></div>
+          </div>
+          <hr class="aa-vin-detail-rule" />
+          <h4 class="aa-vin-detail-h">Sales Raw Verification</h4>
+          <div class="aa-vin-detail-grid">
+            <div><span class="lab">Sales Raw</span><strong>${row.salesFound || sales.kind !== "none" ? "FOUND" : "NOT FOUND"}</strong></div>
+            <div><span class="lab">Sales status</span><strong>${escapeHtml(sales.label || row.salesLabel || "—")}</strong></div>
+            <div><span class="lab">Invoice</span><strong>${escapeHtml(sales.invoiceDate || sales.deliveryDate ? formatRvDate(sales.invoiceDate || sales.deliveryDate) : "—")}</strong></div>
+            <div><span class="lab">Delivery date</span><strong>${escapeHtml(sales.deliveryDate ? formatRvDate(sales.deliveryDate) : "—")}</strong></div>
+            <div><span class="lab">Proforma</span><strong>${escapeHtml(sales.proformaDate ? formatRvDate(sales.proformaDate) : "—")}</strong></div>
+            <div><span class="lab">Advisor</span><strong>${escapeHtml(sales.salesman || row.salesman || "—")}</strong></div>
+          </div>
+          <hr class="aa-vin-detail-rule" />
+          <h4 class="aa-vin-detail-h">Other Sources</h4>
+          <div class="aa-vin-detail-grid aa-vin-detail-grid--3">
+            <div><span class="lab">E-Sales</span>${aaYesNoPill(!!row.inReserved)}</div>
+            <div><span class="lab">Display</span>${aaYesNoPill(!!row.inDisplay)}</div>
+            <div><span class="lab">Available</span>${aaYesNoPill(!!row.inAvailable)}</div>
+          </div>
+          <div class="aa-vin-detail-actions">
+            <button type="button" class="btn" id="aa-vin-detail-rtl">View all RTL columns</button>
+          </div>
+        </div>`;
+      const rtlBtn = bodyEl.querySelector("#aa-vin-detail-rtl");
+      if (rtlBtn) {
+        rtlBtn.addEventListener("click", () => {
+          openAaRtlSheetDetail(rawIdx != null ? rawIdx : (row.rawIdx != null ? row.rawIdx : row.vin));
+        });
+      }
+    }
+
+    backdrop.classList.add("show");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
+  function paintAaSummaryTable(wrap, rows, scope) {
+    if (!wrap) return;
+    if (!rows.length) {
+      wrap.innerHTML = `<p class="foot" style="padding:16px">${scope === "current"
+        ? "No current-month RES VINs (Col AG) matched allocation rows."
+        : "No allocation plan rows with values, and no RES VINs matched."}</p>`;
+      return;
+    }
+    wrap.innerHTML = `<table class="data-table aa-table aa-summary-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Suffix</th>
+          <th class="num">Allocation</th>
+          <th class="num">Actual RTL</th>
+          <th class="num">Gap</th>
+          <th class="num">Delivered</th>
+          <th class="num">Proforma</th>
+          <th class="num">المحجوز</th>
+          <th class="num">Available</th>
+          <th class="num">Display</th>
+          <th class="num aa-th-missing">Missing</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr class="${r.missing ? "aa-row-has-missing" : ""}">
+            <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
+            <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
+            <td class="num">${aaNumButton(r.allocation, r.id, "allocation", "", scope)}</td>
+            <td class="num">${aaNumButton(r.actual, r.id, "actual", "", scope)}</td>
+            <td class="num">${aaNumButton(r.gap, r.id, "gap", r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : "", scope)}</td>
+            <td class="num">${aaNumButton(r.delivered, r.id, "delivered", "", scope)}</td>
+            <td class="num">${aaNumButton(r.proforma, r.id, "proforma", "", scope)}</td>
+            <td class="num">${aaNumButton(r.reserved, r.id, "reserved", "", scope)}</td>
+            <td class="num">${aaNumButton(r.available, r.id, "available", "", scope)}</td>
+            <td class="num">${aaNumButton(r.display, r.id, "display", "", scope)}</td>
+            <td class="num aa-td-missing">${aaNumButton(r.missing, r.id, "missing", "", scope)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+    <p class="foot aa-summary-hint">${scope === "current"
+      ? "Current month only (Col AG) · click any number for related VINs"
+      : "Click any number to open related RES VINs · Missing (red) = searched in RTL file"}</p>`;
+    if (!wrap.dataset.aaBound) {
+      wrap.dataset.aaBound = "1";
+      wrap.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-aa-metric]");
+        if (!btn || !wrap.contains(btn)) return;
+        openAaVinDrill(
+          btn.getAttribute("data-aa-leaf"),
+          btn.getAttribute("data-aa-metric"),
+          btn.getAttribute("data-aa-scope") || ""
+        );
+      });
+    }
+  }
+
+  function renderAaVinBoard(wrapSel, footSel, allRows, filteredRows, emptyMsg, footLabel, mode) {
     const wrap = $(wrapSel);
     const foot = $(footSel);
     if (!wrap) return;
+    const isPrior = mode === "prior";
     if (!(allRows || []).length) {
       wrap.innerHTML = `<p class="foot" style="padding:16px">${escapeHtml(emptyMsg)}</p>`;
     } else if (!filteredRows.length) {
       wrap.innerHTML = `<p class="foot" style="padding:16px">No RTL VINs match the filters.</p>`;
     } else {
-      wrap.innerHTML = `<table class="data-table aa-table aa-schedule-table aa-rtl-prior-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>VIN</th>
-            <th>Col AG</th>
-            <th class="num">Age</th>
-            <th>Location</th>
-            <th>Status</th>
-            <th>Advisor</th>
-            <th>Proforma</th>
-            <th>Invoice</th>
-          </tr>
-        </thead>
+      const head = isPrior
+        ? `<tr>
+            <th>Product</th><th>Suffix</th><th>VIN</th><th>RTL Date</th><th class="num">Age</th>
+            <th>Sales Raw</th><th>Status</th><th>Delivered</th><th>Proforma</th><th>E-Sales</th><th>Display</th>
+          </tr>`
+        : `<tr>
+            <th>Product</th><th>Suffix</th><th>VIN</th><th>Model Year</th><th>RTL Date</th>
+            <th>Status</th><th>Sales Raw Status</th><th>E-Sales</th><th>Display</th>
+          </tr>`;
+      wrap.innerHTML = `<table class="data-table aa-table aa-schedule-table aa-vin-board-table">
+        <thead>${head}</thead>
         <tbody>
-          ${filteredRows.map((r) => `
-            <tr class="aa-rtl-prior-row" role="button" tabindex="0" data-aa-rtl-idx="${escapeHtml(String(r.rawIdx))}" data-aa-rtl-vin="${escapeHtml(r.vin)}" title="Open all RTL sheet columns">
-              <td>
-                <strong class="aa-prod">${escapeHtml(r.product)}</strong>
-                <div class="aa-sfx-line"><span class="aa-sfx">${escapeHtml(r.sfx || "")}</span>${r.seg && r.seg !== "—" ? `<span class="aa-seg">${escapeHtml(r.seg)}</span>` : ""}</div>
-              </td>
+          ${filteredRows.map((r) => {
+            const common = `
+              data-aa-rtl-idx="${escapeHtml(String(r.rawIdx))}"
+              data-aa-rtl-vin="${escapeHtml(r.vin)}"
+              title="Open VIN audit trail"`;
+            if (isPrior) {
+              return `<tr class="aa-vin-board-row" role="button" tabindex="0" ${common}>
+                <td><strong class="aa-prod">${escapeHtml(r.product)}</strong></td>
+                <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
+                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
+                <td class="aa-date">${escapeHtml(r.agLabel || "—")}</td>
+                <td class="num">${r.ageing != null ? escapeHtml(String(r.ageing)) + "d" : "—"}</td>
+                <td>${aaSalesRawCell(r)}</td>
+                <td>${aaBadgeHtml(r.badge)}</td>
+                <td>${aaYesNoPill(r.salesKind === "delivered")}</td>
+                <td>${aaYesNoPill(r.salesKind === "proforma")}</td>
+                <td>${aaYesNoPill(!!r.inReserved)}</td>
+                <td>${aaYesNoPill(!!r.inDisplay)}</td>
+              </tr>`;
+            }
+            return `<tr class="aa-vin-board-row" role="button" tabindex="0" ${common}>
+              <td><strong class="aa-prod">${escapeHtml(r.product)}</strong></td>
+              <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
               <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
-              <td class="aa-date">${escapeHtml(r.agLabel || r.collectionLabel || "—")}</td>
-              <td class="num">${r.ageing != null ? escapeHtml(String(r.ageing)) + "d" : "—"}</td>
-              <td>${escapeHtml(r.location || "—")}${r.searchArea && r.searchArea !== "—" ? `<div class="rv-muted">${escapeHtml(r.searchArea)}</div>` : ""}</td>
-              <td><span class="aa-status ${r.salesKind === "delivered" ? "ok" : r.salesKind === "proforma" ? "warn" : "na"}">${escapeHtml(r.status || "—")}</span>${r.salesLabel && r.salesLabel !== "—" ? `<div class="rv-muted">${escapeHtml(r.salesLabel)}</div>` : ""}</td>
-              <td>${escapeHtml(r.salesman || "—")}</td>
-              <td class="aa-date">${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
-              <td class="aa-date">${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
-            </tr>`).join("")}
+              <td>${escapeHtml(r.modelYear || "—")}</td>
+              <td class="aa-date">${escapeHtml(r.agLabel || "—")}</td>
+              <td>${aaBadgeHtml(r.badge)}</td>
+              <td>${aaSalesRawCell(r)}</td>
+              <td>${aaYesNoPill(!!r.inReserved)}</td>
+              <td>${aaYesNoPill(!!r.inDisplay)}</td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table>`;
-      if (!wrap.dataset.aaPriorBound) {
-        wrap.dataset.aaPriorBound = "1";
+      if (!wrap.dataset.aaBoardBound) {
+        wrap.dataset.aaBoardBound = "1";
         const openFromTarget = (el) => {
-          const tr = el && el.closest ? el.closest("tr.aa-rtl-prior-row") : null;
+          const tr = el && el.closest ? el.closest("tr.aa-vin-board-row") : null;
           if (!tr || !wrap.contains(tr)) return;
-          const idx = tr.getAttribute("data-aa-rtl-idx");
           const vin = tr.getAttribute("data-aa-rtl-vin");
-          openAaRtlSheetDetail(idx != null && idx !== "" ? idx : vin);
+          const idx = tr.getAttribute("data-aa-rtl-idx");
+          openAaVinAuditDrawer(vin || idx);
         };
-        wrap.addEventListener("click", (e) => openFromTarget(e.target));
+        wrap.addEventListener("click", (e) => {
+          if (e.target.closest && e.target.closest("button")) return;
+          openFromTarget(e.target);
+        });
         wrap.addEventListener("keydown", (e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
-          openFromTarget(e.target);
           e.preventDefault();
+          openFromTarget(e.target);
         });
       }
     }
     if (foot) {
-      foot.textContent = `Showing ${formatNumber(filteredRows.length)} of ${formatNumber((allRows || []).length)} ${footLabel} · click a row for all sheet columns`;
+      foot.textContent = `Showing ${formatNumber(filteredRows.length)} of ${formatNumber((allRows || []).length)} ${footLabel} · click a VIN for full audit trail`;
     }
+  }
+
+  function renderAaKpiCards(el, items, mini) {
+    if (!el) return;
+    el.innerHTML = items.map(([label, value, status, hint]) => `
+      <div class="aa-cc-kpi ${status || ""}${mini ? " aa-cc-kpi--mini" : ""}">
+        <div class="lab">${escapeHtml(label)}</div>
+        <div class="val">${escapeHtml(String(value))}</div>
+        ${hint ? `<div class="aa-cc-kpi-hint">${escapeHtml(hint)}</div>` : ""}
+      </div>`).join("");
   }
 
   function renderAllocationAudit() {
@@ -18200,177 +18648,71 @@
 
     const pack = buildAllocationAuditPack();
     aaLastPack = pack;
-    const { summaryRows, summaryRowsCurrent, vinRows, rtlCurrentRows, rtlPriorRows, totals } = pack;
-    const filtered = filteredAaVinRows(vinRows);
-    const filteredCurrent = filteredAaRtlAgRows(rtlCurrentRows || []);
-    const filteredPrior = filteredAaRtlAgRows(rtlPriorRows || []);
+    const { summaryRowsCurrent, rtlCurrentRows, rtlPriorRows } = pack;
+
+    const currentBoard = enrichAaRtlBoardRows(rtlCurrentRows || []);
+    const priorBoard = enrichAaRtlBoardRows(rtlPriorRows || []);
+    fillAaFilterOptions(currentBoard, priorBoard);
+
+    const filteredCurrent = filteredAaRtlAgRows(currentBoard);
+    const filteredPrior = filteredAaRtlAgRows(priorBoard);
+    const curMetrics = sumAaSummaryMetrics(summaryRowsCurrent || []);
+    const boardCur = countAaBoardMetrics(currentBoard);
+    const boardPrior = countAaBoardMetrics(priorBoard);
+    const ach = curMetrics.allocation > 0
+      ? `${Math.round((curMetrics.actual / curMetrics.allocation) * 1000) / 10}%`
+      : "—";
+    const pendingCur = Math.max(0, curMetrics.actual - curMetrics.delivered);
 
     const hint = $("#aa-live-hint");
     if (hint) {
-      const sheetNote = slots.central.reservedSheet
-        ? ` · E-Sales «${slots.central.reservedSheet}»`
-        : " · E-Sales sheet 2";
-      const displayNote = slots.central.displaySheet
-        ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
-        : "";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.actualCurrent || 0} RES this month (Col AG) · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing · ${totals.rtlCurrent || 0} RES list this month · ${totals.rtlPrior || 0} RES list prior${sheetNote}${displayNote}`;
+      hint.textContent = `Current Month · ${formatNumber(boardCur.total)} RTL VINs · ${formatNumber(curMetrics.allocation)} Allocated · ${formatNumber(curMetrics.delivered)} Delivered · ${formatNumber(pendingCur)} Pending`;
     }
 
-    const kpis = $("#aa-kpis");
-    if (kpis) {
-      kpis.innerHTML = [
-        ["Allocation", totals.allocation, "ok"],
-        ["Actual RES", totals.actual, "ok"],
-        ["RES this month", totals.actualCurrent || 0, "ok"],
-        ["E-Sales VINs", totals.reserved, "ok"],
-        ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
-        ["Delivered", totals.delivered, "ok"],
-        ["Display", totals.display || 0, "ok"],
-        ["RES this month", totals.rtlCurrent || 0, "ok"],
-        ["RES prior months", totals.rtlPrior || 0, "ok"],
-        ["Missing (RTL)", totals.missing, totals.missing ? "bad" : "ok"],
-      ].map(([label, value, status]) => `
-        <div class="bo-kpi ${status}">
-          <div class="lab">${escapeHtml(label)}</div>
-          <div class="val">${escapeHtml(String(value))}</div>
-        </div>`).join("");
-    }
+    renderAaKpiCards($("#aa-kpis"), [
+      ["Allocation", formatNumber(curMetrics.allocation), "ok", "Current-month plan"],
+      ["RTL Received", formatNumber(curMetrics.actual || boardCur.total), "ok", "Unique RES VINs this month"],
+      ["Allocation Achievement", ach, "ok", "RTL actual vs allocation"],
+      ["Delivered", formatNumber(curMetrics.delivered), "ok", "In Sales Raw as delivered"],
+      ["Proforma / Invoice", formatNumber(curMetrics.proforma), "warn", "In Sales Raw · not delivered"],
+      ["E-Sales / المحجوز", formatNumber(curMetrics.reserved), "warn", "Reserved sheet"],
+      ["Display", formatNumber(curMetrics.display), "ok", "Display Central"],
+      ["Missing", formatNumber(curMetrics.missing), curMetrics.missing ? "bad" : "ok", "Unclassified"],
+    ], false);
 
-    const sumWrap = $("#aa-summary-wrap");
-    const sumCurrentWrap = $("#aa-summary-current-wrap");
+    renderAaKpiCards($("#aa-prior-kpis"), [
+      ["Previous Month VINs", formatNumber(boardPrior.total), "ok"],
+      ["Delivered", formatNumber(boardPrior.delivered), "ok"],
+      ["Proforma / Invoice", formatNumber(boardPrior.proforma), "warn"],
+      ["E-Sales", formatNumber(boardPrior.reserved), "warn"],
+      ["Display", formatNumber(boardPrior.display), "ok"],
+      ["Still Pending", formatNumber(boardPrior.pending), boardPrior.pending ? "bad" : "ok"],
+    ], true);
 
-    function paintAaSummaryTable(wrap, rows, scope) {
-      if (!wrap) return;
-      if (!rows.length) {
-        wrap.innerHTML = `<p class="foot" style="padding:16px">${scope === "current"
-          ? "No current-month RES VINs (Col AG) matched allocation rows."
-          : "No allocation plan rows with values, and no RES VINs matched."}</p>`;
-        return;
-      }
-      wrap.innerHTML = `<table class="data-table aa-table aa-summary-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Suffix</th>
-            <th class="num">Allocation</th>
-            <th class="num">Actual</th>
-            <th class="num">Gap</th>
-            <th class="num">Delivered</th>
-            <th class="num">Proforma</th>
-            <th class="num">المحجوز</th>
-            <th class="num">Available</th>
-            <th class="num">Display</th>
-            <th class="num aa-th-missing">Missing</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((r) => `
-            <tr class="${r.missing ? "aa-row-has-missing" : ""}">
-              <td><strong>${escapeHtml(r.product)}</strong><div class="rv-muted">${escapeHtml(r.seg || "")}</div></td>
-              <td><span class="aa-sfx">${escapeHtml(r.sfx || "—")}</span></td>
-              <td class="num">${aaNumButton(r.allocation, r.id, "allocation", "", scope)}</td>
-              <td class="num">${aaNumButton(r.actual, r.id, "actual", "", scope)}</td>
-              <td class="num">${aaNumButton(r.gap, r.id, "gap", r.gap < 0 ? "aa-gap-neg" : r.gap > 0 ? "aa-gap-pos" : "", scope)}</td>
-              <td class="num">${aaNumButton(r.delivered, r.id, "delivered", "", scope)}</td>
-              <td class="num">${aaNumButton(r.proforma, r.id, "proforma", "", scope)}</td>
-              <td class="num">${aaNumButton(r.reserved, r.id, "reserved", "", scope)}</td>
-              <td class="num">${aaNumButton(r.available, r.id, "available", "", scope)}</td>
-              <td class="num">${aaNumButton(r.display, r.id, "display", "", scope)}</td>
-              <td class="num aa-td-missing">${aaNumButton(r.missing, r.id, "missing", "", scope)}</td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-      <p class="foot aa-summary-hint">${scope === "current"
-        ? "Current month only (Col AG) · click any number for related VINs"
-        : "Click any number to open related RES VINs · Missing (red) = searched in RTL file"}</p>`;
-      if (!wrap.dataset.aaBound) {
-        wrap.dataset.aaBound = "1";
-        wrap.addEventListener("click", (e) => {
-          const btn = e.target.closest("[data-aa-metric]");
-          if (!btn || !wrap.contains(btn)) return;
-          openAaVinDrill(
-            btn.getAttribute("data-aa-leaf"),
-            btn.getAttribute("data-aa-metric"),
-            btn.getAttribute("data-aa-scope") || ""
-          );
-        });
-      }
-    }
+    paintAaSummaryTable($("#aa-summary-current-wrap"), summaryRowsCurrent || [], "current");
+    const legacySum = $("#aa-summary-wrap");
+    if (legacySum) legacySum.innerHTML = "";
 
-    paintAaSummaryTable(sumWrap, summaryRows || [], "");
-    paintAaSummaryTable(sumCurrentWrap, summaryRowsCurrent || [], "current");
+    renderAaVinHit(currentBoard, priorBoard);
 
-    renderAaRtlAgSchedule(
+    renderAaVinBoard(
       "#aa-rtl-current-wrap",
       "#aa-rtl-current-foot",
-      rtlCurrentRows || [],
+      currentBoard,
       filteredCurrent,
       "No this-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG in the current month.",
-      "RES VINs with Col AG in the current month"
+      "current-month RES VINs",
+      "current"
     );
-    renderAaRtlAgSchedule(
+    renderAaVinBoard(
       "#aa-rtl-prior-wrap",
       "#aa-rtl-prior-foot",
-      rtlPriorRows || [],
+      priorBoard,
       filteredPrior,
       "No prior-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG before the current month.",
-      "RES VINs with Col AG before the current month"
+      "prior-month carryover VINs",
+      "prior"
     );
-
-    const vinWrap = $("#aa-vin-wrap");
-    const foot = $("#aa-vin-foot");
-    if (vinWrap) {
-      if (!vinRows.length) {
-        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No E-Sales sheet 2 VINs found. Upload Stock Central (slot 3) with sheet 2 / المحجوز (Col L VIN · Col F BO), then Push to live.</p>`;
-      } else if (!filtered.length) {
-        vinWrap.innerHTML = `<p class="foot" style="padding:16px">No schedule VINs match the filters.</p>`;
-      } else {
-        vinWrap.innerHTML = `<table class="data-table aa-table aa-schedule-table">
-          <thead>
-            <tr>
-              <th>BO</th>
-              <th>Product</th>
-              <th>VIN</th>
-              <th>Advisor</th>
-              <th>Status</th>
-              <th>Proforma</th>
-              <th>Invoice</th>
-              <th>Location / RTL</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map((r) => {
-              const statusCls = r.missing ? "bad" : (r.sales.cls || "na");
-              const locBits = [
-                r.location || "",
-                r.missing && r.inRtl ? "RTL" : "",
-                r.age != null ? `Age ${r.age}d` : "",
-                r.searchArea || "",
-              ].filter(Boolean);
-              return `<tr class="${r.missing ? "aa-row-missing" : (r.inDisplay ? "aa-row-display" : "")}">
-                <td class="mono aa-bo">${escapeHtml(r.orderNumber || "—")}</td>
-                <td>
-                  <strong class="aa-prod">${escapeHtml(r.product)}</strong>
-                  <div class="aa-sfx-line"><span class="aa-sfx">${escapeHtml(r.sfx || "")}</span>${r.seg ? `<span class="aa-seg">${escapeHtml(r.seg)}</span>` : ""}</div>
-                </td>
-                <td class="mono aa-vin">${escapeHtml(r.vin)}</td>
-                <td>${escapeHtml(r.salesman || "—")}</td>
-                <td>
-                  <span class="rv-status rv-status-${escapeHtml(statusCls)}">${escapeHtml(r.currentStatus || r.sales.label)}</span>
-                  <div class="rv-muted aa-status-detail">${escapeHtml(r.sales.detail || "")}</div>
-                </td>
-                <td class="aa-date">${escapeHtml(r.proformaDate ? formatRvDate(r.proformaDate) : "—")}</td>
-                <td class="aa-date">${escapeHtml(r.invoiceDate ? formatRvDate(r.invoiceDate) : "—")}</td>
-                <td class="aa-loc">${escapeHtml(locBits.join(" · ") || "—")}</td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>`;
-      }
-    }
-    if (foot) {
-      foot.textContent = `Showing ${filtered.length} of ${vinRows.length} schedule VINs · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing${totals.missingInRtl ? ` (${totals.missingInRtl} in RTL)` : ""}`;
-    }
 
     if (!aaLastSeenCache.loaded) {
       ensureAaRtlLastSeen().then(() => {
@@ -18697,6 +19039,20 @@
   if (aaFilter) {
     aaFilter.addEventListener("change", (e) => {
       aaView.status = e.target.value;
+      if (activePanel === "allocationaudit") renderAllocationAudit();
+    });
+  }
+  const aaFilterProduct = $("#aa-filter-product");
+  if (aaFilterProduct) {
+    aaFilterProduct.addEventListener("change", (e) => {
+      aaView.product = e.target.value;
+      if (activePanel === "allocationaudit") renderAllocationAudit();
+    });
+  }
+  const aaFilterSuffix = $("#aa-filter-suffix");
+  if (aaFilterSuffix) {
+    aaFilterSuffix.addEventListener("change", (e) => {
+      aaView.suffix = e.target.value;
       if (activePanel === "allocationaudit") renderAllocationAudit();
     });
   }

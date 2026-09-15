@@ -10741,8 +10741,11 @@ button.dvp-total-card:focus-visible {
 
 /* --- Allocation Audit --- */
 .aa-dash { display: flex; flex-direction: column; gap: 14px; }
+.aa-control-center { gap: 18px; overflow-x: hidden; max-width: 100%; }
+.aa-vin-board-wrap { overflow: auto; max-width: 100%; }
 .aa-summary-card,
-.aa-vin-card {
+.aa-vin-card,
+.aa-vin-board-card {
   padding: 14px 16px 16px;
   border: 1px solid #e5eaf1;
   border-radius: 14px;
