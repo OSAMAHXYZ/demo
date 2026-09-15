@@ -929,8 +929,8 @@
           <article class="card aa-rtl-current-card">
             <div class="pbi-viz-head">
               <div>
-                <h2>RTL stock · this month</h2>
-                <span class="hint">RTL VINs where Col AG date is in the current month · click a row for all sheet columns</span>
+                <h2>RES · this month</h2>
+                <span class="hint">Retail Electronic Sales only · Col AG in the current month · click a row for all sheet columns</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-rtl-current-wrap"></div>
@@ -939,8 +939,8 @@
           <article class="card aa-rtl-prior-card">
             <div class="pbi-viz-head">
               <div>
-                <h2>RTL stock · prior months</h2>
-                <span class="hint">RTL VINs where Col AG date is before the current month · click a row for all sheet columns</span>
+                <h2>RES · prior months</h2>
+                <span class="hint">Retail Electronic Sales only · Col AG before the current month · click a row for all sheet columns</span>
               </div>
             </div>
             <div class="table-wrap aa-table-wrap" id="aa-rtl-prior-wrap"></div>
@@ -17249,7 +17249,7 @@
   }
 
   /**
-   * RTL stock VIN schedules split by Col AG month.
+   * RES VIN schedules split by Col AG month (Retail Electronic Sales only).
    * mode: "current" = Col AG in active report month · "prior" = Col AG before that month
    */
   function buildRtlAgMonthScheduleRows(salesLookup, mode) {
@@ -17262,6 +17262,13 @@
     const wantCurrent = mode === "current";
 
     (slots.rtl.rows || []).forEach((r, idx) => {
+      const searchArea = cellToString(cellByLetter(r, "P")).trim()
+        || stockFieldByAlias(r, "searchAreaDesc", [])
+        || stockFieldByAlias(r, "vehicleSearchArea", [])
+        || "";
+      // Allocation Audit schedules: Retail Electronic Sales only
+      if (!isRetailElectronicSales(searchArea)) return;
+
       const vin = extractVinValue(cellByLetter(r, "E"))
         || extractVinValue(r.vin)
         || extractVinValue(stockFieldByAlias(r, "vin", []))
@@ -17294,10 +17301,6 @@
         || "—";
       const status = stockPrimaryStatus(r) || cellToString(cellByLetter(r, "D")).trim() || "—";
       const secondary = cellToString(cellByLetter(r, "L")).trim() || stockSecondaryStatus(r) || "";
-      const searchArea = cellToString(cellByLetter(r, "P")).trim()
-        || stockFieldByAlias(r, "searchAreaDesc", [])
-        || stockFieldByAlias(r, "vehicleSearchArea", [])
-        || "";
       const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
       const sales = resolveAaSalesStatus(vin, salesMap);
 
@@ -18210,7 +18213,7 @@
       const displayNote = slots.central.displaySheet
         ? ` · Display «${slots.central.displaySheet}» ${(slots.central.displayRows || []).length} VIN(s)`
         : "";
-      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.actualCurrent || 0} RES this month (Col AG) · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing · ${totals.rtlCurrent || 0} RTL this month · ${totals.rtlPrior || 0} RTL prior${sheetNote}${displayNote}`;
+      hint.textContent = `${totals.reserved} E-Sales VINs · ${totals.actualCurrent || 0} RES this month (Col AG) · ${totals.withSalesDate || 0} with proforma/invoice · ${totals.display || 0} Display · ${totals.missing} missing · ${totals.rtlCurrent || 0} RES list this month · ${totals.rtlPrior || 0} RES list prior${sheetNote}${displayNote}`;
     }
 
     const kpis = $("#aa-kpis");
@@ -18223,8 +18226,8 @@
         ["Proforma / Invoice", totals.withSalesDate || 0, "warn"],
         ["Delivered", totals.delivered, "ok"],
         ["Display", totals.display || 0, "ok"],
-        ["RTL this month", totals.rtlCurrent || 0, "ok"],
-        ["RTL prior months", totals.rtlPrior || 0, "ok"],
+        ["RES this month", totals.rtlCurrent || 0, "ok"],
+        ["RES prior months", totals.rtlPrior || 0, "ok"],
         ["Missing (RTL)", totals.missing, totals.missing ? "bad" : "ok"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
@@ -18302,16 +18305,16 @@
       "#aa-rtl-current-foot",
       rtlCurrentRows || [],
       filteredCurrent,
-      "No this-month RTL VINs. Col AG must be a date in the current month.",
-      "RTL VINs with Col AG in the current month"
+      "No this-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG in the current month.",
+      "RES VINs with Col AG in the current month"
     );
     renderAaRtlAgSchedule(
       "#aa-rtl-prior-wrap",
       "#aa-rtl-prior-foot",
       rtlPriorRows || [],
       filteredPrior,
-      "No prior-month RTL VINs. Col AG must be a date before the current month.",
-      "RTL VINs with Col AG before the current month"
+      "No prior-month RES VINs. Need Search Area = Retail Electronic Sales and Col AG before the current month.",
+      "RES VINs with Col AG before the current month"
     );
 
     const vinWrap = $("#aa-vin-wrap");
@@ -18450,8 +18453,8 @@
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "By Product");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryCurrent), "Current Month AG");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vins), "VIN Audit");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "RTL This Month AG");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RTL Prior Months AG");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlCurrent), "RES This Month AG");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rtlPrior), "RES Prior Months AG");
     downloadWorkbook(wb, `Allocation-Audit-${excelFileStamp()}`);
     setStatus("Allocation Audit Excel exported", "ok");
   }
