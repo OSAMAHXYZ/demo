@@ -15763,9 +15763,11 @@
     const totalPro = cards.reduce((s, c) => s + c.proforma, 0);
     const prevDel = cards.reduce((s, c) => s + c.prevDelivered, 0);
     const prevPro = cards.reduce((s, c) => s + c.prevProforma, 0);
-    // (Delivered + Proforma) / Delivered
-    const ratio = totalDel > 0 ? ((totalDel + totalPro) / totalDel) * 100 : null;
-    const prevRatio = prevDel > 0 ? ((prevDel + prevPro) / prevDel) * 100 : null;
+    // Delivered / (Delivered + Proforma)
+    const sum = totalDel + totalPro;
+    const ratio = sum > 0 ? (totalDel / sum) * 100 : null;
+    const prevSum = prevDel + prevPro;
+    const prevRatio = prevSum > 0 ? (prevDel / prevSum) * 100 : null;
 
     return {
       live,
