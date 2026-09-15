@@ -1427,3 +1427,17 @@ body.uploader-enterprise button[type="submit"] {
 .live-app.toyota-theme.theme-dark .sr-mock-acc .acc-summary-cell .v {
   color: #f8fafc !important;
 }
+
+/* Allocation Audit — clickable RTL VIN rows */
+.live-app.toyota-theme tr.aa-rtl-prior-row,
+.live-app.toyota-theme tr.aa-rtl-sheet-row {
+  cursor: pointer;
+}
+.live-app.toyota-theme tr.aa-rtl-prior-row:hover,
+.live-app.toyota-theme tr.aa-rtl-sheet-row:hover {
+  background: rgba(15, 23, 42, 0.05) !important;
+}
+.live-app.toyota-theme.theme-dark tr.aa-rtl-prior-row:hover,
+.live-app.toyota-theme.theme-dark tr.aa-rtl-sheet-row:hover {
+  background: rgba(148, 163, 184, 0.12) !important;
+}
