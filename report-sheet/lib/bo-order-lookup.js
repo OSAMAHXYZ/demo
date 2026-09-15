@@ -1232,6 +1232,7 @@ class BoOrderLookup {
         reservationDate: e.reservationDateRaw,
         product: e.product,
         suffix: e.suffix,
+        salesman: e.salesman || '',
         pairs: e.pairs.map((p) => ({ exterior: p.exterior, interior: p.interior }))
       })),
       queueRule:

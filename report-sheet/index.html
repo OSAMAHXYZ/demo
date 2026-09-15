@@ -13,7 +13,7 @@
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260914rvsales"></script>
+  <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260914eu2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
@@ -16449,6 +16449,24 @@
     return "";
   }
 
+  /** First 3 BO orders matching product + suffix + colors (lookup-tool combo queue). */
+  function resolveReservedFirstThreeMatching(queue) {
+    if (!queue) return [];
+    const preview = Array.isArray(queue.queuePreview) ? queue.queuePreview : [];
+    if (preview.length) {
+      return preview.slice(0, 3).map((n, i) => mapRvNextOrder({
+        ...n,
+        queuePosition: i + 1,
+        salesman: n.salesman || findBoSalesmanForOrder(n.orderNumber) || "",
+      }, i + 1));
+    }
+    // Spec match path already puts first 3 peers in nextInQueue when order is not in BO
+    if (queue.specMatched && Array.isArray(queue.nextInQueue) && queue.nextInQueue.length) {
+      return queue.nextInQueue.slice(0, 3).map((n, i) => mapRvNextOrder(n, i + 1));
+    }
+    return resolveReservedNextInQueue(queue);
+  }
+
   /** Prefer main BO queue next-3; fill gaps from largest color-pair queues. */
   function resolveReservedNextInQueue(queue) {
     if (!queue) return [];
@@ -16583,22 +16601,43 @@
       }
 
       const qr = queue && queue.queueResult ? queue.queueResult : null;
-      const nextInQueue = resolveReservedNextInQueue(queue);
-      const pairQueues = queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : [];
-      const values = queue && queue.values ? queue.values : null;
+      let comboQueue = null;
+      if (engine && product && suffix && ext && intc && typeof engine.buildQueueFromVehicleSpec === "function") {
+        try {
+          comboQueue = engine.buildQueueFromVehicleSpec({
+            product,
+            suffix,
+            exteriorColor: ext,
+            interiorColor: intc,
+            orderNumber,
+          });
+        } catch {
+          comboQueue = null;
+        }
+      }
+      // First 3 BO orders with same product + suffix + colors (lookup tool logic)
+      const nextInQueue = resolveReservedFirstThreeMatching(comboQueue || queue);
+      const pairQueues = (comboQueue && Array.isArray(comboQueue.pairQueues) ? comboQueue.pairQueues : null)
+        || (queue && Array.isArray(queue.pairQueues) ? queue.pairQueues : []);
+      const values = (comboQueue && comboQueue.values)
+        || (queue && queue.values ? queue.values : null);
       const inBoQueue = qr && qr.position != null;
+      const comboTotal = comboQueue && comboQueue.queueResult
+        ? comboQueue.queueResult.totalQueueSize
+        : (qr && qr.totalQueueSize != null ? qr.totalQueueSize : null);
 
       return {
         orderNumber,
         vin,
         status,
         queue,
+        comboQueue,
         orderDetails,
         queueError,
         matchMethod,
-        position: qr && qr.position != null ? qr.position : null,
-        ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : null,
-        totalQueue: qr && qr.totalQueueSize != null ? qr.totalQueueSize : null,
+        position: qr && qr.position != null ? qr.position : (comboQueue && comboQueue.queueResult && comboQueue.queueResult.position != null ? comboQueue.queueResult.position : null),
+        ordersAhead: qr && qr.ordersAhead != null ? qr.ordersAhead : (comboQueue && comboQueue.queueResult ? comboQueue.queueResult.ordersAhead : null),
+        totalQueue: comboTotal != null ? comboTotal : (qr && qr.totalQueueSize != null ? qr.totalQueueSize : null),
         product: product || (qr ? qr.product : "") || (values ? values.product : "") || "",
         suffix: suffix || (qr ? qr.suffix : "") || (values ? values.suffix : "") || "",
         ext: ext || (values ? values.extColor1 : "") || "",
@@ -16612,7 +16651,9 @@
         rtlDetail,
         reservationDate: qr ? qr.reservationDate : (values ? values.reservationDate : ""),
         inBoQueue: !!inBoQueue,
-        specQueueOnly: !!(queue && queue.specMatched && !inBoQueue),
+        specQueueOnly: !!(queue && queue.specMatched && !inBoQueue) || !!(comboQueue && !inBoQueue),
+        _raw: rec._raw || null,
+        rawIdx: rec.idx,
       };
     });
   }
@@ -16698,7 +16739,7 @@
     }
 
     if (hint) {
-      hint.textContent = `${sheetName} · Col F/L/I/J/M/N → BO queue (order · VIN · product/suffix/colors) · ${allRows.length} reserved · ${withQueue} in queue first · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
+      hint.textContent = `${sheetName} · Col F/L/I/J/M/N → BO first 3 same product/suffix/colors · click VIN for all sheet columns · ${allRows.length} reserved · ${withQueue} in queue · BO ${hasBackOrder() ? "ready" : "missing"} · Sales Raw ${hasSalesRaw() ? "ready" : "missing"}`;
     }
 
     if (kpis) {
@@ -16729,13 +16770,13 @@
     const body = rows.map((r) => {
       const nextSlots = [0, 1, 2].map((i) => r.nextInQueue[i] || null);
       const hasNext = r.nextInQueue && r.nextInQueue.length;
-      const nextHtml = r.position == null && !hasNext
-        ? `<span class="rv-muted">${escapeHtml(r.queueError || "—")}</span>`
+      const nextHtml = !hasNext
+        ? `<span class="rv-muted">${escapeHtml(r.queueError || "No BO orders with same product / suffix / colors")}</span>`
         : `<ol class="rv-next-list">${nextSlots.map((n, i) => {
             if (!n) {
               return `<li class="rv-next-empty">
                 <span class="rv-next-rank">+${i + 1}</span>
-                <span class="rv-muted">No more orders after</span>
+                <span class="rv-muted">No more matching orders</span>
               </li>`;
             }
             const pairs = Array.isArray(n.pairs) && n.pairs.length
@@ -16804,7 +16845,7 @@
           <th>Order (Col F) · Product I/J · Color M/N</th>
           <th>VIN (Col L)</th>
           <th>Current queue · BO lookup</th>
-          <th>Next 3 in queue</th>
+          <th>First 3 · same product / suffix / colors</th>
           <th>VIN status · Sales Raw</th>
         </tr>
       </thead>
@@ -16838,11 +16879,19 @@
 
     const sales = row.salesDetail || findSalesRawDetailForVin(row.vin);
     const rtl = row.rtlDetail || null;
-    const values = row.queue && row.queue.values ? row.queue.values : null;
+    const values = (row.comboQueue && row.comboQueue.values)
+      || (row.queue && row.queue.values ? row.queue.values : null);
     const nextSlots = [0, 1, 2].map((i) => row.nextInQueue[i] || null);
     const ownSalesman = (sales && sales.salesman)
       || findBoSalesmanForOrder(row.orderNumber)
       || "";
+    const raw = row._raw || null;
+    const sheetHeaders = raw && Array.isArray(raw.__headers)
+      ? raw.__headers
+      : (raw ? Object.keys(raw).filter((k) => !String(k).startsWith("__")) : []);
+    const sheetCells = raw && Array.isArray(raw.__cells)
+      ? raw.__cells
+      : (raw ? sheetHeaders.map((h) => raw[h]) : []);
 
     if (titleEl) titleEl.textContent = row.vin || "VIN";
     if (subEl) {
@@ -16851,6 +16900,7 @@
         ownSalesman ? `Sales emp ${ownSalesman}` : "",
         row.product || "",
         row.suffix || "",
+        row.ext && row.int ? `${row.ext}/${row.int}` : "",
         row.status && row.status.label ? row.status.label : "",
       ].filter(Boolean).join(" · ");
     }
@@ -16863,7 +16913,7 @@
 
     const nextBlock = nextSlots.map((n, i) => {
       if (!n) {
-        return `<li class="rv-next-empty"><span class="rv-next-rank">+${i + 1}</span> <span class="rv-muted">No more orders after</span></li>`;
+        return `<li class="rv-next-empty"><span class="rv-next-rank">+${i + 1}</span> <span class="rv-muted">No more matching orders</span></li>`;
       }
       const pairs = Array.isArray(n.pairs) && n.pairs.length
         ? n.pairs.slice(0, 2).map((p) => `${p.exterior || "*"}/${p.interior || "*"}`).join(" · ")
@@ -16878,6 +16928,34 @@
       </li>`;
     }).join("");
 
+    const sheetFieldRows = sheetHeaders.map((h, i) => {
+      const letter = indexToColLetter(i);
+      const value = formatBoeCellDisplay(sheetCells[i] != null ? sheetCells[i] : (raw ? raw[h] : ""));
+      return `<tr class="boe-detail-row">
+        <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
+        <td class="boe-detail-name">${escapeHtml(cellToString(h).trim() || `Column ${letter}`)}</td>
+        <td class="boe-detail-val">${escapeHtml(value)}</td>
+      </tr>`;
+    }).join("");
+
+    const sheetBlock = raw
+      ? `<h4 class="rv-detail-h">E-Sales sheet · all columns</h4>
+        <p class="aa-drill-note">Full row from «${escapeHtml(row.sheet || "E-Sales")}»</p>
+        <div class="table-wrap aa-drill-table-wrap boe-detail-wrap">
+          <table class="data-table aa-table boe-detail-table">
+            <thead>
+              <tr>
+                <th>Col</th>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>${sheetFieldRows}</tbody>
+          </table>
+        </div>`
+      : `<h4 class="rv-detail-h">E-Sales sheet · all columns</h4>
+        <p class="foot">Raw sheet row not available for this VIN.</p>`;
+
     bodyEl.innerHTML = `
       <div class="rv-detail">
         <div class="rv-detail-status">
@@ -16885,7 +16963,9 @@
           <span class="rv-muted">${escapeHtml(row.status.detail || "")}</span>
         </div>
 
-        <h4 class="rv-detail-h">E-Sales المحجوز</h4>
+        ${sheetBlock}
+
+        <h4 class="rv-detail-h">E-Sales المحجوز · key fields</h4>
         <div class="rv-detail-grid">
           ${kv("Order (Col F)", row.orderNumber)}
           ${kv("Sales employee", ownSalesman || "—")}
@@ -16899,14 +16979,15 @@
           ${kv("Sheet", row.sheet)}
         </div>
 
-        <h4 class="rv-detail-h">BO queue · next orders</h4>
+        <h4 class="rv-detail-h">BO lookup · first 3 same product / suffix / colors</h4>
         <div class="rv-detail-grid">
           ${kv("Position", row.position != null ? `${row.position} of ${row.totalQueue ?? "—"}` : (row.queueError || "—"))}
+          ${kv("Matching queue size", row.totalQueue != null ? row.totalQueue : "—")}
           ${kv("Orders ahead", row.ordersAhead != null ? row.ordersAhead : "—")}
           ${kv("Reservation date", formatRvDate(row.reservationDate))}
-          ${kv("BO product", values && values.product ? values.product : "—")}
-          ${kv("BO suffix", values && values.suffix ? values.suffix : "—")}
-          ${kv("BO colors", values ? [values.extColor1, values.intColor1].filter(Boolean).join(" / ") : "—")}
+          ${kv("Match product", values && values.product ? values.product : (row.product || "—"))}
+          ${kv("Match suffix", values && values.suffix ? values.suffix : (row.suffix || "—"))}
+          ${kv("Match colors", [row.ext || (values && values.extColor1), row.int || (values && values.intColor1)].filter(Boolean).join(" / ") || "—")}
         </div>
         <ol class="rv-next-list rv-detail-next">${nextBlock}</ol>
 
