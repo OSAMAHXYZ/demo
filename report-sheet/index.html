@@ -1343,7 +1343,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day N Tot/RES = Col J age 0 from that day’s RTL file only · Admin Push = today only</span>
+                <span class="hint" id="bas-month-hint">Day N Tot = age 0 · RES = age 0 or newly changed/added to Retail Electronic Sales · Admin Push = today only</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
               </div>
@@ -1352,7 +1352,7 @@
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily arrivals · days 1–30 · Tot = age 0 in that day’s file · RES = age 0 Retail Electronic Sales</p>
+              <p class="bas-day-panel-label">Daily arrivals · days 1–30 · Tot = age 0 in that day’s file · RES = age 0 RES, plus cars newly added or changed to Retail Electronic Sales vs the previous day file</p>
               <div class="bas-day-strip-wrap">
                 <div class="bas-day-strip" id="bas-day-strip"></div>
               </div>
@@ -1362,7 +1362,7 @@
               <div class="bas-retail-head">
                 <div class="bas-retail-title">
                   <h3>Retail Electronic Sales</h3>
-                  <span class="hint">Search Area Desc = Retail Electronic Sales · RTL stock</span>
+                  <span class="hint">All RES cars in today’s file · flags show Age 0 / Changed / Added</span>
                 </div>
                 <div class="bas-retail-total-card" id="bas-retail-total-card">
                   <span class="bas-retail-total-lab">Total</span>
@@ -1380,6 +1380,10 @@
               <div class="bas-mini-section bas-mini-ok">
                 <h3 class="bas-subhead">Age 0 · collected today</h3>
                 <div class="table-wrap bas-table-wrap" id="bas-age0-table"></div>
+              </div>
+              <div class="bas-mini-section bas-mini-change">
+                <h3 class="bas-subhead">Changed / added to RES</h3>
+                <div class="table-wrap bas-table-wrap" id="bas-res-change-table"></div>
               </div>
               <div class="bas-mini-section bas-mini-late">
                 <h3 class="bas-subhead">Late · still in RTL (age ≥ 1)</h3>
@@ -11859,16 +11863,33 @@
     row.cars.push(car);
   }
 
-  /** Col J age 0 (or blank) = arrival for that day file. */
+  /** Col J age 0 (or blank) = physical arrival for that day file. */
   function isRtlDayFileArrival(age) {
     return age == null || !Number.isFinite(age) || Math.floor(age) === 0;
+  }
+
+  function basResArrivalBadge(car) {
+    const kind = car && car.arrivalKind;
+    if (kind === "changed-res") {
+      const from = car.prevSearchArea ? ` · was ${car.prevSearchArea}` : "";
+      return { cls: "warn", text: `Changed to RES${from}` };
+    }
+    if (kind === "added") {
+      return { cls: "ok", text: "Added as RES" };
+    }
+    if (car && car.isTodayArrival) {
+      return { cls: "ok", text: `Age 0 · day ${car.collectionDay || "?"} file` };
+    }
+    return { cls: "ok", text: `Age 0 · day ${car && car.collectionDay != null ? car.collectionDay : "?"} file` };
   }
 
   /**
    * Monthly RTL schedule:
    * - Day N file (Data Uploader for that calendar date, or Admin Push for today):
    *   Tot = ALL Col J age 0 (or blank) VINs in that day's file.
-   *   RES = same + Search Area = Retail Electronic Sales.
+   *   RES = age 0 Retail Electronic Sales
+   *     + VINs newly added as RES vs the previous day file
+   *     + VINs whose Search Area changed to RES vs the previous day file
    *   Product tables still require allocation-plan match.
    * - Days without a file stay empty (no live-RTL age fill-in) once any day file exists.
    * - If the month has no day files yet, fall back to live RTL Col J age inference.
@@ -11883,6 +11904,7 @@
     const matched = [];
     const retailArrivalCars = [];
     const retailArrivalSeen = new Set();
+    const matchedResVinSeen = new Set();
     const dayTotals = Array(31).fill(0);
     const dayRetailTotals = Array(31).fill(0);
     const dayHasFile = Array(31).fill(false);
@@ -11914,6 +11936,9 @@
     };
 
     if (hasDayFiles) {
+      let sawPriorDayFile = false;
+      let prevVinMeta = new Map(); // vin -> { isRes, searchArea }
+
       Object.keys(dayFiles).sort().forEach((dateKey) => {
         const dayNum = Number(String(dateKey).slice(8, 10));
         if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 31) return;
@@ -11926,57 +11951,117 @@
           dayHasFile[dayNum] = true;
           dayFileVinCount[dayNum] = Number(snap.count) || vehicles.length || 0;
         }
+
+        const thisVinMeta = new Map();
         vehicles.forEach((v, i) => {
           const car = mapRtlDailyVehicle(v, dateKey, snap.id, i);
+          const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+          if (!vin) return;
           const ageRaw = car.ageing;
           const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
-          // Day-file Col J is relative to that schedule day (Day 10 file → age 0 = day 10).
-          if (!isRtlDayFileArrival(age)) return;
-          if (dayNum >= 1 && dayNum <= 30) {
+          const isAge0 = isRtlDayFileArrival(age);
+          const isRes = isRetailElectronicSales(car.searchAreaDesc);
+          const prev = sawPriorDayFile ? prevVinMeta.get(vin) : null;
+          thisVinMeta.set(vin, { isRes, searchArea: car.searchAreaDesc || "" });
+
+          let arrivalKind = null;
+          if (isRes) {
+            if (sawPriorDayFile && prev && !prev.isRes) arrivalKind = "changed-res";
+            else if (sawPriorDayFile && !prev) arrivalKind = "added";
+            else if (isAge0) arrivalKind = "age0";
+          }
+          const countsAsResArrival = Boolean(arrivalKind);
+          const prevSearchArea = prev && !prev.isRes ? (prev.searchArea || "") : "";
+
+          // Tot = age 0 only (any search area)
+          if (isAge0 && dayNum >= 1 && dayNum <= 30 && dayNum <= ctx.todayDay) {
             dayTotals[dayNum] += 1;
             dayAge0Count[dayNum] += 1;
-            if (isRetailElectronicSales(car.searchAreaDesc)) {
+          }
+
+          if (countsAsResArrival && dayNum >= 1 && dayNum <= 30 && dayNum <= ctx.todayDay) {
+            if (!retailArrivalSeen.has(vin)) {
               dayRetailTotals[dayNum] += 1;
               pushRetailArrival(car, collDate, dayNum, collLabel, {
                 age: age == null ? 0 : age,
                 isTodayArrival: dayNum === ctx.todayDay,
                 isLate: false,
+                arrivalKind,
+                prevSearchArea,
                 _fromDayFile: true,
               });
+              addResProduct(car, dayNum);
             }
           }
-          addResProduct(car, dayNum);
+
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
-          matched.push({
-            ...car,
-            seg: leaf.seg,
-            allocProduct: leaf.product,
-            allocSfx: leaf.sfx,
-            leafId: leaf.id,
-            allocation: Number(allocationValues[leaf.id]) || 0,
-            collectionDate: collDate,
-            collectionDay: dayNum,
-            collectionLabel: collLabel,
-            isTodayArrival: dayNum === ctx.todayDay,
-            isLate: false,
-            age: age == null ? 0 : age,
-            _fromDayFile: true,
-          });
+
+          // Plan-matched: RES arrivals (age 0 / changed / added) once per VIN; non-RES age 0 still feed Tot/all.
+          if (countsAsResArrival) {
+            if (matchedResVinSeen.has(vin)) return;
+            matchedResVinSeen.add(vin);
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay: dayNum,
+              collectionLabel: collLabel,
+              isTodayArrival: dayNum === ctx.todayDay,
+              isLate: false,
+              age: age == null ? 0 : age,
+              arrivalKind,
+              prevSearchArea,
+              _fromDayFile: true,
+            });
+          } else if (isAge0) {
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay: dayNum,
+              collectionLabel: collLabel,
+              isTodayArrival: dayNum === ctx.todayDay,
+              isLate: false,
+              age: age == null ? 0 : age,
+              arrivalKind: null,
+              _fromDayFile: true,
+            });
+          }
         });
+
+        prevVinMeta = thisVinMeta;
+        sawPriorDayFile = true;
       });
 
-      // Late = age ≥ 1 in today's active file (RES only) — does not add to day Tot/RES.
+      // Late = age ≥ 1 in today's active file (RES only) that did not just become/add as RES today.
       const todayKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
       const todaySnap = dayFiles[todayKey];
       if (todaySnap && Array.isArray(todaySnap.vehicles)) {
         todaySnap.vehicles.forEach((v, i) => {
           const car = mapRtlDailyVehicle(v, todayKey, todaySnap.id, `late-${i}`);
+          const vin = extractVinValue(car.vin) || upperTrim(car.vin);
           const leaf = matchRtlToAllocLeaf(car);
           if (!leaf) return;
           const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
           if (age == null || age < 1) return;
           if (!isRetailElectronicSales(car.searchAreaDesc)) return;
+          // Already counted today as changed/added RES → not late backlog
+          const alreadyArrival = vin && retailArrivalSeen.has(vin)
+            && retailArrivalCars.some((c) => {
+              const cv = extractVinValue(c.vin) || upperTrim(c.vin);
+              return cv === vin && c.collectionDay === ctx.todayDay
+                && (c.arrivalKind === "changed-res" || c.arrivalKind === "added");
+            });
+          if (alreadyArrival) return;
           const arrivedOn = inferCollectionDateFromAge(age, ctx.today);
           matched.push({
             ...car,
@@ -11993,6 +12078,7 @@
             isTodayArrival: false,
             isLate: true,
             age,
+            arrivalKind: "late",
             _lateOnly: true,
             _fromDayFile: true,
           });
@@ -12019,6 +12105,7 @@
               age,
               isTodayArrival: age === 0,
               isLate: age != null && age >= 1,
+              arrivalKind: age === 0 ? "age0" : "late",
               _fromDayFile: false,
             });
           }
@@ -12036,6 +12123,7 @@
           isTodayArrival: age === 0,
           isLate: age != null && age >= 1,
           age,
+          arrivalKind: age === 0 ? "age0" : (age != null && age >= 1 ? "late" : null),
           _fromDayFile: false,
         });
       });
@@ -12059,6 +12147,10 @@
       if (rowAll) rowAll.late += 1;
     });
 
+    const resChangeCars = matchedRetailArrivals.filter((c) =>
+      c.arrivalKind === "changed-res" || c.arrivalKind === "added"
+    );
+
     const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     return {
@@ -12068,6 +12160,7 @@
       matched: matchedRetailArrivals,
       matchedAll: arrivalMatched,
       retailArrivalCars,
+      resChangeCars,
       lateCars,
       dayTotals,
       dayRetailTotals,
@@ -12107,7 +12200,7 @@
     }
     section.hidden = false;
 
-    const { ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount, mode, activeDayCount, lateCars } = buildBasMonthlyData();
+    const { ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount, mode, activeDayCount, lateCars, resChangeCars } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
       const live = ctx.live || window._globalLivePeriod;
@@ -12115,7 +12208,7 @@
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
       if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · day N Tot/RES = age 0 (Col J) from that day's RTL only · Admin Push = today only · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · Tot = age 0 · RES = age 0 + newly added/changed to Retail Electronic Sales vs prior day · today day ${ctx.todayDay}`;
       } else {
         hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL Col J age · drop day files in Data Uploader to lock each day · today day ${ctx.todayDay}`;
       }
@@ -12128,10 +12221,20 @@
       return filteredRows.some((fr) => fr.id === row.id);
     });
     const filteredLate = (lateCars || []).filter((car) => filteredRows.some((fr) => fr.id === car.leafId));
+    const filteredChanges = (resChangeCars || []).filter((car) => {
+      if (!filteredRows.some((fr) => fr.id === car.leafId)) return false;
+      return true;
+    });
 
     const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
-    const age0Total = filteredMatched.filter((c) => c.isTodayArrival).length;
+    const age0Total = filteredMatched.filter((c) =>
+      c.collectionDay === ctx.todayDay && isRtlDayFileArrival(c.age) && isRetailElectronicSales(c.searchAreaDesc)
+    ).length;
+    const todayChangeTotal = filteredMatched.filter((c) =>
+      c.collectionDay === ctx.todayDay
+      && (c.arrivalKind === "changed-res" || c.arrivalKind === "added")
+    ).length;
     const lateTotal = filteredLate.length || filteredMatched.filter((c) => c.isLate).length;
     const gap = planTotal - mtdTotal;
 
@@ -12139,7 +12242,8 @@
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
-        { label: "Age 0 today", val: formatNumber(age0Total), sub: "RES · collected today", cls: age0Total ? "ok" : "" },
+        { label: "Age 0 today", val: formatNumber(age0Total), sub: "RES · age 0 collected", cls: age0Total ? "ok" : "" },
+        { label: "Changed / added", val: formatNumber(todayChangeTotal), sub: "Search area → RES today", cls: todayChangeTotal ? "warn" : "" },
         { label: "Collected MTD", val: formatNumber(mtdTotal), sub: "Retail Electronic Sales", cls: "ok" },
         { label: "Plan total", val: formatNumber(planTotal), sub: "E-Sales allocation" },
         { label: "MTD gap", val: (gap > 0 ? "+" : "") + formatNumber(gap), sub: gap >= 0 ? "Plan above RES collected" : "RES collected above plan", cls: gap >= 0 ? "warn" : "ok" },
@@ -12189,7 +12293,10 @@
       stripEl.innerHTML = stripHtml;
     }
 
-    renderRetailElectronicSalesPanel(ctx, mode === "daily" ? pack : null);
+    renderRetailElectronicSalesPanel(ctx, mode === "daily" ? pack : null, {
+      matched: filteredMatched,
+      todayDay: ctx.todayDay,
+    });
 
     const tableEl = $("#bas-month-table");
     const footEl = $("#bas-month-foot");
@@ -12255,14 +12362,16 @@
       }
       if (footEl) {
         footEl.textContent = mode === "daily"
-          ? `${formatNumber(filteredMatched.length)} RES age-0 arrivals from active day files · ${formatNumber(age0Total)} today · ${formatNumber(lateTotal)} late · scroll days 1–30`
+          ? `${formatNumber(filteredMatched.length)} RES arrivals (age 0 + changed/added) · ${formatNumber(age0Total)} age 0 today · ${formatNumber(todayChangeTotal)} changed/added today · ${formatNumber(lateTotal)} late · scroll days 1–30`
           : `${formatNumber(filteredMatched.length)} Retail Electronic Sales units matched to plan · ${formatNumber(age0Total)} age 0 today · scroll for days 1–30`;
       }
     }
 
     const age0El = $("#bas-age0-table");
     if (age0El) {
-      const age0Cars = filteredMatched.filter((c) => c.isTodayArrival).sort((a, b) => a.allocProduct.localeCompare(b.allocProduct));
+      const age0Cars = filteredMatched
+        .filter((c) => c.collectionDay === ctx.todayDay && isRtlDayFileArrival(c.age))
+        .sort((a, b) => a.allocProduct.localeCompare(b.allocProduct));
       if (!age0Cars.length) {
         age0El.innerHTML = `<p class="foot" style="padding:12px">No age-0 Retail Electronic Sales cars today matching the allocation plan.</p>`;
       } else {
@@ -12276,6 +12385,32 @@
             <td>${escapeHtml(c.collectionLabel)}</td>
             <td>${escapeHtml(c.location || "—")}</td>
           </tr>`).join("")}</tbody>
+        </table>`;
+      }
+    }
+
+    const changeEl = $("#bas-res-change-table");
+    if (changeEl) {
+      const changeList = (filteredChanges.length ? filteredChanges : filteredMatched.filter((c) =>
+        c.arrivalKind === "changed-res" || c.arrivalKind === "added"
+      )).sort((a, b) => (b.collectionDay || 0) - (a.collectionDay || 0) || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!changeList.length) {
+        changeEl.innerHTML = `<p class="foot" style="padding:12px">No cars newly added or changed to Retail Electronic Sales vs a previous day file yet.</p>`;
+      } else {
+        changeEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>Day</th><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Change</th><th>Was</th></tr></thead>
+          <tbody>${changeList.map((c) => {
+            const badge = basResArrivalBadge(c);
+            return `<tr class="bas-row-above">
+              <td class="num">${formatNumber(c.collectionDay)}</td>
+              <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+              <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
+              <td>${escapeHtml(c.vin || "—")}</td>
+              <td class="num">${c.age == null ? "—" : formatNumber(c.age)}</td>
+              <td><span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span></td>
+              <td>${escapeHtml(c.prevSearchArea || "—")}</td>
+            </tr>`;
+          }).join("")}</tbody>
         </table>`;
       }
     }
@@ -12316,15 +12451,18 @@
         const body = dayCars.length
           ? `<table class="bas-table bas-day-inner">
               <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Age</th><th>Note</th></tr></thead>
-              <tbody>${dayCars.map((c) => `<tr class="bas-row-above">
+              <tbody>${dayCars.map((c) => {
+                const badge = basResArrivalBadge(c);
+                return `<tr class="bas-row-above">
                 <td>${escapeHtml(c.allocProduct)}</td>
                 <td>${escapeHtml(c.allocSfx)}</td>
                 <td>${escapeHtml(c.vin || "—")}</td>
-                <td class="num">${formatNumber(c.age)}</td>
-                <td><span class="badge ok">Age 0 · day ${day} file</span></td>
-              </tr>`).join("")}</tbody>
+                <td class="num">${c.age == null ? "—" : formatNumber(c.age)}</td>
+                <td><span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span></td>
+              </tr>`;
+              }).join("")}</tbody>
             </table>`
-          : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : (hasFile ? "Active file for this day · no age-0 RES matched to plan" : "No active RTL file for this day")}</p>`;
+          : `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : (hasFile ? "Active file for this day · no RES arrivals matched to plan" : "No active RTL file for this day")}</p>`;
         sectionsHtml += `<details class="bas-day-detail"${openAttr}>
           <summary class="${summaryCls}"><span class="bas-day-summary-num">Day ${day}</span><span class="bas-day-summary-date">${dateLabel}${hasFile ? " · file" : ""}</span><span class="bas-day-summary-count">${formatNumber(dayCars.length)} car${dayCars.length === 1 ? "" : "s"}</span></summary>
           ${body}
@@ -13379,7 +13517,7 @@
       });
   }
 
-  function renderRetailElectronicSalesPanel(ctx, dayPack) {
+  function renderRetailElectronicSalesPanel(ctx, dayPack, arrivalHints) {
     const panel = $("#bas-retail-panel");
     const tableEl = $("#bas-retail-table");
     const footEl = $("#bas-retail-foot");
@@ -13387,27 +13525,54 @@
     if (!panel || !tableEl) return;
 
     const cars = buildRetailElectronicSalesCars(ctx, dayPack || null);
-    const age0Cars = cars.filter((c) => c.isAge0Arrival);
-    // Same rule as day cards: RES headline = age 0 (or blank age) in today's day file / live RTL.
-    if (totalEl) totalEl.textContent = formatNumber(age0Cars.length);
+    const arrivalByVin = new Map();
+    const hintList = (arrivalHints && arrivalHints.matched) || [];
+    const todayDay = (arrivalHints && arrivalHints.todayDay) || (ctx && ctx.todayDay);
+    hintList.forEach((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      if (!vin) return;
+      if (!arrivalByVin.has(vin) || c.collectionDay === todayDay) arrivalByVin.set(vin, c);
+    });
 
-    if (!cars.length) {
+    const annotated = cars.map((c) => {
+      const vin = extractVinValue(c.vin) || upperTrim(c.vin);
+      const hit = vin ? arrivalByVin.get(vin) : null;
+      return {
+        ...c,
+        arrivalKind: hit && hit.collectionDay === todayDay ? hit.arrivalKind : (c.isAge0Arrival ? "age0" : null),
+        prevSearchArea: hit ? hit.prevSearchArea : "",
+      };
+    });
+
+    const age0Cars = annotated.filter((c) => c.isAge0Arrival);
+    const changedCars = annotated.filter((c) => c.arrivalKind === "changed-res" || c.arrivalKind === "added");
+    // Headline = all RES cars in today's file so the full stock is visible
+    if (totalEl) totalEl.textContent = formatNumber(annotated.length);
+
+    if (!annotated.length) {
       tableEl.innerHTML = `<p class="foot" style="padding:16px">No RTL cars with Search Area Desc = Retail Electronic Sales${dayPack ? " in today's active day file" : ""}.</p>`;
       if (footEl) footEl.textContent = "0 cars";
       return;
     }
 
     const age0 = age0Cars.length;
-    const late = cars.filter((c) => c.age != null && c.age >= 1).length;
+    const late = annotated.filter((c) => c.age != null && c.age >= 1 && c.arrivalKind !== "changed-res" && c.arrivalKind !== "added").length;
 
     tableEl.innerHTML = `<table class="bas-table bas-retail-table">
       <thead><tr>
         <th>Seg</th><th>Product</th><th>SFX</th><th>VIN</th>
-        <th>Age</th><th>Collected</th><th>Location</th><th>Search Area Desc</th>
+        <th>Age</th><th>Collected</th><th>Location</th><th>Search Area Desc</th><th>Flag</th>
       </tr></thead>
-      <tbody>${cars.map((c) => {
+      <tbody>${annotated.map((c) => {
         const ageCls = c.isAge0Arrival ? "bas-gap-pos" : c.age != null && c.age >= 1 ? "bas-gap-neg" : "";
-        return `<tr>
+        const badge = c.arrivalKind === "changed-res" || c.arrivalKind === "added"
+          ? basResArrivalBadge(c)
+          : c.isAge0Arrival
+            ? { cls: "ok", text: "Age 0 today" }
+            : c.age != null && c.age >= 1
+              ? { cls: "bad", text: `Late · ${c.age}d` }
+              : { cls: "", text: "—" };
+        return `<tr class="${c.arrivalKind === "changed-res" || c.arrivalKind === "added" ? "bas-row-above" : ""}">
           <td>${escapeHtml(c.seg || "—")}</td>
           <td>${escapeHtml(c.product || "—")}</td>
           <td>${escapeHtml(c.suffix || "—")}</td>
@@ -13416,12 +13581,13 @@
           <td>${escapeHtml(c.collectionLabel || "—")}</td>
           <td>${escapeHtml(c.location || "—")}</td>
           <td>${escapeHtml(c.searchAreaDesc || "—")}</td>
+          <td>${badge.text === "—" ? "—" : `<span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>`}</td>
         </tr>`;
       }).join("")}</tbody>
     </table>`;
 
     if (footEl) {
-      footEl.textContent = `TOTAL ${formatNumber(age0)} = age 0 RES today · ${formatNumber(cars.length)} RES rows in file · late (age ≥ 1): ${formatNumber(late)}${dayPack ? " · today's day file" : ""}`;
+      footEl.textContent = `${formatNumber(annotated.length)} RES cars in file · ${formatNumber(age0)} age 0 · ${formatNumber(changedCars.length)} changed/added today · late (age ≥ 1): ${formatNumber(late)}${dayPack ? " · today's day file" : ""}`;
     }
   }
 
@@ -16307,7 +16473,10 @@
         || stockFieldByAlias(r, "searchAreaDesc", [])
         || stockFieldByAlias(r, "vehicleSearchArea", [])
         || "";
-      const ageingRaw = cellByLetter(r, "AF") || cellByLetter(r, "O") || stockFieldByAlias(r, "ageing", []);
+      const ageingRaw = cellByLetter(r, "J")
+        || cellByLetter(r, "AF")
+        || cellByLetter(r, "O")
+        || stockFieldByAlias(r, "ageing", []);
       const ageingNum = toNumber(ageingRaw);
       const usage = cellToString(cellByLetter(r, "K")).trim() || stockFieldByAlias(r, "usage", []) || "";
       byVin.set(vin, {
@@ -17101,6 +17270,40 @@
       setStatus("No reserved sheet data to export", "busy");
       return;
     }
+
+    function rvAgeValue(r) {
+      const rtl = r.rtlDetail;
+      if (rtl && rtl.ageing != null && Number.isFinite(Number(rtl.ageing))) return Number(rtl.ageing);
+      const raw = (rtl && rtl._raw) || null;
+      if (raw) {
+        const fromJ = toNumber(cellByLetter(raw, "J"));
+        if (Number.isFinite(fromJ) && fromJ >= 0) return Math.floor(fromJ);
+        const fromAf = toNumber(cellByLetter(raw, "AF") || cellByLetter(raw, "O"));
+        if (Number.isFinite(fromAf) && fromAf >= 0) return Math.floor(fromAf);
+      }
+      return "";
+    }
+
+    function rvModelYear(r) {
+      const rtl = r.rtlDetail;
+      if (rtl && rtl._raw) {
+        const y = cellToString(cellByLetter(rtl._raw, "C")).trim()
+          || stockFieldByAlias(rtl._raw, "modelYear", [])
+          || stockFieldByAlias(rtl._raw, "year", []);
+        if (y) return y;
+      }
+      const sales = r.salesDetail;
+      if (sales && sales.year) return sales.year;
+      const esRaw = r._raw;
+      if (esRaw) {
+        const y = cellToString(cellByLetter(esRaw, "K")).trim()
+          || stockFieldByAlias(esRaw, "modelYear", [])
+          || stockFieldByAlias(esRaw, "year", []);
+        if (y) return y;
+      }
+      return "";
+    }
+
     const rows = buildReservedVehicleRows().map((r) => {
       const employee = resolveSalesmanName(r.salesman)
         || findBoSalesmanForOrder(r.orderNumber)
@@ -17109,14 +17312,31 @@
       const next1 = r.nextInQueue[0] || null;
       const next2 = r.nextInQueue[1] || null;
       const next3 = r.nextInQueue[2] || null;
-      return {
-        Order: r.orderNumber,
+      const rtl = r.rtlDetail || null;
+      const sales = r.salesDetail || null;
+      const age = rvAgeValue(r);
+
+      const out = {
+        Order: r.orderNumber || "",
         "Employee Name": employee || "",
-        VIN: r.vin,
+        VIN: r.vin || "",
         Product: r.product || "",
         Suffix: r.suffix || "",
+        "Model Year": rvModelYear(r),
         Exterior: r.ext || "",
         Interior: r.int || "",
+        Age: age === "" ? "" : age,
+        Location: r.location
+          || (rtl && rtl.location && rtl.location !== "—" ? rtl.location : "")
+          || (sales && sales.location ? sales.location : "")
+          || "",
+        "Search Area": r.searchArea
+          || (rtl && rtl.searchArea && rtl.searchArea !== "—" ? rtl.searchArea : "")
+          || "",
+        "RTL Status": rtl ? (rtl.status && rtl.status !== "—" ? rtl.status : "") : "",
+        "RTL Secondary": rtl ? (rtl.secondaryStatus && rtl.secondaryStatus !== "—" ? rtl.secondaryStatus : "") : "",
+        Usage: rtl && rtl.usage && rtl.usage !== "—" ? rtl.usage : "",
+        "In RTL": rtl ? "Yes" : "No",
         Sheet: r.sheet || "",
         "Queue Position": r.position != null ? r.position : "",
         "Orders Ahead": r.ordersAhead != null ? r.ordersAhead : "",
@@ -17137,13 +17357,59 @@
         "Next 3 Employee": next3
           ? (resolveSalesmanName(next3.salesman) || findBoSalesmanForOrder(next3.orderNumber) || "")
           : "",
-        "VIN Status": r.status.label,
-        "Status Detail": r.status.detail,
-        Proforma: r.status.hasProforma ? "Yes" : "No",
-        "Proforma Date": r.status.proformaDate ? formatRvDate(r.status.proformaDate) : "",
+        "VIN Status": r.status && r.status.label ? r.status.label : "",
+        "Status Detail": r.status && r.status.detail ? r.status.detail : "",
+        "In Sales Raw": sales ? "Yes" : "No",
+        "Sales Employee": sales && sales.salesman ? sales.salesman : (employee || ""),
+        "Sales Product": sales && sales.product ? sales.product : "",
+        "Sales Type": sales && sales.salesType ? sales.salesType : "",
+        Plant: sales && sales.plant ? sales.plant : "",
+        "Sales Location": sales && sales.location ? sales.location : "",
+        Proforma: r.status && r.status.hasProforma ? "Yes" : "No",
+        "Proforma Date": (r.status && r.status.proformaDate)
+          ? formatRvDate(r.status.proformaDate)
+          : (sales && sales.proformaDate ? formatRvDate(sales.proformaDate) : ""),
+        "Delivery / Invoice Date": sales && (sales.invoiceDate || sales.deliveryDate)
+          ? formatRvDate(sales.invoiceDate || sales.deliveryDate)
+          : "",
         "Queue Note": r.queueError || "",
       };
+
+      // Append every E-Sales المحجوز sheet column for full car info
+      const raw = r._raw || null;
+      if (raw) {
+        const headers = Array.isArray(raw.__headers) && raw.__headers.length
+          ? raw.__headers
+          : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+        const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+        headers.forEach((h, i) => {
+          const letter = indexToColLetter(i);
+          const name = cellToString(h).trim() || `Column ${letter}`;
+          const key = `E-Sales ${letter} · ${name}`;
+          if (Object.prototype.hasOwnProperty.call(out, key)) return;
+          out[key] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+        });
+      }
+
+      // Append RTL sheet columns when VIN is found there
+      if (rtl && rtl._raw) {
+        const raw = rtl._raw;
+        const headers = Array.isArray(raw.__headers) && raw.__headers.length
+          ? raw.__headers
+          : Object.keys(raw).filter((k) => !String(k).startsWith("__"));
+        const cells = Array.isArray(raw.__cells) ? raw.__cells : headers.map((h) => raw[h]);
+        headers.forEach((h, i) => {
+          const letter = indexToColLetter(i);
+          const name = cellToString(h).trim() || `Column ${letter}`;
+          const key = `RTL ${letter} · ${name}`;
+          if (Object.prototype.hasOwnProperty.call(out, key)) return;
+          out[key] = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+        });
+      }
+
+      return out;
     });
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Reserved Vehicles");

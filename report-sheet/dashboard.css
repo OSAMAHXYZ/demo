@@ -5257,9 +5257,13 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 
 .bas-mini-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-top: 16px;
+}
+
+@media (max-width: 1100px) {
+  .bas-mini-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 960px) {
@@ -5276,6 +5280,11 @@ details.bas-section-card > summary .pbi-viz-head h2 {
 .bas-mini-ok {
   border-color: #b8e0c8;
   background: linear-gradient(180deg, #fff, #f4fbf7);
+}
+
+.bas-mini-change {
+  border-color: #e8d4a8;
+  background: linear-gradient(180deg, #fff, #fffaf0);
 }
 
 .bas-mini-late {
