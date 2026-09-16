@@ -5114,6 +5114,19 @@ details.bas-section-card > summary .pbi-viz-head h2 {
   background: linear-gradient(180deg, #f3fbff, #fff);
 }
 
+.bas-free-stock-panel {
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #e8d4a8;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffaf0, #fff);
+}
+
+.bas-free-stock-panel .bas-retail-total-card {
+  border-color: #e8d4a8;
+  background: #fff8e8;
+}
+
 .bas-retail-head {
   display: flex;
   align-items: center;

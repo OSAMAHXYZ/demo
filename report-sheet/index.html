@@ -140,7 +140,7 @@
         <div class="dvp-empty card" id="dvp-empty" hidden>
           <h3>Delivered vs Proforma</h3>
           <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · Telesales · B2C · Experience Automall totals.</p>
-          <p class="foot">Lexus counts only products <b>ESH, IS, LC, LSH, LX, LXH, NX, NXH, RX, RXH</b>. Mark Guest Experience advisors in Admin → Employees → <b>Guest Exp</b>, then Push to live.</p>
+          <p class="foot">Lexus = product codes ESH/ES/IS/LC/LSH/LX/LXH/NX/NXH/RX/RXH (and RX350-style). B2C = Not Assigned / EB2C / eCommerce plant. Mark Guest Exp advisors in Admin → Employees.</p>
         </div>
 
         <div id="dvp-board" class="dvp-board" hidden>
@@ -1343,7 +1343,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day-over-day RES VIN compare · new to RES = received (by Allocation Date) · moved out tracked · Sales Raw delivery</span>
+                <span class="hint" id="bas-month-hint">Day-over-day RES VIN compare · schedule days = age 0 only · non–age-0 new RES → free stock below · moved out tracked · Sales Raw delivery</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
               </div>
@@ -1352,7 +1352,7 @@
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily · Tot = age 0 in that day’s file · RES = newly added Retail Electronic Sales VINs vs prior days (schedule day from Allocation Date when in this month)</p>
+              <p class="bas-day-panel-label">Daily · Tot = age 0 in that day’s file · RES = newly added age-0 Retail Electronic Sales VINs (non–age-0 new RES listed as Free stock below)</p>
               <div class="bas-day-strip-wrap">
                 <div class="bas-day-strip" id="bas-day-strip"></div>
               </div>
@@ -1376,9 +1376,24 @@
             <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="bas-month-table"></div>
             <p class="foot bas-foot" id="bas-month-foot"></p>
 
+            <div class="bas-free-stock-panel" id="bas-free-stock-panel">
+              <div class="bas-retail-head">
+                <div class="bas-retail-title">
+                  <h3>Free stock</h3>
+                  <span class="hint">New RES VINs that were not age 0 when first seen · not placed on the day schedule</span>
+                </div>
+                <div class="bas-retail-total-card" id="bas-free-stock-total-card">
+                  <span class="bas-retail-total-lab">Free stock</span>
+                  <span class="bas-retail-total-val" id="bas-free-stock-total">0</span>
+                </div>
+              </div>
+              <div class="table-wrap bas-table-wrap" id="bas-free-stock-table"></div>
+              <p class="foot bas-foot" id="bas-free-stock-foot"></p>
+            </div>
+
             <div class="bas-mini-grid">
               <div class="bas-mini-section bas-mini-ok">
-                <h3 class="bas-subhead">New to RES · received</h3>
+                <h3 class="bas-subhead">Age 0 · on schedule</h3>
                 <div class="table-wrap bas-table-wrap" id="bas-age0-table"></div>
               </div>
               <div class="bas-mini-section bas-mini-change">
@@ -1614,6 +1629,7 @@
       "API-PATCH", "API PATCH", "Api-Patch", "Api Patch",
       "Not Assigned", "NOT ASSIGNED", "Unassigned", "unassigned",
       "not assigned",
+      "EB2C", "E-B2C", "B2C", "BTOC", "eCommerce", "E-Commerce", "Ecommerce",
     ],
     "Wasim Kathem Awad": ["Wasim Awad", "Waseem Kathem Awad", "Waseem Awad"],
     "Ahmed Saleh Ahmed Binmahfoodh": ["Ahmed Binmahfoodh", "Ahmed Saleh Binmahfoodh"],
@@ -1824,6 +1840,10 @@
       ["api batch", "Not assigned"],
       ["api-patch", "Not assigned"],
       ["api patch", "Not assigned"],
+      ["eb2c", "Not assigned"],
+      ["b2c", "Not assigned"],
+      ["e-commerce", "Not assigned"],
+      ["ecommerce", "Not assigned"],
     ].forEach(([alias, canon]) => addNameIdentity(map, alias, canon, { force: true }));
     rosterKeys.add(normalizeNameLoose("Not assigned"));
 
@@ -1913,11 +1933,11 @@
     const loose = normalizeNameLoose(name);
     if (!loose) return null;
     if (NAME_IDENTITY_MAP.has(loose)) return NAME_IDENTITY_MAP.get(loose);
-    if (loose === "not assigned" || loose === "unassigned") {
+    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c") {
       const canon = "Not assigned";
       return { canonical: canon, key: normalizeNameLoose(canon) };
     }
-    if (/^api[\s\-_]*(batch|patch)$/.test(loose)) {
+    if (/^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) {
       const canon = "Not assigned";
       return { canonical: canon, key: normalizeNameLoose(canon) };
     }
@@ -2026,7 +2046,7 @@
     if (!raw) return "";
     const loose = normalizeNameLoose(raw);
     if (!loose) return "";
-    if (loose === "not assigned" || loose === "unassigned" || /^api[\s\-_]*(batch|patch)$/.test(loose)) {
+    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c" || /^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) {
       return "Not assigned";
     }
     const id = resolveEmployeeIdentity(raw);
@@ -2146,7 +2166,7 @@
   }
 
   const HEADER_ALIASES = {
-    product: ["product", "vehicle model", "car model", "المادة", "المنتج", "model", "item"],
+    product: ["product", "product code", "vehicle model", "car model", "المادة", "المنتج", "model code", "prod"],
     suffix: ["alj suffix", "alj sfx", "اللاحقة", "suffix", "tmc suffix"],
     year: ["model year", "year", "my"],
     ext: ["exterior color  1", "exterior color 1", "exterior color", "ext color", "ext. color"],
@@ -3533,6 +3553,41 @@
       });
       const paid = paidIdx >= 0 ? isPaid(line[paidIdx]) : false;
       obj.salesType = inferSalesType(salesTypeIdx >= 0 ? line[salesTypeIdx] : "", paid);
+
+      // Explicit product for channel cards (Lexus codes etc.)
+      // Prefer exact "Product" — never steal "Model Year" via includes("model").
+      const isYearishHeader = (n) => /\byear\b/.test(n) || n === "my" || n === "model year";
+      const productIdxExact = headers.findIndex((h) => {
+        const n = normHeader(h);
+        return n === "product" || n === "product code" || n === "prod" || n === "المادة" || n === "المنتج";
+      });
+      const productIdxLoose = headers.findIndex((h) => {
+        const n = normHeader(h);
+        if (!n || isYearishHeader(n)) return false;
+        return n === "vehicle model" || n === "car model" || n === "model code"
+          || n === "vehicle model code" || n === "series"
+          || (n === "model" && !isYearishHeader(n));
+      });
+      const materialIdx = headers.findIndex((h) => {
+        const n = normHeader(h);
+        if (!n || isYearishHeader(n)) return false;
+        return n === "material"
+          || n.includes("material desc")
+          || n.includes("material description");
+      });
+      const colB = cellToString(line[colLetterToIndex("B")]).trim();
+      const colC = cellToString(line[colLetterToIndex("C")]).trim();
+      const colD = cellToString(line[colLetterToIndex("D")]).trim();
+      if (productIdxExact >= 0) obj.product = cellToString(line[productIdxExact]).trim();
+      if (!obj.product && productIdxLoose >= 0) obj.product = cellToString(line[productIdxLoose]).trim();
+      if (!obj.product && materialIdx >= 0) obj.product = cellToString(line[materialIdx]).trim();
+      // RTL / Sales Raw convention: Col B is usually Product — prefer letter codes over years
+      if (!obj.product || /^\d{4}$/.test(obj.product)) {
+        const letterProd = [colB, colC, colD].find((v) => v && !/^\d{4}$/.test(v) && /[A-Za-z]/.test(v));
+        if (letterProd) obj.product = letterProd;
+        else if (!obj.product) obj.product = colB || colC || colD || "";
+      }
+      obj._productRaw = obj.product;
 
       rows.push(obj);
     }
@@ -11880,7 +11935,10 @@
     }
     if (car && car.arrivalKind === "new-res") {
       const ag = car.agLabel ? ` · AG ${car.agLabel}` : "";
-      return { cls: "ok", text: `New RES · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
+      return { cls: "ok", text: `Age 0 · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
+    }
+    if (car && car.arrivalKind === "free-stock") {
+      return { cls: "warn", text: `Free stock · age ${car.age != null ? car.age : "?"}d` };
     }
     if (car && car.arrivalKind === "age0") {
       return { cls: "ok", text: `Received · day ${car.collectionDay != null ? car.collectionDay : "?"}` };
@@ -11935,9 +11993,10 @@
   /**
    * Monthly RTL allocation schedule:
    * For each submitted day RTL file, compare Retail Electronic Sales VINs to all prior day files.
-   * - New RES VIN (not seen as RES before) = Received (once). Schedule day = Col AG if current month, else file day.
+   * - New RES VIN + Col J age 0 (or blank) = Received on schedule (once). Day = Col AG if current month, else file day.
+   * - New RES VIN + age ≥ 1 = Free stock (listed below schedule, not in day cells).
    * - Was RES before, now another search area / missing = Moved out (informational).
-   * - Sales Raw delivery status attached to each received VIN.
+   * - Sales Raw delivery status attached to each received / free-stock VIN.
    * Tot strip still = Col J age 0 (all search areas) for that day file.
    */
   function buildBasMonthlyData() {
@@ -11949,6 +12008,8 @@
     const matched = [];
     const retailArrivalCars = [];
     const retailArrivalSeen = new Set();
+    const freeStockCars = [];
+    const freeStockSeen = new Set();
     const matchedResVinSeen = new Set();
     const resChangeCars = [];
     const resChangeSeen = new Set();
@@ -11970,6 +12031,29 @@
         collectionDate: collDate,
         collectionDay,
         collectionLabel: collLabel,
+        ...(extra || {}),
+      });
+    };
+
+    const pushFreeStock = (car, collDate, collectionDay, collLabel, extra) => {
+      const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+      if (!vin || freeStockSeen.has(vin)) return;
+      freeStockSeen.add(vin);
+      const leaf = matchRtlToAllocLeaf(car);
+      freeStockCars.push({
+        ...car,
+        seg: leaf ? leaf.seg : "—",
+        allocProduct: leaf ? leaf.product : (car.product || "—"),
+        allocSfx: leaf ? leaf.sfx : (car.suffix || "—"),
+        leafId: leaf ? leaf.id : "",
+        allocation: leaf ? (Number(allocationValues[leaf.id]) || 0) : 0,
+        collectionDate: collDate,
+        collectionDay,
+        collectionLabel: collLabel,
+        isTodayArrival: false,
+        isLate: false,
+        isFreeStock: true,
+        arrivalKind: "free-stock",
         ...(extra || {}),
       });
     };
@@ -12053,7 +12137,7 @@
             thisResMeta.set(vin, { searchArea, car, agDate, agLabel, age });
           }
 
-          // New to RES vs all prior day files → Received (once)
+          // New to RES vs all prior day files → once
           if (isRes && dayNum <= ctx.todayDay && !everResSeen.has(vin)) {
             everResSeen.add(vin);
             const scheduleDay = basScheduleDayFromAg(agDate, dayNum, ctx);
@@ -12061,53 +12145,64 @@
               ? agDate
               : fileDate;
             const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-            const prev = prevResMeta.get(vin);
-            const wasOther = prevResMeta.size > 0 && !prev; // first day file: no "other→res", just new
             const changeKind = prevResMeta.size > 0 ? "to-res" : null;
-
-            if (scheduleDay >= 1 && scheduleDay <= 30) {
-              dayRetailTotals[scheduleDay] += 1;
-            }
-            pushRetailArrival(car, collDate, scheduleDay, collLabel, {
-              age: age == null ? 0 : age,
-              isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
-              isLate: false,
-              arrivalKind: "new-res",
-              agDate,
-              agLabel,
-              firstSeenDay: dayNum,
-              _fromDayFile: true,
-            });
-            addResProduct(car, scheduleDay);
+            const ageVal = age == null ? 0 : age;
 
             if (changeKind) {
               pushResChange(car, dayNum, fileDate, fileLabel, {
                 changeKind: "to-res",
                 prevSearchArea: "",
                 newSearchArea: searchArea || "Retail Electronic Sales",
-                age: age == null ? 0 : age,
+                age: ageVal,
                 agDate,
                 agLabel,
               });
             }
 
-            const leaf = matchRtlToAllocLeaf(car);
-            if (leaf && !matchedResVinSeen.has(vin)) {
-              matchedResVinSeen.add(vin);
-              matched.push({
-                ...car,
-                seg: leaf.seg,
-                allocProduct: leaf.product,
-                allocSfx: leaf.sfx,
-                leafId: leaf.id,
-                allocation: Number(allocationValues[leaf.id]) || 0,
-                collectionDate: collDate,
-                collectionDay: scheduleDay,
-                collectionLabel: collLabel,
+            if (isAge0) {
+              // Age 0 only → day schedule + received MTD
+              if (scheduleDay >= 1 && scheduleDay <= 30) {
+                dayRetailTotals[scheduleDay] += 1;
+              }
+              pushRetailArrival(car, collDate, scheduleDay, collLabel, {
+                age: ageVal,
                 isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
                 isLate: false,
-                age: age == null ? 0 : age,
                 arrivalKind: "new-res",
+                agDate,
+                agLabel,
+                firstSeenDay: dayNum,
+                _fromDayFile: true,
+              });
+              addResProduct(car, scheduleDay);
+
+              const leaf = matchRtlToAllocLeaf(car);
+              if (leaf && !matchedResVinSeen.has(vin)) {
+                matchedResVinSeen.add(vin);
+                matched.push({
+                  ...car,
+                  seg: leaf.seg,
+                  allocProduct: leaf.product,
+                  allocSfx: leaf.sfx,
+                  leafId: leaf.id,
+                  allocation: Number(allocationValues[leaf.id]) || 0,
+                  collectionDate: collDate,
+                  collectionDay: scheduleDay,
+                  collectionLabel: collLabel,
+                  isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
+                  isLate: false,
+                  age: ageVal,
+                  arrivalKind: "new-res",
+                  agDate,
+                  agLabel,
+                  firstSeenDay: dayNum,
+                  _fromDayFile: true,
+                });
+              }
+            } else {
+              // New RES but age ≥ 1 → free stock below schedule (not in day cells)
+              pushFreeStock(car, collDate, scheduleDay, collLabel, {
+                age: ageVal,
                 agDate,
                 agLabel,
                 firstSeenDay: dayNum,
@@ -12115,7 +12210,7 @@
               });
             }
           } else if (isRes && everResSeen.has(vin)) {
-            // Already counted as received — still RES today, no double count
+            // Already counted as received / free stock — still RES today, no double count
           } else if (!isRes && prevResMeta.has(vin)) {
             // Still in file but left RES
             const prev = prevResMeta.get(vin);
@@ -12221,39 +12316,64 @@
         if (collDate.getFullYear() !== ctx.y || collDate.getMonth() !== ctx.m) return;
         const collectionDay = collDate.getDate();
         const age = car.ageing == null || !Number.isFinite(car.ageing) ? null : Math.floor(car.ageing);
-        addResProduct(car, collectionDay);
+        const isAge0 = isRtlDayFileArrival(age);
         const leaf = matchRtlToAllocLeaf(car);
         if (!leaf) return;
         if (collectionDay >= 1 && collectionDay <= 30) {
-          dayTotals[collectionDay] += 1;
-          if (isRtlDayFileArrival(age)) dayAge0Count[collectionDay] += 1;
-          dayRetailTotals[collectionDay] += 1;
-          pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
-            age,
-            isTodayArrival: age === 0,
-            isLate: age != null && age >= 1,
-            arrivalKind: age === 0 ? "new-res" : "late",
-            _fromDayFile: false,
-          });
+          if (isAge0) {
+            dayTotals[collectionDay] += 1;
+            dayAge0Count[collectionDay] += 1;
+            dayRetailTotals[collectionDay] += 1;
+            addResProduct(car, collectionDay);
+            pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+              age,
+              isTodayArrival: age === 0,
+              isLate: false,
+              arrivalKind: "new-res",
+              _fromDayFile: false,
+            });
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay,
+              collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+              isTodayArrival: age === 0,
+              isLate: false,
+              age,
+              arrivalKind: "new-res",
+              _fromDayFile: false,
+            });
+          } else {
+            pushFreeStock(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+              age,
+              _fromDayFile: false,
+            });
+            matched.push({
+              ...car,
+              seg: leaf.seg,
+              allocProduct: leaf.product,
+              allocSfx: leaf.sfx,
+              leafId: leaf.id,
+              allocation: Number(allocationValues[leaf.id]) || 0,
+              collectionDate: collDate,
+              collectionDay,
+              collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+              isTodayArrival: false,
+              isLate: true,
+              age,
+              arrivalKind: "late",
+              _lateOnly: true,
+              _fromDayFile: false,
+            });
+          }
         }
-        matched.push({
-          ...car,
-          seg: leaf.seg,
-          allocProduct: leaf.product,
-          allocSfx: leaf.sfx,
-          leafId: leaf.id,
-          allocation: Number(allocationValues[leaf.id]) || 0,
-          collectionDate: collDate,
-          collectionDay,
-          collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-          isTodayArrival: age === 0,
-          isLate: age != null && age >= 1,
-          age,
-          arrivalKind: age === 0 ? "new-res" : (age != null && age >= 1 ? "late" : null),
-          _fromDayFile: false,
-        });
       });
-      if (matched.length) mode = "age";
+      if (matched.length || freeStockCars.length) mode = "age";
     }
 
     const byLeaf = emptyBasLeafRows();
@@ -12276,6 +12396,7 @@
 
     const delivery = basAttachSalesDelivery(matchedRetailArrivals);
     basAttachSalesDelivery(retailArrivalCars);
+    basAttachSalesDelivery(freeStockCars);
     basAttachSalesDelivery(resChangeCars.filter((c) => c.changeKind === "to-res"));
 
     const movedOutCars = resChangeCars.filter((c) => c.changeKind === "from-res");
@@ -12290,6 +12411,7 @@
       matched: matchedRetailArrivals,
       matchedAll: arrivalMatched,
       retailArrivalCars,
+      freeStockCars,
       resChangeCars,
       movedOutCars,
       newInCars,
@@ -12335,7 +12457,7 @@
 
     const {
       ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount,
-      mode, activeDayCount, lateCars, resChangeCars, movedOutCars, delivery,
+      mode, activeDayCount, lateCars, resChangeCars, movedOutCars, delivery, freeStockCars,
     } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
@@ -12344,9 +12466,9 @@
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
       if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · compare each day RES VINs vs prior days · schedule by Allocation Date · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · schedule = age-0 new RES only · non–age-0 → free stock · today day ${ctx.todayDay}`;
       } else {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · drop day files in Data Uploader for day-over-day RES compare · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · age 0 on schedule · age ≥ 1 as free stock · today day ${ctx.todayDay}`;
       }
     }
 
@@ -12363,6 +12485,12 @@
       if (!car.leafId) return true;
       return filteredRows.some((fr) => fr.id === car.leafId);
     });
+    const freeList = freeStockCars || [];
+    const filteredFree = freeList.filter((car) => {
+      if (!basView.seg && !basView.product && !basView.sfx && !String(basView.search || "").trim()) return true;
+      if (!car.leafId) return true;
+      return filteredRows.some((fr) => fr.id === car.leafId);
+    });
 
     const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
@@ -12371,6 +12499,7 @@
     ).length;
     const movedToday = filteredMoved.filter((c) => c.collectionDay === ctx.todayDay).length;
     const movedTotal = filteredMoved.length;
+    const freeTotal = filteredFree.length;
     const lateTotal = filteredLate.length;
     const gap = planTotal - mtdTotal;
     const del = delivery || { delivered: 0, proforma: 0, pending: 0, notFound: 0, total: 0 };
@@ -12384,13 +12513,13 @@
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
-        { label: "Received MTD", val: formatNumber(mtdTotal), sub: "New RES VINs vs prior days", cls: "ok" },
-        { label: "Received today", val: formatNumber(receivedToday), sub: "First seen as RES today", cls: receivedToday ? "ok" : "" },
+        { label: "Received MTD", val: formatNumber(mtdTotal), sub: "Age 0 new RES · on schedule", cls: "ok" },
+        { label: "Received today", val: formatNumber(receivedToday), sub: "Age 0 first seen today", cls: receivedToday ? "ok" : "" },
+        { label: "Free stock", val: formatNumber(freeTotal), sub: "New RES · age ≥ 1 (not on schedule)", cls: freeTotal ? "warn" : "ok" },
         { label: "Moved out", val: formatNumber(movedTotal), sub: `Left RES · ${formatNumber(movedToday)} today`, cls: movedTotal ? "bad" : "ok" },
-        { label: "Delivered", val: formatNumber(filteredDelivery.delivered), sub: "Sales Raw · received VINs", cls: filteredDelivery.delivered ? "ok" : "" },
-        { label: "Proforma / Invoice", val: formatNumber(filteredDelivery.proforma), sub: "Sales Raw · not delivered", cls: filteredDelivery.proforma ? "warn" : "" },
-        { label: "Pending delivery", val: formatNumber(filteredDelivery.pending), sub: "Not delivered yet", cls: filteredDelivery.pending ? "warn" : "ok" },
-        { label: "Plan / Gap", val: `${formatNumber(planTotal)} / ${(gap > 0 ? "+" : "") + formatNumber(gap)}`, sub: gap >= 0 ? "Plan above received" : "Received above plan", cls: gap >= 0 ? "warn" : "ok" },
+        { label: "Delivered", val: formatNumber(filteredDelivery.delivered), sub: "Sales Raw · age-0 received", cls: filteredDelivery.delivered ? "ok" : "" },
+        { label: "Pending delivery", val: formatNumber(filteredDelivery.pending), sub: "Age-0 received · not delivered", cls: filteredDelivery.pending ? "warn" : "ok" },
+        { label: "Plan / Gap", val: `${formatNumber(planTotal)} / ${(gap > 0 ? "+" : "") + formatNumber(gap)}`, sub: gap >= 0 ? "Plan above age-0 received" : "Age-0 above plan", cls: gap >= 0 ? "warn" : "ok" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
           <div class="lbl">${k.label}</div>
@@ -12419,7 +12548,7 @@
           hasFile ? "has-file" : "",
           hasFile && !(total || retail) ? "has-file-empty" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · file has no Col J age 0 rows — drop that day's RTL extract" : ""} · Tot ${total} · RES ${retail}">
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · file has no Col J age 0 rows — drop that day's RTL extract" : ""} · Tot ${total} · RES age-0 ${retail}">
           <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
@@ -12446,7 +12575,7 @@
     const footEl = $("#bas-month-foot");
     if (tableEl) {
       if (!filteredRows.length) {
-        tableEl.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales rows match filters.${mode === "daily" ? " Day files drive received columns via new RES VINs vs prior days." : ""}</p>`;
+        tableEl.innerHTML = `<p class="foot" style="padding:16px">No age-0 Retail Electronic Sales rows match filters.${mode === "daily" ? " Day columns only show new RES VINs that were age 0 when first seen." : ""}</p>`;
       } else {
         const dayHeaders = Array.from({ length: 30 }, (_, i) => {
           const day = i + 1;
@@ -12506,8 +12635,39 @@
       }
       if (footEl) {
         footEl.textContent = mode === "daily"
-          ? `${formatNumber(filteredMatched.length)} received (new RES) · ${formatNumber(receivedToday)} today · ${formatNumber(movedTotal)} moved out · Delivered ${formatNumber(filteredDelivery.delivered)} · Pending ${formatNumber(filteredDelivery.pending)} · ${formatNumber(lateTotal)} late · scroll days 1–30`
-          : `${formatNumber(filteredMatched.length)} RES units · Delivered ${formatNumber(filteredDelivery.delivered)} · scroll days 1–30`;
+          ? `${formatNumber(filteredMatched.length)} age-0 on schedule · ${formatNumber(freeTotal)} free stock · ${formatNumber(receivedToday)} today · ${formatNumber(movedTotal)} moved out · Delivered ${formatNumber(filteredDelivery.delivered)} · Pending ${formatNumber(filteredDelivery.pending)} · ${formatNumber(lateTotal)} late · scroll days 1–30`
+          : `${formatNumber(filteredMatched.length)} age-0 · ${formatNumber(freeTotal)} free stock · Delivered ${formatNumber(filteredDelivery.delivered)} · scroll days 1–30`;
+      }
+    }
+
+    const freeTotalEl = $("#bas-free-stock-total");
+    if (freeTotalEl) freeTotalEl.textContent = formatNumber(freeTotal);
+    const freeTableEl = $("#bas-free-stock-table");
+    const freeFootEl = $("#bas-free-stock-foot");
+    if (freeTableEl) {
+      const freeSorted = filteredFree
+        .slice()
+        .sort((a, b) => (b.age || 0) - (a.age || 0)
+          || (b.firstSeenDay || b.collectionDay || 0) - (a.firstSeenDay || a.collectionDay || 0)
+          || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
+      if (!freeSorted.length) {
+        freeTableEl.innerHTML = `<p class="foot" style="padding:12px">No free-stock VINs. Free stock = new RES cars that were age ≥ 1 when first seen (not placed on the day schedule).</p>`;
+      } else {
+        freeTableEl.innerHTML = `<table class="bas-table">
+          <thead><tr><th>First seen</th><th>Product</th><th>SFX</th><th>VIN</th><th class="num">Age</th><th>Alloc Date</th><th>Delivery</th></tr></thead>
+          <tbody>${freeSorted.map((c) => `<tr class="bas-row-below">
+            <td class="num">${formatNumber(c.firstSeenDay || c.collectionDay || "—")}</td>
+            <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
+            <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
+            <td>${escapeHtml(c.vin || "—")}</td>
+            <td class="num bas-gap-neg">${formatNumber(c.age)}${c.age != null ? "d" : ""}</td>
+            <td>${escapeHtml(c.agLabel || c.collectionLabel || "—")}</td>
+            <td><span class="badge ${c.salesKind === "delivered" ? "ok" : c.salesKind === "proforma" ? "warn" : "bad"}">${escapeHtml(c.deliveryStatus || "—")}</span></td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+      }
+      if (freeFootEl) {
+        freeFootEl.textContent = `${formatNumber(freeSorted.length)} free-stock VIN(s) · new to RES with age ≥ 1 · excluded from day schedule / Received MTD`;
       }
     }
 
@@ -12517,7 +12677,7 @@
         .slice()
         .sort((a, b) => (b.collectionDay || 0) - (a.collectionDay || 0) || String(a.allocProduct || "").localeCompare(String(b.allocProduct || "")));
       if (!recvCars.length) {
-        age0El.innerHTML = `<p class="foot" style="padding:12px">No new Retail Electronic Sales VINs vs prior day files yet.</p>`;
+        age0El.innerHTML = `<p class="foot" style="padding:12px">No age-0 Retail Electronic Sales VINs on the schedule yet.</p>`;
       } else {
         age0El.innerHTML = `<table class="bas-table">
           <thead><tr><th>Day</th><th>Product</th><th>SFX</th><th>VIN</th><th>Alloc Date</th><th>Delivery</th></tr></thead>
@@ -15944,25 +16104,33 @@
     return keys;
   }
 
-  /** Lexus Sales channel — only these Sales Raw product codes (exact). */
+  /** Lexus Sales channel — only these Sales Raw product codes (exact / code+digits). */
   const LEXUS_PRODUCT_CODES = new Set([
-    "ESH", "IS", "LC", "LSH", "LX", "LXH", "NX", "NXH", "RX", "RXH",
+    "ESH", "ES", "IS", "LC", "LSH", "LX", "LXH", "NX", "NXH", "RX", "RXH",
   ]);
+  /** Toyota codes that must never count as Lexus LC. */
+  const TOYOTA_LC_BODY = new Set(["70", "200", "300"]);
 
   function salesRowProductBlob(r) {
     if (!r) return "";
     const bits = [
-      r.product, r.Product, r.model, r.Model, r["Vehicle Model"], r["vehicle model"],
+      r.product, r._productRaw, r.Product, r.model, r.Model, r["Vehicle Model"], r["vehicle model"],
       r.Description, r.description, r.Material, r.material,
-      r.plant, r.Plant, r.secondaryStatus,
     ];
     Object.keys(r).forEach((k) => {
-      if (/^__/.test(k)) return;
+      if (/^__/.test(k) || k === "plant" || k === "Plant" || k === "secondaryStatus") return;
       const n = normHeader(k);
-      if (n.includes("product") || n.includes("model") || n.includes("brand") || n.includes("material") || n.includes("desc")) {
+      if (/\byear\b/.test(n)) return;
+      if (n.includes("product") || n === "model" || n.includes("vehicle model") || n.includes("brand") || n.includes("material") || n === "series" || n === "prod") {
         bits.push(r[k]);
       }
     });
+    if (Array.isArray(r.__cells)) {
+      ["B", "C", "D", "E", "F", "G", "I", "J"].forEach((L) => {
+        const idx = colLetterToIndex(L);
+        if (idx >= 0 && r.__cells[idx] != null) bits.push(r.__cells[idx]);
+      });
+    }
     return bits.map((x) => cellToString(x)).filter(Boolean).join(" ");
   }
 
@@ -15973,43 +16141,118 @@
   function isLexusProductCode(raw) {
     const text = cellToString(raw).trim();
     if (!text) return false;
+    if (/\blexus\b/i.test(text)) return true;
     const compact = compactProductCode(text);
+    if (!compact) return false;
     if (LEXUS_PRODUCT_CODES.has(compact)) return true;
+
+    // RX350 / NX200T / LC500 / ES300H — code + body, but never Toyota LC70/200/300
+    const m = compact.match(/^(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)$/);
+    if (m) {
+      if (m[1] === "LC") {
+        const body = m[2].replace(/[A-Z]+$/i, "");
+        if (TOYOTA_LC_BODY.has(body)) return false;
+      }
+      return true;
+    }
+
+    // Embedded code inside longer labels: "Product: RXH", "RX · Luxury"
+    const embedded = text.toUpperCase().match(/\b(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)?\b/);
+    if (embedded) {
+      const code = embedded[1];
+      const body = (embedded[2] || "").replace(/[A-Z]+$/i, "");
+      if (code === "LC" && TOYOTA_LC_BODY.has(body)) return false;
+      if (!embedded[2]) return LEXUS_PRODUCT_CODES.has(code);
+      return true;
+    }
+
     // First token only (e.g. "RX · …") — never prefix-match LC300 as LC
     const first = text.split(/[\s|/\\,_·−-]+/).find(Boolean) || "";
-    return LEXUS_PRODUCT_CODES.has(compactProductCode(first));
+    const firstCompact = compactProductCode(first);
+    if (LEXUS_PRODUCT_CODES.has(firstCompact)) return true;
+    const m2 = firstCompact.match(/^(ESH|ES|IS|LSH|LXH|LX|NXH|NX|RXH|RX|LC)([0-9]{2,4}[A-Z]?)$/);
+    if (m2) {
+      if (m2[1] === "LC") {
+        const body = m2[2].replace(/[A-Z]+$/i, "");
+        if (TOYOTA_LC_BODY.has(body)) return false;
+      }
+      return true;
+    }
+    return false;
   }
 
   function isLexusSaleRow(r) {
     if (!r) return false;
     const fields = [
-      r.product, r.Product, r.model, r.Model,
+      r.product, r._productRaw, r.Product, r.model, r.Model,
       r["Vehicle Model"], r["vehicle model"],
       r.Material, r.material,
     ];
     if (fields.some((f) => isLexusProductCode(f))) return true;
-    // Fallback: any product-like token in the row that exactly matches a Lexus code
+    if (Array.isArray(r.__cells)) {
+      for (let i = 0; i < Math.min(r.__cells.length, 40); i += 1) {
+        const v = cellToString(r.__cells[i]).trim();
+        if (!v || /^\d{4}$/.test(v)) continue;
+        if (isLexusProductCode(v)) return true;
+      }
+    }
     const blob = salesRowProductBlob(r);
     if (!blob) return false;
-    return blob.split(/[\s|/\\,_·−-]+/).some((tok) => LEXUS_PRODUCT_CODES.has(compactProductCode(tok)))
-      || LEXUS_PRODUCT_CODES.has(compactProductCode(blob));
+    if (/\blexus\b/i.test(blob)) return true;
+    return blob.split(/[\s|/\\,_·−-]+/).some((tok) => isLexusProductCode(tok));
   }
 
   function isTelesalesSaleRow(r) {
     const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
     const key = nameKey(salesmanName);
     if (!key) return false;
-    const meta = employeeMeta(salesmanName);
-    return meta && meta.plant && /telesales/i.test(meta.plant);
+    const meta = Object.prototype.hasOwnProperty.call(EMPLOYEE_META, key) ? EMPLOYEE_META[key] : null;
+    const plant = `${cellToString(r.plant || "").trim()} ${(meta && meta.plant) || ""}`;
+    return /telesales/i.test(plant);
+  }
+
+  function isEcommercePlantText(raw) {
+    const plant = cellToString(raw).trim().toLowerCase().replace(/[–—]/g, "-");
+    if (!plant) return false;
+    return /e\s*-?\s*commerce|ecommerce|\beb2c\b|\bb2c\b|online\s*sales|digital\s*sales|e\s*-?\s*sales/.test(plant);
+  }
+
+  function isB2cSaleRow(r) {
+    if (!r) return false;
+    const raw = String(r._salesmanRaw || r.salesman || "").trim();
+    const salesmanName = rosterSalesmanName(raw);
+    const rawTok = upperTrim(raw).replace(/[^A-Z0-9]/g, "");
+    const looseRaw = normalizeNameLoose(raw);
+    if (/^(EB2C|B2C|BTOC|ECOMMERCE|ECOM|APIBATCH|APIPATCH)$/i.test(rawTok)) return true;
+    if (/eb2c|e b2c|\bb2c\b|not\s*assigned|unassigned|api\s*(batch|patch)|e\s*commerce/.test(looseRaw)) return true;
+    if (normalizeNameLoose(salesmanName) === "not assigned") return true;
+    if (String(salesmanName || "").trim().toLowerCase() === "not assigned") return true;
+
+    if (isEcommercePlantText(r.plant || r.Plant)) return true;
+
+    const key = nameKey(salesmanName);
+    if (key && Object.prototype.hasOwnProperty.call(EMPLOYEE_META, key)) {
+      if (isEcommercePlantText(EMPLOYEE_META[key].plant)) return true;
+    }
+
+    const channelBits = [
+      r.salesType, r.salesChannel, r.channel, r["Sales Channel"], r["Sales Type"],
+      r.Category, r.category, r["Distribution Channel"],
+    ].map((x) => cellToString(x).toLowerCase()).join(" ");
+    if (/eb2c|\bb2c\b|ecommerce|e-?commerce|online\s*retail|not\s*assigned/.test(channelBits)) return true;
+    return false;
   }
 
   function dvpBucketForSaleRow(r, guestKeys) {
+    // Lexus by product first, then B2C (Not Assigned / EB2C) before Guest Exp
+    // so roster "Not assigned" never lands on Experience Automall.
+    if (isLexusSaleRow(r)) return "lexus";
+    if (isB2cSaleRow(r)) return "b2c";
     const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
     const key = nameKey(salesmanName);
     if (key && guestKeys.has(key)) return "guest";
-    if (isLexusSaleRow(r)) return "lexus";
-    const notAssigned = salesmanName.toLowerCase() === "not assigned";
-    if (notAssigned) return "b2c";
+    if (isTelesalesSaleRow(r)) return "telesales";
+    // Default: named advisors without Guest/Lexus/B2C/Telesales plant → Telesales (anywhere)
     return "telesales";
   }
 
