@@ -12302,7 +12302,7 @@
     const footEl = $("#bas-month-foot");
     if (tableEl) {
       if (!filteredRows.length) {
-        tableEl.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales rows match filters.${mode === "daily" ? " Active day files drive columns 1–30 (age 0 only)." : ""}</p>`;
+        tableEl.innerHTML = `<p class="foot" style="padding:16px">No Retail Electronic Sales rows match filters.${mode === "daily" ? " Active day files drive columns 1–30 (age 0 + newly added/changed to RES)." : ""}</p>`;
       } else {
         const dayHeaders = Array.from({ length: 30 }, (_, i) => {
           const day = i + 1;
