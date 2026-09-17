@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1343,7 +1343,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day-over-day RES VIN compare · schedule days = age 0 only · non–age-0 new RES → free stock below · moved out tracked · Sales Raw delivery</span>
+                <span class="hint" id="bas-month-hint">Day-over-day RES VIN compare · schedule = new RES (age 0 / blank / backdated) · Tot ≠ RES · free stock only if undatable</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
               </div>
@@ -1352,7 +1352,7 @@
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily · Tot = age 0 in that day’s file · RES = newly added age-0 Retail Electronic Sales VINs (non–age-0 new RES listed as Free stock below)</p>
+              <p class="bas-day-panel-label">Daily · Tot = explicit Col J age 0 (any area, blank excluded) · RES = newly added Retail Electronic Sales VINs (age 0/blank, or backdated by age/AG)</p>
               <div class="bas-day-strip-wrap">
                 <div class="bas-day-strip" id="bas-day-strip"></div>
               </div>
@@ -1380,7 +1380,7 @@
               <div class="bas-retail-head">
                 <div class="bas-retail-title">
                   <h3>Free stock</h3>
-                  <span class="hint">New RES VINs that were not age 0 when first seen · not placed on the day schedule</span>
+                  <span class="hint">New RES VINs that could not be placed on a month day (no AG / age outside month)</span>
                 </div>
                 <div class="bas-retail-total-card" id="bas-free-stock-total-card">
                   <span class="bas-retail-total-lab">Free stock</span>
@@ -11918,9 +11918,15 @@
     row.cars.push(car);
   }
 
-  /** Col J age 0 (or blank) = physical arrival for that day file. */
+  /** Col J age 0 only (explicit). Blank age is unknown — not counted in Tot (avoids inflated day sums). */
   function isRtlDayFileArrival(age) {
-    return age == null || !Number.isFinite(age) || Math.floor(age) === 0;
+    return age != null && Number.isFinite(age) && Math.floor(age) === 0;
+  }
+
+  /** RES collected in this day file: explicit age 0, or blank age (treated as new arrival once). */
+  function isResCollectedInDayFile(age) {
+    if (age == null || !Number.isFinite(age)) return true;
+    return Math.floor(age) === 0;
   }
 
   function basResArrivalBadge(car) {
@@ -11936,6 +11942,10 @@
     if (car && car.arrivalKind === "new-res") {
       const ag = car.agLabel ? ` · AG ${car.agLabel}` : "";
       return { cls: "ok", text: `Age 0 · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
+    }
+    if (car && car.arrivalKind === "backdated-res") {
+      const ag = car.agLabel ? ` · AG ${car.agLabel}` : "";
+      return { cls: "ok", text: `Backdated · day ${car.collectionDay != null ? car.collectionDay : "?"}${ag}` };
     }
     if (car && car.arrivalKind === "free-stock") {
       return { cls: "warn", text: `Free stock · age ${car.age != null ? car.age : "?"}d` };
@@ -11993,11 +12003,11 @@
   /**
    * Monthly RTL allocation schedule:
    * For each submitted day RTL file, compare Retail Electronic Sales VINs to all prior day files.
-   * - New RES VIN + Col J age 0 (or blank) = Received on schedule (once). Day = Col AG if current month, else file day.
-   * - New RES VIN + age ≥ 1 = Free stock (listed below schedule, not in day cells).
+   * - Tot = Col J age === 0 (any search area) — explicit 0 only (blank excluded so summed Tot is not inflated).
+   * - New RES + age 0/blank = Received on schedule (once). Day = Col AG if current month, else file day.
+   * - New RES + age ≥ 1 = backdate via Col AG or (file day − age) onto schedule; free stock only if undatable.
    * - Was RES before, now another search area / missing = Moved out (informational).
    * - Sales Raw delivery status attached to each received / free-stock VIN.
-   * Tot strip still = Col J age 0 (all search areas) for that day file.
    */
   function buildBasMonthlyData() {
     const ctx = basMonthContext();
@@ -12116,6 +12126,7 @@
           const ageRaw = car.ageing;
           const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
           const isAge0 = isRtlDayFileArrival(age);
+          const isResArrival = isResCollectedInDayFile(age);
           const searchArea = (typeof dayVehicleSearchArea === "function"
             ? dayVehicleSearchArea(v)
             : "") || car.searchAreaDesc || "";
@@ -12127,7 +12138,7 @@
             : "";
           seenThisDay.add(vin);
 
-          // Tot = age 0 any search area (day-file physical arrivals)
+          // Tot = explicit Col J age 0 only (any search area) — blank ages excluded
           if (isAge0 && dayNum >= 1 && dayNum <= 30 && dayNum <= ctx.todayDay) {
             dayTotals[dayNum] += 1;
             dayAge0Count[dayNum] += 1;
@@ -12140,11 +12151,6 @@
           // New to RES vs all prior day files → once
           if (isRes && dayNum <= ctx.todayDay && !everResSeen.has(vin)) {
             everResSeen.add(vin);
-            const scheduleDay = basScheduleDayFromAg(agDate, dayNum, ctx);
-            const collDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
-              ? agDate
-              : fileDate;
-            const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
             const changeKind = prevResMeta.size > 0 ? "to-res" : null;
             const ageVal = age == null ? 0 : age;
 
@@ -12159,19 +12165,51 @@
               });
             }
 
-            if (isAge0) {
-              // Age 0 only → day schedule + received MTD
-              if (scheduleDay >= 1 && scheduleDay <= 30) {
-                dayRetailTotals[scheduleDay] += 1;
+            let scheduleDay = null;
+            let collDate = null;
+            let backdated = false;
+
+            if (isResArrival) {
+              // Age 0 / blank → collected on this day (AG day if same month)
+              scheduleDay = basScheduleDayFromAg(agDate, dayNum, ctx);
+              collDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
+                ? agDate
+                : fileDate;
+            } else {
+              // Age ≥ 1 first seen → backdate to AG or fileDay − age (do not drop to free stock if placeable)
+              if (agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m) {
+                const d = agDate.getDate();
+                if (d >= 1 && d <= 30 && d <= ctx.todayDay) {
+                  scheduleDay = d;
+                  collDate = agDate;
+                  backdated = true;
+                }
               }
+              if (scheduleDay == null && age != null && age >= 1) {
+                const inferred = inferCollectionDateFromAge(age, fileDate);
+                if (inferred && inferred.getFullYear() === ctx.y && inferred.getMonth() === ctx.m) {
+                  const d = inferred.getDate();
+                  if (d >= 1 && d <= 30 && d <= ctx.todayDay && d <= dayNum) {
+                    scheduleDay = d;
+                    collDate = inferred;
+                    backdated = true;
+                  }
+                }
+              }
+            }
+
+            if (scheduleDay != null && collDate && scheduleDay >= 1 && scheduleDay <= 30 && scheduleDay <= ctx.todayDay) {
+              const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+              dayRetailTotals[scheduleDay] += 1;
               pushRetailArrival(car, collDate, scheduleDay, collLabel, {
                 age: ageVal,
                 isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
                 isLate: false,
-                arrivalKind: "new-res",
+                arrivalKind: backdated ? "backdated-res" : "new-res",
                 agDate,
                 agLabel,
                 firstSeenDay: dayNum,
+                backdated,
                 _fromDayFile: true,
               });
               addResProduct(car, scheduleDay);
@@ -12192,16 +12230,21 @@
                   isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
                   isLate: false,
                   age: ageVal,
-                  arrivalKind: "new-res",
+                  arrivalKind: backdated ? "backdated-res" : "new-res",
                   agDate,
                   agLabel,
                   firstSeenDay: dayNum,
+                  backdated,
                   _fromDayFile: true,
                 });
               }
             } else {
-              // New RES but age ≥ 1 → free stock below schedule (not in day cells)
-              pushFreeStock(car, collDate, scheduleDay, collLabel, {
+              // Cannot place on an in-month day → free stock
+              const fallbackDay = basScheduleDayFromAg(agDate, dayNum, ctx);
+              const fallbackDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
+                ? agDate
+                : fileDate;
+              pushFreeStock(car, fallbackDate, fallbackDay, fallbackDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
                 age: ageVal,
                 agDate,
                 agLabel,
@@ -12222,30 +12265,6 @@
               agDate,
               agLabel,
             });
-          }
-
-          // Non-RES age0 for Tot context only (matchedAll) — skip plan grid for non-RES
-          if (isAge0 && !isRes) {
-            const leaf = matchRtlToAllocLeaf(car);
-            if (leaf) {
-              matched.push({
-                ...car,
-                seg: leaf.seg,
-                allocProduct: leaf.product,
-                allocSfx: leaf.sfx,
-                leafId: leaf.id,
-                allocation: Number(allocationValues[leaf.id]) || 0,
-                collectionDate: fileDate,
-                collectionDay: dayNum,
-                collectionLabel: fileLabel,
-                isTodayArrival: dayNum === ctx.todayDay,
-                isLate: false,
-                age: age == null ? 0 : age,
-                arrivalKind: null,
-                _fromDayFile: true,
-                _nonResAge0: true,
-              });
-            }
           }
         });
 
@@ -12349,8 +12368,15 @@
               _fromDayFile: false,
             });
           } else {
-            pushFreeStock(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
+            // age ≥ 1 with inferred collection day already in month → schedule (backdated)
+            dayRetailTotals[collectionDay] += 1;
+            addResProduct(car, collectionDay);
+            pushRetailArrival(car, collDate, collectionDay, collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
               age,
+              isTodayArrival: false,
+              isLate: false,
+              arrivalKind: "backdated-res",
+              backdated: true,
               _fromDayFile: false,
             });
             matched.push({
@@ -12364,10 +12390,10 @@
               collectionDay,
               collectionLabel: collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
               isTodayArrival: false,
-              isLate: true,
+              isLate: false,
               age,
-              arrivalKind: "late",
-              _lateOnly: true,
+              arrivalKind: "backdated-res",
+              backdated: true,
               _fromDayFile: false,
             });
           }
@@ -12382,7 +12408,9 @@
 
     const byLeafRetail = emptyBasLeafRows();
     const matchedRetailArrivals = arrivalMatched.filter((car) =>
-      car.arrivalKind === "new-res" || isRetailElectronicSales(car.searchAreaDesc)
+      car.arrivalKind === "new-res"
+      || car.arrivalKind === "backdated-res"
+      || isRetailElectronicSales(car.searchAreaDesc)
     );
     matchedRetailArrivals.forEach((car) => pushBasMonthCar(byLeafRetail, car));
 
@@ -12466,9 +12494,9 @@
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
       if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · schedule = age-0 new RES only · non–age-0 → free stock · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · RES = new to Retail Electronic Sales (age 0 / blank, or backdated by age/AG) · Tot = explicit age 0 any area · today day ${ctx.todayDay}`;
       } else {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · age 0 on schedule · age ≥ 1 as free stock · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · RES on schedule via age/AG · today day ${ctx.todayDay}`;
       }
     }
 
@@ -12494,6 +12522,8 @@
 
     const planTotal = filteredRows.reduce((s, r) => s + r.allocation, 0);
     const mtdTotal = filteredRows.reduce((s, r) => s + r.mtd, 0);
+    const resAllMtd = basScheduleResReceived({ dayRetailTotals, ctx }) || 0;
+    const unmatchedToPlan = Math.max(0, resAllMtd - mtdTotal);
     const receivedToday = filteredMatched.filter((c) =>
       c.firstSeenDay === ctx.todayDay || c.collectionDay === ctx.todayDay
     ).length;
@@ -12501,7 +12531,7 @@
     const movedTotal = filteredMoved.length;
     const freeTotal = filteredFree.length;
     const lateTotal = filteredLate.length;
-    const gap = planTotal - mtdTotal;
+    const gap = planTotal - resAllMtd;
     const del = delivery || { delivered: 0, proforma: 0, pending: 0, notFound: 0, total: 0 };
     const filteredDelivery = {
       delivered: filteredMatched.filter((c) => c.salesKind === "delivered").length,
@@ -12513,13 +12543,13 @@
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
-        { label: "Received MTD", val: formatNumber(mtdTotal), sub: "Age 0 new RES · on schedule", cls: "ok" },
-        { label: "Received today", val: formatNumber(receivedToday), sub: "Age 0 first seen today", cls: receivedToday ? "ok" : "" },
-        { label: "Free stock", val: formatNumber(freeTotal), sub: "New RES · age ≥ 1 (not on schedule)", cls: freeTotal ? "warn" : "ok" },
+        { label: "RES Received MTD", val: formatNumber(resAllMtd), sub: "Unique new RES · day files (age 0 / backdated)", cls: "ok" },
+        { label: "Matched to plan", val: formatNumber(mtdTotal), sub: unmatchedToPlan ? `${formatNumber(unmatchedToPlan)} unmatched to allocation` : "All RES map to plan rows", cls: unmatchedToPlan ? "warn" : "ok" },
+        { label: "Received today", val: formatNumber(receivedToday), sub: "First seen / collected today", cls: receivedToday ? "ok" : "" },
+        { label: "Free stock", val: formatNumber(freeTotal), sub: "New RES · could not place on a month day", cls: freeTotal ? "warn" : "ok" },
         { label: "Moved out", val: formatNumber(movedTotal), sub: `Left RES · ${formatNumber(movedToday)} today`, cls: movedTotal ? "bad" : "ok" },
-        { label: "Delivered", val: formatNumber(filteredDelivery.delivered), sub: "Sales Raw · age-0 received", cls: filteredDelivery.delivered ? "ok" : "" },
-        { label: "Pending delivery", val: formatNumber(filteredDelivery.pending), sub: "Age-0 received · not delivered", cls: filteredDelivery.pending ? "warn" : "ok" },
-        { label: "Plan / Gap", val: `${formatNumber(planTotal)} / ${(gap > 0 ? "+" : "") + formatNumber(gap)}`, sub: gap >= 0 ? "Plan above age-0 received" : "Age-0 above plan", cls: gap >= 0 ? "warn" : "ok" },
+        { label: "Delivered", val: formatNumber(filteredDelivery.delivered), sub: "Sales Raw · RES received", cls: filteredDelivery.delivered ? "ok" : "" },
+        { label: "Plan / Gap", val: `${formatNumber(planTotal)} / ${(gap > 0 ? "+" : "") + formatNumber(gap)}`, sub: gap >= 0 ? "Plan above RES received" : "RES above plan", cls: gap >= 0 ? "warn" : "ok" },
       ].map((k) => `
         <article class="bo-kpi${k.cls ? " " + k.cls : ""}">
           <div class="lbl">${k.label}</div>
