@@ -14,6 +14,7 @@
     assignPool: [],
     assignDisplay: [],
     assignEmployee: '',
+    editsTimer: null,
     tzOffset: -new Date().getTimezoneOffset(),
   };
 
@@ -101,21 +102,30 @@
 
   function setView(view) {
     state.view = view;
+    if (state.editsTimer) {
+      clearInterval(state.editsTimer);
+      state.editsTimer = null;
+    }
     $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${view}`));
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
       today: ["Today's Vehicles", 'Proforma Date = today'],
-      my: ['My VINs', 'Your assigned delivery schedule'],
+      my: ['My VINs', 'Edit your assigned vehicles — changes go to Admin live'],
       assign: ['Assignment', 'Hanouf assignment board'],
       all: ['All Vehicles', 'Full fleet · filters · export'],
       upload: ['Upload Raw Data', 'First worksheet only'],
-      audit: ['Audit Log', 'Every assignment & field change'],
+      audit: ['Audit Log', 'Full history of every edit'],
     };
     const t = titles[view] || ['Delivery Team', ''];
     $('#page-title').textContent = t[0];
     $('#page-sub').textContent = t[1];
     refreshView();
+    if (view === 'dashboard' && canManage()) {
+      state.editsTimer = setInterval(() => {
+        loadDashboard().catch(() => {});
+      }, 8000);
+    }
   }
 
   async function refreshView() {
@@ -198,10 +208,66 @@
       state.filters.page = 1;
       setView(canManage() ? 'all' : 'my');
     }));
+
+    renderRecentEdits(d.recentEdits || []);
   }
 
-  function scheduleColumns() {
-    return [
+  function fieldLabel(action) {
+    const map = {
+      guestSentDate: 'تاريخ إرسال الضيف',
+      signatureReceivedDate: 'تاريخ استلام التواقيع',
+      accountsSentDate: 'إرسال للحسابات',
+      accountsApprovalDate: 'موافقة الحسابات',
+      registrationIssueDate: 'إصدار الاستمارة',
+      opsStatus: 'Status',
+      vin1502: 'VIN 1502',
+      trafficFile: 'ملف المرور',
+      trafficFeesOps: 'Traffic Fees',
+      insuranceOps: 'Insurance',
+      transferCity: 'مدينة الترحيل',
+      carrier: 'الناقل',
+      notes: 'ملاحظات',
+      assign: 'Assigned',
+      reassign: 'Reassigned',
+    };
+    if (map[action]) return map[action];
+    if (String(action).startsWith('update_')) return map[action.slice(7)] || action.slice(7);
+    return action;
+  }
+
+  function editableControl(vin, field, type, value) {
+    const v = value == null ? '' : String(value);
+    const common = `class="cell-edit" data-vin="${esc(vin)}" data-field="${esc(field)}"`;
+    if (type === 'status') {
+      const statuses = (state.meta && state.meta.statuses) || [];
+      return `<select ${common}><option value="">—</option>${statuses.map((s) =>
+        `<option value="${esc(s)}" ${v === s ? 'selected' : ''}>${esc(s)}</option>`
+      ).join('')}</select>`;
+    }
+    if (type === 'yn') {
+      return `<select ${common}>
+        <option value="">—</option>
+        <option value="Yes" ${v === 'Yes' ? 'selected' : ''}>🟢 Yes</option>
+        <option value="No" ${v === 'No' ? 'selected' : ''}>🔴 No</option>
+      </select>`;
+    }
+    if (type === 'date') {
+      return `<input type="date" ${common} value="${esc(v)}" />`;
+    }
+    if (type === 'city') {
+      return `<input list="edit-city-list" ${common} value="${esc(v)}" placeholder="City…" />`;
+    }
+    if (type === 'carrier') {
+      return `<input list="edit-carrier-list" ${common} value="${esc(v)}" placeholder="Carrier…" />`;
+    }
+    if (type === 'notes') {
+      return `<input type="text" ${common} value="${esc(v)}" placeholder="Notes…" style="min-width:140px" />`;
+    }
+    return esc(v || '—');
+  }
+
+  function scheduleColumns({ editable = false } = {}) {
+    const cols = [
       ['Proforma', (r) => na(r.raw.proformaDate)],
       ['Order', (r) => na(r.raw.salesOrder)],
       ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
@@ -213,25 +279,86 @@
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
       ['Phone', (r) => na(r.raw.phone)],
-      ['Status', (r) => statusBadge(r.ops.opsStatus)],
-      ['إرسال الضيف', (r) => na(r.ops.guestSentDate)],
-      ['استلام التواقيع', (r) => na(r.ops.signatureReceivedDate)],
-      ['إرسال للحسابات', (r) => na(r.ops.accountsSentDate)],
-      ['موافقة الحسابات', (r) => na(r.ops.accountsApprovalDate)],
-      ['VIN 1502', (r) => ynBadge(r.ops.vin1502)],
-      ['ملف المرور', (r) => ynBadge(r.ops.trafficFile)],
-      ['Traffic Fees', (r) => ynBadge(r.ops.trafficFeesOps)],
-      ['Insurance', (r) => ynBadge(r.ops.insuranceOps)],
-      ['إصدار الاستمارة', (r) => na(r.ops.registrationIssueDate)],
-      ['مدينة الترحيل', (r) => na(r.ops.transferCity)],
-      ['الناقل', (r) => na(r.ops.carrier)],
-      ['ملاحظات', (r) => esc((r.ops.notes || '').slice(0, 40))],
-      ['Employee', (r) => na(r.ops.assignedEmployeeName)],
     ];
+    if (editable) {
+      cols.push(
+        ['Status', (r) => editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)],
+        ['إرسال الضيف', (r) => editableControl(r.vin, 'guestSentDate', 'date', r.ops.guestSentDate)],
+        ['استلام التواقيع', (r) => editableControl(r.vin, 'signatureReceivedDate', 'date', r.ops.signatureReceivedDate)],
+        ['إرسال للحسابات', (r) => editableControl(r.vin, 'accountsSentDate', 'date', r.ops.accountsSentDate)],
+        ['موافقة الحسابات', (r) => editableControl(r.vin, 'accountsApprovalDate', 'date', r.ops.accountsApprovalDate)],
+        ['VIN 1502', (r) => editableControl(r.vin, 'vin1502', 'yn', r.ops.vin1502)],
+        ['ملف المرور', (r) => editableControl(r.vin, 'trafficFile', 'yn', r.ops.trafficFile)],
+        ['Traffic Fees', (r) => editableControl(r.vin, 'trafficFeesOps', 'yn', r.ops.trafficFeesOps)],
+        ['Insurance', (r) => editableControl(r.vin, 'insuranceOps', 'yn', r.ops.insuranceOps)],
+        ['إصدار الاستمارة', (r) => editableControl(r.vin, 'registrationIssueDate', 'date', r.ops.registrationIssueDate)],
+        ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
+        ['الناقل', (r) => editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)],
+        ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
+      );
+    } else {
+      cols.push(
+        ['Status', (r) => statusBadge(r.ops.opsStatus)],
+        ['إرسال الضيف', (r) => na(r.ops.guestSentDate)],
+        ['استلام التواقيع', (r) => na(r.ops.signatureReceivedDate)],
+        ['إرسال للحسابات', (r) => na(r.ops.accountsSentDate)],
+        ['موافقة الحسابات', (r) => na(r.ops.accountsApprovalDate)],
+        ['VIN 1502', (r) => ynBadge(r.ops.vin1502)],
+        ['ملف المرور', (r) => ynBadge(r.ops.trafficFile)],
+        ['Traffic Fees', (r) => ynBadge(r.ops.trafficFeesOps)],
+        ['Insurance', (r) => ynBadge(r.ops.insuranceOps)],
+        ['إصدار الاستمارة', (r) => na(r.ops.registrationIssueDate)],
+        ['مدينة الترحيل', (r) => na(r.ops.transferCity)],
+        ['الناقل', (r) => na(r.ops.carrier)],
+        ['ملاحظات', (r) => esc((r.ops.notes || '').slice(0, 40))],
+        ['Employee', (r) => na(r.ops.assignedEmployeeName)],
+      );
+    }
+    if (editable) {
+      cols.push(['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`]);
+    }
+    return cols;
   }
 
-  function renderScheduleTable(tableEl, rows, { selectable = false } = {}) {
-    const cols = scheduleColumns();
+  async function saveCellEdit(el) {
+    const vin = el.dataset.vin;
+    const field = el.dataset.field;
+    const value = el.value;
+    if (!vin || !field) return;
+    el.classList.add('is-saving');
+    try {
+      await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: { [field]: value } });
+      el.classList.remove('is-saving');
+      el.classList.add('is-saved');
+      const toast = $('#my-save-toast');
+      if (toast) {
+        toast.hidden = false;
+        toast.textContent = `Saved ✓ ${fieldLabel(field)} · ${new Date().toLocaleTimeString()}`;
+        setTimeout(() => { toast.hidden = true; }, 2200);
+      }
+      setTimeout(() => el.classList.remove('is-saved'), 1200);
+    } catch (err) {
+      el.classList.remove('is-saving');
+      alert(err.message || 'Save failed');
+    }
+  }
+
+  function bindEditableCells(tableEl) {
+    $$('.cell-edit', tableEl).forEach((el) => {
+      el.addEventListener('change', () => saveCellEdit(el));
+      if (el.tagName === 'INPUT' && el.type === 'text') {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            saveCellEdit(el);
+          }
+        });
+      }
+    });
+  }
+
+  function renderScheduleTable(tableEl, rows, { selectable = false, editable = false } = {}) {
+    const cols = scheduleColumns({ editable });
     const head = `<thead><tr>${selectable ? '<th></th>' : ''}${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>`;
     const body = `<tbody>${rows.map((r) => {
       const done = r.ops.opsStatus === 'Claimed';
@@ -243,6 +370,7 @@
     }).join('')}</tbody>`;
     tableEl.innerHTML = head + body;
     $$('.vin-link', tableEl).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+    if (editable) bindEditableCells(tableEl);
     if (selectable) {
       $$('.assign-check', tableEl).forEach((cb) => cb.addEventListener('change', () => {
         if (cb.checked) state.selectedVins.add(cb.dataset.vin);
@@ -250,6 +378,32 @@
         cb.closest('tr').classList.toggle('selected', cb.checked);
       }));
     }
+  }
+
+  function renderRecentEdits(edits) {
+    const card = $('#dash-edits-card');
+    const table = $('#dash-edits-table');
+    if (!card || !table) return;
+    if (!canManage()) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const rows = edits || [];
+    if (!rows.length) {
+      table.innerHTML = `<tbody><tr><td>No employee edits yet. Changes on assigned VINs will appear here live.</td></tr></tbody>`;
+      return;
+    }
+    table.innerHTML = `<thead><tr><th>Time</th><th>Employee</th><th>VIN</th><th>Field</th><th>From</th><th>To</th></tr></thead>
+      <tbody>${rows.map((a) => `<tr>
+        <td>${esc((a.at || '').replace('T', ' ').slice(0, 19))}</td>
+        <td><b>${esc(a.user)}</b></td>
+        <td>${a.vin ? `<button type="button" class="vin-link" data-vin="${esc(a.vin)}">${esc(a.vin)}</button>` : '—'}</td>
+        <td>${esc(fieldLabel(a.action))}</td>
+        <td>${esc(a.oldValue)}</td>
+        <td><b>${esc(a.newValue)}</b></td>
+      </tr>`).join('')}</tbody>`;
+    $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
   }
 
   function filterQuery(extra = {}) {
@@ -302,6 +456,13 @@
 
   async function loadMy() {
     buildToolbar($('#my-toolbar'), { showEmployee: false });
+    const cities = (state.meta && state.meta.transferCities) || [];
+    const carriers = (state.meta && state.meta.carriers) || [];
+    const cityList = $('#edit-city-list');
+    const carrierList = $('#edit-carrier-list');
+    if (cityList) cityList.innerHTML = cities.map((c) => `<option value="${esc(c)}"></option>`).join('');
+    if (carrierList) carrierList.innerHTML = carriers.map((c) => `<option value="${esc(c)}"></option>`).join('');
+
     const pack = await api(`/vehicles?${filterQuery()}`);
     if (state.user.role === 'employee') {
       const dash = await api(`/dashboard?tzOffset=${state.tzOffset}`);
@@ -315,7 +476,8 @@
     } else {
       $('#my-kpis').innerHTML = '';
     }
-    renderScheduleTable($('#my-table'), pack.rows || []);
+    // Employees (and managers reviewing My VINs) edit ops inline — every save is audited for Admin
+    renderScheduleTable($('#my-table'), pack.rows || [], { editable: true });
     renderPager($('#my-pager'), pack, (p) => { state.filters.page = p; loadMy(); });
   }
 
@@ -693,6 +855,7 @@
     state.assignEmployee = b.dataset.emp;
     updateAssignConfirmState();
   }));
+  $('#dash-edits-refresh')?.addEventListener('click', () => loadDashboard().catch((e) => alert(e.message)));
   $('#audit-refresh').addEventListener('click', () => { state.filters.page = 1; loadAudit(); });
   $('#audit-vin').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { state.filters.page = 1; loadAudit(); }

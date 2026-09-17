@@ -398,6 +398,27 @@ function createDeliveryTeamRouter(opts) {
         };
       })();
 
+    let recentEdits = [];
+    if (canSeeAll(req.dtUser.role)) {
+      recentEdits = (store.data.audit || [])
+        .filter((a) => a && (
+          String(a.action || '').startsWith('update_')
+          || a.action === 'assign'
+          || a.action === 'reassign'
+        ))
+        .slice(0, 60)
+        .map((a) => ({
+          id: a.id,
+          at: a.at,
+          vin: a.vin || '',
+          user: a.user || '',
+          action: a.action || '',
+          oldValue: a.oldValue || '',
+          newValue: a.newValue || '',
+          field: String(a.action || '').replace(/^update_/, ''),
+        }));
+    }
+
     res.json({
       today,
       totals: {
@@ -420,6 +441,7 @@ function createDeliveryTeamRouter(opts) {
       },
       employees,
       myWorkload: mine,
+      recentEdits,
     });
   });
 

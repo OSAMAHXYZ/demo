@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917b" />
+  <link rel="stylesheet" href="styles.css?v=20260917d" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -88,6 +88,18 @@
             <p class="hint">Click a status to filter the schedule</p>
             <div class="status-grid" id="dash-status"></div>
           </div>
+          <div class="card" id="dash-edits-card" hidden>
+            <div class="edits-head">
+              <div>
+                <h2>Live employee edits</h2>
+                <p class="hint">Every change on assigned VINs appears here for Admin / Hanouf</p>
+              </div>
+              <button type="button" class="btn" id="dash-edits-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap" style="max-height:360px">
+              <table class="data" id="dash-edits-table"></table>
+            </div>
+          </div>
         </section>
 
         <!-- TODAY -->
@@ -104,8 +116,11 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">Excel-style workload · only your assigned VINs</p>
+            <p class="hint">Edit status, dates, traffic, city, carrier, and notes directly · each save is logged for Admin</p>
+            <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar"></div>
+            <datalist id="edit-city-list"></datalist>
+            <datalist id="edit-carrier-list"></datalist>
             <div class="table-wrap"><table class="data" id="my-table"></table></div>
             <div class="pager" id="my-pager"></div>
           </div>
@@ -216,6 +231,6 @@
     <div class="drawer" id="vin-drawer"></div>
   </div>
 
-  <script src="app.js?v=20260917b"></script>
+  <script src="app.js?v=20260917d"></script>
 </body>
 </html>
