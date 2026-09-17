@@ -2046,7 +2046,17 @@
     if (!raw) return "";
     const loose = normalizeNameLoose(raw);
     if (!loose) return "";
-    if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c" || /^api[\s\-_]*(batch|patch)$/.test(loose) || /^e[\s\-]?commerce$/.test(loose)) {
+    if (
+      loose === "not assigned"
+      || loose === "unassigned"
+      || loose === "eb2c"
+      || loose === "b2c"
+      || /eb2c/.test(loose)
+      || /\bb2c\b/.test(loose)
+      || /^api[\s\-_]*(batch|patch)$/.test(loose)
+      || /^e[\s\-]?commerce$/.test(loose)
+      || /غير\s*(مسند|معين|مخصص)/.test(loose)
+    ) {
       return "Not assigned";
     }
     const id = resolveEmployeeIdentity(raw);
@@ -3518,7 +3528,18 @@
 
       const plantIdx = headers.findIndex((h) => {
         const n = normHeader(h);
-        return n === "plant" || n.includes("sales office") || n.includes("department") || n === "channel" || n === "team";
+        if (!n) return false;
+        // "Plant", "Plant Name", "Sales Plant", sales office / department / channel / team / brand
+        return n === "plant"
+          || /(^|\s)plant(\s|$)/.test(n)
+          || n.includes("sales office")
+          || n.includes("sales plant")
+          || n.includes("department")
+          || n === "channel"
+          || n.includes("sales channel")
+          || n === "team"
+          || n === "brand"
+          || n.includes("division");
       });
       const codeIdx = headers.findIndex((h) => {
         const n = normHeader(h);
@@ -16216,9 +16237,17 @@
     const fields = [
       r.product, r._productRaw, r.Product, r.model, r.Model,
       r["Vehicle Model"], r["vehicle model"],
-      r.Material, r.material,
+      r.Material, r.material, r.Brand, r.brand, r.Series, r.series,
     ];
     if (fields.some((f) => isLexusProductCode(f))) return true;
+    // Plant / channel / brand — Lexus Sales team rows even when product is a full grade name
+    const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
+    const meta = employeeMeta(salesmanName);
+    const plantBits = [
+      r.plant, r.Plant, r.salesChannel, r.channel, r["Sales Channel"], r.salesType,
+      r.Brand, r.brand, meta && meta.plant,
+    ].map((x) => cellToString(x)).join(" ");
+    if (/\blexus\b/i.test(plantBits) || /لكزس/.test(plantBits)) return true;
     if (Array.isArray(r.__cells)) {
       for (let i = 0; i < Math.min(r.__cells.length, 40); i += 1) {
         const v = cellToString(r.__cells[i]).trim();
@@ -16228,7 +16257,7 @@
     }
     const blob = salesRowProductBlob(r);
     if (!blob) return false;
-    if (/\blexus\b/i.test(blob)) return true;
+    if (/\blexus\b/i.test(blob) || /لكزس/.test(blob)) return true;
     return blob.split(/[\s|/\\,_·−-]+/).some((tok) => isLexusProductCode(tok));
   }
 
@@ -16253,8 +16282,9 @@
     const salesmanName = rosterSalesmanName(raw);
     const rawTok = upperTrim(raw).replace(/[^A-Z0-9]/g, "");
     const looseRaw = normalizeNameLoose(raw);
-    if (/^(EB2C|B2C|BTOC|ECOMMERCE|ECOM|APIBATCH|APIPATCH)$/i.test(rawTok)) return true;
-    if (/eb2c|e b2c|\bb2c\b|not\s*assigned|unassigned|api\s*(batch|patch)|e\s*commerce/.test(looseRaw)) return true;
+    // RTLEB2C / EB2C / B2C / API-BATCH / eCommerce placeholders
+    if (/^(RTL)?E?B2C$|^BTOC$|^ECOMMERCE$|^ECOM$|^APIBATCH$|^APIPATCH$/i.test(rawTok)) return true;
+    if (/eb2c|e b2c|\bb2c\b|not\s*assigned|unassigned|api\s*(batch|patch)|e\s*commerce|غير\s*(مسند|معين|مخصص)/.test(looseRaw)) return true;
     if (normalizeNameLoose(salesmanName) === "not assigned") return true;
     if (String(salesmanName || "").trim().toLowerCase() === "not assigned") return true;
 
@@ -16267,9 +16297,9 @@
 
     const channelBits = [
       r.salesType, r.salesChannel, r.channel, r["Sales Channel"], r["Sales Type"],
-      r.Category, r.category, r["Distribution Channel"],
+      r.Category, r.category, r["Distribution Channel"], r.plant, r.Plant,
     ].map((x) => cellToString(x).toLowerCase()).join(" ");
-    if (/eb2c|\bb2c\b|ecommerce|e-?commerce|online\s*retail|not\s*assigned/.test(channelBits)) return true;
+    if (/eb2c|\bb2c\b|ecommerce|e-?commerce|online\s*retail|not\s*assigned|digital\s*sales/.test(channelBits)) return true;
     return false;
   }
 
@@ -16338,7 +16368,12 @@
       guest: { icon: "★", title: "High engagement", tip: "Convert guest interest into confirmed orders." },
     };
     if (delivered <= 0 && proforma <= 0) {
-      return { icon: "○", title: "No activity", tip: "No delivered or proforma activity in this period." };
+      const emptyTip = id === "lexus"
+        ? "No ESH/IS/LC/LX/NX/RX (etc.) or Lexus plant rows in this period — other channels may hold those VINs."
+        : id === "b2c"
+          ? "No Not Assigned / EB2C / eCommerce rows in this period — check Col A salesman and plant."
+          : "No delivered or proforma activity in this period.";
+      return { icon: "○", title: "No activity", tip: emptyTip };
     }
     if (tips[id]) {
       if (delivered >= proforma && delivered > 0 && id !== "b2c") {
@@ -16405,6 +16440,26 @@
     }
   }
 
+  function dvpActivityPeriod(live) {
+    if (!live) return "month";
+    const preset = live.preset || "";
+    if (preset === "today") return "day";
+    if (preset === "this_month" || preset === "last_month" || preset === "all") return "month";
+    if (preset === "custom") {
+      if (live.rangeFrom && live.rangeTo && !live.dayUsesRange
+        && sameCalendarDay(live.rangeFrom, live.rangeTo)) {
+        return "day";
+      }
+      return "month";
+    }
+    // Default today-style live object
+    if (live.dayUsesRange === false && live.rangeFrom && live.rangeTo
+      && sameCalendarDay(live.rangeFrom, live.rangeTo)) {
+      return "day";
+    }
+    return "month";
+  }
+
   function buildDeliveredVsProformaSummary() {
     const live = window._globalLivePeriod || ensureGlobalLivePeriod();
     const prevMonthKey = live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : "");
@@ -16412,7 +16467,9 @@
     const allRows = slots.sales.rows || [];
     populateDvpFilters(allRows);
     const rows = filterDvpSalesRows(allRows);
-    const packed = collectDvpBuckets(rows, live, prevMonthKey, "month", guestKeys);
+    // Match the Date chip: "Today" → that calendar day only; "This month" → MTD range
+    const period = dvpActivityPeriod(live);
+    const packed = collectDvpBuckets(rows, live, prevMonthKey, period, guestKeys);
     const prevPacked = collectDvpBuckets(rows, live, prevMonthKey, "prev", guestKeys);
     const cur = packed.counts;
     const prev = prevPacked.counts;
@@ -16736,7 +16793,22 @@
     dvpLastPack = data;
     if (asof) {
       const live = data.live || {};
-      asof.textContent = live.rangeLabel || live.label || cellToString(live.now) || "—";
+      const period = dvpActivityPeriod(live);
+      const fmt = (d) => {
+        try {
+          return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        } catch {
+          return "";
+        }
+      };
+      if (period === "day") {
+        asof.textContent = (live.rangeTo && fmt(live.rangeTo))
+          || live.rangeLabel
+          || live.label
+          || "—";
+      } else {
+        asof.textContent = live.rangeLabel || live.reportMonthLabel || live.label || cellToString(live.now) || "—";
+      }
     }
     const updated = $("#dvp-last-updated");
     if (updated) {
