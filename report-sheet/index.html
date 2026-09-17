@@ -16443,8 +16443,11 @@
   function dvpActivityPeriod(live) {
     if (!live) return "month";
     const preset = live.preset || "";
-    if (preset === "today") return "day";
-    if (preset === "this_month" || preset === "last_month" || preset === "all") return "month";
+    // Summary channel board is month-to-date for Today / This month (rangeFrom→rangeTo).
+    // Only a custom single calendar day uses day-scoped counts.
+    if (preset === "today" || preset === "this_month" || preset === "last_month" || preset === "all") {
+      return "month";
+    }
     if (preset === "custom") {
       if (live.rangeFrom && live.rangeTo && !live.dayUsesRange
         && sameCalendarDay(live.rangeFrom, live.rangeTo)) {
@@ -16452,12 +16455,31 @@
       }
       return "month";
     }
-    // Default today-style live object
-    if (live.dayUsesRange === false && live.rangeFrom && live.rangeTo
-      && sameCalendarDay(live.rangeFrom, live.rangeTo)) {
-      return "day";
-    }
     return "month";
+  }
+
+  function dvpPeriodLabel(live, period) {
+    const fmt = (d) => {
+      try {
+        return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      } catch {
+        return "";
+      }
+    };
+    if (!live) return "—";
+    if (period === "day") {
+      return (live.rangeTo && fmt(live.rangeTo))
+        || live.rangeLabel
+        || live.label
+        || "—";
+    }
+    // MTD / range: prefer explicit from–to so "Today" still shows Sep 1 – today
+    if (live.rangeFrom && live.rangeTo && !sameCalendarDay(live.rangeFrom, live.rangeTo)) {
+      const span = `${fmt(live.rangeFrom)} – ${fmt(live.rangeTo)}`;
+      if (live.preset === "today" || live.preset === "this_month") return `MTD · ${span}`;
+      return span;
+    }
+    return live.rangeLabel || live.reportMonthLabel || live.label || cellToString(live.now) || "—";
   }
 
   function buildDeliveredVsProformaSummary() {
@@ -16467,7 +16489,7 @@
     const allRows = slots.sales.rows || [];
     populateDvpFilters(allRows);
     const rows = filterDvpSalesRows(allRows);
-    // Match the Date chip: "Today" → that calendar day only; "This month" → MTD range
+    // Channel board: Today / This month → MTD (rangeFrom→rangeTo); custom one day → that day
     const period = dvpActivityPeriod(live);
     const packed = collectDvpBuckets(rows, live, prevMonthKey, period, guestKeys);
     const prevPacked = collectDvpBuckets(rows, live, prevMonthKey, "prev", guestKeys);
@@ -16793,22 +16815,7 @@
     dvpLastPack = data;
     if (asof) {
       const live = data.live || {};
-      const period = dvpActivityPeriod(live);
-      const fmt = (d) => {
-        try {
-          return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        } catch {
-          return "";
-        }
-      };
-      if (period === "day") {
-        asof.textContent = (live.rangeTo && fmt(live.rangeTo))
-          || live.rangeLabel
-          || live.label
-          || "—";
-      } else {
-        asof.textContent = live.rangeLabel || live.reportMonthLabel || live.label || cellToString(live.now) || "—";
-      }
+      asof.textContent = dvpPeriodLabel(live, dvpActivityPeriod(live));
     }
     const updated = $("#dvp-last-updated");
     if (updated) {
