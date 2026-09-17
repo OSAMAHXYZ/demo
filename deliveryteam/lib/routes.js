@@ -440,6 +440,33 @@ function createDeliveryTeamRouter(opts) {
     res.json({ total: list.length, rows: list.map(publicVehicle) });
   });
 
+  /** Resolve a submitted VIN list for Hanouf display-before-assign. */
+  router.post('/resolve-vins', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const rawList = Array.isArray(req.body.vins) ? req.body.vins : String(req.body.vins || '').split(/[\s,;]+/);
+    const keys = [];
+    const seen = new Set();
+    rawList.forEach((v) => {
+      const key = normVin(v);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      keys.push(key);
+    });
+    if (!keys.length) return res.status(400).json({ error: 'Submit at least one VIN' });
+
+    const found = [];
+    const missing = [];
+    keys.forEach((key) => {
+      const v = store.getVehicle(key);
+      if (v) found.push(publicVehicle(v));
+      else missing.push(key);
+    });
+    return res.json({
+      total: found.length,
+      missing,
+      rows: found,
+    });
+  });
+
   // Upload handler is mounted on the main app BEFORE express.json (binary Excel).
   function uploadHandler(req, res) {
     const header = req.headers['x-delivery-team-token'] || req.headers.authorization || '';

@@ -11,6 +11,9 @@
     view: 'dashboard',
     filters: { q: '', status: '', employee: '', page: 1, limit: 40 },
     selectedVins: new Set(),
+    assignPool: [],
+    assignDisplay: [],
+    assignEmployee: '',
     tzOffset: -new Date().getTimezoneOffset(),
   };
 
@@ -324,15 +327,125 @@
   }
 
   async function loadAssign() {
-    const todayOnly = $('#assign-today-only').checked;
-    const data = await api(`/unassigned?tzOffset=${state.tzOffset}${todayOnly ? '&today=1' : ''}`);
     state.selectedVins.clear();
-    renderScheduleTable($('#assign-table'), data.rows || [], { selectable: true });
-
+    await loadAssignPool(true);
+    renderAssignDisplay();
     const dash = await api(`/dashboard?tzOffset=${state.tzOffset}`);
     $('#assign-lanes').innerHTML = (dash.employees || []).map((e) =>
       `<div class="lane" data-emp="${esc(e.name)}"><h4>${esc(e.name)}</h4><div class="count">${e.assigned} assigned · ${e.remaining} remaining · ${e.progress}%</div></div>`
     ).join('');
+  }
+
+  async function loadAssignPool(todayOnly) {
+    const data = await api(`/unassigned?tzOffset=${state.tzOffset}${todayOnly ? '&today=1' : ''}`);
+    state.assignPool = data.rows || [];
+    renderAssignPool();
+    $('#assign-pool-hint').textContent = todayOnly
+      ? `${state.assignPool.length} today’s unassigned · check VINs then Submit & display`
+      : `${state.assignPool.length} unassigned · check VINs then Submit & display`;
+  }
+
+  function renderAssignPool() {
+    const q = String($('#assign-pool-search')?.value || '').trim().toLowerCase();
+    let rows = state.assignPool || [];
+    if (q) {
+      rows = rows.filter((r) =>
+        `${r.vin} ${r.raw.product} ${r.raw.salesOrder} ${r.raw.salesType}`.toLowerCase().includes(q)
+      );
+    }
+    const cols = [
+      ['VIN', (r) => esc(r.vin)],
+      ['Product', (r) => na(r.raw.product)],
+      ['Sales Type', (r) => na(r.raw.salesType)],
+      ['Proforma', (r) => na(r.raw.proformaDate)],
+      ['Status', (r) => statusBadge(r.ops.opsStatus)],
+      ['Currently', (r) => na(r.ops.assignedEmployeeName)],
+    ];
+    const head = `<thead><tr><th></th>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>`;
+    const body = `<tbody>${rows.map((r) => {
+      const checked = state.selectedVins.has(r.vin) ? 'checked' : '';
+      return `<tr class="${checked ? 'selected' : ''}">
+        <td><input class="checkbox assign-pool-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>
+        ${cols.map((c) => `<td>${c[1](r)}</td>`).join('')}
+      </tr>`;
+    }).join('') || '<tr><td colspan="7">No unassigned VINs in this pool.</td></tr>'}</tbody>`;
+    $('#assign-pool-table').innerHTML = head + body;
+    $$('.assign-pool-check').forEach((cb) => cb.addEventListener('change', () => {
+      if (cb.checked) state.selectedVins.add(cb.dataset.vin);
+      else state.selectedVins.delete(cb.dataset.vin);
+      cb.closest('tr').classList.toggle('selected', cb.checked);
+    }));
+  }
+
+  function parseVinPaste(text) {
+    return String(text || '')
+      .split(/[\s,;]+/)
+      .map((v) => v.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .filter(Boolean);
+  }
+
+  async function submitVinsForDisplay() {
+    const fromChecks = [...state.selectedVins];
+    const fromPaste = parseVinPaste($('#assign-vin-input').value);
+    const vins = [...new Set([...fromChecks, ...fromPaste])];
+    if (!vins.length) {
+      alert('Select VINs from the pool and/or paste VINs, then Submit & display.');
+      return;
+    }
+    const data = await api('/resolve-vins', { method: 'POST', json: { vins } });
+    state.assignDisplay = data.rows || [];
+    if (data.missing && data.missing.length) {
+      alert(`${data.missing.length} VIN(s) not found in Raw Data:\n${data.missing.slice(0, 12).join('\n')}`);
+    }
+    if (!state.assignDisplay.length) {
+      alert('None of the submitted VINs were found. Upload Raw Data first.');
+      return;
+    }
+    state.selectedVins.clear();
+    $('#assign-vin-input').value = '';
+    renderAssignPool();
+    renderAssignDisplay();
+    $('#assign-step-2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderAssignDisplay() {
+    const empty = $('#assign-display-empty');
+    const body = $('#assign-display-body');
+    const rows = state.assignDisplay || [];
+    if (!rows.length) {
+      empty.hidden = false;
+      body.hidden = true;
+      $('#assign-confirm-btn').disabled = true;
+      return;
+    }
+    empty.hidden = true;
+    body.hidden = false;
+    $('#assign-display-count').textContent = String(rows.length);
+    renderScheduleTable($('#assign-display-table'), rows, { selectable: false });
+    updateAssignConfirmState();
+  }
+
+  function updateAssignConfirmState() {
+    const emp = state.assignEmployee;
+    const has = (state.assignDisplay || []).length > 0;
+    $('#assign-confirm-btn').disabled = !(emp && has);
+    $('#assign-picked-label').textContent = emp
+      ? `Selected: ${emp} · will receive ${state.assignDisplay.length} VIN(s)`
+      : 'No employee selected';
+    $$('.assign-emp-btn').forEach((b) => b.classList.toggle('active', b.dataset.emp === emp));
+  }
+
+  async function doAssign() {
+    const employee = state.assignEmployee;
+    const vins = (state.assignDisplay || []).map((r) => r.vin);
+    if (!employee) return alert('Choose an employee first');
+    if (!vins.length) return alert('Submit & display VINs first');
+    const res = await api('/assign', { method: 'POST', json: { vins, employee } });
+    const ok = (res.results || []).filter((r) => r.ok).length;
+    alert(`Assigned ${ok} VIN(s) to ${employee}`);
+    state.assignDisplay = [];
+    state.assignEmployee = '';
+    await loadAssign();
   }
 
   async function loadAudit() {
@@ -457,16 +570,6 @@
       </div>`;
   }
 
-  async function doAssign() {
-    const employee = $('#assign-employee').value;
-    const vins = [...state.selectedVins];
-    if (!employee) return alert('Select an employee');
-    if (!vins.length) return alert('Select at least one VIN');
-    await api('/assign', { method: 'POST', json: { vins, employee } });
-    state.selectedVins.clear();
-    await loadAssign();
-  }
-
   async function doUpload(file) {
     if (!file) return;
     const summary = $('#upload-summary');
@@ -576,9 +679,20 @@
   $('#logout-btn').addEventListener('click', () => logout());
   $('#refresh-btn').addEventListener('click', refreshView);
   $('#export-btn').addEventListener('click', () => doExport().catch((e) => alert(e.message)));
-  $('#assign-btn').addEventListener('click', () => doAssign().catch((e) => alert(e.message)));
-  $('#assign-refresh').addEventListener('click', loadAssign);
-  $('#assign-today-only').addEventListener('change', loadAssign);
+  $('#assign-submit-btn')?.addEventListener('click', () => submitVinsForDisplay().catch((e) => alert(e.message)));
+  $('#assign-confirm-btn')?.addEventListener('click', () => doAssign().catch((e) => alert(e.message)));
+  $('#assign-load-today')?.addEventListener('click', () => loadAssignPool(true).catch((e) => alert(e.message)));
+  $('#assign-load-all-unassigned')?.addEventListener('click', () => loadAssignPool(false).catch((e) => alert(e.message)));
+  $('#assign-clear-display')?.addEventListener('click', () => {
+    state.assignDisplay = [];
+    state.assignEmployee = '';
+    renderAssignDisplay();
+  });
+  $('#assign-pool-search')?.addEventListener('input', () => renderAssignPool());
+  $$('.assign-emp-btn').forEach((b) => b.addEventListener('click', () => {
+    state.assignEmployee = b.dataset.emp;
+    updateAssignConfirmState();
+  }));
   $('#audit-refresh').addEventListener('click', () => { state.filters.page = 1; loadAudit(); });
   $('#audit-vin').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { state.filters.page = 1; loadAudit(); }

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917a" />
+  <link rel="stylesheet" href="styles.css?v=20260917b" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -113,26 +113,60 @@
 
         <!-- ASSIGNMENT -->
         <section class="panel" id="panel-assign">
-          <div class="assign-board">
-            <div class="card">
-              <h2>Unassigned vehicles</h2>
-              <p class="hint">Select VINs · choose employee · Assign · or reassign anytime</p>
+          <div class="assign-flow">
+            <div class="card assign-step" id="assign-step-1">
+              <div class="assign-step-badge">1</div>
+              <h2>Submit VINs</h2>
+              <p class="hint">Paste VINs (one per line or comma-separated), or load today’s unassigned proformas, then submit to display them for assignment.</p>
               <div class="toolbar">
-                <label><input type="checkbox" id="assign-today-only" /> Today’s proformas only</label>
-                <select id="assign-employee">
-                  <option value="">Assign to…</option>
-                  <option>Rasha</option><option>Ruba</option><option>Ibrahim</option><option>Abdullah</option>
-                </select>
-                <button type="button" class="btn-primary" id="assign-btn">Assign selected</button>
-                <button type="button" class="btn" id="assign-refresh">Refresh</button>
+                <button type="button" class="btn" id="assign-load-today">Load today’s unassigned</button>
+                <button type="button" class="btn" id="assign-load-all-unassigned">Load all unassigned</button>
+                <input type="search" id="assign-pool-search" placeholder="Filter pool…" style="min-width:160px" />
               </div>
-              <div class="table-wrap"><table class="data" id="assign-table"></table></div>
+              <div class="table-wrap assign-pool-wrap"><table class="data" id="assign-pool-table"></table></div>
+              <div class="field" style="margin-top:12px">
+                <label for="assign-vin-input">Or paste VINs to submit</label>
+                <textarea id="assign-vin-input" rows="4" placeholder="JTNB…&#10;JTNC…&#10;or comma-separated"></textarea>
+              </div>
+              <div class="toolbar" style="margin-top:8px">
+                <button type="button" class="btn-primary" id="assign-submit-btn">Submit &amp; display</button>
+                <span class="hint" id="assign-pool-hint"></span>
+              </div>
             </div>
-            <div class="card">
-              <h2>Assignment lanes</h2>
-              <p class="hint">Quick view by employee</p>
-              <div class="assign-lanes" id="assign-lanes"></div>
+
+            <div class="card assign-step" id="assign-step-2">
+              <div class="assign-step-badge">2</div>
+              <h2>Displayed VINs · choose employee</h2>
+              <p class="hint">Review the submitted list, then pick who receives them.</p>
+              <div id="assign-display-empty" class="assign-empty">
+                No VINs displayed yet. Submit VINs in step 1 first.
+              </div>
+              <div id="assign-display-body" hidden>
+                <div class="assign-display-meta">
+                  <strong id="assign-display-count">0</strong> VIN(s) ready to assign
+                  <button type="button" class="btn" id="assign-clear-display">Clear list</button>
+                </div>
+                <div class="table-wrap"><table class="data" id="assign-display-table"></table></div>
+                <div class="assign-emp-pick">
+                  <p class="assign-emp-label">Assign displayed VINs to</p>
+                  <div class="assign-emp-grid" id="assign-emp-grid">
+                    <button type="button" class="assign-emp-btn" data-emp="Rasha">Rasha</button>
+                    <button type="button" class="assign-emp-btn" data-emp="Ruba">Ruba</button>
+                    <button type="button" class="assign-emp-btn" data-emp="Ibrahim">Ibrahim</button>
+                    <button type="button" class="assign-emp-btn" data-emp="Abdullah">Abdullah</button>
+                  </div>
+                  <div class="toolbar" style="margin-top:12px">
+                    <button type="button" class="btn-primary" id="assign-confirm-btn" disabled>Assign to selected employee</button>
+                    <span class="hint" id="assign-picked-label">No employee selected</span>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+          <div class="card">
+            <h2>Employee lanes</h2>
+            <p class="hint">Current workload after assignments</p>
+            <div class="assign-lanes" id="assign-lanes"></div>
           </div>
         </section>
 
@@ -182,6 +216,6 @@
     <div class="drawer" id="vin-drawer"></div>
   </div>
 
-  <script src="app.js?v=20260917a"></script>
+  <script src="app.js?v=20260917b"></script>
 </body>
 </html>
