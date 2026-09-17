@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delivery Team — Toyota ALJ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260917a" />
+</head>
+<body>
+  <div class="login-screen" id="login-screen">
+    <div class="login-card">
+      <div class="brand" style="padding:0 0 12px">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong style="color:var(--navy)">TOYOTA</strong>
+          <span style="color:var(--muted)">ALJ Delivery Team</span>
+        </div>
+      </div>
+      <h1>Sign in</h1>
+      <p>Internal delivery operations · Hanouf upload · employee schedules</p>
+      <div class="user-pills" id="login-pills"></div>
+      <div class="field">
+        <label for="login-user">User</label>
+        <select id="login-user"></select>
+      </div>
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <input id="login-pass" type="password" value="1234" autocomplete="current-password" />
+      </div>
+      <button type="button" class="btn-primary" id="login-btn">Enter Delivery Team</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong>TOYOTA</strong>
+          <span>ALJ Delivery Team</span>
+        </div>
+      </div>
+      <nav class="nav" id="side-nav"></nav>
+      <div class="side-user">
+        <div>
+          <strong id="side-name">—</strong>
+          <span id="side-role">—</span>
+        </div>
+        <button type="button" class="btn-ghost" id="logout-btn" style="color:#fff;border-color:rgba(255,255,255,.25)">Logout</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Dashboard</h1>
+          <p class="sub" id="page-sub">Delivery Control Tower</p>
+        </div>
+        <div class="top-actions">
+          <input type="search" id="global-search" placeholder="Search VIN / order / product…" style="min-width:220px;border:1px solid var(--line);border-radius:10px;padding:8px 10px" />
+          <button type="button" class="btn" id="export-btn" hidden>Export Excel</button>
+          <button type="button" class="btn" id="refresh-btn">Refresh</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- DASHBOARD -->
+        <section class="panel active" id="panel-dashboard">
+          <div class="kpi-row" id="dash-kpis"></div>
+          <div class="card">
+            <h2>Delivery pipeline</h2>
+            <p class="hint">Today’s Proformas → Assigned → PSFU → Ready → Delivered / Claimed</p>
+            <div class="pipeline" id="dash-pipeline"></div>
+          </div>
+          <div class="card" id="dash-emp-card">
+            <h2>Employee performance</h2>
+            <p class="hint">Click an employee to filter their VINs</p>
+            <div class="table-wrap" style="max-height:280px">
+              <table class="data" id="dash-emp-table"></table>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Status distribution</h2>
+            <p class="hint">Click a status to filter the schedule</p>
+            <div class="status-grid" id="dash-status"></div>
+          </div>
+        </section>
+
+        <!-- TODAY -->
+        <section class="panel" id="panel-today">
+          <div class="card">
+            <h2>Today’s delivery requests</h2>
+            <p class="hint">Proforma Date = today · first worksheet Raw Data</p>
+            <div class="table-wrap"><table class="data" id="today-table"></table></div>
+          </div>
+        </section>
+
+        <!-- MY VINS -->
+        <section class="panel" id="panel-my">
+          <div class="kpi-row" id="my-kpis"></div>
+          <div class="card">
+            <h2>My delivery schedule</h2>
+            <p class="hint">Excel-style workload · only your assigned VINs</p>
+            <div class="toolbar" id="my-toolbar"></div>
+            <div class="table-wrap"><table class="data" id="my-table"></table></div>
+            <div class="pager" id="my-pager"></div>
+          </div>
+        </section>
+
+        <!-- ASSIGNMENT -->
+        <section class="panel" id="panel-assign">
+          <div class="assign-board">
+            <div class="card">
+              <h2>Unassigned vehicles</h2>
+              <p class="hint">Select VINs · choose employee · Assign · or reassign anytime</p>
+              <div class="toolbar">
+                <label><input type="checkbox" id="assign-today-only" /> Today’s proformas only</label>
+                <select id="assign-employee">
+                  <option value="">Assign to…</option>
+                  <option>Rasha</option><option>Ruba</option><option>Ibrahim</option><option>Abdullah</option>
+                </select>
+                <button type="button" class="btn-primary" id="assign-btn">Assign selected</button>
+                <button type="button" class="btn" id="assign-refresh">Refresh</button>
+              </div>
+              <div class="table-wrap"><table class="data" id="assign-table"></table></div>
+            </div>
+            <div class="card">
+              <h2>Assignment lanes</h2>
+              <p class="hint">Quick view by employee</p>
+              <div class="assign-lanes" id="assign-lanes"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ALL VINS / REPORTS -->
+        <section class="panel" id="panel-all">
+          <div class="card">
+            <h2>All vehicles</h2>
+            <p class="hint">Server-side search · filters · pagination</p>
+            <div class="toolbar" id="all-toolbar"></div>
+            <div class="table-wrap"><table class="data" id="all-table"></table></div>
+            <div class="pager" id="all-pager"></div>
+          </div>
+        </section>
+
+        <!-- UPLOAD -->
+        <section class="panel" id="panel-upload">
+          <div class="card">
+            <h2>Upload Raw Data</h2>
+            <p class="hint">Reads <b>ONLY the first worksheet</b>. Updates raw fields. Never overwrites employee delivery work.</p>
+            <div class="upload-drop" id="upload-drop">
+              <strong>Drop Excel here</strong>
+              <p class="hint" style="margin-top:8px">or click to browse · .xlsx / .xls</p>
+              <input type="file" id="upload-file" accept=".xlsx,.xls" hidden />
+            </div>
+            <div id="upload-summary" hidden></div>
+          </div>
+        </section>
+
+        <!-- AUDIT -->
+        <section class="panel" id="panel-audit">
+          <div class="card">
+            <h2>Audit log</h2>
+            <p class="hint">Assignments · status · dates · uploads</p>
+            <div class="toolbar">
+              <input type="search" id="audit-vin" placeholder="Filter by VIN…" />
+              <button type="button" class="btn" id="audit-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap"><table class="data" id="audit-table"></table></div>
+            <div class="pager" id="audit-pager"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="vin-drawer-back">
+    <div class="drawer" id="vin-drawer"></div>
+  </div>
+
+  <script src="app.js?v=20260917a"></script>
+</body>
+</html>

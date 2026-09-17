@@ -36,6 +36,15 @@ const DELIVERY_CHECK_TEMPLATE_FILE = path.join(ROOT, 'delivery_check_note.docx')
 const DELIVERY_CHECK_PDF_FILE = path.join(ROOT, 'delivery_check_note.pdf');
 const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-note-form.png');
 const PORT = Number(process.env.PORT) || 3000;
+const DELIVERY_TEAM_PASSWORD = process.env.DELIVERY_TEAM_PASSWORD || process.env.DELIVERY_AGENT_PASSWORD || '1234';
+const DELIVERY_TEAM_DATA = path.join(PERSISTENT_ROOT, 'delivery-team-data.json');
+const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
+const deliveryTeam = createDeliveryTeamRouter({
+  filePath: DELIVERY_TEAM_DATA,
+  password: DELIVERY_TEAM_PASSWORD,
+});
+const deliveryTeamRouter = deliveryTeam.router;
+const deliveryTeamUpload = deliveryTeam.uploadHandler;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse', 'showroom admin', 'سيارات العرض']);
 const AGENT_PASSWORD = process.env.DELIVERY_AGENT_PASSWORD || '1234';
@@ -3218,7 +3227,18 @@ app.post('/api/rtl-daily/save-file', express.raw({ limit: '80mb', type: '*/*' })
   }
 });
 
+app.post('/api/delivery-team/upload', express.raw({ limit: '80mb', type: '*/*' }), deliveryTeamUpload);
+
 app.use(express.json({ limit: '80mb' }));
+
+// Delivery Team module (Hanouf / employees) — isolated store + auth
+app.use('/api/delivery-team', deliveryTeamRouter);
+app.get('/deliveryteam', (_req, res) => {
+  res.redirect('/deliveryteam/');
+});
+app.get('/deliveryteam/', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'deliveryteam', 'index.html'));
+});
 
 /** Shared Sales Report push — same snapshot for every laptop on this server. */
 app.get('/api/report-sheet/meta', (_req, res) => {
@@ -5652,6 +5672,9 @@ server.listen(PORT, () => {
   }
   console.log(`[delivery] listening on http://localhost:${PORT}`);
   console.log(`[delivery] agents password: ${AGENT_PASSWORD}`);
+  console.log(`[delivery-team] password: ${DELIVERY_TEAM_PASSWORD}`);
+  console.log(`[delivery-team] data: ${DELIVERY_TEAM_DATA}`);
+  console.log(`[delivery-team] UI: http://localhost:${PORT}/deliveryteam/`);
   console.log(`[delivery] persistent root: ${PERSISTENT_ROOT}`);
   console.log(`[delivery] data file: ${DATA_FILE}`);
   console.log(`[delivery] RTL archive (append-only): ${RTL_DAILY_DIR}`);
