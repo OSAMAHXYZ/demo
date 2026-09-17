@@ -5127,6 +5127,124 @@ details.bas-section-card > summary .pbi-viz-head h2 {
   background: #fff8e8;
 }
 
+/* RES VIN Movement / Reconciliation (under Monthly RTL collection) */
+.bas-res-move-panel {
+  margin: 18px 0 8px;
+  padding: 14px 16px;
+  border: 1px solid #c7e7f5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f3fbff, #fff);
+}
+
+.bas-res-move-panel .bas-retail-head {
+  margin-bottom: 10px;
+}
+
+#bas-res-move-kpis.bo-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  margin-bottom: 12px;
+}
+
+button.bas-res-move-kpi {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.bas-res-move-kpi.is-active {
+  outline: 2px solid var(--navy, #0b1f33);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(11, 31, 51, 0.08);
+}
+
+.bas-res-move-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed #b6d9ea;
+  background: #f8fcff;
+}
+
+.bas-res-flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.bas-res-flow-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--navy, #0b1f33);
+  background: #eef6fb;
+  border: 1px solid #c7e7f5;
+}
+
+.bas-res-flow-chip.is-core {
+  background: #0b1f33;
+  color: #fff;
+  border-color: #0b1f33;
+}
+
+.bas-res-flow-chip.is-ok { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+.bas-res-flow-chip.is-info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.bas-res-flow-chip.is-warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.bas-res-flow-chip.is-bad { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+
+.bas-res-flow-arrow,
+.bas-res-flow-plus {
+  font-weight: 800;
+  color: var(--muted, #64748b);
+  font-size: 0.85rem;
+}
+
+.bas-res-move-recon {
+  margin: 0 0 14px;
+}
+
+.bas-res-recon-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbe7f0;
+  background: #fff;
+}
+
+.bas-res-recon-card strong {
+  font-size: 0.88rem;
+  color: var(--navy, #0b1f33);
+}
+
+.bas-res-move-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+@media (max-width: 960px) {
+  .bas-res-move-grid { grid-template-columns: 1fr; }
+}
+
+.bas-res-move-toolbar {
+  margin: 0 0 8px;
+}
+
+.bas-res-move-panel .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
 .bas-retail-head {
   display: flex;
   align-items: center;

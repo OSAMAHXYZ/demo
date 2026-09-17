@@ -1410,6 +1410,60 @@
               <p class="bas-day-panel-label">Day-by-day breakdown</p>
               <div class="bas-day-sections" id="bas-day-sections"></div>
             </div>
+
+            <!-- Retail Electronic Sales VIN Movement / Reconciliation (VIN-level) -->
+            <div class="bas-res-move-panel" id="bas-res-move-panel">
+              <div class="bas-retail-head">
+                <div class="bas-retail-title">
+                  <h3>Retail Electronic Sales VIN Movement</h3>
+                  <span class="hint">Distinct VIN ledger · day RTL snapshots · Sales Raw proforma / invoice · click a KPI to filter</span>
+                </div>
+                <button type="button" class="btn" id="bas-res-move-export">Export Excel</button>
+              </div>
+              <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-res-move-kpis"></div>
+              <div class="bas-res-move-flow" id="bas-res-move-flow" aria-hidden="true"></div>
+              <div class="bas-res-move-recon" id="bas-res-move-recon"></div>
+              <div class="bas-res-move-grid">
+                <div class="bas-mini-section">
+                  <h3 class="bas-subhead">Transfer analysis</h3>
+                  <div class="table-wrap bas-table-wrap" id="bas-res-move-transfers"></div>
+                </div>
+                <div class="bas-mini-section">
+                  <h3 class="bas-subhead">Data quality</h3>
+                  <div id="bas-res-move-quality"></div>
+                </div>
+              </div>
+              <div class="bas-alloc-toolbar bas-res-move-toolbar">
+                <input type="search" id="bas-res-move-q" placeholder="Search VIN / product / area…" autocomplete="off" />
+                <select id="bas-res-move-f-move">
+                  <option value="">All classifications</option>
+                  <option value="CURRENT">Current RES</option>
+                  <option value="PREVIOUS / CARRYOVER">Previous / Carryover</option>
+                  <option value="NEW ALLOCATION">New Allocation</option>
+                  <option value="TRANSFER IN">Transfer IN</option>
+                  <option value="TRANSFER OUT">Transfer OUT</option>
+                  <option value="PROFORMA">Proforma</option>
+                  <option value="INVOICE">Invoice</option>
+                  <option value="PROFORMA + INVOICE">Proforma + Invoice</option>
+                  <option value="REMOVED / NOT FOUND IN SALES RAW">Removed / Not found</option>
+                </select>
+                <select id="bas-res-move-f-presence">
+                  <option value="">Current + Removed</option>
+                  <option value="current">Current in latest RTL</option>
+                  <option value="removed">Missing from latest RTL</option>
+                </select>
+                <select id="bas-res-move-f-sales">
+                  <option value="">All Sales Raw</option>
+                  <option value="found">Found in Sales Raw</option>
+                  <option value="notfound">Not found in Sales Raw</option>
+                  <option value="proforma">Has Proforma</option>
+                  <option value="invoice">Has Invoice</option>
+                </select>
+                <button type="button" class="btn" id="bas-res-move-clear">Clear filters</button>
+              </div>
+              <p class="foot bas-foot" id="bas-res-move-foot"></p>
+              <div class="table-wrap bas-table-wrap" id="bas-res-move-table"></div>
+            </div>
             </div>
           </details>
 
@@ -12491,6 +12545,692 @@
     });
   }
 
+  /* ——— RES VIN Movement / Reconciliation (distinct VIN ledger) ——— */
+  let resMoveView = {
+    kpi: "",
+    q: "",
+    movement: "",
+    presence: "",
+    sales: "",
+  };
+  let resMoveLastPack = null;
+
+  function resMoveNormVin(raw) {
+    return extractVinValue(raw) || upperTrim(String(raw || "").replace(/[^A-Za-z0-9]/g, ""));
+  }
+
+  function resMoveFmtDate(d) {
+    if (!d) return "";
+    if (typeof formatRvDate === "function") {
+      const s = formatRvDate(d);
+      if (s && s !== "—" && s !== "N/A") return s;
+    }
+    try {
+      const dt = d instanceof Date ? d : parseDate(d);
+      if (!dt) return cellToString(d).slice(0, 10);
+      return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return cellToString(d).slice(0, 10);
+    }
+  }
+
+  function resMoveSalesClass(sales) {
+    if (!sales || sales.kind === "none") {
+      return {
+        found: false,
+        badge: "NOT FOUND IN SALES RAW",
+        label: "REMOVED / NOT FOUND IN SALES RAW",
+        exitType: "REMOVED",
+        proformaDate: null,
+        invoiceDate: null,
+      };
+    }
+    const hasInv = !!(sales.invoiceDate && parseDate(sales.invoiceDate))
+      || !!(sales.deliveryDate && parseDate(sales.deliveryDate))
+      || sales.kind === "delivered";
+    const hasPro = !!(sales.proformaDate && parseDate(sales.proformaDate));
+    if (hasInv && hasPro) {
+      return {
+        found: true,
+        badge: "PROFORMA + INVOICE",
+        label: "PROFORMA + INVOICE",
+        exitType: "PROFORMA_INVOICE",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+      };
+    }
+    if (hasInv) {
+      return {
+        found: true,
+        badge: "INVOICE",
+        label: "INVOICE",
+        exitType: "INVOICE",
+        proformaDate: sales.proformaDate,
+        invoiceDate: sales.invoiceDate || sales.deliveryDate,
+      };
+    }
+    if (hasPro) {
+      return {
+        found: true,
+        badge: "PROFORMA",
+        label: "PROFORMA",
+        exitType: "PROFORMA",
+        proformaDate: sales.proformaDate,
+        invoiceDate: null,
+      };
+    }
+    return {
+      found: true,
+      badge: "FOUND IN SALES RAW",
+      label: "REMOVED / NOT FOUND IN SALES RAW",
+      exitType: "REMOVED",
+      proformaDate: sales.proformaDate,
+      invoiceDate: sales.invoiceDate || sales.deliveryDate,
+    };
+  }
+
+  /**
+   * Build chronological VIN observations from RTL day snapshots (+ live RTL as latest).
+   * Classification uses historical movement first, then Sales Raw for disappeared VINs.
+   */
+  function buildResVinMovementPack() {
+    const ctx = basMonthContext();
+    const pack = getCachedRtlActiveMonth(ctx.monthKey);
+    const dayFiles = pack && pack.days && typeof pack.days === "object" ? pack.days : {};
+    const dateKeys = Object.keys(dayFiles).sort();
+    const salesLookup = typeof buildSalesVinLookup === "function" ? buildSalesVinLookup() : new Map();
+
+    const history = new Map(); // vin -> observations[]
+    const quality = {
+      blankVins: 0,
+      invalidVins: 0,
+      duplicateRowsInSnapshots: 0,
+      productConflicts: 0,
+      areaFlips: 0,
+      salesOnly: 0,
+    };
+
+    const pushObs = (vin, obs) => {
+      if (!history.has(vin)) history.set(vin, []);
+      history.get(vin).push(obs);
+    };
+
+    dateKeys.forEach((dateKey) => {
+      const snap = dayFiles[dateKey];
+      const vehicles = (snap && snap.vehicles) || [];
+      const seenInSnap = new Set();
+      vehicles.forEach((v, i) => {
+        const car = mapRtlDailyVehicle(v, dateKey, snap && snap.id, i);
+        const vin = resMoveNormVin(car.vin);
+        if (!vin) {
+          quality.blankVins += 1;
+          return;
+        }
+        if (vin.length < 11) {
+          quality.invalidVins += 1;
+        }
+        if (seenInSnap.has(vin)) {
+          quality.duplicateRowsInSnapshots += 1;
+          return;
+        }
+        seenInSnap.add(vin);
+        const searchArea = (typeof dayVehicleSearchArea === "function"
+          ? dayVehicleSearchArea(v)
+          : "") || car.searchAreaDesc || "";
+        const agDate = typeof dayVehicleAgDate === "function" ? dayVehicleAgDate(v) : null;
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        pushObs(vin, {
+          dateKey,
+          searchArea: searchArea || "",
+          isRes: isRetailElectronicSales(searchArea),
+          product: car.product || "—",
+          suffix: car.suffix || "—",
+          year: car.year || "",
+          age,
+          allocationDate: agDate,
+          agLabel: agDate ? resMoveFmtDate(agDate) : "",
+          location: car.location || "—",
+          status: car.status || "",
+          source: "day",
+        });
+      });
+    });
+
+    // Live RTL overlays as authoritative "current" observation (same day key as today)
+    const liveCars = mapStockInv(slots.rtl.rows || [], "RTL");
+    const liveKey = `${ctx.monthKey}-${String(ctx.todayDay).padStart(2, "0")}`;
+    if (liveCars.length) {
+      // Drop same-day day-file rows so live alone defines "today"
+      history.forEach((list, vin) => {
+        history.set(vin, list.filter((o) => !(o.dateKey === liveKey && o.source === "day")));
+      });
+      const seenLive = new Set();
+      liveCars.forEach((car) => {
+        const vin = resMoveNormVin(car.vin);
+        if (!vin) {
+          quality.blankVins += 1;
+          return;
+        }
+        if (seenLive.has(vin)) {
+          quality.duplicateRowsInSnapshots += 1;
+          return;
+        }
+        seenLive.add(vin);
+        const searchArea = car.searchAreaDesc || "";
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        const agDate = car._raw && typeof rtlAgDateFromRaw === "function" ? rtlAgDateFromRaw(car._raw) : null;
+        pushObs(vin, {
+          dateKey: liveKey,
+          searchArea,
+          isRes: isRetailElectronicSales(searchArea),
+          product: car.product || "—",
+          suffix: car.suffix || "—",
+          year: car.year || "",
+          age,
+          allocationDate: agDate,
+          agLabel: agDate ? resMoveFmtDate(agDate) : "",
+          location: car.location || "—",
+          status: car.status || "",
+          source: "live",
+        });
+      });
+      if (!dateKeys.includes(liveKey)) dateKeys.push(liveKey);
+      dateKeys.sort();
+    }
+
+    const latestKey = dateKeys.length ? dateKeys[dateKeys.length - 1] : "";
+    const transferEvents = [];
+    const ledger = [];
+
+    history.forEach((obsList, vin) => {
+      obsList.sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+      const everRes = obsList.some((o) => o.isRes);
+      if (!everRes) return;
+
+      const products = new Set(obsList.map((o) => o.product).filter(Boolean));
+      if (products.size > 1) quality.productConflicts += 1;
+
+      let entryType = "CARRYOVER"; // NEW_ALLOCATION | TRANSFER_IN | CARRYOVER
+      let entryFrom = "";
+      let entryAt = "";
+      let firstRes = null;
+      let lastRes = null;
+      let prevObs = null;
+
+      obsList.forEach((o) => {
+        if (o.isRes) {
+          if (!firstRes) {
+            firstRes = o;
+            entryAt = o.dateKey;
+            if (prevObs && !prevObs.isRes) {
+              entryType = "TRANSFER_IN";
+              entryFrom = prevObs.searchArea || "(other)";
+              transferEvents.push({
+                direction: "IN",
+                vin,
+                product: o.product,
+                prevArea: entryFrom,
+                currArea: o.searchArea || "Retail Electronic Sales",
+                prevDate: prevObs.dateKey,
+                currDate: o.dateKey,
+              });
+            } else if (!prevObs) {
+              // First observation overall is RES
+              if (o.age == null || o.age === 0) entryType = "NEW_ALLOCATION";
+              else entryType = "CARRYOVER";
+            } else {
+              entryType = "CARRYOVER";
+            }
+          }
+          lastRes = o;
+        } else if (prevObs && prevObs.isRes) {
+          transferEvents.push({
+            direction: "OUT",
+            vin,
+            product: prevObs.product,
+            prevArea: prevObs.searchArea || "Retail Electronic Sales",
+            currArea: o.searchArea || "(other)",
+            prevDate: prevObs.dateKey,
+            currDate: o.dateKey,
+          });
+          quality.areaFlips += 1;
+        }
+        prevObs = o;
+      });
+
+      const lastObs = obsList[obsList.length - 1];
+      const inLatestSnap = latestKey && obsList.some((o) => o.dateKey === latestKey);
+      const latestObs = inLatestSnap
+        ? obsList.filter((o) => o.dateKey === latestKey).slice(-1)[0]
+        : null;
+      const isCurrentRes = !!(latestObs && latestObs.isRes);
+
+      const sales = typeof resolveAaSalesStatus === "function"
+        ? resolveAaSalesStatus(vin, salesLookup)
+        : { kind: "none" };
+      const salesClass = resMoveSalesClass(sales);
+
+      let exitType = "";
+      let finalClassification = "CURRENT";
+      let movementType = "CURRENT";
+
+      if (isCurrentRes) {
+        finalClassification = "CURRENT";
+        movementType = entryType === "NEW_ALLOCATION"
+          ? "NEW ALLOCATION"
+          : entryType === "TRANSFER_IN"
+            ? "TRANSFER IN"
+            : "PREVIOUS / CARRYOVER";
+      } else if (latestObs && !latestObs.isRes && lastRes) {
+        // Still in latest RTL but left RES
+        exitType = "TRANSFER_OUT";
+        finalClassification = "TRANSFER OUT";
+        movementType = "TRANSFER OUT";
+      } else if (!inLatestSnap || !latestObs) {
+        // Disappeared from latest RTL — Sales Raw first
+        exitType = salesClass.exitType;
+        finalClassification = salesClass.label;
+        movementType = salesClass.label;
+      } else {
+        exitType = "REMOVED";
+        finalClassification = "REMOVED / NOT FOUND IN SALES RAW";
+        movementType = finalClassification;
+      }
+
+      const cur = latestObs || lastObs || lastRes || firstRes;
+      ledger.push({
+        vin,
+        product: (lastRes && lastRes.product) || (firstRes && firstRes.product) || "—",
+        suffix: (lastRes && lastRes.suffix) || (firstRes && firstRes.suffix) || "—",
+        year: (lastRes && lastRes.year) || "",
+        firstSnapshot: obsList[0].dateKey,
+        lastSnapshot: lastObs.dateKey,
+        firstRetailDate: firstRes ? firstRes.dateKey : "",
+        allocationDate: (lastRes && lastRes.agLabel) || (firstRes && firstRes.agLabel) || "",
+        allocationAgeing: lastRes ? lastRes.age : (firstRes ? firstRes.age : null),
+        previousSearchArea: entryFrom || (entryType === "CARRYOVER" ? "Retail Electronic Sales" : ""),
+        currentSearchArea: isCurrentRes
+          ? (latestObs.searchArea || "Retail Electronic Sales")
+          : (latestObs ? latestObs.searchArea : "(missing from latest RTL)"),
+        entryType,
+        exitType,
+        movementType,
+        finalClassification,
+        isCurrent: isCurrentRes,
+        salesFound: salesClass.found,
+        salesBadge: salesClass.badge,
+        proformaDate: salesClass.proformaDate,
+        invoiceDate: salesClass.invoiceDate,
+        location: (cur && cur.location) || "—",
+        status: (cur && cur.status) || "",
+        observations: obsList.length,
+      });
+    });
+
+    // Sales Raw VINs not in any RTL RES history (informational quality)
+    salesLookup.forEach((_s, vin) => {
+      if (!history.has(vin)) quality.salesOnly += 1;
+    });
+
+    const kpis = {
+      historical: ledger.length,
+      carryover: ledger.filter((r) => r.entryType === "CARRYOVER").length,
+      newAlloc: ledger.filter((r) => r.entryType === "NEW_ALLOCATION").length,
+      transferIn: ledger.filter((r) => r.entryType === "TRANSFER_IN").length,
+      transferOut: ledger.filter((r) => r.exitType === "TRANSFER_OUT" || r.finalClassification === "TRANSFER OUT").length,
+      current: ledger.filter((r) => r.isCurrent).length,
+      proforma: ledger.filter((r) => r.exitType === "PROFORMA").length,
+      invoice: ledger.filter((r) => r.exitType === "INVOICE" || r.exitType === "PROFORMA_INVOICE").length,
+      removed: ledger.filter((r) => r.exitType === "REMOVED").length,
+    };
+
+    // Reconciliation: every historical VIN has one entry type and one outcome
+    const entered = kpis.carryover + kpis.newAlloc + kpis.transferIn;
+    const outcomes = kpis.current + kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed;
+    const impliedCurrent = entered - (kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed);
+    const unreconciled = (entered - kpis.historical) || (outcomes - kpis.historical) || (kpis.current - impliedCurrent);
+    const unreconciledVins = [];
+    if (unreconciled !== 0) {
+      ledger.forEach((r) => {
+        const outcomeOk = r.isCurrent
+          || r.exitType === "TRANSFER_OUT"
+          || r.exitType === "PROFORMA"
+          || r.exitType === "INVOICE"
+          || r.exitType === "PROFORMA_INVOICE"
+          || r.exitType === "REMOVED";
+        const entryOk = r.entryType === "CARRYOVER" || r.entryType === "NEW_ALLOCATION" || r.entryType === "TRANSFER_IN";
+        if (!outcomeOk || !entryOk) unreconciledVins.push(r.vin);
+      });
+    }
+
+    // Transfer corridor summary
+    const corridor = new Map();
+    transferEvents.forEach((e) => {
+      const key = `${e.prevArea} → ${e.currArea}`;
+      corridor.set(key, (corridor.get(key) || 0) + 1);
+    });
+
+    return {
+      ctx,
+      latestKey,
+      snapshotCount: dateKeys.length,
+      ledger,
+      transferEvents,
+      corridor: [...corridor.entries()].map(([k, n]) => ({ path: k, count: n }))
+        .sort((a, b) => b.count - a.count),
+      kpis,
+      recon: {
+        entered,
+        outcomes,
+        left: kpis.transferOut + kpis.proforma + kpis.invoice + kpis.removed,
+        impliedCurrent,
+        actualCurrent: kpis.current,
+        unreconciled,
+        unreconciledVins: unreconciledVins.slice(0, 40),
+      },
+      quality,
+    };
+  }
+
+  function filteredResMoveRows(pack) {
+    const rows = (pack && pack.ledger) || [];
+    const q = String(resMoveView.q || "").trim().toLowerCase();
+    const move = resMoveView.movement || resMoveView.kpi || "";
+    return rows.filter((r) => {
+      if (move === "CURRENT" && !r.isCurrent) return false;
+      if (move === "PREVIOUS / CARRYOVER" && r.entryType !== "CARRYOVER") return false;
+      if (move === "NEW ALLOCATION" && r.entryType !== "NEW_ALLOCATION") return false;
+      if (move === "TRANSFER IN" && r.entryType !== "TRANSFER_IN") return false;
+      if (move === "TRANSFER OUT" && r.finalClassification !== "TRANSFER OUT" && r.exitType !== "TRANSFER_OUT") return false;
+      if (move === "PROFORMA" && r.exitType !== "PROFORMA") return false;
+      if (move === "INVOICE" && r.exitType !== "INVOICE" && r.exitType !== "PROFORMA_INVOICE") return false;
+      if (move === "PROFORMA + INVOICE" && r.exitType !== "PROFORMA_INVOICE") return false;
+      if (move === "REMOVED / NOT FOUND IN SALES RAW" && r.exitType !== "REMOVED") return false;
+      if (move === "HISTORICAL" && false) return false;
+      if (resMoveView.kpi === "historical") { /* all */ }
+      if (resMoveView.presence === "current" && !r.isCurrent) return false;
+      if (resMoveView.presence === "removed" && r.isCurrent) return false;
+      if (resMoveView.sales === "found" && !r.salesFound) return false;
+      if (resMoveView.sales === "notfound" && r.salesFound) return false;
+      if (resMoveView.sales === "proforma" && !r.proformaDate) return false;
+      if (resMoveView.sales === "invoice" && !r.invoiceDate) return false;
+      if (q) {
+        const hay = `${r.vin} ${r.product} ${r.suffix} ${r.previousSearchArea} ${r.currentSearchArea} ${r.finalClassification} ${r.location}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderResVinMovement() {
+    const panel = $("#bas-res-move-panel");
+    if (!panel) return;
+    const ctx = basMonthContext();
+    const packCache = getCachedRtlActiveMonth(ctx.monthKey);
+    const hasDaily = packCache && packCache.days && Object.keys(packCache.days).length > 0;
+    if (!hasDaily && !(slots.rtl.rows || []).length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+
+    const pack = buildResVinMovementPack();
+    resMoveLastPack = pack;
+    const k = pack.kpis;
+
+    const kpiEl = $("#bas-res-move-kpis");
+    if (kpiEl) {
+      const items = [
+        ["historical", "Historical RES", k.historical, "Ever entered Retail Electronic Sales", ""],
+        ["CURRENT", "Current RES", k.current, "In latest RTL snapshot", "ok"],
+        ["PREVIOUS / CARRYOVER", "Previous / Carryover", k.carryover, "Already RES before first seen / age ≥ 1", ""],
+        ["NEW ALLOCATION", "New Allocation", k.newAlloc, "First seen as RES · age 0 / blank", "ok"],
+        ["TRANSFER IN", "Transfer IN", k.transferIn, "Other area → RES", "info"],
+        ["TRANSFER OUT", "Transfer OUT", k.transferOut, "RES → other area in RTL", "warn"],
+        ["PROFORMA", "Proforma", k.proforma, "Missing from RTL · open proforma in Sales Raw", "warn"],
+        ["INVOICE", "Invoice", k.invoice, "Missing from RTL · invoiced / delivered", "ok"],
+        ["REMOVED / NOT FOUND IN SALES RAW", "Removed / Unmatched", k.removed, "Missing from RTL · not in Sales Raw", "bad"],
+      ];
+      kpiEl.innerHTML = items.map(([id, lab, val, sub, cls]) => {
+        const active = (resMoveView.kpi === id || resMoveView.movement === id) ? " is-active" : "";
+        return `<button type="button" class="bo-kpi bas-res-move-kpi${active}${cls ? ` ${cls}` : ""}" data-res-move-kpi="${escapeHtml(id)}" title="${escapeHtml(sub)}">
+          <div class="lab">${escapeHtml(lab)}</div>
+          <div class="val">${escapeHtml(formatNumber(val))}</div>
+          <div class="sub">${escapeHtml(sub)}</div>
+        </button>`;
+      }).join("");
+      $$("[data-res-move-kpi]", kpiEl).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-res-move-kpi") || "";
+          if (resMoveView.kpi === id) {
+            resMoveView.kpi = "";
+            resMoveView.movement = "";
+          } else {
+            resMoveView.kpi = id;
+            resMoveView.movement = id === "historical" ? "" : id;
+          }
+          const sel = $("#bas-res-move-f-move");
+          if (sel) sel.value = resMoveView.movement;
+          renderResVinMovement();
+        });
+      });
+    }
+
+    const flow = $("#bas-res-move-flow");
+    if (flow) {
+      flow.innerHTML = `
+        <div class="bas-res-flow-row">
+          <span class="bas-res-flow-chip">Previous ${formatNumber(k.carryover)}</span>
+          <span class="bas-res-flow-arrow">↓</span>
+          <span class="bas-res-flow-chip is-ok">New Allocation ${formatNumber(k.newAlloc)}</span>
+          <span class="bas-res-flow-plus">+</span>
+          <span class="bas-res-flow-chip is-info">Transfer IN ${formatNumber(k.transferIn)}</span>
+          <span class="bas-res-flow-arrow">→</span>
+          <span class="bas-res-flow-chip is-core">RES ${formatNumber(k.historical)}</span>
+          <span class="bas-res-flow-arrow">→</span>
+          <span class="bas-res-flow-chip is-warn">Transfer OUT ${formatNumber(k.transferOut)}</span>
+        </div>
+        <div class="bas-res-flow-row">
+          <span class="bas-res-flow-chip is-warn">Proforma ${formatNumber(k.proforma)}</span>
+          <span class="bas-res-flow-chip is-ok">Invoice ${formatNumber(k.invoice)}</span>
+          <span class="bas-res-flow-chip is-bad">Removed ${formatNumber(k.removed)}</span>
+          <span class="bas-res-flow-arrow">⇒</span>
+          <span class="bas-res-flow-chip is-core">Current ${formatNumber(k.current)}</span>
+        </div>`;
+    }
+
+    const recon = $("#bas-res-move-recon");
+    if (recon) {
+      const r = pack.recon;
+      const balCls = r.unreconciled === 0 ? "ok" : "bad";
+      recon.innerHTML = `
+        <div class="bas-res-recon-card">
+          <strong>Reconciliation</strong>
+          <p class="hint" style="margin:6px 0 0">
+            Carryover ${formatNumber(k.carryover)}
+            + New ${formatNumber(k.newAlloc)}
+            + Transfer IN ${formatNumber(k.transferIn)}
+            = Entered ${formatNumber(r.entered)}
+            · − Transfer OUT ${formatNumber(k.transferOut)}
+            − Proforma/Invoice ${formatNumber(k.proforma + k.invoice)}
+            − Removed ${formatNumber(k.removed)}
+            = Implied current ${formatNumber(r.impliedCurrent)}
+            · Actual current ${formatNumber(r.actualCurrent)}
+            · <span class="badge ${balCls}">${r.unreconciled === 0 ? "Balanced" : `UNRECONCILED ${r.unreconciled > 0 ? "+" : ""}${formatNumber(r.unreconciled)}`}</span>
+          </p>
+          ${r.unreconciled !== 0 && r.unreconciledVins.length
+            ? `<p class="foot" style="margin:8px 0 0">Sample multi-flip VINs: ${r.unreconciledVins.map((v) => escapeHtml(v)).join(", ")}</p>`
+            : ""}
+          <p class="foot" style="margin:6px 0 0">${formatNumber(pack.snapshotCount)} RTL snapshot(s) · latest ${escapeHtml(pack.latestKey || "—")}</p>
+        </div>`;
+    }
+
+    const xferEl = $("#bas-res-move-transfers");
+    if (xferEl) {
+      const events = (pack.transferEvents || []).slice().reverse().slice(0, 80);
+      const corridors = pack.corridor || [];
+      xferEl.innerHTML = `
+        <p class="hint" style="margin:0 0 8px">Other area → RES (IN) · RES → other area (OUT)</p>
+        ${corridors.length ? `<table class="bas-table" style="margin-bottom:10px">
+          <thead><tr><th>From → To</th><th class="num">VINs</th></tr></thead>
+          <tbody>${corridors.slice(0, 20).map((c) => `<tr>
+            <td>${escapeHtml(c.path)}</td><td class="num">${formatNumber(c.count)}</td>
+          </tr>`).join("")}</tbody>
+        </table>` : "<p class=\"foot\">No transfer corridors yet.</p>"}
+        ${events.length ? `<table class="bas-table">
+          <thead><tr><th>Dir</th><th>VIN</th><th>Product</th><th>From</th><th>To</th><th>Prev day</th><th>Curr day</th></tr></thead>
+          <tbody>${events.map((e) => `<tr class="${e.direction === "IN" ? "bas-row-above" : "bas-row-below"}">
+            <td><span class="badge ${e.direction === "IN" ? "ok" : "warn"}">${e.direction}</span></td>
+            <td>${escapeHtml(e.vin)}</td>
+            <td>${escapeHtml(e.product || "—")}</td>
+            <td>${escapeHtml(e.prevArea)}</td>
+            <td>${escapeHtml(e.currArea)}</td>
+            <td>${escapeHtml(e.prevDate)}</td>
+            <td>${escapeHtml(e.currDate)}</td>
+          </tr>`).join("")}</tbody>
+        </table>` : ""}`;
+    }
+
+    const qualEl = $("#bas-res-move-quality");
+    if (qualEl) {
+      const q = pack.quality || {};
+      qualEl.innerHTML = `<div class="status-grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+        ${[
+          ["Blank VINs", q.blankVins],
+          ["Short / invalid VINs", q.invalidVins],
+          ["Dup rows in snapshots", q.duplicateRowsInSnapshots],
+          ["Product conflicts", q.productConflicts],
+          ["RES area flips", q.areaFlips],
+          ["Sales-only VINs", q.salesOnly],
+        ].map(([lab, n]) => `<div class="status-chip" style="cursor:default"><div class="n">${formatNumber(n || 0)}</div><div class="l">${escapeHtml(lab)}</div></div>`).join("")}
+      </div>`;
+    }
+
+    const rows = filteredResMoveRows(pack);
+    const foot = $("#bas-res-move-foot");
+    if (foot) {
+      foot.textContent = `${formatNumber(rows.length)} VIN(s) shown · ${formatNumber(pack.ledger.length)} historical RES · filters apply to the audit table`;
+    }
+    const tableEl = $("#bas-res-move-table");
+    if (tableEl) {
+      if (!rows.length) {
+        tableEl.innerHTML = `<p class="foot" style="padding:12px">No VINs match these filters. Upload day RTL files and Sales Raw, then Refresh.</p>`;
+      } else {
+        tableEl.innerHTML = `<table class="bas-table">
+          <thead><tr>
+            <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th><th class="num">Age</th>
+            <th>First seen</th><th>Last seen</th><th>Prev area</th><th>Curr area</th>
+            <th>Movement</th><th>Sales Raw</th><th>Proforma</th><th>Invoice</th>
+            <th>Final</th><th>Location</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rows.map((r) => {
+            const salesCls = r.salesFound ? (r.exitType === "INVOICE" || r.exitType === "PROFORMA_INVOICE" ? "ok" : "warn") : "bad";
+            return `<tr class="${r.isCurrent ? "bas-row-above" : "bas-row-below"}">
+              <td class="mono">${escapeHtml(r.vin)}</td>
+              <td>${escapeHtml(r.product)}</td>
+              <td>${escapeHtml(r.suffix)}</td>
+              <td>${escapeHtml(r.allocationDate || "—")}</td>
+              <td class="num">${r.allocationAgeing == null ? "—" : formatNumber(r.allocationAgeing)}</td>
+              <td>${escapeHtml(r.firstRetailDate || r.firstSnapshot || "—")}</td>
+              <td>${escapeHtml(r.lastSnapshot || "—")}</td>
+              <td>${escapeHtml(r.previousSearchArea || "—")}</td>
+              <td>${escapeHtml(r.currentSearchArea || "—")}</td>
+              <td><span class="badge">${escapeHtml(r.movementType)}</span></td>
+              <td><span class="badge ${salesCls}">${escapeHtml(r.salesBadge)}</span></td>
+              <td>${escapeHtml(resMoveFmtDate(r.proformaDate) || "—")}</td>
+              <td>${escapeHtml(resMoveFmtDate(r.invoiceDate) || "—")}</td>
+              <td><strong>${escapeHtml(r.finalClassification)}</strong></td>
+              <td>${escapeHtml(r.location || "—")}</td>
+              <td>${escapeHtml(r.status || "—")}</td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+      }
+    }
+  }
+
+  function exportResVinMovementExcel() {
+    const pack = resMoveLastPack || buildResVinMovementPack();
+    const rows = filteredResMoveRows(pack);
+    if (typeof XLSX === "undefined") {
+      setStatus("Excel library not loaded", "err");
+      return;
+    }
+    const aoa = [[
+      "VIN", "Product", "Suffix", "Year", "Allocation Date", "Allocation Ageing",
+      "First Snapshot", "Last Snapshot", "First Retail Date",
+      "Previous Search Area", "Current Search Area", "Entry Type", "Exit Type",
+      "Movement Type", "Final Classification", "Sales Raw", "Proforma Date", "Invoice Date",
+      "Location", "Status", "Observations",
+    ]];
+    rows.forEach((r) => {
+      aoa.push([
+        r.vin, r.product, r.suffix, r.year, r.allocationDate, r.allocationAgeing,
+        r.firstSnapshot, r.lastSnapshot, r.firstRetailDate,
+        r.previousSearchArea, r.currentSearchArea, r.entryType, r.exitType,
+        r.movementType, r.finalClassification, r.salesBadge,
+        resMoveFmtDate(r.proformaDate), resMoveFmtDate(r.invoiceDate),
+        r.location, r.status, r.observations,
+      ]);
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "RES VIN Movement");
+    XLSX.writeFile(wb, `res-vin-movement-${pack.latestKey || "export"}.xlsx`);
+  }
+
+  function bindResVinMovementUi() {
+    const q = $("#bas-res-move-q");
+    if (q && !q.dataset.bound) {
+      q.dataset.bound = "1";
+      q.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        resMoveView.q = q.value.trim();
+        renderResVinMovement();
+      });
+      q.addEventListener("change", () => {
+        resMoveView.q = q.value.trim();
+        renderResVinMovement();
+      });
+    }
+    ["bas-res-move-f-move", "bas-res-move-f-presence", "bas-res-move-f-sales"].forEach((id) => {
+      const el = $(`#${id}`);
+      if (!el || el.dataset.bound) return;
+      el.dataset.bound = "1";
+      el.addEventListener("change", () => {
+        if (id.endsWith("move")) {
+          resMoveView.movement = el.value;
+          resMoveView.kpi = el.value;
+        }
+        if (id.endsWith("presence")) resMoveView.presence = el.value;
+        if (id.endsWith("sales")) resMoveView.sales = el.value;
+        renderResVinMovement();
+      });
+    });
+    const clear = $("#bas-res-move-clear");
+    if (clear && !clear.dataset.bound) {
+      clear.dataset.bound = "1";
+      clear.addEventListener("click", () => {
+        resMoveView = { kpi: "", q: "", movement: "", presence: "", sales: "" };
+        if (q) q.value = "";
+        ["bas-res-move-f-move", "bas-res-move-f-presence", "bas-res-move-f-sales"].forEach((id) => {
+          const el = $(`#${id}`);
+          if (el) el.value = "";
+        });
+        renderResVinMovement();
+      });
+    }
+    const exp = $("#bas-res-move-export");
+    if (exp && !exp.dataset.bound) {
+      exp.dataset.bound = "1";
+      exp.addEventListener("click", () => {
+        try { exportResVinMovementExcel(); }
+        catch (err) { setStatus(err.message || "Export failed", "err"); }
+      });
+    }
+  }
+
   function renderBasMonthlyCollection(d) {
     const section = $("#bas-month-section");
     if (!section) return;
@@ -12841,6 +13581,15 @@
         </details>`;
       }
       daySectionsEl.innerHTML = sectionsHtml;
+    }
+
+    bindResVinMovementUi();
+    try {
+      renderResVinMovement();
+    } catch (err) {
+      console.warn("RES VIN Movement render failed", err);
+      const foot = $("#bas-res-move-foot");
+      if (foot) foot.textContent = err && err.message ? err.message : "VIN movement failed to render";
     }
   }
 
