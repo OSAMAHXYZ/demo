@@ -11,10 +11,16 @@
     view: 'dashboard',
     filters: { q: '', status: '', employee: '', page: 1, limit: 40 },
     selectedVins: new Set(),
+    reassignVins: new Set(),
+    reassignFrom: '',
+    reassignRows: [],
     assignPool: [],
     assignDisplay: [],
     assignEmployee: '',
     editsTimer: null,
+    liveTimer: null,
+    liveFilters: { q: '', employee: '', status: '' },
+    liveFingerprint: '',
     tzOffset: -new Date().getTimezoneOffset(),
   };
 
@@ -41,12 +47,26 @@
     return '<span class="badge">—</span>';
   }
 
+  function statusRowClass(s) {
+    const v = String(s || '').trim();
+    if (v === 'Claimed') return 'row-status-claimed';
+    if (v === 'PSFU') return 'row-status-psfu';
+    if (v === 'جاهز للتسليم') return 'row-status-ready';
+    if (v === 'مرور') return 'row-status-traffic';
+    if (v === 'رجوع مرور') return 'row-status-traffic-return';
+    if (v === 'الغاء') return 'row-status-cancel';
+    return '';
+  }
+
   function statusBadge(s) {
     const v = String(s || '').trim();
     if (!v) return '<span class="badge">—</span>';
-    if (v === 'Claimed' || v === 'تم التسليم') return `<span class="badge ok">${esc(v)}</span>`;
-    if (v === 'معلقة' || v === 'رجوع مرور' || v === 'الغاء') return `<span class="badge bad">${esc(v)}</span>`;
-    if (v === 'PSFU' || v === 'جاهز للتسليم') return `<span class="badge info">${esc(v)}</span>`;
+    if (v === 'Claimed') return `<span class="badge info">${esc(v)}</span>`;
+    if (v === 'PSFU' || v === 'تم التسليم') return `<span class="badge ok">${esc(v)}</span>`;
+    if (v === 'جاهز للتسليم') return `<span class="badge warn">${esc(v)}</span>`;
+    if (v === 'مرور') return `<span class="badge">${esc(v)}</span>`;
+    if (v === 'رجوع مرور') return `<span class="badge purple">${esc(v)}</span>`;
+    if (v === 'الغاء' || v === 'معلقة') return `<span class="badge bad">${esc(v)}</span>`;
     return `<span class="badge warn">${esc(v)}</span>`;
   }
 
@@ -79,6 +99,7 @@
   function navItems() {
     const items = [
       { id: 'dashboard', label: 'Dashboard', roles: ['admin', 'hanouf', 'employee'] },
+      { id: 'live', label: 'Live Sheet', roles: ['admin', 'hanouf'] },
       { id: 'today', label: "Today's Vehicles", roles: ['admin', 'hanouf'] },
       { id: 'my', label: 'My VINs', roles: ['employee', 'admin', 'hanouf'] },
       { id: 'assign', label: 'Assignment', roles: ['admin', 'hanouf'] },
@@ -106,10 +127,15 @@
       clearInterval(state.editsTimer);
       state.editsTimer = null;
     }
+    if (state.liveTimer) {
+      clearInterval(state.liveTimer);
+      state.liveTimer = null;
+    }
     $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${view}`));
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
+      live: ['Live Sheet', 'Excel-style board · all assigned VINs · updates every few seconds'],
       today: ["Today's Vehicles", 'Proforma Date = today'],
       my: ['My VINs', 'Edit your assigned vehicles — changes go to Admin live'],
       assign: ['Assignment', 'Hanouf assignment board'],
@@ -126,11 +152,17 @@
         loadDashboard().catch(() => {});
       }, 8000);
     }
+    if (view === 'live' && canManage()) {
+      state.liveTimer = setInterval(() => {
+        loadLiveSheet({ silent: true }).catch(() => {});
+      }, 5000);
+    }
   }
 
   async function refreshView() {
     try {
       if (state.view === 'dashboard') await loadDashboard();
+      if (state.view === 'live') await loadLiveSheet();
       if (state.view === 'today') await loadToday();
       if (state.view === 'my') await loadMy();
       if (state.view === 'assign') await loadAssign();
@@ -140,6 +172,121 @@
       console.error(err);
       alert(err.message || 'Failed to load');
     }
+  }
+
+  async function loadLiveSheet({ silent = false } = {}) {
+    const f = state.liveFilters;
+    const params = new URLSearchParams();
+    params.set('tzOffset', String(state.tzOffset));
+    params.set('sort', 'updatedAt');
+    params.set('dir', 'desc');
+    if (f.q) params.set('q', f.q);
+    if (f.employee) params.set('employee', f.employee);
+    if (f.status) params.set('status', f.status);
+    const data = await api(`/live-sheet?${params}`);
+    const rows = data.rows || [];
+    const fingerprint = JSON.stringify(rows.map((r) => [
+      r.vin,
+      r.ops.opsStatus,
+      r.ops.assignedEmployeeName,
+      r.ops.carrier,
+      r.ops.updatedAt,
+      r.ops.notes,
+      r.ops.guestSentDate,
+      r.ops.signatureReceivedDate,
+      r.ops.accountsSentDate,
+      r.ops.accountsApprovalDate,
+      r.ops.vin1502,
+      r.ops.trafficFile,
+      r.ops.trafficFeesOps,
+      r.ops.insuranceOps,
+      r.ops.registrationIssueDate,
+      r.ops.transferCity,
+    ]));
+    const changed = fingerprint !== state.liveFingerprint;
+    state.liveFingerprint = fingerprint;
+
+    const statusSel = $('#live-status');
+    if (statusSel && !statusSel.dataset.filled) {
+      const statuses = (state.meta && state.meta.statuses) || [];
+      statusSel.innerHTML = `<option value="">All statuses</option>${statuses.map((s) =>
+        `<option value="${esc(s)}">${esc(s)}</option>`
+      ).join('')}`;
+      statusSel.value = f.status || '';
+      statusSel.dataset.filled = '1';
+    }
+
+    const chips = $('#live-chips');
+    if (chips) {
+      const byEmp = data.byEmployee || {};
+      const bySt = data.byStatus || {};
+      chips.innerHTML = [
+        `<span class="live-chip"><b>${data.total || 0}</b> assigned</span>`,
+        ...Object.keys(byEmp).map((k) => `<span class="live-chip">${esc(k)} <b>${byEmp[k]}</b></span>`),
+        ...Object.keys(bySt).filter((k) => k !== '(blank)').slice(0, 8).map((k) =>
+          `<button type="button" class="live-chip status-filter ${f.status === k ? 'active' : ''}" data-status="${esc(k)}">${esc(k)} <b>${bySt[k]}</b></button>`
+        ),
+      ].join('');
+      $$('.live-chip.status-filter', chips).forEach((b) => b.addEventListener('click', () => {
+        state.liveFilters.status = state.liveFilters.status === b.dataset.status ? '' : b.dataset.status;
+        if ($('#live-status')) $('#live-status').value = state.liveFilters.status;
+        loadLiveSheet().catch((e) => alert(e.message));
+      }));
+    }
+
+    const meta = $('#live-meta-text');
+    const dot = $('#live-dot');
+    if (meta) {
+      const t = new Date(data.at || Date.now()).toLocaleTimeString();
+      meta.textContent = `${data.total || 0} assigned VINs · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
+    }
+    if (dot) {
+      dot.classList.toggle('pulse', !!changed || !silent);
+      setTimeout(() => dot && dot.classList.remove('pulse'), 900);
+    }
+
+    if (!changed && silent) return;
+
+    const cols = [
+      ['#', (_r, i) => i + 1],
+      ['Employee', (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>`],
+      ['Status', (r) => statusBadge(r.ops.opsStatus)],
+      ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
+      ['Proforma', (r) => na(r.raw.proformaDate)],
+      ['Order', (r) => na(r.raw.salesOrder)],
+      ['Product', (r) => na(r.raw.product)],
+      ['Sales Type', (r) => na(r.raw.salesType)],
+      ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
+      ['Customer', (r) => na(r.raw.userName)],
+      ['S/A', (r) => na(r.raw.salesAdvisor)],
+      ['Phone', (r) => na(r.raw.phone)],
+      ['GT Loc', (r) => na(r.raw.gtLocation)],
+      ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
+      ['إرسال الضيف', (r) => na(r.ops.guestSentDate)],
+      ['استلام التواقيع', (r) => na(r.ops.signatureReceivedDate)],
+      ['إرسال للحسابات', (r) => na(r.ops.accountsSentDate)],
+      ['موافقة الحسابات', (r) => na(r.ops.accountsApprovalDate)],
+      ['VIN 1502', (r) => ynBadge(r.ops.vin1502)],
+      ['ملف المرور', (r) => ynBadge(r.ops.trafficFile)],
+      ['Traffic Fees', (r) => ynBadge(r.ops.trafficFeesOps)],
+      ['Insurance', (r) => ynBadge(r.ops.insuranceOps)],
+      ['إصدار الاستمارة', (r) => na(r.ops.registrationIssueDate)],
+      ['مدينة الترحيل', (r) => na(r.ops.transferCity)],
+      ['الناقل', (r) => na(r.ops.carrier)],
+      ['ملاحظات', (r) => esc(r.ops.notes || '')],
+      ['Updated', (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—')],
+      ['By', (r) => na(r.ops.updatedBy)],
+    ];
+
+    const table = $('#live-table');
+    table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r, i) => {
+        const statusCls = statusRowClass(r.ops.opsStatus);
+        return `<tr class="${statusCls}" data-vin="${esc(r.vin)}">${cols.map((c) =>
+          `<td>${c[1](r, i)}</td>`
+        ).join('')}</tr>`;
+      }).join('') || `<tr><td colspan="${cols.length}">No assigned VINs yet. Use Assignment to assign vehicles.</td></tr>`}</tbody>`;
+    $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
   }
 
   async function loadDashboard() {
@@ -258,7 +405,10 @@
       return `<input list="edit-city-list" ${common} value="${esc(v)}" placeholder="City…" />`;
     }
     if (type === 'carrier') {
-      return `<input list="edit-carrier-list" ${common} value="${esc(v)}" placeholder="Carrier…" />`;
+      const carriers = (state.meta && state.meta.carriers) || [];
+      return `<select ${common}><option value="">— الناقل —</option>${carriers.map((c) =>
+        `<option value="${esc(c)}" ${v === c ? 'selected' : ''}>${esc(c)}</option>`
+      ).join('')}</select>`;
     }
     if (type === 'notes') {
       return `<input type="text" ${common} value="${esc(v)}" placeholder="Notes…" style="min-width:140px" />`;
@@ -266,7 +416,7 @@
     return esc(v || '—');
   }
 
-  function scheduleColumns({ editable = false } = {}) {
+  function scheduleColumns({ editable = false, carrierEditable = false } = {}) {
     const cols = [
       ['Proforma', (r) => na(r.raw.proformaDate)],
       ['Order', (r) => na(r.raw.salesOrder)],
@@ -274,7 +424,7 @@
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Product', (r) => na(r.raw.product)],
       ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['User Name', (r) => na(r.raw.userName)],
+      ['Customer Name', (r) => na(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
@@ -295,6 +445,7 @@
         ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
         ['الناقل', (r) => editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)],
         ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
+        ['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`],
       );
     } else {
       cols.push(
@@ -309,13 +460,12 @@
         ['Insurance', (r) => ynBadge(r.ops.insuranceOps)],
         ['إصدار الاستمارة', (r) => na(r.ops.registrationIssueDate)],
         ['مدينة الترحيل', (r) => na(r.ops.transferCity)],
-        ['الناقل', (r) => na(r.ops.carrier)],
+        ['الناقل', (r) => (carrierEditable
+          ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)
+          : na(r.ops.carrier))],
         ['ملاحظات', (r) => esc((r.ops.notes || '').slice(0, 40))],
         ['Employee', (r) => na(r.ops.assignedEmployeeName)],
       );
-    }
-    if (editable) {
-      cols.push(['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`]);
     }
     return cols;
   }
@@ -330,6 +480,18 @@
       await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: { [field]: value } });
       el.classList.remove('is-saving');
       el.classList.add('is-saved');
+      if (field === 'opsStatus') {
+        const tr = el.closest('tr');
+        if (tr) {
+          tr.classList.remove(
+            'row-status-claimed', 'row-status-psfu', 'row-status-ready',
+            'row-status-traffic', 'row-status-traffic-return', 'row-status-cancel'
+          );
+          const cls = statusRowClass(value);
+          if (cls) tr.classList.add(cls);
+          tr.dataset.status = value || '';
+        }
+      }
       const toast = $('#my-save-toast');
       if (toast) {
         toast.hidden = false;
@@ -357,27 +519,97 @@
     });
   }
 
-  function renderScheduleTable(tableEl, rows, { selectable = false, editable = false } = {}) {
-    const cols = scheduleColumns({ editable });
+  function fillCarrierLists() {
+    const carriers = (state.meta && state.meta.carriers) || [];
+    const html = carriers.map((c) => `<option value="${esc(c)}"></option>`).join('');
+    ['#edit-carrier-list', '#all-carrier-list', '#assign-carrier-list'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.innerHTML = html;
+    });
+    const bulk = $('#assign-bulk-carrier');
+    if (bulk && bulk.tagName === 'SELECT' && !bulk.dataset.filled) {
+      bulk.innerHTML = `<option value="">— اختر الناقل —</option>${carriers.map((c) =>
+        `<option value="${esc(c)}">${esc(c)}</option>`
+      ).join('')}`;
+      bulk.dataset.filled = '1';
+    }
+  }
+
+  function renderScheduleTable(tableEl, rows, {
+    selectable = false,
+    editable = false,
+    carrierEditable = false,
+    selectionSet = null,
+  } = {}) {
+    const selected = selectionSet || state.selectedVins;
+    const cols = scheduleColumns({ editable, carrierEditable });
     const head = `<thead><tr>${selectable ? '<th></th>' : ''}${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>`;
     const body = `<tbody>${rows.map((r) => {
-      const done = r.ops.opsStatus === 'Claimed';
-      const checked = state.selectedVins.has(r.vin) ? 'checked' : '';
-      return `<tr class="${done ? 'is-done' : ''} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}">
-        ${selectable ? `<td><input class="checkbox assign-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>` : ''}
+      const statusCls = statusRowClass(r.ops.opsStatus);
+      const checked = selected.has(r.vin) ? 'checked' : '';
+      return `<tr class="${statusCls} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}" data-status="${esc(r.ops.opsStatus || '')}">
+        ${selectable ? `<td><input class="checkbox vin-select-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>` : ''}
         ${cols.map((c) => `<td>${c[1](r)}</td>`).join('')}
       </tr>`;
     }).join('')}</tbody>`;
     tableEl.innerHTML = head + body;
     $$('.vin-link', tableEl).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
-    if (editable) bindEditableCells(tableEl);
+    if (editable || carrierEditable) bindEditableCells(tableEl);
     if (selectable) {
-      $$('.assign-check', tableEl).forEach((cb) => cb.addEventListener('change', () => {
-        if (cb.checked) state.selectedVins.add(cb.dataset.vin);
-        else state.selectedVins.delete(cb.dataset.vin);
+      $$('.vin-select-check', tableEl).forEach((cb) => cb.addEventListener('change', () => {
+        if (cb.checked) selected.add(cb.dataset.vin);
+        else selected.delete(cb.dataset.vin);
         cb.closest('tr').classList.toggle('selected', cb.checked);
+        updateMyReassignBar();
+        updateLaneReassignCount();
       }));
     }
+  }
+
+  function otherEmployees(exceptName) {
+    const all = ['Rasha', 'Ruba', 'Ibrahim', 'Abdullah'];
+    const skip = String(exceptName || '').trim().toLowerCase();
+    return all.filter((n) => n.toLowerCase() !== skip);
+  }
+
+  function updateMyReassignBar() {
+    const countEl = $('#my-reassign-count');
+    if (countEl) countEl.textContent = String(state.reassignVins.size);
+  }
+
+  function updateLaneReassignCount() {
+    const countEl = $('#lane-reassign-count');
+    if (countEl) countEl.textContent = String(state.reassignVins.size);
+  }
+
+  function renderReassignTargets(container, exceptName, onPick) {
+    if (!container) return;
+    const targets = otherEmployees(exceptName);
+    container.innerHTML = targets.map((name) =>
+      `<button type="button" class="btn reassign-target-btn" data-emp="${esc(name)}">→ ${esc(name)}</button>`
+    ).join('');
+    $$('.reassign-target-btn', container).forEach((b) => b.addEventListener('click', () => onPick(b.dataset.emp)));
+  }
+
+  async function reassignSelected(toEmployee, { clearPanel = false } = {}) {
+    const vins = [...state.reassignVins];
+    if (!vins.length) return alert('Select at least one VIN first');
+    if (!toEmployee) return alert('Choose an employee');
+    if (!confirm(`Reassign ${vins.length} VIN(s) to ${toEmployee}?`)) return;
+    const res = await api('/reassign', { method: 'POST', json: { vins, employee: toEmployee } });
+    const ok = (res.results || []).filter((r) => r.ok).length;
+    const fail = (res.results || []).filter((r) => !r.ok);
+    alert(`Reassigned ${ok} VIN(s) to ${toEmployee}${fail.length ? `\n${fail.length} failed` : ''}`);
+    state.reassignVins.clear();
+    if (clearPanel) {
+      state.reassignFrom = '';
+      state.reassignRows = [];
+      const panel = $('#lane-reassign-panel');
+      if (panel) panel.hidden = true;
+    }
+    if (state.view === 'my') await loadMy();
+    else if (state.view === 'assign') await loadAssign();
+    else await refreshView();
   }
 
   function renderRecentEdits(edits) {
@@ -450,8 +682,9 @@
   }
 
   async function loadToday() {
+    fillCarrierLists();
     const data = await api(`/todays-proformas?tzOffset=${state.tzOffset}`);
-    renderScheduleTable($('#today-table'), data.rows || []);
+    renderScheduleTable($('#today-table'), data.rows || [], { carrierEditable: canManage() });
   }
 
   async function loadMy() {
@@ -462,6 +695,7 @@
     const carrierList = $('#edit-carrier-list');
     if (cityList) cityList.innerHTML = cities.map((c) => `<option value="${esc(c)}"></option>`).join('');
     if (carrierList) carrierList.innerHTML = carriers.map((c) => `<option value="${esc(c)}"></option>`).join('');
+    fillCarrierLists();
 
     const pack = await api(`/vehicles?${filterQuery()}`);
     if (state.user.role === 'employee') {
@@ -476,26 +710,88 @@
     } else {
       $('#my-kpis').innerHTML = '';
     }
-    // Employees (and managers reviewing My VINs) edit ops inline — every save is audited for Admin
-    renderScheduleTable($('#my-table'), pack.rows || [], { editable: true });
+    renderScheduleTable($('#my-table'), pack.rows || [], {
+      editable: true,
+      selectable: true,
+      selectionSet: state.reassignVins,
+    });
     renderPager($('#my-pager'), pack, (p) => { state.filters.page = p; loadMy(); });
+    const except = state.user.role === 'employee' ? state.user.name : '';
+    renderReassignTargets($('#my-reassign-targets'), except, (emp) => {
+      reassignSelected(emp).catch((e) => alert(e.message));
+    });
+    updateMyReassignBar();
   }
 
   async function loadAll() {
     buildToolbar($('#all-toolbar'), { showEmployee: true });
+    fillCarrierLists();
     const pack = await api(`/vehicles?${filterQuery()}`);
-    renderScheduleTable($('#all-table'), pack.rows || []);
+    renderScheduleTable($('#all-table'), pack.rows || [], { carrierEditable: canManage() });
     renderPager($('#all-pager'), pack, (p) => { state.filters.page = p; loadAll(); });
   }
 
   async function loadAssign() {
     state.selectedVins.clear();
+    fillCarrierLists();
     await loadAssignPool(true);
     renderAssignDisplay();
     const dash = await api(`/dashboard?tzOffset=${state.tzOffset}`);
     $('#assign-lanes').innerHTML = (dash.employees || []).map((e) =>
-      `<div class="lane" data-emp="${esc(e.name)}"><h4>${esc(e.name)}</h4><div class="count">${e.assigned} assigned · ${e.remaining} remaining · ${e.progress}%</div></div>`
+      `<div class="lane" data-emp="${esc(e.name)}">
+        <div class="lane-top">
+          <div>
+            <h4>${esc(e.name)}</h4>
+            <div class="count">${e.assigned} assigned · ${e.remaining} remaining · ${e.progress}%</div>
+          </div>
+          <button type="button" class="btn lane-select-btn" data-emp="${esc(e.name)}" ${e.assigned ? '' : 'disabled'}>
+            Select VINs
+          </button>
+        </div>
+      </div>`
     ).join('');
+    $$('.lane-select-btn').forEach((b) => b.addEventListener('click', () => {
+      openLaneReassign(b.dataset.emp).catch((e) => alert(e.message));
+    }));
+    if (state.reassignFrom) {
+      await openLaneReassign(state.reassignFrom);
+    } else {
+      const panel = $('#lane-reassign-panel');
+      if (panel) panel.hidden = true;
+    }
+  }
+
+  async function openLaneReassign(employeeName) {
+    state.reassignFrom = employeeName;
+    state.reassignVins.clear();
+    const prevEmp = state.filters.employee;
+    const prevPage = state.filters.page;
+    const prevLimit = state.filters.limit;
+    state.filters.employee = employeeName;
+    state.filters.page = 1;
+    state.filters.limit = 200;
+    let data;
+    try {
+      data = await api(`/vehicles?${filterQuery()}`);
+    } finally {
+      state.filters.employee = prevEmp;
+      state.filters.page = prevPage;
+      state.filters.limit = prevLimit;
+    }
+    state.reassignRows = data.rows || [];
+    const panel = $('#lane-reassign-panel');
+    panel.hidden = false;
+    $('#lane-reassign-title').textContent = `${employeeName} · select VINs to reassign`;
+    $('#lane-reassign-hint').textContent = `${state.reassignRows.length} VIN(s) currently with ${employeeName}`;
+    renderScheduleTable($('#lane-reassign-table'), state.reassignRows, {
+      selectable: true,
+      selectionSet: state.reassignVins,
+    });
+    renderReassignTargets($('#lane-reassign-targets'), employeeName, (emp) => {
+      reassignSelected(emp, { clearPanel: true }).catch((e) => alert(e.message));
+    });
+    updateLaneReassignCount();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function loadAssignPool(todayOnly) {
@@ -583,7 +879,8 @@
     empty.hidden = true;
     body.hidden = false;
     $('#assign-display-count').textContent = String(rows.length);
-    renderScheduleTable($('#assign-display-table'), rows, { selectable: false });
+    fillCarrierLists();
+    renderScheduleTable($('#assign-display-table'), rows, { selectable: false, carrierEditable: true });
     updateAssignConfirmState();
   }
 
@@ -591,23 +888,42 @@
     const emp = state.assignEmployee;
     const has = (state.assignDisplay || []).length > 0;
     $('#assign-confirm-btn').disabled = !(emp && has);
+    const carrier = String($('#assign-bulk-carrier')?.value || '').trim();
     $('#assign-picked-label').textContent = emp
-      ? `Selected: ${emp} · will receive ${state.assignDisplay.length} VIN(s)`
+      ? `Selected: ${emp}${carrier ? ` · الناقل: ${carrier}` : ''} · ${state.assignDisplay.length} VIN(s)`
       : 'No employee selected';
     $$('.assign-emp-btn').forEach((b) => b.classList.toggle('active', b.dataset.emp === emp));
+    const carrierBtn = $('#assign-carrier-btn');
+    if (carrierBtn) carrierBtn.disabled = !(has && carrier);
   }
 
   async function doAssign() {
     const employee = state.assignEmployee;
     const vins = (state.assignDisplay || []).map((r) => r.vin);
+    const carrier = String($('#assign-bulk-carrier')?.value || '').trim();
     if (!employee) return alert('Choose an employee first');
     if (!vins.length) return alert('Submit & display VINs first');
-    const res = await api('/assign', { method: 'POST', json: { vins, employee } });
+    const res = await api('/assign', { method: 'POST', json: { vins, employee, carrier: carrier || undefined } });
     const ok = (res.results || []).filter((r) => r.ok).length;
-    alert(`Assigned ${ok} VIN(s) to ${employee}`);
+    alert(`Assigned ${ok} VIN(s) to ${employee}${carrier ? ` · الناقل: ${carrier}` : ''}`);
     state.assignDisplay = [];
     state.assignEmployee = '';
+    if ($('#assign-bulk-carrier')) $('#assign-bulk-carrier').value = '';
     await loadAssign();
+  }
+
+  async function doAssignCarrier() {
+    const vins = (state.assignDisplay || []).map((r) => r.vin);
+    const carrier = String($('#assign-bulk-carrier')?.value || '').trim();
+    if (!vins.length) return alert('Submit & display VINs first');
+    if (!carrier) return alert('اختر الناقل أولاً');
+    const res = await api('/assign-carrier', { method: 'POST', json: { vins, carrier } });
+    const ok = (res.results || []).filter((r) => r.ok).length;
+    alert(`تم تعيين الناقل «${carrier}» لـ ${ok} VIN(s)`);
+    // refresh displayed rows with updated carrier
+    const data = await api('/resolve-vins', { method: 'POST', json: { vins } });
+    state.assignDisplay = data.rows || [];
+    renderAssignDisplay();
   }
 
   async function loadAudit() {
@@ -695,7 +1011,7 @@
           ${[
             ['Proforma Date', v.raw.proformaDate], ['Sales Order', v.raw.salesOrder],
             ['Sales Type', v.raw.salesType], ['Invoice Owner', v.raw.invoiceOwner],
-            ['User Name', v.raw.userName], ['S/A', v.raw.salesAdvisor],
+            ['Customer Name', v.raw.userName], ['S/A', v.raw.salesAdvisor],
             ['GT Location', v.raw.gtLocation], ['Vehicle Location', v.raw.vehicleLocation],
             ['Phone', v.raw.phone], ['PIC', v.raw.pic],
           ].map(([l, val]) => `<div class="field"><label>${esc(l)}</label><input value="${esc(na(val))}" readonly /></div>`).join('')}
@@ -783,7 +1099,9 @@
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     renderNav();
-    setView(canManage() ? 'dashboard' : 'my');
+    if (state.user.role === 'hanouf') setView('live');
+    else if (canManage()) setView('dashboard');
+    else setView('my');
   }
 
   function logout(silent) {
@@ -821,6 +1139,7 @@
     ).join('');
     $$('#login-pills button').forEach((b) => b.addEventListener('click', () => {
       $('#login-user').value = b.dataset.u;
+      $$('#login-pills button').forEach((x) => x.classList.toggle('active', x === b));
     }));
 
     if (state.token) {
@@ -843,6 +1162,8 @@
   $('#export-btn').addEventListener('click', () => doExport().catch((e) => alert(e.message)));
   $('#assign-submit-btn')?.addEventListener('click', () => submitVinsForDisplay().catch((e) => alert(e.message)));
   $('#assign-confirm-btn')?.addEventListener('click', () => doAssign().catch((e) => alert(e.message)));
+  $('#assign-carrier-btn')?.addEventListener('click', () => doAssignCarrier().catch((e) => alert(e.message)));
+  $('#assign-bulk-carrier')?.addEventListener('change', () => updateAssignConfirmState());
   $('#assign-load-today')?.addEventListener('click', () => loadAssignPool(true).catch((e) => alert(e.message)));
   $('#assign-load-all-unassigned')?.addEventListener('click', () => loadAssignPool(false).catch((e) => alert(e.message)));
   $('#assign-clear-display')?.addEventListener('click', () => {
@@ -850,12 +1171,52 @@
     state.assignEmployee = '';
     renderAssignDisplay();
   });
+  $('#my-reassign-clear')?.addEventListener('click', () => {
+    state.reassignVins.clear();
+    loadMy().catch((e) => alert(e.message));
+  });
+  $('#lane-reassign-close')?.addEventListener('click', () => {
+    state.reassignFrom = '';
+    state.reassignRows = [];
+    state.reassignVins.clear();
+    $('#lane-reassign-panel').hidden = true;
+  });
+  $('#lane-reassign-clear')?.addEventListener('click', () => {
+    state.reassignVins.clear();
+    renderScheduleTable($('#lane-reassign-table'), state.reassignRows, {
+      selectable: true,
+      selectionSet: state.reassignVins,
+    });
+    updateLaneReassignCount();
+  });
+  $('#lane-reassign-select-all')?.addEventListener('click', () => {
+    (state.reassignRows || []).forEach((r) => state.reassignVins.add(r.vin));
+    renderScheduleTable($('#lane-reassign-table'), state.reassignRows, {
+      selectable: true,
+      selectionSet: state.reassignVins,
+    });
+    updateLaneReassignCount();
+  });
   $('#assign-pool-search')?.addEventListener('input', () => renderAssignPool());
   $$('.assign-emp-btn').forEach((b) => b.addEventListener('click', () => {
     state.assignEmployee = b.dataset.emp;
     updateAssignConfirmState();
   }));
   $('#dash-edits-refresh')?.addEventListener('click', () => loadDashboard().catch((e) => alert(e.message)));
+  $('#live-refresh')?.addEventListener('click', () => loadLiveSheet().catch((e) => alert(e.message)));
+  $('#live-q')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    state.liveFilters.q = e.target.value.trim();
+    loadLiveSheet().catch((err) => alert(err.message));
+  });
+  $('#live-employee')?.addEventListener('change', (e) => {
+    state.liveFilters.employee = e.target.value;
+    loadLiveSheet().catch((err) => alert(err.message));
+  });
+  $('#live-status')?.addEventListener('change', (e) => {
+    state.liveFilters.status = e.target.value;
+    loadLiveSheet().catch((err) => alert(err.message));
+  });
   $('#audit-refresh').addEventListener('click', () => { state.filters.page = 1; loadAudit(); });
   $('#audit-vin').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { state.filters.page = 1; loadAudit(); }

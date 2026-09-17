@@ -12,6 +12,7 @@ const {
   USERS,
   HEADER_MAP,
   OPS_FIELDS,
+  RAW_COL,
 } = require('./constants');
 const { createStore } = require('./store');
 
@@ -135,10 +136,23 @@ function emptyOps() {
   };
 }
 
-function mapRawRow(row) {
+function cellText(line, idx) {
+  if (!Array.isArray(line) || idx == null || idx < 0) return '';
+  const v = line[idx];
+  return String(v == null ? '' : v).trim();
+}
+
+function mapRawRow(row, line) {
   const raw = {};
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
     raw[key] = pickCol(row, aliases);
+  }
+  // Fixed Raw Data positions: D = Order, N = Invoice Owner, O = Customer Name, Y = Phone
+  if (Array.isArray(line) && line.length) {
+    raw.salesOrder = cellText(line, RAW_COL.salesOrder);
+    raw.invoiceOwner = cellText(line, RAW_COL.invoiceOwner);
+    raw.userName = cellText(line, RAW_COL.customerName);
+    raw.phone = cellText(line, RAW_COL.phone);
   }
   raw.proformaDate = normalizeDate(raw.proformaDate);
   raw.deliveryDate = normalizeDate(raw.deliveryDate);
@@ -357,6 +371,29 @@ function createDeliveryTeamRouter(opts) {
     });
   });
 
+  /** Hanouf / Admin live Excel-style board — all assigned VINs with full detail */
+  router.get('/live-sheet', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const q = { ...(req.query || {}), assigned: 'yes' };
+    let list = store.allVehicles();
+    list = applyFilters(list, q);
+    list = sortVehicles(list, req.query.sort || 'updatedAt', req.query.dir || 'desc');
+    const byStatus = {};
+    const byEmployee = {};
+    list.forEach((v) => {
+      const st = v.ops.opsStatus || '(blank)';
+      byStatus[st] = (byStatus[st] || 0) + 1;
+      const emp = v.ops.assignedEmployeeName || '(unassigned)';
+      byEmployee[emp] = (byEmployee[emp] || 0) + 1;
+    });
+    res.json({
+      at: new Date().toISOString(),
+      total: list.length,
+      byStatus,
+      byEmployee,
+      rows: list.map(publicVehicle),
+    });
+  });
+
   router.get('/vehicles/:vin', auth, (req, res) => {
     const v = assertVinAccess(req, res, req.params.vin);
     if (!v) return undefined;
@@ -572,7 +609,7 @@ function createDeliveryTeamRouter(opts) {
         if (line.every((c) => String(c == null ? '' : c).trim() === '')) continue;
         const obj = {};
         headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ''; });
-        const raw = mapRawRow(obj);
+        const raw = mapRawRow(obj, line);
         const vinKey = normVin(raw.vin);
         if (!vinKey) {
           errors.push({ row: r + 1, error: 'Missing VIN' });
@@ -652,9 +689,13 @@ function createDeliveryTeamRouter(opts) {
   router.post('/assign', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
     const employeeName = String(req.body.employee || '').trim();
+    const carrierRaw = req.body.carrier != null ? String(req.body.carrier).trim() : '';
     const emp = USERS.find((u) => u.role === 'employee'
       && (u.name.toLowerCase() === employeeName.toLowerCase() || u.id === employeeName.toLowerCase()));
     if (!emp) return res.status(400).json({ error: 'Select a valid employee (Rasha / Ruba / Ibrahim / Abdullah)' });
+    if (carrierRaw && !CARRIERS.includes(carrierRaw)) {
+      return res.status(400).json({ error: 'Invalid الناقل / carrier' });
+    }
 
     const results = [];
     vins.forEach((rawVin) => {
@@ -669,6 +710,19 @@ function createDeliveryTeamRouter(opts) {
       v.ops.assignedEmployeeName = emp.name;
       v.ops.assignedBy = req.dtUser.name;
       v.ops.assignedAt = new Date().toISOString();
+      if (carrierRaw) {
+        const oldCarrier = v.ops.carrier || '';
+        if (oldCarrier !== carrierRaw) {
+          v.ops.carrier = carrierRaw;
+          store.pushAudit({
+            vin: key,
+            user: req.dtUser.name,
+            action: 'update_carrier',
+            oldValue: oldCarrier || '(empty)',
+            newValue: carrierRaw,
+          });
+        }
+      }
       v.ops.updatedBy = req.dtUser.name;
       v.ops.updatedAt = new Date().toISOString();
       store.upsertVehicle(key, v);
@@ -679,7 +733,90 @@ function createDeliveryTeamRouter(opts) {
         oldValue: old || '(unassigned)',
         newValue: emp.name,
       });
+      results.push({ vin: key, ok: true, employee: emp.name, carrier: v.ops.carrier || '' });
+    });
+    store.save();
+    res.json({ ok: true, results });
+  });
+
+  /** Reassign VINs to another employee. Employees may only move their own VINs. */
+  router.post('/reassign', auth, (req, res) => {
+    const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
+    const employeeName = String(req.body.employee || '').trim();
+    const emp = USERS.find((u) => u.role === 'employee'
+      && (u.name.toLowerCase() === employeeName.toLowerCase() || u.id === employeeName.toLowerCase()));
+    if (!emp) return res.status(400).json({ error: 'Select a valid employee (Rasha / Ruba / Ibrahim / Abdullah)' });
+
+    const isManager = canSeeAll(req.dtUser.role);
+    const results = [];
+    vins.forEach((rawVin) => {
+      const key = normVin(rawVin);
+      const v = store.getVehicle(key);
+      if (!v) {
+        results.push({ vin: key, ok: false, error: 'Not found' });
+        return;
+      }
+      if (!isManager && v.ops.assignedEmployeeId !== req.dtUser.userId) {
+        results.push({ vin: key, ok: false, error: 'Not your VIN' });
+        return;
+      }
+      if (v.ops.assignedEmployeeId === emp.id) {
+        results.push({ vin: key, ok: false, error: 'Already assigned to this employee' });
+        return;
+      }
+      const old = v.ops.assignedEmployeeName || '';
+      v.ops.assignedEmployeeId = emp.id;
+      v.ops.assignedEmployeeName = emp.name;
+      v.ops.assignedBy = req.dtUser.name;
+      v.ops.assignedAt = new Date().toISOString();
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = new Date().toISOString();
+      store.upsertVehicle(key, v);
+      store.pushAudit({
+        vin: key,
+        user: req.dtUser.name,
+        action: 'reassign',
+        oldValue: old || '(unassigned)',
+        newValue: emp.name,
+      });
       results.push({ vin: key, ok: true, employee: emp.name });
+    });
+    store.save();
+    res.json({ ok: true, results });
+  });
+
+  /** Hanouf / Admin: set الناقل on any VIN list */
+  router.post('/assign-carrier', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
+    const carrier = String(req.body.carrier || '').trim();
+    if (!carrier) return res.status(400).json({ error: 'اختر الناقل' });
+    if (!CARRIERS.includes(carrier)) return res.status(400).json({ error: 'Invalid الناقل / carrier' });
+
+    const results = [];
+    vins.forEach((rawVin) => {
+      const key = normVin(rawVin);
+      const v = store.getVehicle(key);
+      if (!v) {
+        results.push({ vin: key, ok: false, error: 'Not found' });
+        return;
+      }
+      const oldCarrier = v.ops.carrier || '';
+      if (oldCarrier === carrier) {
+        results.push({ vin: key, ok: true, carrier, unchanged: true });
+        return;
+      }
+      v.ops.carrier = carrier;
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = new Date().toISOString();
+      store.upsertVehicle(key, v);
+      store.pushAudit({
+        vin: key,
+        user: req.dtUser.name,
+        action: 'update_carrier',
+        oldValue: oldCarrier || '(empty)',
+        newValue: carrier,
+      });
+      results.push({ vin: key, ok: true, carrier });
     });
     store.save();
     res.json({ ok: true, results });
@@ -790,7 +927,7 @@ function createDeliveryTeamRouter(opts) {
       Product: v.raw.product || '',
       'Sales Type': v.raw.salesType || '',
       'Invoice Owner': v.raw.invoiceOwner || '',
-      'User Name': v.raw.userName || '',
+      'Customer Name': v.raw.userName || '',
       'S/A': v.raw.salesAdvisor || '',
       'GT Location': v.raw.gtLocation || '',
       'Vehicle Location': v.raw.vehicleLocation || '',

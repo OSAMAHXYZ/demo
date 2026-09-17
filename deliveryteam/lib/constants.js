@@ -71,7 +71,8 @@ const HEADER_MAP = Object.freeze({
   pic: ['pic'],
   salesType: ['sales type', 'نوع البيع'],
   invoiceOwner: ['invoice owner', 'مالك الفاتورة'],
-  userName: ['user name', 'username', 'اسم المستخدم'],
+  // Customer name (Raw Data column O) — keep legacy "user name" headers too
+  userName: ['customer name', 'customer', 'اسم العميل', 'اسم الزبون', 'user name', 'username', 'اسم المستخدم'],
   salesAdvisor: ['s/a', 'sa', 's a', 'sales advisor', 'مستشار المبيعات'],
   proformaDate: ['proforma date', 'proforma invoice date', 'pro forma date', 'تاريخ البروفورما'],
   deliveryDate: ['delivery date', 'تاريخ التسليم'],
@@ -83,6 +84,14 @@ const HEADER_MAP = Object.freeze({
   trafficFees: ['traffic fees', 'رسوم المرور'],
   insurance: ['insurance', 'التأمين'],
   registrationDate: ['registration date', 'تاريخ الاستمارة'],
+});
+
+/** Fixed Raw Data letter positions (0-based): D = Order, N = Invoice Owner, O = Customer Name, Y = Phone */
+const RAW_COL = Object.freeze({
+  salesOrder: 3, // D
+  invoiceOwner: 13, // N
+  customerName: 14, // O
+  phone: 24, // Y
 });
 
 /** Operational fields employees own — never overwritten by Raw Data upload */
@@ -115,5 +124,6 @@ module.exports = {
   EMPLOYEE_NAMES,
   USERS,
   HEADER_MAP,
+  RAW_COL,
   OPS_FIELDS,
 };
