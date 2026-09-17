@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917m" />
+  <link rel="stylesheet" href="styles.css?v=20260917p" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -70,6 +70,14 @@
       <div class="content">
         <!-- DASHBOARD -->
         <section class="panel active" id="panel-dashboard">
+          <div class="toolbar month-toolbar">
+            <label class="month-filter-label">
+              Month
+              <input type="month" id="dash-month" />
+            </label>
+            <button type="button" class="btn" id="dash-month-all">All months</button>
+            <span class="hint" id="dash-month-hint"></span>
+          </div>
           <div class="kpi-row" id="dash-kpis"></div>
           <div class="card">
             <h2>Delivery pipeline</h2>
@@ -79,11 +87,16 @@
           <div class="dash-grid">
             <div class="dash-stack">
               <div class="card" id="dash-emp-card">
-                <h2>Employee performance</h2>
-                <p class="hint">Click an employee to open their VINs</p>
+                <h2>Employee schedule</h2>
+                <p class="hint">Assigned · Claimed · sales types per person — click a name to open their VINs</p>
                 <div class="table-wrap compact">
                   <table class="data" id="dash-emp-table"></table>
                 </div>
+              </div>
+              <div class="card" id="dash-sales-type-card">
+                <h2>Sales type mix</h2>
+                <p class="hint">How many of each sales type in the selected month</p>
+                <div class="status-grid" id="dash-sales-types"></div>
               </div>
               <div class="card" id="dash-edits-card" hidden>
                 <div class="edits-head">
@@ -99,14 +112,14 @@
               </div>
             </div>
             <div class="card">
-              <h2>Status distribution</h2>
-              <p class="hint">Click a status to filter the schedule</p>
+              <h2>Status counts</h2>
+              <p class="hint">How many VINs in each status · click to filter schedule</p>
               <div class="status-grid" id="dash-status"></div>
             </div>
           </div>
         </section>
 
-        <!-- LIVE SHEET (Hanouf / Admin) -->
+        <!-- LIVE SHEET (everyone) -->
         <section class="panel" id="panel-live">
           <div class="live-sheet-card">
             <div class="live-sheet-toolbar">
@@ -115,13 +128,13 @@
                 <span id="live-meta-text">Connecting…</span>
               </div>
               <div class="live-sheet-filters">
+                <label class="month-filter-label">
+                  Month
+                  <input type="month" id="live-month" />
+                </label>
                 <input type="search" id="live-q" placeholder="Search VIN / order / product / customer…" />
                 <select id="live-employee">
                   <option value="">All employees</option>
-                  <option>Rasha</option>
-                  <option>Ruba</option>
-                  <option>Ibrahim</option>
-                  <option>Abdullah</option>
                 </select>
                 <select id="live-status">
                   <option value="">All statuses</option>
@@ -214,13 +227,8 @@
                   </div>
                 </div>
                 <div class="assign-emp-pick">
-                  <p class="assign-emp-label">Assign displayed VINs to</p>
-                  <div class="assign-emp-grid" id="assign-emp-grid">
-                    <button type="button" class="assign-emp-btn" data-emp="Rasha">Rasha</button>
-                    <button type="button" class="assign-emp-btn" data-emp="Ruba">Ruba</button>
-                    <button type="button" class="assign-emp-btn" data-emp="Ibrahim">Ibrahim</button>
-                    <button type="button" class="assign-emp-btn" data-emp="Abdullah">Abdullah</button>
-                  </div>
+                  <p class="assign-emp-label">Assign displayed VINs to (including Hanouf)</p>
+                  <div class="assign-emp-grid" id="assign-emp-grid"></div>
                   <div class="toolbar">
                     <button type="button" class="btn-primary" id="assign-confirm-btn" disabled>Assign to selected employee</button>
                     <span class="hint" id="assign-picked-label">No employee selected</span>
@@ -302,6 +310,19 @@
     <div class="drawer" id="vin-drawer"></div>
   </div>
 
-  <script src="app.js?v=20260917m"></script>
+  <div class="modal-back" id="guest-modal-back">
+    <div class="guest-modal" id="guest-modal" role="dialog" aria-modal="true" aria-labelledby="guest-modal-title">
+      <div class="guest-modal-head">
+        <div>
+          <h2 id="guest-modal-title">Guest Experience</h2>
+          <p class="hint" id="guest-modal-sub">Schedule customer collection</p>
+        </div>
+        <button type="button" class="btn" id="guest-modal-close">Close</button>
+      </div>
+      <div class="guest-modal-body" id="guest-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20260917p"></script>
 </body>
 </html>

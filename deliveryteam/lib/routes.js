@@ -9,10 +9,12 @@ const {
   CARRIERS,
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
+  ASSIGNABLE_NAMES,
   USERS,
   HEADER_MAP,
   OPS_FIELDS,
   RAW_COL,
+  isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
 
@@ -105,6 +107,25 @@ function todayIso(tzOffsetMinutes) {
   return now.toISOString().slice(0, 10);
 }
 
+function monthKeyFromIso(value) {
+  const s = String(value || '').trim();
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  return '';
+}
+
+function currentMonthKey(tzOffsetMinutes) {
+  return todayIso(tzOffsetMinutes).slice(0, 7);
+}
+
+function findAssignableUser(employeeName) {
+  const want = String(employeeName || '').trim().toLowerCase();
+  if (!want) return null;
+  return USERS.find((u) => (
+    (u.role === 'employee' || u.role === 'hanouf')
+    && (u.name.toLowerCase() === want || u.id === want)
+  )) || null;
+}
+
 function isYesNo(v) {
   const s = String(v || '').trim().toLowerCase();
   if (s === 'yes' || s === 'y' || s === 'نعم' || s === '1' || s === 'true') return 'Yes';
@@ -133,6 +154,10 @@ function emptyOps() {
     assignedAt: '',
     updatedBy: '',
     updatedAt: '',
+    guestCenter: '',
+    guestCollectAt: '',
+    guestCollected: '',
+    guestCollectNote: '',
   };
 }
 
@@ -163,6 +188,17 @@ function mapRawRow(row, line) {
 
 function publicVehicle(v) {
   if (!v) return null;
+  const ops = { ...emptyOps(), ...v.ops };
+  const guestCenter = isGuestCenterRaw(v.raw, ops) || String(ops.guestCenter || '').toLowerCase() === 'yes';
+  let guestTimerMs = null;
+  let guestDue = false;
+  if (ops.guestCollectAt) {
+    const at = new Date(ops.guestCollectAt).getTime();
+    if (Number.isFinite(at)) {
+      guestTimerMs = at - Date.now();
+      guestDue = guestTimerMs <= 0 && String(ops.guestCollected || '') !== 'Yes';
+    }
+  }
   return {
     vin: v.vin,
     raw: {
@@ -185,7 +221,10 @@ function publicVehicle(v) {
       insurance: na(v.raw.insurance),
       registrationDate: na(v.raw.registrationDate),
     },
-    ops: { ...emptyOps(), ...v.ops },
+    ops,
+    guestCenter: !!guestCenter,
+    guestTimerMs,
+    guestDue,
     createdAt: v.createdAt,
     rawUpdatedAt: v.rawUpdatedAt,
     lastUploadId: v.lastUploadId || '',
@@ -253,6 +292,7 @@ function createDeliveryTeamRouter(opts) {
       transferCities: TRANSFER_CITIES,
       yesNo: YES_NO,
       employees: EMPLOYEE_NAMES,
+      assignable: ASSIGNABLE_NAMES,
       users: USERS.map((u) => ({ id: u.id, name: u.name, role: u.role })),
       completedStatus: COMPLETED_STATUS,
     });
@@ -330,6 +370,20 @@ function createDeliveryTeamRouter(opts) {
       const d = normalizeDate(q.date) || String(q.date).slice(0, 10);
       out = out.filter((v) => v.raw.proformaDate === d || v.raw.date === d);
     }
+    if (q.month) {
+      const m = String(q.month).trim().slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(m)) {
+        out = out.filter((v) => {
+          const keys = [
+            monthKeyFromIso(v.raw.proformaDate),
+            monthKeyFromIso(v.raw.date),
+            monthKeyFromIso(v.raw.deliveryDate),
+            monthKeyFromIso(v.ops.assignedAt),
+          ];
+          return keys.includes(m);
+        });
+      }
+    }
     return out;
   }
 
@@ -371,25 +425,30 @@ function createDeliveryTeamRouter(opts) {
     });
   });
 
-  /** Hanouf / Admin live Excel-style board — all assigned VINs with full detail */
-  router.get('/live-sheet', auth, requireRole('admin', 'hanouf'), (req, res) => {
+  /** Live Excel-style board — all assigned VINs (Admin, Hanouf, and every employee) */
+  router.get('/live-sheet', auth, (req, res) => {
     const q = { ...(req.query || {}), assigned: 'yes' };
     let list = store.allVehicles();
     list = applyFilters(list, q);
     list = sortVehicles(list, req.query.sort || 'updatedAt', req.query.dir || 'desc');
     const byStatus = {};
     const byEmployee = {};
+    const bySalesType = {};
     list.forEach((v) => {
       const st = v.ops.opsStatus || '(blank)';
       byStatus[st] = (byStatus[st] || 0) + 1;
       const emp = v.ops.assignedEmployeeName || '(unassigned)';
       byEmployee[emp] = (byEmployee[emp] || 0) + 1;
+      const stype = (v.raw && v.raw.salesType) || '(blank)';
+      bySalesType[stype] = (bySalesType[stype] || 0) + 1;
     });
     res.json({
       at: new Date().toISOString(),
       total: list.length,
+      month: q.month || '',
       byStatus,
       byEmployee,
+      bySalesType,
       rows: list.map(publicVehicle),
     });
   });
@@ -401,25 +460,54 @@ function createDeliveryTeamRouter(opts) {
   });
 
   router.get('/dashboard', auth, (req, res) => {
-    const all = scopedVehicles(req.dtUser);
-    const today = todayIso(Number(req.query.tzOffset));
+    const month = String((req.query && req.query.month) || '').trim().slice(0, 7);
+    const tz = Number(req.query.tzOffset);
+    const filterQ = month && /^\d{4}-\d{2}$/.test(month) ? { month, tzOffset: tz } : { tzOffset: tz };
+    let all = scopedVehicles(req.dtUser);
+    all = applyFilters(all, filterQ);
+    // Admin/Hanouf dashboard always reflects full fleet for the month (not only own VINs)
+    if (canSeeAll(req.dtUser.role)) {
+      all = applyFilters(store.allVehicles(), filterQ);
+    }
+    const today = todayIso(tz);
     const todays = all.filter((v) => v.raw.proformaDate === today);
     const assigned = all.filter((v) => v.ops.assignedEmployeeId);
     const unassigned = all.filter((v) => !v.ops.assignedEmployeeId);
     const byStatus = {};
     STATUSES.forEach((s) => { byStatus[s] = 0; });
+    let blankStatus = 0;
     all.forEach((v) => {
       const s = v.ops.opsStatus;
       if (s && byStatus[s] != null) byStatus[s] += 1;
+      else if (!s) blankStatus += 1;
     });
     const claimed = byStatus[COMPLETED_STATUS] || 0;
-    const employees = EMPLOYEE_NAMES.map((name) => {
+    const bySalesType = {};
+    assigned.forEach((v) => {
+      const st = (v.raw && v.raw.salesType) || '(blank)';
+      bySalesType[st] = (bySalesType[st] || 0) + 1;
+    });
+
+    const employees = ASSIGNABLE_NAMES.map((name) => {
       const id = name.toLowerCase();
       const mine = all.filter((v) => v.ops.assignedEmployeeId === id);
       const done = mine.filter((v) => v.ops.opsStatus === COMPLETED_STATUS);
       const rem = mine.length - done.length;
       const pct = mine.length ? Math.round((done.length / mine.length) * 100) : 0;
-      return { id, name, assigned: mine.length, claimed: done.length, remaining: rem, progress: pct };
+      const salesTypes = {};
+      mine.forEach((v) => {
+        const st = (v.raw && v.raw.salesType) || '(blank)';
+        salesTypes[st] = (salesTypes[st] || 0) + 1;
+      });
+      return {
+        id,
+        name,
+        assigned: mine.length,
+        claimed: done.length,
+        remaining: rem,
+        progress: pct,
+        bySalesType: salesTypes,
+      };
     });
 
     const mine = canSeeAll(req.dtUser.role)
@@ -427,11 +515,17 @@ function createDeliveryTeamRouter(opts) {
       : (() => {
         const rows = all;
         const done = rows.filter((v) => v.ops.opsStatus === COMPLETED_STATUS);
+        const salesTypes = {};
+        rows.forEach((v) => {
+          const st = (v.raw && v.raw.salesType) || '(blank)';
+          salesTypes[st] = (salesTypes[st] || 0) + 1;
+        });
         return {
           assigned: rows.length,
           completed: done.length,
           remaining: rows.length - done.length,
           progress: rows.length ? Math.round((done.length / rows.length) * 100) : 0,
+          bySalesType: salesTypes,
         };
       })();
 
@@ -456,8 +550,21 @@ function createDeliveryTeamRouter(opts) {
         }));
     }
 
+    // Available months from data (for filter UI)
+    const monthSet = new Set();
+    store.allVehicles().forEach((v) => {
+      [v.raw.proformaDate, v.raw.date, v.raw.deliveryDate, v.ops.assignedAt].forEach((d) => {
+        const mk = monthKeyFromIso(d);
+        if (mk) monthSet.add(mk);
+      });
+    });
+    const months = [...monthSet].sort().reverse();
+    if (!months.includes(currentMonthKey(tz))) months.unshift(currentMonthKey(tz));
+
     res.json({
       today,
+      month: month || '',
+      months,
       totals: {
         total: all.length,
         todaysProformas: todays.length,
@@ -467,8 +574,10 @@ function createDeliveryTeamRouter(opts) {
         psfu: byStatus.PSFU || 0,
         ready: byStatus['جاهز للتسليم'] || 0,
         delivered: byStatus['تم التسليم'] || 0,
+        blankStatus,
       },
       byStatus,
+      bySalesType,
       pipeline: {
         todaysProformas: todays.length,
         assigned: assigned.length,
@@ -690,9 +799,12 @@ function createDeliveryTeamRouter(opts) {
     const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
     const employeeName = String(req.body.employee || '').trim();
     const carrierRaw = req.body.carrier != null ? String(req.body.carrier).trim() : '';
-    const emp = USERS.find((u) => u.role === 'employee'
-      && (u.name.toLowerCase() === employeeName.toLowerCase() || u.id === employeeName.toLowerCase()));
-    if (!emp) return res.status(400).json({ error: 'Select a valid employee (Rasha / Ruba / Ibrahim / Abdullah)' });
+    const emp = findAssignableUser(employeeName);
+    if (!emp) {
+      return res.status(400).json({
+        error: `Select a valid person (${ASSIGNABLE_NAMES.join(' / ')})`,
+      });
+    }
     if (carrierRaw && !CARRIERS.includes(carrierRaw)) {
       return res.status(400).json({ error: 'Invalid الناقل / carrier' });
     }
@@ -739,13 +851,16 @@ function createDeliveryTeamRouter(opts) {
     res.json({ ok: true, results });
   });
 
-  /** Reassign VINs to another employee. Employees may only move their own VINs. */
+  /** Reassign VINs to another employee (or Hanouf). Employees may only move their own VINs. */
   router.post('/reassign', auth, (req, res) => {
     const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
     const employeeName = String(req.body.employee || '').trim();
-    const emp = USERS.find((u) => u.role === 'employee'
-      && (u.name.toLowerCase() === employeeName.toLowerCase() || u.id === employeeName.toLowerCase()));
-    if (!emp) return res.status(400).json({ error: 'Select a valid employee (Rasha / Ruba / Ibrahim / Abdullah)' });
+    const emp = findAssignableUser(employeeName);
+    if (!emp) {
+      return res.status(400).json({
+        error: `Select a valid person (${ASSIGNABLE_NAMES.join(' / ')})`,
+      });
+    }
 
     const isManager = canSeeAll(req.dtUser.role);
     const results = [];
@@ -881,6 +996,21 @@ function createDeliveryTeamRouter(opts) {
         return s;
       },
       notes: (x) => String(x == null ? '' : x),
+      guestCenter: (x) => {
+        const s = String(x || '').trim();
+        if (!s) return '';
+        if (/^(yes|y|نعم|1|true)$/i.test(s)) return 'Yes';
+        if (/^(no|n|لا|0|false)$/i.test(s)) return 'No';
+        return s === 'Yes' || s === 'No' ? s : '';
+      },
+      guestCollectAt: (x) => {
+        const s = String(x || '').trim();
+        if (!s) return '';
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0, 19);
+        return s;
+      },
+      guestCollected: (x) => isYesNo(x) || (['Yes', 'No', ''].includes(String(x)) ? String(x) : ''),
+      guestCollectNote: (x) => String(x == null ? '' : x),
     };
 
     try {
@@ -908,6 +1038,126 @@ function createDeliveryTeamRouter(opts) {
     }
   });
 
+  // ——— Guest Experience (Ruba) ———
+  function canManageGuest(req, v) {
+    if (!v) return false;
+    if (canSeeAll(req.dtUser.role)) return true;
+    if (req.dtUser.userId === 'ruba' && v.ops.assignedEmployeeId === 'ruba') return true;
+    return false;
+  }
+
+  function parseGuestDateTime(dateStr, timeStr) {
+    const d = normalizeDate(dateStr) || String(dateStr || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('Invalid collection date');
+    let t = String(timeStr || '').trim();
+    if (!t) t = '12:00';
+    const tm = t.match(/^(\d{1,2}):(\d{2})$/);
+    if (!tm) throw new Error('Invalid collection time (use HH:MM)');
+    const hh = String(Math.min(23, Number(tm[1]))).padStart(2, '0');
+    const mm = String(Math.min(59, Number(tm[2]))).padStart(2, '0');
+    // Store as local-wall ISO without Z so UI shows the chosen clock time
+    return `${d}T${hh}:${mm}:00`;
+  }
+
+  /** Schedule / reschedule Guest Exp customer collection (Ruba) */
+  router.post('/vehicles/:vin/guest-schedule', auth, (req, res) => {
+    const v = assertVinAccess(req, res, req.params.vin);
+    if (!v) return undefined;
+    if (!canManageGuest(req, v)) {
+      return res.status(403).json({ error: 'Only Ruba (on her VINs) or Admin/Hanouf can schedule Guest Exp' });
+    }
+    try {
+      const at = parseGuestDateTime(req.body && req.body.date, req.body && req.body.time);
+      const old = v.ops.guestCollectAt || '';
+      v.ops.guestCenter = 'Yes';
+      v.ops.guestCollectAt = at;
+      v.ops.guestCollected = '';
+      v.ops.guestCollectNote = String((req.body && req.body.note) || v.ops.guestCollectNote || '').trim();
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = new Date().toISOString();
+      store.upsertVehicle(v.vin, v);
+      store.pushAudit({
+        vin: v.vin,
+        user: req.dtUser.name,
+        action: old ? 'guest_reschedule' : 'guest_schedule',
+        oldValue: old || '(empty)',
+        newValue: at,
+      });
+      store.save();
+      return res.json({ ok: true, vehicle: publicVehicle(v) });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Schedule failed' });
+    }
+  });
+
+  /** After timer: mark collected (then optional status) or reschedule */
+  router.post('/vehicles/:vin/guest-collect', auth, (req, res) => {
+    const v = assertVinAccess(req, res, req.params.vin);
+    if (!v) return undefined;
+    if (!canManageGuest(req, v)) {
+      return res.status(403).json({ error: 'Only Ruba (on her VINs) or Admin/Hanouf can confirm Guest Exp collection' });
+    }
+    const collected = req.body && (req.body.collected === true || req.body.collected === 'yes' || req.body.collected === 'Yes');
+    try {
+      if (collected) {
+        const status = String((req.body && req.body.status) || '').trim();
+        if (status && !STATUSES.includes(status)) {
+          return res.status(400).json({ error: `Invalid status: ${status}` });
+        }
+        const oldCollected = v.ops.guestCollected || '';
+        v.ops.guestCollected = 'Yes';
+        v.ops.guestCenter = 'Yes';
+        if (status) {
+          const oldStatus = v.ops.opsStatus || '';
+          v.ops.opsStatus = status;
+          if (oldStatus !== status) {
+            store.pushAudit({
+              vin: v.vin,
+              user: req.dtUser.name,
+              action: 'update_opsStatus',
+              oldValue: oldStatus || '(empty)',
+              newValue: status,
+            });
+          }
+        }
+        v.ops.updatedBy = req.dtUser.name;
+        v.ops.updatedAt = new Date().toISOString();
+        store.upsertVehicle(v.vin, v);
+        store.pushAudit({
+          vin: v.vin,
+          user: req.dtUser.name,
+          action: 'guest_collected',
+          oldValue: oldCollected || '(empty)',
+          newValue: status ? `Yes · ${status}` : 'Yes',
+        });
+        store.save();
+        return res.json({ ok: true, vehicle: publicVehicle(v) });
+      }
+
+      // Not collected → require new date/time
+      const at = parseGuestDateTime(req.body && req.body.date, req.body && req.body.time);
+      const old = v.ops.guestCollectAt || '';
+      v.ops.guestCollected = 'No';
+      v.ops.guestCenter = 'Yes';
+      v.ops.guestCollectAt = at;
+      v.ops.guestCollectNote = String((req.body && req.body.note) || '').trim() || v.ops.guestCollectNote || '';
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = new Date().toISOString();
+      store.upsertVehicle(v.vin, v);
+      store.pushAudit({
+        vin: v.vin,
+        user: req.dtUser.name,
+        action: 'guest_not_collected_reschedule',
+        oldValue: old || '(empty)',
+        newValue: at,
+      });
+      store.save();
+      return res.json({ ok: true, vehicle: publicVehicle(v) });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Update failed' });
+    }
+  });
+
   router.get('/audit', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const vin = normVin(req.query.vin || '');
     let list = store.data.audit || [];
@@ -920,7 +1170,9 @@ function createDeliveryTeamRouter(opts) {
   });
 
   router.get('/export', auth, requireRole('admin', 'hanouf'), (req, res) => {
-    const rows = sortVehicles(store.allVehicles(), 'proformaDate', 'desc').map((v) => ({
+    // Hanouf/Admin export = assigned VINs only (not full Raw Data dump)
+    const assignedOnly = store.allVehicles().filter((v) => v.ops && v.ops.assignedEmployeeId);
+    const rows = sortVehicles(assignedOnly, 'proformaDate', 'desc').map((v) => ({
       'Proforma Invoice Date': v.raw.proformaDate || '',
       'Sales Order Number': v.raw.salesOrder || '',
       VIN: v.vin,
@@ -945,27 +1197,30 @@ function createDeliveryTeamRouter(opts) {
       'Registration Issue Date': v.ops.registrationIssueDate || '',
       'Transfer City': v.ops.transferCity || '',
       Carrier: v.ops.carrier || '',
+      'Guest Experience': isGuestCenterRaw(v.raw, v.ops) ? 'Yes' : '',
+      'Guest Collect At': v.ops.guestCollectAt || '',
+      'Guest Collected': v.ops.guestCollected || '',
       Notes: v.ops.notes || '',
       'Assigned By': v.ops.assignedBy || '',
       'Assigned Date': v.ops.assignedAt || '',
       'Last Updated': v.ops.updatedAt || '',
     }));
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ VIN: '(no assigned VINs)' }]);
     ws['!autofilter'] = { ref: ws['!ref'] || 'A1' };
     ws['!freeze'] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Delivery Team');
+    XLSX.utils.book_append_sheet(wb, ws, 'Assigned VINs');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     store.pushAudit({
       vin: '',
       user: req.dtUser.name,
       action: 'export_excel',
       oldValue: '',
-      newValue: `${rows.length} VINs`,
+      newValue: `${assignedOnly.length} assigned VINs`,
     });
     store.save();
-    const fname = `delivery-team-export-${todayIso()}.xlsx`;
+    const fname = `delivery-team-assigned-${todayIso()}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
     return res.send(buf);

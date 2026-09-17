@@ -53,6 +53,9 @@ const TRANSFER_CITIES = Object.freeze([
 
 const EMPLOYEE_NAMES = Object.freeze(['Rasha', 'Ruba', 'Ibrahim', 'Abdullah']);
 
+/** People Hanouf/Admin can assign VINs to (employees + Hanouf herself) */
+const ASSIGNABLE_NAMES = Object.freeze(['Hanouf', 'Rasha', 'Ruba', 'Ibrahim', 'Abdullah']);
+
 const USERS = Object.freeze([
   { id: 'admin', name: 'Admin', role: 'admin' },
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
@@ -113,7 +116,27 @@ const OPS_FIELDS = Object.freeze([
   'assignedEmployeeName',
   'assignedBy',
   'assignedAt',
+  // Guest Experience (Ruba) — customer collection appointment
+  'guestCenter',
+  'guestCollectAt',
+  'guestCollected',
+  'guestCollectNote',
 ]);
+
+/** Detect Guest Experience / Automall vehicles from location fields */
+function isGuestCenterRaw(raw, ops) {
+  if (ops && String(ops.guestCenter || '').toLowerCase() === 'yes') return true;
+  if (ops && ops.guestCollectAt) return true;
+  const blob = [
+    raw && raw.gtLocation,
+    raw && raw.vehicleLocation,
+    raw && raw.pic,
+    raw && raw.salesType,
+    ops && ops.transferCity,
+    ops && ops.notes,
+  ].map((x) => String(x || '')).join(' ').toLowerCase();
+  return /guest|experience|automall|auto\s*mall|اوتومول|أوتومول|ضيف|تجربة|معرض/.test(blob);
+}
 
 module.exports = {
   STATUSES,
@@ -122,8 +145,10 @@ module.exports = {
   CARRIERS,
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
+  ASSIGNABLE_NAMES,
   USERS,
   HEADER_MAP,
   RAW_COL,
   OPS_FIELDS,
+  isGuestCenterRaw,
 };

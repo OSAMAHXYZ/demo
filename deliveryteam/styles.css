@@ -539,6 +539,39 @@ table.data .vin-link:hover { text-decoration: underline; }
   font-weight: 600;
   line-height: 1.2;
 }
+.status-chip:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.month-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.month-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.month-filter-label input[type="month"] {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  background: #fff;
+  color: var(--navy);
+}
+.sales-type-line {
+  margin-top: 4px !important;
+  font-size: 0.68rem !important;
+  color: var(--muted);
+}
 
 /* ——— Assignment ——— */
 .assign-flow { display: grid; gap: 12px; }
@@ -950,6 +983,11 @@ select.cell-edit { cursor: pointer; }
   justify-content: flex-end;
 }
 .modal-back.open { display: flex; }
+#guest-modal-back.open {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
 .drawer {
   width: min(680px, 100%);
   background: #fff;
@@ -1163,6 +1201,98 @@ table.live-sheet tbody tr:nth-child(even):not([class*="row-status-"]) td:nth-chi
   overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+}
+
+/* ——— Guest Experience (Ruba) ——— */
+.guest-modal {
+  width: min(440px, 94vw);
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  margin: auto;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  padding: 16px 18px 18px;
+}
+.guest-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.guest-modal-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.guest-modal-body .field {
+  margin-bottom: 10px;
+}
+.guest-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.btn-guest {
+  border: 1px solid #7c3aed;
+  background: #f5f3ff;
+  color: #5b21b6;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-guest:hover { background: #ede9fe; }
+.btn-guest.due {
+  border-color: var(--red);
+  background: #fef2f2;
+  color: #b91c1c;
+  animation: guest-pulse 1.4s ease-in-out infinite;
+}
+.btn-guest.ok {
+  border-color: #15803d;
+  background: #f0fdf4;
+  color: #166534;
+}
+@keyframes guest-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(185, 28, 28, 0.08); }
+}
+.guest-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #5b21b6;
+  background: #f5f3ff;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.guest-timer.is-due {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+.guest-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+.guest-badge.collected {
+  background: #dcfce7;
+  color: #166534;
+}
+tr.row-guest-exp td:nth-child(-n+4) {
+  box-shadow: inset 3px 0 0 #7c3aed;
 }
 
 /* My VINs / All: table uses more of the page */

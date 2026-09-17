@@ -9,7 +9,7 @@
     user: null,
     meta: null,
     view: 'dashboard',
-    filters: { q: '', status: '', employee: '', page: 1, limit: 40 },
+    filters: { q: '', status: '', employee: '', month: '', page: 1, limit: 40 },
     selectedVins: new Set(),
     reassignVins: new Set(),
     reassignFrom: '',
@@ -19,8 +19,10 @@
     assignEmployee: '',
     editsTimer: null,
     liveTimer: null,
-    liveFilters: { q: '', employee: '', status: '' },
+    liveFilters: { q: '', employee: '', status: '', month: '' },
     liveFingerprint: '',
+    monthFilter: '',
+    guestTickTimer: null,
     tzOffset: -new Date().getTimezoneOffset(),
   };
 
@@ -96,10 +98,226 @@
     return state.user && (state.user.role === 'admin' || state.user.role === 'hanouf');
   }
 
+  function isRuba() {
+    return state.user && (state.user.id === 'ruba' || state.user.name === 'Ruba');
+  }
+
+  function canEditGuest(row) {
+    if (!state.user || !row) return false;
+    if (canManage()) return true;
+    if (!isRuba()) return false;
+    const id = (row.ops && row.ops.assignedEmployeeId) || '';
+    const name = (row.ops && row.ops.assignedEmployeeName) || '';
+    return id === 'ruba' || name === 'Ruba';
+  }
+
+  function formatGuestAt(iso) {
+    if (!iso) return '—';
+    const s = String(iso);
+    const d = s.slice(0, 10);
+    const t = s.slice(11, 16);
+    return t ? `${d} ${t}` : d;
+  }
+
+  function formatCountdown(ms) {
+    if (ms == null || !Number.isFinite(ms)) return '—';
+    if (ms <= 0) return 'DUE NOW';
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 48) return `${Math.floor(h / 24)}d ${h % 24}h`;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function guestCellHtml(r) {
+    const ops = r.ops || {};
+    const isGuest = !!(r.guestCenter || String(ops.guestCenter || '').toLowerCase() === 'yes' || ops.guestCollectAt);
+    const collected = String(ops.guestCollected || '') === 'Yes';
+    const due = !!r.guestDue || (ops.guestCollectAt && (r.guestTimerMs == null ? false : r.guestTimerMs <= 0) && !collected);
+    const canEdit = canEditGuest(r);
+
+    if (collected) {
+      return `<span class="guest-badge collected">Collected ✓</span>
+        <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>`;
+    }
+
+    if (!isGuest) {
+      if (!canEdit) return '<span class="hint">—</span>';
+      return `<button type="button" class="btn-guest" data-guest-act="mark" data-vin="${esc(r.vin)}">Guest Exp</button>`;
+    }
+
+    if (!ops.guestCollectAt) {
+      if (!canEdit) return `<span class="guest-badge">Guest Exp</span>`;
+      return `<button type="button" class="btn-guest" data-guest-act="schedule" data-vin="${esc(r.vin)}">Schedule pickup</button>`;
+    }
+
+    if (due && canEdit) {
+      return `<span class="guest-timer is-due">DUE NOW</span>
+        <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
+          <button type="button" class="btn-guest due" data-guest-act="collected-yes" data-vin="${esc(r.vin)}">Collected?</button>
+          <button type="button" class="btn-guest" data-guest-act="collected-no" data-vin="${esc(r.vin)}">Not yet</button>
+        </div>
+        <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>`;
+    }
+
+    const ms = r.guestTimerMs != null
+      ? r.guestTimerMs
+      : (ops.guestCollectAt ? new Date(ops.guestCollectAt).getTime() - Date.now() : null);
+    return `<span class="guest-badge">Guest Exp</span>
+      <span class="guest-timer" data-guest-timer="${esc(ops.guestCollectAt)}">${esc(formatCountdown(ms))}</span>
+      <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>
+      ${canEdit ? `<button type="button" class="btn-guest" data-guest-act="schedule" data-vin="${esc(r.vin)}" style="margin-top:4px">Reschedule</button>` : ''}`;
+  }
+
+  function bindGuestButtons(root = document) {
+    $$('[data-guest-act]', root).forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openGuestModal(b.dataset.vin, b.dataset.guestAct).catch((err) => alert(err.message));
+      });
+    });
+  }
+
+  function tickGuestTimers() {
+    $$('[data-guest-timer]').forEach((el) => {
+      const at = el.getAttribute('data-guest-timer');
+      if (!at) return;
+      const ms = new Date(at).getTime() - Date.now();
+      el.textContent = formatCountdown(ms);
+      el.classList.toggle('is-due', ms <= 0);
+      if (ms <= 0 && state.view === 'my') {
+        // soft refresh once due so Collected? buttons appear
+        if (!el.dataset.refreshed) {
+          el.dataset.refreshed = '1';
+          loadMy().catch(() => {});
+        }
+      }
+    });
+  }
+
+  async function openGuestModal(vin, action) {
+    const data = await api(`/vehicles/${encodeURIComponent(vin)}`);
+    const v = data.vehicle;
+    const back = $('#guest-modal-back');
+    const body = $('#guest-modal-body');
+    const title = $('#guest-modal-title');
+    const sub = $('#guest-modal-sub');
+    const statuses = (state.meta && state.meta.statuses) || [];
+    const existing = v.ops.guestCollectAt || '';
+    const dateVal = existing.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const timeVal = existing.slice(11, 16) || '16:00';
+
+    function close() {
+      back.classList.remove('open');
+    }
+    $('#guest-modal-close').onclick = close;
+    back.onclick = (e) => { if (e.target === back) close(); };
+
+    if (action === 'collected-yes') {
+      title.textContent = 'Guest collected?';
+      sub.textContent = `${v.vin} · ${na(v.raw.userName)} · choose status after collection`;
+      body.innerHTML = `
+        <p class="hint">Appointment was <b>${esc(formatGuestAt(existing))}</b>. Confirm the car was collected, then set status.</p>
+        <div class="field">
+          <label>New status</label>
+          <select id="guest-status">
+            <option value="">— keep current (${esc(v.ops.opsStatus || 'none')}) —</option>
+            ${statuses.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="guest-modal-actions">
+          <button type="button" class="btn-primary" id="guest-save-yes">Yes — collected</button>
+          <button type="button" class="btn" id="guest-cancel">Cancel</button>
+        </div>`;
+      $('#guest-cancel').onclick = close;
+      $('#guest-save-yes').onclick = async () => {
+        const status = $('#guest-status').value;
+        await api(`/vehicles/${encodeURIComponent(vin)}/guest-collect`, {
+          method: 'POST',
+          json: { collected: true, status: status || undefined },
+        });
+        close();
+        await refreshView();
+      };
+      back.classList.add('open');
+      return;
+    }
+
+    if (action === 'collected-no') {
+      title.textContent = 'Not collected — new time';
+      sub.textContent = `${v.vin} · set another date & time for the customer`;
+      body.innerHTML = `
+        <div class="field"><label>New date</label><input type="date" id="guest-date" value="${esc(dateVal)}" /></div>
+        <div class="field"><label>New time</label><input type="time" id="guest-time" value="${esc(timeVal)}" /></div>
+        <div class="field"><label>Note (optional)</label><input type="text" id="guest-note" placeholder="Customer delayed…" /></div>
+        <div class="guest-modal-actions">
+          <button type="button" class="btn-primary" id="guest-save-no">Save new appointment</button>
+          <button type="button" class="btn" id="guest-cancel">Cancel</button>
+        </div>`;
+      $('#guest-cancel').onclick = close;
+      $('#guest-save-no').onclick = async () => {
+        await api(`/vehicles/${encodeURIComponent(vin)}/guest-collect`, {
+          method: 'POST',
+          json: {
+            collected: false,
+            date: $('#guest-date').value,
+            time: $('#guest-time').value,
+            note: $('#guest-note').value,
+          },
+        });
+        close();
+        await refreshView();
+      };
+      back.classList.add('open');
+      return;
+    }
+
+    // mark / schedule / reschedule
+    title.textContent = action === 'mark' ? 'Mark Guest Experience' : 'Guest Exp · Schedule pickup';
+    sub.textContent = `${v.vin} · ${na(v.raw.userName)} · ${na(v.raw.product)}`;
+    body.innerHTML = `
+      <p class="hint">Set the date and time for the customer to collect this VIN at Guest Experience.</p>
+      <div class="field"><label>Collection date</label><input type="date" id="guest-date" value="${esc(dateVal)}" required /></div>
+      <div class="field"><label>Collection time</label><input type="time" id="guest-time" value="${esc(timeVal)}" required /></div>
+      <div class="field"><label>Note (optional)</label><input type="text" id="guest-note" value="${esc(v.ops.guestCollectNote || '')}" placeholder="Customer name / contact…" /></div>
+      <div class="guest-modal-actions">
+        <button type="button" class="btn-primary" id="guest-save-sched">Save appointment</button>
+        <button type="button" class="btn" id="guest-cancel">Cancel</button>
+      </div>`;
+    $('#guest-cancel').onclick = close;
+    $('#guest-save-sched').onclick = async () => {
+      await api(`/vehicles/${encodeURIComponent(vin)}/guest-schedule`, {
+        method: 'POST',
+        json: {
+          date: $('#guest-date').value,
+          time: $('#guest-time').value,
+          note: $('#guest-note').value,
+        },
+      });
+      close();
+      await refreshView();
+    };
+    back.classList.add('open');
+  }
+
+  function assignableNames() {
+    const fromMeta = state.meta && state.meta.assignable;
+    if (Array.isArray(fromMeta) && fromMeta.length) return fromMeta.slice();
+    return ['Hanouf', 'Rasha', 'Ruba', 'Ibrahim', 'Abdullah'];
+  }
+
+  function currentMonthValue() {
+    const d = new Date(Date.now() + state.tzOffset * 60000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
   function navItems() {
     const items = [
       { id: 'dashboard', label: 'Dashboard', roles: ['admin', 'hanouf', 'employee'] },
-      { id: 'live', label: 'Live Sheet', roles: ['admin', 'hanouf'] },
+      { id: 'live', label: 'Live Sheet', roles: ['admin', 'hanouf', 'employee'] },
       { id: 'today', label: "Today's Vehicles", roles: ['admin', 'hanouf'] },
       { id: 'my', label: 'My VINs', roles: ['employee', 'admin', 'hanouf'] },
       { id: 'assign', label: 'Assignment', roles: ['admin', 'hanouf'] },
@@ -135,10 +353,10 @@
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
-      live: ['Live Sheet', 'Excel-style board · all assigned VINs · updates every few seconds'],
+      live: ['Live Sheet', 'All assigned VINs · live updates · filter by month'],
       today: ["Today's Vehicles", 'Proforma Date = today'],
-      my: ['My VINs', 'Edit your assigned vehicles — changes go to Admin live'],
-      assign: ['Assignment', 'Hanouf assignment board'],
+      my: ['My VINs', 'Your schedule · sales types · edit work · الناقل'],
+      assign: ['Assignment', 'Upload → assign employee (incl. Hanouf) → الناقل'],
       all: ['All Vehicles', 'Full fleet · filters · export'],
       upload: ['Upload Raw Data', 'First worksheet only'],
       audit: ['Audit Log', 'Full history of every edit'],
@@ -152,10 +370,13 @@
         loadDashboard().catch(() => {});
       }, 8000);
     }
-    if (view === 'live' && canManage()) {
+    if (view === 'live') {
       state.liveTimer = setInterval(() => {
         loadLiveSheet({ silent: true }).catch(() => {});
       }, 5000);
+    }
+    if (!state.guestTickTimer) {
+      state.guestTickTimer = setInterval(() => tickGuestTimers(), 1000);
     }
   }
 
@@ -183,6 +404,7 @@
     if (f.q) params.set('q', f.q);
     if (f.employee) params.set('employee', f.employee);
     if (f.status) params.set('status', f.status);
+    if (f.month) params.set('month', f.month);
     const data = await api(`/live-sheet?${params}`);
     const rows = data.rows || [];
     const fingerprint = JSON.stringify(rows.map((r) => [
@@ -202,9 +424,26 @@
       r.ops.insuranceOps,
       r.ops.registrationIssueDate,
       r.ops.transferCity,
+      r.ops.guestCollectAt,
+      r.ops.guestCollected,
+      r.ops.guestCenter,
     ]));
     const changed = fingerprint !== state.liveFingerprint;
     state.liveFingerprint = fingerprint;
+
+    const empSel = $('#live-employee');
+    if (empSel && !empSel.dataset.filled) {
+      empSel.innerHTML = `<option value="">All employees</option>${assignableNames().map((s) =>
+        `<option value="${esc(s)}">${esc(s)}</option>`
+      ).join('')}`;
+      empSel.value = f.employee || '';
+      empSel.dataset.filled = '1';
+    }
+
+    const monthInp = $('#live-month');
+    if (monthInp && monthInp.value !== (f.month || '')) {
+      monthInp.value = f.month || '';
+    }
 
     const statusSel = $('#live-status');
     if (statusSel && !statusSel.dataset.filled) {
@@ -238,7 +477,8 @@
     const dot = $('#live-dot');
     if (meta) {
       const t = new Date(data.at || Date.now()).toLocaleTimeString();
-      meta.textContent = `${data.total || 0} assigned VINs · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
+      const monthNote = f.month ? ` · ${f.month}` : ' · all months';
+      meta.textContent = `${data.total || 0} assigned VINs${monthNote} · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
     }
     if (dot) {
       dot.classList.toggle('pulse', !!changed || !silent);
@@ -260,6 +500,7 @@
       ['Customer', (r) => na(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['Phone', (r) => na(r.raw.phone)],
+      ['Guest Exp', (r) => guestCellHtml(r)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
       ['إرسال الضيف', (r) => na(r.ops.guestSentDate)],
@@ -282,22 +523,30 @@
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r, i) => {
         const statusCls = statusRowClass(r.ops.opsStatus);
-        return `<tr class="${statusCls}" data-vin="${esc(r.vin)}">${cols.map((c) =>
+        const guestCls = (r.guestCenter || r.ops.guestCollectAt) ? 'row-guest-exp' : '';
+        return `<tr class="${statusCls} ${guestCls}" data-vin="${esc(r.vin)}">${cols.map((c) =>
           `<td>${c[1](r, i)}</td>`
         ).join('')}</tr>`;
       }).join('') || `<tr><td colspan="${cols.length}">No assigned VINs yet. Use Assignment to assign vehicles.</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+    bindGuestButtons(table);
   }
 
   async function loadDashboard() {
-    const d = await api(`/dashboard?tzOffset=${state.tzOffset}`);
+    const month = state.monthFilter || '';
+    const d = await api(`/dashboard?tzOffset=${state.tzOffset}${month ? `&month=${encodeURIComponent(month)}` : ''}`);
+    const monthInp = $('#dash-month');
+    if (monthInp && monthInp.value !== month) monthInp.value = month;
+    const hint = $('#dash-month-hint');
+    if (hint) hint.textContent = month ? `Showing ${month}` : 'Showing all months';
+
     const t = d.totals || {};
     const kpis = canManage()
       ? [
         ['Total vehicles', t.total, ''],
-        ["Today's proformas", t.todaysProformas, 'info'],
-        ['Assigned', t.assigned, 'ok'],
+        ['VINs assigned', t.assigned, 'ok'],
         ['Unassigned', t.unassigned, t.unassigned ? 'warn' : 'ok'],
+        ["Today's proformas", t.todaysProformas, 'info'],
         ['Claimed', t.claimed, 'ok'],
         ['PSFU', t.psfu, 'info'],
         ['Ready for delivery', t.ready, 'info'],
@@ -323,40 +572,87 @@
     ].map(([l, n]) => `<div class="pipe-step"><strong>${esc(n)}</strong><span>${esc(l)}</span></div>`).join('');
 
     const empCard = $('#dash-emp-card');
-    if (!canManage()) {
-      empCard.hidden = true;
-    } else {
+    const salesCard = $('#dash-sales-type-card');
+    if (empCard) {
       empCard.hidden = false;
       const rows = d.employees || [];
-      $('#dash-emp-table').innerHTML = `<thead><tr><th>Employee</th><th class="num">Assigned</th><th class="num">Claimed</th><th class="num">Remaining</th><th class="num">Progress %</th></tr></thead>
-        <tbody>${rows.map((e) => `<tr data-emp="${esc(e.name)}" style="cursor:pointer">
+      // For employees, highlight only their row in schedule; managers see everyone
+      const showRows = canManage()
+        ? rows
+        : rows.filter((e) => e.id === state.user.id || e.name === state.user.name);
+      const typeKeys = [...new Set(showRows.flatMap((e) => Object.keys(e.bySalesType || {})))].sort();
+      $('#dash-emp-table').innerHTML = `<thead><tr>
+          <th>Employee</th>
+          <th class="num">Assigned</th>
+          <th class="num">Claimed</th>
+          <th class="num">Remaining</th>
+          <th class="num">Progress %</th>
+          ${typeKeys.map((k) => `<th class="num">${esc(k)}</th>`).join('')}
+        </tr></thead>
+        <tbody>${showRows.map((e) => `<tr data-emp="${esc(e.name)}" style="cursor:pointer">
           <td><b>${esc(e.name)}</b></td>
           <td class="num">${e.assigned}</td>
           <td class="num">${e.claimed}</td>
           <td class="num">${e.remaining}</td>
           <td class="num">${e.progress}%</td>
-        </tr>`).join('')}</tbody>`;
+          ${typeKeys.map((k) => `<td class="num">${(e.bySalesType && e.bySalesType[k]) || 0}</td>`).join('')}
+        </tr>`).join('') || '<tr><td colspan="5">No assigned VINs in this month</td></tr>'}</tbody>`;
       $$('#dash-emp-table tr[data-emp]').forEach((tr) => {
         tr.addEventListener('click', () => {
-          state.filters.employee = tr.dataset.emp;
-          state.filters.page = 1;
-          setView('all');
+          if (canManage()) {
+            state.filters.employee = tr.dataset.emp;
+            state.filters.month = state.monthFilter || '';
+            state.filters.page = 1;
+            setView('all');
+          } else {
+            setView('my');
+          }
         });
       });
     }
 
+    if (salesCard) {
+      const mix = canManage() ? (d.bySalesType || {}) : (d.myWorkload?.bySalesType || {});
+      const entries = Object.entries(mix).sort((a, b) => b[1] - a[1]);
+      $('#dash-sales-types').innerHTML = entries.length
+        ? entries.map(([k, n]) =>
+          `<button type="button" class="status-chip" disabled><div class="n">${n}</div><div class="l">${esc(k)}</div></button>`
+        ).join('')
+        : '<p class="hint">No sales types in this period</p>';
+    }
+
     const by = d.byStatus || {};
     const statuses = (state.meta && state.meta.statuses) || Object.keys(by);
-    $('#dash-status').innerHTML = statuses.map((s) =>
-      `<button type="button" class="status-chip" data-status="${esc(s)}"><div class="n">${by[s] || 0}</div><div class="l">${esc(s)}</div></button>`
-    ).join('');
+    $('#dash-status').innerHTML = statuses.map((s) => {
+      const n = by[s] || 0;
+      return `<button type="button" class="status-chip" data-status="${esc(s)}"><div class="n">${n}</div><div class="l">${esc(s)}</div></button>`;
+    }).join('') + (t.blankStatus
+      ? `<button type="button" class="status-chip" data-status=""><div class="n">${t.blankStatus}</div><div class="l">(no status)</div></button>`
+      : '');
     $$('#dash-status .status-chip').forEach((b) => b.addEventListener('click', () => {
+      if (!b.dataset.status) return;
       state.filters.status = b.dataset.status;
+      state.filters.month = state.monthFilter || '';
       state.filters.page = 1;
       setView(canManage() ? 'all' : 'my');
     }));
 
-    renderRecentEdits(d.recentEdits || []);
+    const editsCard = $('#dash-edits-card');
+    if (editsCard) {
+      editsCard.hidden = !canManage();
+      if (canManage()) {
+        const edits = d.recentEdits || [];
+        $('#dash-edits-table').innerHTML = `<thead><tr><th>Time</th><th>VIN</th><th>Who</th><th>Action</th><th>Old</th><th>New</th></tr></thead>
+          <tbody>${edits.map((a) => `<tr>
+            <td>${esc((a.at || '').replace('T', ' ').slice(0, 19))}</td>
+            <td>${esc(a.vin || '—')}</td>
+            <td>${esc(a.user)}</td>
+            <td>${esc(a.action)}</td>
+            <td>${esc(a.oldValue)}</td>
+            <td>${esc(a.newValue)}</td>
+          </tr>`).join('') || '<tr><td colspan="6">No recent edits</td></tr>'}</tbody>`;
+      }
+    }
   }
 
   function fieldLabel(action) {
@@ -429,6 +725,7 @@
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
       ['Phone', (r) => na(r.raw.phone)],
+      ['Guest Exp', (r) => guestCellHtml(r)],
     ];
     if (editable) {
       cols.push(
@@ -546,14 +843,16 @@
     const head = `<thead><tr>${selectable ? '<th></th>' : ''}${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>`;
     const body = `<tbody>${rows.map((r) => {
       const statusCls = statusRowClass(r.ops.opsStatus);
+      const guestCls = (r.guestCenter || r.ops.guestCollectAt) ? 'row-guest-exp' : '';
       const checked = selected.has(r.vin) ? 'checked' : '';
-      return `<tr class="${statusCls} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}" data-status="${esc(r.ops.opsStatus || '')}">
+      return `<tr class="${statusCls} ${guestCls} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}" data-status="${esc(r.ops.opsStatus || '')}">
         ${selectable ? `<td><input class="checkbox vin-select-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>` : ''}
         ${cols.map((c) => `<td>${c[1](r)}</td>`).join('')}
       </tr>`;
     }).join('')}</tbody>`;
     tableEl.innerHTML = head + body;
     $$('.vin-link', tableEl).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+    bindGuestButtons(tableEl);
     if (editable || carrierEditable) bindEditableCells(tableEl);
     if (selectable) {
       $$('.vin-select-check', tableEl).forEach((cb) => cb.addEventListener('change', () => {
@@ -567,7 +866,7 @@
   }
 
   function otherEmployees(exceptName) {
-    const all = ['Rasha', 'Ruba', 'Ibrahim', 'Abdullah'];
+    const all = assignableNames();
     const skip = String(exceptName || '').trim().toLowerCase();
     return all.filter((n) => n.toLowerCase() !== skip);
   }
@@ -646,6 +945,8 @@
     if (state.filters.q) p.set('q', state.filters.q);
     if (state.filters.status) p.set('status', state.filters.status);
     if (state.filters.employee) p.set('employee', state.filters.employee);
+    const month = state.filters.month || state.monthFilter || '';
+    if (month) p.set('month', month);
     Object.entries(extra).forEach(([k, v]) => { if (v != null && v !== '') p.set(k, v); });
     return p.toString();
   }
@@ -660,23 +961,27 @@
 
   function buildToolbar(el, { showEmployee = true } = {}) {
     const statuses = (state.meta && state.meta.statuses) || [];
+    const month = state.filters.month || state.monthFilter || '';
     el.innerHTML = `
+      <label class="month-filter-label">Month <input type="month" data-f="month" value="${esc(month)}" /></label>
       <input type="search" data-f="q" placeholder="Search…" value="${esc(state.filters.q)}" />
       <select data-f="status"><option value="">All statuses</option>${statuses.map((s) => `<option ${state.filters.status === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
-      ${showEmployee && canManage() ? `<select data-f="employee"><option value="">All employees</option>${['Rasha', 'Ruba', 'Ibrahim', 'Abdullah'].map((s) => `<option ${state.filters.employee === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>` : ''}
+      ${showEmployee && canManage() ? `<select data-f="employee"><option value="">All employees</option>${assignableNames().map((s) => `<option ${state.filters.employee === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>` : ''}
       <button type="button" class="btn" data-clear>Clear filters</button>
     `;
     $$('[data-f]', el).forEach((inp) => {
-      const ev = inp.tagName === 'SELECT' ? 'change' : 'keydown';
+      const ev = inp.tagName === 'SELECT' || inp.type === 'month' ? 'change' : 'keydown';
       inp.addEventListener(ev, (e) => {
         if (ev === 'keydown' && e.key !== 'Enter') return;
         state.filters[inp.dataset.f] = inp.value;
+        if (inp.dataset.f === 'month') state.monthFilter = inp.value;
         state.filters.page = 1;
         refreshView();
       });
     });
     $('[data-clear]', el)?.addEventListener('click', () => {
-      state.filters = { q: '', status: '', employee: '', page: 1, limit: 40 };
+      state.filters = { q: '', status: '', employee: '', month: '', page: 1, limit: 40 };
+      state.monthFilter = '';
       refreshView();
     });
   }
@@ -688,6 +993,10 @@
   }
 
   async function loadMy() {
+    // Hanouf "My VINs" = rows assigned to herself (she can receive assignments)
+    if (state.user.role === 'hanouf') {
+      state.filters.employee = 'Hanouf';
+    }
     buildToolbar($('#my-toolbar'), { showEmployee: false });
     const cities = (state.meta && state.meta.transferCities) || [];
     const carriers = (state.meta && state.meta.carriers) || [];
@@ -698,25 +1007,27 @@
     fillCarrierLists();
 
     const pack = await api(`/vehicles?${filterQuery()}`);
-    if (state.user.role === 'employee') {
-      const dash = await api(`/dashboard?tzOffset=${state.tzOffset}`);
-      const w = dash.myWorkload || {};
-      $('#my-kpis').innerHTML = [
-        ['Assigned', w.assigned, ''],
-        ['Completed', w.completed, 'ok'],
-        ['Remaining', w.remaining, 'warn'],
-        ['Progress %', `${w.progress}%`, 'info'],
-      ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${l}</div><div class="val">${v}</div></article>`).join('');
-    } else {
-      $('#my-kpis').innerHTML = '';
-    }
+    const dash = await api(`/dashboard?tzOffset=${state.tzOffset}${state.monthFilter ? `&month=${encodeURIComponent(state.monthFilter)}` : ''}`);
+    const w = state.user.role === 'employee'
+      ? (dash.myWorkload || {})
+      : (dash.employees || []).find((e) => e.name === state.user.name) || {};
+    const salesTypes = w.bySalesType || {};
+    const typeKpis = Object.entries(salesTypes).sort((a, b) => b[1] - a[1]).slice(0, 6)
+      .map(([l, v]) => [l, v, 'info']);
+    $('#my-kpis').innerHTML = [
+      ['Assigned', w.assigned || 0, ''],
+      ['Completed', w.claimed != null ? w.claimed : (w.completed || 0), 'ok'],
+      ['Remaining', w.remaining != null ? w.remaining : 0, 'warn'],
+      ['Progress %', `${w.progress || 0}%`, 'info'],
+      ...typeKpis,
+    ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
     renderScheduleTable($('#my-table'), pack.rows || [], {
       editable: true,
       selectable: true,
       selectionSet: state.reassignVins,
     });
     renderPager($('#my-pager'), pack, (p) => { state.filters.page = p; loadMy(); });
-    const except = state.user.role === 'employee' ? state.user.name : '';
+    const except = state.user.name;
     renderReassignTargets($('#my-reassign-targets'), except, (emp) => {
       reassignSelected(emp).catch((e) => alert(e.message));
     });
@@ -734,22 +1045,25 @@
   async function loadAssign() {
     state.selectedVins.clear();
     fillCarrierLists();
+    renderAssignEmpGrid();
     await loadAssignPool(true);
     renderAssignDisplay();
-    const dash = await api(`/dashboard?tzOffset=${state.tzOffset}`);
-    $('#assign-lanes').innerHTML = (dash.employees || []).map((e) =>
-      `<div class="lane" data-emp="${esc(e.name)}">
+    const dash = await api(`/dashboard?tzOffset=${state.tzOffset}${state.monthFilter ? `&month=${encodeURIComponent(state.monthFilter)}` : ''}`);
+    $('#assign-lanes').innerHTML = (dash.employees || []).map((e) => {
+      const types = Object.entries(e.bySalesType || {}).map(([k, n]) => `${k}: ${n}`).join(' · ');
+      return `<div class="lane" data-emp="${esc(e.name)}">
         <div class="lane-top">
           <div>
             <h4>${esc(e.name)}</h4>
             <div class="count">${e.assigned} assigned · ${e.remaining} remaining · ${e.progress}%</div>
+            ${types ? `<div class="count sales-type-line">${esc(types)}</div>` : ''}
           </div>
           <button type="button" class="btn lane-select-btn" data-emp="${esc(e.name)}" ${e.assigned ? '' : 'disabled'}>
             Select VINs
           </button>
         </div>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
     $$('.lane-select-btn').forEach((b) => b.addEventListener('click', () => {
       openLaneReassign(b.dataset.emp).catch((e) => alert(e.message));
     }));
@@ -759,6 +1073,18 @@
       const panel = $('#lane-reassign-panel');
       if (panel) panel.hidden = true;
     }
+  }
+
+  function renderAssignEmpGrid() {
+    const grid = $('#assign-emp-grid');
+    if (!grid) return;
+    grid.innerHTML = assignableNames().map((name) =>
+      `<button type="button" class="assign-emp-btn${state.assignEmployee === name ? ' active' : ''}" data-emp="${esc(name)}">${esc(name)}</button>`
+    ).join('');
+    $$('.assign-emp-btn', grid).forEach((b) => b.addEventListener('click', () => {
+      state.assignEmployee = b.dataset.emp;
+      updateAssignConfirmState();
+    }));
   }
 
   async function openLaneReassign(employeeName) {
@@ -1090,7 +1416,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `delivery-team-export.xlsx`;
+    a.download = `delivery-team-assigned.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1198,11 +1524,18 @@
     updateLaneReassignCount();
   });
   $('#assign-pool-search')?.addEventListener('input', () => renderAssignPool());
-  $$('.assign-emp-btn').forEach((b) => b.addEventListener('click', () => {
-    state.assignEmployee = b.dataset.emp;
-    updateAssignConfirmState();
-  }));
   $('#dash-edits-refresh')?.addEventListener('click', () => loadDashboard().catch((e) => alert(e.message)));
+  $('#dash-month')?.addEventListener('change', (e) => {
+    state.monthFilter = e.target.value || '';
+    state.filters.month = state.monthFilter;
+    loadDashboard().catch((err) => alert(err.message));
+  });
+  $('#dash-month-all')?.addEventListener('click', () => {
+    state.monthFilter = '';
+    state.filters.month = '';
+    if ($('#dash-month')) $('#dash-month').value = '';
+    loadDashboard().catch((err) => alert(err.message));
+  });
   $('#live-refresh')?.addEventListener('click', () => loadLiveSheet().catch((e) => alert(e.message)));
   $('#live-q')?.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
@@ -1215,6 +1548,10 @@
   });
   $('#live-status')?.addEventListener('change', (e) => {
     state.liveFilters.status = e.target.value;
+    loadLiveSheet().catch((err) => alert(err.message));
+  });
+  $('#live-month')?.addEventListener('change', (e) => {
+    state.liveFilters.month = e.target.value || '';
     loadLiveSheet().catch((err) => alert(err.message));
   });
   $('#audit-refresh').addEventListener('click', () => { state.filters.page = 1; loadAudit(); });
