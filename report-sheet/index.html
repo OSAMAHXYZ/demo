@@ -140,7 +140,7 @@
         <div class="dvp-empty card" id="dvp-empty" hidden>
           <h3>Delivered vs Proforma</h3>
           <p>Push <b>Sales Raw Data</b> from Admin to build Lexus · Telesales · B2C · Experience Automall totals.</p>
-          <p class="foot">Lexus = product codes ESH/ES/IS/LC/LSH/LX/LXH/NX/NXH/RX/RXH (and RX350-style). B2C = Not Assigned / EB2C / eCommerce plant. Mark Guest Exp advisors in Admin → Employees.</p>
+          <p class="foot">Lexus = product codes ESH/ES/IS/LC/LSH/LX/LXH/NX/NXH/RX/RXH. <b>B2C</b> = Col A Not Assigned or API-PATCH only. <b>Guest Exp</b> = advisors marked in Admin → Push. <b>Telesales</b> = everyone else.</p>
         </div>
 
         <div id="dvp-board" class="dvp-board" hidden>
@@ -16276,43 +16276,30 @@
     return /e\s*-?\s*commerce|ecommerce|\beb2c\b|\bb2c\b|online\s*sales|digital\s*sales|e\s*-?\s*sales/.test(plant);
   }
 
+  /** B2C channel: Sales Raw Col A is Not Assigned or API-PATCH / API-BATCH only. */
   function isB2cSaleRow(r) {
     if (!r) return false;
     const raw = String(r._salesmanRaw || r.salesman || "").trim();
-    const salesmanName = rosterSalesmanName(raw);
+    if (!raw) return false;
     const rawTok = upperTrim(raw).replace(/[^A-Z0-9]/g, "");
-    const looseRaw = normalizeNameLoose(raw);
-    // RTLEB2C / EB2C / B2C / API-BATCH / eCommerce placeholders
-    if (/^(RTL)?E?B2C$|^BTOC$|^ECOMMERCE$|^ECOM$|^APIBATCH$|^APIPATCH$/i.test(rawTok)) return true;
-    if (/eb2c|e b2c|\bb2c\b|not\s*assigned|unassigned|api\s*(batch|patch)|e\s*commerce|غير\s*(مسند|معين|مخصص)/.test(looseRaw)) return true;
-    if (normalizeNameLoose(salesmanName) === "not assigned") return true;
-    if (String(salesmanName || "").trim().toLowerCase() === "not assigned") return true;
-
-    if (isEcommercePlantText(r.plant || r.Plant)) return true;
-
-    const key = nameKey(salesmanName);
-    if (key && Object.prototype.hasOwnProperty.call(EMPLOYEE_META, key)) {
-      if (isEcommercePlantText(EMPLOYEE_META[key].plant)) return true;
-    }
-
-    const channelBits = [
-      r.salesType, r.salesChannel, r.channel, r["Sales Channel"], r["Sales Type"],
-      r.Category, r.category, r["Distribution Channel"], r.plant, r.Plant,
-    ].map((x) => cellToString(x).toLowerCase()).join(" ");
-    if (/eb2c|\bb2c\b|ecommerce|e-?commerce|online\s*retail|not\s*assigned|digital\s*sales/.test(channelBits)) return true;
+    const loose = normalizeNameLoose(raw);
+    // Strict Col A placeholders — do not use plant / EB2C / eCommerce
+    if (/^(NOTASSIGNED|UNASSIGNED|APIPATCH|APIBATCH)$/i.test(rawTok)) return true;
+    if (/^not\s*assigned$|^unassigned$|^api[\s\-_]*patch$|^api[\s\-_]*batch$/i.test(loose)) return true;
+    if (/غير\s*(مسند|معين|مخصص)/.test(loose)) return true;
     return false;
   }
 
   function dvpBucketForSaleRow(r, guestKeys) {
-    // Lexus by product first, then B2C (Not Assigned / EB2C) before Guest Exp
-    // so roster "Not assigned" never lands on Experience Automall.
+    // 1) Lexus by product/plant
+    // 2) B2C = Not Assigned / API-PATCH only (Col A)
+    // 3) Guest Exp = Admin Push selected employees
+    // 4) Telesales = everyone else
     if (isLexusSaleRow(r)) return "lexus";
     if (isB2cSaleRow(r)) return "b2c";
     const salesmanName = rosterSalesmanName(r._salesmanRaw || r.salesman);
     const key = nameKey(salesmanName);
     if (key && guestKeys.has(key)) return "guest";
-    if (isTelesalesSaleRow(r)) return "telesales";
-    // Default: named advisors without Guest/Lexus/B2C/Telesales plant → Telesales (anywhere)
     return "telesales";
   }
 
@@ -16371,8 +16358,10 @@
       const emptyTip = id === "lexus"
         ? "No ESH/IS/LC/LX/NX/RX (etc.) or Lexus plant rows in this period — other channels may hold those VINs."
         : id === "b2c"
-          ? "No Not Assigned / EB2C / eCommerce rows in this period — check Col A salesman and plant."
-          : "No delivered or proforma activity in this period.";
+          ? "No Col A Not Assigned / API-PATCH rows in this period."
+          : id === "guest"
+            ? "No deliveries/proforma for Admin Guest Exp advisors in this period."
+            : "No delivered or proforma activity in this period.";
       return { icon: "○", title: "No activity", tip: emptyTip };
     }
     if (tips[id]) {
@@ -16512,7 +16501,7 @@
       {
         id: "telesales",
         title: "Telesales",
-        subtitle: "All anywhere sales channel",
+        subtitle: "All other advisors (excludes B2C + Guest Exp)",
         brand: "TOYOTA",
         theme: "telesales",
         image: "../images/cars/camry.png",
@@ -16524,7 +16513,7 @@
       {
         id: "b2c",
         title: "B2C Sales",
-        subtitle: "Direct to Customer",
+        subtitle: "Not Assigned · API-PATCH",
         brand: "TOYOTA",
         theme: "b2c",
         image: "../images/cars/fortuner.png",
