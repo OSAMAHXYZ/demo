@@ -1343,7 +1343,7 @@
               <span class="bas-section-badge is-teal">3</span>
               <div class="pbi-viz-head">
                 <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Day-over-day RES VIN compare · schedule = new RES (age 0 / blank / backdated) · Tot ≠ RES · free stock only if undatable</span>
+                <span class="hint" id="bas-month-hint">Same-day Allocation Date on each RTL day file · RES schedule · Sales Raw delivered / proforma · free stock · moved out</span>
               </div>
               <span class="bas-fold-chev" aria-hidden="true">▾</span>
               </div>
@@ -1352,7 +1352,7 @@
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
 
             <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily · Tot = explicit Col J age 0 (any area, blank excluded) · RES = newly added Retail Electronic Sales VINs (age 0/blank, or backdated by age/AG)</p>
+              <p class="bas-day-panel-label">Daily · Tot = Col J age 0 (any area) · RES = Retail Electronic Sales with Allocation Date on that file day</p>
               <div class="bas-day-strip-wrap">
                 <div class="bas-day-strip" id="bas-day-strip"></div>
               </div>
@@ -1407,8 +1407,19 @@
             </div>
 
             <div class="bas-day-panel bas-day-panel-list">
-              <p class="bas-day-panel-label">Day-by-day breakdown</p>
-              <div class="bas-day-sections" id="bas-day-sections"></div>
+              <p class="bas-day-panel-label">Day-by-day · RES with Allocation Date on that file day · Sales Raw delivered / proforma · free stock · moved out · click a number for VINs</p>
+              <div class="bas-day-ops" id="bas-day-ops"></div>
+              <div class="bas-day-ops-detail" id="bas-day-ops-detail" hidden>
+                <div class="bas-retail-head">
+                  <div class="bas-retail-title">
+                    <h3 id="bas-day-ops-detail-title">VIN list</h3>
+                    <span class="hint" id="bas-day-ops-detail-hint"></span>
+                  </div>
+                  <button type="button" class="btn" id="bas-day-ops-detail-close">Close</button>
+                </div>
+                <div class="table-wrap bas-table-wrap" id="bas-day-ops-table"></div>
+              </div>
+              <div class="bas-day-sections" id="bas-day-sections" hidden></div>
             </div>
 
             <!-- Retail Electronic Sales VIN Movement / Reconciliation (VIN-level) -->
@@ -12034,6 +12045,169 @@
     return { cls: "ok", text: `Received · day ${car && car.collectionDay != null ? car.collectionDay : "?"}` };
   }
 
+  let basDayOpsView = { day: 0, bucket: "" };
+  let basDayOpsLast = null;
+
+  function basDayOpsFmtSalesDate(d) {
+    if (!d) return "—";
+    if (typeof formatRvDate === "function") {
+      const s = formatRvDate(d);
+      if (s && s !== "—" && s !== "N/A") return s;
+    }
+    try {
+      const dt = d instanceof Date ? d : parseDate(d);
+      if (!dt) return "—";
+      return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return "—";
+    }
+  }
+
+  function renderBasDayOpsDetail() {
+    const detail = $("#bas-day-ops-detail");
+    const tableEl = $("#bas-day-ops-table");
+    const titleEl = $("#bas-day-ops-detail-title");
+    const hintEl = $("#bas-day-ops-detail-hint");
+    if (!detail || !tableEl) return;
+    const day = Number(basDayOpsView.day) || 0;
+    const bucket = basDayOpsView.bucket || "";
+    const pack = basDayOpsLast;
+    const slot = pack && pack.days && pack.days[day] ? pack.days[day] : null;
+    if (!slot || !bucket || !slot[bucket]) {
+      detail.hidden = true;
+      return;
+    }
+    const labels = {
+      received: "From allocation · received",
+      delivered: "Delivered",
+      proforma: "Proforma",
+      free: "Free in stock",
+      moved: "Moved from Retail Electronic Sales",
+    };
+    const rows = slot[bucket] || [];
+    detail.hidden = false;
+    if (titleEl) titleEl.textContent = `Day ${day} · ${labels[bucket] || bucket}`;
+    if (hintEl) {
+      hintEl.textContent = `${formatNumber(rows.length)} VIN(s) · ${slot.label || ""}${slot.dateKey ? ` · file ${slot.dateKey}` : ""}`;
+    }
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No VINs in this bucket.</p>`;
+      return;
+    }
+    const showMoved = bucket === "moved";
+    tableEl.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th><th class="num">Age</th>
+        ${showMoved ? "<th>From</th><th>To</th>" : "<th>Sales Raw</th><th>Proforma</th><th>Invoice</th>"}
+        <th>Location</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `<tr class="${bucket === "moved" ? "bas-row-below" : bucket === "received" ? "bas-row-above" : ""}">
+        <td class="mono">${escapeHtml(r.vin)}</td>
+        <td>${escapeHtml(r.product || "—")}</td>
+        <td>${escapeHtml(r.suffix || "—")}</td>
+        <td>${escapeHtml(r.agLabel || "—")}</td>
+        <td class="num">${r.age == null ? "—" : formatNumber(r.age)}</td>
+        ${showMoved
+          ? `<td>${escapeHtml(r.prevSearchArea || "Retail Electronic Sales")}</td><td>${escapeHtml(r.newSearchArea || "—")}</td>`
+          : `<td><span class="badge ${r.bucket === "delivered" ? "ok" : r.bucket === "proforma" ? "warn" : "na"}">${escapeHtml(r.label || "—")}</span></td>
+             <td>${escapeHtml(basDayOpsFmtSalesDate(r.proformaDate))}</td>
+             <td>${escapeHtml(basDayOpsFmtSalesDate(r.invoiceDate))}</td>`}
+        <td>${escapeHtml(r.location || "—")}</td>
+        <td>${escapeHtml(r.status || "—")}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  function renderBasDayOps(dayOps, ctx, dayHasFile) {
+    const root = $("#bas-day-ops");
+    if (!root) return;
+    basDayOpsLast = dayOps;
+    if (!dayOps || !dayOps.days) {
+      root.innerHTML = `<p class="foot" style="padding:8px 0">Upload day RTL files to see same-day allocation, Sales Raw, and movement.</p>`;
+      const detail = $("#bas-day-ops-detail");
+      if (detail) detail.hidden = true;
+      return;
+    }
+
+    let html = "";
+    for (let day = 1; day <= 30; day += 1) {
+      const slot = dayOps.days[day] || null;
+      const hasFile = (slot && slot.hasFile) || (dayHasFile && dayHasFile[day]);
+      const isToday = day === ctx.todayDay;
+      const isFuture = day > ctx.todayDay;
+      if (!hasFile) continue;
+      if (isFuture) continue;
+      const received = slot ? slot.received.length : 0;
+      const delivered = slot ? slot.delivered.length : 0;
+      const proforma = slot ? slot.proforma.length : 0;
+      const free = slot ? slot.free.length : 0;
+      const moved = slot ? slot.moved.length : 0;
+      const active = basDayOpsView.day === day ? basDayOpsView.bucket : "";
+      const cardCls = [
+        "bas-day-ops-card",
+        isToday ? "is-today" : "",
+        isFuture ? "is-future" : "",
+        hasFile ? "has-file" : "",
+        (received || delivered || proforma || free || moved) ? "has-stats" : "",
+      ].filter(Boolean).join(" ");
+
+      html += `<article class="${cardCls}" data-day="${day}">
+        <header class="bas-day-ops-head">
+          <div>
+            <span class="bas-day-ops-num">Day ${day}</span>
+            <span class="bas-day-ops-date">${escapeHtml(slot && slot.label ? slot.label : "")}${hasFile ? " · file" : " · no file"}</span>
+          </div>
+          ${day > 1 ? `<span class="bas-day-ops-vs">vs day ${day - 1}</span>` : `<span class="bas-day-ops-vs">first file</span>`}
+        </header>
+        <div class="bas-day-ops-metrics">
+          ${[
+            ["received", "From allocation we received", received, "ok"],
+            ["delivered", "Delivered", delivered, "ok"],
+            ["proforma", "Proforma", proforma, "warn"],
+            ["free", "Free in the stock", free, "info"],
+            ["moved", "Moved from Retail Electronic Sales", moved, "bad"],
+          ].map(([key, lab, n, tone]) => `
+            <button type="button" class="bas-day-ops-metric ${tone}${active === key ? " is-active" : ""}${!hasFile ? " is-disabled" : ""}"
+              data-day-ops-day="${day}" data-day-ops-bucket="${key}" ${!hasFile ? "disabled" : ""}>
+              <span class="bas-day-ops-metric-lab">${escapeHtml(lab)}</span>
+              <span class="bas-day-ops-metric-val">${formatNumber(n)}</span>
+            </button>`).join("")}
+        </div>
+      </article>`;
+    }
+    root.innerHTML = html || `<p class="foot" style="padding:8px 0">No day files in range yet.</p>`;
+
+    $$("[data-day-ops-bucket]", root).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const d = Number(btn.getAttribute("data-day-ops-day")) || 0;
+        const b = btn.getAttribute("data-day-ops-bucket") || "";
+        if (basDayOpsView.day === d && basDayOpsView.bucket === b) {
+          basDayOpsView = { day: 0, bucket: "" };
+        } else {
+          basDayOpsView = { day: d, bucket: b };
+        }
+        renderBasDayOps(basDayOpsLast, ctx, dayHasFile);
+        renderBasDayOpsDetail();
+        const detail = $("#bas-day-ops-detail");
+        if (detail && !detail.hidden) {
+          try { detail.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) { /* ignore */ }
+        }
+      });
+    });
+
+    const closeBtn = $("#bas-day-ops-detail-close");
+    if (closeBtn && !closeBtn.dataset.bound) {
+      closeBtn.dataset.bound = "1";
+      closeBtn.addEventListener("click", () => {
+        basDayOpsView = { day: 0, bucket: "" };
+        if (basDayOpsLast) renderBasDayOps(basDayOpsLast, ctx, dayHasFile);
+        renderBasDayOpsDetail();
+      });
+    }
+
+    renderBasDayOpsDetail();
+  }
+
   function basScheduleDayFromAg(agDate, fileDayNum, ctx) {
     if (agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m) {
       const d = agDate.getDate();
@@ -12073,6 +12247,173 @@
       }
     });
     return { delivered, proforma, pending, notFound, total: (cars || []).length };
+  }
+
+  /** Sales Raw bucket for day ops: invoice → delivered; blank invoice (incl. both blank) → proforma; else free. */
+  function basDaySalesBucket(vin, salesLookup) {
+    const sales = typeof resolveAaSalesStatus === "function"
+      ? resolveAaSalesStatus(vin, salesLookup)
+      : { kind: "none", proformaDate: null, invoiceDate: null, deliveryDate: null };
+    const inv = sales.invoiceDate || sales.deliveryDate || null;
+    const hasInv = !!(inv && parseDate(inv)) || sales.kind === "delivered";
+    const pro = sales.proformaDate || null;
+    const hasPro = !!(pro && parseDate(pro));
+    if (hasInv) {
+      return {
+        bucket: "delivered",
+        label: "Delivered",
+        salesFound: true,
+        proformaDate: pro,
+        invoiceDate: inv,
+      };
+    }
+    if (sales.kind !== "none") {
+      // Found in Sales Raw with blank invoice (proforma only, or both dates blank) → Proforma
+      return {
+        bucket: "proforma",
+        label: hasPro ? "Proforma" : "Proforma (no dates)",
+        salesFound: true,
+        proformaDate: pro,
+        invoiceDate: null,
+      };
+    }
+    return {
+      bucket: "free",
+      label: "Free in stock",
+      salesFound: false,
+      proformaDate: null,
+      invoiceDate: null,
+    };
+  }
+
+  function basAgSameAsFileDay(agDate, dayNum, ctx) {
+    if (!agDate || !ctx) return false;
+    return agDate.getFullYear() === ctx.y
+      && agDate.getMonth() === ctx.m
+      && agDate.getDate() === dayNum;
+  }
+
+  /**
+   * Per day-file RES ops:
+   * received = RES + Allocation Date on that file day
+   * delivered / proforma / free = Sales Raw status for RES still in the file
+   * moved = was RES in previous day file, not RES in this file
+   */
+  function buildBasDayOpsPack(ctx, dayFiles) {
+    const emptyDay = (day) => ({
+      day,
+      dateKey: "",
+      hasFile: false,
+      label: new Date(ctx.y, ctx.m, day).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      received: [],
+      delivered: [],
+      proforma: [],
+      free: [],
+      moved: [],
+    });
+    const days = {};
+    for (let d = 1; d <= 30; d += 1) days[d] = emptyDay(d);
+    if (!dayFiles || typeof dayFiles !== "object") {
+      return { days, salesLookupSize: 0 };
+    }
+
+    const salesLookup = typeof buildSalesVinLookup === "function" ? buildSalesVinLookup() : new Map();
+    let prevRes = new Map(); // vin -> row meta
+
+    Object.keys(dayFiles).sort().forEach((dateKey) => {
+      const dayNum = Number(String(dateKey).slice(8, 10));
+      if (!Number.isFinite(dayNum) || dayNum < 1 || dayNum > 30) return;
+      if (dayNum > ctx.daysInMonth || dayNum > ctx.todayDay) return;
+      const snap = dayFiles[dateKey];
+      const vehicles = (snap && snap.vehicles) || [];
+      const slot = days[dayNum];
+      slot.hasFile = true;
+      slot.dateKey = dateKey;
+
+      const thisRes = new Map();
+      const seenVin = new Set();
+
+      vehicles.forEach((v, i) => {
+        const car = mapRtlDailyVehicle(v, dateKey, snap && snap.id, i);
+        const vin = extractVinValue(car.vin) || upperTrim(car.vin);
+        if (!vin || seenVin.has(vin)) return;
+        seenVin.add(vin);
+        const searchArea = (typeof dayVehicleSearchArea === "function"
+          ? dayVehicleSearchArea(v)
+          : "") || car.searchAreaDesc || "";
+        const isRes = isRetailElectronicSales(searchArea);
+        const agDate = typeof dayVehicleAgDate === "function" ? dayVehicleAgDate(v) : null;
+        const agLabel = agDate
+          ? agDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : "";
+        const ageRaw = car.ageing;
+        const age = ageRaw == null || !Number.isFinite(ageRaw) ? null : Math.floor(ageRaw);
+        const leaf = matchRtlToAllocLeaf(car);
+        const base = {
+          vin,
+          product: leaf ? leaf.product : (car.product || "—"),
+          suffix: leaf ? leaf.sfx : (car.suffix || "—"),
+          year: car.year || "",
+          age,
+          agDate,
+          agLabel,
+          location: car.location || "—",
+          status: car.status || "",
+          searchArea: searchArea || "",
+          day: dayNum,
+          dateKey,
+        };
+
+        if (isRes) {
+          thisRes.set(vin, base);
+          if (basAgSameAsFileDay(agDate, dayNum, ctx)) {
+            slot.received.push({ ...base, bucket: "received", label: "Received · same-day allocation" });
+          }
+          const sales = basDaySalesBucket(vin, salesLookup);
+          const row = {
+            ...base,
+            bucket: sales.bucket,
+            label: sales.label,
+            salesFound: sales.salesFound,
+            proformaDate: sales.proformaDate,
+            invoiceDate: sales.invoiceDate,
+          };
+          if (sales.bucket === "delivered") slot.delivered.push(row);
+          else if (sales.bucket === "proforma") slot.proforma.push(row);
+          else slot.free.push(row);
+        } else if (prevRes.has(vin)) {
+          const prev = prevRes.get(vin);
+          slot.moved.push({
+            ...base,
+            bucket: "moved",
+            label: "Moved from Retail Electronic Sales",
+            prevSearchArea: (prev && prev.searchArea) || "Retail Electronic Sales",
+            newSearchArea: searchArea || "(other)",
+            product: base.product !== "—" ? base.product : (prev.product || "—"),
+            suffix: base.suffix !== "—" ? base.suffix : (prev.suffix || "—"),
+          });
+        }
+      });
+
+      // RES yesterday, missing entirely from today's file → moved out
+      prevRes.forEach((prev, vin) => {
+        if (thisRes.has(vin)) return;
+        if (seenVin.has(vin)) return; // already counted as moved to other area
+        slot.moved.push({
+          ...prev,
+          day: dayNum,
+          dateKey,
+          bucket: "moved",
+          label: "Moved from Retail Electronic Sales",
+          prevSearchArea: prev.searchArea || "Retail Electronic Sales",
+          newSearchArea: "(not in day file)",
+        });
+      });
+
+      prevRes = thisRes;
+    });
+
+    return { days, salesLookupSize: salesLookup.size };
   }
 
   /**
@@ -12224,10 +12565,12 @@
           }
 
           // New to RES vs all prior day files → once
+          // Schedule ONLY when Allocation Date (Col AG) is the same calendar day as this file
           if (isRes && dayNum <= ctx.todayDay && !everResSeen.has(vin)) {
             everResSeen.add(vin);
             const changeKind = prevResMeta.size > 0 ? "to-res" : null;
             const ageVal = age == null ? 0 : age;
+            const agSameDay = basAgSameAsFileDay(agDate, dayNum, ctx);
 
             if (changeKind) {
               pushResChange(car, dayNum, fileDate, fileLabel, {
@@ -12240,51 +12583,21 @@
               });
             }
 
-            let scheduleDay = null;
-            let collDate = null;
-            let backdated = false;
-
-            if (isResArrival) {
-              // Age 0 / blank → collected on this day (AG day if same month)
-              scheduleDay = basScheduleDayFromAg(agDate, dayNum, ctx);
-              collDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
-                ? agDate
-                : fileDate;
-            } else {
-              // Age ≥ 1 first seen → backdate to AG or fileDay − age (do not drop to free stock if placeable)
-              if (agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m) {
-                const d = agDate.getDate();
-                if (d >= 1 && d <= 30 && d <= ctx.todayDay) {
-                  scheduleDay = d;
-                  collDate = agDate;
-                  backdated = true;
-                }
-              }
-              if (scheduleDay == null && age != null && age >= 1) {
-                const inferred = inferCollectionDateFromAge(age, fileDate);
-                if (inferred && inferred.getFullYear() === ctx.y && inferred.getMonth() === ctx.m) {
-                  const d = inferred.getDate();
-                  if (d >= 1 && d <= 30 && d <= ctx.todayDay && d <= dayNum) {
-                    scheduleDay = d;
-                    collDate = inferred;
-                    backdated = true;
-                  }
-                }
-              }
-            }
-
-            if (scheduleDay != null && collDate && scheduleDay >= 1 && scheduleDay <= 30 && scheduleDay <= ctx.todayDay) {
+            if (agSameDay) {
+              const scheduleDay = dayNum;
+              const collDate = agDate;
               const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
               dayRetailTotals[scheduleDay] += 1;
               pushRetailArrival(car, collDate, scheduleDay, collLabel, {
                 age: ageVal,
                 isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
                 isLate: false,
-                arrivalKind: backdated ? "backdated-res" : "new-res",
+                arrivalKind: "new-res",
                 agDate,
                 agLabel,
                 firstSeenDay: dayNum,
-                backdated,
+                backdated: false,
+                sameDayAllocation: true,
                 _fromDayFile: true,
               });
               addResProduct(car, scheduleDay);
@@ -12305,30 +12618,33 @@
                   isTodayArrival: scheduleDay === ctx.todayDay || dayNum === ctx.todayDay,
                   isLate: false,
                   age: ageVal,
-                  arrivalKind: backdated ? "backdated-res" : "new-res",
+                  arrivalKind: "new-res",
                   agDate,
                   agLabel,
                   firstSeenDay: dayNum,
-                  backdated,
+                  backdated: false,
+                  sameDayAllocation: true,
                   _fromDayFile: true,
                 });
               }
             } else {
-              // Cannot place on an in-month day → free stock
-              const fallbackDay = basScheduleDayFromAg(agDate, dayNum, ctx);
+              // RES first seen but Allocation Date is not this file day → free stock (not on schedule day)
               const fallbackDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
                 ? agDate
                 : fileDate;
+              const fallbackDay = basScheduleDayFromAg(agDate, dayNum, ctx);
               pushFreeStock(car, fallbackDate, fallbackDay, fallbackDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), {
                 age: ageVal,
                 agDate,
                 agLabel,
                 firstSeenDay: dayNum,
+                sameDayAllocation: false,
                 _fromDayFile: true,
               });
             }
           } else if (isRes && everResSeen.has(vin)) {
             // Already counted as received / free stock — still RES today, no double count
+            // Same-day AG on a later file still counts toward that day's strip via dayOps overlay
           } else if (!isRes && prevResMeta.has(vin)) {
             // Still in file but left RES
             const prev = prevResMeta.get(vin);
@@ -12505,6 +12821,17 @@
     const movedOutCars = resChangeCars.filter((c) => c.changeKind === "from-res");
     const newInCars = resChangeCars.filter((c) => c.changeKind === "to-res");
 
+    // Day ops: same-day AG received + Sales Raw + moved — drives schedule RES strip + day cards
+    const dayOps = buildBasDayOpsPack(ctx, hasDayFiles ? dayFiles : null);
+    if (dayOps && dayOps.days) {
+      for (let d = 1; d <= 30; d += 1) {
+        const slot = dayOps.days[d];
+        if (slot && slot.hasFile) {
+          dayRetailTotals[d] = (slot.received || []).length;
+        }
+      }
+    }
+
     const rowsAll = [...byLeaf.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     const rows = [...byLeafRetail.values()].filter((r) => r.allocation > 0 || r.mtd > 0 || r.late > 0);
     return {
@@ -12520,6 +12847,7 @@
       newInCars,
       lateCars,
       delivery,
+      dayOps,
       dayTotals,
       dayRetailTotals,
       dayHasFile,
@@ -13247,6 +13575,7 @@
     const {
       ctx, rows, matched, dayTotals, dayRetailTotals, dayHasFile, dayFileVinCount,
       mode, activeDayCount, lateCars, resChangeCars, movedOutCars, delivery, freeStockCars,
+      dayOps,
     } = buildBasMonthlyData();
     const hint = $("#bas-month-hint");
     if (hint) {
@@ -13255,9 +13584,9 @@
         ? ` · MTD 1–${ctx.todayDay}`
         : "";
       if (mode === "daily") {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · RES = new to Retail Electronic Sales (age 0 / blank, or backdated by age/AG) · Tot = explicit age 0 any area · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · ${activeDayCount} day file(s) · RES schedule = Allocation Date on that file day · Sales Raw delivered / proforma · free stock · moved out · today day ${ctx.todayDay}`;
       } else {
-        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · RES on schedule via age/AG · today day ${ctx.todayDay}`;
+        hint.textContent = `${ctx.monthLabel}${rangeNote} · fallback · live RTL · today day ${ctx.todayDay}`;
       }
     }
 
@@ -13304,7 +13633,7 @@
     if (kpiEl) {
       kpiEl.innerHTML = [
         { label: "Month", val: ctx.monthLabel, sub: mode === "daily" ? `${activeDayCount} day file(s)` : `Day ${ctx.todayDay} of ${ctx.daysInMonth}` },
-        { label: "RES Received MTD", val: formatNumber(resAllMtd), sub: "Unique new RES · day files (age 0 / backdated)", cls: "ok" },
+        { label: "RES Received MTD", val: formatNumber(resAllMtd), sub: "Same-day Allocation Date · Retail Electronic Sales", cls: "ok" },
         { label: "Matched to plan", val: formatNumber(mtdTotal), sub: unmatchedToPlan ? `${formatNumber(unmatchedToPlan)} unmatched to allocation` : "All RES map to plan rows", cls: unmatchedToPlan ? "warn" : "ok" },
         { label: "Received today", val: formatNumber(receivedToday), sub: "First seen / collected today", cls: receivedToday ? "ok" : "" },
         { label: "Free stock", val: formatNumber(freeTotal), sub: "New RES · could not place on a month day", cls: freeTotal ? "warn" : "ok" },
@@ -13339,7 +13668,7 @@
           hasFile ? "has-file" : "",
           hasFile && !(total || retail) ? "has-file-empty" : "",
         ].filter(Boolean).join(" ");
-        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · file has no Col J age 0 rows — drop that day's RTL extract" : ""} · Tot ${total} · RES age-0 ${retail}">
+        stripHtml += `<div class="${cls}" title="Day ${day}${hasFile ? ` · day RTL file (${formatNumber(fileVins)} VINs · Tot = age 0 in that file)` : " · no day file yet"}${hasFile && !(total || retail) ? " · no same-day RES allocation in that file" : ""} · Tot ${total} · RES same-day AG ${retail}">
           <span class="bas-day-num">${day}${hasFile ? "·" : ""}</span>
           <span class="bas-day-split">
             <span class="bas-day-part">
@@ -13533,54 +13862,13 @@
     }
 
     const daySectionsEl = $("#bas-day-sections");
-    if (daySectionsEl) {
-      let sectionsHtml = "";
-      for (let day = 1; day <= 30; day += 1) {
-        const dayCars = filteredMatched.filter((c) => c.collectionDay === day);
-        const dayMoved = filteredMoved.filter((c) => c.collectionDay === day);
-        const isToday = day === ctx.todayDay;
-        const isFuture = day > ctx.todayDay;
-        const hasFile = dayHasFile && dayHasFile[day];
-        const openAttr = isToday && (dayCars.length || dayMoved.length) ? " open" : "";
-        const summaryCls = isToday ? "bas-day-summary is-today" : isFuture ? "bas-day-summary is-future" : "bas-day-summary";
-        const dateLabel = new Date(ctx.y, ctx.m, day).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-        let body = "";
-        if (dayCars.length || dayMoved.length) {
-          const receivedRows = dayCars.map((c) => {
-            const badge = basResArrivalBadge(c);
-            return `<tr class="bas-row-above">
-                <td>${escapeHtml(c.allocProduct)}</td>
-                <td>${escapeHtml(c.allocSfx)}</td>
-                <td>${escapeHtml(c.vin || "—")}</td>
-                <td>${escapeHtml(c.agLabel || c.collectionLabel || "—")}</td>
-                <td><span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span></td>
-                <td><span class="badge ${c.salesKind === "delivered" ? "ok" : c.salesKind === "proforma" ? "warn" : "bad"}">${escapeHtml(c.deliveryStatus || "—")}</span></td>
-              </tr>`;
-          }).join("");
-          const movedRows = dayMoved.map((c) => {
-            const badge = basResArrivalBadge(c);
-            return `<tr class="bas-row-below">
-                <td>${escapeHtml(c.allocProduct || c.product || "—")}</td>
-                <td>${escapeHtml(c.allocSfx || c.suffix || "—")}</td>
-                <td>${escapeHtml(c.vin || "—")}</td>
-                <td>${escapeHtml(c.agLabel || "—")}</td>
-                <td><span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span></td>
-                <td>—</td>
-              </tr>`;
-          }).join("");
-          body = `<table class="bas-table bas-day-inner">
-              <thead><tr><th>Product</th><th>SFX</th><th>VIN</th><th>Alloc Date</th><th>Note</th><th>Delivery</th></tr></thead>
-              <tbody>${receivedRows}${movedRows}</tbody>
-            </table>`;
-        } else {
-          body = `<p class="foot" style="margin:0;padding:8px 0">${isFuture ? "Future day" : (hasFile ? "Active file · no new RES / no moved-out VINs this day" : "No active RTL file for this day")}</p>`;
-        }
-        sectionsHtml += `<details class="bas-day-detail"${openAttr}>
-          <summary class="${summaryCls}"><span class="bas-day-summary-num">Day ${day}</span><span class="bas-day-summary-date">${dateLabel}${hasFile ? " · file" : ""}</span><span class="bas-day-summary-count">${formatNumber(dayCars.length)} new · ${formatNumber(dayMoved.length)} moved out</span></summary>
-          ${body}
-        </details>`;
-      }
-      daySectionsEl.innerHTML = sectionsHtml;
+    if (daySectionsEl) daySectionsEl.hidden = true;
+    try {
+      renderBasDayOps(dayOps, ctx, dayHasFile);
+    } catch (err) {
+      console.warn("Day ops render failed", err);
+      const root = $("#bas-day-ops");
+      if (root) root.innerHTML = `<p class="foot" style="padding:8px 0">${escapeHtml(err && err.message ? err.message : "Day breakdown failed")}</p>`;
     }
 
     bindResVinMovementUi();
