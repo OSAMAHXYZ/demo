@@ -14,7 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260915aa6" />
+  <script src="plan-tracker.js?v=20260918pt1"></script>
+  <link rel="stylesheet" href="dashboard.css?v=20260918pt1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -978,6 +979,133 @@
             <div class="table-wrap aa-table-wrap" id="aa-vin-wrap"></div>
             <p class="foot" id="aa-vin-foot"></p>
           </article>
+        </div>
+      </div>
+
+      <!-- PANEL: Plan Tracker · RES Allocation Control Tower -->
+      <div class="panel-section" id="panel-plantracker" style="display:none">
+        <div class="bo-empty card" id="pt-empty">
+          <h2>Plan Tracker</h2>
+          <p style="color:var(--muted);margin:0 0 12px">
+            Retail Electronic Sales allocation &amp; movement control tower.
+            Reads <b>daily RTL snapshots</b> from <a href="data-uploader.html">Data Uploader</a>
+            (same archive as Admin Push · <code>rtl-daily</code>).
+          </p>
+          <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
+            <li>Open <a href="data-uploader.html">Data Uploader</a></li>
+            <li>Upload one RTL Excel per day (first worksheet · VIN · Search Area · Allocation Date · Age)</li>
+            <li>Return here · open <b>Plan Tracker</b> · click <b>Refresh snapshots</b></li>
+          </ol>
+          <p class="foot" id="pt-loading" hidden>Loading day RTL snapshots…</p>
+        </div>
+
+        <div id="pt-dash" class="bo-dash pt-dash" hidden>
+          <header class="aa-cc-header pt-header">
+            <div class="aa-cc-header-copy">
+              <p class="aa-cc-eyebrow">TOYOTA · ALJ MOTORS</p>
+              <h2 class="aa-cc-title">Plan Tracker</h2>
+              <p class="aa-cc-sub">Retail Electronic Sales · 315 allocation plan · VIN movement</p>
+              <p class="aa-cc-live" id="pt-live-hint">—</p>
+            </div>
+            <div class="aa-cc-toolbar pt-toolbar">
+              <button type="button" class="btn" id="pt-refresh">Refresh snapshots</button>
+              <button type="button" class="btn-primary" id="pt-export">Export Excel</button>
+            </div>
+          </header>
+
+          <div class="bo-kpis bas-kpi-row" id="pt-kpis"></div>
+          <div class="pt-progress card" id="pt-progress"></div>
+
+          <div class="pt-grid-2">
+            <div class="card pt-card" id="pt-yesterday"></div>
+            <div class="card pt-card">
+              <h3 class="bas-subhead">Age 0 by Search Area</h3>
+              <div class="table-wrap" id="pt-age0-table"></div>
+            </div>
+          </div>
+
+          <div class="pt-charts">
+            <article class="card">
+              <div class="pbi-viz-head"><h3>Plan vs allocated</h3></div>
+              <div class="chart-box"><canvas id="pt-chart-plan"></canvas></div>
+            </article>
+            <article class="card pt-span-2">
+              <div class="pbi-viz-head"><h3>Daily allocations &amp; movement</h3></div>
+              <div class="chart-box"><canvas id="pt-chart-daily"></canvas></div>
+            </article>
+            <article class="card">
+              <div class="pbi-viz-head"><h3>RES total trend</h3></div>
+              <div class="chart-box"><canvas id="pt-chart-res"></canvas></div>
+            </article>
+            <article class="card">
+              <div class="pbi-viz-head"><h3>RES allocation age</h3></div>
+              <div class="chart-box"><canvas id="pt-chart-age"></canvas></div>
+            </article>
+          </div>
+
+          <div class="bas-day-ops-detail" id="pt-drill" hidden>
+            <div class="bas-retail-head">
+              <div class="bas-retail-title">
+                <h3 id="pt-drill-title">VIN list</h3>
+                <span class="hint">Click a KPI or daily number · click again to clear</span>
+              </div>
+              <button type="button" class="btn" id="pt-drill-close">Close</button>
+            </div>
+            <div class="table-wrap" id="pt-drill-table"></div>
+          </div>
+
+          <div class="card pt-card">
+            <h3 class="bas-subhead">Daily table</h3>
+            <div class="table-wrap" id="pt-daily-table"></div>
+          </div>
+
+          <div class="pt-grid-2">
+            <div class="card pt-card">
+              <h3 class="bas-subhead">Search Area flow</h3>
+              <div id="pt-corridor"></div>
+            </div>
+            <div class="card pt-card">
+              <h3 class="bas-subhead">Movement matrix</h3>
+              <div id="pt-matrix"></div>
+            </div>
+          </div>
+
+          <div class="card pt-card">
+            <div class="bas-retail-head">
+              <div class="bas-retail-title">
+                <h3>Movement ledger</h3>
+                <span class="hint">VIN-level · previous vs current Search Area</span>
+              </div>
+            </div>
+            <div class="bas-alloc-toolbar pt-filters">
+              <input type="search" id="pt-search" placeholder="Search VIN / product / area…" autocomplete="off" />
+              <select id="pt-f-snap"></select>
+              <select id="pt-f-move"></select>
+              <select id="pt-f-product"></select>
+              <button type="button" class="btn" id="pt-clear">Clear filters</button>
+            </div>
+            <div class="table-wrap" id="pt-move-table"></div>
+          </div>
+
+          <div class="pt-grid-2">
+            <div class="card pt-card">
+              <h3 class="bas-subhead">VIN investigation</h3>
+              <div class="bas-alloc-toolbar">
+                <input type="search" id="pt-vin-q" placeholder="Enter VIN…" autocomplete="off" />
+                <button type="button" class="btn-primary" id="pt-vin-go">Trace VIN</button>
+              </div>
+              <div id="pt-vin-result"></div>
+            </div>
+            <div class="card pt-card">
+              <h3 class="bas-subhead">Data quality</h3>
+              <div id="pt-quality"></div>
+            </div>
+          </div>
+
+          <div class="card pt-card">
+            <h3 class="bas-subhead">Current RES inventory</h3>
+            <div class="pt-inv-grid" id="pt-inventory"></div>
+          </div>
         </div>
       </div>
 
@@ -6537,6 +6665,7 @@
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
     { id: "allocationaudit", label: "Allocation Audit" },
+    { id: "plantracker", label: "Plan Tracker" },
     { id: "stockdashboard", label: "Stock Dashboard" },
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
@@ -6580,6 +6709,7 @@
       if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
       if (p.id === "allocationaudit") return true;
+      if (p.id === "plantracker") return true;
       if (p.id === "boerrors") return true;
       // BO + Allocation + Stock & BO Dashboard always visible — empty state when files missing
       return true;
@@ -7155,6 +7285,37 @@
     setStatus("Stock & BO Dashboard Excel exported · sheet per section", "ok");
   }
 
+  /** Bridge helpers for Plan Tracker module (Data Uploader rtl-daily snapshots). */
+  function renderPlanTrackerPanel(force) {
+    window.ensureRtlActiveMonth = ensureRtlActiveMonth;
+    window.getCachedRtlActiveMonth = getCachedRtlActiveMonth;
+    window.basMonthContext = basMonthContext;
+    window.mapRtlDailyVehicle = mapRtlDailyVehicle;
+    window.dayVehicleSearchArea = dayVehicleSearchArea;
+    window.dayVehicleAgDate = dayVehicleAgDate;
+    window.escapeHtml = escapeHtml;
+    window.formatNumber = formatNumber;
+    window.parseDate = parseDate;
+    window.extractVinValue = extractVinValue;
+    window.normHeader = normHeader;
+    window.setStatus = setStatus;
+    if (typeof formatRvDate === "function") window.formatRvDate = formatRvDate;
+    if (!window.PlanTracker || typeof window.PlanTracker.render !== "function") {
+      const empty = $("#pt-empty");
+      const dash = $("#pt-dash");
+      if (empty) {
+        empty.hidden = false;
+        empty.innerHTML = `<h2>Plan Tracker</h2><p class="foot">plan-tracker.js failed to load.</p>`;
+      }
+      if (dash) dash.hidden = true;
+      return;
+    }
+    window.PlanTracker.render({ force: !!force }).catch((err) => {
+      console.warn("Plan Tracker render failed", err);
+      if (typeof setStatus === "function") setStatus(err.message || "Plan Tracker failed", "err");
+    });
+  }
+
   function switchPanel(panelId) {
     const panels = visiblePanels();
     if (!panels.some((p) => p.id === panelId)) {
@@ -7172,6 +7333,7 @@
       boerrors: "⚠",
       boallocstock: "▦",
       allocationaudit: "⬡",
+      plantracker: "▣",
       stockdashboard: "◈",
       reservedvehicles: "◎",
       dashboard: "◉",
@@ -7198,6 +7360,7 @@
     if (panelId === "summary") renderSummaryDashboard();
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "allocationaudit") renderAllocationAudit();
+    if (panelId === "plantracker") renderPlanTrackerPanel();
     if (panelId === "boerrors" && window._data) renderBoErrorsDashboard(window._data);
     if (panelId === "boallocstock" && window._data) {
       renderBoAllocStockDashboard(window._data);
