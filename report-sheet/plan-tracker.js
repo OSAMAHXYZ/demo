@@ -77,6 +77,19 @@
       - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
     return Math.round(ms / 86400000);
   }
+
+  /** True when RES VIN counts toward the 315 plan (Age 0 or Allocation Date = snapshot day). */
+  function isPlanReceipt(row, dateKey) {
+    if (!row || !row.isTarget) return false;
+    if (row.allocationAge === 0) return true;
+    if (row.allocationDate instanceof Date && dateKey) {
+      const d = row.allocationDate;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return key === dateKey;
+    }
+    return false;
+  }
+
   function ageBucket(age) {
     if (age == null || !Number.isFinite(age)) return "blank";
     const n = Math.floor(age);
@@ -192,7 +205,8 @@
     const daily = [];
     const movements = [];
     const vinHistory = new Map(); // vin -> observations[]
-    const everAllocated = new Set(); // unique VINs that entered target
+    const planAllocated = new Set(); // unique VINs counting toward 315 (Age 0 / same-day AG only)
+    const everEnteredRes = new Set(); // any VIN that was ever in RES (analytics)
     const everSeen = new Set();
     const disappearedEver = new Set();
     const qualityTotals = {
@@ -209,6 +223,14 @@
     let prev = null; // { dateKey, byVin }
     let latestTarget = new Map();
 
+    const creditPlan = (vin, row, dateKey, dayStats) => {
+      if (!isPlanReceipt(row, dateKey)) return false;
+      if (planAllocated.has(vin)) return false;
+      planAllocated.add(vin);
+      dayStats.planReceipts.push(row);
+      return true;
+    };
+
     dateKeys.forEach((dateKey) => {
       const snap = days[dateKey];
       const { byVin, quality, fileDate } = snapshotRows(snap, dateKey);
@@ -223,11 +245,13 @@
           ? fileDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
           : dateKey,
         newRes: [],
+        planReceipts: [],
         transferIn: [],
         transferOut: [],
         disappeared: [],
         reappeared: [],
         stayed: [],
+        carryover: [],
         newVinAny: [],
         resTotal: 0,
         age0Target: 0,
@@ -261,16 +285,24 @@
       });
 
       if (!prev) {
+        // Opening snapshot: only Age 0 / same-day AG count toward 315 — not full RES stock
         byVin.forEach((r) => {
           everSeen.add(r.vin);
-          const movementType = r.isTarget ? "NEW ALLOCATION" : "NEW VIN";
           if (r.isTarget) {
-            everAllocated.add(r.vin);
-            dayStats.newRes.push(r);
+            everEnteredRes.add(r.vin);
+            if (isPlanReceipt(r, dateKey)) {
+              creditPlan(r.vin, r, dateKey, dayStats);
+              dayStats.newRes.push(r);
+              movements.push(makeMovement(dateKey, null, r, "NEW ALLOCATION"));
+            } else {
+              dayStats.carryover.push(r);
+              dayStats.stayed.push(r);
+              movements.push(makeMovement(dateKey, null, r, "CARRYOVER / OPENING"));
+            }
           } else {
             dayStats.newVinAny.push(r);
+            movements.push(makeMovement(dateKey, null, r, "NEW VIN"));
           }
-          movements.push(makeMovement(dateKey, null, r, movementType));
         });
       } else {
         const prevMap = prev.byVin;
@@ -285,15 +317,29 @@
               const mt = b.isTarget ? "RE-APPEARED (RES)" : "RE-APPEARED";
               dayStats.reappeared.push(b);
               if (b.isTarget) {
-                everAllocated.add(vin);
-                dayStats.transferIn.push(b);
-                addCorridor(corridor, a ? a.searchArea : "(re-appeared)", b.searchArea);
+                everEnteredRes.add(vin);
+                // Re-appear into RES is movement, not a new plan allocation unless Age 0 / same-day AG
+                if (isPlanReceipt(b, dateKey)) {
+                  creditPlan(vin, b, dateKey, dayStats);
+                  dayStats.newRes.push(b);
+                } else {
+                  dayStats.transferIn.push(b);
+                  addCorridor(corridor, "(re-appeared)", b.searchArea);
+                }
               }
               movements.push(makeMovement(dateKey, a, b, mt));
             } else if (b.isTarget) {
-              everAllocated.add(vin);
-              dayStats.newRes.push(b);
-              movements.push(makeMovement(dateKey, null, b, "NEW ALLOCATION"));
+              everEnteredRes.add(vin);
+              if (isPlanReceipt(b, dateKey)) {
+                creditPlan(vin, b, dateKey, dayStats);
+                dayStats.newRes.push(b);
+                movements.push(makeMovement(dateKey, null, b, "NEW ALLOCATION"));
+              } else {
+                // First seen as RES but not Age 0 / same-day AG → treat as transfer-style entry, not plan
+                dayStats.transferIn.push(b);
+                addCorridor(corridor, "(first seen)", b.searchArea);
+                movements.push(makeMovement(dateKey, null, b, "TRANSFERRED INTO RES"));
+              }
             } else {
               dayStats.newVinAny.push(b);
               movements.push(makeMovement(dateKey, null, b, "NEW VIN"));
@@ -309,9 +355,11 @@
           if (a && b) {
             everSeen.add(vin);
             if (!a.isTarget && b.isTarget) {
-              everAllocated.add(vin);
+              everEnteredRes.add(vin);
               dayStats.transferIn.push(b);
               addCorridor(corridor, a.searchArea, b.searchArea);
+              // Transfer IN is movement — credit 315 only if Age 0 / same-day AG (not double-count in newRes)
+              if (isPlanReceipt(b, dateKey)) creditPlan(vin, b, dateKey, dayStats);
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED INTO RES"));
             } else if (a.isTarget && !b.isTarget) {
               dayStats.transferOut.push(b);
@@ -319,6 +367,8 @@
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED OUT OF RES"));
             } else if (a.isTarget && b.isTarget) {
               dayStats.stayed.push(b);
+              // Still in RES: credit plan only when this snapshot shows a fresh Age 0 / same-day AG
+              if (isPlanReceipt(b, dateKey)) creditPlan(vin, b, dateKey, dayStats);
               movements.push(makeMovement(dateKey, a, b, "STAYED IN RES"));
             } else if (a.searchArea !== b.searchArea) {
               addCorridor(corridor, a.searchArea, b.searchArea);
@@ -328,15 +378,11 @@
         });
       }
 
-      // Reconciliation for target
-      const implied = dayStats.prevResTotal
-        + dayStats.newRes.length
-        + dayStats.transferIn.length
-        - dayStats.transferOut.length
-        - dayStats.disappeared.filter((r) => r.isTarget).length;
-      // Adjust: disappeared counted only if was target
+      // Reconciliation for target (opening carryover only on first snapshot)
       const disappearedTarget = dayStats.disappeared.filter((r) => r.isTarget).length;
+      const openingCarry = prev ? 0 : dayStats.carryover.length;
       const impliedRes = dayStats.prevResTotal
+        + openingCarry
         + dayStats.newRes.length
         + dayStats.transferIn.length
         - dayStats.transferOut.length
@@ -364,7 +410,7 @@
     }
 
     const currentRes = latestTarget.size;
-    const allocated = everAllocated.size;
+    const allocated = planAllocated.size;
     const remaining = Math.max(0, plan - allocated);
     const progress = plan > 0 ? allocated / plan : 0;
     const latestDay = daily.length ? daily[daily.length - 1] : null;
@@ -437,7 +483,7 @@
         newAlloc: newAllocAll.length,
       },
       lists: {
-        allocated: [...everAllocated].map((vin) => {
+        allocated: [...planAllocated].map((vin) => {
           const hist = vinHistory.get(vin) || [];
           const last = hist[hist.length - 1];
           return last || { vin };
@@ -450,6 +496,10 @@
         age0: latestSnap
           ? [...latestSnap.byVin.values()].filter((r) => r.isTarget && r.allocationAge === 0)
           : [],
+        everEntered: [...everEnteredRes].map((vin) => {
+          const hist = vinHistory.get(vin) || [];
+          return hist[hist.length - 1] || { vin };
+        }),
       },
       latestDay,
       prevDay,
@@ -574,11 +624,11 @@
     const k = model.kpis;
     const items = [
       ["plan", "Allocation Plan", k.plan, `Target ${esc(TARGET_SEARCH_AREA)}`, ""],
-      ["allocated", "Total Allocated", k.allocated, "Unique VINs ever entered RES", "ok"],
+      ["allocated", "Total Allocated", k.allocated, "Age 0 / same-day AG toward plan", "ok"],
       ["remaining", "Remaining", k.remaining, `${Math.min(100, Math.round(k.progress * 100))}% of plan`, k.remaining ? "warn" : "ok"],
       ["current", "RES Current", k.currentRes, "In latest snapshot", "ok"],
       ["age0", "Age 0 (RES)", k.age0Target, `All areas Age 0: ${num(k.age0Total)}`, "info"],
-      ["newAlloc", "New Allocations", k.newAlloc, "First seen as RES", "ok"],
+      ["newAlloc", "New Allocations", k.newAlloc, "First seen as RES · Age 0 / same-day AG", "ok"],
       ["transferIn", "Transfers IN", k.transferIn, "Other area → RES", "info"],
       ["transferOut", "Transfers OUT", k.transferOut, "RES → other area", "warn"],
       ["net", "Net Movement", k.net, "IN − OUT", k.net >= 0 ? "ok" : "bad"],
@@ -620,7 +670,7 @@
     }
     const rows = drillRows(model);
     const labels = {
-      allocated: "Total allocated (unique VINs ever in RES)",
+      allocated: "Plan allocated (Age 0 / same-day Allocation Date)",
       current: "Current RES inventory",
       age0: "Age 0 · Retail Electronic Sales",
       newAlloc: "New allocations",
@@ -681,7 +731,154 @@
       <div class="pt-progress-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
         <div class="pt-progress-fill" style="width:${pct}%"></div>
       </div>
-      <p class="foot" style="margin:8px 0 0">Progress ${pct}%${over ? ` (actual ${(k.progress * 100).toFixed(1)}%)` : ""} · unique VINs allocated to ${esc(TARGET_SEARCH_AREA)}</p>`;
+      <p class="foot" style="margin:8px 0 0">Progress ${pct}%${over ? ` (actual ${(k.progress * 100).toFixed(1)}%)` : ""} · Age 0 / same-day AG VINs toward ${esc(TARGET_SEARCH_AREA)} plan (not opening stock)</p>`;
+  }
+
+  function buildScheduleRows(model) {
+    const allocRows = global.ALLOCATION_ROWS || [];
+    const values = global.allocationValues || {};
+    const matchLeaf = typeof global.matchRtlToAllocLeaf === "function"
+      ? global.matchRtlToAllocLeaf
+      : () => null;
+    const byLeaf = new Map();
+    const unmatched = {
+      id: "__unmatched__",
+      seg: "—",
+      product: "(unmatched)",
+      sfx: "—",
+      allocation: 0,
+      dayCounts: Array(31).fill(0),
+      mtd: 0,
+      seen: new Set(),
+    };
+
+    allocRows.forEach((leaf) => {
+      if (leaf.kind !== "leaf") return;
+      byLeaf.set(leaf.id, {
+        id: leaf.id,
+        seg: leaf.seg || "—",
+        product: leaf.product || "—",
+        sfx: leaf.sfx || "—",
+        allocation: Number(values[leaf.id]) || 0,
+        dayCounts: Array(31).fill(0),
+        mtd: 0,
+        seen: new Set(),
+      });
+    });
+
+    const monthKey = (model.dateKeys && model.dateKeys[0])
+      ? String(model.dateKeys[0]).slice(0, 7)
+      : "";
+
+    (model.daily || []).forEach((day) => {
+      const snapDay = Number(String(day.dateKey).slice(8, 10));
+      const list = (day.planReceipts && day.planReceipts.length)
+        ? day.planReceipts
+        : (day.newRes || []);
+      list.forEach((r) => {
+        const vin = r.vin;
+        if (!vin) return;
+        let placeDay = snapDay;
+        if (r.allocationDate instanceof Date && monthKey) {
+          const y = r.allocationDate.getFullYear();
+          const m = String(r.allocationDate.getMonth() + 1).padStart(2, "0");
+          if (`${y}-${m}` === monthKey) {
+            placeDay = r.allocationDate.getDate();
+          }
+        }
+        if (!Number.isFinite(placeDay) || placeDay < 1 || placeDay > 30) return;
+
+        const leaf = matchLeaf({ product: r.product, suffix: r.suffix });
+        const row = leaf && byLeaf.has(leaf.id) ? byLeaf.get(leaf.id) : unmatched;
+        if (row.seen.has(vin)) return;
+        row.seen.add(vin);
+        row.dayCounts[placeDay] += 1;
+        row.mtd += 1;
+      });
+    });
+
+    const rows = [...byLeaf.values()]
+      .filter((r) => r.allocation > 0 || r.mtd > 0)
+      .sort((a, b) => String(a.seg).localeCompare(String(b.seg))
+        || String(a.product).localeCompare(String(b.product))
+        || String(a.sfx).localeCompare(String(b.sfx)));
+    if (unmatched.mtd > 0) rows.push(unmatched);
+    return rows;
+  }
+
+  function renderSchedule(model) {
+    const tableEl = $("#pt-schedule-table");
+    const footEl = $("#pt-schedule-foot");
+    if (!tableEl) return;
+    const rows = buildScheduleRows(model);
+    model.scheduleRows = rows;
+    const ctx = typeof global.basMonthContext === "function" ? global.basMonthContext() : null;
+    const todayDay = ctx && ctx.todayDay ? ctx.todayDay : 0;
+
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No plan-schedule rows yet. Upload day RTL files and set the Admin allocation plan.</p>`;
+      if (footEl) footEl.textContent = "";
+      return;
+    }
+
+    const dayHeaders = Array.from({ length: 30 }, (_, i) => {
+      const day = i + 1;
+      const cls = day === todayDay ? "bas-day-col is-today" : day > todayDay ? "bas-day-col is-future" : "bas-day-col";
+      return `<th class="${cls}">${day}</th>`;
+    }).join("");
+
+    const body = rows.map((r) => {
+      const rowGap = r.allocation - r.mtd;
+      const gapCls = rowGap > 0 ? "bas-gap-pos" : rowGap < 0 ? "bas-gap-neg" : "";
+      const dayCells = Array.from({ length: 30 }, (_, i) => {
+        const day = i + 1;
+        const n = r.dayCounts[day] || 0;
+        const cls = day === todayDay ? "is-today" : "";
+        return `<td class="num bas-day-cell ${cls}${n ? " has-val" : ""}">${n || ""}</td>`;
+      }).join("");
+      return `<tr>
+        <td>${esc(r.seg)}</td>
+        <td>${esc(r.product)}</td>
+        <td>${esc(r.sfx)}</td>
+        <td class="num">${num(r.allocation)}</td>
+        ${dayCells}
+        <td class="num"><b>${num(r.mtd)}</b></td>
+        <td class="num ${gapCls}">${rowGap > 0 ? "+" : ""}${num(rowGap)}</td>
+      </tr>`;
+    }).join("");
+
+    const totals = rows.reduce((acc, r) => {
+      acc.mtd += r.mtd;
+      acc.alloc += r.allocation;
+      for (let d = 1; d <= 30; d += 1) acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
+      return acc;
+    }, { mtd: 0, alloc: 0, days: {} });
+    const totalDayCells = Array.from({ length: 30 }, (_, i) => {
+      const n = totals.days[i + 1] || 0;
+      return `<td class="num"><b>${n || ""}</b></td>`;
+    }).join("");
+    const totalGap = totals.alloc - totals.mtd;
+
+    tableEl.innerHTML = `<table class="bas-table bas-month-grid">
+      <thead><tr>
+        <th>Seg</th><th>Product</th><th>SFX</th><th>Plan</th>
+        ${dayHeaders}
+        <th>MTD</th><th>Gap</th>
+      </tr></thead>
+      <tbody>${body}
+      <tr class="bas-row-total">
+        <td colspan="3"><b>Total</b></td>
+        <td class="num"><b>${num(totals.alloc)}</b></td>
+        ${totalDayCells}
+        <td class="num"><b>${num(totals.mtd)}</b></td>
+        <td class="num"><b>${totalGap > 0 ? "+" : ""}${num(totalGap)}</b></td>
+      </tr>
+      </tbody>
+    </table>`;
+
+    if (footEl) {
+      footEl.textContent = `${num(totals.mtd)} plan receipts on schedule · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · scroll days 1–30`;
+    }
   }
 
   function renderYesterday(model) {
@@ -694,16 +891,16 @@
       return;
     }
     const rows = [
-      ["RES Vehicles", prev ? prev.resTotal : "—", cur.resTotal],
-      ["Age 0 (RES)", prev ? prev.age0Target : "—", cur.age0Target],
-      ["New RES Allocations", prev ? prev.newRes.length : "—", cur.newRes.length],
-      ["Transfers IN", prev ? prev.transferIn.length : "—", cur.transferIn.length],
-      ["Transfers OUT", prev ? prev.transferOut.length : "—", cur.transferOut.length],
-      ["Disappeared (was RES)", prev ? (prev.disappearedTarget || 0) : "—", cur.disappearedTarget || 0],
+      ["RES", prev ? prev.resTotal : "—", cur.resTotal],
+      ["Age 0", prev ? prev.age0Target : "—", cur.age0Target],
+      ["New alloc", prev ? ((prev.planReceipts && prev.planReceipts.length) || prev.newRes.length) : "—", (cur.planReceipts && cur.planReceipts.length) || cur.newRes.length],
+      ["IN", prev ? prev.transferIn.length : "—", cur.transferIn.length],
+      ["OUT", prev ? prev.transferOut.length : "—", cur.transferOut.length],
+      ["Gone", prev ? (prev.disappearedTarget || 0) : "—", cur.disappearedTarget || 0],
     ];
     el.innerHTML = `
       <div class="pt-y-head">
-        <strong>Today vs previous snapshot</strong>
+        <strong>Today vs previous</strong>
         <span class="hint">${prev ? esc(prev.label) : "—"} → ${esc(cur.label)}</span>
       </div>
       <div class="pt-y-grid">
@@ -711,7 +908,7 @@
           const delta = (typeof a === "number" && typeof b === "number") ? b - a : null;
           const dCls = delta == null ? "" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
           const dTxt = delta == null ? "" : (delta > 0 ? `+${delta}` : String(delta));
-          return `<div class="pt-y-card">
+          return `<div class="pt-y-card" title="${esc(lab)}">
             <span class="lab">${esc(lab)}</span>
             <div class="pt-y-vals"><span>${esc(String(a))}</span><span class="arrow">→</span><strong>${esc(String(b))}</strong>
             ${delta != null ? `<span class="delta ${dCls}">${dTxt}</span>` : ""}</div>
@@ -719,8 +916,8 @@
         }).join("")}
       </div>
       ${cur.reconOk
-        ? `<p class="foot" style="margin:10px 0 0"><span class="badge ok">Reconciliation OK</span> · ${num(cur.prevResTotal)} + ${num(cur.newRes.length)} + ${num(cur.transferIn.length)} − ${num(cur.transferOut.length)} − ${num(cur.disappearedTarget || 0)} = ${num(cur.resTotal)}</p>`
-        : `<p class="foot" style="margin:10px 0 0"><span class="badge bad">RECONCILIATION ERROR</span> · implied ${num(cur.impliedRes)} · actual ${num(cur.resTotal)} · diff ${cur.reconDiff > 0 ? "+" : ""}${num(cur.reconDiff)}</p>`}`;
+        ? `<p class="foot pt-y-foot"><span class="badge ok">OK</span> · ${num(cur.prevResTotal)} + ${num(cur.newRes.length)} + ${num(cur.transferIn.length)} − ${num(cur.transferOut.length)} − ${num(cur.disappearedTarget || 0)} = ${num(cur.resTotal)}</p>`
+        : `<p class="foot pt-y-foot"><span class="badge bad">ERROR</span> · ${num(cur.impliedRes)} vs ${num(cur.resTotal)} (${cur.reconDiff > 0 ? "+" : ""}${num(cur.reconDiff)})</p>`}`;
   }
 
   function renderDailyTable(model) {
@@ -739,7 +936,7 @@
       </tr></thead>
       <tbody>${rows.map((d) => `<tr>
         <td>${esc(d.label)}<div class="foot">${esc(d.dateKey)}</div></td>
-        <td class="num"><button type="button" class="pt-linknum" data-pt-day="${esc(d.dateKey)}" data-pt-bucket="newRes">${num(d.newRes.length)}</button></td>
+        <td class="num"><button type="button" class="pt-linknum" data-pt-day="${esc(d.dateKey)}" data-pt-bucket="newRes">${num((d.planReceipts && d.planReceipts.length) || d.newRes.length)}</button></td>
         <td class="num"><button type="button" class="pt-linknum" data-pt-day="${esc(d.dateKey)}" data-pt-bucket="transferIn">${num(d.transferIn.length)}</button></td>
         <td class="num"><button type="button" class="pt-linknum" data-pt-day="${esc(d.dateKey)}" data-pt-bucket="transferOut">${num(d.transferOut.length)}</button></td>
         <td class="num"><button type="button" class="pt-linknum" data-pt-day="${esc(d.dateKey)}" data-pt-bucket="disappeared">${num(d.disappearedTarget || 0)}</button></td>
@@ -756,6 +953,7 @@
         if (!slot) return;
         let list = slot[bucket] || [];
         if (bucket === "disappeared") list = (slot.disappeared || []).filter((r) => r.isTarget);
+        if (bucket === "newRes" && slot.planReceipts && slot.planReceipts.length) list = slot.planReceipts;
         view.drill = "day-" + bucket;
         const wrap = $("#pt-drill");
         const table = $("#pt-drill-table");
@@ -938,8 +1136,8 @@
       type: "bar",
       data: {
         labels,
-        datasets: [
-          { label: "New RES", data: daily.map((d) => d.newRes.length), backgroundColor: "#0f766e" },
+          datasets: [
+          { label: "New RES (plan)", data: daily.map((d) => (d.planReceipts && d.planReceipts.length) || d.newRes.length), backgroundColor: "#0f766e" },
           { label: "Transfer IN", data: daily.map((d) => d.transferIn.length), backgroundColor: "#0284c7" },
           { label: "Transfer OUT", data: daily.map((d) => d.transferOut.length), backgroundColor: "#d97706" },
           { label: "Disappeared", data: daily.map((d) => d.disappearedTarget || 0), backgroundColor: "#eb0a1e" },
@@ -1130,6 +1328,7 @@
     renderKpis(model);
     renderProgress(model);
     renderYesterday(model);
+    renderSchedule(model);
     renderDailyTable(model);
     renderAge0(model);
     renderCorridor(model);
@@ -1176,6 +1375,19 @@
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(daily), "Daily");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(moves), "Movements");
+    const sched = (lastModel.scheduleRows || buildScheduleRows(lastModel)).map((r) => {
+      const out = {
+        Seg: r.seg,
+        Product: r.product,
+        SFX: r.sfx,
+        Plan: r.allocation,
+        MTD: r.mtd,
+        Gap: r.allocation - r.mtd,
+      };
+      for (let d = 1; d <= 30; d += 1) out[`D${d}`] = r.dayCounts[d] || 0;
+      return out;
+    });
+    if (sched.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sched), "Schedule");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       (lastModel.lists.current || []).map((r) => ({
         VIN: r.vin,

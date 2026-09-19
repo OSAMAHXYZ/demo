@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20260918pt1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260918pt1" />
+  <script src="plan-tracker.js?v=20260919pt4"></script>
+  <link rel="stylesheet" href="dashboard.css?v=20260919pt4" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -1022,6 +1022,17 @@
               <h3 class="bas-subhead">Age 0 by Search Area</h3>
               <div class="table-wrap" id="pt-age0-table"></div>
             </div>
+          </div>
+
+          <div class="card pt-card pt-schedule-card">
+            <div class="bas-retail-head">
+              <div class="bas-retail-title">
+                <h3>RES plan schedule</h3>
+                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · Age 0 / same-day Allocation Date only · mapped to Admin plan</span>
+              </div>
+            </div>
+            <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="pt-schedule-table"></div>
+            <p class="foot bas-foot" id="pt-schedule-foot"></p>
           </div>
 
           <div class="pt-charts">
@@ -7299,6 +7310,9 @@
     window.extractVinValue = extractVinValue;
     window.normHeader = normHeader;
     window.setStatus = setStatus;
+    window.matchRtlToAllocLeaf = matchRtlToAllocLeaf;
+    window.ALLOCATION_ROWS = ALLOCATION_ROWS;
+    window.allocationValues = allocationValues;
     if (typeof formatRvDate === "function") window.formatRvDate = formatRvDate;
     if (!window.PlanTracker || typeof window.PlanTracker.render !== "function") {
       const empty = $("#pt-empty");
