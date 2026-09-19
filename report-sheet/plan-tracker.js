@@ -78,16 +78,45 @@
     return Math.round(ms / 86400000);
   }
 
-  /** True when RES VIN counts toward the 315 plan (Age 0 or Allocation Date = snapshot day). */
-  function isPlanReceipt(row, dateKey) {
-    if (!row || !row.isTarget) return false;
-    if (row.allocationAge === 0) return true;
-    if (row.allocationDate instanceof Date && dateKey) {
+  /**
+   * Allocation Date YYYY-MM (empty if unknown).
+   */
+  function allocationMonthKey(row) {
+    if (row && row.allocationDate instanceof Date && !Number.isNaN(row.allocationDate.getTime())) {
       const d = row.allocationDate;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return key === dateKey;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     }
-    return false;
+    return "";
+  }
+
+  /**
+   * This-month RES receipt → counts toward 315 plan.
+   * Unique VIN that entered RES with Allocation Date in the active month
+   * (or Age 0 / blank AG when date is missing).
+   */
+  function isThisMonthReceipt(row, monthKey) {
+    if (!row || !row.isTarget || !monthKey) return false;
+    const mk = allocationMonthKey(row);
+    if (mk) return mk === monthKey;
+    // No Allocation Date: Age 0 / blank = this month; age ≥ 1 = prior stock
+    return row.allocationAge == null || row.allocationAge === 0;
+  }
+
+  /**
+   * Prior-month (e.g. last month) RES stock → Free Stock (excluded from 315 progress).
+   */
+  function isPriorMonthFreeStock(row, monthKey) {
+    if (!row || !row.isTarget || !monthKey) return false;
+    if (isThisMonthReceipt(row, monthKey)) return false;
+    const mk = allocationMonthKey(row);
+    if (mk) return mk < monthKey;
+    return row.allocationAge != null && row.allocationAge >= 1;
+  }
+
+  /** @deprecated use isThisMonthReceipt — kept for any leftover refs */
+  function isPlanReceipt(row, dateKey) {
+    const monthKey = dateKey && String(dateKey).length >= 7 ? String(dateKey).slice(0, 7) : "";
+    return isThisMonthReceipt(row, monthKey);
   }
 
   function ageBucket(age) {
@@ -202,10 +231,16 @@
     const plan = (opts && opts.plan != null) ? Number(opts.plan) : ALLOCATION_PLAN;
     const days = pack && pack.days && typeof pack.days === "object" ? pack.days : {};
     const dateKeys = Object.keys(days).sort();
+    const ctx = typeof global.basMonthContext === "function" ? global.basMonthContext() : null;
+    const monthKey = (pack && pack.month)
+      || (ctx && ctx.monthKey)
+      || (dateKeys[0] ? String(dateKeys[0]).slice(0, 7) : "");
     const daily = [];
     const movements = [];
     const vinHistory = new Map(); // vin -> observations[]
-    const planAllocated = new Set(); // unique VINs counting toward 315 (Age 0 / same-day AG only)
+    const planAllocated = new Set(); // this-month unique RES receipts → 315
+    const freeStockPrior = new Set(); // prior-month unique RES → free stock
+    const freeStockMeta = new Map(); // vin -> row
     const everEnteredRes = new Set(); // any VIN that was ever in RES (analytics)
     const everSeen = new Set();
     const disappearedEver = new Set();
@@ -223,12 +258,27 @@
     let prev = null; // { dateKey, byVin }
     let latestTarget = new Map();
 
-    const creditPlan = (vin, row, dateKey, dayStats) => {
-      if (!isPlanReceipt(row, dateKey)) return false;
-      if (planAllocated.has(vin)) return false;
+    const creditResVin = (vin, row, dateKey, dayStats, opts) => {
+      // Count once when VIN first enters RES — keep forever even if later gone / moved out
+      if (!row || !vin) return "";
+      const treatAsRes = (opts && opts.wasRes) || row.isTarget;
+      if (!treatAsRes) return "";
+      if (planAllocated.has(vin) || freeStockPrior.has(vin)) return "";
+      const asRes = { ...row, isTarget: true };
+      if (isThisMonthReceipt(asRes, monthKey)) {
+        planAllocated.add(vin);
+        dayStats.planReceipts.push(asRes);
+        return "plan";
+      }
+      if (isPriorMonthFreeStock(asRes, monthKey)) {
+        freeStockPrior.add(vin);
+        freeStockMeta.set(vin, asRes);
+        dayStats.freeStock.push(asRes);
+        return "free";
+      }
       planAllocated.add(vin);
-      dayStats.planReceipts.push(row);
-      return true;
+      dayStats.planReceipts.push(asRes);
+      return "plan";
     };
 
     dateKeys.forEach((dateKey) => {
@@ -246,6 +296,7 @@
           : dateKey,
         newRes: [],
         planReceipts: [],
+        freeStock: [],
         transferIn: [],
         transferOut: [],
         disappeared: [],
@@ -285,15 +336,19 @@
       });
 
       if (!prev) {
-        // Opening snapshot: only Age 0 / same-day AG count toward 315 — not full RES stock
+        // Opening snapshot: this-month AG → plan; prior-month AG → free stock
         byVin.forEach((r) => {
           everSeen.add(r.vin);
           if (r.isTarget) {
             everEnteredRes.add(r.vin);
-            if (isPlanReceipt(r, dateKey)) {
-              creditPlan(r.vin, r, dateKey, dayStats);
+            const bucket = creditResVin(r.vin, r, dateKey, dayStats);
+            if (bucket === "plan") {
               dayStats.newRes.push(r);
               movements.push(makeMovement(dateKey, null, r, "NEW ALLOCATION"));
+            } else if (bucket === "free") {
+              dayStats.carryover.push(r);
+              dayStats.stayed.push(r);
+              movements.push(makeMovement(dateKey, null, r, "FREE STOCK / PRIOR MONTH"));
             } else {
               dayStats.carryover.push(r);
               dayStats.stayed.push(r);
@@ -318,11 +373,9 @@
               dayStats.reappeared.push(b);
               if (b.isTarget) {
                 everEnteredRes.add(vin);
-                // Re-appear into RES is movement, not a new plan allocation unless Age 0 / same-day AG
-                if (isPlanReceipt(b, dateKey)) {
-                  creditPlan(vin, b, dateKey, dayStats);
-                  dayStats.newRes.push(b);
-                } else {
+                const bucket = creditResVin(vin, b, dateKey, dayStats);
+                if (bucket === "plan") dayStats.newRes.push(b);
+                else if (bucket !== "free") {
                   dayStats.transferIn.push(b);
                   addCorridor(corridor, "(re-appeared)", b.searchArea);
                 }
@@ -330,12 +383,14 @@
               movements.push(makeMovement(dateKey, a, b, mt));
             } else if (b.isTarget) {
               everEnteredRes.add(vin);
-              if (isPlanReceipt(b, dateKey)) {
-                creditPlan(vin, b, dateKey, dayStats);
+              const bucket = creditResVin(vin, b, dateKey, dayStats);
+              if (bucket === "plan") {
                 dayStats.newRes.push(b);
                 movements.push(makeMovement(dateKey, null, b, "NEW ALLOCATION"));
+              } else if (bucket === "free") {
+                dayStats.carryover.push(b);
+                movements.push(makeMovement(dateKey, null, b, "FREE STOCK / PRIOR MONTH"));
               } else {
-                // First seen as RES but not Age 0 / same-day AG → treat as transfer-style entry, not plan
                 dayStats.transferIn.push(b);
                 addCorridor(corridor, "(first seen)", b.searchArea);
                 movements.push(makeMovement(dateKey, null, b, "TRANSFERRED INTO RES"));
@@ -348,6 +403,11 @@
           }
           if (a && !b) {
             disappearedEver.add(vin);
+            // Still count toward plan / free stock — it came into RES first
+            if (a.isTarget) {
+              everEnteredRes.add(vin);
+              creditResVin(vin, a, dateKey, dayStats, { wasRes: true });
+            }
             dayStats.disappeared.push(a);
             movements.push(makeMovement(dateKey, a, null, "DISAPPEARED"));
             return;
@@ -358,17 +418,18 @@
               everEnteredRes.add(vin);
               dayStats.transferIn.push(b);
               addCorridor(corridor, a.searchArea, b.searchArea);
-              // Transfer IN is movement — credit 315 only if Age 0 / same-day AG (not double-count in newRes)
-              if (isPlanReceipt(b, dateKey)) creditPlan(vin, b, dateKey, dayStats);
+              creditResVin(vin, b, dateKey, dayStats, { wasRes: true });
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED INTO RES"));
             } else if (a.isTarget && !b.isTarget) {
+              // Left RES but already counted when it was in stock (credit if missed)
+              everEnteredRes.add(vin);
+              creditResVin(vin, a, dateKey, dayStats, { wasRes: true });
               dayStats.transferOut.push(b);
               addCorridor(corridor, a.searchArea, b.searchArea);
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED OUT OF RES"));
             } else if (a.isTarget && b.isTarget) {
               dayStats.stayed.push(b);
-              // Still in RES: credit plan only when this snapshot shows a fresh Age 0 / same-day AG
-              if (isPlanReceipt(b, dateKey)) creditPlan(vin, b, dateKey, dayStats);
+              creditResVin(vin, b, dateKey, dayStats, { wasRes: true });
               movements.push(makeMovement(dateKey, a, b, "STAYED IN RES"));
             } else if (a.searchArea !== b.searchArea) {
               addCorridor(corridor, a.searchArea, b.searchArea);
@@ -411,6 +472,8 @@
 
     const currentRes = latestTarget.size;
     const allocated = planAllocated.size;
+    const freeStock = freeStockPrior.size;
+    const totalReceived = allocated + freeStock;
     const remaining = Math.max(0, plan - allocated);
     const progress = plan > 0 ? allocated / plan : 0;
     const latestDay = daily.length ? daily[daily.length - 1] : null;
@@ -453,6 +516,7 @@
     return {
       plan,
       target: TARGET_SEARCH_AREA,
+      monthKey,
       dateKeys,
       latestKey,
       daily,
@@ -471,6 +535,8 @@
       kpis: {
         plan,
         allocated,
+        freeStock,
+        totalReceived,
         remaining,
         progress,
         currentRes,
@@ -488,6 +554,7 @@
           const last = hist[hist.length - 1];
           return last || { vin };
         }),
+        freeStock: [...freeStockPrior].map((vin) => freeStockMeta.get(vin) || (vinHistory.get(vin) || []).slice(-1)[0] || { vin }),
         transferIn: transferInAll,
         transferOut: transferOutAll,
         disappeared: disappearedAll,
@@ -607,6 +674,10 @@
     const key = view.drill;
     if (!key || !model) return [];
     if (key === "allocated") return model.lists.allocated;
+    if (key === "freeStock") return model.lists.freeStock || [];
+    if (key === "totalReceived") {
+      return [...(model.lists.allocated || []), ...(model.lists.freeStock || [])];
+    }
     if (key === "remaining") return []; // conceptual
     if (key === "current") return model.lists.current;
     if (key === "age0") return model.lists.age0;
@@ -624,18 +695,20 @@
     const k = model.kpis;
     const items = [
       ["plan", "Allocation Plan", k.plan, `Target ${esc(TARGET_SEARCH_AREA)}`, ""],
-      ["allocated", "Total Allocated", k.allocated, "Age 0 / same-day AG toward plan", "ok"],
+      ["allocated", "This month received", k.allocated, `Unique ever in RES this month (keeps count if gone) · ${esc(model.monthKey || "month")}`, "ok"],
+      ["freeStock", "Free stock (prior month)", k.freeStock || 0, "Prior AG · still counted if later left RES", "warn"],
+      ["totalReceived", "Total received", k.totalReceived || (k.allocated + (k.freeStock || 0)), "This month + free stock (incl. gone)", "info"],
       ["remaining", "Remaining", k.remaining, `${Math.min(100, Math.round(k.progress * 100))}% of plan`, k.remaining ? "warn" : "ok"],
       ["current", "RES Current", k.currentRes, "In latest snapshot", "ok"],
       ["age0", "Age 0 (RES)", k.age0Target, `All areas Age 0: ${num(k.age0Total)}`, "info"],
-      ["newAlloc", "New Allocations", k.newAlloc, "First seen as RES · Age 0 / same-day AG", "ok"],
+      ["newAlloc", "New Allocations", k.newAlloc, "First seen as RES this month", "ok"],
       ["transferIn", "Transfers IN", k.transferIn, "Other area → RES", "info"],
       ["transferOut", "Transfers OUT", k.transferOut, "RES → other area", "warn"],
       ["net", "Net Movement", k.net, "IN − OUT", k.net >= 0 ? "ok" : "bad"],
       ["disappeared", "Disappeared", k.disappeared, "Missing from next snapshot", "bad"],
     ];
     el.innerHTML = items.map(([id, lab, val, sub, cls]) => {
-      const active = view.drill === id ? " is-active" : "";
+      const active = (view.drill === id || (id === "totalReceived" && view.drill === "progress")) ? " is-active" : "";
       const clickable = id !== "plan" && id !== "remaining";
       const tag = clickable ? "button" : "article";
       const attrs = clickable
@@ -655,8 +728,40 @@
         view.drill = view.drill === id ? "" : id;
         renderDrill(model);
         renderKpis(model);
+        renderProgress(model);
       });
     });
+  }
+
+  function totalReceivedRows(model) {
+    const seen = new Set();
+    const rows = [];
+    [...(model.lists.allocated || []), ...(model.lists.freeStock || [])].forEach((r) => {
+      if (!r || !r.vin || seen.has(r.vin)) return;
+      seen.add(r.vin);
+      const inPlan = (model.lists.allocated || []).some((x) => x && x.vin === r.vin);
+      rows.push({
+        ...r,
+        bucket: inPlan ? "This month" : "Free stock",
+      });
+    });
+    return rows;
+  }
+
+  function productBreakdown(rows) {
+    const byProduct = new Map();
+    const byModel = new Map(); // product + suffix
+    (rows || []).forEach((r) => {
+      const product = r.product || "—";
+      const sfx = r.suffix || "—";
+      const modelKey = `${product} · ${sfx}`;
+      byProduct.set(product, (byProduct.get(product) || 0) + 1);
+      byModel.set(modelKey, (byModel.get(modelKey) || 0) + 1);
+    });
+    return {
+      byProduct: [...byProduct.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
+      byModel: [...byModel.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
+    };
   }
 
   function renderDrill(model) {
@@ -668,9 +773,13 @@
       wrap.hidden = true;
       return;
     }
-    const rows = drillRows(model);
+    const isProgress = view.drill === "progress" || view.drill === "totalReceived";
+    const rows = isProgress ? totalReceivedRows(model) : drillRows(model);
     const labels = {
-      allocated: "Plan allocated (Age 0 / same-day Allocation Date)",
+      progress: "All received VINs · product & model totals",
+      allocated: "This month received (toward 315)",
+      freeStock: "Free stock · prior / last month Allocation Date",
+      totalReceived: "Total received (this month + free stock)",
       current: "Current RES inventory",
       age0: "Age 0 · Retail Electronic Sales",
       newAlloc: "New allocations",
@@ -685,13 +794,40 @@
       table.innerHTML = `<p class="foot" style="padding:12px">No VINs in this bucket.</p>`;
       return;
     }
-    const isMove = rows[0] && rows[0].movementType;
-    table.innerHTML = `<table class="bas-table">
+
+    let summaryHtml = "";
+    if (isProgress || view.drill === "allocated" || view.drill === "freeStock" || view.drill === "current") {
+      const br = productBreakdown(rows);
+      summaryHtml = `
+        <div class="pt-drill-summary">
+          <div class="pt-drill-summary-card">
+            <h4>By product <span class="badge">${num(br.byProduct.length)}</span></h4>
+            <table class="bas-table"><thead><tr><th>Product</th><th class="num">VINs</th></tr></thead>
+            <tbody>${br.byProduct.map((r) => `<tr><td>${esc(r.key)}</td><td class="num"><b>${num(r.count)}</b></td></tr>`).join("")}
+            <tr class="bas-row-total"><td><b>Total</b></td><td class="num"><b>${num(rows.length)}</b></td></tr>
+            </tbody></table>
+          </div>
+          <div class="pt-drill-summary-card">
+            <h4>By product · model (SFX) <span class="badge">${num(br.byModel.length)}</span></h4>
+            <table class="bas-table"><thead><tr><th>Product · SFX</th><th class="num">VINs</th></tr></thead>
+            <tbody>${br.byModel.map((r) => `<tr><td>${esc(r.key)}</td><td class="num"><b>${num(r.count)}</b></td></tr>`).join("")}
+            <tr class="bas-row-total"><td><b>Total</b></td><td class="num"><b>${num(rows.length)}</b></td></tr>
+            </tbody></table>
+          </div>
+        </div>`;
+    }
+
+    const isMove = !isProgress && rows[0] && rows[0].movementType;
+    const showBucket = isProgress;
+    table.innerHTML = `${summaryHtml}
+      <h4 class="pt-drill-vin-head">VIN list · ${num(rows.length)}</h4>
+      <table class="bas-table">
       <thead><tr>
         <th>VIN</th><th>Product</th><th>SFX</th>
-        ${isMove ? "<th>From</th><th>To</th><th>Movement</th><th>Snapshot</th>" : "<th>Search Area</th><th>Alloc Date</th><th class=\"num\">Age</th><th>Location</th>"}
+        ${isMove ? "<th>From</th><th>To</th><th>Movement</th><th>Snapshot</th>"
+          : `${showBucket ? "" : "<th>Search Area</th>"}<th>Alloc Date</th><th class="num">Age</th>${showBucket ? "<th>Bucket</th>" : ""}<th>Location</th>`}
       </tr></thead>
-      <tbody>${rows.slice(0, 500).map((r) => {
+      <tbody>${rows.slice(0, 800).map((r) => {
         if (isMove) {
           return `<tr>
             <td class="mono">${esc(r.vin)}</td>
@@ -705,16 +841,19 @@
         }
         return `<tr>
           <td class="mono">${esc(r.vin)}</td>
-          <td>${esc(r.product)}</td>
-          <td>${esc(r.suffix)}</td>
-          <td>${esc(r.searchArea || "—")}</td>
+          <td>${esc(r.product || "—")}</td>
+          <td>${esc(r.suffix || "—")}</td>
+          ${showBucket ? "" : `<td>${esc(r.searchArea || "—")}</td>`}
           <td>${esc(fmtDate(r.allocationDate))}</td>
           <td class="num">${r.allocationAge == null ? "—" : num(r.allocationAge)}</td>
+          ${showBucket ? `<td><span class="badge ${r.bucket === "This month" ? "ok" : "warn"}">${esc(r.bucket || "—")}</span></td>` : ""}
           <td>${esc(r.location || "—")}</td>
         </tr>`;
       }).join("")}</tbody>
     </table>
-    <p class="foot">${num(rows.length)} VIN(s)</p>`;
+    <p class="foot">${num(rows.length)} VIN(s)${rows.length > 800 ? " · showing first 800" : ""}</p>`;
+
+    try { wrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) { /* ignore */ }
   }
 
   function renderProgress(model) {
@@ -723,15 +862,33 @@
     const k = model.kpis;
     const pct = Math.min(100, Math.round(k.progress * 1000) / 10);
     const over = k.allocated > k.plan;
+    const free = k.freeStock || 0;
+    const total = k.totalReceived != null ? k.totalReceived : (k.allocated + free);
+    const active = (view.drill === "progress" || view.drill === "totalReceived") ? " is-active" : "";
     el.innerHTML = `
-      <div class="pt-progress-head">
-        <strong>Allocation progress</strong>
-        <span>${num(k.allocated)} / ${num(k.plan)} · Remaining ${num(k.remaining)}${over ? ` · <span class="badge warn">Over plan +${num(k.allocated - k.plan)}</span>` : ""}</span>
-      </div>
-      <div class="pt-progress-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
-        <div class="pt-progress-fill" style="width:${pct}%"></div>
-      </div>
-      <p class="foot" style="margin:8px 0 0">Progress ${pct}%${over ? ` (actual ${(k.progress * 100).toFixed(1)}%)` : ""} · Age 0 / same-day AG VINs toward ${esc(TARGET_SEARCH_AREA)} plan (not opening stock)</p>`;
+      <button type="button" class="pt-progress-btn${active}" id="pt-progress-open" title="Click to see all VINs and product totals">
+        <div class="pt-progress-head">
+          <strong>Allocation progress</strong>
+          <span>${num(k.allocated)} / ${num(k.plan)} · Remaining ${num(k.remaining)}${over ? ` · <span class="badge warn">Over plan +${num(k.allocated - k.plan)}</span>` : ""}</span>
+        </div>
+        <div class="pt-progress-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+          <div class="pt-progress-fill" style="width:${pct}%"></div>
+        </div>
+        <p class="foot" style="margin:8px 0 0">
+          This month ${num(k.allocated)} · Free stock ${num(free)} · <strong>Total received ${num(total)}</strong>
+          · Progress ${pct}%
+          · <span class="pt-progress-hint">Click for all VINs · product &amp; model totals</span>
+        </p>
+      </button>`;
+    const btn = $("#pt-progress-open");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        view.drill = view.drill === "progress" ? "" : "progress";
+        renderDrill(model);
+        renderProgress(model);
+        renderKpis(model);
+      });
+    }
   }
 
   function buildScheduleRows(model) {
@@ -878,6 +1035,39 @@
 
     if (footEl) {
       footEl.textContent = `${num(totals.mtd)} plan receipts on schedule · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · scroll days 1–30`;
+    }
+  }
+
+  function renderFreeStock(model) {
+    const totalEl = $("#pt-free-stock-total");
+    const tableEl = $("#pt-free-stock-table");
+    const footEl = $("#pt-free-stock-foot");
+    const rows = (model.lists && model.lists.freeStock) || [];
+    if (totalEl) totalEl.textContent = num(rows.length);
+    if (!tableEl) return;
+    if (!rows.length) {
+      tableEl.innerHTML = `<p class="foot" style="padding:12px">No prior-month RES VINs — all receipts are in this month’s plan count.</p>`;
+      if (footEl) footEl.textContent = "";
+      return;
+    }
+    tableEl.innerHTML = `<table class="bas-table">
+      <thead><tr>
+        <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th><th class="num">Age</th>
+        <th>Search Area</th><th>Location</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows.slice(0, 400).map((r) => `<tr>
+        <td class="mono">${esc(r.vin)}</td>
+        <td>${esc(r.product || "—")}</td>
+        <td>${esc(r.suffix || "—")}</td>
+        <td>${esc(fmtDate(r.allocationDate))}</td>
+        <td class="num">${r.allocationAge == null ? "—" : num(r.allocationAge)}</td>
+        <td>${esc(r.searchArea || "—")}</td>
+        <td>${esc(r.location || "—")}</td>
+        <td>${esc(r.status || "—")}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    if (footEl) {
+      footEl.textContent = `${num(rows.length)} unique prior-month VIN(s) · excluded from 315 · total received = this month ${num(model.kpis.allocated)} + free stock ${num(rows.length)} = ${num(model.kpis.totalReceived)}`;
     }
   }
 
@@ -1294,6 +1484,7 @@
         if (lastModel) {
           renderDrill(lastModel);
           renderKpis(lastModel);
+          renderProgress(lastModel);
         }
       });
     }
@@ -1322,11 +1513,12 @@
     if (dash) dash.hidden = false;
     const hint = $("#pt-live-hint");
     if (hint) {
-      hint.textContent = `${model.dateKeys.length} snapshot(s) · latest ${model.latestKey || "—"} · plan ${model.plan} · target ${TARGET_SEARCH_AREA}`;
+      hint.textContent = `${model.dateKeys.length} snapshot(s) · ${model.monthKey || "—"} · latest ${model.latestKey || "—"} · this month ${model.kpis.allocated} · free stock ${model.kpis.freeStock || 0} · total ${model.kpis.totalReceived || 0} · plan ${model.plan}`;
     }
     fillFilters(model);
     renderKpis(model);
     renderProgress(model);
+    renderFreeStock(model);
     renderYesterday(model);
     renderSchedule(model);
     renderDailyTable(model);
@@ -1388,6 +1580,18 @@
       return out;
     });
     if (sched.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sched), "Schedule");
+    const freeRows = (lastModel.lists.freeStock || []).map((r) => ({
+      VIN: r.vin,
+      Product: r.product,
+      Suffix: r.suffix,
+      "Alloc Date": fmtDate(r.allocationDate),
+      Age: r.allocationAge,
+      "Search Area": r.searchArea,
+      Location: r.location,
+      Status: r.status,
+      Bucket: "Free stock · prior month",
+    }));
+    if (freeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(freeRows), "Free Stock");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       (lastModel.lists.current || []).map((r) => ({
         VIN: r.vin,

@@ -11414,7 +11414,17 @@ button.dvp-total-card:focus-visible {
 .pt-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 .pt-kpi { cursor: pointer; text-align: left; font: inherit; width: 100%; appearance: none; }
 button.pt-kpi.is-active { outline: 2px solid var(--navy, #0b1f33); outline-offset: 1px; }
-.pt-progress { padding: 14px 16px; }
+.pt-progress { padding: 0; overflow: hidden; }
+.pt-progress-btn {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: transparent; border: 0; padding: 14px 16px; cursor: pointer;
+  appearance: none;
+}
+.pt-progress-btn:hover { background: rgba(15, 118, 110, 0.04); }
+.pt-progress-btn.is-active {
+  outline: 2px solid var(--navy, #0b1f33); outline-offset: -2px;
+  background: rgba(15, 118, 110, 0.06);
+}
 .pt-progress-head {
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   align-items: baseline; margin-bottom: 10px; font-size: 0.9rem;
@@ -11426,6 +11436,24 @@ button.pt-kpi.is-active { outline: 2px solid var(--navy, #0b1f33); outline-offse
   height: 100%; border-radius: 999px;
   background: linear-gradient(90deg, #0f766e, #14b8a6);
   transition: width 0.35s ease;
+}
+.pt-progress-hint { color: #0f766e; font-weight: 600; }
+.pt-drill-summary {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin: 0 0 16px;
+}
+.pt-drill-summary-card {
+  border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+  background: #f8fafc;
+}
+.pt-drill-summary-card h4 {
+  margin: 0 0 8px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
+}
+.pt-drill-vin-head {
+  margin: 4px 0 8px; font-size: 0.9rem;
+}
+@media (max-width: 800px) {
+  .pt-drill-summary { grid-template-columns: 1fr; }
 }
 .pt-grid-2 {
   display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px;

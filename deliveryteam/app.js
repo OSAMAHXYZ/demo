@@ -42,6 +42,22 @@
     return s && s !== 'N/A' ? s : 'N/A';
   }
 
+  /** Customer name: first letter + * for the rest (per word). */
+  function maskPersonName(value) {
+    const s = String(value == null ? '' : value).trim();
+    if (!s || s === '—' || s === '-' || s === 'N/A' || s === 'n/a') return s || '—';
+    return s.replace(/[^\s]+/g, (word) => {
+      const chars = Array.from(word);
+      if (!chars.length) return word;
+      return chars[0] + '*'.repeat(Math.max(0, chars.length - 1));
+    });
+  }
+
+  /** Never show phone numbers. */
+  function maskPhone(_value) {
+    return '—';
+  }
+
   function ynBadge(v) {
     const s = String(v || '').trim();
     if (s === 'Yes') return '<span class="badge ok">🟢 Yes</span>';
@@ -218,7 +234,7 @@
 
     if (action === 'collected-yes') {
       title.textContent = 'Guest collected?';
-      sub.textContent = `${v.vin} · ${na(v.raw.userName)} · choose status after collection`;
+      sub.textContent = `${v.vin} · ${maskPersonName(v.raw.userName)} · choose status after collection`;
       body.innerHTML = `
         <p class="hint">Appointment was <b>${esc(formatGuestAt(existing))}</b>. Confirm the car was collected, then set status.</p>
         <div class="field">
@@ -277,7 +293,7 @@
 
     // mark / schedule / reschedule
     title.textContent = action === 'mark' ? 'Mark Guest Experience' : 'Guest Exp · Schedule pickup';
-    sub.textContent = `${v.vin} · ${na(v.raw.userName)} · ${na(v.raw.product)}`;
+    sub.textContent = `${v.vin} · ${maskPersonName(v.raw.userName)} · ${na(v.raw.product)}`;
     body.innerHTML = `
       <p class="hint">Set the date and time for the customer to collect this VIN at Guest Experience.</p>
       <div class="field"><label>Collection date</label><input type="date" id="guest-date" value="${esc(dateVal)}" required /></div>
@@ -497,9 +513,9 @@
       ['Product', (r) => na(r.raw.product)],
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer', (r) => na(r.raw.userName)],
+      ['Customer', (r) => maskPersonName(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
-      ['Phone', (r) => na(r.raw.phone)],
+      ['Phone', () => maskPhone()],
       ['Guest Exp', (r) => guestCellHtml(r)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
@@ -720,11 +736,11 @@
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Product', (r) => na(r.raw.product)],
       ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer Name', (r) => na(r.raw.userName)],
+      ['Customer Name', (r) => maskPersonName(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
-      ['Phone', (r) => na(r.raw.phone)],
+      ['Phone', () => maskPhone()],
       ['Guest Exp', (r) => guestCellHtml(r)],
     ];
     if (editable) {
@@ -1337,9 +1353,9 @@
           ${[
             ['Proforma Date', v.raw.proformaDate], ['Sales Order', v.raw.salesOrder],
             ['Sales Type', v.raw.salesType], ['Invoice Owner', v.raw.invoiceOwner],
-            ['Customer Name', v.raw.userName], ['S/A', v.raw.salesAdvisor],
+            ['Customer Name', maskPersonName(v.raw.userName)], ['S/A', v.raw.salesAdvisor],
             ['GT Location', v.raw.gtLocation], ['Vehicle Location', v.raw.vehicleLocation],
-            ['Phone', v.raw.phone], ['PIC', v.raw.pic],
+            ['Phone', maskPhone()], ['PIC', v.raw.pic],
           ].map(([l, val]) => `<div class="field"><label>${esc(l)}</label><input value="${esc(na(val))}" readonly /></div>`).join('')}
         </div>
         <div class="card">

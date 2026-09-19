@@ -2325,7 +2325,7 @@
                 return `<button type="button" class="ys-slot is-used${delivery ? ' is-delivery' : ''}" data-ys-vin="${String(e.vin || '').replace(/"/g, '&quot;')}">
                     <div class="ys-slot-id">${s.slot} · ${delivery ? 'تسليم' : 'عرض'}</div>
                     <div class="ys-slot-vin">${e.vin || ''}</div>
-                    <div class="ys-slot-meta">${e.guestName || 'ضيف —'} · ${e.guestPhone || '—'}</div>
+                    <div class="ys-slot-meta">${maskPersonName(e.guestName || 'ضيف —')} · ${maskPhone(e.guestPhone)}</div>
                     <div class="ys-slot-meta">${delivery ? `حضور: ${formatGuestArrival(e.guestArrivalTime)}` : (e.product || '')}</div>
                 </button>`;
             }).join('');
@@ -2360,8 +2360,8 @@
                         <div class="am-sub">${c.product || '—'}</div>
                     </div>
                     <div class="am-meta">
-                        <div>${c.guestName || '—'}</div>
-                        <div class="am-sub" style="direction:ltr;text-align:left">${c.guestPhone || '—'}</div>
+                        <div>${maskPersonName(c.guestName)}</div>
+                        <div class="am-sub" style="direction:ltr;text-align:left">${maskPhone(c.guestPhone)}</div>
                     </div>
                     <div class="am-meta">
                         <div>${typeLabel} · ${park}</div>
@@ -2471,8 +2471,8 @@
                 }
                 if (guestBox) {
                     guestBox.className = 'guest-box';
-                    guestBox.innerHTML = `<strong>اسم الضيف (O):</strong> ${data.guestName || '—'}<br>
-                        <strong>الجوال (Y):</strong> <span style="direction:ltr;display:inline-block">${data.guestPhone || '—'}</span><br>
+                    guestBox.innerHTML = `<strong>اسم الضيف (O):</strong> ${maskPersonName(data.guestName)}<br>
+                        <strong>الجوال (Y):</strong> <span style="direction:ltr;display:inline-block">${maskPhone(data.guestPhone)}</span><br>
                         <strong>المنتج:</strong> ${data.product || '—'}`;
                 }
                 const parked = data.parked;
@@ -2533,7 +2533,7 @@
                 renderYassinCars(data.cars || []);
                 setSt(
                     carType === 'delivery'
-                        ? `تم · موقف ${data.entry?.slot || slot} · ضيف: ${data.guest?.guestName || '—'} · ${data.guest?.guestPhone || ''}`
+                        ? `تم · موقف ${data.entry?.slot || slot} · ضيف: ${maskPersonName(data.guest?.guestName)}`
                         : `تم تسجيل السيارة كعرض${data.entry?.slot ? ` · ${data.entry.slot}` : ''}`,
                     'ok'
                 );
@@ -2794,6 +2794,19 @@
             overlayFields.querySelectorAll('.overlay-field').forEach((el) => {
                 fieldEls[el.dataset.tag] = el;
             });
+        }
+
+        function maskPersonName(value) {
+            const s = String(value == null ? '' : value).trim();
+            if (!s || s === '—' || s === '-' || s === 'N/A') return s || '—';
+            return s.replace(/[^\s]+/g, (word) => {
+                const chars = Array.from(word);
+                if (!chars.length) return word;
+                return chars[0] + '*'.repeat(Math.max(0, chars.length - 1));
+            });
+        }
+        function maskPhone(_value) {
+            return '—';
         }
 
         function setStatus(msg, type) {

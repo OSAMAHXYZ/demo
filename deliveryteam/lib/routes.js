@@ -17,6 +17,7 @@ const {
   isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
+const { maskPersonName, phoneDisplay } = require('./privacy');
 
 function na(v) {
   const s = String(v == null ? '' : v).trim();
@@ -208,13 +209,13 @@ function publicVehicle(v) {
       pic: na(v.raw.pic),
       salesType: na(v.raw.salesType),
       invoiceOwner: na(v.raw.invoiceOwner),
-      userName: na(v.raw.userName),
+      userName: maskPersonName(v.raw.userName),
       salesAdvisor: na(v.raw.salesAdvisor),
       proformaDate: na(v.raw.proformaDate),
       deliveryDate: na(v.raw.deliveryDate),
       gtLocation: na(v.raw.gtLocation),
       vehicleLocation: na(v.raw.vehicleLocation),
-      phone: na(v.raw.phone),
+      phone: phoneDisplay(v.raw.phone),
       status: na(v.raw.status),
       traffic: na(v.raw.traffic),
       trafficFees: na(v.raw.trafficFees),
@@ -334,7 +335,6 @@ function createDeliveryTeamRouter(opts) {
           v.raw.invoiceOwner,
           v.raw.userName,
           v.raw.salesAdvisor,
-          v.raw.phone,
           v.ops.transferCity,
           v.ops.carrier,
           v.raw.gtLocation,
@@ -1179,11 +1179,11 @@ function createDeliveryTeamRouter(opts) {
       Product: v.raw.product || '',
       'Sales Type': v.raw.salesType || '',
       'Invoice Owner': v.raw.invoiceOwner || '',
-      'Customer Name': v.raw.userName || '',
+      'Customer Name': maskPersonName(v.raw.userName),
       'S/A': v.raw.salesAdvisor || '',
       'GT Location': v.raw.gtLocation || '',
       'Vehicle Location': v.raw.vehicleLocation || '',
-      'Phone Number': v.raw.phone || '',
+      'Phone Number': '',
       'Assigned Employee': v.ops.assignedEmployeeName || '',
       'Guest Sent Date': v.ops.guestSentDate || '',
       'Signature Received Date': v.ops.signatureReceivedDate || '',

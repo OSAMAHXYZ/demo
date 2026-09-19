@@ -14,8 +14,8 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20260919pt4"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260919pt4" />
+  <script src="plan-tracker.js?v=20260919pt7"></script>
+  <link rel="stylesheet" href="dashboard.css?v=20260919pt7" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -1016,6 +1016,21 @@
           <div class="bo-kpis bas-kpi-row" id="pt-kpis"></div>
           <div class="pt-progress card" id="pt-progress"></div>
 
+          <div class="card pt-card" id="pt-free-stock-card">
+            <div class="bas-retail-head">
+              <div class="bas-retail-title">
+                <h3>Free stock · prior / last month</h3>
+                <span class="hint">Unique RES VINs with Allocation Date before this month — still counted after they leave · excluded from 315 bar only</span>
+              </div>
+              <div class="bas-retail-total-card">
+                <span class="bas-retail-total-lab">Free stock</span>
+                <span class="bas-retail-total-val" id="pt-free-stock-total">0</span>
+              </div>
+            </div>
+            <div class="table-wrap bas-table-wrap" id="pt-free-stock-table"></div>
+            <p class="foot" id="pt-free-stock-foot"></p>
+          </div>
+
           <div class="pt-grid-2">
             <div class="card pt-card" id="pt-yesterday"></div>
             <div class="card pt-card">
@@ -1028,7 +1043,7 @@
             <div class="bas-retail-head">
               <div class="bas-retail-title">
                 <h3>RES plan schedule</h3>
-                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · Age 0 / same-day Allocation Date only · mapped to Admin plan</span>
+                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · this-month Allocation Date RES receipts · mapped to Admin plan</span>
               </div>
             </div>
             <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="pt-schedule-table"></div>
@@ -2447,6 +2462,23 @@
     return String(str ?? "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+
+  /** Customer / person name: first letter + * for remaining chars (per word). */
+  function maskPersonName(value) {
+    const s = String(value == null ? "" : value).trim();
+    if (!s || s === "—" || s === "-" || s === "N/A" || s === "n/a") return s || "—";
+    return s.replace(/[^\s]+/g, (word) => {
+      const chars = Array.from(word);
+      if (!chars.length) return word;
+      return chars[0] + "*".repeat(Math.max(0, chars.length - 1));
+    });
+  }
+
+  /** Never display phone numbers. */
+  function maskPhone(_value) {
+    return "—";
+  }
+
   function cellToString(v) {
     if (v == null || v === "") return "";
     if (v instanceof Date && !Number.isNaN(v.getTime())) {
@@ -4130,7 +4162,7 @@
       return {
         id: i,
         boNumber: cellToString(get(r, "boNumber")),
-        customer: cellToString(get(r, "customer")),
+        customer: maskPersonName(cellToString(get(r, "customer"))),
         salesman: resolveSalesmanName(get(r, "salesman")),
         product: product || "—",
         category,

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { maskPersonName, maskPhone } from './privacy'
 
 const WAREHOUSE_SPECIAL_NAME = 'مستودع الهاتفية'
 
@@ -108,7 +109,7 @@ export function exportAllToExcel({ vehicles, queue, drafts, dashboard }) {
     'Chassis / VIN': v.vin || '',
     Product: v.product || v.model || '',
     Plate: v.plate || '',
-    Customer: v.customerName || '',
+    Customer: maskPersonName(v.customerName),
     Location: v.location || '',
     GT: v.gt || '',
     Model: v.model || '',
@@ -144,7 +145,7 @@ export function exportAllToExcel({ vehicles, queue, drafts, dashboard }) {
             ? 'تم التسليم في المستودع'
             : item.statusLabel || (item.agentStatus === 'delivered' ? 'تم الترحيل' : 'محجوز'),
       Plate: item.plate || '',
-      Customer: item.customerName || '',
+      Customer: maskPersonName(item.customerName),
       Company: item.deliveryCompany || item.company || '',
       'Company Changed From': String(item.companyChangedFrom || '').trim(),
       'Company Changed To': String(item.companyChangedTo || '').trim(),
@@ -192,7 +193,7 @@ export function exportAllToExcel({ vehicles, queue, drafts, dashboard }) {
       Section: isWh ? 'في المستودع' : 'شركات النقل',
       'Delivery Type': isWh ? 'warehouse' : 'memo',
       'Company Name': isWh ? WAREHOUSE_SPECIAL_NAME : p.company_rep || '',
-      'Company Rep': isWh ? ownerName : p.customer_name || d.customerName || '',
+      'Company Rep': isWh ? maskPersonName(ownerName) : maskPersonName(p.customer_name || d.customerName),
       'Company Changed From': changeFrom,
       'Company Changed To': changeTo,
       'Branch To': isWh ? 'في المستودع' : p.branch_to || '',
@@ -203,7 +204,7 @@ export function exportAllToExcel({ vehicles, queue, drafts, dashboard }) {
       Remarks: remarks,
       Notes: remarks,
       'Customer ID': p.customer_id || '',
-      Phone: p.phone || p.warehouse?.user_phone || '',
+      Phone: maskPhone(),
     }
   })
   XLSX.utils.book_append_sheet(
