@@ -186,9 +186,11 @@
 
   /**
    * Pull shared snapshot from server into IndexedDB + localStorage.
+   * @param {{ force?: boolean }} [opts] — force:true always re-downloads slot files
    * @returns {Promise<{ at: number, fromServer: boolean, meta?: object }|null>}
    */
-  async function syncFromServer() {
+  async function syncFromServer(opts) {
+    const force = !!(opts && opts.force);
     let meta;
     try {
       meta = await fetchServerMeta();
@@ -204,7 +206,7 @@
     const local = await loadWorkbookFiles();
     const hasLocal = !!(local && local.files && Object.keys(local.files).length);
 
-    if (serverAt === localAt && hasLocal) {
+    if (!force && serverAt === localAt && hasLocal) {
       return { at: serverAt, fromServer: true, meta, cached: true };
     }
 
@@ -222,7 +224,7 @@
 
     const files = await downloadServerFiles(meta);
     await saveWorkbookFiles(files, { at: serverAt });
-    return { at: serverAt, fromServer: true, meta };
+    return { at: serverAt, fromServer: true, meta, forced: force };
   }
 
   /**

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="data-store.js?v=20260910fast1"></script>
+  <script src="data-store.js?v=20260920force1"></script>
   <script src="allocation-plan-data.js"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
@@ -21448,30 +21448,34 @@
   } catch { /* ignore */ }
 
   let refreshInFlight = null;
-  async function refreshFromAdmin(reason) {
+  async function refreshFromAdmin(reason, opts) {
+    const forceSync = !!(opts && opts.force)
+      || /refresh/i.test(String(reason || ""));
     if (refreshInFlight) {
       try { await refreshInFlight; } catch { /* ignore */ }
     }
     showError("");
-    setStatus(reason || "Opening…", "busy");
+    setStatus(reason || (forceSync ? "Refreshing from server…" : "Opening…"), "busy");
     refreshInFlight = (async () => {
     try {
-      // Fast path: paint from IndexedDB cache first (no network wait).
+      // Fast path: paint from IndexedDB first unless forcing a full re-download.
       let painted = false;
-      const localPayload = await Store.loadWorkbookFiles();
-      if (localPayload && localPayload.files && Object.keys(localPayload.files).length) {
-        const okLocal = await applyWorkbookPayload(localPayload);
-        if (okLocal) {
-          buildDashboard({ progressive: true });
-          painted = true;
-          setStatus(reason || "Opening cached data…", "ok");
+      if (!forceSync) {
+        const localPayload = await Store.loadWorkbookFiles();
+        if (localPayload && localPayload.files && Object.keys(localPayload.files).length) {
+          const okLocal = await applyWorkbookPayload(localPayload);
+          if (okLocal) {
+            buildDashboard({ progressive: true });
+            painted = true;
+            setStatus(reason || "Opening cached data…", "ok");
+          }
         }
       }
 
-      // Then sync from server; rebuild only if files changed.
+      // Then sync from server; rebuild when files changed or Refresh forced.
       let sync = null;
       try {
-        sync = await Store.syncFromServer();
+        sync = await Store.syncFromServer({ force: forceSync });
       } catch {
         sync = null;
       }
@@ -21482,7 +21486,7 @@
         return;
       }
 
-      if (sync && !sync.cached) {
+      if (sync && (!sync.cached || forceSync)) {
         const ok = await hydrateSlotsFromAdmin({ skipSync: true });
         if (!ok) {
           if (!painted) {
@@ -21492,6 +21496,7 @@
           return;
         }
         buildDashboard({ progressive: true });
+        painted = true;
       } else if (!painted) {
         const ok = await hydrateSlotsFromAdmin({ skipSync: true });
         if (!ok) {
@@ -21500,10 +21505,11 @@
           return;
         }
         buildDashboard({ progressive: true });
+        painted = true;
       }
 
       if (reason) setStatus(reason, "ok");
-        else setStatus(painted && sync && sync.cached ? "Ready (cached)" : "Synced from server", "ok");
+        else setStatus(painted && sync && sync.cached && !forceSync ? "Ready (cached)" : "Synced from server", "ok");
         const badge = $("#live-badge");
         if (badge) {
           badge.textContent = "Manual";
@@ -21527,7 +21533,7 @@
   }
 
   $("#clear-btn").addEventListener("click", clearAll);
-  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed"));
+  $("#run-btn").addEventListener("click", () => refreshFromAdmin("Refreshed", { force: true }));
   $("#csv-btn").addEventListener("click", exportCsv);
   const dashExcelBtn = $("#dash-excel-btn");
   if (dashExcelBtn) dashExcelBtn.addEventListener("click", exportStockBoDashboardExcel);
