@@ -430,6 +430,7 @@ table.data th {
 table.data tbody tr:nth-child(even) td { background: #fafcfd; }
 table.data tr:hover td { background: #eef5fb !important; }
 table.data tr.selected td { background: #fff1f2 !important; }
+table.data tr.is-me td { box-shadow: inset 3px 0 0 var(--navy, #0b1f33); }
 table.data tr.row-status-claimed td { background: #dbeafe !important; }
 table.data tr.row-status-psfu td { background: #dcfce7 !important; }
 table.data tr.row-status-ready td { background: #fef9c3 !important; }

@@ -38,13 +38,32 @@ const DELIVERY_CHECK_PREVIEW_IMAGE = path.join(ROOT, 'images', 'delivery-check-n
 const PORT = Number(process.env.PORT) || 3000;
 const DELIVERY_TEAM_PASSWORD = process.env.DELIVERY_TEAM_PASSWORD || process.env.DELIVERY_AGENT_PASSWORD || '1234';
 const DELIVERY_TEAM_DATA = path.join(PERSISTENT_ROOT, 'delivery-team-data.json');
+const {
+  mapCarrierToCoordinatorCompany,
+} = require('./deliveryteam/lib/constants');
+/** Late-bound hooks — filled after hub store helpers exist (router is created early). */
+const deliveryTeamHooks = {
+  onCarrierAssigned: null,
+  onRawUploaded: null,
+};
 const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
 const deliveryTeam = createDeliveryTeamRouter({
   filePath: DELIVERY_TEAM_DATA,
   password: DELIVERY_TEAM_PASSWORD,
+  onCarrierAssigned: (items) => (
+    typeof deliveryTeamHooks.onCarrierAssigned === 'function'
+      ? deliveryTeamHooks.onCarrierAssigned(items)
+      : null
+  ),
+  onRawUploaded: (payload) => (
+    typeof deliveryTeamHooks.onRawUploaded === 'function'
+      ? deliveryTeamHooks.onRawUploaded(payload)
+      : null
+  ),
 });
 const deliveryTeamRouter = deliveryTeam.router;
 const deliveryTeamUpload = deliveryTeam.uploadHandler;
+const deliveryTeamStore = deliveryTeam.store;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse', 'showroom admin', 'سيارات العرض']);
 const AGENT_PASSWORD = process.env.DELIVERY_AGENT_PASSWORD || '1234';
@@ -1274,6 +1293,280 @@ function persistAndBroadcast() {
   saveStore();
   broadcastHubUpdate();
 }
+
+/** Resolve Delivery Team الناقل → existing coordinator company board name. */
+function resolveCoordinatorCompanyFromCarrier(carrier) {
+  const mapped = mapCarrierToCoordinatorCompany(carrier);
+  if (!mapped) return '';
+  ensureOptions();
+  const key = companyNameKey(mapped);
+  const companies = store.options.companies || [];
+  const exact = companies.find((c) => companyNameKey(c) === key);
+  if (exact) return exact;
+  const compact = key.replace(/^شركه?\s+/, '').replace(/^ال/, '');
+  const fuzzy = companies.find((c) => {
+    const ck = companyNameKey(c).replace(/^شركه?\s+/, '').replace(/^ال/, '');
+    return ck === compact || (compact.length >= 3 && (ck.includes(compact) || compact.includes(ck)));
+  });
+  return fuzzy || mapped;
+}
+
+function upsertHubVehicleFromTeamVehicle(teamVehicle) {
+  const vin = normVin(teamVehicle && (teamVehicle.vin || (teamVehicle.raw && teamVehicle.raw.vin)));
+  if (!vin) return null;
+  const raw = (teamVehicle && teamVehicle.raw) || {};
+  const next = {
+    vin,
+    product: String(raw.product || '').trim(),
+    model: String(raw.product || '').trim(),
+    gt: String(raw.gtLocation || '').trim(),
+    location: String(raw.vehicleLocation || '').trim(),
+    plate: '',
+    customerName: String(raw.userName || '').trim(),
+    phone: String(raw.phone || '').trim(),
+    imageUrl: '',
+    suffix: '',
+    proformaDate: String(raw.proformaDate || '').trim(),
+    invoiceDate: '',
+    deliveryNoteDate: String(raw.deliveryDate || '').trim(),
+  };
+  if (!Array.isArray(store.vehicles)) store.vehicles = [];
+  const idx = store.vehicles.findIndex((v) => normVin(v.vin) === vin);
+  if (idx >= 0) {
+    const prev = store.vehicles[idx];
+    store.vehicles[idx] = {
+      ...prev,
+      ...next,
+      product: next.product || prev.product || '',
+      model: next.model || prev.model || prev.product || '',
+      gt: next.gt || prev.gt || '',
+      location: next.location || prev.location || '',
+      customerName: next.customerName || prev.customerName || '',
+      phone: next.phone || prev.phone || '',
+      proformaDate: next.proformaDate || prev.proformaDate || '',
+      deliveryNoteDate: next.deliveryNoteDate || prev.deliveryNoteDate || '',
+    };
+    return store.vehicles[idx];
+  }
+  store.vehicles.push(next);
+  return next;
+}
+
+/** Resolve Delivery Team مدينة الترحيل → coordinator branch/city option. */
+function resolveCoordinatorCityFromTeam(city) {
+  const name = String(city || '').trim();
+  if (!name) return '';
+  ensureOptions();
+  const key = companyNameKey(name);
+  const cities = store.options.cities || [];
+  const exact = cities.find((c) => companyNameKey(c) === key);
+  if (exact) return exact;
+  const compact = key.replace(/^ال/, '');
+  const fuzzy = cities.find((c) => {
+    const ck = companyNameKey(c).replace(/^ال/, '');
+    return ck === compact || (compact.length >= 2 && (ck.includes(compact) || compact.includes(ck)));
+  });
+  if (fuzzy) return fuzzy;
+  store.options.cities = uniqueSorted([...cities, name]);
+  return name;
+}
+
+function applyTeamCityToQueueItem(item, transferCity) {
+  if (!item) return false;
+  const city = resolveCoordinatorCityFromTeam(transferCity);
+  if (!city) return false;
+  if (String(item.plannedBranch || '').trim() === city) return false;
+  item.plannedBranch = city;
+  return true;
+}
+
+/**
+ * When Hanouf / Rasha (or any team user) sets الناقل and/or مدينة الترحيل,
+ * push VIN onto that company board and stamp plannedBranch for لوحة الترحيل.
+ */
+function syncTeamCarriersToCoordinator(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return { added: 0, reassigned: 0, skipped: 0, same: 0, cityUpdated: 0 };
+  ensureOptions();
+  store.queue = dedupeQueue(store.queue || []);
+  const now = new Date().toISOString();
+  let added = 0;
+  let reassigned = 0;
+  let skipped = 0;
+  let same = 0;
+  let cityUpdated = 0;
+
+  for (const item of list) {
+    const vin = normVin(item.vin);
+    const carrier = String(item.carrier || (item.ops && item.ops.carrier) || '').trim();
+    const transferCity = String(
+      item.transferCity || (item.ops && item.ops.transferCity) || ''
+    ).trim();
+    if (!vin) {
+      skipped += 1;
+      continue;
+    }
+
+    // City-only update when VIN already on a board
+    if (!carrier) {
+      const existingOnly = findQueueItem(vin);
+      if (existingOnly && transferCity && applyTeamCityToQueueItem(existingOnly, transferCity)) {
+        cityUpdated += 1;
+      } else {
+        skipped += 1;
+      }
+      continue;
+    }
+
+    const deliveryCompany = resolveCoordinatorCompanyFromCarrier(carrier);
+    if (!deliveryCompany) {
+      skipped += 1;
+      continue;
+    }
+    const existsOpt = (store.options.companies || []).some(
+      (x) => companyNameKey(x) === companyNameKey(deliveryCompany)
+    );
+    if (!existsOpt) {
+      store.options.companies = uniqueSorted([...(store.options.companies || []), deliveryCompany]);
+    }
+
+    const hubVeh = upsertHubVehicleFromTeamVehicle(item);
+    const existingItem = findQueueItem(vin);
+    if (existingItem) {
+      const prevCompany = String(existingItem.deliveryCompany || existingItem.company || '').trim();
+      const sameCompany = prevCompany
+        && companyNameKey(prevCompany) === companyNameKey(deliveryCompany);
+      if (sameCompany) {
+        if (transferCity && applyTeamCityToQueueItem(existingItem, transferCity)) cityUpdated += 1;
+        same += 1;
+        continue;
+      }
+      existingItem.deliveryCompany = deliveryCompany;
+      existingItem.company = deliveryCompany;
+      existingItem.plannedDeliveryMode = 'memo';
+      if (transferCity && applyTeamCityToQueueItem(existingItem, transferCity)) cityUpdated += 1;
+      if (hubVeh) Object.assign(existingItem, enrichFromVehicle(existingItem, hubVeh));
+      reassigned += 1;
+      continue;
+    }
+
+    const base = {
+      vin,
+      status: 'available',
+      agentStatus: '',
+      assignedTo: '',
+      addedAt: now,
+      assignedAt: '',
+      deliveryCompany,
+      plannedDeliveryMode: 'memo',
+      company: deliveryCompany,
+      plannedBranch: transferCity ? resolveCoordinatorCityFromTeam(transferCity) : '',
+      source: 'delivery-team',
+      sourceBy: item.by || '',
+    };
+    store.queue.push(enrichFromVehicle(base, hubVeh));
+    added += 1;
+  }
+
+  if (added || reassigned || cityUpdated) persistAndBroadcast();
+  return { added, reassigned, skipped, same, cityUpdated };
+}
+
+/** Merge all Delivery Team vehicles into hub inventory + sync carriers to boards. */
+function syncTeamRawToHubInventory(teamStore) {
+  const src = teamStore || deliveryTeamStore;
+  if (!src || typeof src.allVehicles !== 'function') {
+    return { upserted: 0, carriers: null };
+  }
+  const all = src.allVehicles() || [];
+  let upserted = 0;
+  for (const v of all) {
+    if (upsertHubVehicleFromTeamVehicle(v)) upserted += 1;
+  }
+  const carrierItems = all
+    .filter((v) => v && v.ops && (
+      String(v.ops.carrier || '').trim() || String(v.ops.transferCity || '').trim()
+    ))
+    .map((v) => ({
+      vin: v.vin,
+      carrier: v.ops.carrier || '',
+      transferCity: v.ops.transferCity || '',
+      raw: v.raw,
+      ops: v.ops,
+      by: 'delivery-team-sync',
+    }));
+  const carriers = syncTeamCarriersToCoordinator(carrierItems);
+  if (upserted && !(carriers.added || carriers.reassigned || carriers.cityUpdated)) persistAndBroadcast();
+  return { upserted, carriers };
+}
+
+/** Push hub Sales Raw vehicles into Delivery Team store (preserve ops). */
+function syncHubVehiclesToDeliveryTeam(vehicles) {
+  if (!deliveryTeamStore || typeof deliveryTeamStore.upsertVehicle !== 'function') {
+    return { upserted: 0 };
+  }
+  const list = Array.isArray(vehicles) ? vehicles : [];
+  let upserted = 0;
+  for (const veh of list) {
+    const vin = normVin(veh && veh.vin);
+    if (!vin) continue;
+    const rawPatch = {
+      vin,
+      product: String(veh.product || veh.model || '').trim(),
+      userName: String(veh.customerName || '').trim(),
+      phone: String(veh.phone || '').trim(),
+      gtLocation: String(veh.gt || '').trim(),
+      vehicleLocation: String(veh.location || '').trim(),
+      proformaDate: String(veh.proformaDate || '').trim(),
+      deliveryDate: String(veh.deliveryNoteDate || '').trim(),
+      salesOrder: '',
+      salesType: '',
+      invoiceOwner: '',
+      salesAdvisor: '',
+      pic: '',
+      status: '',
+      traffic: '',
+      trafficFees: '',
+      insurance: '',
+      registrationDate: '',
+      date: '',
+      year: '',
+    };
+    const existing = deliveryTeamStore.getVehicle(vin);
+    if (!existing) {
+      const emptyOps = {
+        guestSentDate: '', signatureReceivedDate: '', accountsSentDate: '', accountsApprovalDate: '',
+        vin1502: '', opsStatus: '', trafficFile: '', trafficFeesOps: '', insuranceOps: '',
+        registrationIssueDate: '', transferCity: '', carrier: '', notes: '',
+        assignedEmployeeId: '', assignedEmployeeName: '', assignedBy: '', assignedAt: '',
+        guestCenter: '', guestCollectAt: '', guestCollected: '', guestCollectNote: '',
+        updatedBy: '', updatedAt: '',
+      };
+      deliveryTeamStore.upsertVehicle(vin, {
+        vin,
+        raw: rawPatch,
+        ops: emptyOps,
+        createdAt: new Date().toISOString(),
+        rawUpdatedAt: new Date().toISOString(),
+        lastUploadId: 'hub-sync',
+      });
+    } else {
+      const merged = { ...existing.raw };
+      Object.keys(rawPatch).forEach((k) => {
+        if (rawPatch[k]) merged[k] = rawPatch[k];
+      });
+      existing.raw = merged;
+      existing.rawUpdatedAt = new Date().toISOString();
+      deliveryTeamStore.upsertVehicle(vin, existing);
+    }
+    upserted += 1;
+  }
+  if (upserted) deliveryTeamStore.save();
+  return { upserted };
+}
+
+deliveryTeamHooks.onCarrierAssigned = (items) => syncTeamCarriersToCoordinator(items);
+deliveryTeamHooks.onRawUploaded = (payload) => syncTeamRawToHubInventory(payload && payload.store);
 
 function todayIsoRiyadh() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -4319,6 +4612,7 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
       return res.status(400).json({ error: 'لم يتم العثور على أرقام شاسيه في الملف' });
     }
     const refresh = applyParsedInventory(parsed);
+    const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
     persistAndBroadcast();
     res.json({
       imported: parsed.vehicles.length,
@@ -4329,7 +4623,8 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
       sheetName: parsed.sheetName,
       queueRefreshed: refresh.total,
       matchedUpdated: refresh.matched,
-      notInNewFile: refresh.missing
+      notInNewFile: refresh.missing,
+      deliveryTeamSync: teamSync,
     });
   } catch (err) {
     console.error('[upload]', err);

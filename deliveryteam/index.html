@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917p" />
+  <link rel="stylesheet" href="styles.css?v=20260920q" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -88,14 +88,14 @@
             <div class="dash-stack">
               <div class="card" id="dash-emp-card">
                 <h2>Employee schedule</h2>
-                <p class="hint">Assigned · Claimed · sales types per person — click a name to open their VINs</p>
+                <p class="hint">Full team · Assigned · Claimed · Cash/Bank (sales type) per person — click a name to open their VINs</p>
                 <div class="table-wrap compact">
                   <table class="data" id="dash-emp-table"></table>
                 </div>
               </div>
               <div class="card" id="dash-sales-type-card">
                 <h2>Sales type mix</h2>
-                <p class="hint">How many of each sales type in the selected month</p>
+                <p class="hint">Team totals · how many of each sales type (cash / bank / …) this month</p>
                 <div class="status-grid" id="dash-sales-types"></div>
               </div>
               <div class="card" id="dash-edits-card" hidden>
@@ -278,11 +278,15 @@
         <!-- UPLOAD -->
         <section class="panel" id="panel-upload">
           <div class="card">
-            <h2>Upload Raw Data</h2>
-            <p class="hint">Reads <b>ONLY the first worksheet</b>. Updates raw fields. Never overwrites employee delivery work.</p>
+            <h2>Upload Delivery sheet</h2>
+            <p class="hint">
+              Upload the latest <b>Delivery sheet</b> Excel (same as <b>E sales</b> tab).
+              The system reads VINs, customer, status, الناقل, مدينة الترحيل, and work dates — then shows them on schedules.
+              Export downloads the same <b>E sales</b> layout.
+            </p>
             <div class="upload-drop" id="upload-drop">
-              <strong>Drop Excel here</strong>
-              <p class="hint">or click to browse · .xlsx / .xls</p>
+              <strong>Drop Delivery sheet here</strong>
+              <p class="hint">or click to browse · .xlsx / .xls · prefers worksheet «E sales»</p>
               <input type="file" id="upload-file" accept=".xlsx,.xls" hidden />
             </div>
             <div id="upload-summary" hidden></div>
@@ -323,6 +327,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260917p"></script>
+  <script src="app.js?v=20260920q"></script>
 </body>
 </html>

@@ -42,20 +42,16 @@
     return s && s !== 'N/A' ? s : 'N/A';
   }
 
-  /** Customer name: first letter + * for the rest (per word). */
-  function maskPersonName(value) {
+  /** Show full customer name (signed-in staff). */
+  function displayName(value) {
     const s = String(value == null ? '' : value).trim();
-    if (!s || s === '—' || s === '-' || s === 'N/A' || s === 'n/a') return s || '—';
-    return s.replace(/[^\s]+/g, (word) => {
-      const chars = Array.from(word);
-      if (!chars.length) return word;
-      return chars[0] + '*'.repeat(Math.max(0, chars.length - 1));
-    });
+    return s || '—';
   }
 
-  /** Never show phone numbers. */
-  function maskPhone(_value) {
-    return '—';
+  /** Show full phone number (signed-in staff). */
+  function displayPhone(value) {
+    const s = String(value == null ? '' : value).trim();
+    return s || '—';
   }
 
   function ynBadge(v) {
@@ -234,7 +230,7 @@
 
     if (action === 'collected-yes') {
       title.textContent = 'Guest collected?';
-      sub.textContent = `${v.vin} · ${maskPersonName(v.raw.userName)} · choose status after collection`;
+      sub.textContent = `${v.vin} · ${displayName(v.raw.userName)} · choose status after collection`;
       body.innerHTML = `
         <p class="hint">Appointment was <b>${esc(formatGuestAt(existing))}</b>. Confirm the car was collected, then set status.</p>
         <div class="field">
@@ -293,7 +289,7 @@
 
     // mark / schedule / reschedule
     title.textContent = action === 'mark' ? 'Mark Guest Experience' : 'Guest Exp · Schedule pickup';
-    sub.textContent = `${v.vin} · ${maskPersonName(v.raw.userName)} · ${na(v.raw.product)}`;
+    sub.textContent = `${v.vin} · ${displayName(v.raw.userName)} · ${na(v.raw.product)}`;
     body.innerHTML = `
       <p class="hint">Set the date and time for the customer to collect this VIN at Guest Experience.</p>
       <div class="field"><label>Collection date</label><input type="date" id="guest-date" value="${esc(dateVal)}" required /></div>
@@ -338,7 +334,7 @@
       { id: 'my', label: 'My VINs', roles: ['employee', 'admin', 'hanouf'] },
       { id: 'assign', label: 'Assignment', roles: ['admin', 'hanouf'] },
       { id: 'all', label: 'All Vehicles', roles: ['admin', 'hanouf'] },
-      { id: 'upload', label: 'Upload Raw Data', roles: ['admin', 'hanouf'] },
+      { id: 'upload', label: 'Upload Delivery sheet', roles: ['admin', 'hanouf'] },
       { id: 'audit', label: 'Audit Log', roles: ['admin', 'hanouf'] },
     ];
     return items.filter((i) => i.roles.includes(state.user.role));
@@ -369,12 +365,12 @@
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
-      live: ['Live Sheet', 'All assigned VINs · live updates · filter by month'],
+      live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank) · names & phones'],
       today: ["Today's Vehicles", 'Proforma Date = today'],
-      my: ['My VINs', 'Your schedule · sales types · edit work · الناقل'],
+      my: ['My VINs', 'Your schedule · edit your work · الناقل'],
       assign: ['Assignment', 'Upload → assign employee (incl. Hanouf) → الناقل'],
       all: ['All Vehicles', 'Full fleet · filters · export'],
-      upload: ['Upload Raw Data', 'First worksheet only'],
+      upload: ['Upload Delivery sheet', 'E sales layout · status · الناقل · مدينة الترحيل'],
       audit: ['Audit Log', 'Full history of every edit'],
     };
     const t = titles[view] || ['Delivery Team', ''];
@@ -477,7 +473,10 @@
       const bySt = data.byStatus || {};
       chips.innerHTML = [
         `<span class="live-chip"><b>${data.total || 0}</b> assigned</span>`,
-        ...Object.keys(byEmp).map((k) => `<span class="live-chip">${esc(k)} <b>${byEmp[k]}</b></span>`),
+        ...Object.keys(byEmp).map((k) => `<button type="button" class="live-chip emp-filter ${f.employee === k ? 'active' : ''}" data-emp="${esc(k)}">${esc(k)} <b>${byEmp[k]}</b></button>`),
+        ...Object.entries(data.bySalesType || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) =>
+          `<span class="live-chip">${esc(k)} <b>${n}</b></span>`
+        ),
         ...Object.keys(bySt).filter((k) => k !== '(blank)').slice(0, 8).map((k) =>
           `<button type="button" class="live-chip status-filter ${f.status === k ? 'active' : ''}" data-status="${esc(k)}">${esc(k)} <b>${bySt[k]}</b></button>`
         ),
@@ -485,6 +484,11 @@
       $$('.live-chip.status-filter', chips).forEach((b) => b.addEventListener('click', () => {
         state.liveFilters.status = state.liveFilters.status === b.dataset.status ? '' : b.dataset.status;
         if ($('#live-status')) $('#live-status').value = state.liveFilters.status;
+        loadLiveSheet().catch((e) => alert(e.message));
+      }));
+      $$('.live-chip.emp-filter', chips).forEach((b) => b.addEventListener('click', () => {
+        state.liveFilters.employee = state.liveFilters.employee === b.dataset.emp ? '' : b.dataset.emp;
+        if ($('#live-employee')) $('#live-employee').value = state.liveFilters.employee;
         loadLiveSheet().catch((e) => alert(e.message));
       }));
     }
@@ -513,9 +517,9 @@
       ['Product', (r) => na(r.raw.product)],
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer', (r) => maskPersonName(r.raw.userName)],
+      ['Customer', (r) => displayName(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
-      ['Phone', () => maskPhone()],
+      ['Phone', (r) => displayPhone(r.raw.phone)],
       ['Guest Exp', (r) => guestCellHtml(r)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
@@ -592,11 +596,11 @@
     if (empCard) {
       empCard.hidden = false;
       const rows = d.employees || [];
-      // For employees, highlight only their row in schedule; managers see everyone
-      const showRows = canManage()
-        ? rows
-        : rows.filter((e) => e.id === state.user.id || e.name === state.user.name);
+      // Everyone sees the full team schedule (assigned / claimed / cash·bank sales types)
+      const showRows = rows.filter((e) => e.assigned > 0 || canManage());
       const typeKeys = [...new Set(showRows.flatMap((e) => Object.keys(e.bySalesType || {})))].sort();
+      const meId = state.user && state.user.id;
+      const meName = state.user && state.user.name;
       $('#dash-emp-table').innerHTML = `<thead><tr>
           <th>Employee</th>
           <th class="num">Assigned</th>
@@ -605,30 +609,37 @@
           <th class="num">Progress %</th>
           ${typeKeys.map((k) => `<th class="num">${esc(k)}</th>`).join('')}
         </tr></thead>
-        <tbody>${showRows.map((e) => `<tr data-emp="${esc(e.name)}" style="cursor:pointer">
-          <td><b>${esc(e.name)}</b></td>
+        <tbody>${showRows.map((e) => {
+          const isMe = e.id === meId || e.name === meName;
+          return `<tr data-emp="${esc(e.name)}" class="${isMe ? 'is-me' : ''}" style="cursor:pointer" title="Open ${esc(e.name)} schedule on Live Sheet">
+          <td><b>${esc(e.name)}</b>${isMe ? ' <span class="badge info">you</span>' : ''}</td>
           <td class="num">${e.assigned}</td>
           <td class="num">${e.claimed}</td>
           <td class="num">${e.remaining}</td>
           <td class="num">${e.progress}%</td>
           ${typeKeys.map((k) => `<td class="num">${(e.bySalesType && e.bySalesType[k]) || 0}</td>`).join('')}
-        </tr>`).join('') || '<tr><td colspan="5">No assigned VINs in this month</td></tr>'}</tbody>`;
+        </tr>`;
+        }).join('') || '<tr><td colspan="5">No assigned VINs in this month</td></tr>'}</tbody>`;
       $$('#dash-emp-table tr[data-emp]').forEach((tr) => {
         tr.addEventListener('click', () => {
-          if (canManage()) {
-            state.filters.employee = tr.dataset.emp;
-            state.filters.month = state.monthFilter || '';
-            state.filters.page = 1;
-            setView('all');
-          } else {
-            setView('my');
+          state.liveFilters.employee = tr.dataset.emp || '';
+          state.liveFilters.month = state.monthFilter || state.liveFilters.month || '';
+          state.liveFilters.status = '';
+          state.liveFilters.q = '';
+          if ($('#live-employee')) {
+            $('#live-employee').value = state.liveFilters.employee;
+            $('#live-employee').dataset.filled = '1';
           }
+          if ($('#live-month')) $('#live-month').value = state.liveFilters.month || '';
+          if ($('#live-status')) $('#live-status').value = '';
+          if ($('#live-q')) $('#live-q').value = '';
+          setView('live');
         });
       });
     }
 
     if (salesCard) {
-      const mix = canManage() ? (d.bySalesType || {}) : (d.myWorkload?.bySalesType || {});
+      const mix = d.bySalesType || {};
       const entries = Object.entries(mix).sort((a, b) => b[1] - a[1]);
       $('#dash-sales-types').innerHTML = entries.length
         ? entries.map(([k, n]) =>
@@ -647,10 +658,16 @@
       : '');
     $$('#dash-status .status-chip').forEach((b) => b.addEventListener('click', () => {
       if (!b.dataset.status) return;
-      state.filters.status = b.dataset.status;
-      state.filters.month = state.monthFilter || '';
-      state.filters.page = 1;
-      setView(canManage() ? 'all' : 'my');
+      state.liveFilters.status = b.dataset.status;
+      state.liveFilters.month = state.monthFilter || state.liveFilters.month || '';
+      state.liveFilters.employee = '';
+      if ($('#live-status')) {
+        $('#live-status').value = state.liveFilters.status;
+        $('#live-status').dataset.filled = '1';
+      }
+      if ($('#live-month')) $('#live-month').value = state.liveFilters.month || '';
+      if ($('#live-employee')) $('#live-employee').value = '';
+      setView('live');
     }));
 
     const editsCard = $('#dash-edits-card');
@@ -736,11 +753,11 @@
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Product', (r) => na(r.raw.product)],
       ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer Name', (r) => maskPersonName(r.raw.userName)],
+      ['Customer Name', (r) => displayName(r.raw.userName)],
       ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
-      ['Phone', () => maskPhone()],
+      ['Phone', (r) => displayPhone(r.raw.phone)],
       ['Guest Exp', (r) => guestCellHtml(r)],
     ];
     if (editable) {
@@ -1295,11 +1312,18 @@
     const statuses = (state.meta && state.meta.statuses) || [];
     const cities = (state.meta && state.meta.transferCities) || [];
     const carriers = (state.meta && state.meta.carriers) || [];
+    const isMine = !!(state.user && (
+      (v.ops && v.ops.assignedEmployeeId === state.user.id)
+      || (v.ops && v.ops.assignedEmployeeName === state.user.name)
+    ));
+    const canEdit = canManage() || isMine;
 
-    drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers);
+    drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers, { readOnly: !canEdit });
     back.classList.add('open');
     $('#drawer-close', drawer).onclick = () => back.classList.remove('open');
     back.onclick = (e) => { if (e.target === back) back.classList.remove('open'); };
+
+    if (!canEdit) return;
 
     async function savePatch(patch) {
       try {
@@ -1326,13 +1350,18 @@
     });
   }
 
-  function buildDrawerHtml(v, statuses, cities, carriers) {
-    const yn = (key, label, val) => `<div class="field"><label>${esc(label)}</label>
+  function buildDrawerHtml(v, statuses, cities, carriers, opts = {}) {
+    const readOnly = !!opts.readOnly;
+    const yn = (key, label, val) => readOnly
+      ? `<div class="field"><label>${esc(label)}</label><input value="${esc(na(val))}" readonly /></div>`
+      : `<div class="field"><label>${esc(label)}</label>
       <div class="yn" data-yn="${key}">
         <button type="button" class="yes ${val === 'Yes' ? 'active' : ''}" data-v="Yes">🟢 YES</button>
         <button type="button" class="no ${val === 'No' ? 'active' : ''}" data-v="No">🔴 NO</button>
       </div></div>`;
-    const dt = (key, label, val) => `<div class="field"><label>${esc(label)}</label><input type="date" data-ops="${key}" value="${esc(val || '')}" /></div>`;
+    const dt = (key, label, val) => readOnly
+      ? `<div class="field"><label>${esc(label)}</label><input type="text" value="${esc(na(val))}" readonly /></div>`
+      : `<div class="field"><label>${esc(label)}</label><input type="date" data-ops="${key}" value="${esc(val || '')}" /></div>`;
     return `
       <div class="drawer-head">
         <div>
@@ -1342,6 +1371,7 @@
             <span class="badge">${esc(na(v.raw.salesOrder))}</span>
             ${statusBadge(v.ops.opsStatus)}
             <span class="badge">${esc(na(v.ops.assignedEmployeeName))}</span>
+            ${readOnly ? '<span class="badge warn">View only</span>' : ''}
           </div>
         </div>
         <button type="button" class="btn" id="drawer-close">Close</button>
@@ -1353,28 +1383,34 @@
           ${[
             ['Proforma Date', v.raw.proformaDate], ['Sales Order', v.raw.salesOrder],
             ['Sales Type', v.raw.salesType], ['Invoice Owner', v.raw.invoiceOwner],
-            ['Customer Name', maskPersonName(v.raw.userName)], ['S/A', v.raw.salesAdvisor],
+            ['Customer Name', displayName(v.raw.userName)], ['S/A', v.raw.salesAdvisor],
             ['GT Location', v.raw.gtLocation], ['Vehicle Location', v.raw.vehicleLocation],
-            ['Phone', maskPhone()], ['PIC', v.raw.pic],
+            ['Phone', displayPhone(v.raw.phone)], ['PIC', v.raw.pic],
           ].map(([l, val]) => `<div class="field"><label>${esc(l)}</label><input value="${esc(na(val))}" readonly /></div>`).join('')}
         </div>
         <div class="card">
-          <h2>Delivery information</h2>
-          <p class="hint">Employee updates · saves immediately</p>
+          <h2>Delivery information${readOnly ? ' (teammate — view only)' : ''}</h2>
+          <p class="hint">${readOnly ? 'Read-only · teammate schedule' : 'Employee updates · saves immediately'}</p>
           <div id="save-line" class="save-toast" hidden>Saved ✓</div>
           ${dt('guestSentDate', 'تاريخ إرسال الضيف', v.ops.guestSentDate)}
           ${dt('signatureReceivedDate', 'تاريخ استلام التواقيع من الضيف', v.ops.signatureReceivedDate)}
           ${dt('accountsSentDate', 'تاريخ إرسال الملف للحسابات', v.ops.accountsSentDate)}
           ${dt('accountsApprovalDate', 'تاريخ موافقة الحسابات', v.ops.accountsApprovalDate)}
-          <div class="field"><label>Status</label>
+          ${readOnly
+            ? `<div class="field"><label>Status</label><input value="${esc(na(v.ops.opsStatus))}" readonly /></div>`
+            : `<div class="field"><label>Status</label>
             <select data-ops="opsStatus"><option value="">—</option>${statuses.map((s) => `<option ${v.ops.opsStatus === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
-          </div>
+          </div>`}
           ${yn('vin1502', 'Current VIN 1502?', v.ops.vin1502)}
           ${yn('trafficFile', 'ملف المرور', v.ops.trafficFile)}
           ${yn('trafficFeesOps', 'Traffic Fees', v.ops.trafficFeesOps)}
           ${yn('insuranceOps', 'Insurance', v.ops.insuranceOps)}
           ${dt('registrationIssueDate', 'تاريخ إصدار الاستمارة', v.ops.registrationIssueDate)}
-          <div class="field"><label>مدينة الترحيل</label>
+          ${readOnly
+            ? `<div class="field"><label>مدينة الترحيل</label><input value="${esc(na(v.ops.transferCity))}" readonly /></div>
+               <div class="field"><label>الناقل</label><input value="${esc(na(v.ops.carrier))}" readonly /></div>
+               <div class="field"><label>ملاحظات</label><textarea readonly>${esc(v.ops.notes || '')}</textarea></div>`
+            : `<div class="field"><label>مدينة الترحيل</label>
             <input list="city-list" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="Search city…" />
             <datalist id="city-list">${cities.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
           </div>
@@ -1384,7 +1420,7 @@
           </div>
           <div class="field"><label>ملاحظات</label>
             <textarea data-ops="notes">${esc(v.ops.notes || '')}</textarea>
-          </div>
+          </div>`}
           <p class="hint" id="last-updated">Last updated: ${esc(v.ops.updatedAt || '—')}</p>
         </div>
       </div>`;
@@ -1411,12 +1447,13 @@
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       const s = data.summary;
       summary.innerHTML = `
-        <p><b>Sheet used:</b> ${esc(data.sheetName)} <span class="hint">(first worksheet only)</span></p>
+        <p><b>Sheet used:</b> ${esc(data.sheetName)} <span class="hint">(${esc(data.format || 'auto')})</span></p>
         <div class="summary-grid">
           <div><strong>${s.rowsProcessed}</strong><span>Rows processed</span></div>
           <div><strong>${s.newVins}</strong><span>New VINs</span></div>
           <div><strong>${s.updatedVins}</strong><span>Updated VINs</span></div>
-          <div><strong>${s.todaysProformas}</strong><span>Today's proformas</span></div>
+          <div><strong>${s.opsImported || 0}</strong><span>Ops / status imported</span></div>
+          <div><strong>${s.todaysProformas}</strong><span>Today's dates</span></div>
           <div><strong>${s.duplicateVins}</strong><span>Duplicate VINs</span></div>
           <div><strong>${s.errorCount}</strong><span>Errors</span></div>
         </div>

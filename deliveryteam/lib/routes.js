@@ -12,12 +12,14 @@ const {
   ASSIGNABLE_NAMES,
   USERS,
   HEADER_MAP,
+  OPS_HEADER_MAP,
+  E_SALES_EXPORT_HEADERS,
   OPS_FIELDS,
   RAW_COL,
   isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
-const { maskPersonName, phoneDisplay } = require('./privacy');
+const { phoneDisplay } = require('./privacy');
 
 function na(v) {
   const s = String(v == null ? '' : v).trim();
@@ -134,6 +136,66 @@ function isYesNo(v) {
   return '';
 }
 
+/** Normalize Delivery sheet status like "a.CLAIMED" / "d. جاهز للتسليم" → app status. */
+function normalizeSheetStatus(value) {
+  let s = String(value == null ? '' : value).trim();
+  if (!s) return '';
+  // strip leading letter index: a. / b. / d. /
+  s = s.replace(/^[a-zA-Z]\.\s*/u, '').trim();
+  // trailing letter index: الغاء.k / معلقة.L
+  s = s.replace(/\.[a-zA-Z]\s*$/u, '').trim();
+  const lower = s.toLowerCase();
+  const map = {
+    claimed: 'Claimed',
+    psfu: 'PSFU',
+  };
+  if (map[lower]) return map[lower];
+  const hit = STATUSES.find((st) => st === s || st.toLowerCase() === lower);
+  if (hit) return hit;
+  // fuzzy contains
+  const soft = STATUSES.find((st) => lower.includes(st.toLowerCase()) || st.toLowerCase().includes(lower));
+  return soft || s;
+}
+
+function normalizeYnLoose(v) {
+  const yn = isYesNo(v);
+  if (yn) return yn;
+  const s = String(v || '').trim().toLowerCase();
+  if (!s) return '';
+  if (s.startsWith('y') || s.includes('نعم')) return 'Yes';
+  if (s.startsWith('n') || s.includes('لا')) return 'No';
+  return '';
+}
+
+function findPhoneInLine(line) {
+  if (!Array.isArray(line)) return '';
+  for (const cell of line) {
+    const digits = String(cell == null ? '' : cell).replace(/\D/g, '');
+    if (digits.length === 10 && digits.startsWith('05')) return digits;
+    if (digits.length === 12 && digits.startsWith('9665')) return `0${digits.slice(3)}`;
+    if (digits.length === 9 && digits.startsWith('5')) return `0${digits}`;
+  }
+  return '';
+}
+
+function isDeliverySheetHeaders(headers) {
+  const norms = (headers || []).map((h) => normalizeHeader(h));
+  const hasVinAr = norms.some((n) => n.includes('الشاس') || n.includes('شاسية') || n.includes('شاسيه'));
+  const hasStatus = norms.some((n) => n.includes('الحالة') || n === 'status');
+  const hasCarrier = norms.some((n) => n.includes('الناقل') || n === 'carrier');
+  const hasUser = norms.some((n) => n === 'user name' || n.includes('user name'));
+  return (hasVinAr && (hasStatus || hasCarrier || hasUser))
+    || (hasStatus && hasCarrier);
+}
+
+function isLegacyRawColHeaders(headers) {
+  const norms = (headers || []).map((h) => normalizeHeader(h));
+  // Classic admin raw dump often has "Chassis / VIN" + "Proforma" style English headers
+  const hasChassis = norms.some((n) => n.includes('chassis') && n.includes('vin'));
+  const hasProforma = norms.some((n) => n.includes('proforma'));
+  return hasChassis && hasProforma && !isDeliverySheetHeaders(headers);
+}
+
 function emptyOps() {
   return {
     guestSentDate: '',
@@ -168,23 +230,76 @@ function cellText(line, idx) {
   return String(v == null ? '' : v).trim();
 }
 
-function mapRawRow(row, line) {
+function mapRawRow(row, line, { useLegacyCols = false } = {}) {
   const raw = {};
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
     raw[key] = pickCol(row, aliases);
   }
-  // Fixed Raw Data positions: D = Order, N = Invoice Owner, O = Customer Name, Y = Phone
-  if (Array.isArray(line) && line.length) {
-    raw.salesOrder = cellText(line, RAW_COL.salesOrder);
-    raw.invoiceOwner = cellText(line, RAW_COL.invoiceOwner);
-    raw.userName = cellText(line, RAW_COL.customerName);
-    raw.phone = cellText(line, RAW_COL.phone);
+  // Legacy fixed columns only for classic Raw Data dumps (not Delivery sheet / E sales)
+  if (useLegacyCols && Array.isArray(line) && line.length) {
+    const so = cellText(line, RAW_COL.salesOrder);
+    const inv = cellText(line, RAW_COL.invoiceOwner);
+    const cust = cellText(line, RAW_COL.customerName);
+    const ph = cellText(line, RAW_COL.phone);
+    if (so) raw.salesOrder = so;
+    if (inv) raw.invoiceOwner = inv;
+    if (cust) raw.userName = cust;
+    if (ph) raw.phone = ph;
   }
-  raw.proformaDate = normalizeDate(raw.proformaDate);
+  if (!raw.phone) raw.phone = findPhoneInLine(line);
+  // Delivery sheet uses تاريخ as the main date (treat as proforma when missing)
+  raw.proformaDate = normalizeDate(raw.proformaDate) || normalizeDate(raw.date);
   raw.deliveryDate = normalizeDate(raw.deliveryDate);
   raw.registrationDate = normalizeDate(raw.registrationDate);
   raw.date = normalizeDate(raw.date) || raw.date;
   return raw;
+}
+
+function mapOpsFromRow(row) {
+  const ops = {};
+  for (const [key, aliases] of Object.entries(OPS_HEADER_MAP || {})) {
+    const val = pickCol(row, aliases);
+    if (key === 'opsStatus') ops.opsStatus = normalizeSheetStatus(val);
+    else if (key === 'vin1502' || key === 'trafficFile' || key === 'trafficFeesOps' || key === 'insuranceOps') {
+      ops[key] = normalizeYnLoose(val) || String(val || '').trim();
+    } else if (key.endsWith('Date') || key.includes('Date')) {
+      ops[key] = normalizeDate(val);
+    } else if (key === 'carrier') {
+      ops.carrier = String(val || '').trim();
+    } else if (key === 'transferCity') {
+      ops.transferCity = String(val || '').trim();
+    } else {
+      ops[key] = String(val == null ? '' : val).trim();
+    }
+  }
+  return ops;
+}
+
+function mergeOpsFromSheet(existingOps, sheetOps) {
+  const out = { ...emptyOps(), ...(existingOps || {}) };
+  Object.keys(sheetOps || {}).forEach((k) => {
+    const val = sheetOps[k];
+    if (val == null || String(val).trim() === '') return;
+    out[k] = val;
+  });
+  return out;
+}
+
+function assignFromPic(ops, picName, uploadedBy) {
+  const name = String(picName || '').trim();
+  if (!name) return ops;
+  const emp = ASSIGNABLE_NAMES.find((n) => n.toLowerCase() === name.toLowerCase())
+    || EMPLOYEE_NAMES.find((n) => n.toLowerCase() === name.toLowerCase());
+  if (!emp) return ops;
+  if (ops.assignedEmployeeId) return ops;
+  const id = String(emp).toLowerCase();
+  return {
+    ...ops,
+    assignedEmployeeId: id,
+    assignedEmployeeName: emp,
+    assignedBy: uploadedBy || 'sheet-import',
+    assignedAt: ops.assignedAt || new Date().toISOString(),
+  };
 }
 
 function publicVehicle(v) {
@@ -209,7 +324,7 @@ function publicVehicle(v) {
       pic: na(v.raw.pic),
       salesType: na(v.raw.salesType),
       invoiceOwner: na(v.raw.invoiceOwner),
-      userName: maskPersonName(v.raw.userName),
+      userName: na(v.raw.userName),
       salesAdvisor: na(v.raw.salesAdvisor),
       proformaDate: na(v.raw.proformaDate),
       deliveryDate: na(v.raw.deliveryDate),
@@ -242,6 +357,38 @@ function createDeliveryTeamRouter(opts) {
   const store = createStore(filePath);
   const router = express.Router();
 
+  function notifyCarrierAssigned(items) {
+    const fn = opts && opts.onCarrierAssigned;
+    if (typeof fn !== 'function' || !items || !items.length) return null;
+    try {
+      return fn(items.map((it) => {
+        const ops = it.ops || (it.vehicle && it.vehicle.ops) || {};
+        return {
+          vin: it.vin,
+          carrier: it.carrier != null ? it.carrier : (ops.carrier || ''),
+          transferCity: it.transferCity != null ? it.transferCity : (ops.transferCity || ''),
+          raw: it.raw || (it.vehicle && it.vehicle.raw) || {},
+          ops,
+          by: it.by || '',
+        };
+      }));
+    } catch (err) {
+      console.error('[delivery-team] onCarrierAssigned failed:', err.message || err);
+      return null;
+    }
+  }
+
+  function notifyRawUploaded(summary) {
+    const fn = opts && opts.onRawUploaded;
+    if (typeof fn !== 'function') return null;
+    try {
+      return fn({ store, summary: summary || {} });
+    } catch (err) {
+      console.error('[delivery-team] onRawUploaded failed:', err.message || err);
+      return null;
+    }
+  }
+
   function auth(req, res, next) {
     const header = req.headers['x-delivery-team-token']
       || req.headers.authorization
@@ -272,18 +419,26 @@ function createDeliveryTeamRouter(opts) {
     return all.filter((v) => v.ops && v.ops.assignedEmployeeId === user.userId);
   }
 
-  function assertVinAccess(req, res, vin) {
+  function assertVinAccess(req, res, vin, { write = false } = {}) {
     const key = normVin(vin);
     const v = store.getVehicle(key);
     if (!v) {
       res.status(404).json({ error: 'VIN not found' });
       return null;
     }
-    if (!canSeeAll(req.dtUser.role) && v.ops.assignedEmployeeId !== req.dtUser.userId) {
-      res.status(403).json({ error: 'You do not have access to this VIN' });
-      return null;
+    if (canSeeAll(req.dtUser.role)) return v;
+    const isMine = v.ops.assignedEmployeeId === req.dtUser.userId;
+    if (write) {
+      if (!isMine) {
+        res.status(403).json({ error: 'You do not have access to edit this VIN' });
+        return null;
+      }
+      return v;
     }
-    return v;
+    // Read: own VINs or any assigned teammate VIN (team schedule)
+    if (isMine || v.ops.assignedEmployeeId) return v;
+    res.status(403).json({ error: 'You do not have access to this VIN' });
+    return null;
   }
 
   router.get('/meta', (_req, res) => {
@@ -463,20 +618,19 @@ function createDeliveryTeamRouter(opts) {
     const month = String((req.query && req.query.month) || '').trim().slice(0, 7);
     const tz = Number(req.query.tzOffset);
     const filterQ = month && /^\d{4}-\d{2}$/.test(month) ? { month, tzOffset: tz } : { tzOffset: tz };
-    let all = scopedVehicles(req.dtUser);
-    all = applyFilters(all, filterQ);
-    // Admin/Hanouf dashboard always reflects full fleet for the month (not only own VINs)
-    if (canSeeAll(req.dtUser.role)) {
-      all = applyFilters(store.allVehicles(), filterQ);
-    }
+    // Full team fleet — everyone can see other users' schedules & sales-type mix
+    const teamFleet = applyFilters(store.allVehicles(), filterQ);
+    // Personal scope for employee KPIs
+    let mineScoped = scopedVehicles(req.dtUser);
+    mineScoped = applyFilters(mineScoped, filterQ);
     const today = todayIso(tz);
-    const todays = all.filter((v) => v.raw.proformaDate === today);
-    const assigned = all.filter((v) => v.ops.assignedEmployeeId);
-    const unassigned = all.filter((v) => !v.ops.assignedEmployeeId);
+    const todays = teamFleet.filter((v) => v.raw.proformaDate === today);
+    const assigned = teamFleet.filter((v) => v.ops.assignedEmployeeId);
+    const unassigned = teamFleet.filter((v) => !v.ops.assignedEmployeeId);
     const byStatus = {};
     STATUSES.forEach((s) => { byStatus[s] = 0; });
     let blankStatus = 0;
-    all.forEach((v) => {
+    teamFleet.forEach((v) => {
       const s = v.ops.opsStatus;
       if (s && byStatus[s] != null) byStatus[s] += 1;
       else if (!s) blankStatus += 1;
@@ -490,7 +644,7 @@ function createDeliveryTeamRouter(opts) {
 
     const employees = ASSIGNABLE_NAMES.map((name) => {
       const id = name.toLowerCase();
-      const mine = all.filter((v) => v.ops.assignedEmployeeId === id);
+      const mine = assigned.filter((v) => v.ops.assignedEmployeeId === id);
       const done = mine.filter((v) => v.ops.opsStatus === COMPLETED_STATUS);
       const rem = mine.length - done.length;
       const pct = mine.length ? Math.round((done.length / mine.length) * 100) : 0;
@@ -513,7 +667,7 @@ function createDeliveryTeamRouter(opts) {
     const mine = canSeeAll(req.dtUser.role)
       ? null
       : (() => {
-        const rows = all;
+        const rows = mineScoped.filter((v) => v.ops.assignedEmployeeId);
         const done = rows.filter((v) => v.ops.opsStatus === COMPLETED_STATUS);
         const salesTypes = {};
         rows.forEach((v) => {
@@ -566,7 +720,7 @@ function createDeliveryTeamRouter(opts) {
       month: month || '',
       months,
       totals: {
-        total: all.length,
+        total: teamFleet.length,
         todaysProformas: todays.length,
         assigned: assigned.length,
         unassigned: unassigned.length,
@@ -663,44 +817,74 @@ function createDeliveryTeamRouter(opts) {
       if (!sheetNames.length) {
         return res.status(400).json({ error: 'No worksheet found in workbook' });
       }
-      // CRITICAL: first worksheet only
-      const sheetName = sheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      if (!sheet) return res.status(400).json({ error: 'First worksheet is missing' });
 
-      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, cellDates: true });
-      if (!matrix.length) {
-        return res.status(400).json({ error: 'First worksheet is empty' });
-      }
-
-      let headerIdx = 0;
-      let bestHits = -1;
       const vinAliases = HEADER_MAP.vin.map(normalizeHeader);
       const pfAliases = HEADER_MAP.proformaDate.map(normalizeHeader);
-      for (let i = 0; i < Math.min(matrix.length, 30); i += 1) {
-        const cells = (matrix[i] || []).map((c) => normalizeHeader(c));
-        if (!cells.some(Boolean)) continue;
-        const hits = cells.filter((c) => vinAliases.some((a) => c === a || c.includes(a))
-          || pfAliases.some((a) => c === a || c.includes(a))
-          || c.includes('product')
-          || c.includes('sales order')).length;
-        if (hits > bestHits) {
-          bestHits = hits;
-          headerIdx = i;
+
+      function scoreSheet(name) {
+        const sh = workbook.Sheets[name];
+        if (!sh) return { name, score: -1, headerIdx: 0, matrix: [] };
+        const matrix = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '', raw: true, cellDates: true });
+        let headerIdx = 0;
+        let bestHits = -1;
+        for (let i = 0; i < Math.min(matrix.length, 40); i += 1) {
+          const cells = (matrix[i] || []).map((c) => normalizeHeader(c));
+          if (!cells.some(Boolean)) continue;
+          const hits = cells.filter((c) => vinAliases.some((a) => c === a || c.includes(a))
+            || pfAliases.some((a) => c === a || c.includes(a))
+            || c.includes('product')
+            || c.includes('sales order')
+            || c.includes('الشاس')
+            || c.includes('الناقل')
+            || c.includes('الحالة')).length;
+          if (hits > bestHits) {
+            bestHits = hits;
+            headerIdx = i;
+          }
         }
-        if (hits >= 2) break;
+        let score = bestHits;
+        const n = String(name || '').toLowerCase();
+        if (/e\s*sales|esales|delivery\s*sheet|تسليم/i.test(n)) score += 20;
+        if (isDeliverySheetHeaders((matrix[headerIdx] || []).map((h) => String(h == null ? '' : h).trim()))) {
+          score += 10;
+        }
+        return { name, score, headerIdx, matrix, bestHits };
       }
+
+      // Prefer «E sales» / Delivery sheet; fall back to best-scoring sheet with VIN column
+      let picked = null;
+      const preferred = sheetNames.find((n) => /^e\s*sales$/i.test(String(n).trim()))
+        || sheetNames.find((n) => /e\s*sales|esales/i.test(String(n)));
+      if (preferred) {
+        const cand = scoreSheet(preferred);
+        if (cand.bestHits >= 1) picked = cand;
+      }
+      if (!picked) {
+        const ranked = sheetNames.map(scoreSheet).sort((a, b) => b.score - a.score);
+        picked = ranked[0];
+      }
+      if (!picked || picked.bestHits < 1 || !picked.matrix.length) {
+        return res.status(400).json({
+          error: 'No Delivery sheet found — expected a worksheet with رقم الشاسية / VIN (e.g. «E sales»)',
+        });
+      }
+
+      const sheetName = picked.name;
+      const matrix = picked.matrix;
+      const headerIdx = picked.headerIdx;
       const headerRow = matrix[headerIdx] || [];
       const headers = headerRow.map((h, i) => {
         const t = String(h == null ? '' : h).trim();
         return t || `Column ${i + 1}`;
       });
+      const deliveryFmt = isDeliverySheetHeaders(headers);
+      const useLegacyCols = !deliveryFmt && isLegacyRawColHeaders(headers);
       const hasVin = headers.some((h) => {
         const n = normalizeHeader(h);
-        return vinAliases.some((a) => n === a || n.includes(a));
+        return vinAliases.some((a) => n === a || n.includes(a)) || n.includes('الشاس');
       });
       if (!hasVin) {
-        return res.status(400).json({ error: 'Missing VIN column — expected Chassis / VIN header on first worksheet' });
+        return res.status(400).json({ error: 'Missing VIN column — expected رقم الشاسية / Chassis / VIN' });
       }
 
       const today = todayIso(Number(req.headers['x-tz-offset']) || 180);
@@ -709,6 +893,7 @@ function createDeliveryTeamRouter(opts) {
       let updatedVins = 0;
       let todaysProformas = 0;
       let duplicateInFile = 0;
+      let opsImported = 0;
       const errors = [];
       const seenInFile = new Set();
       const uploadId = `up_${Date.now()}`;
@@ -718,7 +903,12 @@ function createDeliveryTeamRouter(opts) {
         if (line.every((c) => String(c == null ? '' : c).trim() === '')) continue;
         const obj = {};
         headers.forEach((h, i) => { obj[h] = line[i] != null ? line[i] : ''; });
-        const raw = mapRawRow(obj, line);
+        // Keep original blank header cells addressable for phone column
+        headerRow.forEach((h, i) => {
+          const key = String(h == null ? '' : h).trim() || `Column ${i + 1}`;
+          if (obj[key] === undefined) obj[key] = line[i] != null ? line[i] : '';
+        });
+        const raw = mapRawRow(obj, line, { useLegacyCols });
         const vinKey = normVin(raw.vin);
         if (!vinKey) {
           errors.push({ row: r + 1, error: 'Missing VIN' });
@@ -728,29 +918,41 @@ function createDeliveryTeamRouter(opts) {
         seenInFile.add(vinKey);
         rowsProcessed += 1;
 
+        const sheetOps = deliveryFmt ? mapOpsFromRow(obj) : {};
+        const hasSheetOps = Object.values(sheetOps).some((v) => String(v || '').trim() !== '');
+
         const existing = store.getVehicle(vinKey);
         if (!existing) {
+          let ops = emptyOps();
+          if (hasSheetOps) {
+            ops = mergeOpsFromSheet(ops, sheetOps);
+            opsImported += 1;
+          }
+          ops = assignFromPic(ops, raw.pic, req.dtUser.name);
           store.upsertVehicle(vinKey, {
             vin: vinKey,
             raw: { ...raw, vin: vinKey },
-            ops: emptyOps(),
+            ops,
             createdAt: new Date().toISOString(),
             rawUpdatedAt: new Date().toISOString(),
             lastUploadId: uploadId,
           });
           newVins += 1;
         } else {
-          existing.raw = { ...raw, vin: vinKey };
+          existing.raw = { ...existing.raw, ...raw, vin: vinKey };
           existing.rawUpdatedAt = new Date().toISOString();
           existing.lastUploadId = uploadId;
-          existing.ops = { ...emptyOps(), ...existing.ops };
-          OPS_FIELDS.forEach((f) => {
-            if (existing.ops[f] == null) existing.ops[f] = '';
-          });
+          let ops = { ...emptyOps(), ...existing.ops };
+          if (hasSheetOps) {
+            ops = mergeOpsFromSheet(ops, sheetOps);
+            opsImported += 1;
+          }
+          ops = assignFromPic(ops, raw.pic, req.dtUser.name);
+          existing.ops = ops;
           store.upsertVehicle(vinKey, existing);
           updatedVins += 1;
         }
-        if (raw.proformaDate === today) todaysProformas += 1;
+        if (raw.proformaDate === today || raw.date === today) todaysProformas += 1;
       }
 
       store.pushUpload({
@@ -762,6 +964,8 @@ function createDeliveryTeamRouter(opts) {
         updatedVins,
         todaysProformas,
         duplicateVins: duplicateInFile,
+        opsImported,
+        format: deliveryFmt ? 'delivery-sheet' : (useLegacyCols ? 'legacy-raw' : 'generic'),
         errors: errors.slice(0, 50),
         uploadedBy: req.dtUser.name,
       });
@@ -774,19 +978,30 @@ function createDeliveryTeamRouter(opts) {
       });
       store.save();
 
+      const syncHint = notifyRawUploaded({
+        rowsProcessed,
+        newVins,
+        updatedVins,
+        todaysProformas,
+        filename,
+      });
+
       return res.json({
         ok: true,
         sheetName,
         filename,
+        format: deliveryFmt ? 'delivery-sheet' : (useLegacyCols ? 'legacy-raw' : 'generic'),
         summary: {
           rowsProcessed,
           newVins,
           updatedVins,
           todaysProformas,
           duplicateVins: duplicateInFile,
+          opsImported,
           errors: errors.slice(0, 50),
           errorCount: errors.length,
         },
+        hubSync: syncHint || undefined,
       });
     } catch (err) {
       console.error('[delivery-team/upload]', err);
@@ -805,8 +1020,8 @@ function createDeliveryTeamRouter(opts) {
         error: `Select a valid person (${ASSIGNABLE_NAMES.join(' / ')})`,
       });
     }
-    if (carrierRaw && !CARRIERS.includes(carrierRaw)) {
-      return res.status(400).json({ error: 'Invalid الناقل / carrier' });
+    if (carrierRaw) {
+      // allow known list or free text from Delivery sheet
     }
 
     const results = [];
@@ -848,7 +1063,15 @@ function createDeliveryTeamRouter(opts) {
       results.push({ vin: key, ok: true, employee: emp.name, carrier: v.ops.carrier || '' });
     });
     store.save();
-    res.json({ ok: true, results });
+    const carrierItems = results
+      .filter((r) => r.ok && r.carrier)
+      .map((r) => {
+        const v = store.getVehicle(r.vin);
+        return v ? { vin: r.vin, carrier: r.carrier, vehicle: v, by: req.dtUser.name } : null;
+      })
+      .filter(Boolean);
+    const hubSync = notifyCarrierAssigned(carrierItems);
+    res.json({ ok: true, results, hubSync: hubSync || undefined });
   });
 
   /** Reassign VINs to another employee (or Hanouf). Employees may only move their own VINs. */
@@ -905,7 +1128,6 @@ function createDeliveryTeamRouter(opts) {
     const vins = Array.isArray(req.body.vins) ? req.body.vins : [req.body.vin];
     const carrier = String(req.body.carrier || '').trim();
     if (!carrier) return res.status(400).json({ error: 'اختر الناقل' });
-    if (!CARRIERS.includes(carrier)) return res.status(400).json({ error: 'Invalid الناقل / carrier' });
 
     const results = [];
     vins.forEach((rawVin) => {
@@ -934,7 +1156,23 @@ function createDeliveryTeamRouter(opts) {
       results.push({ vin: key, ok: true, carrier });
     });
     store.save();
-    res.json({ ok: true, results });
+    const carrierItems = results
+      .filter((r) => r.ok && r.carrier && !r.unchanged)
+      .map((r) => {
+        const v = store.getVehicle(r.vin);
+        return v ? { vin: r.vin, carrier: r.carrier, vehicle: v, by: req.dtUser.name } : null;
+      })
+      .filter(Boolean);
+    // Also sync unchanged carriers that may not be on coordinator yet
+    const allCarrierItems = results
+      .filter((r) => r.ok && r.carrier)
+      .map((r) => {
+        const v = store.getVehicle(r.vin);
+        return v ? { vin: r.vin, carrier: r.carrier, vehicle: v, by: req.dtUser.name } : null;
+      })
+      .filter(Boolean);
+    const hubSync = notifyCarrierAssigned(allCarrierItems.length ? allCarrierItems : carrierItems);
+    res.json({ ok: true, results, hubSync: hubSync || undefined });
   });
 
   router.post('/unassign', auth, requireRole('admin', 'hanouf'), (req, res) => {
@@ -964,7 +1202,7 @@ function createDeliveryTeamRouter(opts) {
 
   // ——— Ops update (employee / admin / hanouf) ———
   router.patch('/vehicles/:vin', auth, (req, res) => {
-    const v = assertVinAccess(req, res, req.params.vin);
+    const v = assertVinAccess(req, res, req.params.vin, { write: true });
     if (!v) return undefined;
     const body = req.body || {};
     const allowed = {
@@ -975,7 +1213,7 @@ function createDeliveryTeamRouter(opts) {
       registrationIssueDate: (x) => normalizeDate(x),
       vin1502: (x) => isYesNo(x) || (['Yes', 'No', ''].includes(String(x)) ? String(x) : ''),
       opsStatus: (x) => {
-        const s = String(x || '').trim();
+        const s = normalizeSheetStatus(x);
         if (!s) return '';
         if (!STATUSES.includes(s)) throw new Error(`Invalid status: ${s}`);
         return s;
@@ -986,13 +1224,13 @@ function createDeliveryTeamRouter(opts) {
       transferCity: (x) => {
         const s = String(x || '').trim();
         if (!s) return '';
-        if (!TRANSFER_CITIES.includes(s)) throw new Error('Invalid transfer city');
+        // Allow cities from Delivery sheet even if not in the static list
         return s;
       },
       carrier: (x) => {
         const s = String(x || '').trim();
         if (!s) return '';
-        if (!CARRIERS.includes(s)) throw new Error('Invalid carrier');
+        // Prefer known carriers; still accept sheet values (e.g. custom الناقل)
         return s;
       },
       notes: (x) => String(x == null ? '' : x),
@@ -1032,7 +1270,29 @@ function createDeliveryTeamRouter(opts) {
       v.ops.updatedAt = new Date().toISOString();
       store.upsertVehicle(v.vin, v);
       store.save();
-      return res.json({ ok: true, saved: true, vehicle: publicVehicle(v), lastUpdated: v.ops.updatedAt });
+      let hubSync;
+      const carrierChanged = Object.prototype.hasOwnProperty.call(body, 'carrier');
+      const cityChanged = Object.prototype.hasOwnProperty.call(body, 'transferCity');
+      if (carrierChanged || cityChanged) {
+        const carrier = String(v.ops.carrier || '').trim();
+        const transferCity = String(v.ops.transferCity || '').trim();
+        if (carrier || transferCity) {
+          hubSync = notifyCarrierAssigned([{
+            vin: v.vin,
+            carrier,
+            transferCity,
+            vehicle: v,
+            by: req.dtUser.name,
+          }]);
+        }
+      }
+      return res.json({
+        ok: true,
+        saved: true,
+        vehicle: publicVehicle(v),
+        lastUpdated: v.ops.updatedAt,
+        hubSync: hubSync || undefined,
+      });
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Update failed' });
     }
@@ -1061,7 +1321,7 @@ function createDeliveryTeamRouter(opts) {
 
   /** Schedule / reschedule Guest Exp customer collection (Ruba) */
   router.post('/vehicles/:vin/guest-schedule', auth, (req, res) => {
-    const v = assertVinAccess(req, res, req.params.vin);
+    const v = assertVinAccess(req, res, req.params.vin, { write: true });
     if (!v) return undefined;
     if (!canManageGuest(req, v)) {
       return res.status(403).json({ error: 'Only Ruba (on her VINs) or Admin/Hanouf can schedule Guest Exp' });
@@ -1092,7 +1352,7 @@ function createDeliveryTeamRouter(opts) {
 
   /** After timer: mark collected (then optional status) or reschedule */
   router.post('/vehicles/:vin/guest-collect', auth, (req, res) => {
-    const v = assertVinAccess(req, res, req.params.vin);
+    const v = assertVinAccess(req, res, req.params.vin, { write: true });
     if (!v) return undefined;
     if (!canManageGuest(req, v)) {
       return res.status(403).json({ error: 'Only Ruba (on her VINs) or Admin/Hanouf can confirm Guest Exp collection' });
@@ -1170,59 +1430,79 @@ function createDeliveryTeamRouter(opts) {
   });
 
   router.get('/export', auth, requireRole('admin', 'hanouf'), (req, res) => {
-    // Hanouf/Admin export = assigned VINs only (not full Raw Data dump)
-    const assignedOnly = store.allVehicles().filter((v) => v.ops && v.ops.assignedEmployeeId);
-    const rows = sortVehicles(assignedOnly, 'proformaDate', 'desc').map((v) => ({
-      'Proforma Invoice Date': v.raw.proformaDate || '',
-      'Sales Order Number': v.raw.salesOrder || '',
-      VIN: v.vin,
-      Product: v.raw.product || '',
-      'Sales Type': v.raw.salesType || '',
-      'Invoice Owner': v.raw.invoiceOwner || '',
-      'Customer Name': maskPersonName(v.raw.userName),
-      'S/A': v.raw.salesAdvisor || '',
-      'GT Location': v.raw.gtLocation || '',
-      'Vehicle Location': v.raw.vehicleLocation || '',
-      'Phone Number': '',
-      'Assigned Employee': v.ops.assignedEmployeeName || '',
-      'Guest Sent Date': v.ops.guestSentDate || '',
-      'Signature Received Date': v.ops.signatureReceivedDate || '',
-      'File Sent to Accounts': v.ops.accountsSentDate || '',
-      'Accounts Approval Date': v.ops.accountsApprovalDate || '',
-      'Current VIN 1502': v.ops.vin1502 || '',
-      Status: v.ops.opsStatus || '',
-      'Traffic File': v.ops.trafficFile || '',
-      'Traffic Fees': v.ops.trafficFeesOps || '',
-      Insurance: v.ops.insuranceOps || '',
-      'Registration Issue Date': v.ops.registrationIssueDate || '',
-      'Transfer City': v.ops.transferCity || '',
-      Carrier: v.ops.carrier || '',
-      'Guest Experience': isGuestCenterRaw(v.raw, v.ops) ? 'Yes' : '',
-      'Guest Collect At': v.ops.guestCollectAt || '',
-      'Guest Collected': v.ops.guestCollected || '',
-      Notes: v.ops.notes || '',
-      'Assigned By': v.ops.assignedBy || '',
-      'Assigned Date': v.ops.assignedAt || '',
-      'Last Updated': v.ops.updatedAt || '',
-    }));
+    const assignedOnly = String(req.query.assigned || '') === '1' || String(req.query.assigned || '') === 'yes';
+    const list = sortVehicles(
+      store.allVehicles().filter((v) => (assignedOnly ? (v.ops && v.ops.assignedEmployeeId) : true)),
+      'proformaDate',
+      'desc'
+    );
 
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ VIN: '(no assigned VINs)' }]);
+    const ynOut = (v) => {
+      const s = String(v || '').trim();
+      if (!s) return '';
+      if (/^yes$/i.test(s)) return 'yes ';
+      if (/^no$/i.test(s)) return 'no ';
+      return s;
+    };
+
+    const matrix = [E_SALES_EXPORT_HEADERS.slice()];
+    list.forEach((v) => {
+      const raw = v.raw || {};
+      const ops = v.ops || {};
+      const pic = ops.assignedEmployeeName || raw.pic || '';
+      matrix.push([
+        raw.date || raw.proformaDate || '',
+        raw.salesOrder || '',
+        v.vin || '',
+        raw.product || '',
+        raw.damage || '',
+        pic,
+        raw.salesType || '',
+        raw.invoiceOwner || '',
+        raw.userName || '',
+        raw.salesAdvisor || '',
+        ops.guestSentDate || '',
+        ops.signatureReceivedDate || '',
+        ops.accountsSentDate || '',
+        ops.accountsApprovalDate || '',
+        ynOut(ops.vin1502),
+        raw.gtLocation || '',
+        raw.vehicleLocation || '',
+        ops.opsStatus || raw.status || '',
+        ynOut(ops.trafficFile),
+        ynOut(ops.trafficFeesOps),
+        ynOut(ops.insuranceOps),
+        ops.registrationIssueDate || raw.registrationDate || '',
+        ops.notes || '',
+        ops.transferCity || '',
+        ops.carrier || '',
+        raw.financeOfficer || '',
+        raw.salesType || '',
+        raw.salePlace || '',
+        raw.phone || '',
+        '', '', '',
+        raw.deliveryDate || '',
+        '', '', '', '', '', '', '', '',
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(matrix.length > 1 ? matrix : [E_SALES_EXPORT_HEADERS.slice(), []]);
     ws['!autofilter'] = { ref: ws['!ref'] || 'A1' };
     ws['!freeze'] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Assigned VINs');
+    XLSX.utils.book_append_sheet(wb, ws, 'E sales');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     store.pushAudit({
       vin: '',
       user: req.dtUser.name,
       action: 'export_excel',
       oldValue: '',
-      newValue: `${assignedOnly.length} assigned VINs`,
+      newValue: `${list.length} VINs · E sales format`,
     });
     store.save();
-    const fname = `delivery-team-assigned-${todayIso()}.xlsx`;
+    const fname = `Delivery sheet ${todayIso()}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fname)}"`);
     return res.send(buf);
   });
 

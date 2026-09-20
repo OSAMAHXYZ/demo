@@ -18,6 +18,8 @@
     vinQ: "",
     drill: "", // kpi key for VIN list
     ageBucket: "",
+    scheduleTitle: "",
+    scheduleList: null,
   };
 
   let lastModel = null;
@@ -771,8 +773,41 @@
     if (!wrap || !table) return;
     if (!view.drill) {
       wrap.hidden = true;
+      view.scheduleList = null;
+      view.scheduleTitle = "";
       return;
     }
+
+    if (view.drill === "schedule") {
+      const rows = Array.isArray(view.scheduleList) ? view.scheduleList : [];
+      wrap.hidden = false;
+      if (title) title.textContent = view.scheduleTitle || "Schedule VINs";
+      if (!rows.length) {
+        table.innerHTML = `<p class="foot" style="padding:12px">No VINs in this cell.</p>`;
+        try { wrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) { /* ignore */ }
+        return;
+      }
+      table.innerHTML = `<table class="bas-table">
+        <thead><tr>
+          <th>VIN</th><th>Product</th><th>SFX</th><th>Alloc Date</th>
+          <th class="num">Age</th><th>Search Area</th><th>Location</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td class="mono">${esc(r.vin)}</td>
+          <td>${esc(r.product || "—")}</td>
+          <td>${esc(r.suffix || "—")}</td>
+          <td>${esc(fmtDate(r.allocationDate))}</td>
+          <td class="num">${r.allocationAge == null ? "—" : num(r.allocationAge)}</td>
+          <td>${esc(r.searchArea || "—")}</td>
+          <td>${esc(r.location || "—")}</td>
+          <td>${esc(r.status || "—")}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+      <p class="foot">${num(rows.length)} VIN(s)</p>`;
+      try { wrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) { /* ignore */ }
+      return;
+    }
+
     const isProgress = view.drill === "progress" || view.drill === "totalReceived";
     const rows = isProgress ? totalReceivedRows(model) : drillRows(model);
     const labels = {
@@ -891,6 +926,12 @@
     }
   }
 
+  function emptyDayVins() {
+    const arr = Array(31);
+    for (let i = 0; i < 31; i += 1) arr[i] = [];
+    return arr;
+  }
+
   function buildScheduleRows(model) {
     const allocRows = global.ALLOCATION_ROWS || [];
     const values = global.allocationValues || {};
@@ -905,7 +946,9 @@
       sfx: "—",
       allocation: 0,
       dayCounts: Array(31).fill(0),
+      dayVins: emptyDayVins(),
       mtd: 0,
+      mtdVins: [],
       seen: new Set(),
     };
 
@@ -918,7 +961,9 @@
         sfx: leaf.sfx || "—",
         allocation: Number(values[leaf.id]) || 0,
         dayCounts: Array(31).fill(0),
+        dayVins: emptyDayVins(),
         mtd: 0,
+        mtdVins: [],
         seen: new Set(),
       });
     });
@@ -950,7 +995,9 @@
         if (row.seen.has(vin)) return;
         row.seen.add(vin);
         row.dayCounts[placeDay] += 1;
+        row.dayVins[placeDay].push(r);
         row.mtd += 1;
+        row.mtdVins.push(r);
       });
     });
 
@@ -961,6 +1008,20 @@
         || String(a.sfx).localeCompare(String(b.sfx)));
     if (unmatched.mtd > 0) rows.push(unmatched);
     return rows;
+  }
+
+  function showScheduleVinDrill(model, list, titleText) {
+    view.drill = "schedule";
+    view.scheduleTitle = titleText || "Schedule VINs";
+    view.scheduleList = Array.isArray(list) ? list : [];
+    renderDrill(model);
+    renderKpis(model);
+    renderProgress(model);
+  }
+
+  function scheduleCellButton(n, attrs, extraCls) {
+    if (!n) return "";
+    return `<button type="button" class="pt-linknum pt-sched-num${extraCls ? ` ${extraCls}` : ""}" ${attrs}>${num(n)}</button>`;
   }
 
   function renderSchedule(model) {
@@ -987,11 +1048,12 @@
     const body = rows.map((r) => {
       const rowGap = r.allocation - r.mtd;
       const gapCls = rowGap > 0 ? "bas-gap-pos" : rowGap < 0 ? "bas-gap-neg" : "";
+      const rowId = esc(r.id);
       const dayCells = Array.from({ length: 30 }, (_, i) => {
         const day = i + 1;
         const n = r.dayCounts[day] || 0;
         const cls = day === todayDay ? "is-today" : "";
-        return `<td class="num bas-day-cell ${cls}${n ? " has-val" : ""}">${n || ""}</td>`;
+        return `<td class="num bas-day-cell ${cls}${n ? " has-val is-clickable" : ""}">${scheduleCellButton(n, `data-pt-sched-row="${rowId}" data-pt-sched-day="${day}"`)}</td>`;
       }).join("");
       return `<tr>
         <td>${esc(r.seg)}</td>
@@ -999,7 +1061,7 @@
         <td>${esc(r.sfx)}</td>
         <td class="num">${num(r.allocation)}</td>
         ${dayCells}
-        <td class="num"><b>${num(r.mtd)}</b></td>
+        <td class="num${r.mtd ? " has-val is-clickable" : ""}"><b>${scheduleCellButton(r.mtd, `data-pt-sched-row="${rowId}" data-pt-sched-day="mtd"`) || num(r.mtd)}</b></td>
         <td class="num ${gapCls}">${rowGap > 0 ? "+" : ""}${num(rowGap)}</td>
       </tr>`;
     }).join("");
@@ -1007,12 +1069,20 @@
     const totals = rows.reduce((acc, r) => {
       acc.mtd += r.mtd;
       acc.alloc += r.allocation;
-      for (let d = 1; d <= 30; d += 1) acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
+      for (let d = 1; d <= 30; d += 1) {
+        acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
+        if (!acc.dayVins[d]) acc.dayVins[d] = [];
+        (r.dayVins[d] || []).forEach((v) => acc.dayVins[d].push(v));
+      }
+      (r.mtdVins || []).forEach((v) => acc.mtdVins.push(v));
       return acc;
-    }, { mtd: 0, alloc: 0, days: {} });
+    }, { mtd: 0, alloc: 0, days: {}, dayVins: emptyDayVins(), mtdVins: [] });
+    model.scheduleTotals = totals;
+
     const totalDayCells = Array.from({ length: 30 }, (_, i) => {
-      const n = totals.days[i + 1] || 0;
-      return `<td class="num"><b>${n || ""}</b></td>`;
+      const day = i + 1;
+      const n = totals.days[day] || 0;
+      return `<td class="num bas-day-cell${n ? " has-val is-clickable" : ""}"><b>${scheduleCellButton(n, `data-pt-sched-row="__total__" data-pt-sched-day="${day}"`, "pt-sched-total") || ""}</b></td>`;
     }).join("");
     const totalGap = totals.alloc - totals.mtd;
 
@@ -1027,15 +1097,51 @@
         <td colspan="3"><b>Total</b></td>
         <td class="num"><b>${num(totals.alloc)}</b></td>
         ${totalDayCells}
-        <td class="num"><b>${num(totals.mtd)}</b></td>
+        <td class="num${totals.mtd ? " has-val is-clickable" : ""}"><b>${scheduleCellButton(totals.mtd, `data-pt-sched-row="__total__" data-pt-sched-day="mtd"`, "pt-sched-total") || num(totals.mtd)}</b></td>
         <td class="num"><b>${totalGap > 0 ? "+" : ""}${num(totalGap)}</b></td>
       </tr>
       </tbody>
     </table>`;
 
     if (footEl) {
-      footEl.textContent = `${num(totals.mtd)} plan receipts on schedule · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · scroll days 1–30`;
+      footEl.textContent = `${num(totals.mtd)} plan receipts on schedule · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · click any number for VINs · scroll days 1–30`;
     }
+
+    $$("[data-pt-sched-row]", tableEl).forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rowId = btn.getAttribute("data-pt-sched-row") || "";
+        const dayKey = btn.getAttribute("data-pt-sched-day") || "";
+        let list = [];
+        let label = "";
+        if (rowId === "__total__") {
+          if (dayKey === "mtd") {
+            list = (model.scheduleTotals && model.scheduleTotals.mtdVins) || [];
+            label = `Total · all MTD receipts · ${num(list.length)} VIN(s)`;
+          } else {
+            const day = Number(dayKey);
+            list = (model.scheduleTotals && model.scheduleTotals.dayVins && model.scheduleTotals.dayVins[day]) || [];
+            label = `Total · day ${day} · ${num(list.length)} VIN(s)`;
+          }
+        } else {
+          const row = (model.scheduleRows || []).find((r) => r.id === rowId);
+          if (!row) return;
+          const prodLabel = row.product === "(unmatched)"
+            ? "Unmatched"
+            : `${row.product} · ${row.sfx}`;
+          if (dayKey === "mtd") {
+            list = row.mtdVins || [];
+            label = `${prodLabel} · MTD · ${num(list.length)} VIN(s)`;
+          } else {
+            const day = Number(dayKey);
+            list = (row.dayVins && row.dayVins[day]) || [];
+            label = `${prodLabel} · day ${day} · ${num(list.length)} VIN(s)`;
+          }
+        }
+        showScheduleVinDrill(model, list, label);
+      });
+    });
   }
 
   function renderFreeStock(model) {

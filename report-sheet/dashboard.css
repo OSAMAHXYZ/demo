@@ -5514,6 +5514,20 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   background: rgba(61, 154, 106, 0.08);
   border-radius: 6px;
 }
+.bas-month-grid .bas-day-cell.is-clickable,
+.bas-month-grid td.is-clickable {
+  cursor: pointer;
+}
+.bas-month-grid .pt-sched-num {
+  color: inherit;
+  text-decoration: none;
+  display: inline-block;
+  min-width: 1.2em;
+}
+.bas-month-grid .pt-sched-num:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 .bas-month-grid .bas-row-total td {
   background: linear-gradient(180deg, #eef4fa, #e4edf6);

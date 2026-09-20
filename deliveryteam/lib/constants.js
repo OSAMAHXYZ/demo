@@ -33,6 +33,30 @@ const CARRIERS = Object.freeze([
   'احد الفرسان',
 ]);
 
+/**
+ * Map Delivery Team الناقل → Delivery Coordinator company board name
+ * (مذكرة ترحيل / لوحات الشركات).
+ */
+const CARRIER_TO_COORDINATOR_COMPANY = Object.freeze({
+  'طريق الراسي': 'الطريق الراسي',
+  'درب الرياض': 'شركه درب الرياض',
+  'ذكاء جميل': 'ذكاء جميل',
+  'الحسناء': 'شركه الحسناء',
+  'البستان الجميل': 'البستان الجميل',
+  'سعيد البسامي': 'شركه سعيد محي البسامي',
+  'اريكو': 'شركه اريكو ( شركه طارق محمد العريفي )',
+  'وسم الثريا': 'وسم الثريا',
+  'احد الفرسان': 'احد الفرسان',
+});
+
+function mapCarrierToCoordinatorCompany(carrier) {
+  const key = String(carrier || '').trim();
+  if (!key) return '';
+  if (CARRIER_TO_COORDINATOR_COMPANY[key]) return CARRIER_TO_COORDINATOR_COMPANY[key];
+  // Already a full company name
+  return key;
+}
+
 const TRANSFER_CITIES = Object.freeze([
   'بقيق', 'الدمام', 'الظهران', 'راس تنورة', 'الهفوف', 'الخبر', 'القطيف', 'الجبيل', 'الاحساء',
   'الباحة', 'المخواة', 'بلجرشي', 'المندق', 'الجوف', 'سكاكا', 'القريات', 'عرعر', 'رفحاء', 'طريف',
@@ -67,29 +91,121 @@ const USERS = Object.freeze([
 
 /** Excel header aliases → canonical raw field keys */
 const HEADER_MAP = Object.freeze({
-  date: ['date', 'تاريخ'],
-  salesOrder: ['sales order no', 'sales order', 'sales order number', 'order number', 'order no', 'so', 'رقم الطلب'],
-  vin: ['chassis / vin', 'chassis', 'vin', 'vin number', 'chassis number', 'رقم الشاصي', 'الشاصي'],
+  date: ['date', 'تاريخ', 'تاريخ '],
+  salesOrder: [
+    'sales order no', 'sales order', 'sales order number', 'order number', 'order no', 'so',
+    'رقم الطلب', 'sales order no رقم الطلب',
+  ],
+  vin: [
+    'chassis / vin', 'chassis', 'vin', 'vin number', 'chassis number',
+    'رقم الشاصي', 'الشاصي', 'رقم الشاسية', 'رقم الشاسيه', 'الشاسية',
+  ],
   product: ['product', 'product name', 'model', 'المنتج'],
+  damage: ['damage', 'ضرر'],
   pic: ['pic'],
-  salesType: ['sales type', 'نوع البيع'],
+  salesType: ['sales type', 'نوع البيع', 'طريقة البيع'],
   invoiceOwner: ['invoice owner', 'مالك الفاتورة'],
-  // Customer name (Raw Data column O) — keep legacy "user name" headers too
-  userName: ['customer name', 'customer', 'اسم العميل', 'اسم الزبون', 'user name', 'username', 'اسم المستخدم'],
+  userName: [
+    'customer name', 'customer', 'اسم العميل', 'اسم الزبون',
+    'user name', 'username', 'اسم المستخدم',
+  ],
   salesAdvisor: ['s/a', 'sa', 's a', 'sales advisor', 'مستشار المبيعات'],
   proformaDate: ['proforma date', 'proforma invoice date', 'pro forma date', 'تاريخ البروفورما'],
   deliveryDate: ['delivery date', 'تاريخ التسليم'],
   gtLocation: ['gt location', 'gt', 'موقع gt'],
   vehicleLocation: ['vehicle location', 'موقع المركبة', 'location'],
-  phone: ['phone number', 'phone', 'mobile', 'رقم الجوال', 'الجوال'],
-  status: ['status', 'الحالة'],
-  traffic: ['traffic', 'المرور'],
-  trafficFees: ['traffic fees', 'رسوم المرور'],
-  insurance: ['insurance', 'التأمين'],
-  registrationDate: ['registration date', 'تاريخ الاستمارة'],
+  phone: ['phone number', 'phone', 'mobile', 'رقم الجوال', 'الجوال', 'contact'],
+  status: ['status', 'الحالة', 'الحالة status'],
+  traffic: ['traffic', 'المرور', 'ملف المرور'],
+  trafficFees: ['traffic fees', 'رسوم المرور', 'السداد traffic fees', 'السداد'],
+  insurance: ['insurance', 'التأمين', 'التأمين insurance'],
+  registrationDate: [
+    'registration date', 'تاريخ الاستمارة',
+    'تاريخ اصدار الاستماره registration date', 'تاريخ اصدار الاستماره',
+  ],
+  financeOfficer: ['اسم مسؤول التمويل', 'finance officer'],
+  salePlace: ['مكان البيع', 'sale place', 'place of sale'],
 });
 
-/** Fixed Raw Data letter positions (0-based): D = Order, N = Invoice Owner, O = Customer Name, Y = Phone */
+/** Ops columns in Delivery sheet / E sales */
+const OPS_HEADER_MAP = Object.freeze({
+  guestSentDate: ['تاريخ إرسال الضيف', 'guest sent date'],
+  signatureReceivedDate: ['تاريخ استلام التواقيع من الضيف', 'signature received'],
+  accountsSentDate: [
+    'تاريخ ارسال الملف للحسابات submission date',
+    'تاريخ إرسال الملف للحسابات',
+    'accounts sent', 'submission date',
+  ],
+  accountsApprovalDate: [
+    'تاريخ استلام موافقة الحسابات',
+    'تاريخ موافقة الحسابات',
+    'accounts approval',
+  ],
+  vin1502: ['current vin 1502 tele sales', 'current vin 1502', 'vin 1502'],
+  opsStatus: ['الحالة status', 'الحالة', 'status', 'ops status'],
+  trafficFile: ['ملف المرور', 'traffic file'],
+  trafficFeesOps: ['السداد traffic fees', 'السداد', 'traffic fees'],
+  insuranceOps: ['التأمين insurance', 'التأمين', 'insurance'],
+  registrationIssueDate: [
+    'تاريخ اصدار الاستماره registration date',
+    'تاريخ إصدار الاستمارة',
+    'registration issue date',
+  ],
+  notes: ['الملاحظات remarks', 'الملاحظات', 'remarks', 'notes'],
+  transferCity: ['مدينة الترحيل', 'transfer city', 'city'],
+  carrier: ['الناقل', 'carrier', 'transporter'],
+});
+
+/**
+ * Exact export headers for Delivery sheet «E sales» layout
+ * (must stay in this order for re-upload compatibility).
+ */
+const E_SALES_EXPORT_HEADERS = Object.freeze([
+  'تاريخ ',
+  'Sales Order No.رقم الطلب',
+  'رقم الشاسية ',
+  'Product',
+  'damage',
+  'PIC',
+  'Sales Type',
+  'Invoice owner',
+  'User Name',
+  'S/A',
+  'تاريخ إرسال الضيف',
+  'تاريخ استلام التواقيع من الضيف',
+  'تاريخ ارسال الملف للحسابات submission date',
+  'تاريخ استلام موافقة الحسابات',
+  'Current vin 1502 Tele sales',
+  'GT',
+  'Vehicle Location',
+  'الحالة Status',
+  'ملف المرور',
+  'السداد Traffic fees',
+  'التأمين insurance',
+  'تاريخ اصدار الاستماره registration date',
+  'الملاحظات Remarks ',
+  'مدينة الترحيل',
+  'الناقل',
+  'اسم مسؤول التمويل',
+  'طريقة البيع ',
+  'مكان البيع',
+  '', // phone / contact (unnamed in source sheet)
+  'Center Arrival-Submission LT',
+  'Submission - Registeration',
+  'Sales Type2',
+  'Delivery Date',
+  'Registration - Delivery',
+  'LT',
+  'Proforma-Reg.2',
+  'Center Arrival to Delivery',
+  'Age from PI  to Date',
+  'Age',
+  'Center Arrival Date',
+  'PI-Delivery',
+  'PIAging',
+]);
+
+/** Fixed Raw Data letter positions (legacy admin dump): D/N/O/Y — only when format detected */
 const RAW_COL = Object.freeze({
   salesOrder: 3, // D
   invoiceOwner: 13, // N
@@ -97,7 +213,7 @@ const RAW_COL = Object.freeze({
   phone: 24, // Y
 });
 
-/** Operational fields employees own — never overwritten by Raw Data upload */
+/** Operational fields employees own — never wiped blank by Raw Data upload */
 const OPS_FIELDS = Object.freeze([
   'guestSentDate',
   'signatureReceivedDate',
@@ -116,7 +232,6 @@ const OPS_FIELDS = Object.freeze([
   'assignedEmployeeName',
   'assignedBy',
   'assignedAt',
-  // Guest Experience (Ruba) — customer collection appointment
   'guestCenter',
   'guestCollectAt',
   'guestCollected',
@@ -143,11 +258,15 @@ module.exports = {
   COMPLETED_STATUS,
   YES_NO,
   CARRIERS,
+  CARRIER_TO_COORDINATOR_COMPANY,
+  mapCarrierToCoordinatorCompany,
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
   ASSIGNABLE_NAMES,
   USERS,
   HEADER_MAP,
+  OPS_HEADER_MAP,
+  E_SALES_EXPORT_HEADERS,
   RAW_COL,
   OPS_FIELDS,
   isGuestCenterRaw,
