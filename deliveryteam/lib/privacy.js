@@ -1,34 +1,50 @@
 'use strict';
 
 /**
- * Display helpers for customer PII.
- * Delivery Team shows full names and phone numbers to signed-in staff.
+ * Delivery Team privacy — never capture or expose customer name,
+ * invoice owner, or phone numbers.
  */
 
-function maskPersonName(value) {
-  const s = String(value == null ? '' : value).trim();
-  return s || '—';
+const PII_KEYS = Object.freeze(['invoiceOwner', 'userName', 'phone']);
+
+function maskPersonName(_value) {
+  return '—';
 }
 
-function maskPhone(value) {
-  const s = String(value == null ? '' : value).trim();
-  return s;
+function maskPhone(_value) {
+  return '—';
 }
 
-function phoneDisplay(value) {
-  const s = String(value == null ? '' : value).trim();
-  return s || '—';
+function phoneDisplay(_value) {
+  return '—';
 }
 
-/** Pass-through copy (kept for callers that still use redactRawPii). */
+/** Strip PII fields from a raw row (upload / store). */
+function stripRawPii(raw) {
+  if (!raw || typeof raw !== 'object') return raw || {};
+  const out = { ...raw };
+  PII_KEYS.forEach((k) => {
+    out[k] = '';
+  });
+  return out;
+}
+
+/** Redact PII for API / UI responses (existing store may still hold old values). */
 function redactRawPii(raw) {
   if (!raw || typeof raw !== 'object') return raw;
-  return { ...raw };
+  return {
+    ...raw,
+    invoiceOwner: '—',
+    userName: '—',
+    phone: '—',
+  };
 }
 
 module.exports = {
+  PII_KEYS,
   maskPersonName,
   maskPhone,
   phoneDisplay,
+  stripRawPii,
   redactRawPii,
 };

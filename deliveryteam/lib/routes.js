@@ -19,7 +19,7 @@ const {
   isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
-const { phoneDisplay } = require('./privacy');
+const { phoneDisplay, stripRawPii, redactRawPii } = require('./privacy');
 
 function na(v) {
   const s = String(v == null ? '' : v).trim();
@@ -167,17 +167,6 @@ function normalizeYnLoose(v) {
   return '';
 }
 
-function findPhoneInLine(line) {
-  if (!Array.isArray(line)) return '';
-  for (const cell of line) {
-    const digits = String(cell == null ? '' : cell).replace(/\D/g, '');
-    if (digits.length === 10 && digits.startsWith('05')) return digits;
-    if (digits.length === 12 && digits.startsWith('9665')) return `0${digits.slice(3)}`;
-    if (digits.length === 9 && digits.startsWith('5')) return `0${digits}`;
-  }
-  return '';
-}
-
 function isDeliverySheetHeaders(headers) {
   const norms = (headers || []).map((h) => normalizeHeader(h));
   const hasVinAr = norms.some((n) => n.includes('الشاس') || n.includes('شاسية') || n.includes('شاسيه'));
@@ -233,26 +222,28 @@ function cellText(line, idx) {
 function mapRawRow(row, line, { useLegacyCols = false } = {}) {
   const raw = {};
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
+    // Never capture customer name, invoice owner, or phone
+    if (key === 'invoiceOwner' || key === 'userName' || key === 'phone') {
+      raw[key] = '';
+      continue;
+    }
     raw[key] = pickCol(row, aliases);
   }
   // Legacy fixed columns only for classic Raw Data dumps (not Delivery sheet / E sales)
+  // Skip invoice owner / customer / phone columns entirely.
   if (useLegacyCols && Array.isArray(line) && line.length) {
     const so = cellText(line, RAW_COL.salesOrder);
-    const inv = cellText(line, RAW_COL.invoiceOwner);
-    const cust = cellText(line, RAW_COL.customerName);
-    const ph = cellText(line, RAW_COL.phone);
     if (so) raw.salesOrder = so;
-    if (inv) raw.invoiceOwner = inv;
-    if (cust) raw.userName = cust;
-    if (ph) raw.phone = ph;
   }
-  if (!raw.phone) raw.phone = findPhoneInLine(line);
+  raw.invoiceOwner = '';
+  raw.userName = '';
+  raw.phone = '';
   // Delivery sheet uses تاريخ as the main date (treat as proforma when missing)
   raw.proformaDate = normalizeDate(raw.proformaDate) || normalizeDate(raw.date);
   raw.deliveryDate = normalizeDate(raw.deliveryDate);
   raw.registrationDate = normalizeDate(raw.registrationDate);
   raw.date = normalizeDate(raw.date) || raw.date;
-  return raw;
+  return stripRawPii(raw);
 }
 
 function mapOpsFromRow(row) {
@@ -315,27 +306,28 @@ function publicVehicle(v) {
       guestDue = guestTimerMs <= 0 && String(ops.guestCollected || '') !== 'Yes';
     }
   }
+  const safeRaw = redactRawPii(v.raw || {});
   return {
     vin: v.vin,
     raw: {
-      date: na(v.raw.date),
-      salesOrder: na(v.raw.salesOrder),
-      product: na(v.raw.product),
-      pic: na(v.raw.pic),
-      salesType: na(v.raw.salesType),
-      invoiceOwner: na(v.raw.invoiceOwner),
-      userName: na(v.raw.userName),
-      salesAdvisor: na(v.raw.salesAdvisor),
-      proformaDate: na(v.raw.proformaDate),
-      deliveryDate: na(v.raw.deliveryDate),
-      gtLocation: na(v.raw.gtLocation),
-      vehicleLocation: na(v.raw.vehicleLocation),
-      phone: phoneDisplay(v.raw.phone),
-      status: na(v.raw.status),
-      traffic: na(v.raw.traffic),
-      trafficFees: na(v.raw.trafficFees),
-      insurance: na(v.raw.insurance),
-      registrationDate: na(v.raw.registrationDate),
+      date: na(safeRaw.date),
+      salesOrder: na(safeRaw.salesOrder),
+      product: na(safeRaw.product),
+      pic: na(safeRaw.pic),
+      salesType: na(safeRaw.salesType),
+      invoiceOwner: '—',
+      userName: '—',
+      salesAdvisor: na(safeRaw.salesAdvisor),
+      proformaDate: na(safeRaw.proformaDate),
+      deliveryDate: na(safeRaw.deliveryDate),
+      gtLocation: na(safeRaw.gtLocation),
+      vehicleLocation: na(safeRaw.vehicleLocation),
+      phone: phoneDisplay(),
+      status: na(safeRaw.status),
+      traffic: na(safeRaw.traffic),
+      trafficFees: na(safeRaw.trafficFees),
+      insurance: na(safeRaw.insurance),
+      registrationDate: na(safeRaw.registrationDate),
     },
     ops,
     guestCenter: !!guestCenter,
@@ -487,8 +479,6 @@ function createDeliveryTeamRouter(opts) {
           v.raw.product,
           v.ops.assignedEmployeeName,
           v.ops.opsStatus,
-          v.raw.invoiceOwner,
-          v.raw.userName,
           v.raw.salesAdvisor,
           v.ops.transferCity,
           v.ops.carrier,
@@ -1458,8 +1448,8 @@ function createDeliveryTeamRouter(opts) {
         raw.damage || '',
         pic,
         raw.salesType || '',
-        raw.invoiceOwner || '',
-        raw.userName || '',
+        '', // invoice owner — not captured
+        '', // customer name — not captured
         raw.salesAdvisor || '',
         ops.guestSentDate || '',
         ops.signatureReceivedDate || '',
@@ -1479,7 +1469,7 @@ function createDeliveryTeamRouter(opts) {
         raw.financeOfficer || '',
         raw.salesType || '',
         raw.salePlace || '',
-        raw.phone || '',
+        '', // phone — not captured
         '', '', '',
         raw.deliveryDate || '',
         '', '', '', '', '', '', '', '',

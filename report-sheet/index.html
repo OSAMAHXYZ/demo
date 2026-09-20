@@ -15,7 +15,7 @@
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20260920pt8"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20260920pt8" />
+  <link rel="stylesheet" href="dashboard.css?v=20260920st1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -352,6 +352,24 @@
                       <canvas id="chart-sr-profdel"></canvas>
                     </div>
                   </div>
+                </div>
+              </article>
+
+              <article class="sr-mock-card sr-mock-salestype is-summary-only sr-tap" data-chart-id="chart-sr-salestype" data-expand="chart-sr-salestype" role="button" tabindex="0" aria-label="Open Sales Type delivered cars wide view">
+                <div class="sr-mock-card-head">
+                  <div>
+                    <h2 class="sr-mock-card-title">Sales Type · Delivered Cars</h2>
+                    <span class="sr-mock-card-sub">Cash · Bank · ALJUF · Employee · Fleet</span>
+                  </div>
+                  <button type="button" class="pbi-expand" data-expand="chart-sr-salestype" title="Open wide view">Wide</button>
+                </div>
+                <div class="sr-salestype-board">
+                  <div class="sr-salestype-donut-wrap">
+                    <div class="chart-box pbi-box sr-salestype-box">
+                      <canvas id="chart-sr-salestype"></canvas>
+                    </div>
+                  </div>
+                  <div class="sr-salestype-legend" id="sr-salestype-legend"></div>
                 </div>
               </article>
             </div>
@@ -8272,6 +8290,63 @@
     `;
   }
 
+  /** Sales Type · Delivered Cars on main Sales Dashboard (same data as Performance wide). */
+  function renderSrSalesTypeDelivered(sr) {
+    const canvas = $("#chart-sr-salestype");
+    const legendEl = $("#sr-salestype-legend");
+    if (!canvas) return;
+    const types = deliverySalesTypeBreakdown(sr);
+    const colors = {
+      Cash: "#3b82f6",
+      Bank: "#10b981",
+      ALJUF: "#8b5cf6",
+      Employee: "#f59e0b",
+      Fleet: "#64748b",
+      Other: "#94a3b8",
+    };
+    const labels = types.map((x) => x.type);
+    const values = types.map((x) => x.count);
+    const bg = labels.map((lab) => colors[lab] || colors.Other);
+    const total = values.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (legendEl) {
+      legendEl.innerHTML = types.length
+        ? types
+            .map((x) => {
+              const pct = total > 0 ? Math.round((x.count / total) * 100) : 0;
+              return `<div class="pbi-wide-salestype-item">
+                <span class="swatch" style="background:${colors[x.type] || colors.Other}"></span>
+                <span class="name">${escapeHtml(x.type)}</span>
+                <span class="count">${formatNumber(x.count)}</span>
+                <span class="pct">${pct}%</span>
+              </div>`;
+            })
+            .join("")
+        : `<p class="foot" style="margin:0">No delivered cars in this period.</p>`;
+    }
+    if (total > 0) {
+      upsertChart("chart-sr-salestype", "doughnut", labels, values, {
+        backgroundColor: bg,
+        cutout: "62%",
+        legend: false,
+        _wide: {
+          labels,
+          values,
+          extra: {
+            backgroundColor: bg,
+            cutout: "58%",
+            legend: true,
+          },
+        },
+      });
+    } else if (charts["chart-sr-salestype"]) {
+      charts["chart-sr-salestype"].destroy();
+      delete charts["chart-sr-salestype"];
+      delete chartSnapshots["chart-sr-salestype"];
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
   function syncSrDateControls(sr) {
     const bar = $("#sr-date-bar");
     if (bar) bar.style.display = hasSalesReportInputs() ? "" : "none";
@@ -8335,6 +8410,7 @@
     renderPaceBoard(sr);
     renderPbiKpis(sr);
     renderCancelPctPanel(sr);
+    renderSrSalesTypeDelivered(sr);
     renderSalesReportCharts(sr);
     renderDailyTargetPanel(sr);
     renderSelectedDetail(sr);

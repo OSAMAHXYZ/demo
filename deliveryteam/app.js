@@ -42,16 +42,14 @@
     return s && s !== 'N/A' ? s : 'N/A';
   }
 
-  /** Show full customer name (signed-in staff). */
-  function displayName(value) {
-    const s = String(value == null ? '' : value).trim();
-    return s || '—';
+  /** Never show customer name / invoice owner (not captured). */
+  function displayName(_value) {
+    return '—';
   }
 
-  /** Show full phone number (signed-in staff). */
-  function displayPhone(value) {
-    const s = String(value == null ? '' : value).trim();
-    return s || '—';
+  /** Never show phone numbers (not captured). */
+  function displayPhone(_value) {
+    return '—';
   }
 
   function ynBadge(v) {
@@ -365,7 +363,7 @@
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
-      live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank) · names & phones'],
+      live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank)'],
       today: ["Today's Vehicles", 'Proforma Date = today'],
       my: ['My VINs', 'Your schedule · edit your work · الناقل'],
       assign: ['Assignment', 'Upload → assign employee (incl. Hanouf) → الناقل'],

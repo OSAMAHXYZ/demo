@@ -45,7 +45,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Page hero Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Page hero ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .page-hero {
   position: relative;
   overflow: hidden;
@@ -143,7 +143,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Top bar Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Top bar ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 header.top {
   display: flex;
   flex-wrap: wrap;
@@ -274,7 +274,7 @@ button:disabled {
   border-color: #efc4ca;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Admin nav Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Admin nav ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .admin-bar {
   display: flex;
   flex-wrap: wrap;
@@ -296,7 +296,7 @@ button:disabled {
   font-weight: 500;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Upload slots Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Upload slots ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .grid-5 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -378,7 +378,7 @@ button:disabled {
   font-weight: 600;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Banners Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Banners ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .banner {
   display: none;
   margin: 0 0 16px;
@@ -425,7 +425,7 @@ button:disabled {
   }
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Stock KPIs / charts Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Stock KPIs / charts ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -492,7 +492,7 @@ button:disabled {
   height: min(720px, max(320px, 36px * 12));
 }
 
-/* Power BIÃ¢ÂÂstyle sales page */
+/* Power BIÃÂ¢ÃÂÃÂstyle sales page */
 .pbi-page {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1696,7 +1696,7 @@ body.pbi-wide-open {
     #fff;
 }
 
-/* ——— BO Dashboard · executive scroll layout ——— */
+/* âââ BO Dashboard Â· executive scroll layout âââ */
 .bo-dash {
   display: flex;
   flex-direction: column;
@@ -2924,12 +2924,12 @@ body.pbi-wide-open {
 }
 
 .pbi-tables summary::before {
-  content: "Ã¢ÂÂ¸ ";
+  content: "ÃÂ¢ÃÂÃÂ¸ ";
   color: var(--muted);
 }
 
 .pbi-tables[open] summary::before {
-  content: "Ã¢ÂÂ¾ ";
+  content: "ÃÂ¢ÃÂÃÂ¾ ";
 }
 
 @media (max-width: 1100px) {
@@ -2986,7 +2986,7 @@ body.pbi-wide-open {
   height: 240px;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tabs Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Tabs ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -3051,7 +3051,7 @@ body.pbi-wide-open {
   box-shadow: var(--shadow);
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Toolbar / forms Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Toolbar / forms ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -3087,7 +3087,7 @@ body.pbi-wide-open {
   box-shadow: 0 0 0 3px rgba(77, 163, 224, 0.18);
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Generic table Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generic table ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .table-wrap {
   overflow: auto;
   max-height: 540px;
@@ -3171,7 +3171,7 @@ tr.emp-row:hover td {
   font-weight: 500;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Targets Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Targets ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .target-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -3366,7 +3366,7 @@ footer.page-foot {
   font-weight: 500;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Employee drawer Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Employee drawer ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .drawer-backdrop {
   display: none;
   position: fixed;
@@ -3614,7 +3614,7 @@ footer.page-foot {
   word-break: break-word;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Sales Report (BI cards) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Sales Report (BI cards) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .xl-sheet {
   background: transparent;
   border: none;
@@ -4000,7 +4000,7 @@ footer.page-foot {
   }
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Admin page (match Live Sales Dashboard chrome) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Admin page (match Live Sales Dashboard chrome) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 body.admin-page .admin-kpis {
   margin-bottom: 14px;
 }
@@ -4147,7 +4147,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   }
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Daily target pace Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Daily target pace ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .pbi-daily-target {
   margin-top: 0;
 }
@@ -4256,7 +4256,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: #b91c1c;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Allocation plan (Admin) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Allocation plan (Admin) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .admin-allocation-card {
   overflow: hidden;
 }
@@ -4390,7 +4390,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 800;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ BO & Allocation & Stock dashboard Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ */
+/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ BO & Allocation & Stock dashboard ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
 .bas-dash {
   gap: 18px;
 }
@@ -5741,7 +5741,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   }
 }
 
-/* ÂÂÂ Inventory Command Center / Summary ÂÂÂ */
+/* ÃÂÃÂÃÂ Inventory Command Center / Summary ÃÂÃÂÃÂ */
 .icc-hero {
   display: flex;
   flex-wrap: wrap;
@@ -6047,7 +6047,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 /* =========================================================
-   Live app CRM shell (UI only â report-sheet/index.html)
+   Live app CRM shell (UI only Ã¢ÂÂ report-sheet/index.html)
    Mockup-aligned SaaS: light gray canvas, blue accents, soft cards
    ========================================================= */
 .live-app {
@@ -6474,7 +6474,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   }
 }
 
-/* ÂÂ Tighter charts (all dashboards) ÂÂ */
+/* ÃÂÃÂ Tighter charts (all dashboards) ÃÂÃÂ */
 .live-app .chart-box {
   min-height: 180px;
   height: auto;
@@ -6541,7 +6541,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   color: #94a3b8;
 }
 
-/* ÂÂ Dark edition ÂÂ */
+/* ÃÂÃÂ Dark edition ÃÂÃÂ */
 .live-app.theme-dark {
   --crm-bg: #0f172a;
   --crm-sidebar: #111827;
@@ -6981,7 +6981,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   padding: 10px 14px 20px !important;
 }
 
-/* ââ Density: kill empty stretch / loose gaps ââ */
+/* Ã¢ÂÂÃ¢ÂÂ Density: kill empty stretch / loose gaps Ã¢ÂÂÃ¢ÂÂ */
 .live-app .pbi-visuals,
 .live-app .sr-charts,
 .live-app .charts,
@@ -7148,7 +7148,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   padding: 10px 12px !important;
 }
 
-/* Default only â JS sets inline height from label count so names never overlap */
+/* Default only Ã¢ÂÂ JS sets inline height from label count so names never overlap */
 .live-app .chart-box,
 .live-app .chart-box.pbi-box {
   min-height: 180px;
@@ -7226,7 +7226,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 /* =========================================================
-   TOYOTA figures theme â brand-first, simple numbers
+   TOYOTA figures theme Ã¢ÂÂ brand-first, simple numbers
    ========================================================= */
 .live-app.toyota-theme {
   --crm-bg: #f2f2f3;
@@ -7318,7 +7318,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   letter-spacing: 0.14em;
 }
 
-/* Kill the old white #panel-tabs card â it made white labels invisible */
+/* Kill the old white #panel-tabs card Ã¢ÂÂ it made white labels invisible */
 .live-app.toyota-theme #panel-tabs,
 .live-app.toyota-theme .sidebar-tabs.tabs {
   background: transparent !important;
@@ -7671,7 +7671,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 
-/* ï¿½ï¿½ï¿½ Inventory Command Center ï¿½ premium one-page redesign ï¿½ï¿½ï¿½ */
+/* Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ Inventory Command Center Ã¯Â¿Â½ premium one-page redesign Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ */
 .icc-command-center {
   display: flex;
   flex-direction: column;
@@ -7922,7 +7922,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* ï¿½ï¿½ï¿½ Allocation Control Tower ï¿½ï¿½ï¿½ */
+/* Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ Allocation Control Tower Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ */
 .act-tower { display: flex; flex-direction: column; gap: 12px; }
 .act-header {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 20px;
@@ -8328,7 +8328,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 .live-app.toyota-theme.theme-dark .act-supply-rest-name,
 .live-app.toyota-theme.theme-dark .act-sort-lab select { color: #fff !important; }
 .live-app.toyota-theme.theme-dark .act-alert-tabs--wide { background: #111 !important; }
-/* ââ Sales Report Â· compact interactive pulse ââ */
+/* Ã¢ÂÂÃ¢ÂÂ Sales Report ÃÂ· compact interactive pulse Ã¢ÂÂÃ¢ÂÂ */
 .sr-panel { display: flex; flex-direction: column; gap: 10px; }
 .sr-hero {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
@@ -8752,7 +8752,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   background: #141414 !important;
   border-color: rgba(255,255,255,.08) !important;
 }
-/* ââ Sales Dashboard mockup (sr25) ââ */
+/* Ã¢ÂÂÃ¢ÂÂ Sales Dashboard mockup (sr25) Ã¢ÂÂÃ¢ÂÂ */
 .sr-hidden-fields,
 .sr-hidden-charts {
   position: absolute !important;
@@ -9102,13 +9102,50 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   grid-template-columns: 1.35fr 1fr;
   grid-template-areas:
     "perf cancel"
-    "acc profdel";
+    "acc profdel"
+    "salestype salestype";
   gap: 10px;
 }
 .sr-mock-perf { grid-area: perf; }
 .sr-mock-cancel { grid-area: cancel; }
 .sr-mock-acc { grid-area: acc; }
 .sr-mock-profdel { grid-area: profdel; }
+.sr-mock-salestype { grid-area: salestype; }
+.sr-salestype-board {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 14px;
+  align-items: center;
+  min-height: 180px;
+}
+.sr-salestype-donut-wrap { min-width: 0; }
+.sr-salestype-box {
+  height: 180px !important;
+  min-height: 180px !important;
+}
+.sr-salestype-legend {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.sr-salestype-legend .pbi-wide-salestype-item {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.82rem;
+}
+.sr-salestype-legend .pbi-wide-salestype-item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.sr-salestype-legend .pbi-wide-salestype-item .name { font-weight: 700; color: #0f172a; }
+.sr-salestype-legend .pbi-wide-salestype-item .count,
+.sr-salestype-legend .pbi-wide-salestype-item .pct {
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
 .sr-mock-card {
   margin: 0;
   padding: 14px 14px 12px !important;
@@ -9547,7 +9584,8 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
       "perf"
       "cancel"
       "acc"
-      "profdel";
+      "profdel"
+      "salestype";
   }
 }
 @media (max-width: 980px) {
@@ -9555,6 +9593,13 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   .sr-emp-rail {
     position: static;
     max-height: 260px;
+  }
+  .sr-salestype-board {
+    grid-template-columns: 1fr;
+  }
+  .sr-salestype-box {
+    height: 200px !important;
+    min-height: 200px !important;
   }
 }
 @media (max-width: 640px) {
@@ -9577,7 +9622,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   background: #141414 !important;
   border-color: rgba(255,255,255,.08) !important;
 }
-/* ââ Employee Sales Schedule mockup (sr28) ââ */
+/* Ã¢ÂÂÃ¢ÂÂ Employee Sales Schedule mockup (sr28) Ã¢ÂÂÃ¢ÂÂ */
 .sr-fold--schedule > .sr-fold-body {
   padding: 12px;
   background: #f5f7fb;
@@ -10044,7 +10089,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 .sr-schedule #sr-diag-banner,
 .sr-sched-info { display: none !important; }
 
-/*  Reserved Vehicles Tracker  */
+/* ÂÂ Reserved Vehicles Tracker ÂÂ */
 .rv-dash { display: flex; flex-direction: column; gap: 14px; }
 .rv-head {
   display: flex;
@@ -10318,7 +10363,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   .rv-head-actions input[type="search"] { flex: 1; min-width: 0; }
 }
 
-/* ── Summary · Delivered vs Proforma (Sales Performance) ── */
+/* ââ Summary Â· Delivered vs Proforma (Sales Performance) ââ */
 .dvp-summary {
   display: flex;
   flex-direction: column;
@@ -10450,7 +10495,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   min-width: 0;
 }
 
-/* Channel cards — 4 across */
+/* Channel cards â 4 across */
 .dvp-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -11313,7 +11358,7 @@ button.dvp-total-card:focus-visible {
   border-radius: 14px;
   background: #fff;
 }
-/* Full list on page scroll — no inner max-height box */
+/* Full list on page scroll â no inner max-height box */
 #boe-table-wrap.table-wrap,
 #boe-table-wrap.aa-table-wrap {
   max-height: none;
@@ -11422,7 +11467,7 @@ button.dvp-total-card:focus-visible {
   font: inherit;
 }
 
-/* ��� Plan Tracker ��� */
+/* ï¿½ï¿½ï¿½ Plan Tracker ï¿½ï¿½ï¿½ */
 .pt-dash { display: flex; flex-direction: column; gap: 14px; }
 .pt-header { margin-bottom: 4px; }
 .pt-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
