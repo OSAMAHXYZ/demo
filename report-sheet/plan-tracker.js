@@ -80,6 +80,22 @@
     return Math.round(ms / 86400000);
   }
 
+  function fileDateFromKey(dateKey) {
+    const parts = String(dateKey || "").split("-").map(Number);
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+    return null;
+  }
+
+  function sameCalendarDay(a, b) {
+    if (!(a instanceof Date) || !(b instanceof Date)) return false;
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+  }
+
   /**
    * Allocation Date YYYY-MM (empty if unknown).
    */
@@ -92,16 +108,24 @@
   }
 
   /**
-   * This-month RES receipt → counts toward 315 plan.
-   * Unique VIN that entered RES with Allocation Date in the active month
-   * (or Age 0 / blank AG when date is missing).
+   * Plan schedule / 315 receipt: Retail Electronic Sales + Col J age 0
+   * + Allocation Date on the same calendar day as the RTL day file.
    */
+  function isPlanScheduleReceipt(row, dateKey) {
+    if (!row || !row.isTarget) return false;
+    const age = row.allocationAge;
+    if (age == null || !Number.isFinite(age) || Math.floor(age) !== 0) return false;
+    const observeKey = dateKey || row.dateKey || "";
+    const fileDate = fileDateFromKey(observeKey);
+    if (!fileDate) return false;
+    if (!(row.allocationDate instanceof Date) || Number.isNaN(row.allocationDate.getTime())) return false;
+    return sameCalendarDay(row.allocationDate, fileDate);
+  }
+
+  /** @deprecated — use isPlanScheduleReceipt */
   function isThisMonthReceipt(row, monthKey) {
     if (!row || !row.isTarget || !monthKey) return false;
-    const mk = allocationMonthKey(row);
-    if (mk) return mk === monthKey;
-    // No Allocation Date: Age 0 / blank = this month; age ≥ 1 = prior stock
-    return row.allocationAge == null || row.allocationAge === 0;
+    return isPlanScheduleReceipt(row, row.dateKey);
   }
 
   /**
@@ -109,16 +133,15 @@
    */
   function isPriorMonthFreeStock(row, monthKey) {
     if (!row || !row.isTarget || !monthKey) return false;
-    if (isThisMonthReceipt(row, monthKey)) return false;
+    if (isPlanScheduleReceipt(row, row.dateKey)) return false;
     const mk = allocationMonthKey(row);
     if (mk) return mk < monthKey;
     return row.allocationAge != null && row.allocationAge >= 1;
   }
 
-  /** @deprecated use isThisMonthReceipt — kept for any leftover refs */
+  /** @deprecated */
   function isPlanReceipt(row, dateKey) {
-    const monthKey = dateKey && String(dateKey).length >= 7 ? String(dateKey).slice(0, 7) : "";
-    return isThisMonthReceipt(row, monthKey);
+    return isPlanScheduleReceipt(row, dateKey);
   }
 
   function ageBucket(age) {
@@ -261,13 +284,14 @@
     let latestTarget = new Map();
 
     const creditResVin = (vin, row, dateKey, dayStats, opts) => {
-      // Count once when VIN first enters RES — keep forever even if later gone / moved out
+      // Count once when VIN first qualifies: RES + age 0 + AG same as file day
       if (!row || !vin) return "";
       const treatAsRes = (opts && opts.wasRes) || row.isTarget;
       if (!treatAsRes) return "";
       if (planAllocated.has(vin) || freeStockPrior.has(vin)) return "";
       const asRes = { ...row, isTarget: true };
-      if (isThisMonthReceipt(asRes, monthKey)) {
+      const observeKey = (opts && opts.observeKey) || row.dateKey || dateKey;
+      if (isPlanScheduleReceipt(asRes, observeKey)) {
         planAllocated.add(vin);
         dayStats.planReceipts.push(asRes);
         return "plan";
@@ -278,9 +302,7 @@
         dayStats.freeStock.push(asRes);
         return "free";
       }
-      planAllocated.add(vin);
-      dayStats.planReceipts.push(asRes);
-      return "plan";
+      return "";
     };
 
     dateKeys.forEach((dateKey) => {
@@ -408,7 +430,7 @@
             // Still count toward plan / free stock — it came into RES first
             if (a.isTarget) {
               everEnteredRes.add(vin);
-              creditResVin(vin, a, dateKey, dayStats, { wasRes: true });
+              creditResVin(vin, a, dateKey, dayStats, { wasRes: true, observeKey: a.dateKey });
             }
             dayStats.disappeared.push(a);
             movements.push(makeMovement(dateKey, a, null, "DISAPPEARED"));
@@ -423,9 +445,9 @@
               creditResVin(vin, b, dateKey, dayStats, { wasRes: true });
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED INTO RES"));
             } else if (a.isTarget && !b.isTarget) {
-              // Left RES but already counted when it was in stock (credit if missed)
+              // Left RES — credit only if last RES day was age 0 + AG same day
               everEnteredRes.add(vin);
-              creditResVin(vin, a, dateKey, dayStats, { wasRes: true });
+              creditResVin(vin, a, dateKey, dayStats, { wasRes: true, observeKey: a.dateKey });
               dayStats.transferOut.push(b);
               addCorridor(corridor, a.searchArea, b.searchArea);
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED OUT OF RES"));
@@ -697,7 +719,7 @@
     const k = model.kpis;
     const items = [
       ["plan", "Allocation Plan", k.plan, `Target ${esc(TARGET_SEARCH_AREA)}`, ""],
-      ["allocated", "This month received", k.allocated, `Unique ever in RES this month (keeps count if gone) · ${esc(model.monthKey || "month")}`, "ok"],
+      ["allocated", "This month received", k.allocated, `Age 0 · AG = file day · Retail Electronic Sales · ${esc(model.monthKey || "month")}`, "ok"],
       ["freeStock", "Free stock (prior month)", k.freeStock || 0, "Prior AG · still counted if later left RES", "warn"],
       ["totalReceived", "Total received", k.totalReceived || (k.allocated + (k.freeStock || 0)), "This month + free stock (incl. gone)", "info"],
       ["remaining", "Remaining", k.remaining, `${Math.min(100, Math.round(k.progress * 100))}% of plan`, k.remaining ? "warn" : "ok"],
@@ -812,7 +834,7 @@
     const rows = isProgress ? totalReceivedRows(model) : drillRows(model);
     const labels = {
       progress: "All received VINs · product & model totals",
-      allocated: "This month received (toward 315)",
+      allocated: "Age 0 · AG same day · Retail Electronic Sales (toward 315)",
       freeStock: "Free stock · prior / last month Allocation Date",
       totalReceived: "Total received (this month + free stock)",
       current: "Current RES inventory",
@@ -968,26 +990,17 @@
       });
     });
 
-    const monthKey = (model.dateKeys && model.dateKeys[0])
-      ? String(model.dateKeys[0]).slice(0, 7)
-      : "";
-
     (model.daily || []).forEach((day) => {
       const snapDay = Number(String(day.dateKey).slice(8, 10));
       const list = (day.planReceipts && day.planReceipts.length)
         ? day.planReceipts
-        : (day.newRes || []);
+        : [];
       list.forEach((r) => {
         const vin = r.vin;
         if (!vin) return;
-        let placeDay = snapDay;
-        if (r.allocationDate instanceof Date && monthKey) {
-          const y = r.allocationDate.getFullYear();
-          const m = String(r.allocationDate.getMonth() + 1).padStart(2, "0");
-          if (`${y}-${m}` === monthKey) {
-            placeDay = r.allocationDate.getDate();
-          }
-        }
+        // Only age-0 RES with AG on this file day (already filtered into planReceipts)
+        if (!isPlanScheduleReceipt(r, day.dateKey)) return;
+        const placeDay = snapDay;
         if (!Number.isFinite(placeDay) || placeDay < 1 || placeDay > 30) return;
 
         const leaf = matchLeaf({ product: r.product, suffix: r.suffix });
@@ -1104,7 +1117,7 @@
     </table>`;
 
     if (footEl) {
-      footEl.textContent = `${num(totals.mtd)} plan receipts on schedule · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · click any number for VINs · scroll days 1–30`;
+      footEl.textContent = `${num(totals.mtd)} age-0 same-day RES receipts · plan ${num(totals.alloc)} · gap ${totalGap > 0 ? "+" : ""}${num(totalGap)} · click any number for VINs · scroll days 1–30`;
     }
 
     $$("[data-pt-sched-row]", tableEl).forEach((btn) => {
