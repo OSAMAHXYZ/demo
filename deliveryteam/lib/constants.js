@@ -80,6 +80,20 @@ const EMPLOYEE_NAMES = Object.freeze(['Rasha', 'Ruba', 'Ibrahim', 'Abdullah']);
 /** People Hanouf/Admin can assign VINs to (employees + Hanouf herself) */
 const ASSIGNABLE_NAMES = Object.freeze(['Hanouf', 'Rasha', 'Ruba', 'Ibrahim', 'Abdullah']);
 
+/** Sheet PIC spellings → canonical assignable name */
+const PIC_NAME_ALIASES = Object.freeze({
+  ebrahim: 'Ibrahim',
+  ibrahim: 'Ibrahim',
+  ibraheem: 'Ibrahim',
+  rasha: 'Rasha',
+  ruba: 'Ruba',
+  abdullah: 'Abdullah',
+  abdulah: 'Abdullah',
+  abdalla: 'Abdullah',
+  hanouf: 'Hanouf',
+  hanoufah: 'Hanouf',
+});
+
 const USERS = Object.freeze([
   { id: 'admin', name: 'Admin', role: 'admin' },
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
@@ -102,7 +116,7 @@ const HEADER_MAP = Object.freeze({
   ],
   product: ['product', 'product name', 'model', 'المنتج'],
   damage: ['damage', 'ضرر'],
-  pic: ['pic'],
+  pic: ['pic', 'p.i.c', 'assigned', 'assigned to', 'assignee', 'employee', 'المسؤول', 'مسؤول'],
   salesType: ['sales type', 'نوع البيع', 'طريقة البيع'],
   invoiceOwner: ['invoice owner', 'مالك الفاتورة'],
   userName: [
@@ -263,6 +277,7 @@ module.exports = {
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
   ASSIGNABLE_NAMES,
+  PIC_NAME_ALIASES,
   USERS,
   HEADER_MAP,
   OPS_HEADER_MAP,

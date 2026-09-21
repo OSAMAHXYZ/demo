@@ -42,14 +42,21 @@
     return s && s !== 'N/A' ? s : 'N/A';
   }
 
-  /** Never show customer name / invoice owner (not captured). */
-  function displayName(_value) {
-    return '—';
+  /** Customer / phone / invoice owner — admin only. */
+  function canSeePii() {
+    return !!(state.user && state.user.role === 'admin');
   }
 
-  /** Never show phone numbers (not captured). */
-  function displayPhone(_value) {
-    return '—';
+  function displayName(value) {
+    if (!canSeePii()) return '—';
+    const s = String(value == null ? '' : value).trim();
+    return s || '—';
+  }
+
+  function displayPhone(value) {
+    if (!canSeePii()) return '—';
+    const s = String(value == null ? '' : value).trim();
+    return s || '—';
   }
 
   function ynBadge(v) {
@@ -66,6 +73,7 @@
     if (v === 'جاهز للتسليم') return 'row-status-ready';
     if (v === 'مرور') return 'row-status-traffic';
     if (v === 'رجوع مرور') return 'row-status-traffic-return';
+    if (v === 'معلقة') return 'row-status-pending';
     if (v === 'الغاء') return 'row-status-cancel';
     return '';
   }
@@ -78,7 +86,8 @@
     if (v === 'جاهز للتسليم') return `<span class="badge warn">${esc(v)}</span>`;
     if (v === 'مرور') return `<span class="badge">${esc(v)}</span>`;
     if (v === 'رجوع مرور') return `<span class="badge purple">${esc(v)}</span>`;
-    if (v === 'الغاء' || v === 'معلقة') return `<span class="badge bad">${esc(v)}</span>`;
+    if (v === 'معلقة') return `<span class="badge navy">${esc(v)}</span>`;
+    if (v === 'الغاء') return `<span class="badge bad">${esc(v)}</span>`;
     return `<span class="badge warn">${esc(v)}</span>`;
   }
 
@@ -506,44 +515,48 @@
     if (!changed && silent) return;
 
     const cols = [
-      ['#', (_r, i) => i + 1],
-      ['Employee', (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>`],
-      ['Status', (r) => statusBadge(r.ops.opsStatus)],
-      ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
-      ['Proforma', (r) => na(r.raw.proformaDate)],
-      ['Order', (r) => na(r.raw.salesOrder)],
-      ['Product', (r) => na(r.raw.product)],
-      ['Sales Type', (r) => na(r.raw.salesType)],
-      ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer', (r) => displayName(r.raw.userName)],
-      ['S/A', (r) => na(r.raw.salesAdvisor)],
-      ['Phone', (r) => displayPhone(r.raw.phone)],
-      ['Guest Exp', (r) => guestCellHtml(r)],
-      ['GT Loc', (r) => na(r.raw.gtLocation)],
-      ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
-      ['إرسال الضيف', (r) => na(r.ops.guestSentDate)],
-      ['استلام التواقيع', (r) => na(r.ops.signatureReceivedDate)],
-      ['إرسال للحسابات', (r) => na(r.ops.accountsSentDate)],
-      ['موافقة الحسابات', (r) => na(r.ops.accountsApprovalDate)],
-      ['VIN 1502', (r) => ynBadge(r.ops.vin1502)],
-      ['ملف المرور', (r) => ynBadge(r.ops.trafficFile)],
-      ['Traffic Fees', (r) => ynBadge(r.ops.trafficFeesOps)],
-      ['Insurance', (r) => ynBadge(r.ops.insuranceOps)],
-      ['إصدار الاستمارة', (r) => na(r.ops.registrationIssueDate)],
-      ['مدينة الترحيل', (r) => na(r.ops.transferCity)],
-      ['الناقل', (r) => na(r.ops.carrier)],
-      ['ملاحظات', (r) => esc(r.ops.notes || '')],
-      ['Updated', (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—')],
-      ['By', (r) => na(r.ops.updatedBy)],
+      { key: 'num', label: '#', html: (_r, i) => i + 1 },
+      { key: 'employee', label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` },
+      { key: 'status', label: 'Status', html: (r) => `<span class="cell-status">${statusBadge(r.ops.opsStatus)}</span>` },
+      { key: 'vin', label: 'VIN', html: (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>` },
+      { key: 'proforma', label: 'Proforma', html: (r) => na(r.raw.proformaDate) },
+      { key: 'order', label: 'Order', html: (r) => na(r.raw.salesOrder) },
+      { key: 'product', label: 'Product', html: (r) => na(r.raw.product) },
+      { key: 'salestype', label: 'Sales Type', html: (r) => na(r.raw.salesType) },
+      ...(canSeePii() ? [
+        { key: 'owner', label: 'Owner', html: (r) => na(r.raw.invoiceOwner) },
+        { key: 'customer', label: 'Customer', html: (r) => displayName(r.raw.userName) },
+      ] : []),
+      { key: 'sa', label: 'S/A', html: (r) => na(r.raw.salesAdvisor) },
+      ...(canSeePii() ? [
+        { key: 'phone', label: 'Phone', html: (r) => displayPhone(r.raw.phone) },
+      ] : []),
+      { key: 'guest', label: 'Guest Exp', html: (r) => guestCellHtml(r) },
+      { key: 'gt', label: 'GT Loc', html: (r) => na(r.raw.gtLocation) },
+      { key: 'veh', label: 'Veh Loc', html: (r) => na(r.raw.vehicleLocation) },
+      { key: 'guestsent', label: 'إرسال الضيف', html: (r) => na(r.ops.guestSentDate) },
+      { key: 'sig', label: 'استلام التواقيع', html: (r) => na(r.ops.signatureReceivedDate) },
+      { key: 'accsent', label: 'إرسال للحسابات', html: (r) => na(r.ops.accountsSentDate) },
+      { key: 'accok', label: 'موافقة الحسابات', html: (r) => na(r.ops.accountsApprovalDate) },
+      { key: 'vin1502', label: 'VIN 1502', html: (r) => ynBadge(r.ops.vin1502) },
+      { key: 'traffic', label: 'ملف المرور', html: (r) => ynBadge(r.ops.trafficFile) },
+      { key: 'fees', label: 'Traffic Fees', html: (r) => ynBadge(r.ops.trafficFeesOps) },
+      { key: 'ins', label: 'Insurance', html: (r) => ynBadge(r.ops.insuranceOps) },
+      { key: 'reg', label: 'إصدار الاستمارة', html: (r) => na(r.ops.registrationIssueDate) },
+      { key: 'city', label: 'مدينة الترحيل', html: (r) => na(r.ops.transferCity) },
+      { key: 'carrier', label: 'الناقل', html: (r) => na(r.ops.carrier) },
+      { key: 'notes', label: 'ملاحظات', html: (r) => esc(r.ops.notes || '') },
+      { key: 'updated', label: 'Updated', html: (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—') },
+      { key: 'by', label: 'By', html: (r) => na(r.ops.updatedBy) },
     ];
 
     const table = $('#live-table');
-    table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
+    table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r, i) => {
         const statusCls = statusRowClass(r.ops.opsStatus);
         const guestCls = (r.guestCenter || r.ops.guestCollectAt) ? 'row-guest-exp' : '';
         return `<tr class="${statusCls} ${guestCls}" data-vin="${esc(r.vin)}">${cols.map((c) =>
-          `<td>${c[1](r, i)}</td>`
+          `<td class="col-${c.key}">${c.html(r, i)}</td>`
         ).join('')}</tr>`;
       }).join('') || `<tr><td colspan="${cols.length}">No assigned VINs yet. Use Assignment to assign vehicles.</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
@@ -750,14 +763,22 @@
       ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
       ['Sales Type', (r) => na(r.raw.salesType)],
       ['Product', (r) => na(r.raw.product)],
-      ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
-      ['Customer Name', (r) => displayName(r.raw.userName)],
+    ];
+    if (canSeePii()) {
+      cols.push(
+        ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
+        ['Customer Name', (r) => displayName(r.raw.userName)],
+      );
+    }
+    cols.push(
       ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['GT Loc', (r) => na(r.raw.gtLocation)],
       ['Veh Loc', (r) => na(r.raw.vehicleLocation)],
-      ['Phone', (r) => displayPhone(r.raw.phone)],
-      ['Guest Exp', (r) => guestCellHtml(r)],
-    ];
+    );
+    if (canSeePii()) {
+      cols.push(['Phone', (r) => displayPhone(r.raw.phone)]);
+    }
+    cols.push(['Guest Exp', (r) => guestCellHtml(r)]);
     if (editable) {
       cols.push(
         ['Status', (r) => editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)],
@@ -813,7 +834,7 @@
         if (tr) {
           tr.classList.remove(
             'row-status-claimed', 'row-status-psfu', 'row-status-ready',
-            'row-status-traffic', 'row-status-traffic-return', 'row-status-cancel'
+            'row-status-traffic', 'row-status-traffic-return', 'row-status-pending', 'row-status-cancel'
           );
           const cls = statusRowClass(value);
           if (cls) tr.classList.add(cls);
@@ -1380,10 +1401,15 @@
           <p class="hint">Raw Data (read-only)</p>
           ${[
             ['Proforma Date', v.raw.proformaDate], ['Sales Order', v.raw.salesOrder],
-            ['Sales Type', v.raw.salesType], ['Invoice Owner', v.raw.invoiceOwner],
-            ['Customer Name', displayName(v.raw.userName)], ['S/A', v.raw.salesAdvisor],
+            ['Sales Type', v.raw.salesType],
+            ...(canSeePii() ? [
+              ['Invoice Owner', v.raw.invoiceOwner],
+              ['Customer Name', displayName(v.raw.userName)],
+            ] : []),
+            ['S/A', v.raw.salesAdvisor],
             ['GT Location', v.raw.gtLocation], ['Vehicle Location', v.raw.vehicleLocation],
-            ['Phone', displayPhone(v.raw.phone)], ['PIC', v.raw.pic],
+            ...(canSeePii() ? [['Phone', displayPhone(v.raw.phone)]] : []),
+            ['PIC', v.raw.pic],
           ].map(([l, val]) => `<div class="field"><label>${esc(l)}</label><input value="${esc(na(val))}" readonly /></div>`).join('')}
         </div>
         <div class="card">
@@ -1450,11 +1476,13 @@
           <div><strong>${s.rowsProcessed}</strong><span>Rows processed</span></div>
           <div><strong>${s.newVins}</strong><span>New VINs</span></div>
           <div><strong>${s.updatedVins}</strong><span>Updated VINs</span></div>
+          <div><strong>${s.assignedFromPic || 0}</strong><span>Assigned from PIC</span></div>
           <div><strong>${s.opsImported || 0}</strong><span>Ops / status imported</span></div>
           <div><strong>${s.todaysProformas}</strong><span>Today's dates</span></div>
           <div><strong>${s.duplicateVins}</strong><span>Duplicate VINs</span></div>
           <div><strong>${s.errorCount}</strong><span>Errors</span></div>
         </div>
+        ${s.picUnresolved ? `<p class="hint" style="color:var(--orange);margin-top:8px">${s.picUnresolved} PIC name(s) not matched (use Hanouf / Rasha / Ruba / Ibrahim·Ebrahim / Abdullah)</p>` : ''}
         ${s.errors && s.errors.length ? `<p class="hint" style="color:var(--red);margin-top:10px">${s.errors.slice(0, 8).map((e) => `Row ${e.row}: ${esc(e.error)}`).join(' · ')}</p>` : ''}`;
     } catch (err) {
       summary.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;

@@ -10,6 +10,7 @@ const {
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
   ASSIGNABLE_NAMES,
+  PIC_NAME_ALIASES,
   USERS,
   HEADER_MAP,
   OPS_HEADER_MAP,
@@ -19,7 +20,7 @@ const {
   isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
-const { phoneDisplay, stripRawPii, redactRawPii } = require('./privacy');
+const { phoneDisplay, redactRawPii, canSeeCustomerPii } = require('./privacy');
 
 function na(v) {
   const s = String(v == null ? '' : v).trim();
@@ -167,6 +168,17 @@ function normalizeYnLoose(v) {
   return '';
 }
 
+function findPhoneInLine(line) {
+  if (!Array.isArray(line)) return '';
+  for (const cell of line) {
+    const digits = String(cell == null ? '' : cell).replace(/\D/g, '');
+    if (digits.length === 10 && digits.startsWith('05')) return digits;
+    if (digits.length === 12 && digits.startsWith('9665')) return `0${digits.slice(3)}`;
+    if (digits.length === 9 && digits.startsWith('5')) return `0${digits}`;
+  }
+  return '';
+}
+
 function isDeliverySheetHeaders(headers) {
   const norms = (headers || []).map((h) => normalizeHeader(h));
   const hasVinAr = norms.some((n) => n.includes('الشاس') || n.includes('شاسية') || n.includes('شاسيه'));
@@ -222,28 +234,26 @@ function cellText(line, idx) {
 function mapRawRow(row, line, { useLegacyCols = false } = {}) {
   const raw = {};
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
-    // Never capture customer name, invoice owner, or phone
-    if (key === 'invoiceOwner' || key === 'userName' || key === 'phone') {
-      raw[key] = '';
-      continue;
-    }
     raw[key] = pickCol(row, aliases);
   }
   // Legacy fixed columns only for classic Raw Data dumps (not Delivery sheet / E sales)
-  // Skip invoice owner / customer / phone columns entirely.
   if (useLegacyCols && Array.isArray(line) && line.length) {
     const so = cellText(line, RAW_COL.salesOrder);
+    const inv = cellText(line, RAW_COL.invoiceOwner);
+    const cust = cellText(line, RAW_COL.customerName);
+    const ph = cellText(line, RAW_COL.phone);
     if (so) raw.salesOrder = so;
+    if (inv) raw.invoiceOwner = inv;
+    if (cust) raw.userName = cust;
+    if (ph) raw.phone = ph;
   }
-  raw.invoiceOwner = '';
-  raw.userName = '';
-  raw.phone = '';
+  if (!raw.phone) raw.phone = findPhoneInLine(line);
   // Delivery sheet uses تاريخ as the main date (treat as proforma when missing)
   raw.proformaDate = normalizeDate(raw.proformaDate) || normalizeDate(raw.date);
   raw.deliveryDate = normalizeDate(raw.deliveryDate);
   raw.registrationDate = normalizeDate(raw.registrationDate);
   raw.date = normalizeDate(raw.date) || raw.date;
-  return stripRawPii(raw);
+  return raw;
 }
 
 function mapOpsFromRow(row) {
@@ -276,24 +286,51 @@ function mergeOpsFromSheet(existingOps, sheetOps) {
   return out;
 }
 
-function assignFromPic(ops, picName, uploadedBy) {
-  const name = String(picName || '').trim();
-  if (!name) return ops;
-  const emp = ASSIGNABLE_NAMES.find((n) => n.toLowerCase() === name.toLowerCase())
-    || EMPLOYEE_NAMES.find((n) => n.toLowerCase() === name.toLowerCase());
-  if (!emp) return ops;
-  if (ops.assignedEmployeeId) return ops;
+function resolveAssignableName(picName) {
+  const raw = String(picName || '').trim();
+  if (!raw) return '';
+  const compact = raw.toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]/gi, '');
+  if (PIC_NAME_ALIASES[compact]) return PIC_NAME_ALIASES[compact];
+  const exact = ASSIGNABLE_NAMES.find((n) => n.toLowerCase() === raw.toLowerCase())
+    || EMPLOYEE_NAMES.find((n) => n.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  const lower = raw.toLowerCase();
+  const fuzzy = ASSIGNABLE_NAMES.find((n) => {
+    const nl = n.toLowerCase();
+    return lower.startsWith(nl) || nl.startsWith(lower) || lower.includes(nl) || compact.includes(nl);
+  });
+  return fuzzy || '';
+}
+
+/**
+ * Assign from Delivery sheet PIC column.
+ * force=true on archive upload so imported PIC always drives assignment.
+ */
+function assignFromPic(ops, picName, uploadedBy, { force = false } = {}) {
+  const emp = resolveAssignableName(picName);
+  if (!emp) return { ops: ops || emptyOps(), changed: false, name: '' };
   const id = String(emp).toLowerCase();
+  const cur = ops || emptyOps();
+  if (!force && cur.assignedEmployeeId) {
+    return { ops: cur, changed: false, name: emp };
+  }
+  if (cur.assignedEmployeeId === id && cur.assignedEmployeeName === emp) {
+    return { ops: cur, changed: false, name: emp };
+  }
   return {
-    ...ops,
-    assignedEmployeeId: id,
-    assignedEmployeeName: emp,
-    assignedBy: uploadedBy || 'sheet-import',
-    assignedAt: ops.assignedAt || new Date().toISOString(),
+    ops: {
+      ...cur,
+      assignedEmployeeId: id,
+      assignedEmployeeName: emp,
+      assignedBy: uploadedBy || 'sheet-import',
+      assignedAt: cur.assignedAt || new Date().toISOString(),
+    },
+    changed: true,
+    name: emp,
   };
 }
 
-function publicVehicle(v) {
+function publicVehicle(v, viewer) {
   if (!v) return null;
   const ops = { ...emptyOps(), ...v.ops };
   const guestCenter = isGuestCenterRaw(v.raw, ops) || String(ops.guestCenter || '').toLowerCase() === 'yes';
@@ -306,7 +343,9 @@ function publicVehicle(v) {
       guestDue = guestTimerMs <= 0 && String(ops.guestCollected || '') !== 'Yes';
     }
   }
-  const safeRaw = redactRawPii(v.raw || {});
+  const role = viewer && (viewer.role || viewer);
+  const allowPii = canSeeCustomerPii(role);
+  const safeRaw = redactRawPii(v.raw || {}, role);
   return {
     vin: v.vin,
     raw: {
@@ -315,14 +354,14 @@ function publicVehicle(v) {
       product: na(safeRaw.product),
       pic: na(safeRaw.pic),
       salesType: na(safeRaw.salesType),
-      invoiceOwner: '—',
-      userName: '—',
+      invoiceOwner: allowPii ? na(safeRaw.invoiceOwner) : '—',
+      userName: allowPii ? na(safeRaw.userName) : '—',
       salesAdvisor: na(safeRaw.salesAdvisor),
       proformaDate: na(safeRaw.proformaDate),
       deliveryDate: na(safeRaw.deliveryDate),
       gtLocation: na(safeRaw.gtLocation),
       vehicleLocation: na(safeRaw.vehicleLocation),
-      phone: phoneDisplay(),
+      phone: allowPii ? phoneDisplay(safeRaw.phone) : '—',
       status: na(safeRaw.status),
       traffic: na(safeRaw.traffic),
       trafficFees: na(safeRaw.trafficFees),
@@ -468,10 +507,11 @@ function createDeliveryTeamRouter(opts) {
     res.json({ user: { id: req.dtUser.userId, name: req.dtUser.name, role: req.dtUser.role } });
   });
 
-  function applyFilters(list, q) {
+  function applyFilters(list, q, viewer) {
     let out = list.slice();
     const search = String(q.q || q.search || '').trim().toLowerCase();
     if (search) {
+      const allowPii = canSeeCustomerPii(viewer && viewer.role);
       out = out.filter((v) => {
         const hay = [
           v.vin,
@@ -484,8 +524,11 @@ function createDeliveryTeamRouter(opts) {
           v.ops.carrier,
           v.raw.gtLocation,
           v.raw.vehicleLocation,
-        ].join(' ').toLowerCase();
-        return hay.includes(search);
+        ];
+        if (allowPii) {
+          hay.push(v.raw.invoiceOwner, v.raw.userName, v.raw.phone);
+        }
+        return hay.join(' ').toLowerCase().includes(search);
       });
     }
     const eq = (field, val) => {
@@ -554,13 +597,13 @@ function createDeliveryTeamRouter(opts) {
 
   router.get('/vehicles', auth, (req, res) => {
     let list = scopedVehicles(req.dtUser);
-    list = applyFilters(list, req.query || {});
+    list = applyFilters(list, req.query || {}, req.dtUser);
     list = sortVehicles(list, req.query.sort, req.query.dir);
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
     const total = list.length;
     const start = (page - 1) * limit;
-    const slice = list.slice(start, start + limit).map(publicVehicle);
+    const slice = list.slice(start, start + limit).map((v) => publicVehicle(v, req.dtUser));
     res.json({
       total,
       page,
@@ -574,7 +617,7 @@ function createDeliveryTeamRouter(opts) {
   router.get('/live-sheet', auth, (req, res) => {
     const q = { ...(req.query || {}), assigned: 'yes' };
     let list = store.allVehicles();
-    list = applyFilters(list, q);
+    list = applyFilters(list, q, req.dtUser);
     list = sortVehicles(list, req.query.sort || 'updatedAt', req.query.dir || 'desc');
     const byStatus = {};
     const byEmployee = {};
@@ -594,14 +637,14 @@ function createDeliveryTeamRouter(opts) {
       byStatus,
       byEmployee,
       bySalesType,
-      rows: list.map(publicVehicle),
+      rows: list.map((v) => publicVehicle(v, req.dtUser)),
     });
   });
 
   router.get('/vehicles/:vin', auth, (req, res) => {
     const v = assertVinAccess(req, res, req.params.vin);
     if (!v) return undefined;
-    return res.json({ vehicle: publicVehicle(v) });
+    return res.json({ vehicle: publicVehicle(v, req.dtUser) });
   });
 
   router.get('/dashboard', auth, (req, res) => {
@@ -609,10 +652,10 @@ function createDeliveryTeamRouter(opts) {
     const tz = Number(req.query.tzOffset);
     const filterQ = month && /^\d{4}-\d{2}$/.test(month) ? { month, tzOffset: tz } : { tzOffset: tz };
     // Full team fleet — everyone can see other users' schedules & sales-type mix
-    const teamFleet = applyFilters(store.allVehicles(), filterQ);
+    const teamFleet = applyFilters(store.allVehicles(), filterQ, req.dtUser);
     // Personal scope for employee KPIs
     let mineScoped = scopedVehicles(req.dtUser);
-    mineScoped = applyFilters(mineScoped, filterQ);
+    mineScoped = applyFilters(mineScoped, filterQ, req.dtUser);
     const today = todayIso(tz);
     const todays = teamFleet.filter((v) => v.raw.proformaDate === today);
     const assigned = teamFleet.filter((v) => v.ops.assignedEmployeeId);
@@ -739,7 +782,7 @@ function createDeliveryTeamRouter(opts) {
     const today = todayIso(Number(req.query.tzOffset));
     const rows = store.allVehicles()
       .filter((v) => v.raw.proformaDate === today)
-      .map(publicVehicle);
+      .map((v) => publicVehicle(v, req.dtUser));
     res.json({ today, total: rows.length, rows });
   });
 
@@ -749,7 +792,7 @@ function createDeliveryTeamRouter(opts) {
     let list = store.allVehicles().filter((v) => !v.ops.assignedEmployeeId);
     if (todayOnly) list = list.filter((v) => v.raw.proformaDate === today);
     list = sortVehicles(list, 'proformaDate', 'desc');
-    res.json({ total: list.length, rows: list.map(publicVehicle) });
+    res.json({ total: list.length, rows: list.map((v) => publicVehicle(v, req.dtUser)) });
   });
 
   /** Resolve a submitted VIN list for Hanouf display-before-assign. */
@@ -769,7 +812,7 @@ function createDeliveryTeamRouter(opts) {
     const missing = [];
     keys.forEach((key) => {
       const v = store.getVehicle(key);
-      if (v) found.push(publicVehicle(v));
+      if (v) found.push(publicVehicle(v, req.dtUser));
       else missing.push(key);
     });
     return res.json({
@@ -884,6 +927,8 @@ function createDeliveryTeamRouter(opts) {
       let todaysProformas = 0;
       let duplicateInFile = 0;
       let opsImported = 0;
+      let assignedFromPic = 0;
+      let picUnresolved = 0;
       const errors = [];
       const seenInFile = new Set();
       const uploadId = `up_${Date.now()}`;
@@ -912,13 +957,18 @@ function createDeliveryTeamRouter(opts) {
         const hasSheetOps = Object.values(sheetOps).some((v) => String(v || '').trim() !== '');
 
         const existing = store.getVehicle(vinKey);
+        // Archive / Delivery sheet upload: PIC always drives assignment when present
+        const forceAssign = !!deliveryFmt;
         if (!existing) {
           let ops = emptyOps();
           if (hasSheetOps) {
             ops = mergeOpsFromSheet(ops, sheetOps);
             opsImported += 1;
           }
-          ops = assignFromPic(ops, raw.pic, req.dtUser.name);
+          const asg = assignFromPic(ops, raw.pic, req.dtUser.name, { force: forceAssign });
+          ops = asg.ops;
+          if (asg.changed) assignedFromPic += 1;
+          else if (String(raw.pic || '').trim() && !asg.name) picUnresolved += 1;
           store.upsertVehicle(vinKey, {
             vin: vinKey,
             raw: { ...raw, vin: vinKey },
@@ -937,7 +987,10 @@ function createDeliveryTeamRouter(opts) {
             ops = mergeOpsFromSheet(ops, sheetOps);
             opsImported += 1;
           }
-          ops = assignFromPic(ops, raw.pic, req.dtUser.name);
+          const asg = assignFromPic(ops, raw.pic, req.dtUser.name, { force: forceAssign });
+          ops = asg.ops;
+          if (asg.changed) assignedFromPic += 1;
+          else if (String(raw.pic || '').trim() && !asg.name) picUnresolved += 1;
           existing.ops = ops;
           store.upsertVehicle(vinKey, existing);
           updatedVins += 1;
@@ -955,6 +1008,8 @@ function createDeliveryTeamRouter(opts) {
         todaysProformas,
         duplicateVins: duplicateInFile,
         opsImported,
+        assignedFromPic,
+        picUnresolved,
         format: deliveryFmt ? 'delivery-sheet' : (useLegacyCols ? 'legacy-raw' : 'generic'),
         errors: errors.slice(0, 50),
         uploadedBy: req.dtUser.name,
@@ -964,7 +1019,7 @@ function createDeliveryTeamRouter(opts) {
         user: req.dtUser.name,
         action: 'upload_raw_data',
         oldValue: '',
-        newValue: `${filename} · sheet «${sheetName}» · ${rowsProcessed} rows`,
+        newValue: `${filename} · sheet «${sheetName}» · ${rowsProcessed} rows · assigned from PIC ${assignedFromPic}`,
       });
       store.save();
 
@@ -973,6 +1028,7 @@ function createDeliveryTeamRouter(opts) {
         newVins,
         updatedVins,
         todaysProformas,
+        assignedFromPic,
         filename,
       });
 
@@ -988,6 +1044,8 @@ function createDeliveryTeamRouter(opts) {
           todaysProformas,
           duplicateVins: duplicateInFile,
           opsImported,
+          assignedFromPic,
+          picUnresolved,
           errors: errors.slice(0, 50),
           errorCount: errors.length,
         },
@@ -1279,7 +1337,7 @@ function createDeliveryTeamRouter(opts) {
       return res.json({
         ok: true,
         saved: true,
-        vehicle: publicVehicle(v),
+        vehicle: publicVehicle(v, req.dtUser),
         lastUpdated: v.ops.updatedAt,
         hubSync: hubSync || undefined,
       });
@@ -1334,7 +1392,7 @@ function createDeliveryTeamRouter(opts) {
         newValue: at,
       });
       store.save();
-      return res.json({ ok: true, vehicle: publicVehicle(v) });
+      return res.json({ ok: true, vehicle: publicVehicle(v, req.dtUser) });
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Schedule failed' });
     }
@@ -1381,7 +1439,7 @@ function createDeliveryTeamRouter(opts) {
           newValue: status ? `Yes · ${status}` : 'Yes',
         });
         store.save();
-        return res.json({ ok: true, vehicle: publicVehicle(v) });
+        return res.json({ ok: true, vehicle: publicVehicle(v, req.dtUser) });
       }
 
       // Not collected → require new date/time
@@ -1402,7 +1460,7 @@ function createDeliveryTeamRouter(opts) {
         newValue: at,
       });
       store.save();
-      return res.json({ ok: true, vehicle: publicVehicle(v) });
+      return res.json({ ok: true, vehicle: publicVehicle(v, req.dtUser) });
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Update failed' });
     }
@@ -1436,6 +1494,7 @@ function createDeliveryTeamRouter(opts) {
     };
 
     const matrix = [E_SALES_EXPORT_HEADERS.slice()];
+    const allowPii = canSeeCustomerPii(req.dtUser && req.dtUser.role);
     list.forEach((v) => {
       const raw = v.raw || {};
       const ops = v.ops || {};
@@ -1448,8 +1507,8 @@ function createDeliveryTeamRouter(opts) {
         raw.damage || '',
         pic,
         raw.salesType || '',
-        '', // invoice owner — not captured
-        '', // customer name — not captured
+        allowPii ? (raw.invoiceOwner || '') : '',
+        allowPii ? (raw.userName || '') : '',
         raw.salesAdvisor || '',
         ops.guestSentDate || '',
         ops.signatureReceivedDate || '',
@@ -1469,7 +1528,7 @@ function createDeliveryTeamRouter(opts) {
         raw.financeOfficer || '',
         raw.salesType || '',
         raw.salePlace || '',
-        '', // phone — not captured
+        allowPii ? (raw.phone || '') : '',
         '', '', '',
         raw.deliveryDate || '',
         '', '', '', '', '', '', '', '',

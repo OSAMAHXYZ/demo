@@ -1322,9 +1322,8 @@ function upsertHubVehicleFromTeamVehicle(teamVehicle) {
     gt: String(raw.gtLocation || '').trim(),
     location: String(raw.vehicleLocation || '').trim(),
     plate: '',
-    // Delivery Team does not capture customer/phone — never overwrite hub PII with blanks
-    customerName: '',
-    phone: '',
+    customerName: String(raw.userName || '').trim(),
+    phone: String(raw.phone || '').trim(),
     imageUrl: '',
     suffix: '',
     proformaDate: String(raw.proformaDate || '').trim(),
@@ -1342,8 +1341,8 @@ function upsertHubVehicleFromTeamVehicle(teamVehicle) {
       model: next.model || prev.model || prev.product || '',
       gt: next.gt || prev.gt || '',
       location: next.location || prev.location || '',
-      customerName: prev.customerName || '',
-      phone: prev.phone || '',
+      customerName: next.customerName || prev.customerName || '',
+      phone: next.phone || prev.phone || '',
       proformaDate: next.proformaDate || prev.proformaDate || '',
       deliveryNoteDate: next.deliveryNoteDate || prev.deliveryNoteDate || '',
     };
@@ -1514,8 +1513,8 @@ function syncHubVehiclesToDeliveryTeam(vehicles) {
     const rawPatch = {
       vin,
       product: String(veh.product || veh.model || '').trim(),
-      userName: '', // deliveryteam never stores customer PII
-      phone: '',
+      userName: String(veh.customerName || '').trim(),
+      phone: String(veh.phone || '').trim(),
       gtLocation: String(veh.gt || '').trim(),
       vehicleLocation: String(veh.location || '').trim(),
       proformaDate: String(veh.proformaDate || '').trim(),
@@ -1556,10 +1555,6 @@ function syncHubVehiclesToDeliveryTeam(vehicles) {
       Object.keys(rawPatch).forEach((k) => {
         if (rawPatch[k]) merged[k] = rawPatch[k];
       });
-      // Delivery Team never keeps customer / invoice owner / phone
-      merged.userName = '';
-      merged.invoiceOwner = '';
-      merged.phone = '';
       existing.raw = merged;
       existing.rawUpdatedAt = new Date().toISOString();
       deliveryTeamStore.upsertVehicle(vin, existing);
