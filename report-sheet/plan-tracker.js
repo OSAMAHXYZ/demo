@@ -108,18 +108,14 @@
   }
 
   /**
-   * Plan schedule / 315 receipt: Retail Electronic Sales + Col J age 0
-   * + Allocation Date on the same calendar day as the RTL day file.
+   * Plan schedule / 315 «This month received»:
+   * From each day Excel individually — Col M Retail Electronic Sales + Col J age = 0.
+   * (No Allocation Date / AG same-day requirement.)
    */
   function isPlanScheduleReceipt(row, dateKey) {
     if (!row || !row.isTarget) return false;
     const age = row.allocationAge;
-    if (age == null || !Number.isFinite(age) || Math.floor(age) !== 0) return false;
-    const observeKey = dateKey || row.dateKey || "";
-    const fileDate = fileDateFromKey(observeKey);
-    if (!fileDate) return false;
-    if (!(row.allocationDate instanceof Date) || Number.isNaN(row.allocationDate.getTime())) return false;
-    return sameCalendarDay(row.allocationDate, fileDate);
+    return age != null && Number.isFinite(age) && Math.floor(age) === 0;
   }
 
   /** @deprecated — use isPlanScheduleReceipt */
@@ -129,7 +125,8 @@
   }
 
   /**
-   * Prior-month (e.g. last month) RES stock → Free Stock (excluded from 315 progress).
+   * Prior-month / aged RES stock → Free Stock (excluded from 315 progress).
+   * Age ≥ 1 (or AG month before view month) — not Col J = 0.
    */
   function isPriorMonthFreeStock(row, monthKey) {
     if (!row || !row.isTarget || !monthKey) return false;
@@ -284,7 +281,7 @@
     let latestTarget = new Map();
 
     const creditResVin = (vin, row, dateKey, dayStats, opts) => {
-      // Count once when VIN first qualifies: RES + age 0 + AG same as file day
+      // Count once when VIN first qualifies in a day file: Col M RES + Col J = 0
       if (!row || !vin) return "";
       const treatAsRes = (opts && opts.wasRes) || row.isTarget;
       if (!treatAsRes) return "";
@@ -445,7 +442,7 @@
               creditResVin(vin, b, dateKey, dayStats, { wasRes: true });
               movements.push(makeMovement(dateKey, a, b, "TRANSFERRED INTO RES"));
             } else if (a.isTarget && !b.isTarget) {
-              // Left RES — credit only if last RES day was age 0 + AG same day
+              // Left RES — credit if that RES day was Col M RES + Col J = 0
               everEnteredRes.add(vin);
               creditResVin(vin, a, dateKey, dayStats, { wasRes: true, observeKey: a.dateKey });
               dayStats.transferOut.push(b);
@@ -719,7 +716,7 @@
     const k = model.kpis;
     const items = [
       ["plan", "Allocation Plan", k.plan, `Target ${esc(TARGET_SEARCH_AREA)}`, ""],
-      ["allocated", "This month received", k.allocated, `Age 0 · AG = file day · Retail Electronic Sales · ${esc(model.monthKey || "month")}`, "ok"],
+      ["allocated", "This month received", k.allocated, `Each day Excel · Col M Retail Electronic Sales · Col J = 0 · ${esc(model.monthKey || "month")}`, "ok"],
       ["freeStock", "Free stock (prior month)", k.freeStock || 0, "Prior AG · still counted if later left RES", "warn"],
       ["totalReceived", "Total received", k.totalReceived || (k.allocated + (k.freeStock || 0)), "This month + free stock (incl. gone)", "info"],
       ["remaining", "Remaining", k.remaining, `${Math.min(100, Math.round(k.progress * 100))}% of plan`, k.remaining ? "warn" : "ok"],
@@ -834,7 +831,7 @@
     const rows = isProgress ? totalReceivedRows(model) : drillRows(model);
     const labels = {
       progress: "All received VINs · product & model totals",
-      allocated: "Age 0 · AG same day · Retail Electronic Sales (toward 315)",
+      allocated: "Each day Excel · Col M Retail Electronic Sales · Col J = 0 (toward 315)",
       freeStock: "Free stock · prior / last month Allocation Date",
       totalReceived: "Total received (this month + free stock)",
       current: "Current RES inventory",
@@ -998,7 +995,7 @@
       list.forEach((r) => {
         const vin = r.vin;
         if (!vin) return;
-        // Only age-0 RES with AG on this file day (already filtered into planReceipts)
+        // Only Col M RES + Col J = 0 from that day Excel (already in planReceipts)
         if (!isPlanScheduleReceipt(r, day.dateKey)) return;
         const placeDay = snapDay;
         if (!Number.isFinite(placeDay) || placeDay < 1 || placeDay > 30) return;
