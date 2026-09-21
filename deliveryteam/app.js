@@ -19,7 +19,7 @@
     assignEmployee: '',
     editsTimer: null,
     liveTimer: null,
-    liveFilters: { q: '', employee: '', status: '', month: '' },
+    liveFilters: { q: '', employee: '', status: '', month: '', carrier: '' },
     liveFingerprint: '',
     monthFilter: '',
     guestTickTimer: null,
@@ -423,6 +423,7 @@
     if (f.q) params.set('q', f.q);
     if (f.employee) params.set('employee', f.employee);
     if (f.status) params.set('status', f.status);
+    if (f.carrier) params.set('carrier', f.carrier);
     if (f.month) params.set('month', f.month);
     const data = await api(`/live-sheet?${params}`);
     const rows = data.rows || [];
@@ -474,13 +475,33 @@
       statusSel.dataset.filled = '1';
     }
 
+    const carrierSel = $('#live-carrier');
+    if (carrierSel) {
+      const byCar = data.byCarrier || {};
+      const carrierNames = Object.keys(byCar)
+        .filter((k) => k && k !== '(empty)')
+        .sort((a, b) => a.localeCompare(b, 'ar'));
+      const metaCarriers = (state.meta && state.meta.carriers) || [];
+      const allCarriers = [...new Set([...metaCarriers, ...carrierNames])];
+      const prev = f.carrier || '';
+      carrierSel.innerHTML = `<option value="">All الناقل</option>
+        <option value="__empty__"${prev === '__empty__' ? ' selected' : ''}>بدون ناقل (فارغ)</option>
+        ${allCarriers.map((c) =>
+          `<option value="${esc(c)}"${prev === c ? ' selected' : ''}>${esc(c)}${byCar[c] != null ? ` (${byCar[c]})` : ''}</option>`
+        ).join('')}`;
+    }
+
     const chips = $('#live-chips');
     if (chips) {
       const byEmp = data.byEmployee || {};
       const bySt = data.byStatus || {};
+      const byCar = data.byCarrier || {};
       chips.innerHTML = [
         `<span class="live-chip"><b>${data.total || 0}</b> assigned</span>`,
         ...Object.keys(byEmp).map((k) => `<button type="button" class="live-chip emp-filter ${f.employee === k ? 'active' : ''}" data-emp="${esc(k)}">${esc(k)} <b>${byEmp[k]}</b></button>`),
+        ...Object.entries(byCar).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) =>
+          `<button type="button" class="live-chip carrier-filter ${f.carrier === (k === '(empty)' ? '__empty__' : k) ? 'active' : ''}" data-carrier="${esc(k === '(empty)' ? '__empty__' : k)}">${esc(k === '(empty)' ? 'بدون ناقل' : k)} <b>${n}</b></button>`
+        ),
         ...Object.entries(data.bySalesType || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) =>
           `<span class="live-chip">${esc(k)} <b>${n}</b></span>`
         ),
@@ -496,6 +517,11 @@
       $$('.live-chip.emp-filter', chips).forEach((b) => b.addEventListener('click', () => {
         state.liveFilters.employee = state.liveFilters.employee === b.dataset.emp ? '' : b.dataset.emp;
         if ($('#live-employee')) $('#live-employee').value = state.liveFilters.employee;
+        loadLiveSheet().catch((e) => alert(e.message));
+      }));
+      $$('.live-chip.carrier-filter', chips).forEach((b) => b.addEventListener('click', () => {
+        state.liveFilters.carrier = state.liveFilters.carrier === b.dataset.carrier ? '' : b.dataset.carrier;
+        if ($('#live-carrier')) $('#live-carrier').value = state.liveFilters.carrier;
         loadLiveSheet().catch((e) => alert(e.message));
       }));
     }
@@ -1624,6 +1650,10 @@
   });
   $('#live-employee')?.addEventListener('change', (e) => {
     state.liveFilters.employee = e.target.value;
+    loadLiveSheet().catch((err) => alert(err.message));
+  });
+  $('#live-carrier')?.addEventListener('change', (e) => {
+    state.liveFilters.carrier = e.target.value;
     loadLiveSheet().catch((err) => alert(err.message));
   });
   $('#live-status')?.addEventListener('change', (e) => {

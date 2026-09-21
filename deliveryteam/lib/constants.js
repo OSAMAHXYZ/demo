@@ -57,6 +57,47 @@ function mapCarrierToCoordinatorCompany(carrier) {
   return key;
 }
 
+function carrierCompanyKey(name) {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Reverse of mapCarrierToCoordinatorCompany — Print Drafts / board name → Live Sheet الناقل.
+ * Unassigned / warehouse / showroom → empty (leave الناقل blank).
+ */
+function mapCoordinatorCompanyToCarrier(company) {
+  const key = String(company || '').trim();
+  if (!key) return '';
+  const kk = carrierCompanyKey(key);
+  if (
+    kk === 'بدون شركة'
+    || kk === 'بدون الشركه'
+    || kk === 'unassigned'
+    || kk === 'no company'
+    || kk === 'none'
+    || kk === '-'
+  ) {
+    return '';
+  }
+  if (kk.includes('مستودع') || kk.includes('عرض الصالة') || kk.includes('showroom')) {
+    return '';
+  }
+
+  for (const [carrier, full] of Object.entries(CARRIER_TO_COORDINATOR_COMPANY)) {
+    if (carrierCompanyKey(full) === kk || carrierCompanyKey(carrier) === kk) return carrier;
+  }
+
+  const stripped = kk.replace(/^شركة\s+|^شركه\s+/, '');
+  for (const carrier of CARRIERS) {
+    const ck = carrierCompanyKey(carrier);
+    if (kk === ck || stripped === ck) return carrier;
+    if (kk.includes(ck) || stripped.includes(ck) || ck.includes(stripped)) return carrier;
+  }
+
+  // Keep full company text so Live Sheet can still show / filter it
+  return key;
+}
+
 const TRANSFER_CITIES = Object.freeze([
   'بقيق', 'الدمام', 'الظهران', 'راس تنورة', 'الهفوف', 'الخبر', 'القطيف', 'الجبيل', 'الاحساء',
   'الباحة', 'المخواة', 'بلجرشي', 'المندق', 'الجوف', 'سكاكا', 'القريات', 'عرعر', 'رفحاء', 'طريف',
@@ -282,6 +323,7 @@ module.exports = {
   CARRIERS,
   CARRIER_TO_COORDINATOR_COMPANY,
   mapCarrierToCoordinatorCompany,
+  mapCoordinatorCompanyToCarrier,
   TRANSFER_CITIES,
   EMPLOYEE_NAMES,
   ASSIGNABLE_NAMES,

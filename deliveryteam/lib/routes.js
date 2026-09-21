@@ -554,7 +554,11 @@ function createDeliveryTeamRouter(opts) {
     eq((v) => v.raw.vehicleLocation, q.vehicleLocation);
     eq((v) => v.raw.gtLocation, q.gtLocation);
     eq((v) => v.ops.transferCity, q.transferCity);
-    eq((v) => v.ops.carrier, q.carrier);
+    if (q.carrier === '__empty__' || q.carrier === '(empty)') {
+      out = out.filter((v) => !String(v.ops.carrier || '').trim());
+    } else {
+      eq((v) => v.ops.carrier, q.carrier);
+    }
     eq((v) => v.ops.trafficFile, q.trafficFile);
     eq((v) => v.ops.trafficFeesOps, q.trafficFees);
     eq((v) => v.ops.insuranceOps, q.insurance);
@@ -626,6 +630,11 @@ function createDeliveryTeamRouter(opts) {
 
   /** Live Excel-style board — all assigned VINs (Admin, Hanouf, and every employee) */
   router.get('/live-sheet', auth, (req, res) => {
+    if (typeof opts.onEnsureDraftCarriers === 'function') {
+      try { opts.onEnsureDraftCarriers(); } catch (err) {
+        console.error('[delivery-team] onEnsureDraftCarriers failed:', err.message || err);
+      }
+    }
     const q = { ...(req.query || {}), assigned: 'yes' };
     let list = store.allVehicles();
     list = applyFilters(list, q, req.dtUser);
@@ -633,6 +642,7 @@ function createDeliveryTeamRouter(opts) {
     const byStatus = {};
     const byEmployee = {};
     const bySalesType = {};
+    const byCarrier = {};
     list.forEach((v) => {
       const st = v.ops.opsStatus || '(blank)';
       byStatus[st] = (byStatus[st] || 0) + 1;
@@ -640,6 +650,8 @@ function createDeliveryTeamRouter(opts) {
       byEmployee[emp] = (byEmployee[emp] || 0) + 1;
       const stype = (v.raw && v.raw.salesType) || '(blank)';
       bySalesType[stype] = (bySalesType[stype] || 0) + 1;
+      const car = String((v.ops && v.ops.carrier) || '').trim() || '(empty)';
+      byCarrier[car] = (byCarrier[car] || 0) + 1;
     });
     res.json({
       at: new Date().toISOString(),
@@ -648,6 +660,7 @@ function createDeliveryTeamRouter(opts) {
       byStatus,
       byEmployee,
       bySalesType,
+      byCarrier,
       rows: list.map((v) => publicVehicle(v, req.dtUser)),
     });
   });

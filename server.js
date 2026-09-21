@@ -40,11 +40,13 @@ const DELIVERY_TEAM_PASSWORD = process.env.DELIVERY_TEAM_PASSWORD || process.env
 const DELIVERY_TEAM_DATA = path.join(PERSISTENT_ROOT, 'delivery-team-data.json');
 const {
   mapCarrierToCoordinatorCompany,
+  mapCoordinatorCompanyToCarrier,
 } = require('./deliveryteam/lib/constants');
 /** Late-bound hooks — filled after hub store helpers exist (router is created early). */
 const deliveryTeamHooks = {
   onCarrierAssigned: null,
   onRawUploaded: null,
+  onEnsureDraftCarriers: null,
 };
 const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
 const deliveryTeam = createDeliveryTeamRouter({
@@ -58,6 +60,11 @@ const deliveryTeam = createDeliveryTeamRouter({
   onRawUploaded: (payload) => (
     typeof deliveryTeamHooks.onRawUploaded === 'function'
       ? deliveryTeamHooks.onRawUploaded(payload)
+      : null
+  ),
+  onEnsureDraftCarriers: () => (
+    typeof deliveryTeamHooks.onEnsureDraftCarriers === 'function'
+      ? deliveryTeamHooks.onEnsureDraftCarriers()
       : null
   ),
 });
@@ -1594,8 +1601,111 @@ function syncHubVehiclesToDeliveryTeam(vehicles) {
   return { upserted };
 }
 
+/**
+ * VIN → company name from Print Drafts (Company Name / company_rep).
+ * Unassigned / empty companies are omitted (caller leaves الناقل empty).
+ */
+function buildCompanyByVinFromDrafts(drafts) {
+  const map = new Map();
+  for (const d of Array.isArray(drafts) ? drafts : []) {
+    const payload = d.payload || {};
+    let company = String(payload.company_rep || d.customerName || '').trim();
+    if (isShowroomDraftPayload(payload) || d.showroomDisplay) {
+      company = company || SHOWROOM_SPECIAL_NAME || '';
+    } else if (payload.deliveryMode === 'warehouse' || payload.warehouse_group) {
+      company = 'مستودع الهاتفية';
+    }
+    if (!company || isUnassignedDeliveryCompany({ company, deliveryCompany: company })) {
+      // Explicitly mark as empty so Live Sheet clears الناقل
+      const vins = collectDraftVins(payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+      vins.forEach((vin) => {
+        if (vin && !map.has(vin)) map.set(vin, '');
+      });
+      continue;
+    }
+    const vins = collectDraftVins(payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    vins.forEach((vin) => {
+      if (!vin) return;
+      map.set(vin, company);
+    });
+  }
+  return map;
+}
+
+/**
+ * Stamp Delivery Team Live Sheet الناقل from Print Drafts for every dashboard VIN.
+ * Matched company → الناقل (short carrier name when known). Unmatched / unassigned → empty.
+ */
+function syncPrintDraftCompaniesToDeliveryTeam(drafts) {
+  if (!deliveryTeamStore || typeof deliveryTeamStore.allVehicles !== 'function') {
+    return { updated: 0, cleared: 0, matched: 0, scanned: 0, draftVins: 0 };
+  }
+  const byVin = buildCompanyByVinFromDrafts(
+    drafts != null ? drafts : (store.drafts || [])
+  );
+  const all = deliveryTeamStore.allVehicles() || [];
+  const now = new Date().toISOString();
+  let updated = 0;
+  let cleared = 0;
+  let matched = 0;
+  let scanned = 0;
+
+  for (const v of all) {
+    const vin = normVin(v && v.vin);
+    if (!vin) continue;
+    scanned += 1;
+    const hasDraft = byVin.has(vin);
+    const company = hasDraft ? byVin.get(vin) : '';
+    // Only rewrite when drafts are present for this run; for full dashboard pass
+    // every VIN is looked up — no draft ⇒ empty الناقل
+    const carrier = company ? mapCoordinatorCompanyToCarrier(company) : '';
+    if (!v.ops) v.ops = {};
+    const prev = String(v.ops.carrier || '').trim();
+    const next = String(carrier || '').trim();
+    if (prev === next) {
+      if (next) matched += 1;
+      continue;
+    }
+    v.ops.carrier = next;
+    v.ops.updatedAt = now;
+    v.ops.updatedBy = 'print-drafts';
+    deliveryTeamStore.upsertVehicle(vin, v);
+    if (next) {
+      updated += 1;
+      matched += 1;
+    } else {
+      cleared += 1;
+    }
+  }
+
+  if (updated || cleared) deliveryTeamStore.save();
+  return {
+    updated,
+    cleared,
+    matched,
+    scanned,
+    draftVins: byVin.size,
+  };
+}
+
 deliveryTeamHooks.onCarrierAssigned = (items) => syncTeamCarriersToCoordinator(items);
-deliveryTeamHooks.onRawUploaded = (payload) => syncTeamRawToHubInventory(payload && payload.store);
+deliveryTeamHooks.onRawUploaded = (payload) => {
+  const hub = syncTeamRawToHubInventory(payload && payload.store);
+  // After Delivery sheet upload, stamp الناقل from Print Drafts when archive drafts exist
+  const draftCarriers = (store.drafts && store.drafts.length)
+    ? syncPrintDraftCompaniesToDeliveryTeam(store.drafts)
+    : null;
+  return { ...hub, draftCarriers };
+};
+let lastDraftCarrierSyncAt = 0;
+deliveryTeamHooks.onEnsureDraftCarriers = () => {
+  if (!store.drafts || !store.drafts.length) return null;
+  const now = Date.now();
+  // Throttle — Live Sheet polls often; still heals within ~45s after deploy / archive restore
+  if (now - lastDraftCarrierSyncAt < 45_000) return null;
+  lastDraftCarrierSyncAt = now;
+  return syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
+};
 
 function todayIsoRiyadh() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -2912,6 +3022,7 @@ function finishRestoreExport(buffer, filename, res) {
     queueImported: (parsed.queue || []).length,
     companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
     draftsByCompany: refresh.draftsApplied?.byCompany || computeDraftsByCompany(),
+    teamCarriersFromDrafts: refresh.teamDraftCarriers || null,
     sheetName: parsed.sheetName,
     filename: parsed.filename,
     queueRefreshed: refresh.total
@@ -3461,7 +3572,12 @@ function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = fa
   }
 
   const refresh = refreshQueueFromVehicles();
-  return { ...refresh, draftsApplied };
+  let teamDraftCarriers = null;
+  if (Array.isArray(store.drafts) && store.drafts.length) {
+    teamDraftCarriers = syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
+    lastDraftCarrierSyncAt = Date.now();
+  }
+  return { ...refresh, draftsApplied, teamDraftCarriers };
 }
 
 function arabicWeekdayName(isoDate) {
@@ -4837,6 +4953,7 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
       queueImported: (parsed.queue || []).length,
       companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
       draftsByCompany: refresh.draftsApplied?.byCompany || (hasDrafts ? computeDraftsByCompany() : {}),
+      teamCarriersFromDrafts: refresh.teamDraftCarriers || null,
       isExport: Boolean(parsed.isExport),
       sheetName: parsed.sheetName,
       queueRefreshed: refresh.total,
@@ -5069,7 +5186,10 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
   const forCoordinator = String(req.query.coordinator || '') === '1';
   if ((admin || forCoordinator) && Array.isArray(store.drafts) && store.drafts.length) {
     const heal = applyCompaniesFromPrintDrafts(store.drafts, { onlyUnassigned: true });
-    if (heal.assigned) persistAndBroadcast();
+    const teamDraftCarriers = syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
+    if (heal.assigned || (teamDraftCarriers && (teamDraftCarriers.updated || teamDraftCarriers.cleared))) {
+      persistAndBroadcast();
+    }
   }
 
   let queue = store.queue.map(enrichQueueItem);
