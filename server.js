@@ -1311,6 +1311,30 @@ function resolveCoordinatorCompanyFromCarrier(carrier) {
   return fuzzy || mapped;
 }
 
+/** الناقل / carrier text from a Delivery Team vehicle (ops first, then raw). */
+function teamVehicleCarrier(teamVehicle) {
+  const ops = (teamVehicle && teamVehicle.ops) || {};
+  const raw = (teamVehicle && teamVehicle.raw) || {};
+  return String(
+    teamVehicle.carrier
+    || ops.carrier
+    || raw.carrier
+    || raw.transporter
+    || ''
+  ).trim();
+}
+
+function teamVehicleTransferCity(teamVehicle) {
+  const ops = (teamVehicle && teamVehicle.ops) || {};
+  const raw = (teamVehicle && teamVehicle.raw) || {};
+  return String(
+    teamVehicle.transferCity
+    || ops.transferCity
+    || raw.transferCity
+    || ''
+  ).trim();
+}
+
 function upsertHubVehicleFromTeamVehicle(teamVehicle) {
   const vin = normVin(teamVehicle && (teamVehicle.vin || (teamVehicle.raw && teamVehicle.raw.vin)));
   if (!vin) return null;
@@ -1383,6 +1407,7 @@ function applyTeamCityToQueueItem(item, transferCity) {
 /**
  * When Hanouf / Rasha (or any team user) sets الناقل and/or مدينة الترحيل,
  * push VIN onto that company board and stamp plannedBranch for لوحة الترحيل.
+ * Also re-assigns queue rows that are still «بدون شركة» when الناقل is already on the sheet.
  */
 function syncTeamCarriersToCoordinator(items) {
   const list = Array.isArray(items) ? items : [];
@@ -1397,11 +1422,9 @@ function syncTeamCarriersToCoordinator(items) {
   let cityUpdated = 0;
 
   for (const item of list) {
-    const vin = normVin(item.vin);
-    const carrier = String(item.carrier || (item.ops && item.ops.carrier) || '').trim();
-    const transferCity = String(
-      item.transferCity || (item.ops && item.ops.transferCity) || ''
-    ).trim();
+    const vin = normVin(item.vin || (item.raw && item.raw.vin) || (item.vehicle && item.vehicle.vin));
+    const carrier = teamVehicleCarrier(item.vehicle ? { ...item, ...item.vehicle, ops: item.ops || item.vehicle.ops, raw: item.raw || item.vehicle.raw } : item);
+    const transferCity = teamVehicleTransferCity(item.vehicle ? { ...item, ...item.vehicle, ops: item.ops || item.vehicle.ops, raw: item.raw || item.vehicle.raw } : item);
     if (!vin) {
       skipped += 1;
       continue;
@@ -1430,22 +1453,30 @@ function syncTeamCarriersToCoordinator(items) {
       store.options.companies = uniqueSorted([...(store.options.companies || []), deliveryCompany]);
     }
 
-    const hubVeh = upsertHubVehicleFromTeamVehicle(item);
+    const hubVeh = upsertHubVehicleFromTeamVehicle(item.vehicle || item);
     const existingItem = findQueueItem(vin);
     if (existingItem) {
       const prevCompany = String(existingItem.deliveryCompany || existingItem.company || '').trim();
-      const sameCompany = prevCompany
+      const wasUnassigned = isUnassignedDeliveryCompany(existingItem);
+      const sameCompany = !wasUnassigned
+        && prevCompany
         && companyNameKey(prevCompany) === companyNameKey(deliveryCompany);
+
       if (sameCompany) {
         if (transferCity && applyTeamCityToQueueItem(existingItem, transferCity)) cityUpdated += 1;
         same += 1;
         continue;
       }
+
+      // بدون شركة / empty / different company → apply الناقل from Delivery Team sheet
       existingItem.deliveryCompany = deliveryCompany;
       existingItem.company = deliveryCompany;
       existingItem.plannedDeliveryMode = 'memo';
       if (transferCity && applyTeamCityToQueueItem(existingItem, transferCity)) cityUpdated += 1;
       if (hubVeh) Object.assign(existingItem, enrichFromVehicle(existingItem, hubVeh));
+      // keep deliveryCompany after enrich (enrich does not clear it, but be explicit)
+      existingItem.deliveryCompany = deliveryCompany;
+      existingItem.company = deliveryCompany;
       reassigned += 1;
       continue;
     }
@@ -1484,13 +1515,11 @@ function syncTeamRawToHubInventory(teamStore) {
     if (upsertHubVehicleFromTeamVehicle(v)) upserted += 1;
   }
   const carrierItems = all
-    .filter((v) => v && v.ops && (
-      String(v.ops.carrier || '').trim() || String(v.ops.transferCity || '').trim()
-    ))
+    .filter((v) => v && (teamVehicleCarrier(v) || teamVehicleTransferCity(v)))
     .map((v) => ({
       vin: v.vin,
-      carrier: v.ops.carrier || '',
-      transferCity: v.ops.transferCity || '',
+      carrier: teamVehicleCarrier(v),
+      transferCity: teamVehicleTransferCity(v),
       raw: v.raw,
       ops: v.ops,
       by: 'delivery-team-sync',

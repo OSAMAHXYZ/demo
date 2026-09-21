@@ -17,6 +17,7 @@ const {
   E_SALES_EXPORT_HEADERS,
   OPS_FIELDS,
   RAW_COL,
+  E_SALES_COL,
   isGuestCenterRaw,
 } = require('./constants');
 const { createStore } = require('./store');
@@ -248,6 +249,10 @@ function mapRawRow(row, line, { useLegacyCols = false } = {}) {
     if (ph) raw.phone = ph;
   }
   if (!raw.phone) raw.phone = findPhoneInLine(line);
+  if (!useLegacyCols && Array.isArray(line) && line.length >= 25) {
+    // Delivery / E sales fixed PIC when header alias missed
+    if (!raw.pic) raw.pic = cellText(line, E_SALES_COL.pic);
+  }
   // Delivery sheet uses تاريخ as the main date (treat as proforma when missing)
   raw.proformaDate = normalizeDate(raw.proformaDate) || normalizeDate(raw.date);
   raw.deliveryDate = normalizeDate(raw.deliveryDate);
@@ -256,7 +261,7 @@ function mapRawRow(row, line, { useLegacyCols = false } = {}) {
   return raw;
 }
 
-function mapOpsFromRow(row) {
+function mapOpsFromRow(row, line, { useESalesCols = false } = {}) {
   const ops = {};
   for (const [key, aliases] of Object.entries(OPS_HEADER_MAP || {})) {
     const val = pickCol(row, aliases);
@@ -272,6 +277,12 @@ function mapOpsFromRow(row) {
     } else {
       ops[key] = String(val == null ? '' : val).trim();
     }
+  }
+  // E sales fixed columns — ensure الناقل / مدينة الترحيل are never missed
+  if (useESalesCols && Array.isArray(line) && line.length) {
+    if (!ops.carrier) ops.carrier = cellText(line, E_SALES_COL.carrier);
+    if (!ops.transferCity) ops.transferCity = cellText(line, E_SALES_COL.transferCity);
+    if (!ops.opsStatus) ops.opsStatus = normalizeSheetStatus(cellText(line, E_SALES_COL.status));
   }
   return ops;
 }
@@ -953,22 +964,24 @@ function createDeliveryTeamRouter(opts) {
         seenInFile.add(vinKey);
         rowsProcessed += 1;
 
-        const sheetOps = deliveryFmt ? mapOpsFromRow(obj) : {};
+        const sheetOps = mapOpsFromRow(obj, line, { useESalesCols: !!deliveryFmt || headers.some((h) => /ناقل|carrier/i.test(String(h))) });
         const hasSheetOps = Object.values(sheetOps).some((v) => String(v || '').trim() !== '');
 
         const existing = store.getVehicle(vinKey);
         // Archive / Delivery sheet upload: PIC always drives assignment when present
-        const forceAssign = !!deliveryFmt;
+        const forceAssign = !!deliveryFmt || !!String(raw.pic || '').trim();
+        let carriersTouched = false;
         if (!existing) {
           let ops = emptyOps();
           if (hasSheetOps) {
             ops = mergeOpsFromSheet(ops, sheetOps);
             opsImported += 1;
           }
-          const asg = assignFromPic(ops, raw.pic, req.dtUser.name, { force: forceAssign });
+          const asg = assignFromPic(ops, raw.pic || cellText(line, E_SALES_COL.pic), req.dtUser.name, { force: forceAssign });
           ops = asg.ops;
           if (asg.changed) assignedFromPic += 1;
-          else if (String(raw.pic || '').trim() && !asg.name) picUnresolved += 1;
+          else if (String(raw.pic || cellText(line, E_SALES_COL.pic) || '').trim() && !asg.name) picUnresolved += 1;
+          if (ops.carrier) carriersTouched = true;
           store.upsertVehicle(vinKey, {
             vin: vinKey,
             raw: { ...raw, vin: vinKey },
@@ -987,14 +1000,16 @@ function createDeliveryTeamRouter(opts) {
             ops = mergeOpsFromSheet(ops, sheetOps);
             opsImported += 1;
           }
-          const asg = assignFromPic(ops, raw.pic, req.dtUser.name, { force: forceAssign });
+          const asg = assignFromPic(ops, raw.pic || cellText(line, E_SALES_COL.pic), req.dtUser.name, { force: forceAssign });
           ops = asg.ops;
           if (asg.changed) assignedFromPic += 1;
-          else if (String(raw.pic || '').trim() && !asg.name) picUnresolved += 1;
+          else if (String(raw.pic || cellText(line, E_SALES_COL.pic) || '').trim() && !asg.name) picUnresolved += 1;
+          if (ops.carrier) carriersTouched = true;
           existing.ops = ops;
           store.upsertVehicle(vinKey, existing);
           updatedVins += 1;
         }
+        if (carriersTouched) { /* counted after loop via sync */ }
         if (raw.proformaDate === today || raw.date === today) todaysProformas += 1;
       }
 
@@ -1023,6 +1038,19 @@ function createDeliveryTeamRouter(opts) {
       });
       store.save();
 
+      // Push الناقل → coordinator company boards (clears «بدون شركة» when carrier is on the sheet)
+      const carrierSyncItems = store.allVehicles()
+        .filter((v) => v && String((v.ops && v.ops.carrier) || '').trim())
+        .map((v) => ({
+          vin: v.vin,
+          carrier: v.ops.carrier,
+          transferCity: (v.ops && v.ops.transferCity) || '',
+          raw: v.raw,
+          ops: v.ops,
+          by: req.dtUser.name,
+        }));
+      const carrierHubSync = notifyCarrierAssigned(carrierSyncItems);
+
       const syncHint = notifyRawUploaded({
         rowsProcessed,
         newVins,
@@ -1031,6 +1059,12 @@ function createDeliveryTeamRouter(opts) {
         assignedFromPic,
         filename,
       });
+
+      const carriersSynced = carrierHubSync && typeof carrierHubSync === 'object'
+        ? (Number(carrierHubSync.added || 0) + Number(carrierHubSync.reassigned || 0))
+        : (syncHint && syncHint.carriers
+          ? (Number(syncHint.carriers.added || 0) + Number(syncHint.carriers.reassigned || 0))
+          : 0);
 
       return res.json({
         ok: true,
@@ -1046,6 +1080,9 @@ function createDeliveryTeamRouter(opts) {
           opsImported,
           assignedFromPic,
           picUnresolved,
+          carriersOnSheet: carrierSyncItems.length,
+          carriersSynced,
+          carrierHubSync: carrierHubSync || undefined,
           errors: errors.slice(0, 50),
           errorCount: errors.length,
         },

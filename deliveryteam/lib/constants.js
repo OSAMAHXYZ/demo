@@ -227,6 +227,14 @@ const RAW_COL = Object.freeze({
   phone: 24, // Y
 });
 
+/** E sales / Delivery sheet fixed column indexes (0-based) */
+const E_SALES_COL = Object.freeze({
+  pic: 5,
+  carrier: 24, // الناقل
+  transferCity: 23, // مدينة الترحيل
+  status: 17, // الحالة Status
+});
+
 /** Operational fields employees own — never wiped blank by Raw Data upload */
 const OPS_FIELDS = Object.freeze([
   'guestSentDate',
@@ -283,6 +291,7 @@ module.exports = {
   OPS_HEADER_MAP,
   E_SALES_EXPORT_HEADERS,
   RAW_COL,
+  E_SALES_COL,
   OPS_FIELDS,
   isGuestCenterRaw,
 };

@@ -1477,6 +1477,7 @@
           <div><strong>${s.newVins}</strong><span>New VINs</span></div>
           <div><strong>${s.updatedVins}</strong><span>Updated VINs</span></div>
           <div><strong>${s.assignedFromPic || 0}</strong><span>Assigned from PIC</span></div>
+          <div><strong>${s.carriersSynced || 0}</strong><span>الناقل → company boards</span></div>
           <div><strong>${s.opsImported || 0}</strong><span>Ops / status imported</span></div>
           <div><strong>${s.todaysProformas}</strong><span>Today's dates</span></div>
           <div><strong>${s.duplicateVins}</strong><span>Duplicate VINs</span></div>
