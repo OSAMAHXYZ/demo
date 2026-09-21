@@ -2910,6 +2910,8 @@ function finishRestoreExport(buffer, filename, res) {
     imported: parsed.vehicles.length,
     draftsImported: (parsed.drafts || []).length,
     queueImported: (parsed.queue || []).length,
+    companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
+    draftsByCompany: refresh.draftsApplied?.byCompany || computeDraftsByCompany(),
     sheetName: parsed.sheetName,
     filename: parsed.filename,
     queueRefreshed: refresh.total
@@ -3081,19 +3083,47 @@ function buildDraftPayloadFromExportRow(row, veh) {
 function parsePrintDraftsFromRows(rows) {
   const drafts = [];
   for (const row of rows || []) {
-    const vin = normVin(pickCol(row, VIN_ALIASES));
-    if (!vin) continue;
     const product = pickCol(row, ['product', 'model']);
     const assignedTo = pickCol(row, ['assigned to', 'agent', 'المسؤول']) || 'admin';
-    const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة']);
+    const companyName = pickCol(row, ['company name', 'company', 'اسم الشركة', 'الشركة']);
     const idRaw = pickCol(row, ['draft id', 'id', 'draft']);
     const id = idRaw || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const printedAt = pickCol(row, ['printed at', 'printed']) || new Date().toISOString();
-    const payload = buildDraftPayloadFromExportRow(row, { vin, product, plate: pickCol(row, ['plate']) });
+    const allVinsRaw = pickCol(row, ['all vins', 'all vin', 'vins', 'chassis list', 'كل الشاسيه']);
+    const primary = normVin(pickCol(row, VIN_ALIASES));
+    const fromAll = String(allVinsRaw || '')
+      .split(/[,;\s]+/)
+      .map((v) => normVin(v))
+      .filter(Boolean);
+    const uniqueVins = [...new Set([primary, ...fromAll].filter(Boolean))];
+    if (!uniqueVins.length) continue;
+    const vin = uniqueVins[0];
+    const payload = buildDraftPayloadFromExportRow(row, {
+      vin,
+      product,
+      plate: pickCol(row, ['plate']),
+    });
+    // Ensure every VIN from «All VINs» is on the payload cars list
+    if (Array.isArray(payload.cars)) {
+      uniqueVins.forEach((v, idx) => {
+        if (!payload.cars[idx]) payload.cars[idx] = emptyCarSlot();
+        if (!payload.cars[idx].chassis) {
+          payload.cars[idx] = {
+            model: product || '',
+            chassis: v,
+            plate: pickCol(row, ['plate']) || '',
+            remarks: '',
+          };
+        }
+      });
+      payload.car_count = String(uniqueVins.length);
+    }
+    if (!payload.company_rep && companyName) payload.company_rep = companyName;
     drafts.push({
       id,
       printedAt,
       vin,
+      vins: uniqueVins,
       product,
       model: product,
       assignedTo: isShowroomDraftPayload(payload) ? (assignedTo || SHOWROOM_AGENT) : assignedTo,
@@ -3102,7 +3132,9 @@ function parsePrintDraftsFromRows(rows) {
       gt: pickCol(row, ['gt']) || '',
       location: pickCol(row, ['location']) || '',
       showroomDisplay: isShowroomDraftPayload(payload),
-      payload
+      deliveryNoteNumber: pickCol(row, ['delivery note number', 'dn', 'رقم المذكرة']) || '',
+      deliveryNoteDate: pickCol(row, ['delivery note date', 'تاريخ المذكرة']) || '',
+      payload,
     });
   }
   return drafts;
@@ -3121,6 +3153,9 @@ function parseQueueFromRows(rows) {
     const deliveryModeRaw = String(pickCol(row, ['delivery mode', 'delivery type']) || '').trim().toLowerCase();
     const isWh = deliveryModeRaw === 'warehouse'
       || isWarehouseExportRow(row);
+    const companyName = String(pickCol(row, [
+      'company name', 'company', 'delivery company', 'اسم الشركة', 'الشركة', 'الناقل'
+    ]) || '').trim();
     queue.push({
       vin,
       status: status === 'claimed' || assignedTo ? 'claimed' : 'available',
@@ -3135,7 +3170,10 @@ function parseQueueFromRows(rows) {
       location: pickCol(row, ['location']) || '',
       plate: pickCol(row, ['plate']) || '',
       customerName: pickCol(row, ['customer', 'customer name']) || '',
-      imageUrl: ''
+      deliveryCompany: companyName,
+      company: companyName,
+      plannedDeliveryMode: isWh ? 'warehouse' : (companyName ? 'memo' : ''),
+      imageUrl: '',
     });
   }
   return queue;
@@ -3226,6 +3264,14 @@ function parseSalesFromWorkbook(wb, filename) {
     if (draftsSheet) result.drafts = parsePrintDraftsFromRows(sheetRows(wb, draftsSheet));
     if (queueSheet) result.queue = parseQueueFromRows(sheetRows(wb, queueSheet));
   } else {
+    // Always try «Print Drafts» sheet when present (archive / delivery_export / mixed workbooks)
+    const draftsSheet = findSheetName(wb, [
+      'print drafts', 'print draft', 'drafts', 'مسودات الطباعة', 'مسودات'
+    ]);
+    if (draftsSheet) {
+      result.drafts = parsePrintDraftsFromRows(sheetRows(wb, draftsSheet));
+      if (result.drafts.length) result.isExport = true;
+    }
     // Pasted Print Drafts grid (single sheet with Draft ID / Company Name columns)
     const headerKeys = Object.keys(rows[0] || {}).map((h) => normalizeHeader(h));
     const looksLikeDrafts = headerKeys.some((h) => h.includes('draft id') || h === 'company name' || h.includes('branch to'));
@@ -3256,6 +3302,124 @@ function parseSalesText(text, filename) {
   return parseSalesFromWorkbook(wb, filename || 'pasted-excel.tsv');
 }
 
+/**
+ * Assign coordinator queue companies from Print Drafts (مسودات الطباعة).
+ * Each draft's Company Name / company_rep stamps every VIN on that memo.
+ * @param {object[]} drafts
+ * @param {{ onlyUnassigned?: boolean }} [opts] — when true, only fill بدون شركة (no overwrite / no create)
+ */
+function applyCompaniesFromPrintDrafts(drafts, { onlyUnassigned = false } = {}) {
+  ensureOptions();
+  const list = Array.isArray(drafts) ? drafts : [];
+  let assigned = 0;
+  let created = 0;
+  const byCompany = new Map();
+  const now = new Date().toISOString();
+  const byVehicle = vehicleIndex();
+
+  for (const d of list) {
+    const payload = d.payload || {};
+    let company = String(payload.company_rep || d.customerName || '').trim();
+    if (isShowroomDraftPayload(payload) || d.showroomDisplay) {
+      company = company || SHOWROOM_SPECIAL_NAME || 'سيارات عرض الصالة';
+    } else if (payload.deliveryMode === 'warehouse' || payload.warehouse_group) {
+      company = 'مستودع الهاتفية';
+    }
+    if (!company || isUnassignedDeliveryCompany({ company, deliveryCompany: company })) {
+      continue;
+    }
+
+    const existsOpt = (store.options.companies || []).some(
+      (x) => companyNameKey(x) === companyNameKey(company)
+    );
+    if (!existsOpt && company !== 'مستودع الهاتفية' && company !== (SHOWROOM_SPECIAL_NAME || '')) {
+      store.options.companies = uniqueSorted([...(store.options.companies || []), company]);
+    }
+
+    const vins = collectDraftVins(payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    byCompany.set(company, (byCompany.get(company) || 0) + vins.length);
+
+    for (const vin of vins) {
+      if (!vin) continue;
+      let item = findQueueItem(vin);
+      const veh = byVehicle.get(vin);
+      const isWh = company === 'مستودع الهاتفية' || payload.deliveryMode === 'warehouse';
+      if (!item) {
+        if (onlyUnassigned) continue;
+        item = enrichFromVehicle({
+          vin,
+          status: 'claimed',
+          agentStatus: 'delivered',
+          assignedTo: d.assignedTo || d.entryAgent || 'admin',
+          addedAt: d.printedAt || now,
+          assignedAt: d.printedAt || now,
+          deliveredAt: d.printedAt || now,
+          deliveryCompany: company,
+          company,
+          plannedDeliveryMode: isWh ? 'warehouse' : 'memo',
+          plannedBranch: String(payload.branch_to || '').trim(),
+          source: 'print-drafts',
+          product: d.product || '',
+          model: d.model || d.product || '',
+        }, veh || {});
+        store.queue.push(item);
+        created += 1;
+        assigned += 1;
+        continue;
+      }
+
+      const wasUnassigned = isUnassignedDeliveryCompany(item);
+      const prev = String(item.deliveryCompany || item.company || '').trim();
+      if (onlyUnassigned && !wasUnassigned && prev) continue;
+      if (wasUnassigned || !prev || (!onlyUnassigned && companyNameKey(prev) !== companyNameKey(company))) {
+        item.deliveryCompany = company;
+        item.company = company;
+        item.plannedDeliveryMode = isWh
+          ? 'warehouse'
+          : (item.plannedDeliveryMode || 'memo');
+        if (payload.branch_to && !item.plannedBranch) {
+          item.plannedBranch = String(payload.branch_to).trim();
+        }
+        // Printed draft ⇒ تم الترحيل
+        if (!item.agentStatus || item.agentStatus === 'available') {
+          item.status = 'claimed';
+          item.agentStatus = 'delivered';
+          item.deliveredAt = item.deliveredAt || d.printedAt || now;
+        }
+        assigned += 1;
+      }
+    }
+  }
+
+  store.queue = dedupeQueue(store.queue || []);
+  return {
+    assigned,
+    created,
+    companies: [...byCompany.keys()],
+    byCompany: Object.fromEntries(byCompany),
+    draftCount: list.length,
+  };
+}
+
+/** VIN counts per company from Print Drafts (for Coordinator boards). */
+function computeDraftsByCompany() {
+  const map = Object.create(null);
+  for (const d of store.drafts || []) {
+    const payload = d.payload || {};
+    let company = String(payload.company_rep || d.customerName || '').trim();
+    if (isShowroomDraftPayload(payload) || d.showroomDisplay) {
+      company = company || SHOWROOM_SPECIAL_NAME || 'سيارات عرض الصالة';
+    } else if (payload.deliveryMode === 'warehouse' || payload.warehouse_group) {
+      company = 'مستودع الهاتفية';
+    }
+    if (!company) company = 'بدون شركة';
+    const vins = collectDraftVins(payload, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    const n = Math.max(1, vins.length);
+    map[company] = (map[company] || 0) + n;
+  }
+  return map;
+}
+
 function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = false } = {}) {
   store.vehicles = parsed.vehicles;
   store.raw = {
@@ -3271,15 +3435,33 @@ function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = fa
     nextDeliveryNoteSeq: Number(store.meta?.nextDeliveryNoteSeq) || 1
   };
 
+  let draftsApplied = null;
   if (replaceDrafts || (Array.isArray(parsed.drafts) && parsed.drafts.length)) {
     store.drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, MAX_DRAFTS) : [];
     migrateDeliveryNoteFields();
+    draftsApplied = applyCompaniesFromPrintDrafts(store.drafts);
   }
   if (replaceQueue || (Array.isArray(parsed.queue) && parsed.queue.length)) {
     store.queue = Array.isArray(parsed.queue) ? dedupeQueue(parsed.queue) : [];
+    // Queue sheet may lack company — backfill from drafts when present
+    if (store.drafts && store.drafts.length) {
+      const again = applyCompaniesFromPrintDrafts(store.drafts);
+      draftsApplied = draftsApplied
+        ? {
+            assigned: (draftsApplied.assigned || 0) + (again.assigned || 0),
+            created: (draftsApplied.created || 0) + (again.created || 0),
+            companies: [...new Set([...(draftsApplied.companies || []), ...(again.companies || [])])],
+            byCompany: { ...(draftsApplied.byCompany || {}), ...(again.byCompany || {}) },
+            draftCount: draftsApplied.draftCount || again.draftCount,
+          }
+        : again;
+    }
+  } else if (draftsApplied && draftsApplied.assigned) {
+    // drafts alone already updated queue
   }
 
-  return refreshQueueFromVehicles();
+  const refresh = refreshQueueFromVehicles();
+  return { ...refresh, draftsApplied };
 }
 
 function arabicWeekdayName(isoDate) {
@@ -4640,7 +4822,12 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
     if (!parsed.vehicles.length) {
       return res.status(400).json({ error: 'لم يتم العثور على أرقام شاسيه في الملف' });
     }
-    const refresh = applyParsedInventory(parsed);
+    const hasDrafts = Array.isArray(parsed.drafts) && parsed.drafts.length > 0;
+    const hasQueue = Array.isArray(parsed.queue) && parsed.queue.length > 0;
+    const refresh = applyParsedInventory(parsed, {
+      replaceDrafts: Boolean(parsed.isExport && hasDrafts),
+      replaceQueue: Boolean(parsed.isExport && hasQueue),
+    });
     const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
     persistAndBroadcast();
     res.json({
@@ -4648,6 +4835,8 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
       vehicles: parsed.vehicles.slice(0, 200),
       draftsImported: (parsed.drafts || []).length,
       queueImported: (parsed.queue || []).length,
+      companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
+      draftsByCompany: refresh.draftsApplied?.byCompany || (hasDrafts ? computeDraftsByCompany() : {}),
       isExport: Boolean(parsed.isExport),
       sheetName: parsed.sheetName,
       queueRefreshed: refresh.total,
@@ -4876,6 +5065,13 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
     }
   }
 
+  // Heal بدون شركة from Print Drafts already in store (archive restore / prior import)
+  const forCoordinator = String(req.query.coordinator || '') === '1';
+  if ((admin || forCoordinator) && Array.isArray(store.drafts) && store.drafts.length) {
+    const heal = applyCompaniesFromPrintDrafts(store.drafts, { onlyUnassigned: true });
+    if (heal.assigned) persistAndBroadcast();
+  }
+
   let queue = store.queue.map(enrichQueueItem);
 
   // Agents also see display-status cars (from ياسين) to convert into a delivery note
@@ -4890,7 +5086,6 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
 
   // Coordinator page: hide تم الترحيل from prior months (from the 1st of each new month).
   // Admin dashboard keeps full history (do not pass coordinator=1).
-  const forCoordinator = String(req.query.coordinator || '') === '1';
   if (forCoordinator) {
     queue = queue.filter((q) => !isPriorMonthDelivered(q));
   }
@@ -4901,6 +5096,7 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
     return res.json({
       queue,
       stats: computeStats(),
+      draftsByCompany: computeDraftsByCompany(),
       drafts: store.drafts,
       deliveryNoteStats: computeDeliveryNoteStats(store.drafts || []),
       manualVehicles: store.manualVehicles || [],
@@ -4917,10 +5113,13 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
     ensureShowroomParking();
     return res.json({
       queue,
+      stats: computeStats(),
+      draftsByCompany: computeDraftsByCompany(),
       warehouseStock: store.warehouseStock.filter((e) => e.status === 'in').map(enrichWarehouseEntry),
       warehouseZones: warehouseOccupancy(),
       showroomParking: store.showroomParking.filter((e) => e.status === 'in').map(enrichShowroomParkingEntry),
-      showroomParkingOccupancy: showroomParkingOccupancy()
+      showroomParkingOccupancy: showroomParkingOccupancy(),
+      rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
     });
   }
 

@@ -3865,8 +3865,11 @@
                 const modeNote = data.mode === 'inventory_only'
                     ? ' · مركبات فقط (المسودات/القائمة لم تُستبدَل)'
                     : '';
+                const assignNote = data.companiesFromDrafts
+                    ? ` · عُيّن ${data.companiesFromDrafts} شاسيه من Print Drafts`
+                    : '';
                 setRestoreStatus(
-                    `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة${modeNote}`,
+                    `تم الاستيراد: ${data.imported || 0} مركبة · ${data.draftsImported || 0} مسودة · ${data.queueImported || 0} قائمة${modeNote}${assignNote}`,
                     'ok'
                 );
                 await loadDashboard({ force: true, quiet: true });

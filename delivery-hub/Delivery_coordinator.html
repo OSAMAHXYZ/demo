@@ -268,6 +268,18 @@
             color: #86efac;
             border: 1px solid rgba(34, 197, 94, .3);
         }
+        .company-board-count.has-drafts {
+            background: rgba(56, 189, 248, .14);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, .35);
+        }
+        .company-board-counts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: flex-end;
+            align-items: center;
+        }
         .company-board textarea {
             width: 100%;
             min-height: 88px;
@@ -574,7 +586,7 @@
                     <label class="hub-upload" id="uploadZone">
                         <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
                         <strong>اسحب ملف Excel أو انقر للاختيار — رفع كامل</strong>
-                        <p class="hub-meta">ارفع Sales Raw Data أولاً قبل إضافة أرقام الشاسيه</p>
+                        <p class="hub-meta">Sales Raw أو أرشيف delivery_export (ورقة Print Drafts تعيّن الشركة تلقائياً)</p>
                     </label>
                     <p class="hub-status" id="uploadStatus"></p>
                     <div class="hub-actions-row" style="margin-top:14px;flex-wrap:wrap;gap:10px;align-items:center">
@@ -661,11 +673,14 @@
 
         function renderStats(stats, hasRaw) {
             const unassigned = currentQueue.filter(isUnassignedCompany).length;
+            const draftTotal = Object.values(draftsByCompany || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+            const draftCompanies = Object.keys(draftsByCompany || {}).filter((k) => k && k !== 'بدون شركة').length;
             document.getElementById('stats').innerHTML = `
                 <div class="hub-stat"><span>إجمالي الشاسيه</span><b>${stats.total || 0}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${stats.available || 0}</b></div>
                 <div class="hub-stat hub-stat--warn"><span>بدون شركة</span><b>${unassigned}</b></div>
-                <div class="hub-stat hub-stat--stock"><span>In Stock</span><b>${stats.in_stock || 0}</b></div>
+                <div class="hub-stat hub-stat--stock"><span>Print Drafts</span><b>${draftTotal}</b></div>
+                <div class="hub-stat"><span>شركات المسودات</span><b>${draftCompanies}</b></div>
                 <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${stats.ready_for_delivery || 0}</b></div>
                 <div class="hub-stat"><span>بيانات خام</span><b style="font-size:1rem">${hasRaw ? '✓' : '—'}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>تم الترحيل</span><b>${stats.delivered || 0}</b></div>
@@ -673,6 +688,7 @@
         }
 
         let currentQueue = [];
+        let draftsByCompany = {};
         let rawUploaded = false;
         let companyOptions = [];
         let companyPhones = {};
@@ -849,6 +865,20 @@
             return n.includes('مستودع') || n === 'المستودع';
         }
 
+        function draftCountForCompany(company) {
+            const key = String(company || '').trim();
+            if (!key) return 0;
+            if (draftsByCompany[key] != null) return Number(draftsByCompany[key]) || 0;
+            const want = key.toLowerCase().replace(/\s+/g, ' ');
+            for (const [k, v] of Object.entries(draftsByCompany || {})) {
+                if (String(k).trim().toLowerCase().replace(/\s+/g, ' ') === want) return Number(v) || 0;
+            }
+            if (isWarehouseCompany(key)) {
+                return Number(draftsByCompany['مستودع الهاتفية'] || 0);
+            }
+            return 0;
+        }
+
         function countForCompany(company) {
             const key = String(company || '').trim();
             return currentQueue.filter((q) => {
@@ -909,10 +939,19 @@
             if (!boards.some(isWarehouseCompany)) {
                 boards.push('مستودع الهاتفية');
             }
+            // Boards from Print Drafts companies (even if not yet in options list)
+            Object.keys(draftsByCompany || {}).forEach((name) => {
+                const n = String(name || '').trim();
+                if (!n || n === 'بدون شركة') return;
+                if (!boards.some((b) => String(b).trim().toLowerCase() === n.toLowerCase())) {
+                    boards.push(n);
+                }
+            });
 
             wrap.innerHTML = boards.map((company) => {
                 const wh = isWarehouseCompany(company);
                 const count = countForCompany(company);
+                const draftCount = draftCountForCompany(company);
                 const waCount = waItemsForCompany(company).length;
                 const cached = boardPasteCache.get(company) || '';
                 const savedPhone = companyPhoneLookup(company);
@@ -939,7 +978,10 @@
                             </div>
                             ${phoneRow}
                         </div>
-                        <span class="company-board-count${count ? ' has-vins' : ''}">${count} في القائمة</span>
+                        <div class="company-board-counts">
+                            <span class="company-board-count${count ? ' has-vins' : ''}">${count} في القائمة</span>
+                            <span class="company-board-count${draftCount ? ' has-drafts' : ''}">${draftCount} مسودة</span>
+                        </div>
                     </div>
                     <textarea
                         data-board-paste="${esc}"
@@ -1479,6 +1521,17 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'فشل التحميل');
             currentQueue = data.queue || [];
+            draftsByCompany = (data.draftsByCompany && typeof data.draftsByCompany === 'object')
+                ? data.draftsByCompany
+                : {};
+            // Pull new company names from Print Drafts into the boards list
+            Object.keys(draftsByCompany).forEach((name) => {
+                const n = String(name || '').trim();
+                if (!n || n === 'بدون شركة') return;
+                if (!companyOptions.some((c) => String(c).trim().toLowerCase() === n.toLowerCase())) {
+                    companyOptions.push(n);
+                }
+            });
             setVinSectionEnabled(Boolean(data.rawUploaded));
             renderStats(data.stats, data.rawUploaded);
             renderQueue(currentQueue);
@@ -1543,11 +1596,15 @@
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || 'فشل الرفع');
+                    const draftNote = data.draftsImported
+                        ? ` · ${data.draftsImported} مسودة Print Drafts · عُيّن ${data.companiesFromDrafts || 0} شاسيه لشركة`
+                        : '';
                     setStatus(
                         'uploadStatus',
-                        `تم رفع الملف · ${data.imported} صف · حدّثت القائمة من البيانات الجديدة`,
+                        `تم رفع الملف · ${data.imported} صف · حدّثت القائمة من البيانات الجديدة${draftNote}`,
                         'ok'
                     );
+                    await loadCompanyOptions();
                     await loadQueue();
                     promptAddNewVins({
                         imported: data.imported,
