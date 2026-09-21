@@ -10,11 +10,11 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="data-store.js?v=20260920force1"></script>
-  <script src="allocation-plan-data.js"></script>
+  <script src="allocation-plan-data.js?v=20260921sfx1"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20260921res0"></script>
+  <script src="plan-tracker.js?v=20260921res1"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260920st1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
@@ -1061,7 +1061,7 @@
             <div class="bas-retail-head">
               <div class="bas-retail-title">
                 <h3>RES plan schedule</h3>
-                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · each day Excel · Col M Retail Electronic Sales · Col J = 0 · mapped to Admin plan</span>
+                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · age 0 · Allocation Date = file day · Retail Electronic Sales · mapped to Admin plan</span>
               </div>
             </div>
             <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="pt-schedule-table"></div>
@@ -10687,6 +10687,27 @@
     return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
 
+  /** Numeric suffix aliases: 1 ↔ 01, 3 ↔ 03 (HILUX DC plan / RTL). */
+  function allocNumericAliases(compact) {
+    const c = String(compact || "");
+    if (!/^\d+$/.test(c)) return [c];
+    const stripped = c.replace(/^0+/, "") || "0";
+    const padded2 = stripped.padStart(2, "0");
+    return [...new Set([c, stripped, padded2])];
+  }
+
+  /** Strip trailing HEV / hybrid markers so "S1 HEV" matches plan "S1". */
+  function allocSfxCoreTokens(compactOrRaw) {
+    const c = allocCompact(compactOrRaw);
+    if (!c) return [];
+    const tokens = new Set([c]);
+    const noHev = c.replace(/(HEV|HYBRID|PHEV)$/i, "");
+    if (noHev && noHev !== c) tokens.add(noHev);
+    allocNumericAliases(c).forEach((a) => tokens.add(a));
+    if (noHev) allocNumericAliases(noHev).forEach((a) => tokens.add(a));
+    return [...tokens];
+  }
+
   function isFortunerProduct(product) {
     return allocCompact(product).includes("FORTUNER");
   }
@@ -10713,6 +10734,9 @@
     const aC = allocCompact(a);
     // RAV 4 ↔ RAV4 (spacing / punctuation only)
     if (bC && aC && bC === aC) return true;
+    // LC300 ↔ LAND CRUISER 300 / LC 300
+    if (aC === "LC300" && (bC === "LC300" || bC.includes("LANDCRUISER300") || /^LC0*300/.test(bC))) return true;
+    if (bC === "LC300" && (aC === "LC300" || aC.includes("LANDCRUISER300"))) return true;
     // "CAMRY HEV" may match plan CAMRY, but not when a longer plan product fits (e.g. COROLLA CR)
     if (!b.startsWith(a + " ")) return false;
     const longerHit = ALLOCATION_ROWS.some((r) => {
@@ -10727,7 +10751,7 @@
   function suffixMatchesAlloc(boSuffix, allocSfx, product) {
     const b = upperTrim(boSuffix);
     if (!b || b === "—") return false;
-      const bC = allocCompact(b);
+    const bC = allocCompact(b);
     if (!bC) return false;
 
     // Fortuner: match by first two letters (G2 GX2 4X2 ↔ G2, G4 GX2 4X4 ↔ G4)
@@ -10738,18 +10762,57 @@
       return allocSfxParts(allocSfx).some((v) => fortunerSuffixKey(v) === bKey);
     }
 
-    const allocParts = allocSfxParts(allocSfx).map(allocCompact).filter(Boolean);
-    if (allocParts.some((p) => p === bC)) return true;
-
-    // "AA 2.5" / "AA-HEV" → token AA matches plan AA. "FREE" does not match EE.
-    const boTokens = [
-      bC,
-      ...b.split(/[\s\/,&._-]+/).map(allocCompact).filter(Boolean),
-    ];
-    return allocParts.some((p) => {
-      if (p.length <= 1) return bC === p;
-      return boTokens.includes(p);
+    const boTokenSet = new Set(allocSfxCoreTokens(b));
+    b.split(/[\s\/,&._-]+/).forEach((t) => {
+      allocSfxCoreTokens(t).forEach((x) => boTokenSet.add(x));
     });
+
+    const allocParts = allocSfxParts(allocSfx);
+    return allocParts.some((part) => {
+      const cores = allocSfxCoreTokens(part);
+      if (!cores.length) return false;
+      // Exact compact or numeric/HEV-normalized token hit
+      return cores.some((p) => boTokenSet.has(p));
+    });
+  }
+
+  /**
+   * Score a suffix match — prefer exact code over slash-group (D3/AA) or weak contains.
+   * Higher = better. -1 = no match.
+   */
+  function scoreSuffixMatch(boSuffix, allocSfx, product) {
+    if (!suffixMatchesAlloc(boSuffix, allocSfx, product)) return -1;
+    const bC = allocCompact(boSuffix);
+    const aC = allocCompact(allocSfx);
+    const bCores = new Set(allocSfxCoreTokens(boSuffix));
+    if (bC && aC && (bC === aC || bCores.has(aC))) return 10000 + aC.length;
+    const parts = allocSfxParts(allocSfx).map(allocCompact).filter(Boolean);
+    if (parts.length === 1 && parts.some((p) => bCores.has(p) || allocSfxCoreTokens(p).some((x) => bCores.has(x)))) {
+      return 8000 + parts[0].length;
+    }
+    if (parts.some((p) => bCores.has(p) || allocSfxCoreTokens(p).some((x) => bCores.has(x)))) {
+      return 2000 + Math.min(...parts.map((p) => p.length));
+    }
+    return aC.length;
+  }
+
+  function matchRtlToAllocLeaf(rtlRow) {
+    let best = null;
+    let bestScore = -1;
+    let bestProdLen = -1;
+    for (const leaf of ALLOCATION_ROWS) {
+      if (leaf.kind !== "leaf") continue;
+      if (!productMatchesAlloc(rtlRow.product, leaf.product)) continue;
+      const score = scoreSuffixMatch(rtlRow.suffix || rtlRow.sfx, leaf.sfx, leaf.product || rtlRow.product);
+      if (score < 0) continue;
+      const prodLen = allocCompact(leaf.product).length;
+      if (score > bestScore || (score === bestScore && prodLen > bestProdLen)) {
+        best = leaf;
+        bestScore = score;
+        bestProdLen = prodLen;
+      }
+    }
+    return best;
   }
 
   function basBoUnitCount(bo) {
@@ -10769,14 +10832,14 @@
     bos.forEach((bo) => {
       const units = basBoUnitCount(bo);
       let best = null;
-      let bestLen = -1;
+      let bestScore = -1;
       leaves.forEach((row) => {
         if (!productMatchesAlloc(bo.product, row.product)) return;
-        if (!suffixMatchesAlloc(bo.suffix || bo.sfx, row.sfx, row.product || bo.product)) return;
-        const len = allocCompact(row.sfx).length;
-        if (len > bestLen) {
+        const score = scoreSuffixMatch(bo.suffix || bo.sfx, row.sfx, row.product || bo.product);
+        if (score < 0) return;
+        if (score > bestScore) {
           best = row;
-          bestLen = len;
+          bestScore = score;
         }
       });
       if (best) boByLeaf.set(best.id, (boByLeaf.get(best.id) || 0) + units);
@@ -12169,16 +12232,6 @@
     return d;
   }
 
-  function matchRtlToAllocLeaf(rtlRow) {
-    for (const leaf of ALLOCATION_ROWS) {
-      if (leaf.kind !== "leaf") continue;
-      if (productMatchesAlloc(rtlRow.product, leaf.product) && suffixMatchesAlloc(rtlRow.suffix, leaf.sfx, leaf.product || rtlRow.product)) {
-        return leaf;
-      }
-    }
-    return null;
-  }
-
   /** Cached active RTL file per calendar day for the schedule month. */
   let rtlActiveMonthCache = { month: "", pack: null, loading: null, error: "" };
 
@@ -12294,10 +12347,9 @@
     return age != null && Number.isFinite(age) && Math.floor(age) === 0;
   }
 
-  /** RES collected in this day file: explicit age 0, or blank age (treated as new arrival once). */
+  /** RES collected in this day file: explicit Col J age 0 only (blank ages excluded). */
   function isResCollectedInDayFile(age) {
-    if (age == null || !Number.isFinite(age)) return true;
-    return Math.floor(age) === 0;
+    return age != null && Number.isFinite(age) && Math.floor(age) === 0;
   }
 
   function basResArrivalBadge(car) {
@@ -12651,8 +12703,9 @@
 
         if (isRes) {
           thisRes.set(vin, base);
-          if (basAgSameAsFileDay(agDate, dayNum, ctx)) {
-            slot.received.push({ ...base, bucket: "received", label: "Received · same-day allocation" });
+          // Received = RES + Col J age 0 + AG same as file day (frozen per day file)
+          if (age === 0 && basAgSameAsFileDay(agDate, dayNum, ctx)) {
+            slot.received.push({ ...base, bucket: "received", label: "Received · age 0 · same-day AG" });
           }
           const sales = basDaySalesBucket(vin, salesLookup);
           const row = {
@@ -12705,10 +12758,10 @@
    * Monthly RTL allocation schedule:
    * For each submitted day RTL file, compare Retail Electronic Sales VINs to all prior day files.
    * - Tot = Col J age === 0 (any search area) — explicit 0 only (blank excluded so summed Tot is not inflated).
-   * - New RES + age 0/blank = Received on schedule (once). Day = Col AG if current month, else file day.
-   * - New RES + age ≥ 1 = backdate via Col AG or (file day − age) onto schedule; free stock only if undatable.
+   * - New RES + Col J = 0 + first seen as RES = Received on schedule (once). Day frozen from that file.
+   * - VIN first seen in another search area then entering RES = transfer in (not counted as received).
    * - Was RES before, now another search area / missing = Moved out (informational).
-   * - Sales Raw delivery status attached to each received / free-stock VIN.
+   * - Sales Raw: Col P = Proforma · Col V = Delivered.
    */
   function buildBasMonthlyData() {
     const ctx = basMonthContext();
@@ -12725,6 +12778,8 @@
     const resChangeCars = [];
     const resChangeSeen = new Set();
     const everResSeen = new Set(); // cumulative RES across prior days
+    const everSeenAny = new Set(); // any search area — first appearance wins for "mine"
+    const everSeenNonRes = new Set(); // first seen outside RES → later RES is transfer-in
     const dayTotals = Array(31).fill(0);
     const dayRetailTotals = Array(31).fill(0);
     const dayHasFile = Array(31).fill(false);
@@ -12839,7 +12894,13 @@
             : "";
           seenThisDay.add(vin);
 
+          if (!everSeenAny.has(vin)) {
+            everSeenAny.add(vin);
+            if (!isRes) everSeenNonRes.add(vin);
+          }
+
           // Tot = explicit Col J age 0 only (any search area) — blank ages excluded
+          // Frozen from this day file — later days do not change prior day Tot
           if (isAge0 && dayNum >= 1 && dayNum <= 30 && dayNum <= ctx.todayDay) {
             dayTotals[dayNum] += 1;
             dayAge0Count[dayNum] += 1;
@@ -12850,17 +12911,18 @@
           }
 
           // New to RES vs all prior day files → once
-          // Schedule ONLY when Allocation Date (Col AG) is the same calendar day as this file
+          // Received ONLY when: Col M RES + Col J = 0 + AG = file day + first appearance was RES
           if (isRes && dayNum <= ctx.todayDay && !everResSeen.has(vin)) {
             everResSeen.add(vin);
-            const changeKind = prevResMeta.size > 0 ? "to-res" : null;
-            const ageVal = age == null ? 0 : age;
+            const cameFromOther = everSeenNonRes.has(vin);
+            const changeKind = prevResMeta.size > 0 || cameFromOther ? "to-res" : null;
+            const ageVal = age == null ? null : age;
             const agSameDay = basAgSameAsFileDay(agDate, dayNum, ctx);
 
             if (changeKind) {
               pushResChange(car, dayNum, fileDate, fileLabel, {
                 changeKind: "to-res",
-                prevSearchArea: "",
+                prevSearchArea: cameFromOther ? "(other area)" : "",
                 newSearchArea: searchArea || "Retail Electronic Sales",
                 age: ageVal,
                 agDate,
@@ -12868,7 +12930,9 @@
               });
             }
 
-            if (agSameDay) {
+            if (cameFromOther) {
+              // First seen elsewhere → Transfers IN only (not counted as received / schedule)
+            } else if (isAge0 && agSameDay) {
               const scheduleDay = dayNum;
               const collDate = agDate;
               const collLabel = collDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -12913,7 +12977,7 @@
                 });
               }
             } else {
-              // RES first seen but Allocation Date is not this file day → free stock (not on schedule day)
+              // RES first seen but not age-0 same-day AG → free stock (not on schedule day)
               const fallbackDate = agDate && agDate.getFullYear() === ctx.y && agDate.getMonth() === ctx.m
                 ? agDate
                 : fileDate;
