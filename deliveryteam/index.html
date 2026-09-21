@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260921pii1" />
+  <link rel="stylesheet" href="styles.css?v=20260921salesraw1" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -61,6 +61,10 @@
           <p class="sub" id="page-sub">Delivery Control Tower</p>
         </div>
         <div class="top-actions">
+          <div class="raw-status-pill" id="raw-status-pill" title="Shared Sales Raw data">
+            <span class="raw-status-label">Sales Raw</span>
+            <strong id="raw-status-time">—</strong>
+          </div>
           <input type="search" class="top-search" id="global-search" placeholder="Search VIN / order / product…" />
           <button type="button" class="btn" id="export-btn" hidden>Export Excel</button>
           <button type="button" class="btn" id="refresh-btn">Refresh</button>
@@ -278,7 +282,7 @@
           </div>
         </section>
 
-        <!-- UPLOAD -->
+        <!-- UPLOAD Delivery sheet -->
         <section class="panel" id="panel-upload">
           <div class="card">
             <h2>Upload Delivery sheet</h2>
@@ -293,6 +297,27 @@
               <input type="file" id="upload-file" accept=".xlsx,.xls" hidden />
             </div>
             <div id="upload-summary" hidden></div>
+          </div>
+        </section>
+
+        <!-- SALES RAW (Hanouf / Ruba / Admin) -->
+        <section class="panel" id="panel-sales-raw">
+          <div class="card">
+            <h2>Upload Sales Raw</h2>
+            <p class="hint">
+              Upload <b>Sales Raw Data</b> here once — Hanouf or Ruba. Updates shared inventory for the whole team and the Coordinator.
+              Everyone sees the last update time in the top bar.
+            </p>
+            <div class="raw-status-card" id="sales-raw-status-card">
+              <div class="lbl">Last Sales Raw update</div>
+              <div class="val" id="sales-raw-status-detail">Not uploaded yet</div>
+            </div>
+            <div class="upload-drop" id="sales-raw-drop">
+              <strong>Drop Sales Raw Excel here</strong>
+              <p class="hint">or click to browse · .xlsx / .xls / .csv · Product · GT · Location · VIN</p>
+              <input type="file" id="sales-raw-file" accept=".xlsx,.xls,.csv" hidden />
+            </div>
+            <div id="sales-raw-summary" hidden></div>
           </div>
         </section>
 
@@ -330,6 +355,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260921draftcarrier1"></script>
+  <script src="app.js?v=20260921salesraw1"></script>
 </body>
 </html>

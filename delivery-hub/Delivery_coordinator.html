@@ -580,13 +580,13 @@
             <details class="coord-upload" id="uploadDetails" open>
                 <summary class="hub-section-head" style="margin-bottom:0">
                     <h2>١ — رفع بيانات خام — Sales Raw</h2>
-                    <span class="hub-hint summary-hint">مطلوب أولاً · Product · GT · Location</span>
+                    <span class="hub-hint summary-hint">أو من Delivery Team · حنوف / ربى</span>
                 </summary>
                 <div style="margin-top:14px">
                     <label class="hub-upload" id="uploadZone">
                         <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
                         <strong>اسحب ملف Excel أو انقر للاختيار — رفع كامل</strong>
-                        <p class="hub-meta">Sales Raw أو أرشيف delivery_export (ورقة Print Drafts تعيّن الشركة تلقائياً)</p>
+                        <p class="hub-meta">Sales Raw أو أرشيف delivery_export — يفضّل رفع Sales Raw من Delivery Team (حنوف / ربى) ليراه الجميع بنفس الوقت</p>
                     </label>
                     <p class="hub-status" id="uploadStatus"></p>
                     <div class="hub-actions-row" style="margin-top:14px;flex-wrap:wrap;gap:10px;align-items:center">
@@ -671,10 +671,14 @@
             el.className = 'hub-status' + (type ? ` ${type}` : '');
         }
 
-        function renderStats(stats, hasRaw) {
+        function renderStats(stats, hasRaw, rawStatus) {
             const unassigned = currentQueue.filter(isUnassignedCompany).length;
             const draftTotal = Object.values(draftsByCompany || {}).reduce((s, n) => s + (Number(n) || 0), 0);
             const draftCompanies = Object.keys(draftsByCompany || {}).filter((k) => k && k !== 'بدون شركة').length;
+            const rawAt = rawStatus && rawStatus.uploadedAt
+                ? new Date(rawStatus.uploadedAt).toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' })
+                : (hasRaw ? '✓' : '—');
+            const rawBy = rawStatus && rawStatus.uploadedByName ? rawStatus.uploadedByName : '';
             document.getElementById('stats').innerHTML = `
                 <div class="hub-stat"><span>إجمالي الشاسيه</span><b>${stats.total || 0}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>متاح</span><b>${stats.available || 0}</b></div>
@@ -682,7 +686,7 @@
                 <div class="hub-stat hub-stat--stock"><span>Print Drafts</span><b>${draftTotal}</b></div>
                 <div class="hub-stat"><span>شركات المسودات</span><b>${draftCompanies}</b></div>
                 <div class="hub-stat hub-stat--ready"><span>Ready</span><b>${stats.ready_for_delivery || 0}</b></div>
-                <div class="hub-stat"><span>بيانات خام</span><b style="font-size:1rem">${hasRaw ? '✓' : '—'}</b></div>
+                <div class="hub-stat"><span>بيانات خام</span><b style="font-size:0.78rem;line-height:1.25">${rawAt}${rawBy ? `<br><span style="font-weight:600;opacity:.85">${rawBy}</span>` : ''}</b></div>
                 <div class="hub-stat hub-stat--avail"><span>تم الترحيل</span><b>${stats.delivered || 0}</b></div>
             `;
         }
@@ -1533,7 +1537,7 @@
                 }
             });
             setVinSectionEnabled(Boolean(data.rawUploaded));
-            renderStats(data.stats, data.rawUploaded);
+            renderStats(data.stats, data.rawUploaded, data.rawStatus);
             renderQueue(currentQueue);
             renderCompanyBoards();
         }

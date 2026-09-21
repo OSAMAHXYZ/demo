@@ -47,6 +47,8 @@ const deliveryTeamHooks = {
   onCarrierAssigned: null,
   onRawUploaded: null,
   onEnsureDraftCarriers: null,
+  onSalesRawUpload: null,
+  getHubRawStatus: null,
 };
 const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
 const deliveryTeam = createDeliveryTeamRouter({
@@ -67,9 +69,20 @@ const deliveryTeam = createDeliveryTeamRouter({
       ? deliveryTeamHooks.onEnsureDraftCarriers()
       : null
   ),
+  onSalesRawUpload: (payload) => (
+    typeof deliveryTeamHooks.onSalesRawUpload === 'function'
+      ? deliveryTeamHooks.onSalesRawUpload(payload)
+      : null
+  ),
+  getHubRawStatus: () => (
+    typeof deliveryTeamHooks.getHubRawStatus === 'function'
+      ? deliveryTeamHooks.getHubRawStatus()
+      : null
+  ),
 });
 const deliveryTeamRouter = deliveryTeam.router;
 const deliveryTeamUpload = deliveryTeam.uploadHandler;
+const deliveryTeamSalesRawUpload = deliveryTeam.salesRawUploadHandler;
 const deliveryTeamStore = deliveryTeam.store;
 
 const AGENTS = new Set(['ياسين', 'الفاضل', 'البراء', 'مستودع', 'warehouse', 'showroom admin', 'سيارات العرض']);
@@ -1707,6 +1720,62 @@ deliveryTeamHooks.onEnsureDraftCarriers = () => {
   return syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
 };
 
+function getHubRawStatus() {
+  const uploadedAt = store.meta?.uploadedAt || null;
+  return {
+    uploaded: Boolean((store.vehicles && store.vehicles.length) || uploadedAt),
+    uploadedAt,
+    uploadedBy: store.meta?.uploadedBy || '',
+    uploadedByName: store.meta?.uploadedByName || '',
+    filename: store.meta?.filename || '',
+    sheetName: store.meta?.sheetName || '',
+    vehicleCount: Array.isArray(store.vehicles) ? store.vehicles.length : 0,
+  };
+}
+
+deliveryTeamHooks.getHubRawStatus = () => getHubRawStatus();
+
+/** Hanouf / Ruba / Admin — upload Sales Raw once; hub + Delivery Team all see the same timestamp. */
+deliveryTeamHooks.onSalesRawUpload = ({ buffer, filename, byUser } = {}) => {
+  if (!buffer || !Buffer.isBuffer(buffer) || !buffer.length) {
+    const err = new Error('Invalid file — empty upload');
+    err.status = 400;
+    throw err;
+  }
+  const name = String(filename || 'Sales Raw Data.xlsx').trim() || 'Sales Raw Data.xlsx';
+  const parsed = parseSalesWorkbook(buffer, name);
+  if (!parsed.vehicles.length) {
+    const err = new Error('لم يتم العثور على أرقام شاسيه في الملف');
+    err.status = 400;
+    throw err;
+  }
+  const byId = String((byUser && (byUser.userId || byUser.id)) || '').trim();
+  const byName = String((byUser && byUser.name) || '').trim();
+  const hasDrafts = Array.isArray(parsed.drafts) && parsed.drafts.length > 0;
+  const hasQueue = Array.isArray(parsed.queue) && parsed.queue.length > 0;
+  const refresh = applyParsedInventory(parsed, {
+    replaceDrafts: Boolean(parsed.isExport && hasDrafts),
+    replaceQueue: Boolean(parsed.isExport && hasQueue),
+    uploadedBy: byId,
+    uploadedByName: byName,
+  });
+  const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
+  persistAndBroadcast();
+  return {
+    ok: true,
+    imported: parsed.vehicles.length,
+    sheetName: parsed.sheetName,
+    filename: parsed.filename || name,
+    queueRefreshed: refresh.total,
+    matchedUpdated: refresh.matched,
+    notInNewFile: refresh.missing,
+    companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
+    teamCarriersFromDrafts: refresh.teamDraftCarriers || null,
+    deliveryTeamSync: teamSync,
+    rawStatus: getHubRawStatus(),
+  };
+};
+
 function todayIsoRiyadh() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Riyadh',
@@ -2696,6 +2765,8 @@ function buildDashboard() {
     totalVehicles: store.vehicles.length,
     uniqueProducts: productCounts.size,
     uploadedAt: store.meta.uploadedAt,
+    uploadedBy: store.meta.uploadedBy || '',
+    uploadedByName: store.meta.uploadedByName || '',
     filename: store.meta.filename,
     sheetName: store.meta.sheetName,
     topProducts
@@ -3531,7 +3602,12 @@ function computeDraftsByCompany() {
   return map;
 }
 
-function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = false } = {}) {
+function applyParsedInventory(parsed, {
+  replaceDrafts = false,
+  replaceQueue = false,
+  uploadedBy = '',
+  uploadedByName = '',
+} = {}) {
   store.vehicles = parsed.vehicles;
   store.raw = {
     filename: parsed.filename,
@@ -3543,6 +3619,8 @@ function applyParsedInventory(parsed, { replaceDrafts = false, replaceQueue = fa
     filename: parsed.filename,
     sheetName: parsed.sheetName,
     uploadedAt: new Date().toISOString(),
+    uploadedBy: String(uploadedBy || '').trim() || store.meta?.uploadedBy || '',
+    uploadedByName: String(uploadedByName || '').trim() || store.meta?.uploadedByName || '',
     nextDeliveryNoteSeq: Number(store.meta?.nextDeliveryNoteSeq) || 1
   };
 
@@ -3848,6 +3926,7 @@ app.post('/api/rtl-daily/save-file', express.raw({ limit: '80mb', type: '*/*' })
 });
 
 app.post('/api/delivery-team/upload', express.raw({ limit: '80mb', type: '*/*' }), deliveryTeamUpload);
+app.post('/api/delivery-team/sales-raw', express.raw({ limit: '80mb', type: '*/*' }), deliveryTeamSalesRawUpload);
 
 app.use(express.json({ limit: '80mb' }));
 
@@ -4943,6 +5022,8 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
     const refresh = applyParsedInventory(parsed, {
       replaceDrafts: Boolean(parsed.isExport && hasDrafts),
       replaceQueue: Boolean(parsed.isExport && hasQueue),
+      uploadedBy: 'coordinator',
+      uploadedByName: 'Coordinator',
     });
     const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
     persistAndBroadcast();
@@ -4960,6 +5041,7 @@ app.post('/api/delivery-inventory/upload', (req, res) => {
       matchedUpdated: refresh.matched,
       notInNewFile: refresh.missing,
       deliveryTeamSync: teamSync,
+      rawStatus: getHubRawStatus(),
     });
   } catch (err) {
     console.error('[upload]', err);
@@ -5224,7 +5306,8 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
       warehouseZones: warehouseOccupancy(),
       showroomParking: store.showroomParking.filter((e) => e.status === 'in').map(enrichShowroomParkingEntry),
       showroomParkingOccupancy: showroomParkingOccupancy(),
-      rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
+      rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt),
+      rawStatus: getHubRawStatus(),
     });
   }
 
@@ -5239,7 +5322,8 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
       warehouseZones: warehouseOccupancy(),
       showroomParking: store.showroomParking.filter((e) => e.status === 'in').map(enrichShowroomParkingEntry),
       showroomParkingOccupancy: showroomParkingOccupancy(),
-      rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt)
+      rawUploaded: Boolean(store.vehicles.length || store.meta.uploadedAt),
+      rawStatus: getHubRawStatus(),
     });
   }
 

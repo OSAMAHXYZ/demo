@@ -484,6 +484,7 @@ function createDeliveryTeamRouter(opts) {
   }
 
   router.get('/meta', (_req, res) => {
+    const hubRaw = typeof opts.getHubRawStatus === 'function' ? opts.getHubRawStatus() : null;
     res.json({
       statuses: STATUSES,
       carriers: CARRIERS,
@@ -493,7 +494,13 @@ function createDeliveryTeamRouter(opts) {
       assignable: ASSIGNABLE_NAMES,
       users: USERS.map((u) => ({ id: u.id, name: u.name, role: u.role })),
       completedStatus: COMPLETED_STATUS,
+      hubRaw: hubRaw || null,
     });
+  });
+
+  router.get('/raw-status', auth, (req, res) => {
+    const hubRaw = typeof opts.getHubRawStatus === 'function' ? opts.getHubRawStatus() : null;
+    res.json({ rawStatus: hubRaw || { uploaded: false, uploadedAt: null } });
   });
 
   router.post('/auth/login', (req, res) => {
@@ -661,6 +668,7 @@ function createDeliveryTeamRouter(opts) {
       byEmployee,
       bySalesType,
       byCarrier,
+      hubRaw: typeof opts.getHubRawStatus === 'function' ? opts.getHubRawStatus() : null,
       rows: list.map((v) => publicVehicle(v, req.dtUser)),
     });
   });
@@ -799,6 +807,7 @@ function createDeliveryTeamRouter(opts) {
       employees,
       myWorkload: mine,
       recentEdits,
+      hubRaw: typeof opts.getHubRawStatus === 'function' ? opts.getHubRawStatus() : null,
     });
   });
 
@@ -1605,7 +1614,61 @@ function createDeliveryTeamRouter(opts) {
     return res.send(buf);
   });
 
-  return { router, store, uploadHandler };
+  function canUploadSalesRawUser(session) {
+    if (!session) return false;
+    if (session.role === 'admin' || session.role === 'hanouf') return true;
+    const id = String(session.userId || session.id || '').toLowerCase();
+    const name = String(session.name || '').toLowerCase();
+    return id === 'ruba' || name === 'ruba';
+  }
+
+  /**
+   * Sales Raw upload (hub inventory) — Hanouf, Ruba, Admin.
+   * Updates shared raw data once; everyone sees uploadedAt.
+   */
+  function salesRawUploadHandler(req, res) {
+    const header = req.headers['x-delivery-team-token'] || req.headers.authorization || '';
+    let token = String(header).trim();
+    if (/^bearer\s+/i.test(token)) token = token.replace(/^bearer\s+/i, '').trim();
+    const session = store.getSession(token);
+    if (!session) return res.status(401).json({ error: 'Unauthorized — please sign in' });
+    if (!canUploadSalesRawUser(session)) {
+      return res.status(403).json({ error: 'Only Hanouf, Ruba, or Admin can upload Sales Raw' });
+    }
+    req.dtUser = session;
+
+    try {
+      const buf = req.body;
+      if (!Buffer.isBuffer(buf) || !buf.length) {
+        return res.status(400).json({ error: 'Invalid file — empty upload' });
+      }
+      const filename = decodeURIComponent(String(req.headers['x-filename'] || 'Sales Raw Data.xlsx'));
+      const fn = opts && opts.onSalesRawUpload;
+      if (typeof fn !== 'function') {
+        return res.status(503).json({ error: 'Sales Raw upload is not available on this server' });
+      }
+      const result = fn({
+        buffer: buf,
+        filename,
+        byUser: { userId: session.userId, id: session.userId, name: session.name, role: session.role },
+      });
+      store.pushAudit({
+        vin: '',
+        user: session.name,
+        action: 'upload_sales_raw',
+        oldValue: '',
+        newValue: `${result.imported || 0} vehicles · ${filename}`,
+      });
+      store.save();
+      return res.json(result);
+    } catch (err) {
+      console.error('[delivery-team] sales-raw upload failed:', err.message || err);
+      const status = Number(err.status) || 500;
+      return res.status(status).json({ error: err.message || 'Sales Raw upload failed' });
+    }
+  }
+
+  return { router, store, uploadHandler, salesRawUploadHandler };
 }
 
 module.exports = { createDeliveryTeamRouter };

@@ -23,6 +23,7 @@
     liveFingerprint: '',
     monthFilter: '',
     guestTickTimer: null,
+    hubRaw: null,
     tzOffset: -new Date().getTimezoneOffset(),
   };
 
@@ -333,6 +334,66 @@
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   }
 
+  function canUploadSalesRaw() {
+    return canManage() || isRuba();
+  }
+
+  function formatRawUpdatedAt(iso) {
+    if (!iso) return 'Not uploaded yet';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      return d.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return String(iso);
+    }
+  }
+
+  function renderRawStatus(raw) {
+    const status = raw || state.hubRaw || null;
+    state.hubRaw = status;
+    const pill = $('#raw-status-pill');
+    const timeEl = $('#raw-status-time');
+    if (timeEl) {
+      if (!status || !status.uploadedAt) {
+        timeEl.textContent = 'Not uploaded yet';
+        if (pill) {
+          pill.classList.add('is-empty');
+          pill.classList.remove('is-fresh');
+        }
+      } else {
+        const by = status.uploadedByName ? ` · ${status.uploadedByName}` : '';
+        timeEl.textContent = `${formatRawUpdatedAt(status.uploadedAt)}${by}`;
+        if (pill) {
+          pill.classList.remove('is-empty');
+          pill.classList.add('is-fresh');
+          pill.title = [
+            status.filename || 'Sales Raw',
+            status.sheetName ? `Sheet: ${status.sheetName}` : '',
+            status.vehicleCount != null ? `${status.vehicleCount} vehicles` : '',
+          ].filter(Boolean).join('\n');
+        }
+      }
+    }
+    const detail = $('#sales-raw-status-detail');
+    if (detail) {
+      if (!status || !status.uploadedAt) {
+        detail.textContent = 'Not uploaded yet — Hanouf or Ruba can upload Sales Raw here';
+      } else {
+        const parts = [
+          formatRawUpdatedAt(status.uploadedAt),
+          status.uploadedByName ? `by ${status.uploadedByName}` : '',
+          status.filename || '',
+          status.vehicleCount != null ? `${status.vehicleCount} vehicles` : '',
+        ].filter(Boolean);
+        detail.textContent = parts.join(' · ');
+      }
+    }
+  }
+
   function navItems() {
     const items = [
       { id: 'dashboard', label: 'Dashboard', roles: ['admin', 'hanouf', 'employee'] },
@@ -341,10 +402,15 @@
       { id: 'my', label: 'My VINs', roles: ['employee', 'admin', 'hanouf'] },
       { id: 'assign', label: 'Assignment', roles: ['admin', 'hanouf'] },
       { id: 'all', label: 'All Vehicles', roles: ['admin', 'hanouf'] },
+      { id: 'sales-raw', label: 'Sales Raw', roles: ['admin', 'hanouf', 'employee'], salesRawOnly: true },
       { id: 'upload', label: 'Upload Delivery sheet', roles: ['admin', 'hanouf'] },
       { id: 'audit', label: 'Audit Log', roles: ['admin', 'hanouf'] },
     ];
-    return items.filter((i) => i.roles.includes(state.user.role));
+    return items.filter((i) => {
+      if (!i.roles.includes(state.user.role)) return false;
+      if (i.salesRawOnly) return canUploadSalesRaw();
+      return true;
+    });
   }
 
   function renderNav() {
@@ -378,6 +444,7 @@
       assign: ['Assignment', 'Upload → assign employee (incl. Hanouf) → الناقل'],
       all: ['All Vehicles', 'Full fleet · filters · export'],
       upload: ['Upload Delivery sheet', 'E sales layout · status · الناقل · مدينة الترحيل'],
+      'sales-raw': ['Sales Raw', 'Hanouf / Ruba · shared inventory · everyone sees the update time'],
       audit: ['Audit Log', 'Full history of every edit'],
     };
     const t = titles[view] || ['Delivery Team', ''];
@@ -407,6 +474,7 @@
       if (state.view === 'my') await loadMy();
       if (state.view === 'assign') await loadAssign();
       if (state.view === 'all') await loadAll();
+      if (state.view === 'sales-raw') await loadSalesRawPanel();
       if (state.view === 'audit') await loadAudit();
     } catch (err) {
       console.error(err);
@@ -426,6 +494,7 @@
     if (f.carrier) params.set('carrier', f.carrier);
     if (f.month) params.set('month', f.month);
     const data = await api(`/live-sheet?${params}`);
+    if (data.hubRaw) renderRawStatus(data.hubRaw);
     const rows = data.rows || [];
     const fingerprint = JSON.stringify(rows.map((r) => [
       r.vin,
@@ -592,6 +661,7 @@
   async function loadDashboard() {
     const month = state.monthFilter || '';
     const d = await api(`/dashboard?tzOffset=${state.tzOffset}${month ? `&month=${encodeURIComponent(month)}` : ''}`);
+    if (d.hubRaw) renderRawStatus(d.hubRaw);
     const monthInp = $('#dash-month');
     if (monthInp && monthInp.value !== month) monthInp.value = month;
     const hint = $('#dash-month-hint');
@@ -1476,6 +1546,55 @@
       </div>`;
   }
 
+  async function loadSalesRawPanel() {
+    try {
+      const data = await api('/raw-status');
+      renderRawStatus(data.rawStatus);
+    } catch {
+      renderRawStatus(state.hubRaw);
+    }
+  }
+
+  async function doSalesRawUpload(file) {
+    if (!file) return;
+    if (!canUploadSalesRaw()) {
+      alert('Only Hanouf, Ruba, or Admin can upload Sales Raw');
+      return;
+    }
+    const summary = $('#sales-raw-summary');
+    summary.hidden = false;
+    summary.innerHTML = `<p class="hint">Uploading ${esc(file.name)}…</p>`;
+    try {
+      const buf = await file.arrayBuffer();
+      const res = await fetch(`${API}/sales-raw`, {
+        method: 'POST',
+        headers: {
+          'X-Delivery-Team-Token': state.token,
+          'X-Filename': encodeURIComponent(file.name),
+          'Content-Type': 'application/octet-stream',
+        },
+        body: buf,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      if (data.rawStatus) renderRawStatus(data.rawStatus);
+      else await loadSalesRawPanel();
+      summary.innerHTML = `
+        <p><b>Sales Raw updated</b> · ${esc(data.sheetName || '')} · ${esc(data.filename || file.name)}</p>
+        <div class="summary-grid">
+          <div><strong>${data.imported || 0}</strong><span>Vehicles imported</span></div>
+          <div><strong>${data.queueRefreshed || 0}</strong><span>Queue rows</span></div>
+          <div><strong>${data.matchedUpdated || 0}</strong><span>Matched</span></div>
+          <div><strong>${(data.deliveryTeamSync && data.deliveryTeamSync.upserted) || 0}</strong><span>Synced to team</span></div>
+        </div>
+        <p class="hint" style="margin-top:10px">Last update: <b>${esc(formatRawUpdatedAt(data.rawStatus && data.rawStatus.uploadedAt))}</b>
+          ${data.rawStatus && data.rawStatus.uploadedByName ? ` · by ${esc(data.rawStatus.uploadedByName)}` : ''}
+          — visible to all users</p>`;
+    } catch (err) {
+      summary.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
+    }
+  }
+
   async function doUpload(file) {
     if (!file) return;
     const summary = $('#upload-summary');
@@ -1564,6 +1683,7 @@
 
   async function boot() {
     state.meta = await (await fetch(`${API}/meta`)).json();
+    if (state.meta && state.meta.hubRaw) renderRawStatus(state.meta.hubRaw);
     const users = state.meta.users || [];
     $('#login-user').innerHTML = users.map((u) => `<option value="${esc(u.name)}">${esc(u.name)} (${esc(u.role)})</option>`).join('');
     $('#login-pills').innerHTML = users.map((u) =>
@@ -1686,6 +1806,23 @@
     drop.classList.remove('drag');
     doUpload(e.dataTransfer.files[0]);
   });
+
+  const salesRawDrop = $('#sales-raw-drop');
+  const salesRawFile = $('#sales-raw-file');
+  if (salesRawDrop && salesRawFile) {
+    salesRawDrop.addEventListener('click', () => salesRawFile.click());
+    salesRawFile.addEventListener('change', () => {
+      doSalesRawUpload(salesRawFile.files[0]);
+      salesRawFile.value = '';
+    });
+    salesRawDrop.addEventListener('dragover', (e) => { e.preventDefault(); salesRawDrop.classList.add('drag'); });
+    salesRawDrop.addEventListener('dragleave', () => salesRawDrop.classList.remove('drag'));
+    salesRawDrop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      salesRawDrop.classList.remove('drag');
+      doSalesRawUpload(e.dataTransfer.files[0]);
+    });
+  }
 
   boot().catch((err) => {
     console.error(err);
