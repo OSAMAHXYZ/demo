@@ -8,12 +8,28 @@ const STATUSES = Object.freeze([
   'تم التسليم',
   'جاهز للتسليم',
   'تسليم متقدم',
+  'صادرة',
   'مرور',
+  'رجوع مرور',
   'بطاقة',
   'فسح',
-  'رجوع مرور',
   'معلقة',
+  'الغاء',
+]);
+
+/** Live Sheet / My VINs display order (top → bottom). Blank statuses go last. */
+const STATUS_SORT_ORDER = Object.freeze([
+  'Claimed',
+  'PSFU',
+  'تم التسليم',
+  'جاهز للتسليم',
+  'تسليم متقدم',
   'صادرة',
+  'مرور',
+  'رجوع مرور',
+  'بطاقة',
+  'فسح',
+  'معلقة',
   'الغاء',
 ]);
 
@@ -260,9 +276,11 @@ const E_SALES_EXPORT_HEADERS = Object.freeze([
   'PIAging',
 ]);
 
-/** Fixed Raw Data letter positions (legacy admin dump): D/N/O/Y — only when format detected */
+/** Fixed Raw Data letter positions (Sales Raw / classic dump): D/F/G/N/O/Y */
 const RAW_COL = Object.freeze({
   salesOrder: 3, // D
+  gtLocation: 5, // F
+  vehicleLocation: 6, // G
   invoiceOwner: 13, // N
   customerName: 14, // O
   phone: 24, // Y
@@ -290,6 +308,7 @@ const OPS_FIELDS = Object.freeze([
   'registrationIssueDate',
   'transferCity',
   'carrier',
+  'carrierChangeCount',
   'notes',
   'assignedEmployeeId',
   'assignedEmployeeName',
@@ -318,6 +337,7 @@ function isGuestCenterRaw(raw, ops) {
 
 module.exports = {
   STATUSES,
+  STATUS_SORT_ORDER,
   COMPLETED_STATUS,
   YES_NO,
   CARRIERS,

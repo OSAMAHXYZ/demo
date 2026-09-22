@@ -1818,9 +1818,9 @@ function syncCoordinatorAssignmentsToDeliveryTeam(items, { by = 'coordinator' } 
           vehicleLocation: String(hubVeh.location || '').trim(),
           proformaDate: String(hubVeh.proformaDate || '').trim(),
           deliveryDate: String(hubVeh.deliveryNoteDate || '').trim(),
-          salesOrder: '',
-          salesType: '',
-          invoiceOwner: '',
+          salesOrder: String(hubVeh.salesOrder || '').trim(),
+          salesType: String(hubVeh.salesType || '').trim(),
+          invoiceOwner: String(hubVeh.invoiceOwner || '').trim(),
           salesAdvisor: '',
           pic: '',
           status: '',
@@ -1869,6 +1869,8 @@ function syncCoordinatorAssignmentsToDeliveryTeam(items, { by = 'coordinator' } 
         vehicleLocation: String(hubVeh.location || '').trim(),
         proformaDate: String(hubVeh.proformaDate || '').trim(),
         deliveryDate: String(hubVeh.deliveryNoteDate || '').trim(),
+        salesOrder: String(hubVeh.salesOrder || '').trim(),
+        invoiceOwner: String(hubVeh.invoiceOwner || '').trim(),
       };
       Object.keys(patches).forEach((k) => {
         if (patches[k] && raw[k] !== patches[k]) {
@@ -1912,12 +1914,33 @@ function getHubTransferStats() {
   const byCarrier = {};
   const cityTally = new Map();
   const companyChangeMap = new Map();
+  const companyCityMap = new Map(); // company -> { total, cities: Map(city -> count), cityVins: Map(city -> vins[]) }
 
   if (deliveryTeamStore && typeof deliveryTeamStore.allVehicles === 'function') {
     for (const v of deliveryTeamStore.allVehicles() || []) {
       const carrier = String((v.ops && v.ops.carrier) || '').trim();
       if (carrier) byCarrier[carrier] = (byCarrier[carrier] || 0) + 1;
     }
+  }
+
+  function bumpCompanyCity(company, city, vins) {
+    const cName = String(company || '').trim();
+    const cityName = String(city || '').trim();
+    if (!cName || !cityName || cName === '-' || cityName === '-' || cityName === 'المستودع') return;
+    if (cName.startsWith('—') || cityName.startsWith('—')) return;
+    if (!companyCityMap.has(cName)) {
+      companyCityMap.set(cName, { total: 0, cities: new Map(), cityVins: new Map() });
+    }
+    const entry = companyCityMap.get(cName);
+    const list = Array.isArray(vins) ? vins.filter(Boolean) : [];
+    const weight = list.length > 0 ? list.length : 1;
+    entry.total += weight;
+    entry.cities.set(cityName, (entry.cities.get(cityName) || 0) + weight);
+    if (!entry.cityVins.has(cityName)) entry.cityVins.set(cityName, []);
+    const vinArr = entry.cityVins.get(cityName);
+    list.forEach((vin) => {
+      if (vin && !vinArr.includes(vin)) vinArr.push(vin);
+    });
   }
 
   // Cities — same source as admin-Delivery-pdf (Print Drafts branch_to), plus coordinator plannedBranch
@@ -1928,9 +1951,11 @@ function getHubTransferStats() {
     }
     const city = String(p.branch_to || d.location || '').trim();
     if (city) cityTally.set(city, (cityTally.get(city) || 0) + 1);
+    const company = String(p.company_rep || p.customer_name || d.customerName || '').trim();
+    const vins = collectDraftVins(p, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    bumpCompanyCity(company, city, vins);
     const from = String(d.companyChangedFrom || p.company_changed_from || '').trim();
     const to = String(d.companyChangedTo || p.company_changed_to || '').trim();
-    const vins = collectDraftVins(p, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
     if (from && to && !sameCompanyName(from, to)) {
       vins.forEach((vin) => {
         if (!vin || companyChangeMap.has(vin)) return;
@@ -1954,9 +1979,16 @@ function getHubTransferStats() {
     } else if (city) {
       // already counted from drafts — leave draft-based tally
     }
+    const company = String(item.deliveryCompany || item.company || '').trim();
+    const vin = normVin(item.vin);
+    // Only add queue company→city when not already covered by a draft VIN for that pair
+    if (company && city && vin) {
+      const existing = companyCityMap.get(company);
+      const already = existing && existing.cityVins.get(city) && existing.cityVins.get(city).includes(vin);
+      if (!already) bumpCompanyCity(company, city, [vin]);
+    }
     const from = String(item.companyChangedFrom || '').trim();
     const to = String(item.companyChangedTo || '').trim();
-    const vin = normVin(item.vin);
     if (from && to && vin && !sameCompanyName(from, to)) {
       companyChangeMap.set(vin, {
         vin,
@@ -1978,6 +2010,19 @@ function getHubTransferStats() {
   const cityList = [...cityTally.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+
+  const companyByCity = [...companyCityMap.entries()]
+    .map(([company, info]) => ({
+      company,
+      total: info.total,
+      cities: [...info.cities.entries()]
+        .map(([city, count]) => ({ city, count }))
+        .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, 'ar')),
+      cityVins: Object.fromEntries(
+        [...info.cityVins.entries()].map(([city, vins]) => [city, vins])
+      ),
+    }))
+    .sort((a, b) => b.total - a.total || a.company.localeCompare(b.company, 'ar'));
 
   // Carrier VIN lists for drill-down
   const carrierVins = {};
@@ -2014,11 +2059,13 @@ function getHubTransferStats() {
   return {
     byCarrier: carrierList,
     byCity: cityList,
+    companyByCity,
     carrierVins,
     cityVins,
     carrierTotal: carrierList.reduce((s, r) => s + r.count, 0),
     cityCount: cityList.length,
     cityTotal: cityList.reduce((s, r) => s + r.count, 0),
+    companyCityPairs: companyByCity.reduce((s, r) => s + r.cities.length, 0),
     companyChanges,
     companyChangeTotal: companyChanges.length,
   };
@@ -3330,8 +3377,8 @@ function rowToVehicle(row) {
   const model = modelExact || product;
       const gt = pickCol(row, ['gt location', 'gt status', 'gt code', 'gtcode', 'gt_code', 'gt']);
       const location = pickCol(row, [
-        'gt location', 'stock location', 'storage location', 'location',
-        'warehouse', 'yard', 'الموقع', 'المستودع'
+        'vehicle location', 'veh location', 'veh loc', 'stock location', 'storage location',
+        'location', 'warehouse', 'yard', 'الموقع', 'المستودع', 'موقع المركبة'
       ]);
   const plate = pickExactishCol(row, ['plate', 'plate no', 'plate number', 'veh plate', 'لوحة', 'رقم اللوحة']);
       const customerName = pickCol(row, ['customer name', 'customer', 'اسم العميل', 'العميل']);
@@ -3522,6 +3569,49 @@ function backfillProformaColumnP(wb, sheetName, vehicles) {
       veh.proformaDate = normalizeExcelDate(raw);
     }
   }
+}
+
+/**
+ * Sales Raw fixed letters (0-based):
+ * D = Sales Order, F = GT Location, G = Vehicle Location, N = Invoice Owner
+ * (O/Y already handled by backfillGuestColumnsOY)
+ */
+function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
+  const sheet = wb && wb.Sheets ? wb.Sheets[sheetName] : null;
+  if (!sheet || !Array.isArray(vehicles) || !vehicles.length) return { updated: 0 };
+  const rowsArr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  if (!rowsArr.length) return { updated: 0 };
+  const headerRow = rowsArr[0] || [];
+  const byVin = new Map(vehicles.map((v) => [normVin(v.vin), v]));
+  const COL_D = 3;  // Sales Order
+  const COL_F = 5;  // GT Location
+  const COL_G = 6;  // Vehicle Location
+  const COL_N = 13; // Invoice Owner
+  let updated = 0;
+  for (let i = 1; i < rowsArr.length; i++) {
+    const line = rowsArr[i];
+    const vin = extractVinFromArrayLine(headerRow, line);
+    if (!vin) continue;
+    const veh = byVin.get(vin);
+    if (!veh) continue;
+    const cell = (idx) => {
+      const v = line[idx];
+      const s = v != null ? String(v).trim() : '';
+      return s === '#' ? '' : s;
+    };
+    const order = cell(COL_D);
+    const gt = cell(COL_F);
+    const vehLoc = cell(COL_G);
+    const owner = cell(COL_N);
+    let dirty = false;
+    // Always stamp from fixed columns on every Sales Raw upload
+    if (veh.salesOrder !== order) { veh.salesOrder = order; dirty = true; }
+    if (veh.gt !== gt) { veh.gt = gt; dirty = true; }
+    if (veh.location !== vehLoc) { veh.location = vehLoc; dirty = true; }
+    if (veh.invoiceOwner !== owner) { veh.invoiceOwner = owner; dirty = true; }
+    if (dirty) updated += 1;
+  }
+  return { updated };
 }
 
 /**
@@ -3763,6 +3853,7 @@ function parseSalesFromWorkbook(wb, filename) {
       vehicles = found;
       backfillProformaColumnP(wb, name, vehicles);
       backfillGuestColumnsOY(wb, name, vehicles);
+      backfillSalesRawFixedColumns(wb, name, vehicles);
       headers = Object.keys(sheetRowsData[0] || {});
       break;
     }
@@ -3781,6 +3872,7 @@ function parseSalesFromWorkbook(wb, filename) {
           vehicles = found;
           backfillProformaColumnP(wb, name, vehicles);
           backfillGuestColumnsOY(wb, name, vehicles);
+          backfillSalesRawFixedColumns(wb, name, vehicles);
           headers = Object.keys(sheetRowsData[0] || {});
           break;
         }

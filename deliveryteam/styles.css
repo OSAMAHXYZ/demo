@@ -377,6 +377,144 @@ textarea:focus-visible {
   .xfer-split { grid-template-columns: 1fr; }
 }
 
+.xfer-company-city {
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bar-chart-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 34%) 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.bar-chart-row:hover .bar-chart-track {
+  filter: brightness(0.96);
+}
+.bar-chart-label {
+  font-size: 0.85rem;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.bar-chart-track {
+  height: 12px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.bar-chart-fill {
+  height: 100%;
+  border-radius: 999px;
+  min-width: 2px;
+}
+.bar-chart-fill.is-carrier {
+  background: linear-gradient(90deg, #0ea5e9, #0369a1);
+}
+.bar-chart-fill.is-city {
+  background: linear-gradient(90deg, #14b8a6, #0f766e);
+}
+.bar-chart-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 2ch;
+  text-align: end;
+  color: #0f172a;
+}
+.company-city-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.company-city-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.company-city-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.company-city-name {
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+.company-city-total {
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.company-city-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.company-city-bar {
+  display: grid;
+  grid-template-columns: minmax(72px, 28%) 1fr auto;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.company-city-bar:hover .company-city-track {
+  filter: brightness(0.96);
+}
+.company-city-label {
+  font-size: 0.85rem;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.company-city-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.company-city-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9, #0369a1);
+  min-width: 2px;
+}
+.company-city-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 2ch;
+  text-align: end;
+}
+
 /* ——— Buttons ——— */
 .btn, .btn-primary, .btn-ghost {
   border: 1px solid var(--line);
@@ -500,28 +638,31 @@ table.data tr.is-me td { box-shadow: inset 3px 0 0 var(--navy, #0b1f33); }
 }
 #dash-emp-table .ach-good {
   color: #15803d;
-  text-shadow: 0 0 8px rgba(34, 197, 94, 0.45);
 }
 #dash-emp-table .ach-mid {
   color: #b45309;
-  text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
 }
 #dash-emp-table .ach-low {
   color: #b91c1c;
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 table.data tr.row-status-claimed td { background: #93c5fd !important; box-shadow: inset 3px 0 0 #1d4ed8; }
 table.data tr.row-status-psfu td { background: #86efac !important; box-shadow: inset 3px 0 0 #15803d; }
-table.data tr.row-status-ready td { background: #fde047 !important; box-shadow: inset 3px 0 0 #a16207; }
+table.data tr.row-status-delivered td { background: #fde047 !important; box-shadow: inset 3px 0 0 #a16207; color: #422006; }
+table.data tr.row-status-ready td { background: #fdba74 !important; box-shadow: inset 3px 0 0 #c2410c; color: #7c2d12; }
 table.data tr.row-status-traffic td { background: #9ca3af !important; box-shadow: inset 3px 0 0 #374151; color: #111827; }
-table.data tr.row-status-traffic-return td { background: #d8b4fe !important; box-shadow: inset 3px 0 0 #7e22ce; }
+table.data tr.row-status-traffic-return td {
+  background: #c084fc !important;
+  box-shadow: inset 3px 0 0 #6b21a8;
+  color: #3b0764;
+}
 table.data tr.row-status-pending td { background: #7dd3fc !important; box-shadow: inset 3px 0 0 #0369a1; }
 table.data tr.row-status-cancel td { background: #fca5a5 !important; box-shadow: inset 3px 0 0 #b91c1c; }
 table.data tr.row-status-claimed:hover td { background: #60a5fa !important; }
 table.data tr.row-status-psfu:hover td { background: #4ade80 !important; }
-table.data tr.row-status-ready:hover td { background: #facc15 !important; }
+table.data tr.row-status-delivered:hover td { background: #facc15 !important; }
+table.data tr.row-status-ready:hover td { background: #fb923c !important; }
 table.data tr.row-status-traffic:hover td { background: #6b7280 !important; color: #fff; }
-table.data tr.row-status-traffic-return:hover td { background: #c084fc !important; }
+table.data tr.row-status-traffic-return:hover td { background: #a855f7 !important; color: #faf5ff; }
 table.data tr.row-status-pending:hover td { background: #38bdf8 !important; }
 table.data tr.row-status-cancel:hover td { background: #f87171 !important; }
 table.data .num {
@@ -555,46 +696,44 @@ table.data .vin-link:hover { text-decoration: underline; }
   border: 1px solid transparent;
 }
 .badge.ok {
-  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  background: #16a34a;
   color: #ecfdf5;
   border-color: #14532d;
-  text-shadow: 0 0 8px rgba(74, 222, 128, 0.85);
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.55), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 .badge.bad {
-  background: linear-gradient(180deg, #f87171 0%, #b91c1c 100%);
+  background: #dc2626;
   color: #fff1f2;
   border-color: #7f1d1d;
-  text-shadow: 0 0 8px rgba(252, 165, 165, 0.9);
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.55), inset 0 1px 0 rgba(255,255,255,0.22);
 }
 .badge.warn {
-  background: linear-gradient(180deg, #facc15 0%, #ca8a04 100%);
+  background: #eab308;
   color: #422006;
   border-color: #854d0e;
-  text-shadow: 0 0 6px rgba(250, 204, 21, 0.9);
-  box-shadow: 0 0 12px rgba(234, 179, 8, 0.65), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.badge.yellow {
+  background: #eab308;
+  color: #422006;
+  border-color: #854d0e;
+}
+.badge.orange {
+  background: #fb923c;
+  color: #7c2d12;
+  border-color: #c2410c;
 }
 .badge.info {
-  background: linear-gradient(180deg, #60a5fa 0%, #1d4ed8 100%);
+  background: #2563eb;
   color: #eff6ff;
   border-color: #1e3a8a;
-  text-shadow: 0 0 8px rgba(147, 197, 253, 0.95);
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), inset 0 1px 0 rgba(255,255,255,0.28);
 }
 .badge.purple {
-  background: linear-gradient(180deg, #c084fc 0%, #7e22ce 100%);
+  background: #9333ea;
   color: #faf5ff;
   border-color: #581c87;
-  text-shadow: 0 0 8px rgba(216, 180, 254, 0.95);
-  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 .badge.navy {
-  background: linear-gradient(180deg, #334155 0%, #0f172a 100%);
+  background: #1e293b;
   color: #f8fafc;
   border-color: #020617;
-  text-shadow: 0 0 8px rgba(148, 163, 184, 0.85);
-  box-shadow: 0 0 10px rgba(15, 23, 42, 0.55), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 
 /* ——— Pipeline / status ——— */
@@ -1479,21 +1618,21 @@ table.live-sheet tbody tr:nth-child(even):not([class*="row-status-"]) td { backg
 /* Full-row tint on live sheet */
 table.live-sheet tr.row-status-claimed td { background: rgba(96, 165, 250, 0.55); }
 table.live-sheet tr.row-status-psfu td { background: rgba(74, 222, 128, 0.5); }
-table.live-sheet tr.row-status-ready td { background: rgba(250, 204, 21, 0.55); }
+table.live-sheet tr.row-status-delivered td { background: rgba(250, 204, 21, 0.55); }
+table.live-sheet tr.row-status-ready td { background: rgba(251, 146, 60, 0.45); }
 table.live-sheet tr.row-status-traffic td { background: rgba(107, 114, 128, 0.45); }
-table.live-sheet tr.row-status-traffic-return td { background: rgba(192, 132, 252, 0.5); }
+table.live-sheet tr.row-status-traffic-return td { background: rgba(168, 85, 247, 0.55); }
 table.live-sheet tr.row-status-pending td { background: rgba(56, 189, 248, 0.5); }
 table.live-sheet tr.row-status-cancel td { background: rgba(248, 113, 113, 0.5); }
 
-/* Sticky left columns — darker + glow (override full-row tint) */
+/* Sticky left columns — solid status colors (override full-row tint) */
 table.live-sheet tr.row-status-claimed td.col-num,
 table.live-sheet tr.row-status-claimed td.col-employee,
 table.live-sheet tr.row-status-claimed td.col-status,
 table.live-sheet tr.row-status-claimed td.col-vin {
   background: #3b82f6 !important;
   color: #eff6ff;
-  text-shadow: 0 0 10px rgba(191, 219, 254, 0.9);
-  box-shadow: inset 3px 0 0 #1e3a8a, 0 0 14px rgba(59, 130, 246, 0.45);
+  box-shadow: inset 3px 0 0 #1e3a8a;
 }
 table.live-sheet tr.row-status-psfu td.col-num,
 table.live-sheet tr.row-status-psfu td.col-employee,
@@ -1501,17 +1640,23 @@ table.live-sheet tr.row-status-psfu td.col-status,
 table.live-sheet tr.row-status-psfu td.col-vin {
   background: #16a34a !important;
   color: #ecfdf5;
-  text-shadow: 0 0 10px rgba(187, 247, 208, 0.95);
-  box-shadow: inset 3px 0 0 #14532d, 0 0 14px rgba(34, 197, 94, 0.5);
+  box-shadow: inset 3px 0 0 #14532d;
+}
+table.live-sheet tr.row-status-delivered td.col-num,
+table.live-sheet tr.row-status-delivered td.col-employee,
+table.live-sheet tr.row-status-delivered td.col-status,
+table.live-sheet tr.row-status-delivered td.col-vin {
+  background: #eab308 !important;
+  color: #422006;
+  box-shadow: inset 3px 0 0 #854d0e;
 }
 table.live-sheet tr.row-status-ready td.col-num,
 table.live-sheet tr.row-status-ready td.col-employee,
 table.live-sheet tr.row-status-ready td.col-status,
 table.live-sheet tr.row-status-ready td.col-vin {
-  background: #eab308 !important;
-  color: #422006;
-  text-shadow: 0 0 8px rgba(254, 240, 138, 0.95);
-  box-shadow: inset 3px 0 0 #854d0e, 0 0 14px rgba(234, 179, 8, 0.55);
+  background: #fb923c !important;
+  color: #7c2d12;
+  box-shadow: inset 3px 0 0 #c2410c;
 }
 table.live-sheet tr.row-status-traffic td.col-num,
 table.live-sheet tr.row-status-traffic td.col-employee,
@@ -1519,8 +1664,7 @@ table.live-sheet tr.row-status-traffic td.col-status,
 table.live-sheet tr.row-status-traffic td.col-vin {
   background: #4b5563 !important;
   color: #f9fafb;
-  text-shadow: 0 0 8px rgba(209, 213, 219, 0.85);
-  box-shadow: inset 3px 0 0 #111827, 0 0 12px rgba(75, 85, 99, 0.5);
+  box-shadow: inset 3px 0 0 #111827;
 }
 table.live-sheet tr.row-status-traffic-return td.col-num,
 table.live-sheet tr.row-status-traffic-return td.col-employee,
@@ -1528,8 +1672,7 @@ table.live-sheet tr.row-status-traffic-return td.col-status,
 table.live-sheet tr.row-status-traffic-return td.col-vin {
   background: #9333ea !important;
   color: #faf5ff;
-  text-shadow: 0 0 10px rgba(233, 213, 255, 0.95);
-  box-shadow: inset 3px 0 0 #581c87, 0 0 14px rgba(168, 85, 247, 0.55);
+  box-shadow: inset 3px 0 0 #581c87;
 }
 table.live-sheet tr.row-status-pending td.col-num,
 table.live-sheet tr.row-status-pending td.col-employee,
@@ -1537,8 +1680,7 @@ table.live-sheet tr.row-status-pending td.col-status,
 table.live-sheet tr.row-status-pending td.col-vin {
   background: #0284c7 !important;
   color: #f0f9ff;
-  text-shadow: 0 0 10px rgba(186, 230, 253, 0.95);
-  box-shadow: inset 3px 0 0 #0c4a6e, 0 0 14px rgba(14, 165, 233, 0.5);
+  box-shadow: inset 3px 0 0 #0c4a6e;
 }
 table.live-sheet tr.row-status-cancel td.col-num,
 table.live-sheet tr.row-status-cancel td.col-employee,
@@ -1546,8 +1688,7 @@ table.live-sheet tr.row-status-cancel td.col-status,
 table.live-sheet tr.row-status-cancel td.col-vin {
   background: #dc2626 !important;
   color: #fef2f2;
-  text-shadow: 0 0 10px rgba(254, 202, 202, 0.95);
-  box-shadow: inset 3px 0 0 #7f1d1d, 0 0 14px rgba(239, 68, 68, 0.55);
+  box-shadow: inset 3px 0 0 #7f1d1d;
 }
 
 table.live-sheet tr.row-status-claimed td.col-vin .vin-link,
@@ -1557,60 +1698,59 @@ table.live-sheet tr.row-status-traffic-return td.col-vin .vin-link,
 table.live-sheet tr.row-status-pending td.col-vin .vin-link,
 table.live-sheet tr.row-status-cancel td.col-vin .vin-link {
   color: inherit;
-  text-shadow: inherit;
   font-weight: 800;
 }
+table.live-sheet tr.row-status-delivered td.col-vin .vin-link,
 table.live-sheet tr.row-status-ready td.col-vin .vin-link {
-  color: #422006;
+  color: inherit;
   font-weight: 800;
 }
 
-/* Status select glow when editing live */
+/* Status select when editing live */
 table.live-sheet tr.row-status-claimed td.col-status .cell-edit {
   border-color: #1d4ed8;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.55);
   background: #dbeafe;
   font-weight: 800;
   color: #1e3a8a;
 }
 table.live-sheet tr.row-status-psfu td.col-status .cell-edit {
   border-color: #15803d;
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
   background: #dcfce7;
   font-weight: 800;
   color: #14532d;
 }
-table.live-sheet tr.row-status-ready td.col-status .cell-edit {
+table.live-sheet tr.row-status-delivered td.col-status .cell-edit {
   border-color: #a16207;
-  box-shadow: 0 0 10px rgba(234, 179, 8, 0.65);
   background: #fef08a;
   font-weight: 800;
   color: #713f12;
 }
+table.live-sheet tr.row-status-ready td.col-status .cell-edit {
+  border-color: #c2410c;
+  background: #ffedd5;
+  font-weight: 800;
+  color: #7c2d12;
+}
 table.live-sheet tr.row-status-traffic td.col-status .cell-edit {
   border-color: #374151;
-  box-shadow: 0 0 10px rgba(75, 85, 99, 0.55);
   background: #e5e7eb;
   font-weight: 800;
   color: #111827;
 }
 table.live-sheet tr.row-status-traffic-return td.col-status .cell-edit {
   border-color: #7e22ce;
-  box-shadow: 0 0 10px rgba(168, 85, 247, 0.55);
   background: #f3e8ff;
   font-weight: 800;
   color: #581c87;
 }
 table.live-sheet tr.row-status-pending td.col-status .cell-edit {
   border-color: #0369a1;
-  box-shadow: 0 0 10px rgba(14, 165, 233, 0.55);
   background: #e0f2fe;
   font-weight: 800;
   color: #0c4a6e;
 }
 table.live-sheet tr.row-status-cancel td.col-status .cell-edit {
   border-color: #b91c1c;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.55);
   background: #fee2e2;
   font-weight: 800;
   color: #7f1d1d;

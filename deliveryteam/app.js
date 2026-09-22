@@ -72,6 +72,7 @@
     const v = String(s || '').trim();
     if (v === 'Claimed') return 'row-status-claimed';
     if (v === 'PSFU') return 'row-status-psfu';
+    if (v === 'تم التسليم') return 'row-status-delivered';
     if (v === 'جاهز للتسليم') return 'row-status-ready';
     if (v === 'مرور') return 'row-status-traffic';
     if (v === 'رجوع مرور') return 'row-status-traffic-return';
@@ -84,8 +85,9 @@
     const v = String(s || '').trim();
     if (!v) return '<span class="badge">—</span>';
     if (v === 'Claimed') return `<span class="badge info">${esc(v)}</span>`;
-    if (v === 'PSFU' || v === 'تم التسليم') return `<span class="badge ok">${esc(v)}</span>`;
-    if (v === 'جاهز للتسليم') return `<span class="badge warn">${esc(v)}</span>`;
+    if (v === 'PSFU') return `<span class="badge ok">${esc(v)}</span>`;
+    if (v === 'تم التسليم') return `<span class="badge yellow">${esc(v)}</span>`;
+    if (v === 'جاهز للتسليم') return `<span class="badge orange">${esc(v)}</span>`;
     if (v === 'مرور') return `<span class="badge">${esc(v)}</span>`;
     if (v === 'رجوع مرور') return `<span class="badge purple">${esc(v)}</span>`;
     if (v === 'معلقة') return `<span class="badge navy">${esc(v)}</span>`;
@@ -178,44 +180,25 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  function guestCellHtml(r) {
-    const ops = r.ops || {};
-    const isGuest = !!(r.guestCenter || String(ops.guestCenter || '').toLowerCase() === 'yes' || ops.guestCollectAt);
-    const collected = String(ops.guestCollected || '') === 'Yes';
-    const due = !!r.guestDue || (ops.guestCollectAt && (r.guestTimerMs == null ? false : r.guestTimerMs <= 0) && !collected);
-    const canEdit = canEditGuest(r);
+  function guestCenterValue(r) {
+    const ops = (r && r.ops) || {};
+    const raw = String(ops.guestCenter || '').trim().toLowerCase();
+    if (raw === 'yes' || raw === 'y') return 'Yes';
+    if (raw === 'no' || raw === 'n') return 'No';
+    if (r && r.guestCenter) return 'Yes';
+    return '';
+  }
 
-    if (collected) {
-      return `<span class="guest-badge collected">Collected ✓</span>
-        <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>`;
+  /** Guest Exp = simple Yes / No list (no modal button). */
+  function guestCellHtml(r, { editable = false } = {}) {
+    const val = guestCenterValue(r);
+    const canEdit = editable || canEditGuest(r) || canEditLiveSheet();
+    if (!canEdit) {
+      if (val === 'Yes') return '<span class="guest-badge">Yes</span>';
+      if (val === 'No') return '<span class="badge">No</span>';
+      return '<span class="hint">—</span>';
     }
-
-    if (!isGuest) {
-      if (!canEdit) return '<span class="hint">—</span>';
-      return `<button type="button" class="btn-guest" data-guest-act="mark" data-vin="${esc(r.vin)}">Guest Exp</button>`;
-    }
-
-    if (!ops.guestCollectAt) {
-      if (!canEdit) return `<span class="guest-badge">Guest Exp</span>`;
-      return `<button type="button" class="btn-guest" data-guest-act="schedule" data-vin="${esc(r.vin)}">Schedule pickup</button>`;
-    }
-
-    if (due && canEdit) {
-      return `<span class="guest-timer is-due">DUE NOW</span>
-        <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
-          <button type="button" class="btn-guest due" data-guest-act="collected-yes" data-vin="${esc(r.vin)}">Collected?</button>
-          <button type="button" class="btn-guest" data-guest-act="collected-no" data-vin="${esc(r.vin)}">Not yet</button>
-        </div>
-        <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>`;
-    }
-
-    const ms = r.guestTimerMs != null
-      ? r.guestTimerMs
-      : (ops.guestCollectAt ? new Date(ops.guestCollectAt).getTime() - Date.now() : null);
-    return `<span class="guest-badge">Guest Exp</span>
-      <span class="guest-timer" data-guest-timer="${esc(ops.guestCollectAt)}">${esc(formatCountdown(ms))}</span>
-      <div class="hint">${esc(formatGuestAt(ops.guestCollectAt))}</div>
-      ${canEdit ? `<button type="button" class="btn-guest" data-guest-act="schedule" data-vin="${esc(r.vin)}" style="margin-top:4px">Reschedule</button>` : ''}`;
+    return editableControl(r.vin, 'guestCenter', 'yn', val);
   }
 
   function bindGuestButtons(root = document) {
@@ -513,8 +496,8 @@
     const f = state.liveFilters;
     const params = new URLSearchParams();
     params.set('tzOffset', String(state.tzOffset));
-    params.set('sort', 'updatedAt');
-    params.set('dir', 'desc');
+    params.set('sort', 'status');
+    params.set('dir', 'asc');
     if (f.q) params.set('q', f.q);
     if (f.employee) params.set('employee', f.employee);
     if (f.status) params.set('status', f.status);
@@ -688,7 +671,7 @@
       ...(canSeePii() ? [
         { key: 'phone', label: 'Phone', html: (r) => displayPhone(r.raw.phone) },
       ] : []),
-      { key: 'guest', label: 'Guest Exp', html: (r) => guestCellHtml(r) },
+      { key: 'guest', label: 'Guest Exp', html: (r) => guestCellHtml(r, { editable: liveEditable }) },
       { key: 'gt', label: 'GT Loc', html: (r) => na(r.raw.gtLocation) },
       { key: 'veh', label: 'Veh Loc', html: (r) => na(r.raw.vehicleLocation) },
       { key: 'guestsent', label: 'إرسال الضيف', html: (r) => opsCell(r, 'guestSentDate', 'date', r.ops.guestSentDate) },
@@ -714,7 +697,7 @@
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r, i) => {
         const statusCls = statusRowClass(r.ops.opsStatus);
-        const guestCls = (r.guestCenter || r.ops.guestCollectAt) ? 'row-guest-exp' : '';
+        const guestCls = guestCenterValue(r) === 'Yes' ? 'row-guest-exp' : '';
         return `<tr class="${statusCls} ${guestCls}" data-vin="${esc(r.vin)}">${cols.map((c) =>
           `<td class="col-${c.key}">${c.html(r, i)}</td>`
         ).join('')}</tr>`;
@@ -758,6 +741,7 @@
       ['عدد المدن', t.cityCount || cities.length, 'info', 'cities'],
       ['تحويلات المدن', t.cityTotal || cities.reduce((s, r) => s + (r.count || 0), 0), '', 'cities'],
       ['تغيير الشركة', t.companyChangeTotal || changes.length, changes.length ? 'warn' : 'ok', 'company-changes'],
+      ['شركة→مدينة', (ht.companyByCity || []).length, 'info', 'company-city'],
     ].map(([l, v, cls, kind]) =>
       `<button type="button" class="kpi kpi-btn ${cls}" data-xfer-kind="${kind}">
         <div class="lbl">${esc(l)}</div>
@@ -797,6 +781,11 @@
             vins.forEach((vin) => all.push(`${vin}  ·  ${r.name}`));
           });
           openXferVinsModal('المدن / الفروع · جميع الشاسيه', `${all.length} VIN(s)`, all);
+          return;
+        }
+        if (kind === 'company-city') {
+          const host = $('#dash-company-city-wrap');
+          if (host) host.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       });
     });
@@ -804,19 +793,12 @@
     const carrierGrid = $('#dash-carrier-grid');
     if (carrierGrid) {
       const vinMap = ht.carrierVins || {};
-      carrierGrid.innerHTML = carriers.length
-        ? carriers.map((r) =>
-          `<button type="button" class="status-chip" data-carrier="${esc(r.name)}">
-            <div class="n">${r.count}</div>
-            <div class="l">${esc(r.name)}</div>
-          </button>`
-        ).join('')
-        : '<p class="hint">لا يوجد ناقل معيّن بعد</p>';
-      $$('#dash-carrier-grid .status-chip').forEach((b) => {
-        b.addEventListener('click', () => {
-          const name = b.dataset.carrier || '';
+      renderNamedBarChart(carrierGrid, carriers, {
+        fillClass: 'is-carrier',
+        empty: 'لا يوجد ناقل معيّن بعد',
+        onClick: (name, count) => {
           const vins = vinMap[name] || [];
-          openXferVinsModal(`الناقل: ${name}`, `${vins.length || b.querySelector('.n')?.textContent || 0} VIN(s)`, vins);
+          openXferVinsModal(`الناقل: ${name}`, `${vins.length || count} VIN(s)`, vins);
           if (!vins.length) {
             state.liveFilters.carrier = name;
             state.liveFilters.month = state.monthFilter || '';
@@ -826,29 +808,99 @@
             }
             setView('live');
           }
-        });
+        },
       });
     }
 
     const cityGrid = $('#dash-city-grid');
     if (cityGrid) {
       const vinMap = ht.cityVins || {};
-      cityGrid.innerHTML = cities.length
-        ? cities.map((r) =>
-          `<button type="button" class="status-chip" data-city="${esc(r.name)}">
-            <div class="n">${r.count}</div>
-            <div class="l">${esc(r.name)}</div>
-          </button>`
-        ).join('')
-        : '<p class="hint">لا توجد مدن من المسودات بعد — اطبع مذكرة أولاً</p>';
-      $$('#dash-city-grid .status-chip').forEach((b) => {
-        b.addEventListener('click', () => {
-          const name = b.dataset.city || '';
+      renderNamedBarChart(cityGrid, cities, {
+        fillClass: 'is-city',
+        empty: 'لا توجد مدن من المسودات بعد — اطبع مذكرة أولاً',
+        onClick: (name, count) => {
           const vins = vinMap[name] || [];
-          openXferVinsModal(`المدينة: ${name}`, `${vins.length} VIN(s)`, vins);
-        });
+          openXferVinsModal(`المدينة: ${name}`, `${vins.length || count} VIN(s)`, vins);
+        },
       });
     }
+
+    renderCompanyCityChart(ht.companyByCity || []);
+  }
+
+  /** Horizontal bar chart for { name, count } rows (الناقل / المدن). */
+  function renderNamedBarChart(host, rows, { fillClass = '', empty = '—', onClick } = {}) {
+    if (!host) return;
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      host.innerHTML = `<p class="hint">${esc(empty)}</p>`;
+      return;
+    }
+    const max = Math.max(1, ...list.map((r) => Number(r.count) || 0));
+    host.innerHTML = list.map((r, i) => {
+      const count = Number(r.count) || 0;
+      const pct = Math.max(4, Math.round((count / max) * 100));
+      return `<button type="button" class="bar-chart-row" data-i="${i}" title="${esc(r.name)} · ${count}">
+        <span class="bar-chart-label">${esc(r.name)}</span>
+        <span class="bar-chart-track"><span class="bar-chart-fill ${esc(fillClass)}" style="width:${pct}%"></span></span>
+        <span class="bar-chart-count">${esc(count)}</span>
+      </button>`;
+    }).join('');
+    $$('.bar-chart-row', host).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = list[Number(btn.dataset.i)];
+        if (!row || typeof onClick !== 'function') return;
+        onClick(row.name, Number(row.count) || 0);
+      });
+    });
+  }
+
+  function renderCompanyCityChart(rows) {
+    const host = $('#dash-company-city');
+    if (!host) return;
+    if (!rows.length) {
+      host.innerHTML = '<p class="hint">لا توجد بيانات شركة→مدينة بعد — اطبع مذكرة ترحيل أولاً</p>';
+      return;
+    }
+    const maxCity = Math.max(
+      1,
+      ...rows.flatMap((r) => (r.cities || []).map((c) => c.count || 0))
+    );
+    host.innerHTML = rows.map((row, ri) => {
+      const cities = row.cities || [];
+      const bars = cities.map((c, ci) => {
+        const pct = Math.max(4, Math.round(((c.count || 0) / maxCity) * 100));
+        return `<button type="button" class="company-city-bar" data-ci="${ri}" data-city-i="${ci}">
+          <span class="company-city-label" title="${esc(c.city)}">${esc(c.city)}</span>
+          <span class="company-city-track"><span class="company-city-fill" style="width:${pct}%"></span></span>
+          <span class="company-city-count">${esc(c.count)}</span>
+        </button>`;
+      }).join('');
+      return `<article class="company-city-row" data-ci="${ri}">
+        <div class="company-city-head">
+          <div class="company-city-name">${esc(row.company)}</div>
+          <div class="company-city-total">${esc(row.total)} سيارة</div>
+        </div>
+        <div class="company-city-bars">${bars || '<p class="hint">لا مدن</p>'}</div>
+      </article>`;
+    }).join('');
+
+    $$('#dash-company-city .company-city-bar').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ri = Number(btn.dataset.ci);
+        const ci = Number(btn.dataset.cityI);
+        const row = rows[ri];
+        if (!row) return;
+        const cityRow = (row.cities || [])[ci];
+        if (!cityRow) return;
+        const vins = (row.cityVins && row.cityVins[cityRow.city]) || [];
+        openXferVinsModal(
+          `${row.company} → ${cityRow.city}`,
+          `${vins.length || cityRow.count} VIN(s)`,
+          vins.length ? vins : [`${cityRow.count} سيارة (لا قائمة شاسيه)`]
+        );
+      });
+    });
   }
 
   async function loadDashboard() {
@@ -1095,8 +1147,8 @@
     if (type === 'yn') {
       return `<select ${common}>
         <option value="">—</option>
-        <option value="Yes" ${v === 'Yes' ? 'selected' : ''}>🟢 Yes</option>
-        <option value="No" ${v === 'No' ? 'selected' : ''}>🔴 No</option>
+        <option value="Yes" ${v === 'Yes' ? 'selected' : ''}>Yes</option>
+        <option value="No" ${v === 'No' ? 'selected' : ''}>No</option>
       </select>`;
     }
     if (type === 'date') {
@@ -1107,6 +1159,7 @@
     }
     if (type === 'carrier') {
       const carriers = (state.meta && state.meta.carriers) || [];
+      // Hanouf 2-change lock is enforced on save; keep select available and show count in title
       return `<select ${common}><option value="">— الناقل —</option>${carriers.map((c) =>
         `<option value="${esc(c)}" ${v === c ? 'selected' : ''}>${esc(c)}</option>`
       ).join('')}</select>`;
@@ -1139,7 +1192,7 @@
     if (canSeePii()) {
       cols.push(['Phone', (r) => displayPhone(r.raw.phone)]);
     }
-    cols.push(['Guest Exp', (r) => guestCellHtml(r)]);
+    cols.push(['Guest Exp', (r) => guestCellHtml(r, { editable })]);
     if (editable) {
       cols.push(
         ['Status', (r) => editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)],
@@ -1194,13 +1247,17 @@
         const tr = el.closest('tr');
         if (tr) {
           tr.classList.remove(
-            'row-status-claimed', 'row-status-psfu', 'row-status-ready',
+            'row-status-claimed', 'row-status-psfu', 'row-status-ready', 'row-status-delivered',
             'row-status-traffic', 'row-status-traffic-return', 'row-status-pending', 'row-status-cancel'
           );
           const cls = statusRowClass(value);
           if (cls) tr.classList.add(cls);
           tr.dataset.status = value || '';
         }
+      }
+      if (field === 'guestCenter') {
+        const tr = el.closest('tr');
+        if (tr) tr.classList.toggle('row-guest-exp', value === 'Yes');
       }
       const toast = $('#live-save-toast') || $('#my-save-toast');
       if (toast) {
@@ -1256,7 +1313,7 @@
     const head = `<thead><tr>${selectable ? '<th></th>' : ''}${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>`;
     const body = `<tbody>${rows.map((r) => {
       const statusCls = statusRowClass(r.ops.opsStatus);
-      const guestCls = (r.guestCenter || r.ops.guestCollectAt) ? 'row-guest-exp' : '';
+      const guestCls = guestCenterValue(r) === 'Yes' ? 'row-guest-exp' : '';
       const checked = selected.has(r.vin) ? 'checked' : '';
       return `<tr class="${statusCls} ${guestCls} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}" data-status="${esc(r.ops.opsStatus || '')}">
         ${selectable ? `<td><input class="checkbox vin-select-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>` : ''}
@@ -1419,7 +1476,8 @@
     if (carrierList) carrierList.innerHTML = carriers.map((c) => `<option value="${esc(c)}"></option>`).join('');
     fillCarrierLists();
 
-    const pack = await api(`/vehicles?${filterQuery()}`);
+    // All of this user's VINs on one page · sorted by status pipeline
+    const pack = await api(`/vehicles?${filterQuery({ all: '1', page: 1, sort: 'status', dir: 'asc' })}`);
     const dash = await api(`/dashboard?tzOffset=${state.tzOffset}${state.monthFilter ? `&month=${encodeURIComponent(state.monthFilter)}` : ''}`);
     const w = state.user.role === 'employee'
       ? (dash.myWorkload || {})
@@ -1439,7 +1497,10 @@
       selectable: true,
       selectionSet: state.reassignVins,
     });
-    renderPager($('#my-pager'), pack, (p) => { state.filters.page = p; loadMy(); });
+    const pager = $('#my-pager');
+    if (pager) {
+      pager.innerHTML = `<span>${pack.total || 0} VIN(s) · all on this page</span>`;
+    }
     const except = state.user.name;
     renderReassignTargets($('#my-reassign-targets'), except, (emp) => {
       reassignSelected(emp).catch((e) => alert(e.message));
@@ -1697,41 +1758,71 @@
       || (v.ops && v.ops.assignedEmployeeName === state.user.name)
     ));
     const canEdit = canManage() || canEditLiveSheet() || isMine;
+    // Any user who can open an assigned VIN may change الناقل from this drawer
+    const canEditCarrier = !!(v.ops && v.ops.assignedEmployeeId) || canEdit;
+    const carrierLocked = !!v.carrierLocked;
 
-    drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers, { readOnly: !canEdit });
+    drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers, {
+      readOnly: !canEdit,
+      carrierEditable: canEditCarrier && !carrierLocked,
+      carrierLocked,
+    });
     back.classList.add('open');
     $('#drawer-close', drawer).onclick = () => back.classList.remove('open');
     back.onclick = (e) => { if (e.target === back) back.classList.remove('open'); };
-
-    if (!canEdit) return;
 
     async function savePatch(patch) {
       try {
         const res = await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: patch });
         const line = $('#save-line', drawer);
-        line.hidden = false;
-        line.textContent = `Saved ✓ · ${new Date(res.lastUpdated).toLocaleTimeString()}`;
-        $('#last-updated', drawer).textContent = `Last updated: ${res.lastUpdated}`;
-        setTimeout(() => { line.hidden = true; }, 2500);
+        if (line) {
+          line.hidden = false;
+          line.textContent = `Saved ✓ · ${new Date(res.lastUpdated || Date.now()).toLocaleTimeString()}`;
+          setTimeout(() => { line.hidden = true; }, 2500);
+        }
+        const last = $('#last-updated', drawer);
+        if (last && res.lastUpdated) last.textContent = `Last updated: ${res.lastUpdated}`;
+        // Refresh drawer when carrier limit / value updates (Hanouf)
+        if (patch.carrier != null && res.vehicle) {
+          openVin(vin).catch(() => {});
+          return;
+        }
       } catch (err) {
         alert(err.message || 'Save failed');
       }
     }
 
-    $$('[data-ops]', drawer).forEach((el) => {
-      el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value }));
-    });
-    $$('[data-yn]', drawer).forEach((group) => {
-      $$('button', group).forEach((b) => b.addEventListener('click', () => {
-        $$('button', group).forEach((x) => x.classList.remove('active'));
-        b.classList.add('active');
-        savePatch({ [group.dataset.yn]: b.dataset.v });
-      }));
-    });
+    if (canEdit) {
+      $$('[data-ops]', drawer).forEach((el) => {
+        if (el.dataset.ops === 'carrier') return; // handled below
+        el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value }));
+      });
+      $$('[data-yn]', drawer).forEach((group) => {
+        $$('button', group).forEach((b) => b.addEventListener('click', () => {
+          $$('button', group).forEach((x) => x.classList.remove('active'));
+          b.classList.add('active');
+          savePatch({ [group.dataset.yn]: b.dataset.v });
+        }));
+      });
+    }
+
+    // الناقل editable from drawer for any user (even if other fields are view-only)
+    const carrierEl = $('[data-ops="carrier"]', drawer);
+    if (carrierEl && !carrierEl.disabled) {
+      carrierEl.addEventListener('change', () => savePatch({ carrier: carrierEl.value }));
+    }
   }
 
   function buildDrawerHtml(v, statuses, cities, carriers, opts = {}) {
     const readOnly = !!opts.readOnly;
+    const carrierEditable = opts.carrierEditable !== false && !opts.carrierLocked;
+    const carrierLocked = !!opts.carrierLocked;
+    const used = Number(v.carrierChangeCount || 0) || 0;
+    const limit = v.carrierChangeLimit;
+    const remaining = v.carrierChangeRemaining;
+    const hanoufHint = limit != null
+      ? `<p class="hint">الناقل · Hanouf: ${used}/${limit} تغييرات${remaining === 0 ? ' · وصلت للحد' : ` · متبقي ${remaining}`}</p>`
+      : '';
     const yn = (key, label, val) => readOnly
       ? `<div class="field"><label>${esc(label)}</label><input value="${esc(na(val))}" readonly /></div>`
       : `<div class="field"><label>${esc(label)}</label>
@@ -1742,6 +1833,17 @@
     const dt = (key, label, val) => readOnly
       ? `<div class="field"><label>${esc(label)}</label><input type="text" value="${esc(na(val))}" readonly /></div>`
       : `<div class="field"><label>${esc(label)}</label><input type="date" data-ops="${key}" value="${esc(val || '')}" /></div>`;
+    const carrierField = carrierEditable
+      ? `<div class="field"><label>الناقل</label>
+            <select data-ops="carrier">
+              <option value="">— الناقل —</option>
+              ${carriers.map((c) => `<option value="${esc(c)}" ${v.ops.carrier === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            </select>
+            ${hanoufHint}
+          </div>`
+      : `<div class="field"><label>الناقل</label><input value="${esc(na(v.ops.carrier))}" readonly />
+            ${carrierLocked ? '<p class="hint">Hanouf وصلت لحد تغييرين للناقل على هذا الـ VIN</p>' : hanoufHint}
+          </div>`;
     return `
       <div class="drawer-head">
         <div>
@@ -1775,9 +1877,18 @@
         </div>
         <div class="card">
           <h2>Delivery information${readOnly ? ' (teammate — view only)' : ''}</h2>
-          <p class="hint">${readOnly ? 'Read-only · teammate schedule' : 'Employee updates · saves immediately'}</p>
+          <p class="hint">${readOnly ? 'Read-only except الناقل · saves immediately' : 'Employee updates · saves immediately'}</p>
           <div id="save-line" class="save-toast" hidden>Saved ✓</div>
           ${dt('guestSentDate', 'تاريخ إرسال الضيف', v.ops.guestSentDate)}
+          ${readOnly
+            ? `<div class="field"><label>Guest Exp</label><input value="${esc(guestCenterValue(v) || '—')}" readonly /></div>`
+            : `<div class="field"><label>Guest Exp</label>
+            <select data-ops="guestCenter">
+              <option value="">—</option>
+              <option value="Yes" ${guestCenterValue(v) === 'Yes' ? 'selected' : ''}>Yes</option>
+              <option value="No" ${guestCenterValue(v) === 'No' ? 'selected' : ''}>No</option>
+            </select>
+          </div>`}
           ${dt('signatureReceivedDate', 'تاريخ استلام التواقيع من الضيف', v.ops.signatureReceivedDate)}
           ${dt('accountsSentDate', 'تاريخ إرسال الملف للحسابات', v.ops.accountsSentDate)}
           ${dt('accountsApprovalDate', 'تاريخ موافقة الحسابات', v.ops.accountsApprovalDate)}
@@ -1793,22 +1904,20 @@
           ${dt('registrationIssueDate', 'تاريخ إصدار الاستمارة', v.ops.registrationIssueDate)}
           ${readOnly
             ? `<div class="field"><label>مدينة الترحيل</label><input value="${esc(na(v.ops.transferCity))}" readonly /></div>
-               <div class="field"><label>الناقل</label><input value="${esc(na(v.ops.carrier))}" readonly /></div>
+               ${carrierField}
                <div class="field"><label>ملاحظات</label><textarea readonly>${esc(v.ops.notes || '')}</textarea></div>`
             : `<div class="field"><label>مدينة الترحيل</label>
             <input list="city-list" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="Search city…" />
             <datalist id="city-list">${cities.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
           </div>
-          <div class="field"><label>الناقل</label>
-            <input list="carrier-list" data-ops="carrier" value="${esc(v.ops.carrier || '')}" placeholder="Search carrier…" />
-            <datalist id="carrier-list">${carriers.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
-          </div>
+          ${carrierField}
           <div class="field"><label>ملاحظات</label>
-            <textarea data-ops="notes">${esc(v.ops.notes || '')}</textarea>
+            <textarea data-ops="notes" rows="3">${esc(v.ops.notes || '')}</textarea>
           </div>`}
           <p class="hint" id="last-updated">Last updated: ${esc(v.ops.updatedAt || '—')}</p>
         </div>
-      </div>`;
+      </div>
+    `;
   }
 
   async function loadSalesRawPanel() {

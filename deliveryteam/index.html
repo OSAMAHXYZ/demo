@@ -90,12 +90,19 @@
             <div class="xfer-split">
               <div>
                 <h3 class="xfer-subhead">الناقل</h3>
-                <div class="status-grid" id="dash-carrier-grid"></div>
+                <p class="hint">عدد السيارات لكل ناقل — اضغط الشريط لعرض الشاسيه</p>
+                <div id="dash-carrier-grid" class="bar-chart"></div>
               </div>
               <div>
                 <h3 class="xfer-subhead">المدن / الفروع</h3>
-                <div class="status-grid" id="dash-city-grid"></div>
+                <p class="hint">عدد التحويلات لكل مدينة — اضغط الشريط لعرض الشاسيه</p>
+                <div id="dash-city-grid" class="bar-chart"></div>
               </div>
+            </div>
+            <div class="xfer-company-city" id="dash-company-city-wrap">
+              <h3 class="xfer-subhead">كل شركة → المدن</h3>
+              <p class="hint">إجمالي ما أرسلته كل شركة نقل إلى كل مدينة (من المذكرات)</p>
+              <div id="dash-company-city" class="company-city-chart"></div>
             </div>
           </div>
           <div class="card">
@@ -187,7 +194,7 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">Edit your work below · select VINs to hand over to another employee</p>
+            <p class="hint">All your assigned VINs on one page · edit below · select VINs to hand over to another employee</p>
             <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar"></div>
             <div class="reassign-bar" id="my-reassign-bar">
