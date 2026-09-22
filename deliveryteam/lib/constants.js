@@ -276,11 +276,18 @@ const E_SALES_EXPORT_HEADERS = Object.freeze([
   'PIAging',
 ]);
 
-/** Fixed Raw Data letter positions (Sales Raw / classic dump): D/F/G/N/O/Y */
+/** Fixed Sales Raw letter positions (0-based):
+ * A=S/A, B=Product, C=VIN, D=Sales Order, F=GT Loc, G=Veh Loc,
+ * K=Sales Type, N=Invoice Owner, O=Customer, Y=Phone
+ */
 const RAW_COL = Object.freeze({
+  salesAdvisor: 0, // A
+  product: 1, // B
+  vin: 2, // C
   salesOrder: 3, // D
   gtLocation: 5, // F
   vehicleLocation: 6, // G
+  salesType: 10, // K
   invoiceOwner: 13, // N
   customerName: 14, // O
   phone: 24, // Y

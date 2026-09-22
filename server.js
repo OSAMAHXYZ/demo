@@ -1821,7 +1821,7 @@ function syncCoordinatorAssignmentsToDeliveryTeam(items, { by = 'coordinator' } 
           salesOrder: String(hubVeh.salesOrder || '').trim(),
           salesType: String(hubVeh.salesType || '').trim(),
           invoiceOwner: String(hubVeh.invoiceOwner || '').trim(),
-          salesAdvisor: '',
+          salesAdvisor: String(hubVeh.salesAdvisor || '').trim(),
           pic: '',
           status: '',
           traffic: '',
@@ -1870,7 +1870,9 @@ function syncCoordinatorAssignmentsToDeliveryTeam(items, { by = 'coordinator' } 
         proformaDate: String(hubVeh.proformaDate || '').trim(),
         deliveryDate: String(hubVeh.deliveryNoteDate || '').trim(),
         salesOrder: String(hubVeh.salesOrder || '').trim(),
+        salesType: String(hubVeh.salesType || '').trim(),
         invoiceOwner: String(hubVeh.invoiceOwner || '').trim(),
+        salesAdvisor: String(hubVeh.salesAdvisor || '').trim(),
       };
       Object.keys(patches).forEach((k) => {
         if (patches[k] && raw[k] !== patches[k]) {
@@ -3531,6 +3533,9 @@ function parseVehiclesFromRows(rows) {
 function extractVinFromArrayLine(headerRow, line) {
   const headers = Array.isArray(headerRow) ? headerRow : [];
   const cells = Array.isArray(line) ? line : [];
+  // Sales Raw: column C (index 2) is VIN
+  const fromC = normVin(String(cells[2] || ''));
+  if (fromC && fromC.length >= 5 && /[A-HJ-NPR-Z0-9]/i.test(fromC)) return fromC;
   for (let i = 0; i < headers.length; i++) {
     const h = normalizeHeader(String(headers[i] || ''));
     if (!h) continue;
@@ -3573,7 +3578,8 @@ function backfillProformaColumnP(wb, sheetName, vehicles) {
 
 /**
  * Sales Raw fixed letters (0-based):
- * D = Sales Order, F = GT Location, G = Vehicle Location, N = Invoice Owner
+ * A = S/A, B = Product, C = VIN, D = Sales Order,
+ * F = GT Location, G = Vehicle Location, K = Sales Type, N = Invoice Owner
  * (O/Y already handled by backfillGuestColumnsOY)
  */
 function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
@@ -3583,14 +3589,20 @@ function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
   if (!rowsArr.length) return { updated: 0 };
   const headerRow = rowsArr[0] || [];
   const byVin = new Map(vehicles.map((v) => [normVin(v.vin), v]));
+  const COL_A = 0;  // S/A
+  const COL_B = 1;  // Product
+  const COL_C = 2;  // VIN
   const COL_D = 3;  // Sales Order
   const COL_F = 5;  // GT Location
   const COL_G = 6;  // Vehicle Location
+  const COL_K = 10; // Sales Type
   const COL_N = 13; // Invoice Owner
   let updated = 0;
   for (let i = 1; i < rowsArr.length; i++) {
     const line = rowsArr[i];
-    const vin = extractVinFromArrayLine(headerRow, line);
+    // Prefer fixed column C for VIN, then header-based extract
+    let vin = normVin(line[COL_C]);
+    if (!vin || vin.length < 5) vin = extractVinFromArrayLine(headerRow, line);
     if (!vin) continue;
     const veh = byVin.get(vin);
     if (!veh) continue;
@@ -3599,15 +3611,24 @@ function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
       const s = v != null ? String(v).trim() : '';
       return s === '#' ? '' : s;
     };
+    const sa = cell(COL_A);
+    const product = cell(COL_B);
     const order = cell(COL_D);
     const gt = cell(COL_F);
     const vehLoc = cell(COL_G);
+    const salesType = cell(COL_K);
     const owner = cell(COL_N);
     let dirty = false;
-    // Always stamp from fixed columns on every Sales Raw upload
+    if (veh.salesAdvisor !== sa) { veh.salesAdvisor = sa; dirty = true; }
+    if (product && (veh.product !== product || veh.model !== product)) {
+      veh.product = product;
+      if (!veh.model) veh.model = product;
+      dirty = true;
+    }
     if (veh.salesOrder !== order) { veh.salesOrder = order; dirty = true; }
     if (veh.gt !== gt) { veh.gt = gt; dirty = true; }
     if (veh.location !== vehLoc) { veh.location = vehLoc; dirty = true; }
+    if (veh.salesType !== salesType) { veh.salesType = salesType; dirty = true; }
     if (veh.invoiceOwner !== owner) { veh.invoiceOwner = owner; dirty = true; }
     if (dirty) updated += 1;
   }

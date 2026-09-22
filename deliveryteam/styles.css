@@ -645,26 +645,26 @@ table.data tr.is-me td { box-shadow: inset 3px 0 0 var(--navy, #0b1f33); }
 #dash-emp-table .ach-low {
   color: #b91c1c;
 }
-table.data tr.row-status-claimed td { background: #93c5fd !important; box-shadow: inset 3px 0 0 #1d4ed8; }
-table.data tr.row-status-psfu td { background: #86efac !important; box-shadow: inset 3px 0 0 #15803d; }
-table.data tr.row-status-delivered td { background: #fde047 !important; box-shadow: inset 3px 0 0 #a16207; color: #422006; }
-table.data tr.row-status-ready td { background: #fdba74 !important; box-shadow: inset 3px 0 0 #c2410c; color: #7c2d12; }
-table.data tr.row-status-traffic td { background: #9ca3af !important; box-shadow: inset 3px 0 0 #374151; color: #111827; }
+table.data tr.row-status-claimed td { background: #dbeafe !important; box-shadow: inset 3px 0 0 #93c5fd; color: #1e3a8a; }
+table.data tr.row-status-psfu td { background: #dcfce7 !important; box-shadow: inset 3px 0 0 #86efac; color: #14532d; }
+table.data tr.row-status-delivered td { background: #fef9c3 !important; box-shadow: inset 3px 0 0 #fde047; color: #713f12; }
+table.data tr.row-status-ready td { background: #ffedd5 !important; box-shadow: inset 3px 0 0 #fdba74; color: #9a3412; }
+table.data tr.row-status-traffic td { background: #f3f4f6 !important; box-shadow: inset 3px 0 0 #d1d5db; color: #374151; }
 table.data tr.row-status-traffic-return td {
-  background: #c084fc !important;
-  box-shadow: inset 3px 0 0 #6b21a8;
-  color: #3b0764;
+  background: #f3e8ff !important;
+  box-shadow: inset 3px 0 0 #d8b4fe;
+  color: #6b21a8;
 }
-table.data tr.row-status-pending td { background: #7dd3fc !important; box-shadow: inset 3px 0 0 #0369a1; }
-table.data tr.row-status-cancel td { background: #fca5a5 !important; box-shadow: inset 3px 0 0 #b91c1c; }
-table.data tr.row-status-claimed:hover td { background: #60a5fa !important; }
-table.data tr.row-status-psfu:hover td { background: #4ade80 !important; }
-table.data tr.row-status-delivered:hover td { background: #facc15 !important; }
-table.data tr.row-status-ready:hover td { background: #fb923c !important; }
-table.data tr.row-status-traffic:hover td { background: #6b7280 !important; color: #fff; }
-table.data tr.row-status-traffic-return:hover td { background: #a855f7 !important; color: #faf5ff; }
-table.data tr.row-status-pending:hover td { background: #38bdf8 !important; }
-table.data tr.row-status-cancel:hover td { background: #f87171 !important; }
+table.data tr.row-status-pending td { background: #e0f2fe !important; box-shadow: inset 3px 0 0 #7dd3fc; color: #075985; }
+table.data tr.row-status-cancel td { background: #fee2e2 !important; box-shadow: inset 3px 0 0 #fca5a5; color: #991b1b; }
+table.data tr.row-status-claimed:hover td { background: #bfdbfe !important; }
+table.data tr.row-status-psfu:hover td { background: #bbf7d0 !important; }
+table.data tr.row-status-delivered:hover td { background: #fef08a !important; }
+table.data tr.row-status-ready:hover td { background: #fed7aa !important; }
+table.data tr.row-status-traffic:hover td { background: #e5e7eb !important; color: #111827; }
+table.data tr.row-status-traffic-return:hover td { background: #e9d5ff !important; color: #581c87; }
+table.data tr.row-status-pending:hover td { background: #bae6fd !important; }
+table.data tr.row-status-cancel:hover td { background: #fecaca !important; }
 table.data .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -696,44 +696,44 @@ table.data .vin-link:hover { text-decoration: underline; }
   border: 1px solid transparent;
 }
 .badge.ok {
-  background: #16a34a;
-  color: #ecfdf5;
-  border-color: #14532d;
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
 }
 .badge.bad {
-  background: #dc2626;
-  color: #fff1f2;
-  border-color: #7f1d1d;
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
 }
 .badge.warn {
-  background: #eab308;
-  color: #422006;
-  border-color: #854d0e;
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde047;
 }
 .badge.yellow {
-  background: #eab308;
-  color: #422006;
-  border-color: #854d0e;
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde047;
 }
 .badge.orange {
-  background: #fb923c;
-  color: #7c2d12;
-  border-color: #c2410c;
+  background: #ffedd5;
+  color: #9a3412;
+  border-color: #fdba74;
 }
 .badge.info {
-  background: #2563eb;
-  color: #eff6ff;
-  border-color: #1e3a8a;
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
 }
 .badge.purple {
-  background: #9333ea;
-  color: #faf5ff;
-  border-color: #581c87;
+  background: #f3e8ff;
+  color: #6b21a8;
+  border-color: #d8b4fe;
 }
 .badge.navy {
-  background: #1e293b;
-  color: #f8fafc;
-  border-color: #020617;
+  background: #e2e8f0;
+  color: #334155;
+  border-color: #cbd5e1;
 }
 
 /* ——— Pipeline / status ——— */
@@ -1616,79 +1616,79 @@ table.live-sheet tbody tr:nth-child(even):not([class*="row-status-"]) td.col-vin
 table.live-sheet tbody tr:nth-child(even):not([class*="row-status-"]) td { background: #f8fafc; }
 
 /* Full-row tint on live sheet */
-table.live-sheet tr.row-status-claimed td { background: rgba(96, 165, 250, 0.55); }
-table.live-sheet tr.row-status-psfu td { background: rgba(74, 222, 128, 0.5); }
-table.live-sheet tr.row-status-delivered td { background: rgba(250, 204, 21, 0.55); }
-table.live-sheet tr.row-status-ready td { background: rgba(251, 146, 60, 0.45); }
-table.live-sheet tr.row-status-traffic td { background: rgba(107, 114, 128, 0.45); }
-table.live-sheet tr.row-status-traffic-return td { background: rgba(168, 85, 247, 0.55); }
-table.live-sheet tr.row-status-pending td { background: rgba(56, 189, 248, 0.5); }
-table.live-sheet tr.row-status-cancel td { background: rgba(248, 113, 113, 0.5); }
+table.live-sheet tr.row-status-claimed td { background: #dbeafe; }
+table.live-sheet tr.row-status-psfu td { background: #dcfce7; }
+table.live-sheet tr.row-status-delivered td { background: #fef9c3; }
+table.live-sheet tr.row-status-ready td { background: #ffedd5; }
+table.live-sheet tr.row-status-traffic td { background: #f3f4f6; }
+table.live-sheet tr.row-status-traffic-return td { background: #f3e8ff; }
+table.live-sheet tr.row-status-pending td { background: #e0f2fe; }
+table.live-sheet tr.row-status-cancel td { background: #fee2e2; }
 
-/* Sticky left columns — solid status colors (override full-row tint) */
+/* Sticky left columns — light status colors */
 table.live-sheet tr.row-status-claimed td.col-num,
 table.live-sheet tr.row-status-claimed td.col-employee,
 table.live-sheet tr.row-status-claimed td.col-status,
 table.live-sheet tr.row-status-claimed td.col-vin {
-  background: #3b82f6 !important;
-  color: #eff6ff;
-  box-shadow: inset 3px 0 0 #1e3a8a;
+  background: #bfdbfe !important;
+  color: #1e3a8a;
+  box-shadow: inset 3px 0 0 #93c5fd;
 }
 table.live-sheet tr.row-status-psfu td.col-num,
 table.live-sheet tr.row-status-psfu td.col-employee,
 table.live-sheet tr.row-status-psfu td.col-status,
 table.live-sheet tr.row-status-psfu td.col-vin {
-  background: #16a34a !important;
-  color: #ecfdf5;
-  box-shadow: inset 3px 0 0 #14532d;
+  background: #bbf7d0 !important;
+  color: #14532d;
+  box-shadow: inset 3px 0 0 #86efac;
 }
 table.live-sheet tr.row-status-delivered td.col-num,
 table.live-sheet tr.row-status-delivered td.col-employee,
 table.live-sheet tr.row-status-delivered td.col-status,
 table.live-sheet tr.row-status-delivered td.col-vin {
-  background: #eab308 !important;
-  color: #422006;
-  box-shadow: inset 3px 0 0 #854d0e;
+  background: #fef08a !important;
+  color: #713f12;
+  box-shadow: inset 3px 0 0 #fde047;
 }
 table.live-sheet tr.row-status-ready td.col-num,
 table.live-sheet tr.row-status-ready td.col-employee,
 table.live-sheet tr.row-status-ready td.col-status,
 table.live-sheet tr.row-status-ready td.col-vin {
-  background: #fb923c !important;
-  color: #7c2d12;
-  box-shadow: inset 3px 0 0 #c2410c;
+  background: #fed7aa !important;
+  color: #9a3412;
+  box-shadow: inset 3px 0 0 #fdba74;
 }
 table.live-sheet tr.row-status-traffic td.col-num,
 table.live-sheet tr.row-status-traffic td.col-employee,
 table.live-sheet tr.row-status-traffic td.col-status,
 table.live-sheet tr.row-status-traffic td.col-vin {
-  background: #4b5563 !important;
-  color: #f9fafb;
-  box-shadow: inset 3px 0 0 #111827;
+  background: #e5e7eb !important;
+  color: #374151;
+  box-shadow: inset 3px 0 0 #d1d5db;
 }
 table.live-sheet tr.row-status-traffic-return td.col-num,
 table.live-sheet tr.row-status-traffic-return td.col-employee,
 table.live-sheet tr.row-status-traffic-return td.col-status,
 table.live-sheet tr.row-status-traffic-return td.col-vin {
-  background: #9333ea !important;
-  color: #faf5ff;
-  box-shadow: inset 3px 0 0 #581c87;
+  background: #e9d5ff !important;
+  color: #6b21a8;
+  box-shadow: inset 3px 0 0 #d8b4fe;
 }
 table.live-sheet tr.row-status-pending td.col-num,
 table.live-sheet tr.row-status-pending td.col-employee,
 table.live-sheet tr.row-status-pending td.col-status,
 table.live-sheet tr.row-status-pending td.col-vin {
-  background: #0284c7 !important;
-  color: #f0f9ff;
-  box-shadow: inset 3px 0 0 #0c4a6e;
+  background: #bae6fd !important;
+  color: #075985;
+  box-shadow: inset 3px 0 0 #7dd3fc;
 }
 table.live-sheet tr.row-status-cancel td.col-num,
 table.live-sheet tr.row-status-cancel td.col-employee,
 table.live-sheet tr.row-status-cancel td.col-status,
 table.live-sheet tr.row-status-cancel td.col-vin {
-  background: #dc2626 !important;
-  color: #fef2f2;
-  box-shadow: inset 3px 0 0 #7f1d1d;
+  background: #fecaca !important;
+  color: #991b1b;
+  box-shadow: inset 3px 0 0 #fca5a5;
 }
 
 table.live-sheet tr.row-status-claimed td.col-vin .vin-link,
@@ -1696,10 +1696,7 @@ table.live-sheet tr.row-status-psfu td.col-vin .vin-link,
 table.live-sheet tr.row-status-traffic td.col-vin .vin-link,
 table.live-sheet tr.row-status-traffic-return td.col-vin .vin-link,
 table.live-sheet tr.row-status-pending td.col-vin .vin-link,
-table.live-sheet tr.row-status-cancel td.col-vin .vin-link {
-  color: inherit;
-  font-weight: 800;
-}
+table.live-sheet tr.row-status-cancel td.col-vin .vin-link,
 table.live-sheet tr.row-status-delivered td.col-vin .vin-link,
 table.live-sheet tr.row-status-ready td.col-vin .vin-link {
   color: inherit;
@@ -1708,52 +1705,52 @@ table.live-sheet tr.row-status-ready td.col-vin .vin-link {
 
 /* Status select when editing live */
 table.live-sheet tr.row-status-claimed td.col-status .cell-edit {
-  border-color: #1d4ed8;
-  background: #dbeafe;
+  border-color: #93c5fd;
+  background: #eff6ff;
   font-weight: 800;
   color: #1e3a8a;
 }
 table.live-sheet tr.row-status-psfu td.col-status .cell-edit {
-  border-color: #15803d;
-  background: #dcfce7;
+  border-color: #86efac;
+  background: #f0fdf4;
   font-weight: 800;
   color: #14532d;
 }
 table.live-sheet tr.row-status-delivered td.col-status .cell-edit {
-  border-color: #a16207;
-  background: #fef08a;
+  border-color: #fde047;
+  background: #fefce8;
   font-weight: 800;
   color: #713f12;
 }
 table.live-sheet tr.row-status-ready td.col-status .cell-edit {
-  border-color: #c2410c;
-  background: #ffedd5;
+  border-color: #fdba74;
+  background: #fff7ed;
   font-weight: 800;
-  color: #7c2d12;
+  color: #9a3412;
 }
 table.live-sheet tr.row-status-traffic td.col-status .cell-edit {
-  border-color: #374151;
-  background: #e5e7eb;
+  border-color: #d1d5db;
+  background: #f9fafb;
   font-weight: 800;
-  color: #111827;
+  color: #374151;
 }
 table.live-sheet tr.row-status-traffic-return td.col-status .cell-edit {
-  border-color: #7e22ce;
-  background: #f3e8ff;
+  border-color: #d8b4fe;
+  background: #faf5ff;
   font-weight: 800;
-  color: #581c87;
+  color: #6b21a8;
 }
 table.live-sheet tr.row-status-pending td.col-status .cell-edit {
-  border-color: #0369a1;
-  background: #e0f2fe;
+  border-color: #7dd3fc;
+  background: #f0f9ff;
   font-weight: 800;
-  color: #0c4a6e;
+  color: #075985;
 }
 table.live-sheet tr.row-status-cancel td.col-status .cell-edit {
-  border-color: #b91c1c;
-  background: #fee2e2;
+  border-color: #fca5a5;
+  background: #fef2f2;
   font-weight: 800;
-  color: #7f1d1d;
+  color: #991b1b;
 }
 table.live-sheet tbody tr:hover td.col-num,
 table.live-sheet tbody tr:hover td.col-employee,

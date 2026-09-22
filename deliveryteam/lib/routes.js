@@ -280,21 +280,32 @@ function mapRawRow(row, line, { useLegacyCols = false } = {}) {
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
     raw[key] = pickCol(row, aliases);
   }
-  // Fixed Sales Raw letters D/F/G/N (and O/Y) — stamp on every upload when the row is wide enough
-  if (Array.isArray(line) && line.length >= 14) {
-    const so = cellText(line, RAW_COL.salesOrder);
-    const gt = cellText(line, RAW_COL.gtLocation);
-    const vehLoc = cellText(line, RAW_COL.vehicleLocation);
-    const inv = cellText(line, RAW_COL.invoiceOwner);
-    const cust = cellText(line, RAW_COL.customerName);
-    const ph = cellText(line, RAW_COL.phone);
-    // Always overwrite from fixed columns (including clear when blank)
-    raw.salesOrder = so === '#' ? '' : so;
-    raw.gtLocation = gt === '#' ? '' : gt;
-    raw.vehicleLocation = vehLoc === '#' ? '' : vehLoc;
-    raw.invoiceOwner = inv === '#' ? '' : inv;
-    if (cust && cust !== '#') raw.userName = cust;
-    if (ph && ph !== '#') raw.phone = ph;
+  // Fixed Sales Raw letters A/B/C/D/F/G/K/N/O/Y — stamp on every upload when the row is wide enough
+  if (Array.isArray(line) && line.length >= 11) {
+    const scrub = (s) => (s === '#' ? '' : s);
+    const sa = scrub(cellText(line, RAW_COL.salesAdvisor));
+    const prod = scrub(cellText(line, RAW_COL.product));
+    const vinFixed = scrub(cellText(line, RAW_COL.vin));
+    const so = scrub(cellText(line, RAW_COL.salesOrder));
+    const gt = scrub(cellText(line, RAW_COL.gtLocation));
+    const vehLoc = scrub(cellText(line, RAW_COL.vehicleLocation));
+    const stype = scrub(cellText(line, RAW_COL.salesType));
+    const inv = scrub(cellText(line, RAW_COL.invoiceOwner));
+    const cust = scrub(cellText(line, RAW_COL.customerName));
+    const ph = scrub(cellText(line, RAW_COL.phone));
+    // Always stamp A/B/C/K (and D/F/G/N when wide enough)
+    raw.salesAdvisor = sa;
+    if (prod) raw.product = prod;
+    if (vinFixed) raw.vin = vinFixed;
+    raw.salesType = stype;
+    if (line.length >= 14 || so || gt || vehLoc || inv) {
+      raw.salesOrder = so;
+      raw.gtLocation = gt;
+      raw.vehicleLocation = vehLoc;
+      raw.invoiceOwner = inv;
+    }
+    if (cust) raw.userName = cust;
+    if (ph) raw.phone = ph;
   } else if (useLegacyCols && Array.isArray(line) && line.length) {
     const so = cellText(line, RAW_COL.salesOrder);
     const inv = cellText(line, RAW_COL.invoiceOwner);
