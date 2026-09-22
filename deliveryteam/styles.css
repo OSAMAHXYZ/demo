@@ -700,6 +700,75 @@ table.data tr.is-me td { box-shadow: inset 3px 0 0 var(--navy, #0b1f33); }
 #dash-emp-table .ach-low {
   color: #b91c1c;
 }
+
+.emp-by-type {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.emp-type-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+.emp-type-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.emp-type-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+.emp-type-total {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.emp-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.emp-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.emp-type-chip:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+.emp-type-chip.is-me {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.emp-type-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.emp-type-count {
+  font-weight: 800;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: #1d4ed8;
+  min-width: 1.2em;
+  text-align: right;
+}
 table.data tr.row-status-claimed td { background: #dbeafe !important; box-shadow: inset 3px 0 0 #93c5fd; color: #1e3a8a; }
 table.data tr.row-status-psfu td { background: #dcfce7 !important; box-shadow: inset 3px 0 0 #86efac; color: #14532d; }
 table.data tr.row-status-delivered td { background: #fef9c3 !important; box-shadow: inset 3px 0 0 #fde047; color: #713f12; }

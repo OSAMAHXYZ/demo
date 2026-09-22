@@ -2,13 +2,14 @@
 
 /**
  * Delivery Team privacy — customer name, invoice owner, and phone
- * are visible to admin only.
+ * are visible to admin and Hanouf (assignment).
  */
 
 const PII_KEYS = Object.freeze(['invoiceOwner', 'userName', 'phone']);
 
 function canSeeCustomerPii(role) {
-  return String(role || '').trim().toLowerCase() === 'admin';
+  const r = String(role || '').trim().toLowerCase();
+  return r === 'admin' || r === 'hanouf';
 }
 
 function maskPersonName(value) {

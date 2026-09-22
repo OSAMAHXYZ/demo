@@ -51,6 +51,7 @@ const deliveryTeamHooks = {
   onSalesRawUpload: null,
   getHubRawStatus: null,
   getHubTransferStats: null,
+  getHubVehicle: null,
 };
 const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
 const deliveryTeam = createDeliveryTeamRouter({
@@ -89,6 +90,11 @@ const deliveryTeam = createDeliveryTeamRouter({
   getHubTransferStats: () => (
     typeof deliveryTeamHooks.getHubTransferStats === 'function'
       ? deliveryTeamHooks.getHubTransferStats()
+      : null
+  ),
+  getHubVehicle: (vin) => (
+    typeof deliveryTeamHooks.getHubVehicle === 'function'
+      ? deliveryTeamHooks.getHubVehicle(vin)
       : null
   ),
 });
@@ -1631,14 +1637,18 @@ function syncHubVehiclesToDeliveryTeam(vehicles) {
       forceKeys.forEach((k) => {
         const next = rawPatch[k] == null ? '' : String(rawPatch[k]);
         const prev = merged[k] == null ? '' : String(merged[k]);
-        // Prefer non-empty Sales Raw values; keep previous only when new file left the field blank
-        // and it is not a core location/date field that must refresh from hub
-        const always = [
+        // Fill-only: Order / Sales Type / Owner / S/A — never wipe a known value with blank
+        const fillOnly = ['salesOrder', 'salesType', 'invoiceOwner', 'salesAdvisor', 'pic'].includes(k);
+        const alwaysRefresh = [
           'product', 'userName', 'phone', 'gtLocation', 'vehicleLocation',
-          'proformaDate', 'deliveryDate', 'salesOrder', 'salesType',
-          'invoiceOwner', 'salesAdvisor', 'pic',
+          'proformaDate', 'deliveryDate',
         ].includes(k);
-        if (always) {
+        if (fillOnly) {
+          if (next && prev !== next) {
+            merged[k] = next;
+            dirty = true;
+          }
+        } else if (alwaysRefresh) {
           if (prev !== next) {
             merged[k] = next;
             dirty = true;
@@ -2088,6 +2098,11 @@ function getHubRawStatus() {
 
 deliveryTeamHooks.getHubRawStatus = () => getHubRawStatus();
 deliveryTeamHooks.getHubTransferStats = () => getHubTransferStats();
+deliveryTeamHooks.getHubVehicle = (vin) => {
+  const key = normVin(vin);
+  if (!key) return null;
+  return vehicleIndex().get(key) || null;
+};
 
 /** Resolve VIN from Sales Raw or Delivery Team store for coordinator submit. */
 function resolveVehicleForSubmit(vin) {

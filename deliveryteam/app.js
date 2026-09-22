@@ -44,9 +44,10 @@
     return s && s !== 'N/A' ? s : 'N/A';
   }
 
-  /** Customer / phone / invoice owner — admin only. */
+  /** Customer / phone / invoice owner — admin + Hanouf (assignment). */
   function canSeePii() {
-    return !!(state.user && state.user.role === 'admin');
+    const role = state.user && state.user.role;
+    return role === 'admin' || role === 'hanouf';
   }
 
   function displayName(value) {
@@ -1038,15 +1039,75 @@
       const hint = $('#dash-emp-hint');
       if (hint) {
         hint.textContent = canEditTarget
-          ? `Target month ${targetMonth || '—'} · Hanouf can set Target · Ach% = Claimed ÷ Target — click a name for Live Sheet`
-          : `Target month ${targetMonth || '—'} · Target set by Hanouf · Ach% = Claimed ÷ Target — click a name for Live Sheet`;
+          ? `By sales type · Target month ${targetMonth || '—'} · Hanouf sets Target · Ach% = Claimed ÷ Target — click a name for Live Sheet`
+          : `By sales type · Target month ${targetMonth || '—'} · click a name for Live Sheet`;
       }
-      // Everyone sees full assignable roster (targets + ach%)
       const showRows = rows.slice();
-      const typeKeys = [...new Set(showRows.flatMap((e) => Object.keys(e.bySalesType || {})))].sort();
       const meId = state.user && state.user.id;
       const meName = state.user && state.user.name;
-      const colCount = 7 + typeKeys.length;
+
+      // —— Schedule grouped by sales type ——
+      const typeTotals = new Map();
+      showRows.forEach((e) => {
+        Object.entries(e.bySalesType || {}).forEach(([stype, n]) => {
+          const key = stype || '(blank)';
+          const count = Number(n) || 0;
+          if (!count) return;
+          if (!typeTotals.has(key)) typeTotals.set(key, { total: 0, employees: [] });
+          const bucket = typeTotals.get(key);
+          bucket.total += count;
+          bucket.employees.push({
+            id: e.id,
+            name: e.name,
+            count,
+            isMe: e.id === meId || e.name === meName,
+          });
+        });
+      });
+      const typeBlocks = [...typeTotals.entries()]
+        .sort((a, b) => b[1].total - a[1].total || String(a[0]).localeCompare(String(b[0])))
+        .map(([stype, bucket]) => {
+          const emps = bucket.employees.slice().sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+          const chips = emps.map((e) =>
+            `<button type="button" class="emp-type-chip${e.isMe ? ' is-me' : ''}" data-emp="${esc(e.name)}" data-stype="${esc(stype)}" title="${esc(e.name)} · ${esc(stype)} · ${e.count}">
+              <span class="emp-type-name">${esc(e.name)}${e.isMe ? ' · you' : ''}</span>
+              <span class="emp-type-count">${e.count}</span>
+            </button>`
+          ).join('');
+          return `<article class="emp-type-block">
+            <div class="emp-type-head">
+              <h3 class="emp-type-title">${esc(stype)}</h3>
+              <span class="emp-type-total">${bucket.total} VIN(s)</span>
+            </div>
+            <div class="emp-type-chips">${chips || '<p class="hint">No employees</p>'}</div>
+          </article>`;
+        });
+      const byTypeHost = $('#dash-emp-by-type');
+      if (byTypeHost) {
+        byTypeHost.innerHTML = typeBlocks.length
+          ? typeBlocks.join('')
+          : '<p class="hint">No sales types in this period — assign VINs with Sales Type from Sales Raw</p>';
+        $$('.emp-type-chip', byTypeHost).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const emp = btn.dataset.emp;
+            const stype = btn.dataset.stype || '';
+            state.liveFilters.employee = emp || '';
+            state.liveFilters.month = state.monthFilter || state.liveFilters.month || '';
+            state.liveFilters.status = '';
+            state.liveFilters.q = stype && stype !== '(blank)' ? stype : '';
+            if ($('#live-employee')) {
+              $('#live-employee').value = emp || '';
+              $('#live-employee').dataset.filled = '1';
+            }
+            if ($('#live-month')) $('#live-month').value = state.liveFilters.month || '';
+            if ($('#live-status')) $('#live-status').value = '';
+            if ($('#live-q')) $('#live-q').value = state.liveFilters.q || '';
+            setView('live');
+          });
+        });
+      }
+
+      // —— Compact targets / Ach% table ——
       $('#dash-emp-table').innerHTML = `<thead><tr>
           <th>Employee</th>
           <th class="num">Assigned</th>
@@ -1055,7 +1116,6 @@
           <th class="num">Progress %</th>
           <th class="num">Target</th>
           <th class="num">Ach%</th>
-          ${typeKeys.map((k) => `<th class="num">${esc(k)}</th>`).join('')}
         </tr></thead>
         <tbody>${showRows.map((e) => {
           const isMe = e.id === meId || e.name === meName;
@@ -1072,9 +1132,8 @@
           <td class="num">${e.progress}%</td>
           <td class="num target-cell" data-stop-nav="1">${targetCell}</td>
           <td class="num ach-cell ${achCls}" data-emp-ach="${esc(e.id)}">${esc(ach)}</td>
-          ${typeKeys.map((k) => `<td class="num">${(e.bySalesType && e.bySalesType[k]) || 0}</td>`).join('')}
         </tr>`;
-        }).join('') || `<tr><td colspan="${colCount}">No employees</td></tr>`}</tbody>`;
+        }).join('') || '<tr><td colspan="7">No employees</td></tr>'}</tbody>`;
 
       $$('#dash-emp-table .target-input').forEach((inp) => {
         inp.addEventListener('click', (ev) => ev.stopPropagation());
@@ -1128,12 +1187,13 @@
         tr.style.cursor = 'pointer';
         tr.addEventListener('click', (ev) => {
           if (ev.target.closest('[data-stop-nav]')) return;
-          state.liveFilters.employee = tr.dataset.emp || '';
+          const emp = tr.dataset.emp;
+          state.liveFilters.employee = emp || '';
           state.liveFilters.month = state.monthFilter || state.liveFilters.month || '';
           state.liveFilters.status = '';
           state.liveFilters.q = '';
           if ($('#live-employee')) {
-            $('#live-employee').value = state.liveFilters.employee;
+            $('#live-employee').value = emp || '';
             $('#live-employee').dataset.filled = '1';
           }
           if ($('#live-month')) $('#live-month').value = state.liveFilters.month || '';
@@ -1695,8 +1755,11 @@
     }
     const cols = [
       ['VIN', (r) => esc(r.vin)],
+      ['Order', (r) => na(r.raw.salesOrder)],
       ['Product', (r) => na(r.raw.product)],
       ['Sales Type', (r) => na(r.raw.salesType)],
+      ['Invoice Owner', (r) => na(r.raw.invoiceOwner)],
+      ['S/A', (r) => na(r.raw.salesAdvisor)],
       ['Proforma', (r) => na(r.raw.proformaDate)],
       ['Status', (r) => statusBadge(r.ops.opsStatus)],
       ['Currently', (r) => na(r.ops.assignedEmployeeName)],
@@ -1708,7 +1771,7 @@
         <td><input class="checkbox assign-pool-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>
         ${cols.map((c) => `<td>${c[1](r)}</td>`).join('')}
       </tr>`;
-    }).join('') || '<tr><td colspan="7">No unassigned VINs in this pool.</td></tr>'}</tbody>`;
+    }).join('') || `<tr><td colspan="${cols.length + 1}">No unassigned VINs in this pool.</td></tr>`}</tbody>`;
     $('#assign-pool-table').innerHTML = head + body;
     $$('.assign-pool-check').forEach((cb) => cb.addEventListener('change', () => {
       if (cb.checked) state.selectedVins.add(cb.dataset.vin);

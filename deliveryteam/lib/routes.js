@@ -510,11 +510,61 @@ function canSeeAll(role) {
   return role === 'admin' || role === 'hanouf';
 }
 
+function blankRaw(v) {
+  const s = String(v == null ? '' : v).trim();
+  return !s || s === 'N/A' || s === '—' || s === '-';
+}
+
+/** Fill Order / Sales Type / Owner / S/A (and other blanks) from hub Sales Raw. */
+function enrichRawFromHub(raw, hubVeh) {
+  if (!hubVeh || !raw) return { raw, changed: false };
+  const next = { ...raw };
+  let changed = false;
+  const fill = (key, hubVal) => {
+    const val = String(hubVal == null ? '' : hubVal).trim();
+    if (!val || val === '#') return;
+    if (!blankRaw(next[key])) return;
+    next[key] = val;
+    changed = true;
+  };
+  fill('salesOrder', hubVeh.salesOrder);
+  fill('salesType', hubVeh.salesType);
+  fill('invoiceOwner', hubVeh.invoiceOwner);
+  fill('salesAdvisor', hubVeh.salesAdvisor);
+  fill('product', hubVeh.product || hubVeh.model);
+  fill('userName', hubVeh.customerName || hubVeh.userName);
+  fill('phone', hubVeh.phone);
+  fill('gtLocation', hubVeh.gt || hubVeh.gtLocation);
+  fill('vehicleLocation', hubVeh.location || hubVeh.vehicleLocation);
+  fill('proformaDate', hubVeh.proformaDate);
+  fill('pic', hubVeh.pic);
+  return { raw: next, changed };
+}
+
 function createDeliveryTeamRouter(opts) {
   const filePath = opts.filePath;
   const password = String(opts.password || '1234').trim();
   const store = createStore(filePath);
   const router = express.Router();
+
+  function hubVehicleFor(vin) {
+    const fn = opts && opts.getHubVehicle;
+    if (typeof fn !== 'function') return null;
+    try { return fn(vin); } catch { return null; }
+  }
+
+  /** Ensure Sales Raw fields are on the team vehicle (persist fills for Assignment / Live Sheet). */
+  function withHubRawEnrichment(v) {
+    if (!v) return null;
+    const hub = hubVehicleFor(v.vin);
+    const { raw, changed } = enrichRawFromHub(v.raw || {}, hub);
+    if (changed) {
+      v.raw = raw;
+      v.rawUpdatedAt = new Date().toISOString();
+      store.upsertVehicle(v.vin, v);
+    }
+    return v;
+  }
 
   function notifyCarrierAssigned(items) {
     const fn = opts && opts.onCarrierAssigned;
@@ -659,6 +709,7 @@ function createDeliveryTeamRouter(opts) {
           v.vin,
           v.raw.salesOrder,
           v.raw.product,
+          v.raw.salesType,
           v.ops.assignedEmployeeName,
           v.ops.opsStatus,
           v.raw.salesAdvisor,
@@ -1069,16 +1120,34 @@ function createDeliveryTeamRouter(opts) {
   });
 
   router.get('/unassigned', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    if (typeof opts.onEnsureHubRawOnLiveSheet === 'function') {
+      try { opts.onEnsureHubRawOnLiveSheet(); } catch (err) {
+        console.error('[delivery-team] hub raw enrich before unassigned:', err.message || err);
+      }
+    }
     const todayOnly = String(req.query.today || '') === '1';
     const today = todayIso(Number(req.query.tzOffset));
     let list = store.allVehicles().filter((v) => !v.ops.assignedEmployeeId);
     if (todayOnly) list = list.filter((v) => v.raw.proformaDate === today);
     list = sortVehicles(list, 'proformaDate', 'desc');
-    res.json({ total: list.length, rows: list.map((v) => publicVehicle(v, req.dtUser)) });
+    let saved = false;
+    const rows = list.map((v) => {
+      const before = JSON.stringify(v.raw || {});
+      const enriched = withHubRawEnrichment(v) || v;
+      if (JSON.stringify(enriched.raw || {}) !== before) saved = true;
+      return publicVehicle(enriched, req.dtUser);
+    });
+    if (saved) store.save();
+    res.json({ total: rows.length, rows });
   });
 
   /** Resolve a submitted VIN list for Hanouf display-before-assign. */
   router.post('/resolve-vins', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    if (typeof opts.onEnsureHubRawOnLiveSheet === 'function') {
+      try { opts.onEnsureHubRawOnLiveSheet(); } catch (err) {
+        console.error('[delivery-team] hub raw enrich before resolve-vins:', err.message || err);
+      }
+    }
     const rawList = Array.isArray(req.body.vins) ? req.body.vins : String(req.body.vins || '').split(/[\s,;]+/);
     const keys = [];
     const seen = new Set();
@@ -1092,11 +1161,50 @@ function createDeliveryTeamRouter(opts) {
 
     const found = [];
     const missing = [];
+    let saved = false;
     keys.forEach((key) => {
-      const v = store.getVehicle(key);
-      if (v) found.push(publicVehicle(v, req.dtUser));
-      else missing.push(key);
+      let v = store.getVehicle(key);
+      if (!v) {
+        // Create from hub Sales Raw so Assignment can show Order / S/A / Sales Type / Owner
+        const hub = hubVehicleFor(key);
+        if (hub) {
+          const now = new Date().toISOString();
+          v = {
+            vin: key,
+            raw: {
+              vin: key,
+              product: String(hub.product || hub.model || '').trim(),
+              userName: String(hub.customerName || hub.userName || '').trim(),
+              phone: String(hub.phone || '').trim(),
+              gtLocation: String(hub.gt || hub.gtLocation || '').trim(),
+              vehicleLocation: String(hub.location || hub.vehicleLocation || '').trim(),
+              proformaDate: String(hub.proformaDate || '').trim(),
+              deliveryDate: String(hub.deliveryNoteDate || hub.deliveryDate || '').trim(),
+              salesOrder: String(hub.salesOrder || '').trim(),
+              salesType: String(hub.salesType || '').trim(),
+              invoiceOwner: String(hub.invoiceOwner || '').trim(),
+              salesAdvisor: String(hub.salesAdvisor || '').trim(),
+              pic: String(hub.pic || '').trim(),
+            },
+            ops: emptyOps(),
+            createdAt: now,
+            rawUpdatedAt: now,
+            lastUploadId: 'hub-resolve',
+          };
+          store.upsertVehicle(key, v);
+          saved = true;
+        }
+      }
+      if (v) {
+        const before = JSON.stringify(v.raw || {});
+        const enriched = withHubRawEnrichment(v) || v;
+        if (JSON.stringify(enriched.raw || {}) !== before) saved = true;
+        found.push(publicVehicle(enriched, req.dtUser));
+      } else {
+        missing.push(key);
+      }
     });
+    if (saved) store.save();
     return res.json({
       total: found.length,
       missing,
