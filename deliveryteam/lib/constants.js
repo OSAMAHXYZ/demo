@@ -158,6 +158,8 @@ const USERS = Object.freeze([
   { id: 'ruba', name: 'Ruba', role: 'employee' },
   { id: 'ibrahim', name: 'Ibrahim', role: 'employee' },
   { id: 'abdullah', name: 'Abdullah', role: 'employee' },
+  /** Live Sheet only — sets الناقل; VINs claim to البراء on Delivery PDF */
+  { id: 'albara', name: 'البراء', role: 'carrier' },
 ]);
 
 /** Excel header aliases → canonical raw field keys */

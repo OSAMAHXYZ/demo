@@ -148,6 +148,15 @@
     return id === 'ruba' || id === 'rasha' || name === 'ruba' || name === 'rasha';
   }
 
+  /** البراء — Live Sheet الناقل only */
+  function isCarrierRole() {
+    return !!(state.user && state.user.role === 'carrier');
+  }
+
+  function canEditCarrierLive() {
+    return isCarrierRole() || canEditLiveSheet();
+  }
+
   function isRuba() {
     return state.user && (state.user.id === 'ruba' || state.user.name === 'Ruba');
   }
@@ -408,7 +417,7 @@
   function navItems() {
     const items = [
       { id: 'dashboard', label: 'Dashboard', roles: ['admin', 'hanouf', 'employee'] },
-      { id: 'live', label: 'Live Sheet', roles: ['admin', 'hanouf', 'employee'] },
+      { id: 'live', label: 'Live Sheet', roles: ['admin', 'hanouf', 'employee', 'carrier'] },
       { id: 'today', label: "Today's Vehicles", roles: ['admin', 'hanouf'] },
       { id: 'my', label: 'My VINs', roles: ['employee', 'admin', 'hanouf'] },
       { id: 'assign', label: 'Assignment', roles: ['admin', 'hanouf'] },
@@ -611,7 +620,9 @@
     if (meta) {
       const t = new Date(data.at || Date.now()).toLocaleTimeString();
       const monthNote = f.month ? ` · ${f.month}` : ' · all months';
-      const editNote = canEditLiveSheet() ? ' · editable' : '';
+      const editNote = canEditLiveSheet()
+        ? ' · editable'
+        : (isCarrierRole() ? ' · الناقل editable' : '');
       meta.textContent = `${data.total || 0} assigned VINs${monthNote}${editNote} · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
     }
     if (dot) {
@@ -634,9 +645,18 @@
     if (editingLive) return;
 
     const liveEditable = canEditLiveSheet();
+    const carrierLiveEditable = canEditCarrierLive();
     const editHint = $('#live-edit-hint');
-    if (editHint) editHint.hidden = !liveEditable;
-    if (liveEditable) {
+    if (editHint) {
+      if (isCarrierRole()) {
+        editHint.hidden = false;
+        editHint.textContent = 'البراء — اختر الناقل لأي شاسيه؛ يُحجز تلقائياً لحسابك في Delivery PDF.';
+      } else {
+        editHint.hidden = !liveEditable;
+        editHint.textContent = 'Hanouf · Ruba · Rasha can edit status, dates, الناقل, city, and notes directly on this sheet.';
+      }
+    }
+    if (carrierLiveEditable) {
       fillCarrierLists();
       const cities = (state.meta && state.meta.transferCities) || [];
       const cityList = $('#edit-city-list');
@@ -685,7 +705,11 @@
       { key: 'ins', label: 'Insurance', html: (r) => opsCell(r, 'insuranceOps', 'yn', r.ops.insuranceOps) },
       { key: 'reg', label: 'إصدار الاستمارة', html: (r) => opsCell(r, 'registrationIssueDate', 'date', r.ops.registrationIssueDate) },
       { key: 'city', label: 'مدينة الترحيل', html: (r) => opsCell(r, 'transferCity', 'city', r.ops.transferCity) },
-      { key: 'carrier', label: 'الناقل', html: (r) => opsCell(r, 'carrier', 'carrier', r.ops.carrier) },
+      { key: 'carrier', label: 'الناقل', html: (r) => (
+        carrierLiveEditable
+          ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)
+          : na(r.ops.carrier)
+      ) },
       { key: 'notes', label: 'ملاحظات', html: (r) => (
         liveEditable
           ? editableControl(r.vin, 'notes', 'notes', r.ops.notes)
@@ -705,7 +729,7 @@
       }).join('') || `<tr><td colspan="${cols.length}">No assigned VINs yet. Use Assignment to assign vehicles.</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
     bindGuestButtons(table);
-    if (liveEditable) bindEditableCells(table);
+    if (liveEditable || isCarrierRole()) bindEditableCells(table);
   }
 
   function openXferVinsModal(title, subtitle, vins) {
@@ -1903,8 +1927,10 @@
       || (v.ops && v.ops.assignedEmployeeName === state.user.name)
     ));
     const canEdit = canManage() || canEditLiveSheet() || isMine;
-    // Any user who can open an assigned VIN may change الناقل from this drawer
-    const canEditCarrier = !!(v.ops && v.ops.assignedEmployeeId) || canEdit;
+    // البراء (carrier): الناقل on any VIN; others: assigned VINs from drawer
+    const canEditCarrier = isCarrierRole()
+      || !!(v.ops && v.ops.assignedEmployeeId)
+      || canEdit;
     const carrierLocked = !!v.carrierLocked;
 
     drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers, {
@@ -2175,7 +2201,7 @@
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     renderNav();
-    if (state.user.role === 'hanouf') setView('live');
+    if (isCarrierRole() || state.user.role === 'hanouf') setView('live');
     else if (canManage()) setView('dashboard');
     else setView('my');
   }

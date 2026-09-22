@@ -1449,7 +1449,7 @@ function applyTeamCityToQueueItem(item, transferCity) {
  */
 function syncTeamCarriersToCoordinator(items) {
   const list = Array.isArray(items) ? items : [];
-  if (!list.length) return { added: 0, reassigned: 0, skipped: 0, same: 0, cityUpdated: 0 };
+  if (!list.length) return { added: 0, reassigned: 0, skipped: 0, same: 0, cityUpdated: 0, claimed: 0 };
   ensureOptions();
   store.queue = dedupeQueue(store.queue || []);
   const now = new Date().toISOString();
@@ -1458,11 +1458,25 @@ function syncTeamCarriersToCoordinator(items) {
   let skipped = 0;
   let same = 0;
   let cityUpdated = 0;
+  let claimed = 0;
+
+  function claimForAgent(queueItem, assignTo) {
+    const agent = String(assignTo || '').trim();
+    if (!agent || !queueItem) return false;
+    const prev = String(queueItem.assignedTo || '').trim();
+    if (prev === agent && queueItem.status === 'claimed') return false;
+    queueItem.status = 'claimed';
+    queueItem.assignedTo = agent;
+    queueItem.agentStatus = queueItem.agentStatus || 'in_stock';
+    queueItem.assignedAt = queueItem.assignedAt || now;
+    return true;
+  }
 
   for (const item of list) {
     const vin = normVin(item.vin || (item.raw && item.raw.vin) || (item.vehicle && item.vehicle.vin));
     const carrier = teamVehicleCarrier(item.vehicle ? { ...item, ...item.vehicle, ops: item.ops || item.vehicle.ops, raw: item.raw || item.vehicle.raw } : item);
     const transferCity = teamVehicleTransferCity(item.vehicle ? { ...item, ...item.vehicle, ops: item.ops || item.vehicle.ops, raw: item.raw || item.vehicle.raw } : item);
+    const assignTo = String(item.assignTo || '').trim();
     if (!vin) {
       skipped += 1;
       continue;
@@ -1502,7 +1516,8 @@ function syncTeamCarriersToCoordinator(items) {
 
       if (sameCompany) {
         if (transferCity && applyTeamCityToQueueItem(existingItem, transferCity)) cityUpdated += 1;
-        same += 1;
+        if (claimForAgent(existingItem, assignTo)) claimed += 1;
+        else same += 1;
         continue;
       }
 
@@ -1515,17 +1530,18 @@ function syncTeamCarriersToCoordinator(items) {
       // keep deliveryCompany after enrich (enrich does not clear it, but be explicit)
       existingItem.deliveryCompany = deliveryCompany;
       existingItem.company = deliveryCompany;
+      if (claimForAgent(existingItem, assignTo)) claimed += 1;
       reassigned += 1;
       continue;
     }
 
     const base = {
       vin,
-      status: 'available',
-      agentStatus: '',
-      assignedTo: '',
+      status: assignTo ? 'claimed' : 'available',
+      agentStatus: assignTo ? 'in_stock' : '',
+      assignedTo: assignTo || '',
       addedAt: now,
-      assignedAt: '',
+      assignedAt: assignTo ? now : '',
       deliveryCompany,
       plannedDeliveryMode: 'memo',
       company: deliveryCompany,
@@ -1535,10 +1551,11 @@ function syncTeamCarriersToCoordinator(items) {
     };
     store.queue.push(enrichFromVehicle(base, hubVeh));
     added += 1;
+    if (assignTo) claimed += 1;
   }
 
-  if (added || reassigned || cityUpdated) persistAndBroadcast();
-  return { added, reassigned, skipped, same, cityUpdated };
+  if (added || reassigned || cityUpdated || claimed) persistAndBroadcast();
+  return { added, reassigned, skipped, same, cityUpdated, claimed };
 }
 
 /** Merge all Delivery Team vehicles into hub inventory + sync carriers to boards. */

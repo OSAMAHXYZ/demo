@@ -566,6 +566,16 @@ function createDeliveryTeamRouter(opts) {
     return v;
   }
 
+  /** Map Delivery Team user → Delivery PDF agent name (when they set الناقل). */
+  function pdfAgentForTeamUser(user) {
+    if (!user) return '';
+    const id = String(user.id || user.userId || '').trim().toLowerCase();
+    const name = String(user.name || '').trim();
+    const role = String(user.role || '').trim().toLowerCase();
+    if (role === 'carrier' || id === 'albara' || name === 'البراء') return 'البراء';
+    return '';
+  }
+
   function notifyCarrierAssigned(items) {
     const fn = opts && opts.onCarrierAssigned;
     if (typeof fn !== 'function' || !items || !items.length) return null;
@@ -579,6 +589,7 @@ function createDeliveryTeamRouter(opts) {
           raw: it.raw || (it.vehicle && it.vehicle.raw) || {},
           ops,
           by: it.by || '',
+          assignTo: it.assignTo || '',
         };
       }));
     } catch (err) {
@@ -636,13 +647,20 @@ function createDeliveryTeamRouter(opts) {
       return null;
     }
     if (canSeeAll(req.dtUser.role)) return v;
+    const isCarrier = String(req.dtUser.role || '') === 'carrier';
     const isMine = v.ops.assignedEmployeeId === req.dtUser.userId;
     const liveEditors = new Set(['ruba', 'rasha']);
     const isLiveEditor = liveEditors.has(String(req.dtUser.userId || '').toLowerCase())
       || liveEditors.has(String(req.dtUser.name || '').trim().toLowerCase());
     if (write) {
+      // البراء (carrier): الناقل only, any VIN on the Live Sheet / fleet
+      if (carrierOnly && isCarrier) return v;
       // Any team member may change الناقل on an assigned VIN (from the VIN drawer)
       if (carrierOnly && v.ops && v.ops.assignedEmployeeId) return v;
+      if (isCarrier) {
+        res.status(403).json({ error: 'Carrier role may only update الناقل' });
+        return null;
+      }
       // Ruba / Rasha / Hanouf(admin via canSeeAll): edit any assigned Live Sheet VIN
       if (isLiveEditor && v.ops && v.ops.assignedEmployeeId) return v;
       if (!isMine) {
@@ -651,6 +669,8 @@ function createDeliveryTeamRouter(opts) {
       }
       return v;
     }
+    // Carrier: read any VIN (Live Sheet)
+    if (isCarrier) return v;
     // Read: own VINs or any assigned teammate VIN (team schedule)
     if (isMine || v.ops.assignedEmployeeId) return v;
     res.status(403).json({ error: 'You do not have access to this VIN' });
@@ -1810,12 +1830,14 @@ function createDeliveryTeamRouter(opts) {
           const transferCity = String(v.ops.transferCity || '').trim();
           let hubSync;
           if (carrier || transferCity) {
+            const assignTo = pdfAgentForTeamUser(req.dtUser);
             hubSync = notifyCarrierAssigned([{
               vin: v.vin,
               carrier,
               transferCity,
               vehicle: v,
               by: req.dtUser.name,
+              assignTo,
             }]);
           }
           return res.json({
@@ -1872,12 +1894,14 @@ function createDeliveryTeamRouter(opts) {
         const carrier = String(v.ops.carrier || '').trim();
         const transferCity = String(v.ops.transferCity || '').trim();
         if (carrier || transferCity) {
+          const assignTo = pdfAgentForTeamUser(req.dtUser);
           hubSync = notifyCarrierAssigned([{
             vin: v.vin,
             carrier,
             transferCity,
             vehicle: v,
             by: req.dtUser.name,
+            assignTo,
           }]);
         }
       }
