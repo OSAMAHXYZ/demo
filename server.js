@@ -2109,7 +2109,7 @@ deliveryTeamHooks.onSalesRawUpload = ({ buffer, filename, byUser } = {}) => {
     throw err;
   }
   const name = String(filename || 'Sales Raw Data.xlsx').trim() || 'Sales Raw Data.xlsx';
-  const parsed = parseSalesWorkbook(buffer, name);
+  const parsed = parseSalesWorkbook(buffer, name, { preferSalesRaw: true });
   if (!parsed.vehicles.length) {
     const err = new Error('لم يتم العثور على أرقام شاسيه في الملف');
     err.status = 400;
@@ -3199,14 +3199,15 @@ function pickCol(row, aliases) {
   }
 
   // 2) Starts-with / contains (token-aware) — supports "VIN No.", "GT Location", etc.
+  // Never let 1–2 letter aliases (sa, so) prefix-match "sales order" / "sales type".
   for (const alias of aliases) {
     const a = normalizeHeader(alias);
     if (!a) continue;
     const hit = entries.find((e) => {
       if (!e.norm || e.norm === a) return false;
       if (e.norm.startsWith(`${a} `) || e.norm.endsWith(` ${a}`) || e.norm.includes(` ${a} `)) return true;
-      // short keys like vin / gt: match headers that begin with them ("vin no", "gt location")
-      if (a.length <= 3) return e.norm.startsWith(`${a} `) || e.norm.startsWith(a);
+      if (a.length <= 2) return false;
+      if (a.length === 3) return e.norm.startsWith(`${a} `);
       return e.norm.includes(a);
     });
     if (hit && row[hit.orig] != null && String(row[hit.orig]).trim() !== '') {
@@ -3405,9 +3406,13 @@ function rowToVehicle(row) {
     'sales order no', 'sales order', 'sales order number', 'order number', 'order no', 'so',
     'رقم الطلب', 'sales order no رقم الطلب',
   ]);
-  const salesType = pickCol(row, ['sales type', 'نوع البيع', 'طريقة البيع']);
+  const salesTypeRaw = pickCol(row, ['sales type', 'نوع البيع', 'طريقة البيع']);
+  const salesType = looksLikeDateValue(salesTypeRaw) ? '' : salesTypeRaw;
   const invoiceOwner = pickCol(row, ['invoice owner', 'مالك الفاتورة']);
-  const salesAdvisor = pickCol(row, ['s/a', 'sa', 's a', 'sales advisor', 'مستشار المبيعات']);
+  const salesAdvisor = pickCol(row, [
+    's/a', 's a', 'sa', 'sales advisor', 'salesman name', 'salesman',
+    'sales employee', 'advisor', 'consultant', 'مستشار المبيعات',
+  ]);
   const pic = pickCol(row, ['pic', 'p.i.c', 'assigned', 'assigned to', 'assignee', 'employee', 'المسؤول', 'مسؤول']);
   const status = pickCol(row, ['status', 'الحالة', 'الحالة status']);
   const traffic = pickCol(row, ['traffic', 'المرور', 'ملف المرور']);
@@ -3576,32 +3581,70 @@ function backfillProformaColumnP(wb, sheetName, vehicles) {
   }
 }
 
+/** True when sheet is classic Sales Raw / Rowdata (Col A = S/A), not Vehicle Inventory. */
+function sheetLooksLikeSalesRaw(headerRow, sheetName) {
+  const name = String(sheetName || '');
+  if (/vehicle\s*inventory|print\s*draft|coordinator\s*queue|مسودات|سجل\s*المركبات/i.test(name)) {
+    return false;
+  }
+  if (/sales\s*raw|row\s*data|rowdata|^raw$/i.test(name)) return true;
+  const headers = Array.isArray(headerRow) ? headerRow : [];
+  const h0 = normalizeHeader(headers[0] || '');
+  // Vehicle Inventory export starts with Chassis / VIN in Col A — never stamp A as S/A
+  if (
+    h0 === 'vin'
+    || h0 === 'chassis'
+    || (h0.includes('chassis') && h0.includes('vin'))
+    || h0.includes('شاس')
+  ) {
+    return false;
+  }
+  if (/salesman|advisor|s a|^sa$|consultant|employee|مستشار/.test(h0)) return true;
+  const h2 = normalizeHeader(headers[2] || '');
+  if (h2.includes('vin') || h2.includes('chassis') || h2.includes('شاس')) return true;
+  return /raw/i.test(name);
+}
+
+function looksLikeDateValue(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (!s) return false;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return true;
+  if (/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(s)) return true;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return true;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 20000 && value < 80000) return true;
+  return false;
+}
+
 /**
- * Sales Raw fixed letters (0-based):
- * A = S/A, B = Product, C = VIN, D = Sales Order,
- * F = GT Location, G = Vehicle Location, K = Sales Type, N = Invoice Owner
- * (O/Y already handled by backfillGuestColumnsOY)
+ * Sales Raw fixed Excel letters (0-based):
+ *   A → S/A · B → Product · C → VIN · K → Sales Type · N → Owner
+ * Also stamps D/F/G when present. Never runs on Vehicle Inventory.
+ * @param {{ force?: boolean }} [opts] force=true when upload is explicitly Sales Raw
  */
-function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
+function backfillSalesRawFixedColumns(wb, sheetName, vehicles, opts = {}) {
   const sheet = wb && wb.Sheets ? wb.Sheets[sheetName] : null;
   if (!sheet || !Array.isArray(vehicles) || !vehicles.length) return { updated: 0 };
   const rowsArr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!rowsArr.length) return { updated: 0 };
   const headerRow = rowsArr[0] || [];
+  if (!opts.force && !sheetLooksLikeSalesRaw(headerRow, sheetName)) return { updated: 0 };
+
   const byVin = new Map(vehicles.map((v) => [normVin(v.vin), v]));
-  const COL_A = 0;  // S/A
-  const COL_B = 1;  // Product
-  const COL_C = 2;  // VIN
-  const COL_D = 3;  // Sales Order
-  const COL_F = 5;  // GT Location
-  const COL_G = 6;  // Vehicle Location
-  const COL_K = 10; // Sales Type
-  const COL_N = 13; // Invoice Owner
+  // A=0 S/A · B=1 Product · C=2 VIN · K=10 Sales Type · N=13 Owner
+  const COL = {
+    A_SA: 0,
+    B_PRODUCT: 1,
+    C_VIN: 2,
+    D_ORDER: 3,
+    F_GT: 5,
+    G_VEH: 6,
+    K_SALES_TYPE: 10,
+    N_OWNER: 13,
+  };
   let updated = 0;
   for (let i = 1; i < rowsArr.length; i++) {
     const line = rowsArr[i];
-    // Prefer fixed column C for VIN, then header-based extract
-    let vin = normVin(line[COL_C]);
+    let vin = normVin(line[COL.C_VIN]);
     if (!vin || vin.length < 5) vin = extractVinFromArrayLine(headerRow, line);
     if (!vin) continue;
     const veh = byVin.get(vin);
@@ -3611,25 +3654,45 @@ function backfillSalesRawFixedColumns(wb, sheetName, vehicles) {
       const s = v != null ? String(v).trim() : '';
       return s === '#' ? '' : s;
     };
-    const sa = cell(COL_A);
-    const product = cell(COL_B);
-    const order = cell(COL_D);
-    const gt = cell(COL_F);
-    const vehLoc = cell(COL_G);
-    const salesType = cell(COL_K);
-    const owner = cell(COL_N);
+
+    const sa = cell(COL.A_SA);
+    const product = cell(COL.B_PRODUCT);
+    const order = cell(COL.D_ORDER);
+    const gt = cell(COL.F_GT);
+    const vehLoc = cell(COL.G_VEH);
+    let salesType = cell(COL.K_SALES_TYPE);
+    const owner = cell(COL.N_OWNER);
+    // K must be Sales Type text — never a date
+    if (looksLikeDateValue(salesType)) salesType = '';
+
     let dirty = false;
-    if (veh.salesAdvisor !== sa) { veh.salesAdvisor = sa; dirty = true; }
+    // A → S/A (skip if Col A accidentally holds this row's VIN)
+    if (sa && normVin(sa) !== vin && veh.salesAdvisor !== sa) {
+      veh.salesAdvisor = sa;
+      dirty = true;
+    }
+    // B → Product
     if (product && (veh.product !== product || veh.model !== product)) {
       veh.product = product;
       if (!veh.model) veh.model = product;
       dirty = true;
     }
-    if (veh.salesOrder !== order) { veh.salesOrder = order; dirty = true; }
+    // K → Sales Type (always overwrite header/date leftovers)
+    if (veh.salesType !== salesType) {
+      veh.salesType = salesType;
+      dirty = true;
+    }
+    // N → Owner
+    if (veh.invoiceOwner !== owner) {
+      veh.invoiceOwner = owner;
+      dirty = true;
+    }
+    if (order && normVin(order) !== vin && veh.salesOrder !== order) {
+      veh.salesOrder = order;
+      dirty = true;
+    }
     if (veh.gt !== gt) { veh.gt = gt; dirty = true; }
     if (veh.location !== vehLoc) { veh.location = vehLoc; dirty = true; }
-    if (veh.salesType !== salesType) { veh.salesType = salesType; dirty = true; }
-    if (veh.invoiceOwner !== owner) { veh.invoiceOwner = owner; dirty = true; }
     if (dirty) updated += 1;
   }
   return { updated };
@@ -3839,23 +3902,32 @@ function parseQueueFromRows(rows) {
   return queue;
 }
 
-function parseSalesFromWorkbook(wb, filename) {
-  // Prefer admin export "Vehicle Inventory", then Sales Raw, then any sheet with VINs
+function parseSalesFromWorkbook(wb, filename, opts = {}) {
+  // Prefer Sales Raw / Rowdata when Hanouf uploads Sales Raw; otherwise inventory first for archives
+  const preferSalesRaw = Boolean(opts.preferSalesRaw)
+    || /sales\s*raw|row\s*data|rowdata/i.test(String(filename || ''));
   const inventorySheet = findSheetName(wb, ['vehicle inventory', 'inventory', 'vehicles']);
-  const sheetOrder = [
-    ...(inventorySheet ? [inventorySheet] : []),
+  const salesRawSheets = [
     ...wb.SheetNames.filter((n) => /sales\s*raw/i.test(n)),
+    ...wb.SheetNames.filter((n) => /row\s*data|rowdata/i.test(n)),
     ...wb.SheetNames.filter((n) => /raw/i.test(n) && !/sales\s*raw/i.test(n)),
-    ...wb.SheetNames.filter((n) => {
-      const norm = normalizeHeader(n);
-      return !/raw/i.test(n)
-        && norm !== normalizeHeader(inventorySheet)
-        && !norm.includes('print draft')
-        && !norm.includes('coordinator queue')
-        && norm !== 'products'
-        && norm !== 'summary';
-    })
   ];
+  const otherSheets = wb.SheetNames.filter((n) => {
+    const norm = normalizeHeader(n);
+    return !/raw|row\s*data|rowdata/i.test(n)
+      && norm !== normalizeHeader(inventorySheet)
+      && !norm.includes('print draft')
+      && !norm.includes('coordinator queue')
+      && norm !== 'products'
+      && norm !== 'summary';
+  });
+  const sheetOrder = preferSalesRaw
+    ? [...salesRawSheets, ...(inventorySheet ? [inventorySheet] : []), ...otherSheets]
+    : [
+      ...(inventorySheet ? [inventorySheet] : []),
+      ...salesRawSheets,
+      ...otherSheets,
+    ];
   const sheets = [...new Set(sheetOrder.length ? sheetOrder : wb.SheetNames)];
   if (!sheets.length) throw new Error('لا توجد أوراق في الملف');
 
@@ -3865,6 +3937,9 @@ function parseSalesFromWorkbook(wb, filename) {
   let headers = [];
 
   for (const name of sheets) {
+    if (preferSalesRaw && /vehicle\s*inventory|print\s*draft|coordinator\s*queue/i.test(name)) {
+      continue;
+    }
     const sheetRowsData = sheetRows(wb, name);
     if (!sheetRowsData.length) continue;
     const found = parseVehiclesFromRows(sheetRowsData);
@@ -3874,7 +3949,11 @@ function parseSalesFromWorkbook(wb, filename) {
       vehicles = found;
       backfillProformaColumnP(wb, name, vehicles);
       backfillGuestColumnsOY(wb, name, vehicles);
-      backfillSalesRawFixedColumns(wb, name, vehicles);
+      backfillSalesRawFixedColumns(wb, name, vehicles, { force: preferSalesRaw });
+      // Clear any leftover date-like Sales Type that header matching left behind
+      vehicles.forEach((v) => {
+        if (v && looksLikeDateValue(v.salesType)) v.salesType = '';
+      });
       headers = Object.keys(sheetRowsData[0] || {});
       break;
     }
@@ -3946,13 +4025,13 @@ function parseSalesFromWorkbook(wb, filename) {
   return result;
 }
 
-function parseSalesWorkbook(buffer, filename) {
+function parseSalesWorkbook(buffer, filename, opts = {}) {
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  return parseSalesFromWorkbook(wb, filename);
+  return parseSalesFromWorkbook(wb, filename, opts);
 }
 
 /** Paste from Excel clipboard (TSV) or CSV text → same vehicle structure as file upload. */
-function parseSalesText(text, filename) {
+function parseSalesText(text, filename, opts = {}) {
   const raw = String(text || '').replace(/^\uFEFF/, '').trim();
   if (!raw) throw new Error('الصق بيانات Excel أولاً');
 
@@ -3961,7 +4040,7 @@ function parseSalesText(text, filename) {
   const commaCount = (firstLine.match(/,/g) || []).length;
   const FS = tabCount >= 1 && tabCount >= commaCount ? '\t' : ',';
   const wb = XLSX.read(raw, { type: 'string', FS, cellDates: true });
-  return parseSalesFromWorkbook(wb, filename || 'pasted-excel.tsv');
+  return parseSalesFromWorkbook(wb, filename || 'pasted-excel.tsv', opts);
 }
 
 /**
@@ -5554,7 +5633,7 @@ app.post('/api/delivery-inventory/merge-dates', (req, res) => {
     const { fileData, filename } = req.body || {};
     if (!fileData) return res.status(400).json({ error: 'ملف Sales Raw مطلوب' });
     const buffer = parseDataUrl(fileData);
-    const parsed = parseSalesWorkbook(buffer, filename || 'Sales Raw Data.xlsx');
+    const parsed = parseSalesWorkbook(buffer, filename || 'Sales Raw Data.xlsx', { preferSalesRaw: true });
     if (parsed.isExport) {
       return res.status(400).json({
         error: 'ارفع ملف Sales Raw (ليس delivery_export) لتحديث تواريخ البروفورما/الفاتورة'

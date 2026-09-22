@@ -180,7 +180,10 @@ const HEADER_MAP = Object.freeze({
     'customer name', 'customer', 'اسم العميل', 'اسم الزبون',
     'user name', 'username', 'اسم المستخدم',
   ],
-  salesAdvisor: ['s/a', 'sa', 's a', 'sales advisor', 'مستشار المبيعات'],
+  salesAdvisor: [
+    's/a', 's a', 'sa', 'sales advisor', 'salesman name', 'salesman',
+    'sales employee', 'advisor', 'consultant', 'مستشار المبيعات',
+  ],
   proformaDate: ['proforma date', 'proforma invoice date', 'pro forma date', 'تاريخ البروفورما'],
   deliveryDate: ['delivery date', 'تاريخ التسليم'],
   gtLocation: ['gt location', 'gt', 'موقع gt'],
@@ -276,9 +279,10 @@ const E_SALES_EXPORT_HEADERS = Object.freeze([
   'PIAging',
 ]);
 
-/** Fixed Sales Raw letter positions (0-based):
- * A=S/A, B=Product, C=VIN, D=Sales Order, F=GT Loc, G=Veh Loc,
- * K=Sales Type, N=Invoice Owner, O=Customer, Y=Phone
+/** Fixed Sales Raw Excel letters (0-based indexes):
+ *   A → S/A          B → Product      C → VIN
+ *   K → Sales Type   N → Owner
+ * Also used when present: D Order · F GT · G Veh Loc · O Customer · Y Phone
  */
 const RAW_COL = Object.freeze({
   salesAdvisor: 0, // A

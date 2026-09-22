@@ -719,6 +719,69 @@
     back.onclick = (e) => { if (e.target === back) close(); };
   }
 
+  function formatChangeAt(iso) {
+    const s = String(iso || '').trim();
+    if (!s) return '—';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s.slice(0, 16).replace('T', ' ');
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${day} ${hh}:${mm}`;
+  }
+
+  function renderCarrierMoves(d) {
+    const left = Array.isArray(d.carrierLeft) ? d.carrierLeft : [];
+    const feed = Array.isArray(d.carrierChanges) ? d.carrierChanges : [];
+    const leftChart = $('#dash-carrier-left-chart');
+    const feedHost = $('#dash-carrier-change-feed');
+
+    if (leftChart) {
+      renderNamedBarChart(leftChart, left, {
+        fillClass: 'is-carrier-left',
+        empty: 'لا توجد نقلات ناقل بعد — عند تغيير الناقل تظهر هنا',
+        onClick: (name) => {
+          const row = left.find((r) => r.name === name);
+          const vins = (row && row.vins) || [];
+          const lines = vins.map((v) =>
+            `${v.vin}  ·  ${name} → ${v.to || '—'}  ·  ${formatChangeAt(v.at)}${v.user ? `  ·  ${v.user}` : ''}`
+          );
+          openXferVinsModal(
+            `غادرت من: ${name}`,
+            `${vins.length} VIN(s) نُقلت إلى ناقل آخر`,
+            lines.length ? lines : [`${(row && row.count) || 0} تغيير`]
+          );
+        },
+      });
+    }
+
+    if (feedHost) {
+      const moves = feed.filter((c) => c && c.from);
+      if (!moves.length) {
+        feedHost.innerHTML = '<p class="hint">لا سجل تغييرات ناقل بعد</p>';
+      } else {
+        feedHost.innerHTML = `<ul class="carrier-change-list">${moves.map((c) => `
+          <li class="carrier-change-item">
+            <button type="button" class="vin-link carrier-change-vin" data-vin="${esc(c.vin)}">${esc(c.vin)}</button>
+            <span class="carrier-change-path">
+              <span class="carrier-from">${esc(c.from)}</span>
+              <span class="carrier-arrow" aria-hidden="true">→</span>
+              <span class="carrier-to">${esc(c.to || '(empty)')}</span>
+            </span>
+            <span class="carrier-change-meta">${esc(formatChangeAt(c.at))}${c.user ? ` · ${esc(c.user)}` : ''}</span>
+          </li>`).join('')}</ul>`;
+        $$('.carrier-change-vin', feedHost).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const vin = btn.dataset.vin;
+            if (vin) openVin(vin);
+          });
+        });
+      }
+    }
+  }
+
   function renderXferDashboard(d) {
     const card = $('#dash-xfer-card');
     if (!card) return;
@@ -733,6 +796,9 @@
       : (d.byCarrier || []);
     const cities = ht.byCity || [];
     const changes = ht.companyChanges || [];
+    const carrierLeft = Array.isArray(d.carrierLeft) ? d.carrierLeft : [];
+    const carrierLeftTotal = Number(d.totals && d.totals.carrierMoveTotal) ||
+      carrierLeft.reduce((s, r) => s + (Number(r.count) || 0), 0);
     const t = d.totals || {};
 
     $('#dash-xfer-kpis').innerHTML = [
@@ -741,6 +807,7 @@
       ['عدد المدن', t.cityCount || cities.length, 'info', 'cities'],
       ['تحويلات المدن', t.cityTotal || cities.reduce((s, r) => s + (r.count || 0), 0), '', 'cities'],
       ['تغيير الشركة', t.companyChangeTotal || changes.length, changes.length ? 'warn' : 'ok', 'company-changes'],
+      ['تغيير الناقل', carrierLeftTotal, carrierLeftTotal ? 'warn' : 'ok', 'carrier-moves'],
       ['شركة→مدينة', (ht.companyByCity || []).length, 'info', 'company-city'],
     ].map(([l, v, cls, kind]) =>
       `<button type="button" class="kpi kpi-btn ${cls}" data-xfer-kind="${kind}">
@@ -760,6 +827,20 @@
             'تغيير الشركة · Company changed',
             `${changes.length} VIN(s) أُعيد تعيينها من شركة إلى أخرى`,
             lines.length ? lines : changes.map((c) => c.vin)
+          );
+          return;
+        }
+        if (kind === 'carrier-moves') {
+          const host = $('#dash-carrier-moves-wrap');
+          if (host) host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const feed = Array.isArray(d.carrierChanges) ? d.carrierChanges.filter((c) => c.from) : [];
+          const lines = feed.map((c) =>
+            `${c.vin}  ·  ${c.from} → ${c.to || '—'}  ·  ${formatChangeAt(c.at)}`
+          );
+          openXferVinsModal(
+            'تغيير الناقل · من → إلى',
+            `${carrierLeftTotal} نقلات من ناقل إلى آخر`,
+            lines.length ? lines : ['لا تغييرات بعد']
           );
           return;
         }
@@ -826,6 +907,7 @@
     }
 
     renderCompanyCityChart(ht.companyByCity || []);
+    renderCarrierMoves(d);
   }
 
   /** Horizontal bar chart for { name, count } rows (الناقل / المدن). */

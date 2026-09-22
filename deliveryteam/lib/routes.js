@@ -59,7 +59,9 @@ function pickCol(row, aliases) {
     const hit = entries.find((e) => {
       if (!e.norm || e.norm === a) return false;
       if (e.norm.startsWith(`${a} `) || e.norm.endsWith(` ${a}`) || e.norm.includes(` ${a} `)) return true;
-      if (a.length <= 3) return e.norm.startsWith(`${a} `) || e.norm.startsWith(a);
+      // Never let 1–2 letter aliases (sa, so) prefix-match "sales order" / "sales type"
+      if (a.length <= 2) return false;
+      if (a.length === 3) return e.norm.startsWith(`${a} `);
       return e.norm.includes(a);
     });
     if (hit && row[hit.orig] != null && String(row[hit.orig]).trim() !== '') {
@@ -201,6 +203,24 @@ function isLegacyRawColHeaders(headers) {
   return hasChassis && hasProforma && !isDeliverySheetHeaders(headers);
 }
 
+/** Sales Raw letter layout: Col A = S/A (not Chassis), Col C often VIN */
+function sheetLooksLikeSalesRawHeaders(headers) {
+  const norms = (headers || []).map((h) => normalizeHeader(h));
+  if (!norms.length) return false;
+  const h0 = norms[0] || '';
+  if (
+    h0 === 'vin'
+    || h0 === 'chassis'
+    || (h0.includes('chassis') && h0.includes('vin'))
+    || h0.includes('شاس')
+  ) {
+    return false;
+  }
+  if (/salesman|advisor|s a|^sa$|consultant|employee|مستشار/.test(h0)) return true;
+  const h2 = norms[2] || '';
+  return h2.includes('vin') || h2.includes('chassis') || h2.includes('شاس');
+}
+
 function emptyOps() {
   return {
     guestSentDate: '',
@@ -275,13 +295,26 @@ function cellText(line, idx) {
   return String(v == null ? '' : v).trim();
 }
 
-function mapRawRow(row, line, { useLegacyCols = false } = {}) {
+function looksLikeDateValue(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (!s) return false;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return true;
+  if (/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(s)) return true;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return true;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 20000 && value < 80000) return true;
+  return false;
+}
+
+function mapRawRow(row, line, { useLegacyCols = false, applySalesRawLetters = false } = {}) {
   const raw = {};
   for (const [key, aliases] of Object.entries(HEADER_MAP)) {
     raw[key] = pickCol(row, aliases);
   }
-  // Fixed Sales Raw letters A/B/C/D/F/G/K/N/O/Y — stamp on every upload when the row is wide enough
-  if (Array.isArray(line) && line.length >= 11) {
+  // Drop header-matched Sales Type when it is clearly a date (wrong column)
+  if (raw.salesType && looksLikeDateValue(raw.salesType)) raw.salesType = '';
+
+  // Fixed Sales Raw letters — A/B/C/K/N always win on Sales Raw layout
+  if (applySalesRawLetters && Array.isArray(line) && line.length >= 11) {
     const scrub = (s) => (s === '#' ? '' : s);
     const sa = scrub(cellText(line, RAW_COL.salesAdvisor));
     const prod = scrub(cellText(line, RAW_COL.product));
@@ -293,13 +326,19 @@ function mapRawRow(row, line, { useLegacyCols = false } = {}) {
     const inv = scrub(cellText(line, RAW_COL.invoiceOwner));
     const cust = scrub(cellText(line, RAW_COL.customerName));
     const ph = scrub(cellText(line, RAW_COL.phone));
-    // Always stamp A/B/C/K (and D/F/G/N when wide enough)
-    raw.salesAdvisor = sa;
+    const vinKey = normVin(vinFixed || raw.vin);
+
+    // A → S/A
+    if (sa && (!vinKey || normVin(sa) !== vinKey)) raw.salesAdvisor = sa;
+    // B → Product
     if (prod) raw.product = prod;
+    // C → VIN
     if (vinFixed) raw.vin = vinFixed;
-    raw.salesType = stype;
+    // K → Sales Type (always overwrite; never keep a date here)
+    raw.salesType = stype && !looksLikeDateValue(stype) ? stype : '';
+    // N → Owner (+ D/F/G when wide enough)
     if (line.length >= 14 || so || gt || vehLoc || inv) {
-      raw.salesOrder = so;
+      if (so && (!vinKey || normVin(so) !== vinKey)) raw.salesOrder = so;
       raw.gtLocation = gt;
       raw.vehicleLocation = vehLoc;
       raw.invoiceOwner = inv;
@@ -937,6 +976,46 @@ function createDeliveryTeamRouter(opts) {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
 
+    // الناقل change history from audit (from → to · date)
+    const blankCarrier = (s) => {
+      const t = String(s == null ? '' : s).trim();
+      return !t || t === '(empty)' || t === '—' || t === '-';
+    };
+    const carrierChangeAll = (store.data.audit || [])
+      .filter((a) => a && a.action === 'update_carrier' && a.vin)
+      .filter((a) => {
+        if (!month || !/^\d{4}-\d{2}$/.test(month)) return true;
+        const mk = monthKeyFromIso(a.at);
+        return mk === month;
+      })
+      .map((a) => ({
+        id: a.id,
+        vin: String(a.vin || '').trim(),
+        from: blankCarrier(a.oldValue) ? '' : String(a.oldValue).trim(),
+        to: blankCarrier(a.newValue) ? '' : String(a.newValue).trim(),
+        at: a.at || '',
+        user: a.user || '',
+      }))
+      .filter((c) => c.from !== c.to);
+
+    // How many VINs left each company (had a الناقل, then moved to another)
+    const leftMap = {};
+    carrierChangeAll.forEach((c) => {
+      if (!c.from) return; // first assignment — not a "left" move
+      if (!leftMap[c.from]) leftMap[c.from] = { name: c.from, count: 0, vins: [] };
+      leftMap[c.from].count += 1;
+      leftMap[c.from].vins.push({
+        vin: c.vin,
+        to: c.to || '(empty)',
+        at: c.at,
+        user: c.user,
+      });
+    });
+    const carrierLeft = Object.values(leftMap)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+
+    const carrierChanges = carrierChangeAll.slice(0, 80);
+
     res.json({
       today,
       month: month || '',
@@ -956,10 +1035,13 @@ function createDeliveryTeamRouter(opts) {
         cityCount: hubTransfer ? hubTransfer.cityCount : 0,
         cityTotal: hubTransfer ? hubTransfer.cityTotal : 0,
         companyChangeTotal: hubTransfer ? hubTransfer.companyChangeTotal : 0,
+        carrierMoveTotal: carrierChangeAll.filter((c) => c.from).length,
       },
       byStatus,
       bySalesType,
       byCarrier,
+      carrierLeft,
+      carrierChanges,
       hubTransfer,
       pipeline: {
         todaysProformas: todays.length,
@@ -1112,6 +1194,10 @@ function createDeliveryTeamRouter(opts) {
       });
       const deliveryFmt = isDeliverySheetHeaders(headers);
       const useLegacyCols = !deliveryFmt && isLegacyRawColHeaders(headers);
+      const applySalesRawLetters = !deliveryFmt && (
+        useLegacyCols
+        || sheetLooksLikeSalesRawHeaders(headers)
+      );
       const hasVin = headers.some((h) => {
         const n = normalizeHeader(h);
         return vinAliases.some((a) => n === a || n.includes(a)) || n.includes('الشاس');
@@ -1143,7 +1229,7 @@ function createDeliveryTeamRouter(opts) {
           const key = String(h == null ? '' : h).trim() || `Column ${i + 1}`;
           if (obj[key] === undefined) obj[key] = line[i] != null ? line[i] : '';
         });
-        const raw = mapRawRow(obj, line, { useLegacyCols });
+        const raw = mapRawRow(obj, line, { useLegacyCols, applySalesRawLetters });
         const vinKey = normVin(raw.vin);
         if (!vinKey) {
           errors.push({ row: r + 1, error: 'Missing VIN' });
