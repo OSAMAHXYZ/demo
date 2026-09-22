@@ -632,11 +632,12 @@
 
         <div class="unassigned-panel" id="unassignedPanel" hidden>
             <h3>٣ — سيارات بدون شركة — عيّنيها الآن</h3>
-            <p class="lead">حددي الشاسيه واختاري الشركة ثم «تعيين المحددة» · السيارات بدون شركة مفتوحة دائماً · التكرار لشركة أخرى يسأل قبل إعادة التعيين من لوحات اللصق.</p>
+            <p class="lead">تعيين تلقائي يسحب الشركة من <b>الناقل</b> (فريق التوصيل) ومسودات الطباعة · أو حددي الشاسيه واختاري الشركة يدوياً ثم «تعيين المحددة».</p>
             <div class="unassigned-assign-bar">
                 <label style="font-size:.75rem;font-weight:700;color:#fde68a">الشركة</label>
                 <select id="assignCompanySelect"></select>
                 <button type="button" class="hub-btn hub-btn--primary hub-btn--sm" id="btnAssignSelected">تعيين المحددة</button>
+                <button type="button" class="hub-btn hub-btn--sm" id="btnAutoAssignUnassigned" title="من الناقل + مسودات الطباعة">تعيين تلقائي</button>
                 <button type="button" class="hub-btn hub-btn--sm" id="btnSelectAllUnassigned">تحديد الكل</button>
                 <button type="button" class="hub-btn hub-btn--sm" id="btnClearUnassignedSel">إلغاء التحديد</button>
             </div>
@@ -1106,6 +1107,37 @@
                 await loadQueue();
             } catch (err) {
                 setUnassignedStatus(err.message || 'فشل التعيين', 'err');
+            }
+        }
+
+        async function autoAssignUnassigned() {
+            const btn = document.getElementById('btnAutoAssignUnassigned');
+            if (btn) btn.disabled = true;
+            setUnassignedStatus('جاري التعيين التلقائي من الناقل / المسودات…');
+            try {
+                const res = await fetch('/api/delivery-coordinator/auto-assign-unassigned', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'فشل التعيين التلقائي');
+                const team = data.fromTeam || {};
+                const drafts = data.fromDrafts || {};
+                const moved = Number(data.assignedNow) || 0;
+                const left = Number(data.remainingUnassigned) || 0;
+                const parts = [
+                    moved ? `تم تعيين ${moved}` : 'لا تعيينات جديدة',
+                    `من الناقل: ${(team.reassigned || 0) + (team.added || 0)}`,
+                    `من المسودات: ${drafts.assigned || 0}`,
+                    `متبقي بدون شركة: ${left}`,
+                ];
+                setUnassignedStatus(parts.join(' · '), moved ? 'ok' : (left ? '' : 'ok'));
+                await loadQueue();
+            } catch (err) {
+                setUnassignedStatus(err.message || 'فشل التعيين التلقائي', 'err');
+            } finally {
+                if (btn) btn.disabled = false;
             }
         }
 
@@ -1677,6 +1709,9 @@
         document.getElementById('btnAssignSelected').addEventListener('click', () => {
             const vins = [...document.querySelectorAll('.unassigned-check:checked')].map((el) => el.value);
             assignVinsToCompany(vins);
+        });
+        document.getElementById('btnAutoAssignUnassigned')?.addEventListener('click', () => {
+            autoAssignUnassigned();
         });
         document.getElementById('btnSelectAllUnassigned').addEventListener('click', () => {
             document.querySelectorAll('.unassigned-check').forEach((el) => { el.checked = true; });

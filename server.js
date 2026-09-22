@@ -6265,6 +6265,56 @@ app.post('/api/delivery-coordinator/assign-meta', (req, res) => {
   res.json({ ok: true, updated, missing, deliveryCompany, plannedDeliveryMode, teamSync });
 });
 
+/**
+ * تعيين تلقائي لسيارات بدون شركة:
+ * 1) الناقل من Delivery Team → لوحة الشركة
+ * 2) مسودات الطباعة → بدون شركة فقط
+ */
+app.post('/api/delivery-coordinator/auto-assign-unassigned', (req, res) => {
+  try {
+    ensureOptions();
+    const beforeUnassigned = (store.queue || []).filter((q) => isUnassignedDeliveryCompany(q)).length;
+
+    // Force team pull (bypass 20s throttle on queue GET)
+    global.__lastTeamPullAt = 0;
+    const teamPull = syncTeamRawToHubInventory(deliveryTeamStore);
+    const fromTeam = (teamPull && teamPull.carriers) || { added: 0, reassigned: 0, skipped: 0, same: 0 };
+
+    let fromDrafts = { assigned: 0, created: 0 };
+    let draftCarriers = null;
+    if (Array.isArray(store.drafts) && store.drafts.length) {
+      fromDrafts = applyCompaniesFromPrintDrafts(store.drafts, { onlyUnassigned: true }) || fromDrafts;
+      draftCarriers = syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
+    }
+
+    const afterUnassigned = (store.queue || []).filter((q) => isUnassignedDeliveryCompany(q)).length;
+    const assignedNow = Math.max(0, beforeUnassigned - afterUnassigned);
+
+    persistAndBroadcast();
+    res.json({
+      ok: true,
+      beforeUnassigned,
+      afterUnassigned,
+      assignedNow,
+      fromTeam: {
+        added: fromTeam.added || 0,
+        reassigned: fromTeam.reassigned || 0,
+        same: fromTeam.same || 0,
+        skipped: fromTeam.skipped || 0,
+      },
+      fromDrafts: {
+        assigned: fromDrafts.assigned || 0,
+        created: fromDrafts.created || 0,
+      },
+      draftCarriers,
+      remainingUnassigned: afterUnassigned,
+    });
+  } catch (err) {
+    console.error('[coordinator] auto-assign-unassigned failed:', err);
+    res.status(500).json({ error: err.message || 'فشل التعيين التلقائي' });
+  }
+});
+
 app.post('/api/delivery-coordinator/claim', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
   if (!auth.ok) return res.status(401).json({ error: auth.error });
