@@ -47,8 +47,10 @@ const deliveryTeamHooks = {
   onCarrierAssigned: null,
   onRawUploaded: null,
   onEnsureDraftCarriers: null,
+  onEnsureHubRawOnLiveSheet: null,
   onSalesRawUpload: null,
   getHubRawStatus: null,
+  getHubTransferStats: null,
 };
 const { createDeliveryTeamRouter } = require('./deliveryteam/lib/routes');
 const deliveryTeam = createDeliveryTeamRouter({
@@ -69,6 +71,11 @@ const deliveryTeam = createDeliveryTeamRouter({
       ? deliveryTeamHooks.onEnsureDraftCarriers()
       : null
   ),
+  onEnsureHubRawOnLiveSheet: () => (
+    typeof deliveryTeamHooks.onEnsureHubRawOnLiveSheet === 'function'
+      ? deliveryTeamHooks.onEnsureHubRawOnLiveSheet()
+      : null
+  ),
   onSalesRawUpload: (payload) => (
     typeof deliveryTeamHooks.onSalesRawUpload === 'function'
       ? deliveryTeamHooks.onSalesRawUpload(payload)
@@ -77,6 +84,11 @@ const deliveryTeam = createDeliveryTeamRouter({
   getHubRawStatus: () => (
     typeof deliveryTeamHooks.getHubRawStatus === 'function'
       ? deliveryTeamHooks.getHubRawStatus()
+      : null
+  ),
+  getHubTransferStats: () => (
+    typeof deliveryTeamHooks.getHubTransferStats === 'function'
+      ? deliveryTeamHooks.getHubTransferStats()
       : null
   ),
 });
@@ -1549,38 +1561,51 @@ function syncTeamRawToHubInventory(teamStore) {
   return { upserted, carriers };
 }
 
-/** Push hub Sales Raw vehicles into Delivery Team store (preserve ops). */
+/** Push hub Sales Raw vehicles into Delivery Team store (preserve ops).
+ * Overwrites mapped raw fields from the latest Sales Raw so Live Sheet / dashboards stay current.
+ */
 function syncHubVehiclesToDeliveryTeam(vehicles) {
   if (!deliveryTeamStore || typeof deliveryTeamStore.upsertVehicle !== 'function') {
-    return { upserted: 0 };
+    return { upserted: 0, created: 0, updated: 0 };
   }
   const list = Array.isArray(vehicles) ? vehicles : [];
   let upserted = 0;
+  let created = 0;
+  let updated = 0;
+  const now = new Date().toISOString();
+
   for (const veh of list) {
     const vin = normVin(veh && veh.vin);
     if (!vin) continue;
     const rawPatch = {
       vin,
       product: String(veh.product || veh.model || '').trim(),
-      userName: String(veh.customerName || '').trim(),
+      userName: String(veh.customerName || veh.userName || '').trim(),
       phone: String(veh.phone || '').trim(),
-      gtLocation: String(veh.gt || '').trim(),
-      vehicleLocation: String(veh.location || '').trim(),
+      gtLocation: String(veh.gt || veh.gtLocation || '').trim(),
+      vehicleLocation: String(veh.location || veh.vehicleLocation || '').trim(),
       proformaDate: String(veh.proformaDate || '').trim(),
-      deliveryDate: String(veh.deliveryNoteDate || '').trim(),
-      salesOrder: '',
-      salesType: '',
-      invoiceOwner: '',
-      salesAdvisor: '',
-      pic: '',
-      status: '',
-      traffic: '',
-      trafficFees: '',
-      insurance: '',
-      registrationDate: '',
-      date: '',
-      year: '',
+      deliveryDate: String(veh.deliveryNoteDate || veh.deliveryDate || '').trim(),
+      salesOrder: String(veh.salesOrder || '').trim(),
+      salesType: String(veh.salesType || '').trim(),
+      invoiceOwner: String(veh.invoiceOwner || '').trim(),
+      salesAdvisor: String(veh.salesAdvisor || '').trim(),
+      pic: String(veh.pic || '').trim(),
+      status: String(veh.status || '').trim(),
+      traffic: String(veh.traffic || '').trim(),
+      trafficFees: String(veh.trafficFees || '').trim(),
+      insurance: String(veh.insurance || '').trim(),
+      registrationDate: String(veh.registrationDate || '').trim(),
+      date: String(veh.date || veh.invoiceDate || '').trim(),
+      year: String(veh.year || '').trim(),
     };
+    // Keys that Sales Raw owns — always apply (including clear when blank in new file)
+    const forceKeys = [
+      'product', 'userName', 'phone', 'gtLocation', 'vehicleLocation',
+      'proformaDate', 'deliveryDate', 'salesOrder', 'salesType', 'invoiceOwner',
+      'salesAdvisor', 'pic', 'status', 'traffic', 'trafficFees', 'insurance',
+      'registrationDate', 'date', 'year',
+    ];
     const existing = deliveryTeamStore.getVehicle(vin);
     if (!existing) {
       const emptyOps = {
@@ -1595,23 +1620,44 @@ function syncHubVehiclesToDeliveryTeam(vehicles) {
         vin,
         raw: rawPatch,
         ops: emptyOps,
-        createdAt: new Date().toISOString(),
-        rawUpdatedAt: new Date().toISOString(),
-        lastUploadId: 'hub-sync',
+        createdAt: now,
+        rawUpdatedAt: now,
+        lastUploadId: 'hub-sales-raw',
       });
+      created += 1;
     } else {
-      const merged = { ...existing.raw };
-      Object.keys(rawPatch).forEach((k) => {
-        if (rawPatch[k]) merged[k] = rawPatch[k];
+      const merged = { ...(existing.raw || {}), vin };
+      let dirty = false;
+      forceKeys.forEach((k) => {
+        const next = rawPatch[k] == null ? '' : String(rawPatch[k]);
+        const prev = merged[k] == null ? '' : String(merged[k]);
+        // Prefer non-empty Sales Raw values; keep previous only when new file left the field blank
+        // and it is not a core location/date field that must refresh from hub
+        const always = [
+          'product', 'userName', 'phone', 'gtLocation', 'vehicleLocation',
+          'proformaDate', 'deliveryDate', 'salesOrder', 'salesType',
+          'invoiceOwner', 'salesAdvisor', 'pic',
+        ].includes(k);
+        if (always) {
+          if (prev !== next) {
+            merged[k] = next;
+            dirty = true;
+          }
+        } else if (next && prev !== next) {
+          merged[k] = next;
+          dirty = true;
+        }
       });
       existing.raw = merged;
-      existing.rawUpdatedAt = new Date().toISOString();
+      existing.rawUpdatedAt = now;
+      existing.lastUploadId = 'hub-sales-raw';
       deliveryTeamStore.upsertVehicle(vin, existing);
+      if (dirty) updated += 1;
     }
     upserted += 1;
   }
   if (upserted) deliveryTeamStore.save();
-  return { upserted };
+  return { upserted, created, updated };
 }
 
 /**
@@ -1720,6 +1766,264 @@ deliveryTeamHooks.onEnsureDraftCarriers = () => {
   return syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
 };
 
+/** Push latest Sales Raw fields onto Delivery Team Live Sheet rows (preserve ops). */
+let lastHubRawLiveSyncAt = 0;
+deliveryTeamHooks.onEnsureHubRawOnLiveSheet = () => {
+  if (!Array.isArray(store.vehicles) || !store.vehicles.length) return null;
+  const now = Date.now();
+  if (now - lastHubRawLiveSyncAt < 30_000) return null;
+  lastHubRawLiveSyncAt = now;
+  return syncHubVehiclesToDeliveryTeam(store.vehicles);
+};
+
+/**
+ * When coordinator assigns / reassigns company (or city), stamp Delivery Team الناقل + مدينة الترحيل.
+ * Creates a team row from hub raw when the VIN is not yet on the Live Sheet.
+ */
+function syncCoordinatorAssignmentsToDeliveryTeam(items, { by = 'coordinator' } = {}) {
+  if (!deliveryTeamStore || typeof deliveryTeamStore.upsertVehicle !== 'function') {
+    return { updated: 0, created: 0, skipped: 0 };
+  }
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return { updated: 0, created: 0, skipped: 0 };
+  const byVin = vehicleIndex();
+  const now = new Date().toISOString();
+  let updated = 0;
+  let created = 0;
+  let skipped = 0;
+
+  for (const entry of list) {
+    const vin = normVin(entry && (entry.vin || entry));
+    if (!vin) {
+      skipped += 1;
+      continue;
+    }
+    const company = String(
+      (entry && (entry.deliveryCompany || entry.company)) || ''
+    ).trim();
+    const plannedBranch = String(
+      (entry && (entry.plannedBranch || entry.branch || entry.city)) || ''
+    ).trim();
+    const carrier = company ? mapCoordinatorCompanyToCarrier(company) : '';
+    const hubVeh = byVin.get(vin) || null;
+    let v = deliveryTeamStore.getVehicle(vin);
+    if (!v) {
+      const rawPatch = hubVeh
+        ? {
+          vin,
+          product: String(hubVeh.product || hubVeh.model || '').trim(),
+          userName: String(hubVeh.customerName || '').trim(),
+          phone: String(hubVeh.phone || '').trim(),
+          gtLocation: String(hubVeh.gt || '').trim(),
+          vehicleLocation: String(hubVeh.location || '').trim(),
+          proformaDate: String(hubVeh.proformaDate || '').trim(),
+          deliveryDate: String(hubVeh.deliveryNoteDate || '').trim(),
+          salesOrder: '',
+          salesType: '',
+          invoiceOwner: '',
+          salesAdvisor: '',
+          pic: '',
+          status: '',
+          traffic: '',
+          trafficFees: '',
+          insurance: '',
+          registrationDate: '',
+          date: '',
+          year: '',
+        }
+        : { vin, product: '', userName: '', phone: '', gtLocation: '', vehicleLocation: '', proformaDate: '', deliveryDate: '', salesOrder: '', salesType: '', invoiceOwner: '', salesAdvisor: '', pic: '', status: '', traffic: '', trafficFees: '', insurance: '', registrationDate: '', date: '', year: '' };
+      v = {
+        vin,
+        raw: rawPatch,
+        ops: {
+          guestSentDate: '', signatureReceivedDate: '', accountsSentDate: '', accountsApprovalDate: '',
+          vin1502: '', opsStatus: '', trafficFile: '', trafficFeesOps: '', insuranceOps: '',
+          registrationIssueDate: '', transferCity: '', carrier: '', notes: '',
+          assignedEmployeeId: '', assignedEmployeeName: '', assignedBy: '', assignedAt: '',
+          guestCenter: '', guestCollectAt: '', guestCollected: '', guestCollectNote: '',
+          updatedBy: '', updatedAt: '',
+        },
+        createdAt: now,
+        rawUpdatedAt: now,
+        lastUploadId: 'coordinator-sync',
+      };
+      created += 1;
+    }
+    if (!v.ops) v.ops = {};
+    let dirty = false;
+    if (carrier && String(v.ops.carrier || '').trim() !== carrier) {
+      v.ops.carrier = carrier;
+      dirty = true;
+    }
+    if (plannedBranch && String(v.ops.transferCity || '').trim() !== plannedBranch) {
+      v.ops.transferCity = plannedBranch;
+      dirty = true;
+    }
+    if (hubVeh) {
+      const raw = { ...(v.raw || {}) };
+      const patches = {
+        product: String(hubVeh.product || hubVeh.model || '').trim(),
+        userName: String(hubVeh.customerName || '').trim(),
+        phone: String(hubVeh.phone || '').trim(),
+        gtLocation: String(hubVeh.gt || '').trim(),
+        vehicleLocation: String(hubVeh.location || '').trim(),
+        proformaDate: String(hubVeh.proformaDate || '').trim(),
+        deliveryDate: String(hubVeh.deliveryNoteDate || '').trim(),
+      };
+      Object.keys(patches).forEach((k) => {
+        if (patches[k] && raw[k] !== patches[k]) {
+          raw[k] = patches[k];
+          dirty = true;
+        }
+      });
+      v.raw = raw;
+      v.rawUpdatedAt = now;
+    }
+    if (dirty || created) {
+      v.ops.updatedAt = now;
+      v.ops.updatedBy = by;
+      deliveryTeamStore.upsertVehicle(vin, v);
+      if (!created) updated += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+  if (updated || created) deliveryTeamStore.save();
+  return { updated, created, skipped };
+}
+
+function recordQueueCompanyChange(item, nextCompany) {
+  if (!item) return false;
+  const to = String(nextCompany || '').trim();
+  if (!to) return false;
+  const from = String(item.deliveryCompany || item.company || '').trim();
+  const fromUnassigned = isUnassignedDeliveryCompany(item);
+  if (from && !fromUnassigned && !sameCompanyName(from, to)) {
+    item.companyChangedFrom = from;
+    item.companyChangedTo = to;
+    item.companyChangedAt = new Date().toISOString();
+    return true;
+  }
+  return false;
+}
+
+/** Hub + team transfer KPIs for Delivery Team admin (الناقل / cities / company changes). */
+function getHubTransferStats() {
+  const byCarrier = {};
+  const cityTally = new Map();
+  const companyChangeMap = new Map();
+
+  if (deliveryTeamStore && typeof deliveryTeamStore.allVehicles === 'function') {
+    for (const v of deliveryTeamStore.allVehicles() || []) {
+      const carrier = String((v.ops && v.ops.carrier) || '').trim();
+      if (carrier) byCarrier[carrier] = (byCarrier[carrier] || 0) + 1;
+    }
+  }
+
+  // Cities — same source as admin-Delivery-pdf (Print Drafts branch_to), plus coordinator plannedBranch
+  for (const d of store.drafts || []) {
+    const p = d.payload || {};
+    if (p.deliveryMode === 'warehouse' || p.warehouse_group || d.showroomDisplay || isShowroomDraftPayload(p)) {
+      continue;
+    }
+    const city = String(p.branch_to || d.location || '').trim();
+    if (city) cityTally.set(city, (cityTally.get(city) || 0) + 1);
+    const from = String(d.companyChangedFrom || p.company_changed_from || '').trim();
+    const to = String(d.companyChangedTo || p.company_changed_to || '').trim();
+    const vins = collectDraftVins(p, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]);
+    if (from && to && !sameCompanyName(from, to)) {
+      vins.forEach((vin) => {
+        if (!vin || companyChangeMap.has(vin)) return;
+        companyChangeMap.set(vin, {
+          vin,
+          from,
+          to,
+          at: d.companyChangedAt || p.company_changed_at || d.createdAt || '',
+          product: '',
+          source: 'draft',
+        });
+      });
+    }
+  }
+
+  for (const item of store.queue || []) {
+    const city = String(item.plannedBranch || '').trim();
+    if (city && !cityTally.has(city)) {
+      // Include coordinator-only cities not yet printed
+      cityTally.set(city, (cityTally.get(city) || 0) + 1);
+    } else if (city) {
+      // already counted from drafts — leave draft-based tally
+    }
+    const from = String(item.companyChangedFrom || '').trim();
+    const to = String(item.companyChangedTo || '').trim();
+    const vin = normVin(item.vin);
+    if (from && to && vin && !sameCompanyName(from, to)) {
+      companyChangeMap.set(vin, {
+        vin,
+        from,
+        to,
+        at: item.companyChangedAt || '',
+        product: item.product || item.model || '',
+        source: 'queue',
+      });
+    }
+  }
+
+  const companyChanges = [...companyChangeMap.values()].sort((a, b) =>
+    String(b.at || '').localeCompare(String(a.at || ''))
+  );
+  const carrierList = Object.entries(byCarrier)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+  const cityList = [...cityTally.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+
+  // Carrier VIN lists for drill-down
+  const carrierVins = {};
+  if (deliveryTeamStore && typeof deliveryTeamStore.allVehicles === 'function') {
+    for (const v of deliveryTeamStore.allVehicles() || []) {
+      const carrier = String((v.ops && v.ops.carrier) || '').trim();
+      if (!carrier) continue;
+      if (!carrierVins[carrier]) carrierVins[carrier] = [];
+      carrierVins[carrier].push(normVin(v.vin));
+    }
+  }
+
+  const cityVins = {};
+  for (const d of store.drafts || []) {
+    const p = d.payload || {};
+    if (p.deliveryMode === 'warehouse' || p.warehouse_group || d.showroomDisplay || isShowroomDraftPayload(p)) {
+      continue;
+    }
+    const city = String(p.branch_to || d.location || '').trim();
+    if (!city) continue;
+    if (!cityVins[city]) cityVins[city] = [];
+    collectDraftVins(p, [d.vin, ...(Array.isArray(d.vins) ? d.vins : [])]).forEach((vin) => {
+      if (vin && !cityVins[city].includes(vin)) cityVins[city].push(vin);
+    });
+  }
+  for (const item of store.queue || []) {
+    const city = String(item.plannedBranch || '').trim();
+    const vin = normVin(item.vin);
+    if (!city || !vin) continue;
+    if (!cityVins[city]) cityVins[city] = [];
+    if (!cityVins[city].includes(vin)) cityVins[city].push(vin);
+  }
+
+  return {
+    byCarrier: carrierList,
+    byCity: cityList,
+    carrierVins,
+    cityVins,
+    carrierTotal: carrierList.reduce((s, r) => s + r.count, 0),
+    cityCount: cityList.length,
+    cityTotal: cityList.reduce((s, r) => s + r.count, 0),
+    companyChanges,
+    companyChangeTotal: companyChanges.length,
+  };
+}
+
 function getHubRawStatus() {
   const uploadedAt = store.meta?.uploadedAt || null;
   return {
@@ -1734,6 +2038,19 @@ function getHubRawStatus() {
 }
 
 deliveryTeamHooks.getHubRawStatus = () => getHubRawStatus();
+deliveryTeamHooks.getHubTransferStats = () => getHubTransferStats();
+
+/** Resolve VIN from Sales Raw or Delivery Team store for coordinator submit. */
+function resolveVehicleForSubmit(vin) {
+  const key = normVin(vin);
+  if (!key) return null;
+  const hub = vehicleIndex().get(key);
+  if (hub) return hub;
+  if (!deliveryTeamStore || typeof deliveryTeamStore.getVehicle !== 'function') return null;
+  const team = deliveryTeamStore.getVehicle(key);
+  if (!team) return null;
+  return upsertHubVehicleFromTeamVehicle(team);
+}
 
 /** Hanouf / Ruba / Admin — upload Sales Raw once; hub + Delivery Team all see the same timestamp. */
 deliveryTeamHooks.onSalesRawUpload = ({ buffer, filename, byUser } = {}) => {
@@ -1760,6 +2077,13 @@ deliveryTeamHooks.onSalesRawUpload = ({ buffer, filename, byUser } = {}) => {
     uploadedByName: byName,
   });
   const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
+  // Ensure Live Sheet الناقل stays aligned with Print Drafts after raw refresh
+  let draftCarriers = null;
+  if (Array.isArray(store.drafts) && store.drafts.length) {
+    draftCarriers = syncPrintDraftCompaniesToDeliveryTeam(store.drafts);
+    lastDraftCarrierSyncAt = Date.now();
+  }
+  lastHubRawLiveSyncAt = 0;
   persistAndBroadcast();
   return {
     ok: true,
@@ -1770,7 +2094,7 @@ deliveryTeamHooks.onSalesRawUpload = ({ buffer, filename, byUser } = {}) => {
     matchedUpdated: refresh.matched,
     notInNewFile: refresh.missing,
     companiesFromDrafts: refresh.draftsApplied?.assigned || 0,
-    teamCarriersFromDrafts: refresh.teamDraftCarriers || null,
+    teamCarriersFromDrafts: draftCarriers || refresh.teamDraftCarriers || null,
     deliveryTeamSync: teamSync,
     rawStatus: getHubRawStatus(),
   };
@@ -1870,18 +2194,25 @@ const AUTOMALL_CITY_LABEL = 'اوتومول';
 /**
  * When an agent prints with a different company than the coordinator assigned,
  * move the VIN to the new company and record from → to for admin/coordinator labels.
+ * `assignedHint` is the company stamped when the note was opened (client-side).
  */
-function applyAgentCompanyChange(vins, typedCompany, { warehouseDelivery = false, showroomDisplay = false } = {}) {
+function applyAgentCompanyChange(vins, typedCompany, {
+  warehouseDelivery = false,
+  showroomDisplay = false,
+  assignedHint = '',
+} = {}) {
   const to = String(typedCompany || '').trim();
   if (!to || warehouseDelivery || showroomDisplay) return [];
+  const hint = String(assignedHint || '').trim();
   const changes = [];
   const nowIso = new Date().toISOString();
   for (const vin of vins) {
     const item = findQueueItem(vin);
     if (!item) continue;
-    const from = String(item.deliveryCompany || item.company || '').trim();
+    const queueFrom = String(item.deliveryCompany || item.company || '').trim();
     const fromUnassigned = isUnassignedDeliveryCompany(item);
-    if (from && !fromUnassigned && !sameCompanyName(from, to)) {
+    const from = (!fromUnassigned && queueFrom) ? queueFrom : hint;
+    if (from && !sameCompanyName(from, to)) {
       item.companyChangedFrom = from;
       item.companyChangedTo = to;
       item.companyChangedAt = nowIso;
@@ -2139,7 +2470,7 @@ function computeDeliveryNoteStats(drafts) {
 }
 
 function normVin(v) {
-  return String(v || '').trim().toUpperCase().replace(/\s+/g, '');
+  return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 function vehicleIndex() {
@@ -3021,21 +3352,51 @@ function rowToVehicle(row) {
     'delivery note date', 'delivery date', 'dn date', 'muthakara date',
     'transfer date', 'تاريخ المذكرة', 'تاريخ مذكرة الترحيل', 'تاريخ الترحيل'
   ]));
+  const salesOrder = pickCol(row, [
+    'sales order no', 'sales order', 'sales order number', 'order number', 'order no', 'so',
+    'رقم الطلب', 'sales order no رقم الطلب',
+  ]);
+  const salesType = pickCol(row, ['sales type', 'نوع البيع', 'طريقة البيع']);
+  const invoiceOwner = pickCol(row, ['invoice owner', 'مالك الفاتورة']);
+  const salesAdvisor = pickCol(row, ['s/a', 'sa', 's a', 'sales advisor', 'مستشار المبيعات']);
+  const pic = pickCol(row, ['pic', 'p.i.c', 'assigned', 'assigned to', 'assignee', 'employee', 'المسؤول', 'مسؤول']);
+  const status = pickCol(row, ['status', 'الحالة', 'الحالة status']);
+  const traffic = pickCol(row, ['traffic', 'المرور', 'ملف المرور']);
+  const trafficFees = pickCol(row, ['traffic fees', 'رسوم المرور', 'السداد traffic fees', 'السداد']);
+  const insurance = pickCol(row, ['insurance', 'التأمين', 'التأمين insurance']);
+  const registrationDate = normalizeExcelDate(pickCol(row, [
+    'registration date', 'تاريخ الاستمارة',
+    'تاريخ اصدار الاستماره registration date', 'تاريخ اصدار الاستماره',
+  ]));
+  const date = normalizeExcelDate(pickCol(row, ['date', 'تاريخ', 'تاريخ ']));
+  const year = pickCol(row, ['year', 'model year', 'السنة']);
 
   return {
     vin,
     product: product || model,
     model: model || product,
-        gt,
-        location,
+    gt,
+    location,
     plate: plate === '#' ? '' : plate,
-        customerName,
+    customerName,
     phone: phone === '#' ? '' : phone,
-        imageUrl,
+    imageUrl,
     suffix,
     proformaDate,
     invoiceDate,
-    deliveryNoteDate
+    deliveryNoteDate,
+    salesOrder,
+    salesType,
+    invoiceOwner,
+    salesAdvisor,
+    pic,
+    status,
+    traffic,
+    trafficFees,
+    insurance,
+    registrationDate,
+    date,
+    year,
   };
 }
 
@@ -3069,6 +3430,8 @@ function finishRestoreExport(buffer, filename, res) {
 
   if (!fullArchive && !fileLooksExport) {
     const refresh = applyParsedInventory(parsed, { replaceDrafts: false, replaceQueue: false });
+    const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
+    lastHubRawLiveSyncAt = 0;
     persistAndBroadcast();
     return res.json({
       ok: true,
@@ -3079,11 +3442,14 @@ function finishRestoreExport(buffer, filename, res) {
       sheetName: parsed.sheetName,
       filename: parsed.filename,
       queueRefreshed: refresh.total,
+      deliveryTeamSync: teamSync,
       note: 'تم استيراد المركبات فقط — لاستيراد المسودات والقائمة استخدم ملف delivery_export'
     });
   }
 
   const refresh = applyParsedInventory(parsed, { replaceDrafts: true, replaceQueue: true });
+  const teamSync = syncHubVehiclesToDeliveryTeam(parsed.vehicles || []);
+  lastHubRawLiveSyncAt = 0;
   persistAndBroadcast();
   return res.json({
     ok: true,
@@ -3096,7 +3462,8 @@ function finishRestoreExport(buffer, filename, res) {
     teamCarriersFromDrafts: refresh.teamDraftCarriers || null,
     sheetName: parsed.sheetName,
     filename: parsed.filename,
-    queueRefreshed: refresh.total
+    queueRefreshed: refresh.total,
+    deliveryTeamSync: teamSync,
   });
 }
 
@@ -5274,6 +5641,19 @@ app.get('/api/delivery-coordinator/queue', (req, res) => {
     }
   }
 
+  // Pull Delivery Team الناقل / مدينة الترحيل onto coordinator boards (throttled)
+  if (admin || forCoordinator) {
+    try {
+      const nowMs = Date.now();
+      if (!global.__lastTeamPullAt || nowMs - global.__lastTeamPullAt > 20_000) {
+        global.__lastTeamPullAt = nowMs;
+        syncTeamRawToHubInventory(deliveryTeamStore);
+      }
+    } catch (err) {
+      console.error('[coordinator] team→hub sync failed:', err.message || err);
+    }
+  }
+
   let queue = store.queue.map(enrichQueueItem);
 
   // Agents also see display-status cars (from ياسين) to convert into a delivery note
@@ -5463,7 +5843,7 @@ app.post('/api/delivery-coordinator/planned-branch', (req, res) => {
   if (!vin) return res.status(400).json({ error: 'الشاسيه مطلوب' });
   let item = findQueueItem(vin);
   if (!item) {
-    const veh = vehicleIndex().get(vin);
+    const veh = resolveVehicleForSubmit(vin) || vehicleIndex().get(vin);
     item = enrichFromVehicle({
       vin,
       status: 'available',
@@ -5476,12 +5856,16 @@ app.post('/api/delivery-coordinator/planned-branch', (req, res) => {
   } else {
     item.plannedBranch = branch;
   }
+  syncCoordinatorAssignmentsToDeliveryTeam([item], { by: 'coordinator-branch' });
   persistAndBroadcast();
   res.json({ ok: true, item: enrichQueueItem(item), automall: isAutomallCity(branch) });
 });
 
 app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
-  if (!store.vehicles.length) {
+  const teamHasVehicles = deliveryTeamStore
+    && typeof deliveryTeamStore.allVehicles === 'function'
+    && (deliveryTeamStore.allVehicles() || []).length > 0;
+  if (!store.vehicles.length && !teamHasVehicles) {
     return res.status(400).json({ error: 'ارفع البيانات الخام (Excel) أولاً قبل إضافة الشاسيه' });
   }
 
@@ -5512,7 +5896,6 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   }
 
   store.queue = dedupeQueue(store.queue);
-  const byVin = vehicleIndex();
   let added = 0;
   let reassigned = 0;
   let skipped = 0;
@@ -5520,6 +5903,7 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
   const alreadyInWarehouse = [];
   const conflicts = [];
   const alreadySameCompany = [];
+  const syncedItems = [];
   const forceReassign = Boolean(req.body?.forceReassign || req.body?.allowReassign);
   const seenBatch = new Set();
   const now = new Date().toISOString();
@@ -5549,6 +5933,7 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
         existingItem.company = deliveryCompany;
         existingItem.plannedDeliveryMode = plannedDeliveryMode;
         reassigned += 1;
+        syncedItems.push(existingItem);
         const wh = findWarehouseInStock(vin);
         if (wh) {
           alreadyInWarehouse.push({ vin, slot: wh.slot, zone: wh.zone });
@@ -5560,15 +5945,18 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       if (sameCompany) {
         alreadySameCompany.push({ vin, company: prevCompany });
         skipped += 1;
+        syncedItems.push(existingItem);
         continue;
       }
 
       // Duplicate in another company — reassign only if coordinator confirmed
       if (forceReassign && deliveryCompany) {
+        recordQueueCompanyChange(existingItem, deliveryCompany);
         existingItem.deliveryCompany = deliveryCompany;
         existingItem.company = deliveryCompany;
         existingItem.plannedDeliveryMode = plannedDeliveryMode;
         reassigned += 1;
+        syncedItems.push(existingItem);
         const wh = findWarehouseInStock(vin);
         if (wh) {
           alreadyInWarehouse.push({ vin, slot: wh.slot, zone: wh.zone });
@@ -5586,7 +5974,7 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       continue;
     }
 
-    const veh = byVin.get(vin);
+    const veh = resolveVehicleForSubmit(vin);
     if (!veh) {
       missingVins.push(vin);
       skipped += 1;
@@ -5609,10 +5997,13 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
       plannedDeliveryMode,
       company: deliveryCompany
     };
-    store.queue.push(enrichFromVehicle(base, veh));
+    const row = enrichFromVehicle(base, veh);
+    store.queue.push(row);
+    syncedItems.push(row);
     added += 1;
   }
 
+  const teamSync = syncCoordinatorAssignmentsToDeliveryTeam(syncedItems, { by: 'coordinator-submit' });
   persistAndBroadcast();
   res.json({
     added,
@@ -5625,7 +6016,8 @@ app.post('/api/delivery-coordinator/submit-vins', (req, res) => {
     alreadySameCompany,
     forceReassign,
     deliveryCompany,
-    plannedDeliveryMode
+    plannedDeliveryMode,
+    teamSync
   });
 });
 
@@ -5666,14 +6058,19 @@ app.post('/api/delivery-coordinator/assign-meta', (req, res) => {
       missing.push(vin);
       continue;
     }
+    recordQueueCompanyChange(item, deliveryCompany);
     item.plannedDeliveryMode = plannedDeliveryMode;
     item.deliveryCompany = deliveryCompany;
     item.company = deliveryCompany;
     updated.push(enrichQueueItem(item));
   }
   if (!updated.length) return res.status(404).json({ error: 'لم يتم تحديث أي شاسيه', missing });
+  const teamSync = syncCoordinatorAssignmentsToDeliveryTeam(
+    updated.map((u) => findQueueItem(u.vin)).filter(Boolean),
+    { by: 'coordinator-assign-meta' }
+  );
   persistAndBroadcast();
-  res.json({ ok: true, updated, missing, deliveryCompany, plannedDeliveryMode });
+  res.json({ ok: true, updated, missing, deliveryCompany, plannedDeliveryMode, teamSync });
 });
 
 app.post('/api/delivery-coordinator/claim', (req, res) => {
@@ -5802,23 +6199,47 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
 
   const primary = deliveredItems[0];
   const typedCompany = String(draftPayload.company_rep || '').trim();
-  const assignedCompanyHint = String(draftPayload.assigned_company || '').trim();
+  const assignedCompanyHint = String(
+    draftPayload.assigned_company
+    || draftPayload.company_changed_from
+    || ''
+  ).trim();
   const companyChanges = applyAgentCompanyChange(vins, typedCompany, {
     warehouseDelivery,
-    showroomDisplay
+    showroomDisplay,
+    assignedHint: assignedCompanyHint,
   });
   // Prefer queue-recorded change; fall back to form hint if queue had no prior company
   let changeFrom = companyChanges[0]?.from || '';
   let changeTo = companyChanges[0]?.to || '';
-  if (!changeFrom && assignedCompanyHint && typedCompany && !sameCompanyName(assignedCompanyHint, typedCompany)
-      && !warehouseDelivery && !showroomDisplay) {
+  if (
+    !changeFrom
+    && assignedCompanyHint
+    && typedCompany
+    && !sameCompanyName(assignedCompanyHint, typedCompany)
+    && !warehouseDelivery
+    && !showroomDisplay
+  ) {
     changeFrom = assignedCompanyHint;
     changeTo = typedCompany;
+    const nowIso = new Date().toISOString();
+    for (const vin of vins) {
+      const item = findQueueItem(vin);
+      if (!item) continue;
+      if (!item.companyChangedFrom) {
+        item.companyChangedFrom = changeFrom;
+        item.companyChangedTo = changeTo;
+        item.companyChangedAt = nowIso;
+      }
+      item.deliveryCompany = typedCompany;
+      item.company = typedCompany;
+    }
   }
   if (changeFrom && changeTo) {
     draftPayload.company_changed = true;
     draftPayload.company_changed_from = changeFrom;
     draftPayload.company_changed_to = changeTo;
+    draftPayload.company_changed_at = new Date().toISOString();
     draftPayload.company_changes = companyChanges.length
       ? companyChanges
       : vins.map((vin) => ({ vin, from: changeFrom, to: changeTo }));
@@ -5835,6 +6256,11 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
       item.plannedBranch = printedBranch;
     }
   }
+  // Keep Delivery Team الناقل / مدينة الترحيل in sync with printed company + city
+  syncCoordinatorAssignmentsToDeliveryTeam(
+    vins.map((vin) => findQueueItem(vin)).filter(Boolean),
+    { by: 'agent-print' }
+  );
   // Do not force auto city — agent must choose branch_to on the form
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const draft = {
@@ -5855,6 +6281,7 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     vehicleStatus,
     companyChangedFrom: changeFrom || '',
     companyChangedTo: changeTo || '',
+    companyChangedAt: (changeFrom && changeTo) ? (draftPayload.company_changed_at || new Date().toISOString()) : '',
     payload: {
       ...draftPayload,
       branch_to: warehouseDelivery
@@ -5866,6 +6293,11 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
       showroom_group: Boolean(showroomDisplay),
       showroom_label: showroomDisplay ? SHOWROOM_SPECIAL_NAME : undefined,
       typed_company: showroomDisplay ? typedCompany : undefined,
+      assigned_company: assignedCompanyHint || draftPayload.assigned_company || '',
+      company_changed: Boolean(changeFrom && changeTo),
+      company_changed_from: changeFrom || '',
+      company_changed_to: changeTo || '',
+      company_changed_at: (changeFrom && changeTo) ? (draftPayload.company_changed_at || new Date().toISOString()) : '',
       vehicleStatus,
       vins
     }
@@ -5890,6 +6322,9 @@ app.post('/api/delivery-coordinator/complete-print', (req, res) => {
     pdfSaved: Boolean(draft.pdfSaved),
     vins,
     deliveredCount: deliveredItems.length,
+    companyChanged: Boolean(changeFrom && changeTo),
+    companyChangedFrom: changeFrom || '',
+    companyChangedTo: changeTo || '',
     showroomDisplay: Boolean(showroomDisplay),
     vehicleStatus,
     statusLabel: showroomDisplay
@@ -6396,6 +6831,20 @@ server.listen(PORT, () => {
     }
   } catch (err) {
     console.error('[rtl-daily] index rebuild failed', err);
+  }
+  try {
+    const boot = syncTeamRawToHubInventory(deliveryTeamStore);
+    if (boot && boot.upserted) {
+      console.log(`[delivery-team] boot sync: ${boot.upserted} VIN(s) → hub`);
+    }
+    if (Array.isArray(store.vehicles) && store.vehicles.length) {
+      const rawPush = syncHubVehiclesToDeliveryTeam(store.vehicles);
+      if (rawPush && rawPush.upserted) {
+        console.log(`[delivery-team] boot raw push: ${rawPush.upserted} VIN(s)`);
+      }
+    }
+  } catch (err) {
+    console.error('[delivery-team] boot sync failed', err);
   }
   console.log(`[delivery] listening on http://localhost:${PORT}`);
   console.log(`[delivery] agents password: ${AGENT_PASSWORD}`);

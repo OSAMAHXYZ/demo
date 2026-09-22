@@ -470,7 +470,12 @@ function createDeliveryTeamRouter(opts) {
     }
     if (canSeeAll(req.dtUser.role)) return v;
     const isMine = v.ops.assignedEmployeeId === req.dtUser.userId;
+    const liveEditors = new Set(['ruba', 'rasha']);
+    const isLiveEditor = liveEditors.has(String(req.dtUser.userId || '').toLowerCase())
+      || liveEditors.has(String(req.dtUser.name || '').trim().toLowerCase());
     if (write) {
+      // Ruba / Rasha / Hanouf(admin via canSeeAll): edit any assigned Live Sheet VIN
+      if (isLiveEditor && v.ops && v.ops.assignedEmployeeId) return v;
       if (!isMine) {
         res.status(403).json({ error: 'You do not have access to edit this VIN' });
         return null;
@@ -642,6 +647,11 @@ function createDeliveryTeamRouter(opts) {
         console.error('[delivery-team] onEnsureDraftCarriers failed:', err.message || err);
       }
     }
+    if (typeof opts.onEnsureHubRawOnLiveSheet === 'function') {
+      try { opts.onEnsureHubRawOnLiveSheet(); } catch (err) {
+        console.error('[delivery-team] onEnsureHubRawOnLiveSheet failed:', err.message || err);
+      }
+    }
     const q = { ...(req.query || {}), assigned: 'yes' };
     let list = store.allVehicles();
     list = applyFilters(list, q, req.dtUser);
@@ -707,6 +717,16 @@ function createDeliveryTeamRouter(opts) {
       bySalesType[st] = (bySalesType[st] || 0) + 1;
     });
 
+    const targetMonth = (month && /^\d{4}-\d{2}$/.test(month))
+      ? month
+      : currentMonthKey(tz);
+    const monthTargets = store.getMonthTargets(targetMonth);
+    // Claimed counts for Ach% always use the target month scope (even if dashboard shows all months)
+    const targetMonthFleet = (month && month === targetMonth)
+      ? assigned
+      : applyFilters(store.allVehicles(), { month: targetMonth, tzOffset: tz }, req.dtUser)
+        .filter((v) => v.ops && v.ops.assignedEmployeeId);
+
     const employees = ASSIGNABLE_NAMES.map((name) => {
       const id = name.toLowerCase();
       const mine = assigned.filter((v) => v.ops.assignedEmployeeId === id);
@@ -718,6 +738,11 @@ function createDeliveryTeamRouter(opts) {
         const st = (v.raw && v.raw.salesType) || '(blank)';
         salesTypes[st] = (salesTypes[st] || 0) + 1;
       });
+      const target = Number(monthTargets[id]) || 0;
+      const claimedForTarget = targetMonthFleet
+        .filter((v) => v.ops.assignedEmployeeId === id && v.ops.opsStatus === COMPLETED_STATUS)
+        .length;
+      const achPct = target > 0 ? Math.round((claimedForTarget / target) * 1000) / 10 : null;
       return {
         id,
         name,
@@ -725,6 +750,9 @@ function createDeliveryTeamRouter(opts) {
         claimed: done.length,
         remaining: rem,
         progress: pct,
+        target,
+        claimedForTarget,
+        achPct,
         bySalesType: salesTypes,
       };
     });
@@ -780,6 +808,21 @@ function createDeliveryTeamRouter(opts) {
     const months = [...monthSet].sort().reverse();
     if (!months.includes(currentMonthKey(tz))) months.unshift(currentMonthKey(tz));
 
+    const hubTransfer = typeof opts.getHubTransferStats === 'function'
+      ? opts.getHubTransferStats()
+      : null;
+
+    // الناقل totals from live sheet fleet (always available even without hub hook)
+    const byCarrierMap = {};
+    teamFleet.forEach((v) => {
+      const car = String((v.ops && v.ops.carrier) || '').trim();
+      if (!car) return;
+      byCarrierMap[car] = (byCarrierMap[car] || 0) + 1;
+    });
+    const byCarrier = Object.entries(byCarrierMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+
     res.json({
       today,
       month: month || '',
@@ -794,9 +837,16 @@ function createDeliveryTeamRouter(opts) {
         ready: byStatus['جاهز للتسليم'] || 0,
         delivered: byStatus['تم التسليم'] || 0,
         blankStatus,
+        carriersAssigned: byCarrier.reduce((s, r) => s + r.count, 0),
+        carrierKinds: byCarrier.length,
+        cityCount: hubTransfer ? hubTransfer.cityCount : 0,
+        cityTotal: hubTransfer ? hubTransfer.cityTotal : 0,
+        companyChangeTotal: hubTransfer ? hubTransfer.companyChangeTotal : 0,
       },
       byStatus,
       bySalesType,
+      byCarrier,
+      hubTransfer,
       pipeline: {
         todaysProformas: todays.length,
         assigned: assigned.length,
@@ -807,6 +857,9 @@ function createDeliveryTeamRouter(opts) {
       employees,
       myWorkload: mine,
       recentEdits,
+      targetMonth,
+      targetsUpdatedAt: monthTargets._updatedAt || null,
+      targetsUpdatedBy: monthTargets._updatedBy || '',
       hubRaw: typeof opts.getHubRawStatus === 'function' ? opts.getHubRawStatus() : null,
     });
   });
@@ -1115,6 +1168,63 @@ function createDeliveryTeamRouter(opts) {
       return res.status(500).json({ error: err.message || 'Upload failed' });
     }
   }
+
+  // ——— Monthly targets (Hanouf only entry · everyone can read via dashboard) ———
+  router.post('/targets', auth, requireRole('hanouf'), (req, res) => {
+    const month = String((req.body && req.body.month) || '').trim().slice(0, 7);
+    const employee = String((req.body && (req.body.employee || req.body.employeeId || req.body.name)) || '').trim();
+    const target = req.body && req.body.target;
+    const emp = findAssignableUser(employee);
+    if (!emp) {
+      return res.status(400).json({
+        error: `Select a valid person (${ASSIGNABLE_NAMES.join(' / ')})`,
+      });
+    }
+    try {
+      const saved = store.setEmployeeTarget(month, emp.id, target, req.dtUser);
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'set_target',
+        oldValue: '',
+        newValue: `${saved.month} · ${emp.name} · ${saved.target}`,
+      });
+      store.save();
+      const tz = Number(req.body && req.body.tzOffset);
+      const claimedInMonth = applyFilters(
+        store.allVehicles().filter((v) => v.ops && v.ops.assignedEmployeeId === emp.id),
+        { month: saved.month, tzOffset: tz },
+        req.dtUser
+      );
+      const done = claimedInMonth.filter((v) => v.ops.opsStatus === COMPLETED_STATUS).length;
+      const achPct = saved.target > 0 ? Math.round((done / saved.target) * 1000) / 10 : null;
+      return res.json({
+        ok: true,
+        ...saved,
+        employeeName: emp.name,
+        claimed: done,
+        achPct,
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Failed to save target' });
+    }
+  });
+
+  router.get('/targets', auth, (req, res) => {
+    const month = String((req.query && req.query.month) || '').trim().slice(0, 7)
+      || currentMonthKey(Number(req.query && req.query.tzOffset));
+    const map = store.getMonthTargets(month);
+    const rows = ASSIGNABLE_NAMES.map((name) => {
+      const id = name.toLowerCase();
+      return { id, name, target: Number(map[id]) || 0 };
+    });
+    res.json({
+      month,
+      updatedAt: map._updatedAt || null,
+      updatedBy: map._updatedBy || '',
+      rows,
+    });
+  });
 
   // ——— Assignment ———
   router.post('/assign', auth, requireRole('admin', 'hanouf'), (req, res) => {

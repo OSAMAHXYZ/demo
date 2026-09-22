@@ -835,7 +835,7 @@
             const from = String(item?.companyChangedFrom || '').trim();
             const to = String(item?.companyChangedTo || item?.deliveryCompany || item?.company || '').trim();
             if (!from || !to || from.toLowerCase() === to.toLowerCase()) return '';
-            return `<span class="qv-company-change" title="تم تغيير الشركة من الموظف">من «${from}» → «${to}»</span>`;
+            return `<span class="qv-company-change" title="تم تغيير الشركة من الموظف"><b>CHANGED</b> من «${from}» → «${to}»</span>`;
         }
 
         function companySelectHtml(selected, vin) {
@@ -898,8 +898,8 @@
         function parseVinList(input) {
             return String(input || '')
                 .split(/[\s,;\n\r\t]+/)
-                .map((s) => s.trim().toUpperCase())
-                .filter(Boolean);
+                .map((s) => s.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''))
+                .filter((s) => s.length >= 8);
         }
 
         function queueBadgeClass(item) {

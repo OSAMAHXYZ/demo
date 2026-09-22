@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260921salesraw1" />
+  <link rel="stylesheet" href="styles.css?v=20260922targets1" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -83,6 +83,21 @@
             <span class="hint" id="dash-month-hint"></span>
           </div>
           <div class="kpi-row" id="dash-kpis"></div>
+          <div class="card" id="dash-xfer-card" hidden>
+            <h2>النقل · الناقل · المدن · تغيير الشركة</h2>
+            <p class="hint">من Delivery Team + Print Drafts (نفس مصدر لوحة النقل في Admin PDF) — اضغط الرقم لعرض الشاسيه</p>
+            <div class="kpi-row kpi-row--xfer" id="dash-xfer-kpis"></div>
+            <div class="xfer-split">
+              <div>
+                <h3 class="xfer-subhead">الناقل</h3>
+                <div class="status-grid" id="dash-carrier-grid"></div>
+              </div>
+              <div>
+                <h3 class="xfer-subhead">المدن / الفروع</h3>
+                <div class="status-grid" id="dash-city-grid"></div>
+              </div>
+            </div>
+          </div>
           <div class="card">
             <h2>Delivery pipeline</h2>
             <p class="hint">Today’s Proformas → Assigned → PSFU → Ready → Delivered / Claimed</p>
@@ -92,7 +107,7 @@
             <div class="dash-stack">
               <div class="card" id="dash-emp-card">
                 <h2>Employee schedule</h2>
-                <p class="hint">Full team · Assigned · Claimed · Cash/Bank (sales type) per person — click a name to open their VINs</p>
+                <p class="hint" id="dash-emp-hint">Full team · Assigned · Claimed · Target · Ach% — click a name to open their VINs</p>
                 <div class="table-wrap compact">
                   <table class="data" id="dash-emp-table"></table>
                 </div>
@@ -150,6 +165,8 @@
               </div>
             </div>
             <div class="live-chip-row" id="live-chips"></div>
+            <p class="hint" id="live-edit-hint" hidden>Hanouf · Ruba · Rasha can edit status, dates, الناقل, city, and notes directly on this sheet.</p>
+            <p class="hint live-save-toast" id="live-save-toast" hidden></p>
             <div class="table-wrap live-sheet-wrap">
               <table class="data live-sheet" id="live-table"></table>
             </div>
@@ -355,6 +372,21 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260921salesraw1"></script>
+  <div class="modal-back" id="xfer-vins-back">
+    <div class="guest-modal xfer-vins-modal" id="xfer-vins-modal" role="dialog" aria-modal="true">
+      <div class="guest-modal-head">
+        <div>
+          <h2 id="xfer-vins-title">VIN list</h2>
+          <p class="hint" id="xfer-vins-sub"></p>
+        </div>
+        <button type="button" class="btn" id="xfer-vins-close">Close</button>
+      </div>
+      <div class="guest-modal-body">
+        <pre class="xfer-vins-list" id="xfer-vins-list"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20260922rawsync1"></script>
 </body>
 </html>

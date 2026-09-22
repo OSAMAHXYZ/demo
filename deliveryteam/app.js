@@ -22,6 +22,7 @@
     liveFilters: { q: '', employee: '', status: '', month: '', carrier: '' },
     liveFingerprint: '',
     monthFilter: '',
+    targetMonth: '',
     guestTickTimer: null,
     hubRaw: null,
     tzOffset: -new Date().getTimezoneOffset(),
@@ -116,6 +117,32 @@
 
   function canManage() {
     return state.user && (state.user.role === 'admin' || state.user.role === 'hanouf');
+  }
+
+  function canSetTargets() {
+    return !!(state.user && state.user.role === 'hanouf');
+  }
+
+  function achPctClass(pct) {
+    if (pct == null || !Number.isFinite(Number(pct))) return '';
+    const n = Number(pct);
+    if (n >= 100) return 'ach-good';
+    if (n >= 70) return 'ach-mid';
+    return 'ach-low';
+  }
+
+  function formatAchPct(pct) {
+    if (pct == null || !Number.isFinite(Number(pct))) return '—';
+    return `${Number(pct)}%`;
+  }
+
+  /** Ruba / Rasha / Hanouf / Admin — inline edit on Live Sheet */
+  function canEditLiveSheet() {
+    if (!state.user) return false;
+    if (canManage()) return true;
+    const id = String(state.user.id || '').trim().toLowerCase();
+    const name = String(state.user.name || '').trim().toLowerCase();
+    return id === 'ruba' || id === 'rasha' || name === 'ruba' || name === 'rasha';
   }
 
   function isRuba() {
@@ -600,7 +627,8 @@
     if (meta) {
       const t = new Date(data.at || Date.now()).toLocaleTimeString();
       const monthNote = f.month ? ` · ${f.month}` : ' · all months';
-      meta.textContent = `${data.total || 0} assigned VINs${monthNote} · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
+      const editNote = canEditLiveSheet() ? ' · editable' : '';
+      meta.textContent = `${data.total || 0} assigned VINs${monthNote}${editNote} · live · last sync ${t}${changed && silent ? ' · updated' : ''}`;
     }
     if (dot) {
       dot.classList.toggle('pulse', !!changed || !silent);
@@ -609,10 +637,44 @@
 
     if (!changed && silent) return;
 
+    const table = $('#live-table');
+    const active = document.activeElement;
+    const editingLive = !!(
+      silent
+      && active
+      && table
+      && active.classList
+      && active.classList.contains('cell-edit')
+      && table.contains(active)
+    );
+    if (editingLive) return;
+
+    const liveEditable = canEditLiveSheet();
+    const editHint = $('#live-edit-hint');
+    if (editHint) editHint.hidden = !liveEditable;
+    if (liveEditable) {
+      fillCarrierLists();
+      const cities = (state.meta && state.meta.transferCities) || [];
+      const cityList = $('#edit-city-list');
+      if (cityList) cityList.innerHTML = cities.map((c) => `<option value="${esc(c)}"></option>`).join('');
+    }
+
+    const opsCell = (r, field, type, value) => (
+      liveEditable
+        ? editableControl(r.vin, field, type, value)
+        : (type === 'status'
+          ? statusBadge(value)
+          : (type === 'yn' ? ynBadge(value) : na(value)))
+    );
+
     const cols = [
       { key: 'num', label: '#', html: (_r, i) => i + 1 },
       { key: 'employee', label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` },
-      { key: 'status', label: 'Status', html: (r) => `<span class="cell-status">${statusBadge(r.ops.opsStatus)}</span>` },
+      { key: 'status', label: 'Status', html: (r) => (
+        liveEditable
+          ? editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)
+          : `<span class="cell-status">${statusBadge(r.ops.opsStatus)}</span>`
+      ) },
       { key: 'vin', label: 'VIN', html: (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>` },
       { key: 'proforma', label: 'Proforma', html: (r) => na(r.raw.proformaDate) },
       { key: 'order', label: 'Order', html: (r) => na(r.raw.salesOrder) },
@@ -629,23 +691,26 @@
       { key: 'guest', label: 'Guest Exp', html: (r) => guestCellHtml(r) },
       { key: 'gt', label: 'GT Loc', html: (r) => na(r.raw.gtLocation) },
       { key: 'veh', label: 'Veh Loc', html: (r) => na(r.raw.vehicleLocation) },
-      { key: 'guestsent', label: 'إرسال الضيف', html: (r) => na(r.ops.guestSentDate) },
-      { key: 'sig', label: 'استلام التواقيع', html: (r) => na(r.ops.signatureReceivedDate) },
-      { key: 'accsent', label: 'إرسال للحسابات', html: (r) => na(r.ops.accountsSentDate) },
-      { key: 'accok', label: 'موافقة الحسابات', html: (r) => na(r.ops.accountsApprovalDate) },
-      { key: 'vin1502', label: 'VIN 1502', html: (r) => ynBadge(r.ops.vin1502) },
-      { key: 'traffic', label: 'ملف المرور', html: (r) => ynBadge(r.ops.trafficFile) },
-      { key: 'fees', label: 'Traffic Fees', html: (r) => ynBadge(r.ops.trafficFeesOps) },
-      { key: 'ins', label: 'Insurance', html: (r) => ynBadge(r.ops.insuranceOps) },
-      { key: 'reg', label: 'إصدار الاستمارة', html: (r) => na(r.ops.registrationIssueDate) },
-      { key: 'city', label: 'مدينة الترحيل', html: (r) => na(r.ops.transferCity) },
-      { key: 'carrier', label: 'الناقل', html: (r) => na(r.ops.carrier) },
-      { key: 'notes', label: 'ملاحظات', html: (r) => esc(r.ops.notes || '') },
+      { key: 'guestsent', label: 'إرسال الضيف', html: (r) => opsCell(r, 'guestSentDate', 'date', r.ops.guestSentDate) },
+      { key: 'sig', label: 'استلام التواقيع', html: (r) => opsCell(r, 'signatureReceivedDate', 'date', r.ops.signatureReceivedDate) },
+      { key: 'accsent', label: 'إرسال للحسابات', html: (r) => opsCell(r, 'accountsSentDate', 'date', r.ops.accountsSentDate) },
+      { key: 'accok', label: 'موافقة الحسابات', html: (r) => opsCell(r, 'accountsApprovalDate', 'date', r.ops.accountsApprovalDate) },
+      { key: 'vin1502', label: 'VIN 1502', html: (r) => opsCell(r, 'vin1502', 'yn', r.ops.vin1502) },
+      { key: 'traffic', label: 'ملف المرور', html: (r) => opsCell(r, 'trafficFile', 'yn', r.ops.trafficFile) },
+      { key: 'fees', label: 'Traffic Fees', html: (r) => opsCell(r, 'trafficFeesOps', 'yn', r.ops.trafficFeesOps) },
+      { key: 'ins', label: 'Insurance', html: (r) => opsCell(r, 'insuranceOps', 'yn', r.ops.insuranceOps) },
+      { key: 'reg', label: 'إصدار الاستمارة', html: (r) => opsCell(r, 'registrationIssueDate', 'date', r.ops.registrationIssueDate) },
+      { key: 'city', label: 'مدينة الترحيل', html: (r) => opsCell(r, 'transferCity', 'city', r.ops.transferCity) },
+      { key: 'carrier', label: 'الناقل', html: (r) => opsCell(r, 'carrier', 'carrier', r.ops.carrier) },
+      { key: 'notes', label: 'ملاحظات', html: (r) => (
+        liveEditable
+          ? editableControl(r.vin, 'notes', 'notes', r.ops.notes)
+          : esc(r.ops.notes || '')
+      ) },
       { key: 'updated', label: 'Updated', html: (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—') },
       { key: 'by', label: 'By', html: (r) => na(r.ops.updatedBy) },
     ];
 
-    const table = $('#live-table');
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r, i) => {
         const statusCls = statusRowClass(r.ops.opsStatus);
@@ -656,12 +721,141 @@
       }).join('') || `<tr><td colspan="${cols.length}">No assigned VINs yet. Use Assignment to assign vehicles.</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
     bindGuestButtons(table);
+    if (liveEditable) bindEditableCells(table);
+  }
+
+  function openXferVinsModal(title, subtitle, vins) {
+    const back = $('#xfer-vins-back');
+    const list = Array.isArray(vins) ? vins.filter(Boolean) : [];
+    $('#xfer-vins-title').textContent = title || 'VIN list';
+    $('#xfer-vins-sub').textContent = subtitle || `${list.length} VIN(s)`;
+    $('#xfer-vins-list').textContent = list.length ? list.join('\n') : '— لا توجد شاسيه —';
+    back.classList.add('open');
+    const close = () => back.classList.remove('open');
+    $('#xfer-vins-close').onclick = close;
+    back.onclick = (e) => { if (e.target === back) close(); };
+  }
+
+  function renderXferDashboard(d) {
+    const card = $('#dash-xfer-card');
+    if (!card) return;
+    if (!canManage()) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const ht = d.hubTransfer || {};
+    const carriers = (ht.byCarrier && ht.byCarrier.length)
+      ? ht.byCarrier
+      : (d.byCarrier || []);
+    const cities = ht.byCity || [];
+    const changes = ht.companyChanges || [];
+    const t = d.totals || {};
+
+    $('#dash-xfer-kpis').innerHTML = [
+      ['الناقل معيّن', t.carriersAssigned || carriers.reduce((s, r) => s + (r.count || 0), 0), 'ok', 'carriers'],
+      ['أنواع الناقل', t.carrierKinds || carriers.length, 'info', 'carriers'],
+      ['عدد المدن', t.cityCount || cities.length, 'info', 'cities'],
+      ['تحويلات المدن', t.cityTotal || cities.reduce((s, r) => s + (r.count || 0), 0), '', 'cities'],
+      ['تغيير الشركة', t.companyChangeTotal || changes.length, changes.length ? 'warn' : 'ok', 'company-changes'],
+    ].map(([l, v, cls, kind]) =>
+      `<button type="button" class="kpi kpi-btn ${cls}" data-xfer-kind="${kind}">
+        <div class="lbl">${esc(l)}</div>
+        <div class="val">${esc(v)}</div>
+      </button>`
+    ).join('');
+
+    $$('#dash-xfer-kpis .kpi-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const kind = btn.dataset.xferKind;
+        if (kind === 'company-changes') {
+          const lines = changes.map((c) =>
+            `${c.vin}  ·  ${c.from || '—'} → ${c.to || '—'}`
+          );
+          openXferVinsModal(
+            'تغيير الشركة · Company changed',
+            `${changes.length} VIN(s) أُعيد تعيينها من شركة إلى أخرى`,
+            lines.length ? lines : changes.map((c) => c.vin)
+          );
+          return;
+        }
+        if (kind === 'carriers') {
+          const all = [];
+          const vinMap = ht.carrierVins || {};
+          carriers.forEach((r) => {
+            const vins = vinMap[r.name] || [];
+            vins.forEach((vin) => all.push(`${vin}  ·  ${r.name}`));
+          });
+          openXferVinsModal('الناقل · جميع الشاسيه', `${all.length} VIN(s)`, all);
+          return;
+        }
+        if (kind === 'cities') {
+          const all = [];
+          const vinMap = ht.cityVins || {};
+          cities.forEach((r) => {
+            const vins = vinMap[r.name] || [];
+            vins.forEach((vin) => all.push(`${vin}  ·  ${r.name}`));
+          });
+          openXferVinsModal('المدن / الفروع · جميع الشاسيه', `${all.length} VIN(s)`, all);
+        }
+      });
+    });
+
+    const carrierGrid = $('#dash-carrier-grid');
+    if (carrierGrid) {
+      const vinMap = ht.carrierVins || {};
+      carrierGrid.innerHTML = carriers.length
+        ? carriers.map((r) =>
+          `<button type="button" class="status-chip" data-carrier="${esc(r.name)}">
+            <div class="n">${r.count}</div>
+            <div class="l">${esc(r.name)}</div>
+          </button>`
+        ).join('')
+        : '<p class="hint">لا يوجد ناقل معيّن بعد</p>';
+      $$('#dash-carrier-grid .status-chip').forEach((b) => {
+        b.addEventListener('click', () => {
+          const name = b.dataset.carrier || '';
+          const vins = vinMap[name] || [];
+          openXferVinsModal(`الناقل: ${name}`, `${vins.length || b.querySelector('.n')?.textContent || 0} VIN(s)`, vins);
+          if (!vins.length) {
+            state.liveFilters.carrier = name;
+            state.liveFilters.month = state.monthFilter || '';
+            if ($('#live-carrier')) {
+              $('#live-carrier').value = name;
+              $('#live-carrier').dataset.filled = '1';
+            }
+            setView('live');
+          }
+        });
+      });
+    }
+
+    const cityGrid = $('#dash-city-grid');
+    if (cityGrid) {
+      const vinMap = ht.cityVins || {};
+      cityGrid.innerHTML = cities.length
+        ? cities.map((r) =>
+          `<button type="button" class="status-chip" data-city="${esc(r.name)}">
+            <div class="n">${r.count}</div>
+            <div class="l">${esc(r.name)}</div>
+          </button>`
+        ).join('')
+        : '<p class="hint">لا توجد مدن من المسودات بعد — اطبع مذكرة أولاً</p>';
+      $$('#dash-city-grid .status-chip').forEach((b) => {
+        b.addEventListener('click', () => {
+          const name = b.dataset.city || '';
+          const vins = vinMap[name] || [];
+          openXferVinsModal(`المدينة: ${name}`, `${vins.length} VIN(s)`, vins);
+        });
+      });
+    }
   }
 
   async function loadDashboard() {
     const month = state.monthFilter || '';
     const d = await api(`/dashboard?tzOffset=${state.tzOffset}${month ? `&month=${encodeURIComponent(month)}` : ''}`);
     if (d.hubRaw) renderRawStatus(d.hubRaw);
+    if (d.targetMonth) state.targetMonth = d.targetMonth;
     const monthInp = $('#dash-month');
     if (monthInp && monthInp.value !== month) monthInp.value = month;
     const hint = $('#dash-month-hint');
@@ -689,6 +883,8 @@
       `<article class="kpi ${cls}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`
     ).join('');
 
+    renderXferDashboard(d);
+
     const p = d.pipeline || {};
     $('#dash-pipeline').innerHTML = [
       ["Today's Proformas", p.todaysProformas],
@@ -703,32 +899,101 @@
     if (empCard) {
       empCard.hidden = false;
       const rows = d.employees || [];
-      // Everyone sees the full team schedule (assigned / claimed / cash·bank sales types)
-      const showRows = rows.filter((e) => e.assigned > 0 || canManage());
+      const targetMonth = d.targetMonth || state.monthFilter || '';
+      const canEditTarget = canSetTargets();
+      const hint = $('#dash-emp-hint');
+      if (hint) {
+        hint.textContent = canEditTarget
+          ? `Target month ${targetMonth || '—'} · Hanouf can set Target · Ach% = Claimed ÷ Target — click a name for Live Sheet`
+          : `Target month ${targetMonth || '—'} · Target set by Hanouf · Ach% = Claimed ÷ Target — click a name for Live Sheet`;
+      }
+      // Everyone sees full assignable roster (targets + ach%)
+      const showRows = rows.slice();
       const typeKeys = [...new Set(showRows.flatMap((e) => Object.keys(e.bySalesType || {})))].sort();
       const meId = state.user && state.user.id;
       const meName = state.user && state.user.name;
+      const colCount = 7 + typeKeys.length;
       $('#dash-emp-table').innerHTML = `<thead><tr>
           <th>Employee</th>
           <th class="num">Assigned</th>
           <th class="num">Claimed</th>
           <th class="num">Remaining</th>
           <th class="num">Progress %</th>
+          <th class="num">Target</th>
+          <th class="num">Ach%</th>
           ${typeKeys.map((k) => `<th class="num">${esc(k)}</th>`).join('')}
         </tr></thead>
         <tbody>${showRows.map((e) => {
           const isMe = e.id === meId || e.name === meName;
-          return `<tr data-emp="${esc(e.name)}" class="${isMe ? 'is-me' : ''}" style="cursor:pointer" title="Open ${esc(e.name)} schedule on Live Sheet">
+          const targetCell = canEditTarget
+            ? `<input type="number" min="0" step="1" class="target-input" data-emp-id="${esc(e.id)}" data-emp-name="${esc(e.name)}" value="${e.target > 0 ? e.target : ''}" placeholder="—" title="Set monthly target (Hanouf)" />`
+            : (e.target > 0 ? e.target : '—');
+          const ach = formatAchPct(e.achPct);
+          const achCls = achPctClass(e.achPct);
+          return `<tr data-emp="${esc(e.name)}" class="${isMe ? 'is-me' : ''}" title="Open ${esc(e.name)} on Live Sheet">
           <td><b>${esc(e.name)}</b>${isMe ? ' <span class="badge info">you</span>' : ''}</td>
           <td class="num">${e.assigned}</td>
           <td class="num">${e.claimed}</td>
           <td class="num">${e.remaining}</td>
           <td class="num">${e.progress}%</td>
+          <td class="num target-cell" data-stop-nav="1">${targetCell}</td>
+          <td class="num ach-cell ${achCls}" data-emp-ach="${esc(e.id)}">${esc(ach)}</td>
           ${typeKeys.map((k) => `<td class="num">${(e.bySalesType && e.bySalesType[k]) || 0}</td>`).join('')}
         </tr>`;
-        }).join('') || '<tr><td colspan="5">No assigned VINs in this month</td></tr>'}</tbody>`;
+        }).join('') || `<tr><td colspan="${colCount}">No employees</td></tr>`}</tbody>`;
+
+      $$('#dash-emp-table .target-input').forEach((inp) => {
+        inp.addEventListener('click', (ev) => ev.stopPropagation());
+        inp.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            inp.blur();
+          }
+        });
+        inp.addEventListener('change', async () => {
+          const empId = inp.dataset.empId;
+          const empName = inp.dataset.empName;
+          const month = state.monthFilter || targetMonth || state.targetMonth;
+          if (!month) {
+            alert('Select a month first (top of dashboard), then set the target');
+            return;
+          }
+          const raw = String(inp.value || '').trim();
+          const target = raw === '' ? 0 : Number(raw);
+          if (!Number.isFinite(target) || target < 0) {
+            alert('Enter a valid target (≥ 0)');
+            return;
+          }
+          try {
+            inp.classList.add('is-saving');
+            const res = await api('/targets', {
+              method: 'POST',
+              json: {
+                month,
+                employee: empId || empName,
+                target,
+                tzOffset: state.tzOffset,
+              },
+            });
+            inp.classList.remove('is-saving');
+            inp.classList.add('is-saved');
+            const achEl = $(`#dash-emp-table [data-emp-ach="${empId}"]`);
+            if (achEl) {
+              achEl.textContent = formatAchPct(res.achPct);
+              achEl.className = `num ach-cell ${achPctClass(res.achPct)}`;
+            }
+            setTimeout(() => inp.classList.remove('is-saved'), 1000);
+          } catch (err) {
+            inp.classList.remove('is-saving');
+            alert(err.message || 'Failed to save target');
+          }
+        });
+      });
+
       $$('#dash-emp-table tr[data-emp]').forEach((tr) => {
-        tr.addEventListener('click', () => {
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', (ev) => {
+          if (ev.target.closest('[data-stop-nav]')) return;
           state.liveFilters.employee = tr.dataset.emp || '';
           state.liveFilters.month = state.monthFilter || state.liveFilters.month || '';
           state.liveFilters.status = '';
@@ -937,7 +1202,7 @@
           tr.dataset.status = value || '';
         }
       }
-      const toast = $('#my-save-toast');
+      const toast = $('#live-save-toast') || $('#my-save-toast');
       if (toast) {
         toast.hidden = false;
         toast.textContent = `Saved ✓ ${fieldLabel(field)} · ${new Date().toLocaleTimeString()}`;
@@ -1431,7 +1696,7 @@
       (v.ops && v.ops.assignedEmployeeId === state.user.id)
       || (v.ops && v.ops.assignedEmployeeName === state.user.name)
     ));
-    const canEdit = canManage() || isMine;
+    const canEdit = canManage() || canEditLiveSheet() || isMine;
 
     drawer.innerHTML = buildDrawerHtml(v, statuses, cities, carriers, { readOnly: !canEdit });
     back.classList.add('open');
@@ -1579,6 +1844,7 @@
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       if (data.rawStatus) renderRawStatus(data.rawStatus);
       else await loadSalesRawPanel();
+      state.liveFingerprint = '';
       summary.innerHTML = `
         <p><b>Sales Raw updated</b> · ${esc(data.sheetName || '')} · ${esc(data.filename || file.name)}</p>
         <div class="summary-grid">
@@ -1586,10 +1852,13 @@
           <div><strong>${data.queueRefreshed || 0}</strong><span>Queue rows</span></div>
           <div><strong>${data.matchedUpdated || 0}</strong><span>Matched</span></div>
           <div><strong>${(data.deliveryTeamSync && data.deliveryTeamSync.upserted) || 0}</strong><span>Synced to team</span></div>
+          <div><strong>${(data.deliveryTeamSync && data.deliveryTeamSync.updated) || 0}</strong><span>Rows refreshed</span></div>
+          <div><strong>${(data.deliveryTeamSync && data.deliveryTeamSync.created) || 0}</strong><span>New on Live Sheet</span></div>
         </div>
         <p class="hint" style="margin-top:10px">Last update: <b>${esc(formatRawUpdatedAt(data.rawStatus && data.rawStatus.uploadedAt))}</b>
           ${data.rawStatus && data.rawStatus.uploadedByName ? ` · by ${esc(data.rawStatus.uploadedByName)}` : ''}
-          — visible to all users</p>`;
+          — Live Sheet, Dashboard, Assignment &amp; All Vehicles refresh with this file</p>`;
+      await refreshView();
     } catch (err) {
       summary.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
     }
@@ -1630,6 +1899,8 @@
         </div>
         ${s.picUnresolved ? `<p class="hint" style="color:var(--orange);margin-top:8px">${s.picUnresolved} PIC name(s) not matched (use Hanouf / Rasha / Ruba / Ibrahim·Ebrahim / Abdullah)</p>` : ''}
         ${s.errors && s.errors.length ? `<p class="hint" style="color:var(--red);margin-top:10px">${s.errors.slice(0, 8).map((e) => `Row ${e.row}: ${esc(e.error)}`).join(' · ')}</p>` : ''}`;
+      state.liveFingerprint = '';
+      await refreshView();
     } catch (err) {
       summary.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
     }
