@@ -135,8 +135,21 @@
   padding: 2px 8px;
   min-width: 28px;
 }
-.pdf-win-body { max-height: min(58vh, 520px); overflow: auto; }
-.pdf-list { padding: 8px; display: grid; gap: 6px; max-height: 240px; overflow: auto; }
+.pdf-win-body { max-height: min(70vh, 620px); overflow: auto; }
+.pdf-tools {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  padding: 8px 8px 0;
+}
+.pdf-tools input {
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.pdf-tools .btn-primary { padding: 8px 10px; font-size: 0.75rem; }
+.pdf-list { padding: 8px; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 .pdf-item {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -146,6 +159,79 @@
 }
 .pdf-item b { display: block; font-size: 0.78rem; }
 .pdf-item span { color: var(--muted); }
+.pdf-item-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.pdf-item-actions button { font-size: 0.72rem; padding: 4px 8px; }
+
+#printCopies { display: none; }
+.print-sheet {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  background: #fff;
+  overflow: hidden;
+}
+.print-sheet img { width: 100%; height: 100%; object-fit: fill; display: block; }
+.overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.overlay-field {
+  position: absolute;
+  font-family: 'Tajawal', Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  direction: rtl;
+  line-height: 1;
+  padding: 0 1px;
+}
+.overlay-cover {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #000;
+  z-index: 1;
+  box-sizing: border-box;
+}
+.overlay-field.align-end { align-items: flex-end; justify-content: flex-start; transform: translateY(-2px); }
+.overlay-field.align-center { align-items: center; justify-content: center; text-align: center; }
+.overlay-field.align-start { align-items: flex-start; justify-content: flex-start; }
+.overlay-field.overlay-field--invoice { color: #EB0A1E; font-size: 16px; font-weight: 800; }
+.overlay-field.overlay-field--chassis {
+  direction: ltr;
+  justify-content: flex-start;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+
+@page { size: A4 portrait; margin: 0; }
+@media print {
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body > *:not(#printCopies) { display: none !important; }
+  #printCopies {
+    display: block !important;
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+  }
+  .print-sheet, .print-copy {
+    width: 210mm !important;
+    height: 297mm !important;
+    page-break-after: always;
+    border: none !important;
+  }
+}
 .pdf-add {
   border-top: 1px solid var(--line);
   padding: 10px;

@@ -541,6 +541,9 @@ function createDeliveryTransformationRouter(opts = {}) {
         printedBy: req.dtUser.name,
         attendanceId,
         invoiceNumber: kind === 'warehouse' ? '' : invoiceNumber,
+        snapshot: (req.body && req.body.snapshot && typeof req.body.snapshot === 'object')
+          ? req.body.snapshot
+          : null,
       });
       if (store.data.prints.length > 2000) store.data.prints.length = 2000;
     }
@@ -1022,7 +1025,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       companies,
       coordinators,
       companyCities,
-      prints: (store.data.prints || []).slice(0, 80),
+      prints: (store.data.prints || []).slice(0, 300),
       carriers: allCarriers(),
       cities: allCities(),
     });

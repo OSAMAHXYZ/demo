@@ -679,6 +679,8 @@
         return;
       }
     }
+    const snapshot = collectPayload();
+    if (invoiceNumber) snapshot.invoice_number = invoiceNumber;
     try {
       await api('/print-complete', {
         method: 'POST',
@@ -689,6 +691,7 @@
           company: isWarehouse() ? '' : String($('company_rep').value || '').trim(),
           city: isWarehouse() ? '' : attendanceCity(),
           invoiceNumber,
+          snapshot,
         },
       });
       if (!isWarehouse()) claimedAttendanceId = '';

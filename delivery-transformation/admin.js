@@ -53,6 +53,7 @@
   let dash = null;
   let dashTimer = null;
   let dashInFlight = false;
+  let pdfQuery = '';
 
   DTXLive.wireHeader(user);
   if ($('who')) $('who').textContent = 'Collector';
@@ -170,23 +171,188 @@
     });
   }
 
+  function printHaystack(p) {
+    const vins = (p.vins || []).map((v) => [v.vin, v.product, v.customer].join(' ')).join(' ');
+    const snap = p.snapshot || {};
+    return [
+      p.invoiceNumber, p.company, p.city, p.printedBy, p.kind, p.at,
+      snap.customer_name, snap.company_rep, snap.branch_to, vins,
+    ].join(' ').toLowerCase();
+  }
+
+  function filteredPrints() {
+    const q = pdfQuery.trim().toLowerCase();
+    const rows = dash && dash.prints ? dash.prints : [];
+    if (!q) return rows;
+    return rows.filter((p) => printHaystack(p).includes(q));
+  }
+
   function renderPrints() {
     const host = $('pdf-list');
-    const rows = dash.prints || [];
-    if (!rows.length) {
+    if (!host) return;
+    const all = (dash && dash.prints) || [];
+    const rows = filteredPrints();
+    if (!all.length) {
       host.innerHTML = '<p class="chart-empty">No delivery-note copies yet. They appear here after coordinator print.</p>';
+      return;
+    }
+    if (!rows.length) {
+      host.innerHTML = `<p class="chart-empty">No copies match “${esc(pdfQuery)}”.</p>`;
       return;
     }
     host.innerHTML = rows.map((p) => {
       const vins = (p.vins || []).map((v) => v.vin || v).join(', ');
       const kind = p.kind === 'warehouse' ? 'Warehouse' : 'Delivery note';
-      return `<article class="pdf-item">
+      return `<article class="pdf-item" data-print-id="${esc(p.id)}">
         <b>${esc(kind)}${p.invoiceNumber ? ` · #${esc(p.invoiceNumber)}` : ''}</b>
         <span>${esc(p.company || '—')} · ${esc(p.city || '—')}</span><br />
         <span class="detail-vin">${esc(vins || '—')}</span><br />
         <span>${esc(p.printedBy || '')} · ${esc(fmtWhen(p.at))}</span>
+        <div class="pdf-item-actions">
+          <button type="button" class="btn" data-extract="${esc(p.id)}">Extract PDF</button>
+        </div>
       </article>`;
     }).join('');
+    host.querySelectorAll('[data-extract]').forEach((b) => {
+      b.addEventListener('click', () => extractPrints([b.dataset.extract]));
+    });
+  }
+
+  function splitDateParts(iso) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? { y: m[1], m: m[2], d: m[3] } : { y: '', m: '', d: '' };
+  }
+
+  function overlayPositionStyle(tag, x, y, w, h) {
+    let left = `${x * 100}%`;
+    if (/^wh_chassis/.test(tag)) left = `${x * 100}%`;
+    else if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
+    if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
+    if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
+    return `left:${left};top:${y * 100}%;width:${w * 100}%;height:${h * 100}%`;
+  }
+
+  function snapshotFromPrint(p) {
+    if (p.snapshot && typeof p.snapshot === 'object') return p.snapshot;
+    const day = String(p.at || '').slice(0, 10);
+    const cars = (p.vins || []).map((v) => ({
+      model: v.product || '',
+      chassis: v.vin || v,
+      plate: '',
+      remarks: '',
+    }));
+    return {
+      doc_date: day,
+      invoice_number: p.invoiceNumber || '',
+      customer_name: (p.vins && p.vins[0] && p.vins[0].customer) || '',
+      company_rep: p.company || '',
+      transfer_date: day,
+      corresponding_date: day,
+      car_count: String(cars.length || ''),
+      branch_to: p.city || '',
+      cars,
+      warehouse: {},
+    };
+  }
+
+  function overlayData(p) {
+    const body = snapshotFromPrint(p);
+    if (p.kind === 'warehouse') {
+      const vins = (body.cars || []).map((c) => String(c.chassis || '').trim()).filter(Boolean);
+      const wh = body.warehouse || {};
+      return {
+        wh_owner_name: wh.owner_name || body.customer_name || '',
+        wh_user_name: wh.user_name || '',
+        wh_user_phone: wh.user_phone || '',
+        wh_user_id: wh.user_id || '',
+        wh_print_date: (wh.print_date || body.doc_date || '').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3.$2.$1'),
+        wh_print_time: wh.print_time || '',
+        wh_chassis: vins[0] || '',
+        wh_chassis_2: vins[1] || '',
+        wh_chassis_3: vins[2] || '',
+        wh_chassis_4: vins[3] || '',
+        wh_chassis_5: vins[4] || '',
+      };
+    }
+    const doc = splitDateParts(body.doc_date);
+    const transfer = splitDateParts(body.transfer_date || body.doc_date);
+    const corr = splitDateParts(body.corresponding_date || body.doc_date);
+    const data = {
+      date_d: doc.d, date_m: doc.m, date_y: doc.y,
+      invoice_number: body.invoice_number || p.invoiceNumber || '',
+      dep_hour: body.dep_hour || '',
+      dep_minute: body.dep_minute || '',
+      customer_name: body.customer_name || '',
+      company_rep: body.company_rep || p.company || '',
+      transfer_d: transfer.d, transfer_m: transfer.m, transfer_y: transfer.y,
+      corresponding_d: corr.d, corresponding_m: corr.m, corresponding_y: corr.y,
+      day_name: body.day_name || '',
+      trailer_number: body.trailer_number || '',
+      car_count: body.car_count || String((p.vins || []).length || ''),
+      branch_to: body.branch_to || p.city || '',
+      attachments: body.attachments || '',
+    };
+    const cars = Array.isArray(body.cars) ? body.cars : [];
+    for (let i = 1; i <= 10; i++) {
+      const row = cars[i - 1] || {};
+      data[`car${i}_model`] = row.model || '';
+      data[`car${i}_chassis`] = row.chassis || '';
+      data[`car${i}_plate`] = row.plate || '';
+      data[`car${i}_remarks`] = row.remarks || '';
+    }
+    return data;
+  }
+
+  function buildPrintSheet(p) {
+    const warehouse = p.kind === 'warehouse';
+    const layout = warehouse
+      ? (typeof CHECK_NOTE_FIELDS !== 'undefined' ? CHECK_NOTE_FIELDS : [])
+      : (typeof MUTHAKARA_FIELDS !== 'undefined' ? MUTHAKARA_FIELDS : []);
+    const cover = !warehouse && typeof INVOICE_NUMBER_COVER !== 'undefined' ? INVOICE_NUMBER_COVER : null;
+    const coverHtml = cover
+      ? `<div class="overlay-cover" style="left:${cover[0] * 100}%;top:${cover[1] * 100}%;width:${cover[2] * 100}%;height:${cover[3] * 100}%"></div>`
+      : '';
+    const data = overlayData(p);
+    const fields = layout.map(([tag, x, y, w, h, align]) => {
+      const invoiceCls = tag === 'invoice_number' ? ' overlay-field--invoice' : '';
+      const chassisCls = /chassis/.test(tag) ? ' overlay-field--chassis' : '';
+      return `<div class="overlay-field align-${align || 'end'}${invoiceCls}${chassisCls}" style="${overlayPositionStyle(tag, x, y, w, h)}">${esc(data[tag] || '')}</div>`;
+    }).join('');
+    const src = warehouse
+      ? '../images/delivery-check-note-form.png'
+      : '../images/muthakara-tarhil-form.png';
+    const fallback = warehouse
+      ? ''
+      : '../toyota-internal-lease-calculator-main/images/muthakara-tarhil-form.png';
+    return `<div class="print-sheet print-copy"><img src="${src}" alt=""${fallback ? ` onerror="this.onerror=null;this.src='${fallback}'"` : ''} />
+      <div class="overlay-layer">${coverHtml}${fields}</div></div>`;
+  }
+
+  function extractPrints(ids) {
+    const set = new Set(ids || []);
+    const rows = ((dash && dash.prints) || []).filter((p) => set.has(p.id));
+    if (!rows.length) {
+      alert('No PDF copies to extract.');
+      return;
+    }
+    const existing = document.getElementById('printCopies');
+    if (existing) existing.remove();
+    const box = document.createElement('div');
+    box.id = 'printCopies';
+    box.innerHTML = rows.map(buildPrintSheet).join('');
+    document.body.insertBefore(box, document.body.firstChild);
+    const imgs = [...box.querySelectorAll('img')];
+    Promise.all(imgs.map((img) => (img.complete ? Promise.resolve() : new Promise((done) => {
+      img.onload = () => done();
+      img.onerror = () => done();
+    })))).then(() => {
+      const finish = () => {
+        window.removeEventListener('afterprint', finish);
+        if (box.parentNode) box.remove();
+      };
+      window.addEventListener('afterprint', finish);
+      window.print();
+    });
   }
 
   function closeDrawer() {
@@ -314,6 +480,13 @@
   document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
   $('detail-back').addEventListener('click', (e) => { if (e.target === $('detail-back')) closeDrawer(); });
   $('pdf-min').addEventListener('click', () => $('pdf-win').classList.toggle('is-min'));
+  $('pdf-search').addEventListener('input', (e) => {
+    pdfQuery = e.target.value || '';
+    renderPrints();
+  });
+  $('pdf-extract-all').addEventListener('click', () => {
+    extractPrints(filteredPrints().map((p) => p.id));
+  });
   $('add-company-form').addEventListener('submit', (e) => { e.preventDefault(); addList('company', e.target); });
   $('add-city-form').addEventListener('submit', (e) => { e.preventDefault(); addList('city', e.target); });
 

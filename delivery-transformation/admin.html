@@ -6,7 +6,8 @@
   <title>Delivery Transformation — Data collector</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="admin.css?v=20260923a2" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css?v=20260923a3" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -136,6 +137,10 @@
       </div>
     </header>
     <div class="pdf-win-body" id="pdf-win-body">
+      <div class="pdf-tools">
+        <input type="search" id="pdf-search" placeholder="Search VIN / company / city / invoice…" />
+        <button type="button" class="btn-primary" id="pdf-extract-all">Extract PDF</button>
+      </div>
       <div class="pdf-list" id="pdf-list"></div>
       <div class="pdf-add">
         <h3>Add to the list</h3>
@@ -157,8 +162,10 @@
   </div>
   </div>
 
+  <script src="../scripts/muthakara-field-layout.js"></script>
+  <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260923a2"></script>
+  <script src="admin.js?v=20260923a5"></script>
 </body>
 </html>
