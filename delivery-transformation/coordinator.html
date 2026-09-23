@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260923c4" />
+  <link rel="stylesheet" href="coordinator.css?v=20260923c10" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -44,6 +44,7 @@
           <a href="index.html" class="btn-ghost">المركز</a>
           <a href="admin.html" class="btn-ghost" id="adminLink" hidden>الإدارة</a>
           <a href="employee.html" class="btn-ghost" id="empLink" hidden>الموظف</a>
+          <button type="button" class="btn-warehouse" id="btnWarehouse">التسليم في المستودع</button>
           <strong id="loggedAs">مرحباً</strong>
           <button type="button" class="btn-ghost" id="btnLogout">خروج</button>
         </div>
@@ -61,9 +62,17 @@
             placeholder="ابحث برقم الشاسيه أو جزء منه… مثال 7022 أو JTNB"
             autocomplete="off" spellcheck="false" inputmode="search" />
           <span class="fleet-search-count" id="availableVinSearchCount"></span>
+          <button type="button" class="btn-missing-vin" id="btnMissingVin">
+            في حال عدم وجود السيارة في البحث اضغط هنا
+          </button>
         </div>
         <div class="fleet-companies" id="availableFleet"></div>
-        <p class="ws-empty fleet-search-empty hidden" id="availableVinSearchEmpty">لا توجد نتائج مطابقة للبحث</p>
+        <p class="ws-empty fleet-search-empty hidden" id="availableVinSearchEmpty">
+          لا توجد نتائج مطابقة للبحث
+          <button type="button" class="btn-missing-vin btn-missing-vin--empty" id="btnMissingVinEmpty">
+            في حال عدم وجود السيارة في البحث اضغط هنا
+          </button>
+        </p>
       </section>
 
       <section class="ws-section">
@@ -82,20 +91,20 @@
     <nav class="page-nav no-print">
       <a href="#" class="page-nav-brand" id="brandHome">
         <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'" />
-        <span>مذكرة ترحيل السيارات</span>
+        <span id="navTitle">مذكرة ترحيل السيارات</span>
       </a>
       <button type="button" class="nav-btn primary" id="btnBackWorkspace">← لوحة السيارات</button>
     </nav>
 
     <div class="layout">
       <header class="hero no-print">
-        <h1>مذكرة ترحيل السيارات</h1>
-        <p>من Live Sheet · عبّئ الشركة والفرع · طباعة A4 بنفس نموذج مذكرة الترحيل</p>
+        <h1 id="printHeroTitle">مذكرة ترحيل السيارات</h1>
+        <p id="printHeroHint">اكتب اسم الشركة · الفرع من مدينة الترحيل على Live Sheet · رقم المذكرة تلقائي من 1000</p>
       </header>
 
       <div class="form-col">
         <form id="deliveryForm">
-          <section class="card">
+          <section class="card memo-only-section">
             <h2>بيانات المذكرة — Header</h2>
             <div class="grid grid-4">
               <div>
@@ -103,8 +112,8 @@
                 <input id="doc_date" name="doc_date" type="date" required />
               </div>
               <div>
-                <label for="invoice_number">Invoice Number / رقم الفاتورة</label>
-                <input id="invoice_number" name="invoice_number" type="text" inputmode="numeric" required />
+                <label for="invoice_number">رقم المذكرة / Memo No.</label>
+                <input id="invoice_number" name="invoice_number" type="text" inputmode="numeric" required readonly />
               </div>
               <div>
                 <label for="dep_hour">ساعة الخروج / Hour</label>
@@ -117,13 +126,12 @@
             </div>
           </section>
 
-          <section class="card">
+          <section class="card memo-only-section">
             <h2>بيانات العميل والنقل — Customer &amp; Transport</h2>
             <div class="grid grid-2">
               <div>
-                <label for="company_rep">اسم الشركة / Company</label>
-                <input id="company_rep" name="company_rep" type="text" list="company-list" required autocomplete="off" />
-                <datalist id="company-list"></datalist>
+                <label for="company_rep">اسم الشركة / Company <span class="req">*</span></label>
+                <input id="company_rep" name="company_rep" type="text" required autocomplete="off" placeholder="اكتب اسم الشركة" />
               </div>
               <div>
                 <label for="customer_name">مندوب الشركة / Company Rep</label>
@@ -150,20 +158,61 @@
                 <input id="car_count" name="car_count" type="text" readonly />
               </div>
               <div>
-                <label for="branch_to">محولة إلى فرع / Branch</label>
-                <input id="branch_to" name="branch_to" type="text" list="branch-list" required autocomplete="off" />
+                <label for="branch_to">محولة إلى فرع / Branch <span class="req hidden" id="branchReq">*</span></label>
+                <input id="branch_to" name="branch_to" type="text" required readonly list="branch-list" autocomplete="off" />
                 <datalist id="branch-list"></datalist>
               </div>
               <div style="grid-column:1/-1">
-                <label for="attachments">المرفقات / Attachments</label>
+                <label for="attachments">المرفقات / Attachments <span class="req hidden" id="attachReq">*</span></label>
                 <textarea id="attachments" name="attachments" rows="2"></textarea>
+                <div id="attachmentsManual" class="attach-choices hidden">
+                  <label class="attach-opt">
+                    <input type="radio" name="attach_opt" value="صالة عرض" />
+                    <span>صالة عرض</span>
+                  </label>
+                  <label class="attach-opt">
+                    <input type="radio" name="attach_opt" value="تسليم" />
+                    <span>تسليم</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card warehouse-top-fields hidden" id="warehouseTopFields">
+            <h2>بيانات قائمة فحص التسليم</h2>
+            <p class="hint">هذه الحقول تظهر على نموذج المستودع · الشاسية من البحث</p>
+            <div class="grid grid-2">
+              <div>
+                <label for="wh_owner_name">اسم المالك</label>
+                <input id="wh_owner_name" name="wh_owner_name" type="text" placeholder="اسم المالك" />
+              </div>
+              <div>
+                <label for="wh_user_name">اسم المستخدم</label>
+                <input id="wh_user_name" name="wh_user_name" type="text" placeholder="اسم المستخدم" />
+              </div>
+              <div>
+                <label for="wh_user_phone">هاتف</label>
+                <input id="wh_user_phone" name="wh_user_phone" type="text" placeholder="05xxxxxxxx" />
+              </div>
+              <div>
+                <label for="wh_user_id">رقم الهوية</label>
+                <input id="wh_user_id" name="wh_user_id" type="text" placeholder="رقم الهوية" />
+              </div>
+              <div>
+                <label for="wh_print_date">تاريخ طباعة المستند</label>
+                <input id="wh_print_date" name="wh_print_date" type="date" />
+              </div>
+              <div>
+                <label for="wh_print_time">وقت طباعة المستند</label>
+                <input id="wh_print_time" name="wh_print_time" type="time" step="1" />
               </div>
             </div>
           </section>
 
           <section class="card">
             <h2>جدول السيارات — Vehicles</h2>
-            <p class="hint">الشاسية من Live Sheet · يمكن تعديل اللوحة والملاحظات قبل الطباعة</p>
+            <p class="hint" id="carsHint">الشاسية من Live Sheet · يمكن تعديل اللوحة والملاحظات قبل الطباعة</p>
             <div style="overflow-x:auto;margin-top:10px">
               <table class="cars-table">
                 <thead>
@@ -190,7 +239,7 @@
 
       <aside class="preview-panel">
         <div class="preview-card">
-          <h2 class="no-print">معاينة مذكرة الترحيل</h2>
+          <h2 class="no-print" id="previewTitle">معاينة مذكرة الترحيل</h2>
           <div class="print-sheet" id="printSheet">
             <img id="previewFormImage" src="../images/muthakara-tarhil-form.png" alt="مذكرة ترحيل" />
             <div id="overlayFields" class="overlay-layer"></div>
@@ -203,10 +252,22 @@
     </div>
   </div>
 
+  <div class="vin-modal no-print" id="vinModal" role="dialog" aria-modal="true">
+    <div class="vin-modal-panel">
+      <div class="vin-modal-head">
+        <h3 id="vinModalTitle">التسليم في المستودع — ابحث عن الشاسيه</h3>
+        <input type="search" id="vinModalSearch" placeholder="بحث بالشاسيه أو المنتج أو الطلب…" autocomplete="off" />
+        <button type="button" class="vin-modal-close" id="vinModalClose" aria-label="إغلاق">×</button>
+      </div>
+      <div class="vin-modal-body">
+        <div class="vin-grid" id="vinModalGrid"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="../scripts/muthakara-field-layout.js"></script>
-  <script src="../scripts/muthakara-branch-options.js"></script>
-  <script src="../scripts/muthakara-customer-options.js"></script>
+  <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260923c4"></script>
+  <script src="coordinator.js?v=20260923c10"></script>
 </body>
 </html>

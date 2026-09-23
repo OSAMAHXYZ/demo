@@ -102,6 +102,9 @@ function emptyOps() {
     assignedAt: '',
     updatedBy: '',
     updatedAt: '',
+    coordinatorPrintedAt: '',
+    coordinatorPrintedBy: '',
+    coordinatorPrintKind: '',
   };
 }
 

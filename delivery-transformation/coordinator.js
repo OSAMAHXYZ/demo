@@ -9,6 +9,10 @@
   let rows = [];
   let poll = null;
   let overlayReady = false;
+  let printMode = 'sheet';
+  let transferCities = [];
+  let vinPickerMode = 'open-warehouse';
+  let activeVinRow = null;
   const fieldEls = {};
 
   function showView(name) {
@@ -70,11 +74,12 @@
     const product = r.raw.product || '—';
     const type = r.raw.salesType || '';
     const loc = r.raw.vehicleLocation || r.raw.gtLocation || '';
-    return `<button type="button" class="fleet-card fleet-card--actionable" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(type)}" data-order="${esc(r.raw.salesOrder || '')}" data-customer="${esc(r.raw.userName || '')}" data-phone="${esc(r.raw.phone || '')}">
+    const city = (r.ops && r.ops.transferCity) || '';
+    return `<button type="button" class="fleet-card fleet-card--actionable" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(type)}" data-order="${esc(r.raw.salesOrder || '')}" data-customer="${esc(r.raw.userName || '')}" data-phone="${esc(r.raw.phone || '')}" data-city="${esc(city)}">
       <div class="fc-body">
         <div class="fc-vin">${esc(r.vin)}</div>
         <div class="fc-product">${esc(product)}</div>
-        <div class="fc-meta">${[r.raw.salesOrder ? `طلب ${r.raw.salesOrder}` : '', loc].filter(Boolean).join(' · ') || '—'}</div>
+        <div class="fc-meta">${[r.raw.salesOrder ? `طلب ${r.raw.salesOrder}` : '', city || loc].filter(Boolean).join(' · ') || '—'}</div>
         <span class="fc-badge">${esc(type || 'متاح')}</span>
       </div>
     </button>`;
@@ -100,7 +105,7 @@
     const cards = [...availEl.querySelectorAll('.fleet-card')];
     let visible = 0;
     cards.forEach((card) => {
-      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company, card.dataset.order, card.dataset.customer, card.dataset.phone]
+      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company, card.dataset.order, card.dataset.customer, card.dataset.phone, card.dataset.city]
         .join(' ').toUpperCase().replace(/\s+/g, '');
       const match = !q || hay.includes(q);
       card.classList.toggle('fleet-card--hidden', !match);
@@ -115,6 +120,8 @@
     });
     countEl.textContent = q ? `${visible} نتيجة` : `${cards.length} سيارة`;
     emptyEl.classList.toggle('hidden', visible > 0 || !q);
+    const missingBtn = $('btnMissingVin');
+    if (missingBtn) missingBtn.classList.toggle('is-highlight', Boolean(q) && visible === 0);
     const table = $('coordLiveTable');
     if (table) {
       table.querySelectorAll('tbody tr[data-vin]').forEach((tr) => {
@@ -172,6 +179,7 @@
       ['S/A', (r) => esc(na(r.raw.salesAdvisor))],
       ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
       ['Veh Loc', (r) => esc(na(r.raw.vehicleLocation))],
+      ['مدينة الترحيل', (r) => esc(na(r.ops && r.ops.transferCity))],
     ];
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead>
       <tbody>${list.map((r, i) => `<tr data-vin="${esc(r.vin)}">${cols.map((c) => `<td>${c[1](r, i)}</td>`).join('')}</tr>`).join('')
@@ -264,19 +272,13 @@
     el.className = 'status no-print' + (type ? ` ${type}` : '');
   }
 
-  function fillDatalist(id, options) {
-    const list = $(id);
-    if (!list) return;
-    list.innerHTML = (options || []).map((name) => `<option value="${esc(name)}"></option>`).join('');
-  }
-
   function buildCarRows() {
     const body = $('carsBody');
     body.innerHTML = AR_NUMS.map((n, i) => `
       <tr>
         <td class="row-no">${n}</td>
         <td><input name="car_model_${i}" data-field="model" data-row="${i}" aria-label="Model row ${i + 1}"></td>
-        <td><input name="car_chassis_${i}" data-field="chassis" data-row="${i}" class="chassis-pick vin-ltr" ${i === 0 ? 'readonly' : ''} aria-label="Chassis row ${i + 1}"></td>
+        <td><input name="car_chassis_${i}" data-field="chassis" data-row="${i}" class="chassis-pick vin-ltr" placeholder="${i === 0 ? '' : 'انقر للاختيار'}" aria-label="Chassis row ${i + 1}" readonly></td>
         <td><input name="car_plate_${i}" data-field="plate" data-row="${i}" aria-label="Plate row ${i + 1}"></td>
         <td><input name="car_remarks_${i}" data-field="remarks" data-row="${i}" aria-label="Remarks row ${i + 1}"></td>
       </tr>
@@ -287,6 +289,23 @@
         updatePreview();
       });
     });
+    body.querySelectorAll('.chassis-pick').forEach((el) => {
+      el.addEventListener('click', () => {
+        const row = parseInt(el.dataset.row, 10);
+        if (Number.isNaN(row)) return;
+        if (row === 0 && printMode !== 'manual') return;
+        openAddVinPicker(row);
+      });
+    });
+  }
+
+  function getSelectedVins(exceptRow) {
+    const form = $('deliveryForm');
+    return AR_NUMS.map((_, i) => {
+      if (i === exceptRow) return '';
+      const el = form.querySelector(`[name="car_chassis_${i}"]`);
+      return el && el.value ? el.value.trim().toUpperCase() : '';
+    }).filter(Boolean);
   }
 
   function countFilledChassis() {
@@ -302,10 +321,15 @@
     $('car_count').value = n ? String(n) : '';
   }
 
+  function isWarehouse() {
+    return printMode === 'warehouse';
+  }
+
   function overlayPositionStyle(tag, x, y, w, h) {
     let left = `${x * 100}%`;
     const top = `${y * 100}%`;
-    if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
+    if (/^wh_chassis/.test(tag)) left = `${x * 100}%`;
+    else if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
     if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
     if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
     return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
@@ -313,12 +337,17 @@
 
   function buildOverlay() {
     const overlayFields = $('overlayFields');
-    if (!overlayFields || typeof MUTHAKARA_FIELDS === 'undefined') return;
+    const warehouse = isWarehouse() && typeof CHECK_NOTE_FIELDS !== 'undefined';
+    const layout = warehouse ? CHECK_NOTE_FIELDS : (typeof MUTHAKARA_FIELDS !== 'undefined' ? MUTHAKARA_FIELDS : []);
+    if (!overlayFields || !layout.length) return;
     Object.keys(fieldEls).forEach((k) => { delete fieldEls[k]; });
-    const cover = typeof MEMO_NUMBER_COVER !== 'undefined' ? MEMO_NUMBER_COVER : [0.050, 0.122, 0.146, 0.036];
-    const [cx, cy, cw, ch] = cover;
-    const coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
-    overlayFields.innerHTML = coverHtml + MUTHAKARA_FIELDS.map(([tag, x, y, w, h, align]) => {
+    let coverHtml = '';
+    if (!warehouse) {
+      const cover = typeof MEMO_NUMBER_COVER !== 'undefined' ? MEMO_NUMBER_COVER : [0.050, 0.122, 0.146, 0.036];
+      const [cx, cy, cw, ch] = cover;
+      coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
+    }
+    overlayFields.innerHTML = coverHtml + layout.map(([tag, x, y, w, h, align]) => {
       const dateCls = /^date_[dmy]$/.test(tag) ? ' overlay-field--header-date' : '';
       const invoiceCls = tag === 'invoice_number' ? ' overlay-field--invoice' : '';
       const chassisCls = /chassis/.test(tag) ? ' overlay-field--chassis' : '';
@@ -355,7 +384,66 @@
       car_count: String(filled || fd.get('car_count')?.trim() || ''),
       branch_to: fd.get('branch_to')?.trim() || '',
       attachments: fd.get('attachments')?.trim(),
+      warehouse: {
+        owner_name: fd.get('wh_owner_name')?.trim(),
+        user_name: fd.get('wh_user_name')?.trim(),
+        user_phone: fd.get('wh_user_phone')?.trim(),
+        user_id: fd.get('wh_user_id')?.trim(),
+        print_date: fd.get('wh_print_date')?.trim(),
+        print_time: fd.get('wh_print_time')?.trim(),
+      },
       cars,
+    };
+  }
+
+  function formatWhPrintDate(iso) {
+    const s = String(iso || '').trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
+  }
+
+  function formatWhPrintTime(value) {
+    const raw = String(value || '').trim();
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(raw)) {
+      const parts = raw.split(':');
+      return `${String(parts[0]).padStart(2, '0')}:${String(parts[1]).padStart(2, '0')}:${String(parts[2] || '00').padStart(2, '0')}`;
+    }
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Riyadh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function buildCheckNoteOverlayData(body) {
+    const wh = body.warehouse || {};
+    const vins = [];
+    const seen = new Set();
+    (body.cars || []).forEach((c) => {
+      const vin = String(c && c.chassis || '').trim().toUpperCase();
+      if (!vin || seen.has(vin)) return;
+      seen.add(vin);
+      vins.push(vin);
+    });
+    const owner = wh.owner_name || body.customer_name || '';
+    return {
+      wh_owner_name: owner,
+      wh_user_name: wh.user_name || '',
+      wh_user_phone: wh.user_phone || '',
+      wh_user_id: wh.user_id || '',
+      wh_print_date: formatWhPrintDate(wh.print_date || body.doc_date || ''),
+      wh_print_time: formatWhPrintTime(wh.print_time),
+      wh_chassis: vins[0] || '',
+      wh_chassis_2: vins[1] || '',
+      wh_chassis_3: vins[2] || '',
+      wh_chassis_4: vins[3] || '',
+      wh_chassis_5: vins[4] || (vins.length > 5 ? `+${vins.length - 4} أخرى` : ''),
     };
   }
 
@@ -399,7 +487,8 @@
 
   function updatePreview() {
     if (!overlayReady) buildOverlay();
-    const data = buildFlatData(collectPayload());
+    const payload = collectPayload();
+    const data = isWarehouse() ? buildCheckNoteOverlayData(payload) : buildFlatData(payload);
     Object.keys(fieldEls).forEach((tag) => {
       fieldEls[tag].textContent = data[tag] || '';
     });
@@ -421,6 +510,17 @@
     const minute = timeParts.find((p) => p.type === 'minute')?.value || '';
     $('dep_hour').value = hour === '24' ? '00' : hour;
     $('dep_minute').value = minute;
+    if ($('wh_print_date')) $('wh_print_date').value = today;
+    if ($('wh_print_time')) {
+      const now = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Riyadh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date());
+      $('wh_print_time').value = now;
+    }
     updatePreview();
   }
 
@@ -431,9 +531,15 @@
   }
 
   function validatePrintFields() {
+    if (!countFilledChassis()) {
+      setPrintStatus(isWarehouse() || printMode === 'manual' ? 'أدخل رقم الشاسيه قبل الطباعة' : 'لا يوجد رقم شاسيه للطباعة', 'err');
+      return false;
+    }
+    if (isWarehouse()) return true;
     const company = String($('company_rep').value || '').trim();
     const branch = String($('branch_to').value || '').trim();
     const invoice = String($('invoice_number').value || '').trim();
+    const attach = String($('attachments').value || '').trim();
     if (!invoice) {
       setPrintStatus('أدخل رقم الفاتورة قبل الطباعة', 'err');
       $('invoice_number').focus();
@@ -445,19 +551,41 @@
       return false;
     }
     if (!branch) {
-      setPrintStatus('اختر المدينة / الفرع قبل الطباعة', 'err');
-      $('branch_to').focus();
+      setPrintStatus(
+        printMode === 'manual' ? 'اختر الفرع / المدينة قبل الطباعة' : 'لا توجد مدينة ترحيل على Live Sheet لهذا الشاسيه',
+        'err'
+      );
+      if (printMode === 'manual') $('branch_to').focus();
       return false;
     }
-    if (!countFilledChassis()) {
-      setPrintStatus('لا يوجد رقم شاسيه للطباعة', 'err');
+    if (printMode === 'manual' && attach !== 'صالة عرض' && attach !== 'تسليم') {
+      setPrintStatus('اختر المرفق: صالة عرض أو تسليم', 'err');
       return false;
     }
     return true;
   }
 
-  function doPrintA4() {
+  async function doPrintA4() {
     if (!validatePrintFields()) return;
+    const printedVins = getSelectedVins();
+    if (!isWarehouse()) {
+      try {
+        const issued = await api('/print-invoice', { method: 'POST', json: { vin: printedVins[0] || '' } });
+        fill('invoice_number', String(issued.invoiceNumber));
+      } catch (err) {
+        setPrintStatus(err.message || 'فشل إصدار رقم المذكرة', 'err');
+        return;
+      }
+    }
+    try {
+      await api('/print-complete', {
+        method: 'POST',
+        json: { vins: printedVins, kind: isWarehouse() ? 'warehouse' : 'memo' },
+      });
+    } catch (err) {
+      setPrintStatus(err.message || 'فشل تحديث قائمة المنسق', 'err');
+      return;
+    }
     buildOverlay();
     updatePreview();
     const cleanupPrintCopies = () => {
@@ -479,11 +607,79 @@
     const finish = () => {
       cleanupPrintCopies();
       window.removeEventListener('afterprint', finish);
-      setPrintStatus('تمت الطباعة — ٣ نسخ A4', 'ok');
+      setPrintMode('sheet');
+      resetPrintForm();
+      closeVinModal();
+      const search = $('availableVinSearch');
+      if (search) search.value = '';
+      showView('workspace');
+      loadWorkspace().catch(() => {});
     };
+    const waitImages = Promise.all([...copiesContainer.querySelectorAll('img')].map((img) => (
+      img.complete ? Promise.resolve() : new Promise((done) => {
+        img.onload = () => done();
+        img.onerror = () => done();
+      })
+    )));
     window.addEventListener('afterprint', finish);
-    setPrintStatus('جاري فتح نافذة الطباعة…', 'ok');
-    window.print();
+    setPrintStatus('جاري فتح نافذة الطباعة — ٣ صفحات A4…', 'ok');
+    waitImages.then(() => {
+      requestAnimationFrame(() => window.print());
+    });
+  }
+
+  function fillBranchList() {
+    const list = $('branch-list');
+    if (!list) return;
+    list.innerHTML = transferCities.map((c) => `<option value="${esc(c)}"></option>`).join('');
+  }
+
+  function syncAttachmentChoice() {
+    const picked = document.querySelector('input[name="attach_opt"]:checked');
+    if (printMode === 'manual') fill('attachments', picked ? picked.value : '');
+    updatePreview();
+  }
+
+  function setPrintMode(mode) {
+    printMode = mode === 'manual' || mode === 'warehouse' ? mode : 'sheet';
+    const manual = printMode === 'manual';
+    const warehouse = printMode === 'warehouse';
+    const branch = $('branch_to');
+    const attach = $('attachments');
+    const chassis0 = document.querySelector('[name="car_chassis_0"]');
+    document.body.classList.toggle('warehouse-form-mode', warehouse);
+    $('warehouseTopFields').classList.toggle('hidden', !warehouse);
+    branch.readOnly = !manual;
+    if (manual) branch.removeAttribute('readonly');
+    else branch.setAttribute('readonly', '');
+    $('branchReq').classList.toggle('hidden', !manual);
+    $('attachReq').classList.toggle('hidden', !manual);
+    attach.classList.toggle('hidden', manual);
+    $('attachmentsManual').classList.toggle('hidden', !manual);
+    if (chassis0) chassis0.readOnly = !manual;
+    $('navTitle').textContent = warehouse ? 'التسليم في المستودع' : 'مذكرة ترحيل السيارات';
+    $('printHeroTitle').textContent = warehouse ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل السيارات';
+    $('printHeroHint').textContent = warehouse
+      ? 'نموذج المستودع · ابحث الشاسيه ثم راجع البيانات واطبع'
+      : manual
+        ? 'السيارة غير موجودة في البحث · اكتب الشركة والفرع يدوياً · المرفق صالة عرض أو تسليم'
+        : 'اكتب اسم الشركة · الفرع من مدينة الترحيل على Live Sheet · رقم المذكرة تلقائي من 1000';
+    $('carsHint').textContent = warehouse || !manual
+      ? 'انقر الصف التالي لاختيار سيارات إضافية من Live Sheet فقط'
+      : 'اكتب الشاسية أو انقر الصف التالي لاختيار سيارات من Live Sheet';
+    $('previewTitle').textContent = warehouse ? 'معاينة قائمة فحص التسليم' : 'معاينة مذكرة الترحيل';
+    const img = $('previewFormImage');
+    img.src = warehouse
+      ? '../images/delivery-check-note-form.png'
+      : '../images/muthakara-tarhil-form.png';
+    img.alt = warehouse ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل';
+    $('btnPrint').textContent = warehouse ? '🖨 طباعة قائمة الفحص' : '🖨 طباعة A4';
+    $('btnPrint2').textContent = warehouse ? '🖨 طباعة قائمة الفحص' : '🖨 طباعة A4';
+    if (!manual) {
+      document.querySelectorAll('input[name="attach_opt"]').forEach((el) => { el.checked = false; });
+    }
+    overlayReady = false;
+    buildOverlay();
   }
 
   function resetPrintForm() {
@@ -492,15 +688,17 @@
     setPrintStatus('');
   }
 
-  async function openDetail(vin) {
-    const { vehicle: v } = await api(`/vehicles/${encodeURIComponent(vin)}`);
-    resetPrintForm();
+  async function peekInvoice() {
+    try {
+      const peek = await api('/print-invoice');
+      fill('invoice_number', String(peek.next || 1000));
+    } catch {
+      fill('invoice_number', '1000');
+    }
+  }
+
+  function fillTodayTimes() {
     const today = getSaudiTodayIso();
-    const docDate = toIsoDate(v.raw.proformaDate) || today;
-    fill('doc_date', docDate);
-    fill('invoice_number', v.raw.salesOrder);
-    fill('company_rep', v.raw.invoiceOwner || v.raw.userName);
-    fill('customer_name', v.raw.userName);
     fill('transfer_date', today);
     fill('corresponding_date', today);
     fill('day_name', arabicDayName(today));
@@ -512,9 +710,152 @@
     }).formatToParts(new Date());
     $('dep_hour').value = (timeParts.find((p) => p.type === 'hour')?.value || '').replace('24', '00');
     $('dep_minute').value = timeParts.find((p) => p.type === 'minute')?.value || '';
+    if ($('wh_print_date')) $('wh_print_date').value = today;
+    if ($('wh_print_time')) {
+      $('wh_print_time').value = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Riyadh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date());
+    }
+    return today;
+  }
+
+  function closeVinModal() {
+    $('vinModal').classList.remove('open');
+    activeVinRow = null;
+  }
+
+  function renderVinModal(query) {
+    const q = String(query || '').trim().toUpperCase().replace(/\s+/g, '');
+    const exclude = new Set(vinPickerMode === 'add-row' ? getSelectedVins(activeVinRow) : []);
+    const list = rows.filter((r) => {
+      const vin = String(r.vin || '').toUpperCase();
+      if (exclude.has(vin)) return false;
+      if (!q) return true;
+      const hay = [
+        r.vin,
+        r.raw && r.raw.product,
+        r.raw && r.raw.salesOrder,
+        r.raw && r.raw.userName,
+        r.raw && r.raw.phone,
+      ].join(' ').toUpperCase().replace(/\s+/g, '');
+      return hay.includes(q);
+    });
+    const grid = $('vinModalGrid');
+    if (!list.length) {
+      grid.innerHTML = '<p class="vin-empty">لا توجد شاسيهات من Live Sheet مطابقة</p>';
+      return;
+    }
+    grid.innerHTML = list.map((r) => `
+      <button type="button" class="vin-card" data-vin="${esc(r.vin)}">
+        <div class="vin-no">${esc(r.vin)}</div>
+        <div class="vin-product">${esc(r.raw.product || '—')}</div>
+        <div class="vin-meta">${esc([r.raw.salesOrder, r.raw.userName, r.ops && r.ops.transferCity].filter(Boolean).join(' · ') || '—')}</div>
+      </button>
+    `).join('');
+    grid.querySelectorAll('.vin-card').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (vinPickerMode === 'add-row') {
+          applyPickedVin(btn.dataset.vin);
+          return;
+        }
+        closeVinModal();
+        openWarehouseDetail(btn.dataset.vin).catch((e) => alert(e.message));
+      });
+    });
+  }
+
+  function applyPickedVin(vin) {
+    const row = rows.find((r) => String(r.vin || '').toUpperCase() === String(vin || '').toUpperCase());
+    if (!row || activeVinRow == null) {
+      closeVinModal();
+      return;
+    }
+    const form = $('deliveryForm');
+    const chassis = form.querySelector(`[name="car_chassis_${activeVinRow}"]`);
+    const model = form.querySelector(`[name="car_model_${activeVinRow}"]`);
+    if (chassis) chassis.value = row.vin;
+    if (model) model.value = (row.raw && row.raw.product) || '';
+    closeVinModal();
+    syncCarCount();
+    updatePreview();
+  }
+
+  function openAddVinPicker(rowIndex) {
+    vinPickerMode = 'add-row';
+    activeVinRow = rowIndex;
+    $('vinModalTitle').textContent = 'أضف سيارة من Live Sheet';
+    $('vinModalSearch').value = '';
+    renderVinModal('');
+    $('vinModal').classList.add('open');
+    setTimeout(() => $('vinModalSearch').focus(), 40);
+  }
+
+  function openWarehouseSearch() {
+    vinPickerMode = 'open-warehouse';
+    activeVinRow = null;
+    $('vinModalTitle').textContent = 'التسليم في المستودع — ابحث عن الشاسيه';
+    $('vinModalSearch').value = '';
+    renderVinModal('');
+    $('vinModal').classList.add('open');
+    setTimeout(() => $('vinModalSearch').focus(), 40);
+  }
+
+  async function openWarehouseDetail(vin) {
+    const { vehicle: v } = await api(`/vehicles/${encodeURIComponent(vin)}`);
+    resetPrintForm();
+    setPrintMode('warehouse');
+    fill('doc_date', fillTodayTimes());
+    fill('wh_owner_name', v.raw.invoiceOwner || v.raw.userName);
+    fill('wh_user_name', v.raw.userName);
+    fill('wh_user_phone', v.raw.phone);
+    fill('wh_user_id', '');
     const form = $('deliveryForm');
     form.querySelector('[name="car_model_0"]').value = v.raw.product || '';
     form.querySelector('[name="car_chassis_0"]').value = v.vin || '';
+    form.querySelector('[name="car_chassis_0"]').readOnly = true;
+    syncCarCount();
+    buildOverlay();
+    updatePreview();
+    showView('detail');
+    window.scrollTo(0, 0);
+  }
+
+  async function openManualDetail() {
+    resetPrintForm();
+    setPrintMode('manual');
+    fill('doc_date', fillTodayTimes());
+    fill('company_rep', '');
+    fill('customer_name', '');
+    fill('branch_to', '');
+    fill('attachments', '');
+    await peekInvoice();
+    syncCarCount();
+    if (!overlayReady) buildOverlay();
+    updatePreview();
+    showView('detail');
+    window.scrollTo(0, 0);
+    $('company_rep').focus();
+  }
+
+  async function openDetail(vin) {
+    const { vehicle: v } = await api(`/vehicles/${encodeURIComponent(vin)}`);
+    resetPrintForm();
+    setPrintMode('sheet');
+    const today = fillTodayTimes();
+    const docDate = toIsoDate(v.raw.proformaDate) || today;
+    fill('doc_date', docDate);
+    fill('company_rep', '');
+    fill('customer_name', v.raw.userName);
+    fill('branch_to', (v.ops && v.ops.transferCity) || '');
+    const form = $('deliveryForm');
+    form.querySelector('[name="car_model_0"]').value = v.raw.product || '';
+    form.querySelector('[name="car_chassis_0"]').value = v.vin || '';
+    form.querySelector('[name="car_chassis_0"]').readOnly = true;
+    await peekInvoice();
     syncCarCount();
     if (!overlayReady) buildOverlay();
     updatePreview();
@@ -524,8 +865,6 @@
 
   function bindPrintForm() {
     buildCarRows();
-    fillDatalist('company-list', typeof MUTHAKARA_CUSTOMER_OPTIONS !== 'undefined' ? MUTHAKARA_CUSTOMER_OPTIONS : []);
-    fillDatalist('branch-list', typeof MUTHAKARA_BRANCH_OPTIONS !== 'undefined' ? MUTHAKARA_BRANCH_OPTIONS : []);
     buildOverlay();
     const form = $('deliveryForm');
     form.addEventListener('input', updatePreview);
@@ -534,6 +873,9 @@
     $('doc_date').addEventListener('change', () => {
       if (!$('transfer_date').value) $('transfer_date').value = $('doc_date').value;
       syncDayFromTransferDate();
+    });
+    document.querySelectorAll('input[name="attach_opt"]').forEach((el) => {
+      el.addEventListener('change', syncAttachmentChoice);
     });
     $('btnPrint').addEventListener('click', doPrintA4);
     $('btnPrint2').addEventListener('click', doPrintA4);
@@ -546,6 +888,8 @@
 
   async function boot() {
     const meta = await api('/meta');
+    transferCities = meta.transferCities || [];
+    fillBranchList();
     const users = (meta.users || []).filter((u) => u.role === 'coordinator');
     $('loginUser').innerHTML = '<option value="">— اختر الاسم —</option>'
       + users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
@@ -554,14 +898,28 @@
     $('loginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
     $('btnLogout').addEventListener('click', logout);
     $('btnBackWorkspace').addEventListener('click', () => {
+      setPrintMode('sheet');
       showView('workspace');
       loadWorkspace().catch(() => {});
     });
     $('brandHome').addEventListener('click', (e) => {
       e.preventDefault();
+      setPrintMode('sheet');
       showView('workspace');
     });
     $('availableVinSearch').addEventListener('input', filterFleet);
+    $('btnMissingVin').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
+    $('btnMissingVinEmpty').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
+    $('btnWarehouse').addEventListener('click', () => {
+      if (!rows.length) loadWorkspace().then(openWarehouseSearch).catch((e) => alert(e.message));
+      else openWarehouseSearch();
+    });
+    $('vinModalClose').addEventListener('click', closeVinModal);
+    $('vinModal').addEventListener('click', (e) => { if (e.target === $('vinModal')) closeVinModal(); });
+    $('vinModalSearch').addEventListener('input', () => renderVinModal($('vinModalSearch').value));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('vinModal').classList.contains('open')) closeVinModal();
+    });
     bindPrintForm();
 
     if (getToken() && getUser()) {

@@ -13,6 +13,7 @@ function emptyStore() {
       createdAt: new Date().toISOString(),
       updatedAt: null,
       label: 'delivery-transformation',
+      memoInvoiceNext: 1000,
     },
   };
 }

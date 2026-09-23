@@ -78,12 +78,18 @@ function canEditVehicle(v, viewer) {
   return false;
 }
 
+function isCoordinatorPrinted(v) {
+  return !!(v && v.ops && String(v.ops.coordinatorPrintedAt || '').trim());
+}
+
 function publicVehicle(v, viewer) {
   if (!v) return null;
   const role = viewer && viewer.role;
   const raw = { ...(v.raw || {}) };
-  // Coordinator sees the VIN and its vehicle details, never the employee's ops entry
-  const ops = role === 'coordinator' ? {} : { ...(v.ops || {}) };
+  // Coordinator sees VIN details + transfer city (for print branch). No other employee ops.
+  const ops = role === 'coordinator'
+    ? { transferCity: String((v.ops && v.ops.transferCity) || '').trim() }
+    : { ...(v.ops || {}) };
   return {
     vin: v.vin,
     raw,
@@ -99,6 +105,22 @@ function createDeliveryTransformationRouter(opts = {}) {
   const dataFile = opts.dataFile
     || path.join(opts.root || process.cwd(), 'delivery-transformation-data.json');
   const store = createStore(dataFile);
+
+  function peekMemoInvoice() {
+    const n = Number(store.data.meta && store.data.meta.memoInvoiceNext);
+    return Number.isFinite(n) && n >= 1000 ? Math.floor(n) : 1000;
+  }
+
+  function consumeMemoInvoice() {
+    const n = peekMemoInvoice();
+    if (!store.data.meta || typeof store.data.meta !== 'object') {
+      store.data.meta = { memoInvoiceNext: n + 1 };
+    } else {
+      store.data.meta.memoInvoiceNext = n + 1;
+    }
+    store.save();
+    return n;
+  }
 
   function auth(req, res, next) {
     const token = String(
@@ -138,6 +160,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       today: todayKey(),
       imports: store.data.meta.imports || {},
       pendingAssignments: Object.keys(store.data.meta.pendingAssignments || {}).length,
+      memoInvoiceNext: peekMemoInvoice(),
     });
   });
 
@@ -175,11 +198,67 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
   });
 
+  router.get('/print-invoice', auth, (_req, res) => {
+    res.json({ next: peekMemoInvoice() });
+  });
+
+  router.post('/print-invoice', auth, (req, res) => {
+    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const invoiceNumber = consumeMemoInvoice();
+    store.pushAudit({
+      user: req.dtUser.name,
+      action: 'print_invoice',
+      oldValue: String(invoiceNumber),
+      newValue: String(invoiceNumber + 1),
+      vin: String((req.body && req.body.vin) || ''),
+    });
+    return res.json({
+      ok: true,
+      invoiceNumber,
+      next: peekMemoInvoice(),
+    });
+  });
+
+  router.post('/print-complete', auth, (req, res) => {
+    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const raw = Array.isArray(req.body && req.body.vins)
+      ? req.body.vins
+      : [req.body && req.body.vin];
+    const kind = String((req.body && req.body.kind) || 'memo').trim() || 'memo';
+    const now = new Date().toISOString();
+    const marked = [];
+    raw.forEach((item) => {
+      const v = store.getVehicle(item);
+      if (!v) return;
+      if (!v.ops) v.ops = emptyOps();
+      v.ops.coordinatorPrintedAt = now;
+      v.ops.coordinatorPrintedBy = req.dtUser.name;
+      v.ops.coordinatorPrintKind = kind;
+      marked.push(v.vin);
+      store.pushAudit({
+        vin: v.vin,
+        user: req.dtUser.name,
+        action: 'coordinator_print',
+        oldValue: '',
+        newValue: kind,
+      });
+    });
+    if (marked.length) store.save();
+    return res.json({ ok: true, vins: marked });
+  });
+
   /** Live Sheet — every role can list; edit only admin/employee via PATCH */
   router.get('/live-sheet', auth, (req, res) => {
     const q = String((req.query && req.query.q) || '').trim().toLowerCase();
     const isCoordinator = req.dtUser.role === 'coordinator';
     let list = store.allVehicles();
+    if (isCoordinator) {
+      list = list.filter((v) => !isCoordinatorPrinted(v));
+    }
     if (q) {
       list = list.filter((v) => {
         const hay = [
@@ -188,10 +267,10 @@ function createDeliveryTransformationRouter(opts = {}) {
           v.raw && v.raw.product,
           v.raw && v.raw.salesType,
           v.raw && v.raw.userName,
+          v.ops && v.ops.transferCity,
           ...(isCoordinator ? [] : [
             v.ops && v.ops.opsStatus,
             v.ops && v.ops.carrier,
-            v.ops && v.ops.transferCity,
             v.ops && v.ops.assignedEmployeeName,
           ]),
         ].join(' ').toLowerCase();
@@ -484,6 +563,9 @@ function createDeliveryTransformationRouter(opts = {}) {
   router.get('/vehicles/:vin', auth, (req, res) => {
     const v = store.getVehicle(req.params.vin);
     if (!v) return res.status(404).json({ error: 'VIN not found' });
+    if (req.dtUser.role === 'coordinator' && isCoordinatorPrinted(v)) {
+      return res.status(404).json({ error: 'VIN already printed' });
+    }
     return res.json({ vehicle: publicVehicle(v, req.dtUser) });
   });
 
