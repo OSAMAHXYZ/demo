@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20260923emp10" />
+  <link rel="stylesheet" href="employee.css?v=20260923emp17" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -268,6 +268,20 @@
             <div id="sales-raw-summary" hidden></div>
           </div>
         </section>
+
+        <!-- APPOINTMENT (Ruba · Guest Exp = Yes) -->
+        <section class="panel" id="panel-appointment">
+          <div class="kpi-row" id="appt-kpis"></div>
+          <div class="card">
+            <h2>Appointment</h2>
+            <p class="hint">
+              Every VIN marked <b>Guest Exp = Yes</b> by anyone lands here.
+              Set the date, time, and a short note so you can organize your visits.
+              The countdown is shown to everyone on the Live Sheet.
+            </p>
+            <div id="appt-list" class="appt-list"></div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -277,6 +291,6 @@
   </div>
 
   <script src="shared.js"></script>
-  <script src="employee.js?v=20260923emp14"></script>
+  <script src="employee.js?v=20260923emp17"></script>
 </body>
 </html>

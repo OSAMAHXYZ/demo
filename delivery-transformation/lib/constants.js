@@ -59,7 +59,8 @@ const USERS = Object.freeze([
   { id: 'alfadel', name: 'الفاضل', role: 'coordinator' },
   { id: 'albara', name: 'البراء', role: 'coordinator' },
   // canUploadSalesRaw: may upload Sales Raw (updates vehicle details on every VIN)
-  { id: 'rasha', name: 'Rasha', role: 'employee', canUploadSalesRaw: true },
+  // canEditAnyVin: may edit every Live Sheet VIN, not only assigned ones
+  { id: 'rasha', name: 'Rasha', role: 'employee', canUploadSalesRaw: true, canEditAnyVin: true },
   { id: 'ruba', name: 'Ruba', role: 'employee', canUploadSalesRaw: true },
   { id: 'ibrahim', name: 'Ibrahim', role: 'employee' },
   { id: 'abdullah', name: 'Abdullah', role: 'employee' },
@@ -98,6 +99,9 @@ function emptyOps() {
     carrier: '',
     notes: '',
     guestCenter: '',
+    guestCollectAt: '',
+    guestCollectNote: '',
+    guestCollected: '',
     assignedEmployeeId: '',
     assignedEmployeeName: '',
     assignedBy: '',

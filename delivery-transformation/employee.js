@@ -11,6 +11,10 @@
     myFilters: { q: '', status: '' },
     liveFingerprint: '',
     liveTimer: null,
+    liveInFlight: false,
+    guestTick: null,
+    appointmentOpen: 0,
+    appointmentDue: 0,
     selected: new Set(),
     selInfo: {},
     rowIndex: {},
@@ -36,6 +40,80 @@
 
   function canUploadSalesRaw() {
     return isManager() || !!(state.user && state.user.canUploadSalesRaw);
+  }
+
+  function canEditAnyVin() {
+    return isManager() || !!(state.user && state.user.canEditAnyVin);
+  }
+
+  function isRuba() {
+    return !!(state.user && state.user.id === 'ruba');
+  }
+
+  function canManageAppointments() {
+    return isRuba() || !!(state.user && state.user.canManageAppointments);
+  }
+
+  function isGuestYes(r) {
+    const raw = String((r && r.ops && r.ops.guestCenter) || '').trim().toLowerCase();
+    return raw === 'yes' || raw === 'y';
+  }
+
+  function parseGuestAt(iso) {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? null : t;
+  }
+
+  function formatDuration(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${String(sec).padStart(2, '0')}s`;
+    return `${m}m ${String(sec).padStart(2, '0')}s`;
+  }
+
+  function formatCountdown(iso) {
+    const t = parseGuestAt(iso);
+    if (!t) return { text: 'Set time', due: false };
+    const ms = t - Date.now();
+    if (ms <= 0) return { text: `Due ${formatDuration(Math.abs(ms))} ago`, due: true };
+    return { text: formatDuration(ms), due: false };
+  }
+
+  function splitLocalAt(at) {
+    const m = String(at || '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    return { date: m ? m[1] : '', time: m ? m[2] : '' };
+  }
+
+  function guestTimerHtml(ops) {
+    const at = (ops && ops.guestCollectAt) || '';
+    if (!at) return '<span class="guest-timer" data-guest-timer="">Set time</span>';
+    const c = formatCountdown(at);
+    const when = at.replace('T', ' ').slice(0, 16);
+    return `<span class="guest-timer ${c.due ? 'is-due' : ''}" data-guest-timer="${esc(at)}" title="${esc(when)}">${esc(c.text)}</span>`;
+  }
+
+  function tickGuestTimers() {
+    $$('[data-guest-timer]').forEach((el) => {
+      const at = el.getAttribute('data-guest-timer');
+      if (!at) {
+        el.textContent = 'Set time';
+        el.classList.remove('is-due');
+        return;
+      }
+      const c = formatCountdown(at);
+      el.textContent = c.text;
+      el.classList.toggle('is-due', c.due);
+    });
+  }
+
+  function startGuestTick() {
+    if (state.guestTick) return;
+    state.guestTick = setInterval(tickGuestTimers, 1000);
   }
 
   function formatWhen(iso) {
@@ -188,6 +266,8 @@
         setTimeout(() => { toast.hidden = true; }, 2200);
       }
       setTimeout(() => el.classList.remove('is-saved'), 1200);
+      if (field === 'guestCenter') loadAppointmentBadge().catch(() => {});
+      if (state.view === 'live') loadLiveSheet({ silent: true }).catch(() => {});
     } catch (err) {
       el.classList.remove('is-saving');
       alert(err.message || 'Save failed');
@@ -213,6 +293,12 @@
         { id: 'upload', label: 'Upload VINs' },
       ] : []),
       ...(canUploadSalesRaw() ? [{ id: 'sales-raw', label: 'Sales Raw' }] : []),
+      ...(isRuba() ? [{
+        id: 'appointment',
+        label: (state.appointmentOpen || state.appointmentDue)
+          ? `Appointment (${(state.appointmentOpen || 0) + (state.appointmentDue || 0)})`
+          : 'Appointment',
+      }] : []),
     ];
   }
 
@@ -232,12 +318,33 @@
     $('#side-role').textContent = state.user.role;
   }
 
-  function setView(view) {
-    state.view = view;
+  function stopLivePoll() {
     if (state.liveTimer) {
       clearInterval(state.liveTimer);
       state.liveTimer = null;
     }
+  }
+
+  function startLivePoll() {
+    stopLivePoll();
+    const ms = (state.view === 'live' || state.view === 'appointment') ? 1200 : 2000;
+    state.liveTimer = setInterval(() => {
+      if (document.hidden || state.liveInFlight) return;
+      refreshViewSilent().catch(() => {});
+    }, ms);
+  }
+
+  function refreshViewSilent() {
+    if (state.view === 'live') return loadLiveSheet({ silent: true });
+    if (state.view === 'dashboard') return loadDashboard();
+    if (state.view === 'my') return loadMy();
+    if (state.view === 'appointment') return loadAppointments({ silent: true });
+    return Promise.resolve();
+  }
+
+  function setView(view) {
+    state.view = view;
+    stopLivePoll();
     $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${view}`));
     renderNav();
     const titles = {
@@ -250,14 +357,13 @@
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
       upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
       'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · everyone sees the update time'],
+      appointment: ['Appointment', 'Guest Exp = Yes · set date, time, and a timer for everyone'],
     };
     const t = titles[view] || ['Delivery Transformation', ''];
     $('#page-title').textContent = t[0];
     $('#page-sub').textContent = t[1];
     refreshView();
-    if (view === 'live') {
-      state.liveTimer = setInterval(() => loadLiveSheet({ silent: true }).catch(() => {}), 5000);
-    }
+    startLivePoll();
   }
 
   async function refreshView() {
@@ -268,6 +374,7 @@
       if (state.view === 'targets') await loadTargets();
       if (state.view === 'assignment') await loadAssignment();
       if (state.view === 'upload' || state.view === 'sales-raw') await loadImportPanels();
+      if (state.view === 'appointment') await loadAppointments();
     } catch (err) {
       console.error(err);
       alert(err.message || 'Failed to load');
@@ -809,11 +916,24 @@
   }
 
   // ——— Live Sheet ———
+  function liveFingerprint(rows) {
+    return JSON.stringify((rows || []).map((r) => [r.vin, r.canEdit, r.raw, r.ops]));
+  }
+
   async function loadLiveSheet({ silent = false } = {}) {
+    if (silent && state.liveInFlight) return;
+    state.liveInFlight = true;
     const f = state.liveFilters;
-    const data = await fetchLive(f);
+    let data;
+    try {
+      data = await fetchLive(f);
+    } catch (err) {
+      state.liveInFlight = false;
+      throw err;
+    }
+    state.liveInFlight = false;
     const rows = data.rows || [];
-    const fingerprint = JSON.stringify(rows.map((r) => [r.vin, r.ops.updatedAt, r.ops.assignedEmployeeId]));
+    const fingerprint = liveFingerprint(rows);
     const changed = fingerprint !== state.liveFingerprint;
     state.liveFingerprint = fingerprint;
 
@@ -914,6 +1034,7 @@
         ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A') },
       { key: 'sa', label: 'S/A', html: (r) => esc(na(r.raw.salesAdvisor)) },
       { key: 'guest', label: 'Guest Exp', html: (r) => cell(r, 'guestCenter', 'yn') },
+      { key: 'appt', label: 'Appointment', html: (r) => (isGuestYes(r) ? guestTimerHtml(r.ops) : '—') },
       { key: 'gt', label: 'GT Loc', html: (r) => esc(na(r.raw.gtLocation)) },
       { key: 'veh', label: 'Veh Loc', html: (r) => esc(na(r.raw.vehicleLocation)) },
       { key: 'guestsent', label: 'إرسال الضيف', html: (r) => cell(r, 'guestSentDate', 'date') },
@@ -934,7 +1055,7 @@
 
     const shown = state.liveOnlySelected ? rows.filter((r) => state.selected.has(r.vin)) : rows;
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr></thead>
-      <tbody>${shown.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
+      <tbody>${shown.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${isGuestYes(r) ? ' row-guest-exp' : ''}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
         `<td class="col-${c.key}">${c.html(r, i)}</td>`).join('')}</tr>`).join('')
         || `<tr><td colspan="${cols.length}">${state.liveOnlySelected ? 'None of the selected VINs match these filters.' : 'No VINs on the Live Sheet yet.'}</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
@@ -977,6 +1098,7 @@
       ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
       ['Veh Loc', (r) => esc(na(r.raw.vehicleLocation))],
       ['Guest Exp', (r) => editableControl(r.vin, 'guestCenter', 'yn', r.ops.guestCenter)],
+      ['Appointment', (r) => (isGuestYes(r) ? guestTimerHtml(r.ops) : '—')],
       ['Status', (r) => editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)],
       ['إرسال الضيف', (r) => editableControl(r.vin, 'guestSentDate', 'date', r.ops.guestSentDate)],
       ['استلام التواقيع', (r) => editableControl(r.vin, 'signatureReceivedDate', 'date', r.ops.signatureReceivedDate)],
@@ -1036,6 +1158,103 @@
     renderSelBars();
   }
 
+  // ——— Appointment (Ruba · Guest Exp = Yes) ———
+  async function loadAppointmentBadge() {
+    if (!isRuba()) return;
+    try {
+      const data = await api('/appointments');
+      state.appointmentOpen = data.open || 0;
+      state.appointmentDue = data.due || 0;
+      renderNav();
+    } catch {
+      /* keep last badge */
+    }
+  }
+
+  async function loadAppointments({ silent = false } = {}) {
+    const data = await api('/appointments');
+    state.appointmentOpen = data.open || 0;
+    state.appointmentDue = data.due || 0;
+    renderNav();
+    const kpis = $('#appt-kpis');
+    if (kpis) {
+      kpis.innerHTML = [
+        ['Guest Exp Yes', data.total || 0, ''],
+        ['Need time', data.open || 0, 'warn'],
+        ['Due now', data.due || 0, 'bad'],
+      ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
+    }
+    const host = $('#appt-list');
+    if (!host) return;
+    const active = document.activeElement;
+    if (silent && active && host.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'BUTTON')) {
+      tickGuestTimers();
+      return;
+    }
+    const rows = data.rows || [];
+    if (!rows.length) {
+      host.innerHTML = '<p class="appt-empty">No Guest Exp cars yet. When anyone marks Guest Exp = Yes, the VIN appears here so you can set the appointment.</p>';
+      return;
+    }
+    host.innerHTML = rows.map((r) => {
+      const at = (r.ops && r.ops.guestCollectAt) || '';
+      const due = !!(parseGuestAt(at) && parseGuestAt(at) <= Date.now());
+      const parts = splitLocalAt(at);
+      const note = (r.ops && r.ops.guestCollectNote) || '';
+      return `<article class="appt-card ${at ? '' : 'is-open'} ${due ? 'is-due' : ''}" data-vin="${esc(r.vin)}">
+        <div class="appt-head">
+          <div class="appt-vin">
+            <button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>
+            <span class="guest-badge">Guest Exp</span>
+            ${statusBadge(r.ops && r.ops.opsStatus)}
+          </div>
+          ${guestTimerHtml(r.ops)}
+        </div>
+        <div class="appt-meta">
+          <span>${esc(na(r.raw.userName))}</span>
+          <span>${esc(na(r.raw.product))}</span>
+          <span>${esc(na(r.ops.assignedEmployeeName))}</span>
+          ${r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : ''}
+        </div>
+        <form class="appt-form" data-vin="${esc(r.vin)}">
+          <label>Date <input type="date" name="date" required value="${esc(parts.date)}" /></label>
+          <label>Time <input type="time" name="time" required value="${esc(parts.time)}" /></label>
+          <label class="grow">Note <input type="text" name="note" value="${esc(note)}" placeholder="Visit note…" /></label>
+          <button type="submit" class="btn-primary" style="width:auto">Save appointment</button>
+        </form>
+      </article>`;
+    }).join('');
+    $$('.vin-link', host).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+    $$('.appt-form', host).forEach((form) => form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveAppointment(form).catch((err) => alert(err.message || 'Could not save appointment'));
+    }));
+  }
+
+  async function saveAppointment(form) {
+    const vin = form.dataset.vin;
+    const date = form.querySelector('[name="date"]').value;
+    const time = form.querySelector('[name="time"]').value;
+    const note = form.querySelector('[name="note"]').value;
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+    }
+    try {
+      await api(`/vehicles/${encodeURIComponent(vin)}/appointment`, {
+        method: 'POST',
+        json: { date, time, note },
+      });
+      await loadAppointments();
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save appointment';
+      }
+    }
+  }
+
   // ——— VIN drawer ———
   function buildDrawerHtml(v, readOnly) {
     const statuses = state.meta.statuses || [];
@@ -1087,6 +1306,7 @@
           <div id="save-line" class="save-toast" hidden>Saved ✓</div>
           ${dt('guestSentDate', 'تاريخ إرسال الضيف', v.ops.guestSentDate)}
           ${sel('guestCenter', 'Guest Exp', ['Yes', 'No'], v.ops.guestCenter, '—')}
+          ${isGuestYes(v) ? `<div class="field"><label>Appointment</label><div>${guestTimerHtml(v.ops)}${v.ops.guestCollectNote ? ` <span class="hint">${esc(v.ops.guestCollectNote)}</span>` : ''}</div></div>` : ''}
           ${dt('signatureReceivedDate', 'تاريخ استلام التواقيع من الضيف', v.ops.signatureReceivedDate)}
           ${dt('accountsSentDate', 'تاريخ إرسال الملف للحسابات', v.ops.accountsSentDate)}
           ${dt('accountsApprovalDate', 'تاريخ موافقة الحسابات', v.ops.accountsApprovalDate)}
@@ -1154,9 +1374,11 @@
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     loadSelection();
-    if (isManager()) {
+    startGuestTick();
+    if (canEditAnyVin()) {
       $('#live-edit-hint').textContent = `${state.user.name} can edit every VIN directly on this sheet.`;
     }
+    loadAppointmentBadge().catch(() => {});
     setView('dashboard');
   }
 
@@ -1212,6 +1434,16 @@
   }
 
   // ——— Events ———
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.user && $('#app').classList.contains('is-on')) {
+      refreshViewSilent().catch(() => {});
+    }
+  });
+  window.addEventListener('focus', () => {
+    if (state.user && $('#app').classList.contains('is-on')) {
+      refreshViewSilent().catch(() => {});
+    }
+  });
   $('#login-btn').addEventListener('click', login);
   $('#login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('#logout-btn').addEventListener('click', logout);

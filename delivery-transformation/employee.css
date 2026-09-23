@@ -2154,6 +2154,75 @@ table.live-sheet tr.row-guest-exp td.col-vin {
   box-shadow: inset 3px 0 0 #7c3aed;
 }
 
+.appt-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.appt-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.appt-card.is-open {
+  border-color: #c4b5fd;
+  box-shadow: inset 3px 0 0 #7c3aed;
+}
+.appt-card.is-due {
+  border-color: #fecaca;
+  box-shadow: inset 3px 0 0 #dc2626;
+}
+.appt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.appt-vin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.appt-meta {
+  margin-top: 8px;
+  color: var(--muted, #64748b);
+  font-size: 0.82rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.appt-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+.appt-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted, #64748b);
+}
+.appt-form input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 10px;
+  font: inherit;
+}
+.appt-form .grow { flex: 1 1 180px; }
+.appt-empty {
+  padding: 28px 8px;
+  text-align: center;
+  color: var(--muted, #64748b);
+}
+
 /* My VINs / All: table uses more of the page */
 #panel-my.active .table-wrap,
 #panel-all.active .table-wrap,

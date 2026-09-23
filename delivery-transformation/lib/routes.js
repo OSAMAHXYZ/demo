@@ -45,6 +45,35 @@ function canUploadSalesRaw(sessionUser) {
   return !!(u && u.canUploadSalesRaw);
 }
 
+function canEditAnyVin(sessionUser) {
+  if (!sessionUser) return false;
+  if (isManager(sessionUser.role)) return true;
+  const u = USERS.find((x) => x.id === sessionUser.userId || x.id === sessionUser.id);
+  return !!(u && u.canEditAnyVin);
+}
+
+function canManageAppointments(sessionUser) {
+  if (!sessionUser) return false;
+  if (isManager(sessionUser.role)) return true;
+  return sessionUser.userId === 'ruba' || sessionUser.id === 'ruba';
+}
+
+function isGuestYes(v) {
+  const raw = String((v && v.ops && v.ops.guestCenter) || '').trim().toLowerCase();
+  return raw === 'yes' || raw === 'y';
+}
+
+function parseAppointmentDateTime(date, time) {
+  const d = String(date || '').trim();
+  const t = String(time || '').trim();
+  const dm = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!dm || !tm) throw new Error('Set appointment date and time');
+  const hh = String(Math.min(23, Number(tm[1]))).padStart(2, '0');
+  const mm = String(Math.min(59, Number(tm[2]))).padStart(2, '0');
+  return `${d}T${hh}:${mm}:00`;
+}
+
 /** Current month in Riyadh (UTC+3), e.g. "2026-09". */
 function currentMonthKey() {
   return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
@@ -74,7 +103,7 @@ function findEmployeeByPic(pic) {
 
 function canEditVehicle(v, viewer) {
   const role = viewer && viewer.role;
-  if (isManager(role)) return true;
+  if (isManager(role) || canEditAnyVin(viewer)) return true;
   if (role === 'employee') return !!(v && v.ops && v.ops.assignedEmployeeId === viewer.userId);
   return false;
 }
@@ -359,6 +388,8 @@ function createDeliveryTransformationRouter(opts = {}) {
         name: user.name,
         role: user.role,
         canUploadSalesRaw: canUploadSalesRaw({ userId: user.id, role: user.role }),
+        canEditAnyVin: canEditAnyVin({ userId: user.id, role: user.role }),
+        canManageAppointments: canManageAppointments({ userId: user.id, role: user.role }),
       },
     });
   });
@@ -375,6 +406,8 @@ function createDeliveryTransformationRouter(opts = {}) {
         name: req.dtUser.name,
         role: req.dtUser.role,
         canUploadSalesRaw: canUploadSalesRaw(req.dtUser),
+        canEditAnyVin: canEditAnyVin(req.dtUser),
+        canManageAppointments: canManageAppointments(req.dtUser),
       },
     });
   });
@@ -439,6 +472,8 @@ function createDeliveryTransformationRouter(opts = {}) {
         v.ops.coordinatorPrintCity = printCity || String((v.ops.transferCity || '')).trim();
         if (printCompany) v.ops.carrier = printCompany;
       }
+      v.ops.updatedAt = now;
+      v.ops.updatedBy = req.dtUser.name;
       marked.push(v.vin);
       store.pushAudit({
         vin: v.vin,
@@ -762,6 +797,62 @@ function createDeliveryTransformationRouter(opts = {}) {
     }
   );
 
+  router.get('/appointments', auth, (req, res) => {
+    if (!canManageAppointments(req.dtUser)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const now = Date.now();
+    const rows = store.allVehicles()
+      .filter((v) => isGuestYes(v))
+      .map((v) => publicVehicle(v, req.dtUser))
+      .sort((a, b) => {
+        const rawA = String((a.ops && a.ops.guestCollectAt) || '').trim();
+        const rawB = String((b.ops && b.ops.guestCollectAt) || '').trim();
+        if (!rawA && rawB) return -1;
+        if (rawA && !rawB) return 1;
+        return (Date.parse(rawA) || 0) - (Date.parse(rawB) || 0);
+      });
+    const open = rows.filter((r) => !String((r.ops && r.ops.guestCollectAt) || '').trim()).length;
+    const due = rows.filter((r) => {
+      const at = Date.parse((r.ops && r.ops.guestCollectAt) || '');
+      return at && at <= now && String((r.ops && r.ops.guestCollected) || '') !== 'Yes';
+    }).length;
+    return res.json({ rows, open, due, total: rows.length });
+  });
+
+  router.post('/vehicles/:vin/appointment', auth, (req, res) => {
+    if (!canManageAppointments(req.dtUser)) {
+      return res.status(403).json({ error: 'Only Ruba can set appointments' });
+    }
+    const v = store.getVehicle(req.params.vin);
+    if (!v) return res.status(404).json({ error: 'VIN not found' });
+    if (!v.ops) v.ops = emptyOps();
+    if (!isGuestYes(v)) {
+      return res.status(400).json({ error: 'Guest Exp must be Yes before setting an appointment' });
+    }
+    try {
+      const at = parseAppointmentDateTime(req.body && req.body.date, req.body && req.body.time);
+      const old = v.ops.guestCollectAt || '';
+      v.ops.guestCollectAt = at;
+      v.ops.guestCollected = '';
+      v.ops.guestCollectNote = String((req.body && req.body.note) || '').trim();
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = new Date().toISOString();
+      store.upsertVehicle(v.vin, v);
+      store.pushAudit({
+        vin: v.vin,
+        user: req.dtUser.name,
+        action: old ? 'appointment_reschedule' : 'appointment_set',
+        oldValue: old || '(empty)',
+        newValue: at,
+      });
+      store.save();
+      return res.json({ ok: true, vehicle: publicVehicle(v, req.dtUser) });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not save appointment' });
+    }
+  });
+
   router.get('/vehicles/:vin', auth, (req, res) => {
     const v = store.getVehicle(req.params.vin);
     if (!v) return res.status(404).json({ error: 'VIN not found' });
@@ -878,9 +969,21 @@ function createDeliveryTransformationRouter(opts = {}) {
     for (const f of [
       'guestSentDate', 'signatureReceivedDate', 'accountsSentDate',
       'accountsApprovalDate', 'registrationIssueDate', 'transferCity',
-      'notes', 'guestCenter',
+      'notes',
     ]) {
       if (Object.prototype.hasOwnProperty.call(body, f)) setOps(f, body[f]);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'guestCenter')) {
+      const s = String(body.guestCenter || '').trim();
+      if (s && !YES_NO.includes(s)) {
+        return res.status(400).json({ error: 'Guest Exp must be Yes/No' });
+      }
+      setOps('guestCenter', s);
+      if (s !== 'Yes') {
+        setOps('guestCollectAt', '');
+        setOps('guestCollectNote', '');
+        setOps('guestCollected', '');
+      }
     }
     for (const f of ['vin1502', 'trafficFile', 'trafficFeesOps', 'insuranceOps']) {
       if (Object.prototype.hasOwnProperty.call(body, f)) {
