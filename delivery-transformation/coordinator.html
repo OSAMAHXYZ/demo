@@ -3,118 +3,169 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Delivery Transformation — منسق التسليم</title>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-  <style>
-    .vin-grid {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-    }
-    .vin-card {
-      text-align: right;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: #fff;
-      padding: 12px;
-      display: grid;
-      gap: 4px;
-    }
-    .vin-card:hover { border-color: var(--red); }
-    .vin-card b { font-family: "Manrope", monospace; letter-spacing: .03em; direction: ltr; text-align: right; }
-    .vin-card span { color: var(--muted); font-size: .78rem; }
-  </style>
+  <title>منسق التسليم — Delivery Transformation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
+  <link rel="stylesheet" href="coordinator.css?v=20260923c1" />
 </head>
-<body>
-  <header class="topnav">
-    <div class="brand">
-      <div class="brand-mark">T</div>
-      <div><strong>TOYOTA</strong><span>Delivery Transformation · منسق التسليم</span></div>
-    </div>
-    <nav class="nav-links" id="admin-links" hidden>
-      <a href="admin.html">Admin</a>
-      <a href="coordinator.html" class="active">Coordinator view</a>
-      <a href="employee.html">Employee view</a>
-    </nav>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span id="who" class="badge">—</span>
-      <button type="button" class="btn-ghost" id="logout-btn">خروج</button>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="hero">
-      <h1>أرقام الشاسيه — Live Sheet</h1>
-      <p>عرض فقط: رقم الشاسيه وتفاصيل السيارة. لا تظهر إدخالات موظف التسليم ولا يمكن التعديل.</p>
-    </section>
-
-    <div class="kpi-row" id="kpis"></div>
-
-    <div class="card">
-      <div class="toolbar">
-        <input type="search" id="search" placeholder="ابحث برقم الشاسيه / الطلب / الموديل…" />
-        <button type="button" class="btn" id="view-toggle">عرض كجدول</button>
-        <button type="button" class="btn" id="refresh-btn">تحديث</button>
-        <span class="hint" id="live-meta"></span>
+<body class="user-ui">
+  <div id="gateLogin">
+    <div class="gate-card">
+      <div class="gate-eyebrow">Coordinator · Live Sheet</div>
+      <h2>منسق التسليم</h2>
+      <p class="gate-lead">اختر اسمك · افتح الشاسيه من Live Sheet · تفاصيل السيارة فقط — بدون إدخالات الموظف</p>
+      <div class="gate-user">
+        <div>
+          <label for="loginUser">اسم المستخدم</label>
+          <select id="loginUser" required></select>
+        </div>
+        <div>
+          <label for="loginPass">كلمة المرور</label>
+          <input id="loginPass" type="password" value="1234" autocomplete="current-password" />
+        </div>
+        <button type="button" class="btn btn-primary" id="btnLogin">دخول</button>
+        <p class="ws-toast" id="loginStatus"></p>
       </div>
-      <div class="vin-grid" id="vin-grid"></div>
-      <div class="table-wrap hidden" id="table-wrap"><table class="data" id="live-table"></table></div>
     </div>
-  </main>
+  </div>
+
+  <div id="agentWorkspace" class="hidden">
+    <div class="ws-shell">
+      <div class="ws-topbar">
+        <div class="ws-brand">
+          <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'" />
+          <div>
+            <h1>لوحة الترحيل <span class="live-pill" id="livePill" title="Live">● Live</span></h1>
+            <p>Live Sheet · انقر الشاسيه لعرض التفاصيل · بدون إدخالات موظف التسليم</p>
+          </div>
+        </div>
+        <div class="ws-user-pill">
+          <a href="index.html" class="btn-ghost">المركز</a>
+          <a href="admin.html" class="btn-ghost" id="adminLink" hidden>الإدارة</a>
+          <a href="employee.html" class="btn-ghost" id="empLink" hidden>الموظف</a>
+          <strong id="loggedAs">مرحباً</strong>
+          <button type="button" class="btn-ghost" id="btnLogout">خروج</button>
+        </div>
+      </div>
+
+      <div class="ws-stats" id="wsStats"></div>
+
+      <section class="ws-section">
+        <div class="ws-section-head">
+          <h2>حسب نوع البيع — VINs على Live Sheet</h2>
+          <span class="hint">كل الأنواع ظاهرة · ابحث بأي جزء من رقم الشاسيه · انقر للتفاصيل</span>
+        </div>
+        <div class="fleet-search-wrap">
+          <input type="search" id="availableVinSearch" class="fleet-search"
+            placeholder="ابحث برقم الشاسيه أو جزء منه… مثال 7022 أو JTNB"
+            autocomplete="off" spellcheck="false" inputmode="search" />
+          <span class="fleet-search-count" id="availableVinSearchCount"></span>
+        </div>
+        <div class="fleet-companies" id="availableFleet"></div>
+        <p class="ws-empty fleet-search-empty hidden" id="availableVinSearchEmpty">لا توجد نتائج مطابقة للبحث</p>
+      </section>
+    </div>
+  </div>
+
+  <div id="mainApp" class="hidden">
+    <nav class="page-nav">
+      <a href="#" class="page-nav-brand" id="brandHome">
+        <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'" />
+        <span>تفاصيل السيارة — منسق التسليم</span>
+      </a>
+      <button type="button" class="nav-btn primary" id="btnBackWorkspace">← لوحة السيارات</button>
+    </nav>
+
+    <div class="layout">
+      <header class="hero">
+        <h1>تفاصيل السيارة</h1>
+        <p>عرض فقط من Live Sheet — رقم الشاسيه وبيانات السيارة والعميل. إدخالات موظف التسليم غير ظاهرة.</p>
+      </header>
+
+      <div class="form-col">
+        <div class="readonly-note">عرض فقط · لا يمكن التعديل أو الطباعة من هنا</div>
+        <section class="card">
+          <h2>بيانات المذكرة — Header</h2>
+          <div class="grid grid-4">
+            <div>
+              <label>تاريخ البروفورما / Proforma</label>
+              <input id="doc_date" readonly />
+            </div>
+            <div>
+              <label>رقم الطلب / Sales Order</label>
+              <input id="invoice_number" readonly />
+            </div>
+            <div>
+              <label>نوع البيع / Sales Type</label>
+              <input id="sales_type" readonly />
+            </div>
+            <div>
+              <label>المستشار / S/A</label>
+              <input id="sales_advisor" readonly />
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>بيانات العميل والنقل — Customer &amp; Transport</h2>
+          <div class="grid grid-2">
+            <div>
+              <label>مالك الفاتورة / Invoice Owner</label>
+              <input id="company_rep" readonly />
+            </div>
+            <div>
+              <label>اسم العميل / Customer</label>
+              <input id="customer_name" readonly />
+            </div>
+            <div>
+              <label>الهاتف / Phone</label>
+              <input id="phone" readonly />
+            </div>
+            <div>
+              <label>موقع GT / GT Location</label>
+              <input id="gt_location" readonly />
+            </div>
+            <div>
+              <label>موقع المركبة / Vehicle Location</label>
+              <input id="vehicle_location" readonly />
+            </div>
+            <div>
+              <label>تاريخ الفاتورة / Invoice Date</label>
+              <input id="invoice_date" readonly />
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>جدول السيارات — Vehicles</h2>
+          <div style="overflow-x:auto;margin-top:10px">
+            <table class="cars-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>الموديل / Model</th>
+                  <th>الشاسية / Chassis</th>
+                  <th>الطلب / Order</th>
+                  <th>النوع / Type</th>
+                </tr>
+              </thead>
+              <tbody id="carsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <aside class="preview-panel">
+        <div class="preview-card">
+          <h2>معاينة التفاصيل</h2>
+          <div id="previewRows"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
 
   <script src="shared.js"></script>
-  <script src="live.js"></script>
-  <script>
-    (async function () {
-      const { api, esc, na, requireRole } = DTX;
-      const user = requireRole(['coordinator', 'admin']);
-      if (!user) return;
-      if (user.role === 'admin') document.getElementById('admin-links').hidden = false;
-      DTXLive.wireHeader(user);
-      await DTXLive.loadMeta();
-
-      let asTable = false;
-      const open = (vin) => DTXLive.openDrawer(vin, { mode: 'coordinator' });
-
-      async function load() {
-        const q = document.getElementById('search').value.trim();
-        const live = await api(`/live-sheet${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-        const rows = live.rows || [];
-        document.getElementById('kpis').innerHTML =
-          `<div class="kpi"><strong>${live.total}</strong><span>شاسيه على Live Sheet</span></div>`;
-        document.getElementById('live-meta').textContent =
-          `آخر تحديث ${new Date(live.at).toLocaleTimeString()}`;
-
-        document.getElementById('vin-grid').innerHTML = rows.map((r) => `
-          <button type="button" class="vin-card" data-vin="${esc(r.vin)}">
-            <b>${esc(r.vin)}</b>
-            <span>${esc(na(r.raw.product))} · ${esc(na(r.raw.salesType))}</span>
-            <span>طلب ${esc(na(r.raw.salesOrder))} · ${esc(na(r.raw.vehicleLocation))}</span>
-          </button>`).join('') || '<span class="hint">لا توجد شاسيهات</span>';
-        document.querySelectorAll('.vin-card').forEach((b) => b.addEventListener('click', () => open(b.dataset.vin)));
-
-        DTXLive.renderTable(document.getElementById('live-table'), rows, { mode: 'coordinator', onOpen: open });
-      }
-
-      document.getElementById('view-toggle').addEventListener('click', (e) => {
-        asTable = !asTable;
-        document.getElementById('vin-grid').classList.toggle('hidden', asTable);
-        document.getElementById('table-wrap').classList.toggle('hidden', !asTable);
-        e.target.textContent = asTable ? 'عرض كبطاقات' : 'عرض كجدول';
-      });
-      let t;
-      document.getElementById('search').addEventListener('input', () => {
-        clearTimeout(t);
-        t = setTimeout(load, 250);
-      });
-      document.getElementById('refresh-btn').addEventListener('click', load);
-      setInterval(() => {
-        if (document.getElementById('vin-drawer-back')?.classList.contains('open')) return;
-        load().catch(() => {});
-      }, 15000);
-      load().catch((e) => alert(e.message));
-    })();
-  </script>
+  <script src="coordinator.js?v=20260923c1"></script>
 </body>
 </html>
