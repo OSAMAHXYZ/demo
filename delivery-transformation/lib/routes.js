@@ -2,6 +2,7 @@
 
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const {
   STATUSES,
   YES_NO,
@@ -145,6 +146,41 @@ function createDeliveryTransformationRouter(opts = {}) {
       return next();
     };
   }
+
+  function normalizePhone(value) {
+    const ar = '٠١٢٣٤٥٦٧٨٩';
+    return String(value || '')
+      .trim()
+      .replace(/[٠-٩]/g, (d) => String(ar.indexOf(d)))
+      .replace(/[^\d+]/g, '');
+  }
+
+  router.post('/attendance', (req, res) => {
+    const name = String((req.body && req.body.name) || '').trim();
+    const company = String((req.body && req.body.company) || '').trim();
+    const phone = normalizePhone(req.body && req.body.phone);
+    if (name.length < 2) {
+      return res.status(400).json({ error: 'أدخل الاسم' });
+    }
+    if (!CARRIERS.includes(company)) {
+      return res.status(400).json({ error: 'اختر الشركة من القائمة' });
+    }
+    if (phone.replace(/\D/g, '').length < 9) {
+      return res.status(400).json({ error: 'أدخل رقم جوال صحيح' });
+    }
+    if (!Array.isArray(store.data.attendance)) store.data.attendance = [];
+    const entry = {
+      id: `att_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+      at: new Date().toISOString(),
+      name,
+      company,
+      phone,
+    };
+    store.data.attendance.unshift(entry);
+    if (store.data.attendance.length > 5000) store.data.attendance.length = 5000;
+    store.save();
+    return res.json({ ok: true, entry });
+  });
 
   router.get('/meta', (_req, res) => {
     res.json({

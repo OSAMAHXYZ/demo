@@ -9,6 +9,7 @@ function emptyStore() {
   return {
     vehicles: {},
     audit: [],
+    attendance: [],
     meta: {
       createdAt: new Date().toISOString(),
       updatedAt: null,
@@ -34,6 +35,7 @@ function createStore(filePath) {
       data = {
         vehicles: raw.vehicles && typeof raw.vehicles === 'object' ? raw.vehicles : {},
         audit: Array.isArray(raw.audit) ? raw.audit : [],
+        attendance: Array.isArray(raw.attendance) ? raw.attendance : [],
         meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : emptyStore().meta,
       };
       if (!Object.keys(data.vehicles).length) {
