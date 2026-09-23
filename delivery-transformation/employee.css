@@ -1477,16 +1477,27 @@ select.cell-edit { cursor: pointer; }
 table.live-sheet tr.selected td.col-num { box-shadow: inset 4px 0 0 var(--red) !important; }
 
 /* ——— Assignment ——— */
-#asg-table td.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
-#asg-table tr.asg-missing td { background: #fff1f2; }
-#asg-table tr.asg-missing .asg-emp { border-color: var(--red); }
-#asg-table .asg-emp {
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font: inherit;
-  min-width: 130px;
+.asg-vin-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 8px;
 }
+.asg-vin {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--navy);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.asg-vin:hover { border-color: var(--navy); }
+.asg-vin.selected { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.asg-after { color: var(--green); font-weight: 800; }
 #asg-map-table td.num { text-align: center; }
 #asg-map-table tr.is-vacation td { background: #fffbeb; color: var(--muted); }
 .vac-cell { white-space: nowrap; }

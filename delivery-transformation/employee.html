@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20260923emp7" />
+  <link rel="stylesheet" href="employee.css?v=20260923emp9" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -163,31 +163,26 @@
           <div class="card">
             <div class="card-head">
               <div>
-                <h2>New VINs to assign</h2>
+                <h2>Today's VINs</h2>
                 <p class="hint" id="asg-hint">
-                  From Sales Raw uploads · only VINs whose <b>Proforma Date (column P)</b> is <b>today</b> and are
-                  <b>not already on the system</b>. The employee is suggested by <b>Sales Type</b>.
+                  Sales Raw VINs with <b>Proforma Date (column P) = today</b> that are not on the system yet.
+                  The employee is picked automatically so everyone has the <b>same number in each sales type</b>.
                 </p>
               </div>
             </div>
             <div class="toolbar asg-actions" id="asg-actions">
-              <button type="button" class="btn-primary" id="asg-confirm-sel" style="width:auto">Confirm selected</button>
-              <button type="button" class="btn" id="asg-confirm-all">Confirm all</button>
+              <button type="button" class="btn-primary" id="asg-confirm-all" style="width:auto">Assign all automatically</button>
               <button type="button" class="btn" id="asg-dismiss">Dismiss selected</button>
             </div>
-            <div class="table-wrap"><table class="data" id="asg-table"></table></div>
+            <div class="asg-vin-list" id="asg-table"></div>
           </div>
           <div class="card">
-            <h2>Sales type → employee</h2>
-            <p class="hint" id="asg-map-hint">
-              Tick which sales types each employee handles. If several employees share a type, the one with the fewest VINs this month is suggested.
+            <h2>Balance by sales type · this month</h2>
+            <p class="hint">
+              VINs per employee in each sales type now <b>→ after</b> confirming today's VINs.
+              Employees on vacation 🌴 get nothing.
             </p>
             <div class="table-wrap"><table class="data" id="asg-map-table"></table></div>
-            <div class="toolbar" id="asg-map-tools" style="margin-top:10px">
-              <input type="text" id="asg-new-type" placeholder="Add sales type…" />
-              <button type="button" class="btn" id="asg-add-type">Add type</button>
-              <button type="button" class="btn-primary" id="asg-map-save" style="width:auto">Save sales types</button>
-            </div>
           </div>
         </section>
 
@@ -275,6 +270,6 @@
   </div>
 
   <script src="shared.js"></script>
-  <script src="employee.js?v=20260923emp7"></script>
+  <script src="employee.js?v=20260923emp9"></script>
 </body>
 </html>

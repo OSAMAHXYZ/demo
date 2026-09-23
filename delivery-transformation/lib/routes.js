@@ -42,10 +42,6 @@ function todayKey() {
   return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function normType(s) {
-  return String(s || '').trim().toLowerCase();
-}
-
 function inMonth(v, month) {
   return [
     v.raw && v.raw.proformaDate,
@@ -255,11 +251,6 @@ function createDeliveryTransformationRouter(opts = {}) {
   function pendingMap() {
     if (!store.data.meta.pendingAssignments) store.data.meta.pendingAssignments = {};
     return store.data.meta.pendingAssignments;
-  }
-
-  function salesTypeMap() {
-    if (!store.data.meta.salesTypeMap) store.data.meta.salesTypeMap = {};
-    return store.data.meta.salesTypeMap;
   }
 
   /** meta.vacations: { employeeId: { until: 'YYYY-MM-DD' | '', by, at } } — empty until = until turned off. */
@@ -762,71 +753,78 @@ function createDeliveryTransformationRouter(opts = {}) {
     return isManager(u && u.role) || canUploadSalesRaw(u);
   }
 
-  /** Drop pending VINs that are already on the system, then suggest an employee per VIN. */
+  /**
+   * Keep only pending VINs whose Proforma Date (column P) is today and that are not on the system,
+   * then auto-pick an employee so every employee has the same count in each sales type this month.
+   */
   function buildAssignmentView() {
+    const today = todayKey();
     const pending = pendingMap();
     let dropped = false;
     Object.keys(pending).forEach((vin) => {
-      if (store.getVehicle(vin)) { delete pending[vin]; dropped = true; }
+      if (store.getVehicle(vin) || pending[vin].raw.proformaDate !== today) {
+        delete pending[vin];
+        dropped = true;
+      }
     });
     if (dropped) store.save();
 
-    const map = salesTypeMap();
     const employees = USERS.filter((u) => u.role === 'employee');
+    const available = employees.filter((u) => !onVacation(u.id));
     const month = currentMonthKey();
-    const load = {};
-    employees.forEach((u) => { load[u.id] = 0; });
+    const typeLabel = (t) => String(t || '').trim() || '(blank)';
+    const byType = {};
+    const total = {};
+    employees.forEach((u) => { byType[u.id] = {}; total[u.id] = 0; });
     store.allVehicles().forEach((v) => {
       const id = v.ops && v.ops.assignedEmployeeId;
-      if (id in load && inMonth(v, month)) load[id] += 1;
+      if (!(id in total) || !inMonth(v, month)) return;
+      const t = typeLabel(v.raw && v.raw.salesType);
+      byType[id][t] = (byType[id][t] || 0) + 1;
+      total[id] += 1;
     });
-    const loadBefore = { ...load };
+    const before = JSON.parse(JSON.stringify(byType));
 
     const rows = Object.values(pending)
-      .sort((a, b) => String(a.uploadedAt).localeCompare(String(b.uploadedAt)) || a.vin.localeCompare(b.vin))
+      .sort((a, b) => typeLabel(a.raw.salesType).localeCompare(typeLabel(b.raw.salesType)) || a.vin.localeCompare(b.vin))
       .map((p) => {
-        const type = normType(p.raw.salesType);
-        const handlers = employees.filter((u) => (map[u.id] || []).some((t) => normType(t) === type));
-        const candidates = handlers.filter((u) => !onVacation(u.id));
-        let suggested = null;
-        let reason;
-        if (!type) reason = 'No sales type on this VIN';
-        else if (!handlers.length) reason = `No employee set for "${p.raw.salesType}"`;
-        else if (!candidates.length) reason = `${handlers.map((u) => u.name).join(' / ')} on vacation · choose another employee`;
-        else {
-          suggested = candidates.reduce((best, u) => (load[u.id] < load[best.id] ? u : best), candidates[0]);
-          load[suggested.id] += 1;
-          reason = candidates.length > 1
-            ? `${p.raw.salesType} · least loaded of ${candidates.map((u) => u.name).join(' / ')}`
-            : `${p.raw.salesType} → ${suggested.name}`;
+        const t = typeLabel(p.raw.salesType);
+        const pick = available.reduce((best, u) => {
+          if (!best) return u;
+          const a = byType[u.id][t] || 0;
+          const b = byType[best.id][t] || 0;
+          return a < b || (a === b && total[u.id] < total[best.id]) ? u : best;
+        }, null);
+        if (pick) {
+          byType[pick.id][t] = (byType[pick.id][t] || 0) + 1;
+          total[pick.id] += 1;
         }
         return {
           vin: p.vin,
-          raw: p.raw,
-          uploadedBy: p.uploadedBy,
-          uploadedAt: p.uploadedAt,
-          filename: p.filename,
-          suggestedEmployeeId: suggested ? suggested.id : '',
-          suggestedEmployeeName: suggested ? suggested.name : '',
-          reason,
+          salesType: t,
+          proformaDate: p.raw.proformaDate,
+          suggestedEmployeeId: pick ? pick.id : '',
+          suggestedEmployeeName: pick ? pick.name : '',
         };
       });
 
-    const knownTypes = new Set();
-    store.allVehicles().forEach((v) => { if (v.raw && v.raw.salesType) knownTypes.add(String(v.raw.salesType).trim()); });
-    Object.values(pending).forEach((p) => { if (p.raw.salesType) knownTypes.add(String(p.raw.salesType).trim()); });
-    Object.values(map).forEach((list) => (list || []).forEach((t) => knownTypes.add(t)));
-
+    const types = new Set();
+    employees.forEach((u) => Object.keys(byType[u.id]).forEach((t) => types.add(t)));
+    const vac = vacationList();
     return {
-      today: todayKey(),
+      today,
       month,
       rows,
-      salesTypeMap: map,
-      salesTypes: [...knownTypes].filter(Boolean).sort((a, b) => a.localeCompare(b)),
+      salesTypes: [...types].sort((a, b) => a.localeCompare(b)),
       employees: employees.map((u) => {
-        const vac = vacationList().find((x) => x.id === u.id);
+        const x = vac.find((e) => e.id === u.id);
         return {
-          id: u.id, name: u.name, monthLoad: loadBefore[u.id], onVacation: vac.onVacation, vacationUntil: vac.until,
+          id: u.id,
+          name: u.name,
+          bySalesType: before[u.id],
+          afterBySalesType: byType[u.id],
+          onVacation: x.onVacation,
+          vacationUntil: x.until,
         };
       }),
     };
@@ -862,27 +860,16 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ...buildAssignmentView(), canConfirm: isManager(req.dtUser.role) });
   });
 
-  /** Sales type → employees: { map: { employeeId: ["Cash", "Bank"] } } */
-  router.put('/assignment/sales-types', auth, requireRole('admin', 'hanouf'), (req, res) => {
-    const input = (req.body && req.body.map) || {};
-    const next = {};
-    USERS.filter((u) => u.role === 'employee').forEach((u) => {
-      const list = Array.isArray(input[u.id]) ? input[u.id] : [];
-      const clean = [...new Map(list.map((t) => String(t || '').trim()).filter(Boolean)
-        .map((t) => [normType(t), t])).values()];
-      if (clean.length) next[u.id] = clean;
-    });
-    store.data.meta.salesTypeMap = next;
-    store.pushAudit({
-      vin: '', user: req.dtUser.name, action: 'set_sales_type_map', oldValue: '', newValue: JSON.stringify(next),
-    });
-    store.save();
-    return res.json({ ok: true, ...buildAssignmentView(), canConfirm: true });
-  });
-
-  /** Hanouf confirms: { items: [{ vin, employeeId }] } → VINs added to the Live Sheet, assigned. */
+  /** Hanouf confirms the automatic split. { all: true } or { vins: [...] } uses the even-by-sales-type pick. */
   router.post('/assignment/confirm', auth, requireRole('admin', 'hanouf'), (req, res) => {
-    const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+    const view = buildAssignmentView();
+    const want = req.body && req.body.all
+      ? view.rows.map((r) => r.vin)
+      : Array.isArray(req.body && req.body.vins) ? req.body.vins.map(normVin).filter(Boolean)
+        : Array.isArray(req.body && req.body.items) ? req.body.items.map((it) => normVin(it && it.vin)).filter(Boolean)
+          : [];
+    const pick = new Map(view.rows.map((r) => [r.vin, r.suggestedEmployeeId]));
+    const items = want.map((vin) => ({ vin, employeeId: pick.get(vin) || '' }));
     if (!items.length) return res.status(400).json({ error: 'Nothing to confirm' });
     const pending = pendingMap();
     const now = new Date().toISOString();

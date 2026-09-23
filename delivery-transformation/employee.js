@@ -246,7 +246,7 @@
       my: isManager()
         ? ['All VINs', 'Every VIN · edit · hand over to an employee']
         : ['My VINs', 'Your schedule · edit your work · الناقل'],
-      assignment: ['Assignment', `New VINs · Proforma Date today (${state.meta.today || ''}) · auto-suggested by sales type · Hanouf confirms`],
+      assignment: ['Assignment', `VIN numbers only · Proforma Date (column P) = today (${state.meta.today || ''}) · auto-split evenly by sales type`],
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
       upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
       'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · everyone sees the update time'],
@@ -439,94 +439,55 @@
     refreshView();
   }
 
-  // ——— Assignment (sales type → employee · Hanouf confirms) ———
+  // ——— Assignment (VIN numbers only · auto-split evenly by sales type) ———
   async function loadAssignment(data) {
     const d = data || await api('/assignment');
     state.asg = d;
-    if (!state.asgChoice) state.asgChoice = {};
     if (!state.asgSel) state.asgSel = new Set();
     const live = new Set(d.rows.map((r) => r.vin));
     [...state.asgSel].forEach((v) => { if (!live.has(v)) state.asgSel.delete(v); });
-    Object.keys(state.asgChoice).forEach((v) => { if (!live.has(v)) delete state.asgChoice[v]; });
     state.meta.pendingAssignments = d.rows.length;
     renderNav();
 
     const can = !!d.canConfirm;
     const away = new Set((d.employees || []).filter((e) => e.onVacation).map((e) => e.id));
-    Object.keys(state.asgChoice).forEach((v) => { if (away.has(state.asgChoice[v])) delete state.asgChoice[v]; });
     if (state.meta.employees) {
       state.meta.employees = state.meta.employees.map((e) => ({ ...e, onVacation: away.has(e.id) }));
     }
-    const chosen = (r) => (r.vin in state.asgChoice ? state.asgChoice[r.vin] : r.suggestedEmployeeId);
-    const needs = d.rows.filter((r) => !chosen(r)).length;
     $('#asg-kpis').innerHTML = [
-      ['Waiting to assign', d.rows.length, d.rows.length ? 'warn' : 'ok'],
-      ['Employee suggested', d.rows.length - needs, 'info'],
-      ['Needs an employee', needs, needs ? 'bad' : ''],
+      ['Today\'s new VINs', d.rows.length, d.rows.length ? 'warn' : 'ok'],
       ['Proforma date', d.today, ''],
     ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
 
     $('#asg-actions').style.display = can && d.rows.length ? '' : 'none';
-    const emps = d.employees || [];
-    const table = $('#asg-table');
-    table.innerHTML = `<thead><tr>
-        ${can ? '<th><input type="checkbox" class="checkbox" id="asg-all" /></th>' : ''}
-        <th>VIN</th><th>Product</th><th>Sales Type</th><th>Proforma</th><th>Order</th><th>S/A</th><th>Customer</th>
-        <th>Employee</th><th>Why</th><th>Uploaded</th></tr></thead>
-      <tbody>${d.rows.map((r) => {
-        const pick = chosen(r);
-        const sel = can
-          ? `<select class="asg-emp" data-vin="${esc(r.vin)}"><option value="">— choose —</option>${emps.map((e) =>
-            `<option value="${esc(e.id)}" ${pick === e.id && !e.onVacation ? 'selected' : ''} ${e.onVacation ? 'disabled' : ''}>${esc(e.name)}${e.onVacation ? ' 🌴 vacation' : ''}${e.id === r.suggestedEmployeeId ? ' ★' : ''}</option>`).join('')}</select>`
-          : `<b>${esc(r.suggestedEmployeeName || '—')}</b>`;
-        return `<tr class="${pick ? '' : 'asg-missing'} ${state.asgSel.has(r.vin) ? 'selected' : ''}">
-          ${can ? `<td><input type="checkbox" class="checkbox asg-check" data-vin="${esc(r.vin)}" ${state.asgSel.has(r.vin) ? 'checked' : ''} /></td>` : ''}
-          <td class="mono"><b>${esc(r.vin)}</b></td>
-          <td>${esc(na(r.raw.product))}</td>
-          <td><span class="badge info">${esc(na(r.raw.salesType))}</span></td>
-          <td>${esc(na(r.raw.proformaDate))}</td>
-          <td>${esc(na(r.raw.salesOrder))}</td>
-          <td>${esc(na(r.raw.salesAdvisor))}</td>
-          <td>${esc(na(r.raw.userName))}</td>
-          <td>${sel}</td>
-          <td class="hint">${esc(r.reason)}</td>
-          <td class="hint">${esc(r.uploadedBy)} · ${esc(formatWhen(r.uploadedAt))}</td>
-        </tr>`;
-      }).join('') || `<tr><td colspan="${can ? 11 : 10}">No new VINs waiting · upload Sales Raw to check today's Proforma Date.</td></tr>`}</tbody>`;
-    $$('.asg-emp', table).forEach((s) => s.addEventListener('change', () => {
-      state.asgChoice[s.dataset.vin] = s.value;
-      s.closest('tr').classList.toggle('asg-missing', !s.value);
+    const list = $('#asg-table');
+    list.innerHTML = d.rows.length
+      ? d.rows.map((r) => `<button type="button" class="asg-vin ${state.asgSel.has(r.vin) ? 'selected' : ''}" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`).join('')
+      : `<p class="hint">No new VINs with Proforma Date (column P) = ${esc(d.today)}.</p>`;
+    $$('.asg-vin', list).forEach((b) => b.addEventListener('click', () => {
+      if (!can) return;
+      if (state.asgSel.has(b.dataset.vin)) state.asgSel.delete(b.dataset.vin);
+      else state.asgSel.add(b.dataset.vin);
+      b.classList.toggle('selected');
     }));
-    $$('.asg-check', table).forEach((cb) => cb.addEventListener('change', () => {
-      if (cb.checked) state.asgSel.add(cb.dataset.vin);
-      else state.asgSel.delete(cb.dataset.vin);
-      cb.closest('tr').classList.toggle('selected', cb.checked);
-    }));
-    const all = $('#asg-all');
-    if (all) {
-      all.checked = d.rows.length > 0 && d.rows.every((r) => state.asgSel.has(r.vin));
-      all.addEventListener('change', () => {
-        d.rows.forEach((r) => (all.checked ? state.asgSel.add(r.vin) : state.asgSel.delete(r.vin)));
-        loadAssignment(state.asg);
-      });
-    }
-    renderSalesTypeMap();
+    renderAssignmentBalance();
   }
 
-  function renderSalesTypeMap() {
+  function renderAssignmentBalance() {
     const d = state.asg;
     const can = !!d.canConfirm;
-    if (!state.asgMapDraft) state.asgMapDraft = JSON.parse(JSON.stringify(d.salesTypeMap || {}));
-    const draft = state.asgMapDraft;
-    const types = [...new Set([...(d.salesTypes || []), ...(state.asgExtraTypes || [])])];
-    const has = (id, t) => (draft[id] || []).some((x) => x.toLowerCase() === t.toLowerCase());
-    $('#asg-map-tools').style.display = can ? '' : 'none';
-    $('#asg-map-table').innerHTML = `<thead><tr><th>Employee</th>${types.map((t) => `<th>${esc(t)}</th>`).join('')}<th>VINs this month</th><th>Vacation 🌴</th></tr></thead>
-      <tbody>${(d.employees || []).map((e) => `<tr class="${e.onVacation ? 'is-vacation' : ''}">
+    const types = d.salesTypes || [];
+    const cell = (now, after) => (now === after
+      ? `<td class="num">${now}</td>`
+      : `<td class="num">${now} <span class="asg-after">→ ${after}</span></td>`);
+    $('#asg-map-table').innerHTML = `<thead><tr><th>Employee</th>${types.map((t) => `<th>${esc(t)}</th>`).join('')}<th>Total</th><th>Vacation 🌴</th></tr></thead>
+      <tbody>${(d.employees || []).map((e) => {
+        const nowT = types.reduce((s, t) => s + ((e.bySalesType && e.bySalesType[t]) || 0), 0);
+        const afterT = types.reduce((s, t) => s + ((e.afterBySalesType && e.afterBySalesType[t]) || 0), 0);
+        return `<tr class="${e.onVacation ? 'is-vacation' : ''}">
         <td><b>${esc(e.name)}</b>${e.onVacation ? ' <span class="badge warn">On vacation</span>' : ''}</td>
-        ${types.map((t) => `<td class="num"><input type="checkbox" class="checkbox asg-map-cb" data-emp="${esc(e.id)}" data-type="${esc(t)}"
-          ${has(e.id, t) ? 'checked' : ''} ${can ? '' : 'disabled'} /></td>`).join('')}
-        <td class="num">${e.monthLoad}</td>
+        ${types.map((t) => cell((e.bySalesType && e.bySalesType[t]) || 0, (e.afterBySalesType && e.afterBySalesType[t]) || 0)).join('')}
+        ${cell(nowT, afterT)}
         <td class="vac-cell">
           <label class="vac-toggle"><input type="checkbox" class="checkbox vac-cb" data-emp="${esc(e.id)}"
             ${e.onVacation ? 'checked' : ''} ${can ? '' : 'disabled'} /> ${e.onVacation ? 'On vacation' : 'Working'}</label>
@@ -534,7 +495,8 @@
             min="${esc(d.today)}" title="Leave empty = until you turn it off" /></label>`
             : (e.vacationUntil ? `<span class="hint">until ${esc(e.vacationUntil)}</span>` : '')}
         </td>
-      </tr>`).join('')}</tbody>`;
+      </tr>`;
+      }).join('')}</tbody>`;
     const setVac = async (empId, on, until) => {
       const res = await api('/vacation', { method: 'PUT', json: { employeeId: empId, onVacation: on, until } });
       await loadAssignment(res);
@@ -548,37 +510,15 @@
       if (!inp.value && !cb.checked) return;
       setVac(inp.dataset.emp, true, inp.value).catch((err) => alert(err.message));
     }));
-    $$('.asg-map-cb').forEach((cb) => cb.addEventListener('change', () => {
-      const list = (draft[cb.dataset.emp] || []).filter((x) => x.toLowerCase() !== cb.dataset.type.toLowerCase());
-      if (cb.checked) list.push(cb.dataset.type);
-      draft[cb.dataset.emp] = list;
-    }));
   }
 
-  async function saveSalesTypeMap() {
-    const data = await api('/assignment/sales-types', { method: 'PUT', json: { map: state.asgMapDraft || {} } });
-    state.asgMapDraft = null;
-    state.asgExtraTypes = [];
-    state.asgChoice = {};
-    await loadAssignment(data);
-    alert('Sales types saved · suggestions updated');
-  }
-
-  async function confirmAssignments(onlySelected) {
-    const rows = state.asg.rows.filter((r) => !onlySelected || state.asgSel.has(r.vin));
-    if (!rows.length) return alert(onlySelected ? 'Tick at least one VIN' : 'Nothing to confirm');
-    const items = rows.map((r) => ({
-      vin: r.vin,
-      employeeId: r.vin in state.asgChoice ? state.asgChoice[r.vin] : r.suggestedEmployeeId,
-    }));
-    const missing = items.filter((i) => !i.employeeId);
-    if (missing.length) return alert(`Choose an employee for:\n${missing.map((i) => i.vin).join('\n')}`);
-    const name = (id) => ((state.asg.employees || []).find((e) => e.id === id) || {}).name || id;
-    if (!confirm(`Confirm assigning ${items.length} VIN(s)?\n\n${items.map((i) => `${i.vin}  →  ${name(i.employeeId)}`).join('\n')}`)) return;
-    const res = await api('/assignment/confirm', { method: 'POST', json: { items } });
-    const ok = res.results.filter((r) => r.ok);
-    const fail = res.results.filter((r) => !r.ok);
-    ok.forEach((r) => state.asgSel.delete(r.vin));
+  async function confirmAssignments() {
+    if (!state.asg.rows.length) return alert('Nothing to assign');
+    if (!confirm(`Assign ${state.asg.rows.length} VIN(s) automatically so each employee has the same number in every sales type?`)) return;
+    const res = await api('/assignment/confirm', { method: 'POST', json: { all: true } });
+    const ok = (res.results || []).filter((r) => r.ok);
+    const fail = (res.results || []).filter((r) => !r.ok);
+    state.asgSel.clear();
     alert(`${ok.length} VIN(s) assigned and added to the Live Sheet${fail.length
       ? `\n${fail.length} skipped:\n${fail.map((f) => `${f.vin} — ${f.error}`).join('\n')}` : ''}`);
     await loadAssignment(res);
@@ -1264,18 +1204,8 @@
     loadMy();
   });
   const fail = (err) => alert(err.message || 'Failed');
-  $('#asg-confirm-sel').addEventListener('click', () => confirmAssignments(true).catch(fail));
-  $('#asg-confirm-all').addEventListener('click', () => confirmAssignments(false).catch(fail));
+  $('#asg-confirm-all').addEventListener('click', () => confirmAssignments().catch(fail));
   $('#asg-dismiss').addEventListener('click', () => dismissAssignments().catch(fail));
-  $('#asg-map-save').addEventListener('click', () => saveSalesTypeMap().catch(fail));
-  $('#asg-add-type').addEventListener('click', () => {
-    const inp = $('#asg-new-type');
-    const t = inp.value.trim();
-    if (!t) return;
-    state.asgExtraTypes = [...new Set([...(state.asgExtraTypes || []), t])];
-    inp.value = '';
-    renderSalesTypeMap();
-  });
   $('#tgt-month').addEventListener('change', (e) => {
     state.targetMonth = e.target.value || state.meta.currentMonth;
     loadTargets().catch((err) => alert(err.message));
