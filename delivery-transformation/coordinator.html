@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delivery Transformation — منسق التسليم</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .vin-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    }
+    .vin-card {
+      text-align: right;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      gap: 4px;
+    }
+    .vin-card:hover { border-color: var(--red); }
+    .vin-card b { font-family: "Manrope", monospace; letter-spacing: .03em; direction: ltr; text-align: right; }
+    .vin-card span { color: var(--muted); font-size: .78rem; }
+  </style>
+</head>
+<body>
+  <header class="topnav">
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div><strong>TOYOTA</strong><span>Delivery Transformation · منسق التسليم</span></div>
+    </div>
+    <nav class="nav-links" id="admin-links" hidden>
+      <a href="admin.html">Admin</a>
+      <a href="coordinator.html" class="active">Coordinator view</a>
+      <a href="employee.html">Employee view</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="who" class="badge">—</span>
+      <button type="button" class="btn-ghost" id="logout-btn">خروج</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>أرقام الشاسيه — Live Sheet</h1>
+      <p>عرض فقط: رقم الشاسيه وتفاصيل السيارة. لا تظهر إدخالات موظف التسليم ولا يمكن التعديل.</p>
+    </section>
+
+    <div class="kpi-row" id="kpis"></div>
+
+    <div class="card">
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="ابحث برقم الشاسيه / الطلب / الموديل…" />
+        <button type="button" class="btn" id="view-toggle">عرض كجدول</button>
+        <button type="button" class="btn" id="refresh-btn">تحديث</button>
+        <span class="hint" id="live-meta"></span>
+      </div>
+      <div class="vin-grid" id="vin-grid"></div>
+      <div class="table-wrap hidden" id="table-wrap"><table class="data" id="live-table"></table></div>
+    </div>
+  </main>
+
+  <script src="shared.js"></script>
+  <script src="live.js"></script>
+  <script>
+    (async function () {
+      const { api, esc, na, requireRole } = DTX;
+      const user = requireRole(['coordinator', 'admin']);
+      if (!user) return;
+      if (user.role === 'admin') document.getElementById('admin-links').hidden = false;
+      DTXLive.wireHeader(user);
+      await DTXLive.loadMeta();
+
+      let asTable = false;
+      const open = (vin) => DTXLive.openDrawer(vin, { mode: 'coordinator' });
+
+      async function load() {
+        const q = document.getElementById('search').value.trim();
+        const live = await api(`/live-sheet${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+        const rows = live.rows || [];
+        document.getElementById('kpis').innerHTML =
+          `<div class="kpi"><strong>${live.total}</strong><span>شاسيه على Live Sheet</span></div>`;
+        document.getElementById('live-meta').textContent =
+          `آخر تحديث ${new Date(live.at).toLocaleTimeString()}`;
+
+        document.getElementById('vin-grid').innerHTML = rows.map((r) => `
+          <button type="button" class="vin-card" data-vin="${esc(r.vin)}">
+            <b>${esc(r.vin)}</b>
+            <span>${esc(na(r.raw.product))} · ${esc(na(r.raw.salesType))}</span>
+            <span>طلب ${esc(na(r.raw.salesOrder))} · ${esc(na(r.raw.vehicleLocation))}</span>
+          </button>`).join('') || '<span class="hint">لا توجد شاسيهات</span>';
+        document.querySelectorAll('.vin-card').forEach((b) => b.addEventListener('click', () => open(b.dataset.vin)));
+
+        DTXLive.renderTable(document.getElementById('live-table'), rows, { mode: 'coordinator', onOpen: open });
+      }
+
+      document.getElementById('view-toggle').addEventListener('click', (e) => {
+        asTable = !asTable;
+        document.getElementById('vin-grid').classList.toggle('hidden', asTable);
+        document.getElementById('table-wrap').classList.toggle('hidden', !asTable);
+        e.target.textContent = asTable ? 'عرض كبطاقات' : 'عرض كجدول';
+      });
+      let t;
+      document.getElementById('search').addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(load, 250);
+      });
+      document.getElementById('refresh-btn').addEventListener('click', load);
+      setInterval(() => {
+        if (document.getElementById('vin-drawer-back')?.classList.contains('open')) return;
+        load().catch(() => {});
+      }, 15000);
+      load().catch((e) => alert(e.message));
+    })();
+  </script>
+</body>
+</html>

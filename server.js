@@ -4530,6 +4530,14 @@ app.get('/deliveryteam/', (_req, res) => {
   res.sendFile(path.join(ROOT, 'deliveryteam', 'index.html'));
 });
 
+// Delivery Transformation — separate store, users, and API (no link to Delivery Team / hub data)
+const { createDeliveryTransformationRouter } = require('./delivery-transformation/lib/routes');
+const deliveryTransformation = createDeliveryTransformationRouter({
+  dataFile: path.join(PERSISTENT_ROOT, 'delivery-transformation-data.json'),
+  password: DELIVERY_TEAM_PASSWORD,
+});
+app.use('/api/delivery-transformation', deliveryTransformation.router);
+
 /** Shared Sales Report push — same snapshot for every laptop on this server. */
 app.get('/api/report-sheet/meta', (_req, res) => {
   const meta = loadReportSheetMeta();
