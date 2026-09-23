@@ -293,7 +293,8 @@
       el.addEventListener('click', () => {
         const row = parseInt(el.dataset.row, 10);
         if (Number.isNaN(row)) return;
-        if (row === 0 && printMode !== 'manual') return;
+        if (printMode === 'manual') return;
+        if (row === 0) return;
         openAddVinPicker(row);
       });
     });
@@ -648,6 +649,7 @@
     const attach = $('attachments');
     const chassis0 = document.querySelector('[name="car_chassis_0"]');
     document.body.classList.toggle('warehouse-form-mode', warehouse);
+    document.body.classList.toggle('manual-form-mode', manual);
     $('warehouseTopFields').classList.toggle('hidden', !warehouse);
     branch.readOnly = !manual;
     if (manual) branch.removeAttribute('readonly');
@@ -656,7 +658,11 @@
     $('attachReq').classList.toggle('hidden', !manual);
     attach.classList.toggle('hidden', manual);
     $('attachmentsManual').classList.toggle('hidden', !manual);
-    if (chassis0) chassis0.readOnly = !manual;
+    document.querySelectorAll('#carsBody [data-field="chassis"]').forEach((el) => {
+      const row = parseInt(el.dataset.row, 10);
+      el.readOnly = manual ? false : row === 0;
+      el.placeholder = manual ? 'اكتب رقم الشاسية' : (row === 0 ? '' : 'انقر للاختيار');
+    });
     $('navTitle').textContent = warehouse ? 'التسليم في المستودع' : 'مذكرة ترحيل السيارات';
     $('printHeroTitle').textContent = warehouse ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل السيارات';
     $('printHeroHint').textContent = warehouse
@@ -664,9 +670,9 @@
       : manual
         ? 'السيارة غير موجودة في البحث · اكتب الشركة والفرع يدوياً · المرفق صالة عرض أو تسليم'
         : 'اكتب اسم الشركة · الفرع من مدينة الترحيل على Live Sheet · رقم المذكرة تلقائي من 1000';
-    $('carsHint').textContent = warehouse || !manual
-      ? 'انقر الصف التالي لاختيار سيارات إضافية من Live Sheet فقط'
-      : 'اكتب الشاسية أو انقر الصف التالي لاختيار سيارات من Live Sheet';
+    $('carsHint').textContent = manual
+      ? 'اكتب الموديل ورقم الشاسية يدوياً — بدون اختيار من Live Sheet'
+      : 'انقر الصف التالي لاختيار سيارات إضافية من Live Sheet فقط';
     $('previewTitle').textContent = warehouse ? 'معاينة قائمة فحص التسليم' : 'معاينة مذكرة الترحيل';
     const img = $('previewFormImage');
     img.src = warehouse
