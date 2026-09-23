@@ -296,6 +296,37 @@ textarea:focus-visible {
   align-items: start;
 }
 .dash-stack { display: grid; gap: 12px; min-width: 0; }
+.emp-dash {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.emp-card {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.emp-card:hover { border-color: var(--navy); box-shadow: var(--shadow); }
+.emp-card.is-vacation { background: #fffbeb; }
+.emp-card.is-empty { cursor: default; background: var(--bg-soft); }
+.emp-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.emp-card-got { margin: 8px 0 2px; }
+.emp-card-got b { font-size: 1.6rem; color: var(--navy); font-variant-numeric: tabular-nums; }
+.emp-card-got span { margin-left: 6px; color: var(--muted); font-weight: 650; font-size: 0.78rem; }
+.emp-card-meta { font-size: 0.72rem; color: var(--muted); font-weight: 650; }
+.emp-card-types { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.emp-card-types span {
+  background: var(--bg-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 650;
+}
 
 /* ——— KPIs ——— */
 .kpi-row {

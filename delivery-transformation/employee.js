@@ -758,6 +758,51 @@
       };
       setView('live');
     }));
+
+    const roster = (state.meta && state.meta.employees) || [];
+    const byEmp = {};
+    roster.forEach((e) => {
+      byEmp[e.id] = {
+        id: e.id,
+        name: e.name,
+        onVacation: !!e.onVacation,
+        vacationUntil: e.until || '',
+        total: 0,
+        delivered: 0,
+        bySalesType: {},
+      };
+    });
+    let unassigned = 0;
+    (data.rows || []).forEach((r) => {
+      const id = r.ops && r.ops.assignedEmployeeId;
+      const row = byEmp[id];
+      if (!row) { unassigned += 1; return; }
+      row.total += 1;
+      if (isDone(r)) row.delivered += 1;
+      const t = (r.raw && r.raw.salesType) || '(blank)';
+      row.bySalesType[t] = (row.bySalesType[t] || 0) + 1;
+    });
+    const cards = Object.values(byEmp).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    $('#dash-employees').innerHTML = cards.map((e) => {
+      const types = Object.entries(e.bySalesType).sort((a, b) => b[1] - a[1]);
+      return `<button type="button" class="emp-card ${e.onVacation ? 'is-vacation' : ''}" data-emp="${esc(e.name)}">
+        <div class="emp-card-top">
+          <strong>${esc(e.name)}</strong>
+          ${e.onVacation ? `<span class="badge warn">Vacation${e.vacationUntil ? ` · ${esc(e.vacationUntil)}` : ''}</span>` : ''}
+        </div>
+        <div class="emp-card-got"><b>${e.total}</b><span>VIN(s) got</span></div>
+        <div class="emp-card-meta">${e.delivered} delivered · ${e.total - e.delivered} remaining</div>
+        <div class="emp-card-types">${types.length
+          ? types.map(([t, n]) => `<span><b>${n}</b> ${esc(t)}</span>`).join('')
+          : '<span class="hint">No VINs</span>'}</div>
+      </button>`;
+    }).join('') + (unassigned
+      ? `<div class="emp-card is-empty"><strong>Unassigned</strong><div class="emp-card-got"><b>${unassigned}</b><span>VIN(s)</span></div></div>`
+      : '');
+    $$('#dash-employees .emp-card[data-emp]').forEach((b) => b.addEventListener('click', () => {
+      state.liveFilters = { ...state.liveFilters, employee: b.dataset.emp, month: state.monthFilter || '', status: '' };
+      setView('live');
+    }));
   }
 
   // ——— Live Sheet ———
