@@ -350,9 +350,12 @@
       return;
     }
     el.classList.add('has-sel');
+    const away = new Set(((state.meta && state.meta.employees) || []).filter((e) => e.onVacation).map((e) => e.name));
     const others = employeeNames().filter((n) => n !== state.user.name);
-    const meBtn = state.user.role === 'employee'
-      ? `<button type="button" class="btn sel-assign me" data-emp="${esc(state.user.name)}">→ Me</button>` : '';
+    const assignBtn = (name, label, extra = '') => (away.has(name)
+      ? `<button type="button" class="btn sel-assign ${extra}" disabled title="${esc(name)} is on vacation">${esc(label)} 🌴</button>`
+      : `<button type="button" class="btn sel-assign ${extra}" data-emp="${esc(name)}">${esc(label)}</button>`);
+    const meBtn = state.user.role === 'employee' ? assignBtn(state.user.name, '→ Me', 'me') : '';
     el.innerHTML = `
       <div class="sel-head">
         <strong>${vins.length}</strong> VIN(s) selected
@@ -370,7 +373,7 @@
       <div class="sel-actions">
         <span class="lbl">Assign to:</span>
         ${meBtn}
-        ${others.map((n) => `<button type="button" class="btn sel-assign" data-emp="${esc(n)}">→ ${esc(n)}</button>`).join('')}
+        ${others.map((n) => assignBtn(n, `→ ${n}`)).join('')}
         <span class="sel-sep"></span>
         <button type="button" class="btn sel-unassign">Unassign</button>
         <button type="button" class="btn sel-remove">Remove from sheet</button>
@@ -449,6 +452,11 @@
     renderNav();
 
     const can = !!d.canConfirm;
+    const away = new Set((d.employees || []).filter((e) => e.onVacation).map((e) => e.id));
+    Object.keys(state.asgChoice).forEach((v) => { if (away.has(state.asgChoice[v])) delete state.asgChoice[v]; });
+    if (state.meta.employees) {
+      state.meta.employees = state.meta.employees.map((e) => ({ ...e, onVacation: away.has(e.id) }));
+    }
     const chosen = (r) => (r.vin in state.asgChoice ? state.asgChoice[r.vin] : r.suggestedEmployeeId);
     const needs = d.rows.filter((r) => !chosen(r)).length;
     $('#asg-kpis').innerHTML = [
@@ -469,7 +477,7 @@
         const pick = chosen(r);
         const sel = can
           ? `<select class="asg-emp" data-vin="${esc(r.vin)}"><option value="">— choose —</option>${emps.map((e) =>
-            `<option value="${esc(e.id)}" ${pick === e.id ? 'selected' : ''}>${esc(e.name)}${e.id === r.suggestedEmployeeId ? ' ★' : ''}</option>`).join('')}</select>`
+            `<option value="${esc(e.id)}" ${pick === e.id && !e.onVacation ? 'selected' : ''} ${e.onVacation ? 'disabled' : ''}>${esc(e.name)}${e.onVacation ? ' 🌴 vacation' : ''}${e.id === r.suggestedEmployeeId ? ' ★' : ''}</option>`).join('')}</select>`
           : `<b>${esc(r.suggestedEmployeeName || '—')}</b>`;
         return `<tr class="${pick ? '' : 'asg-missing'} ${state.asgSel.has(r.vin) ? 'selected' : ''}">
           ${can ? `<td><input type="checkbox" class="checkbox asg-check" data-vin="${esc(r.vin)}" ${state.asgSel.has(r.vin) ? 'checked' : ''} /></td>` : ''}
@@ -513,13 +521,33 @@
     const types = [...new Set([...(d.salesTypes || []), ...(state.asgExtraTypes || [])])];
     const has = (id, t) => (draft[id] || []).some((x) => x.toLowerCase() === t.toLowerCase());
     $('#asg-map-tools').style.display = can ? '' : 'none';
-    $('#asg-map-table').innerHTML = `<thead><tr><th>Employee</th>${types.map((t) => `<th>${esc(t)}</th>`).join('')}<th>VINs this month</th></tr></thead>
-      <tbody>${(d.employees || []).map((e) => `<tr>
-        <td><b>${esc(e.name)}</b></td>
+    $('#asg-map-table').innerHTML = `<thead><tr><th>Employee</th>${types.map((t) => `<th>${esc(t)}</th>`).join('')}<th>VINs this month</th><th>Vacation 🌴</th></tr></thead>
+      <tbody>${(d.employees || []).map((e) => `<tr class="${e.onVacation ? 'is-vacation' : ''}">
+        <td><b>${esc(e.name)}</b>${e.onVacation ? ' <span class="badge warn">On vacation</span>' : ''}</td>
         ${types.map((t) => `<td class="num"><input type="checkbox" class="checkbox asg-map-cb" data-emp="${esc(e.id)}" data-type="${esc(t)}"
           ${has(e.id, t) ? 'checked' : ''} ${can ? '' : 'disabled'} /></td>`).join('')}
         <td class="num">${e.monthLoad}</td>
+        <td class="vac-cell">
+          <label class="vac-toggle"><input type="checkbox" class="checkbox vac-cb" data-emp="${esc(e.id)}"
+            ${e.onVacation ? 'checked' : ''} ${can ? '' : 'disabled'} /> ${e.onVacation ? 'On vacation' : 'Working'}</label>
+          ${can ? `<label class="vac-until">until <input type="date" class="vac-date" data-emp="${esc(e.id)}" value="${esc(e.vacationUntil || '')}"
+            min="${esc(d.today)}" title="Leave empty = until you turn it off" /></label>`
+            : (e.vacationUntil ? `<span class="hint">until ${esc(e.vacationUntil)}</span>` : '')}
+        </td>
       </tr>`).join('')}</tbody>`;
+    const setVac = async (empId, on, until) => {
+      const res = await api('/vacation', { method: 'PUT', json: { employeeId: empId, onVacation: on, until } });
+      await loadAssignment(res);
+    };
+    $$('.vac-cb').forEach((cb) => cb.addEventListener('change', () => {
+      const date = $(`.vac-date[data-emp="${cb.dataset.emp}"]`);
+      setVac(cb.dataset.emp, cb.checked, date ? date.value : '').catch((err) => alert(err.message));
+    }));
+    $$('.vac-date').forEach((inp) => inp.addEventListener('change', () => {
+      const cb = $(`.vac-cb[data-emp="${inp.dataset.emp}"]`);
+      if (!inp.value && !cb.checked) return;
+      setVac(inp.dataset.emp, true, inp.value).catch((err) => alert(err.message));
+    }));
     $$('.asg-map-cb').forEach((cb) => cb.addEventListener('change', () => {
       const list = (draft[cb.dataset.emp] || []).filter((x) => x.toLowerCase() !== cb.dataset.type.toLowerCase());
       if (cb.checked) list.push(cb.dataset.type);
@@ -658,6 +686,7 @@
           <div><strong>${s.created}</strong><span>New VINs</span></div>
           <div><strong>${s.updated}</strong><span>VINs updated</span></div>
           <div><strong>${s.assigned}</strong><span>Assigned from PIC</span></div>
+          <div><strong>${s.skippedVacation || 0}</strong><span>Not assigned · PIC on vacation</span></div>
           <div><strong>${s.skippedOtherMonth}</strong><span>Skipped · other month</span></div>
           <div><strong>${s.skippedNoDate}</strong><span>Skipped · no proforma date</span></div>
         </div>`;
@@ -891,6 +920,10 @@
       { key: 'order', label: 'Order', html: (r) => esc(na(r.raw.salesOrder)) },
       { key: 'product', label: 'Product', html: (r) => esc(na(r.raw.product)) },
       { key: 'salestype', label: 'Sales Type', html: (r) => esc(na(r.raw.salesType)) },
+      { key: 'customer', label: 'Customer', html: (r) => `<span title="${esc(r.raw.userName || '')}">${esc(na(r.raw.userName))}</span>` },
+      { key: 'owner', label: 'Invoice Owner', html: (r) => `<span title="${esc(r.raw.invoiceOwner || '')}">${esc(na(r.raw.invoiceOwner))}</span>` },
+      { key: 'phone', label: 'Phone', html: (r) => (r.raw.phone
+        ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A') },
       { key: 'sa', label: 'S/A', html: (r) => esc(na(r.raw.salesAdvisor)) },
       { key: 'guest', label: 'Guest Exp', html: (r) => cell(r, 'guestCenter', 'yn') },
       { key: 'gt', label: 'GT Loc', html: (r) => esc(na(r.raw.gtLocation)) },
@@ -948,6 +981,9 @@
       ['Order', (r) => esc(na(r.raw.salesOrder))],
       ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
       ['Sales Type', (r) => esc(na(r.raw.salesType))],
+      ['Customer', (r) => esc(na(r.raw.userName))],
+      ['Invoice Owner', (r) => esc(na(r.raw.invoiceOwner))],
+      ['Phone', (r) => (r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A')],
       ['Product', (r) => esc(na(r.raw.product))],
       ['S/A', (r) => esc(na(r.raw.salesAdvisor))],
       ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
@@ -1052,6 +1088,8 @@
           ${[
             ['Proforma Date', v.raw.proformaDate], ['Sales Order', v.raw.salesOrder],
             ['Sales Type', v.raw.salesType], ['S/A', v.raw.salesAdvisor],
+            ['Customer Name', v.raw.userName], ['Invoice Owner', v.raw.invoiceOwner],
+            ['Phone', v.raw.phone],
             ['GT Location', v.raw.gtLocation], ['Vehicle Location', v.raw.vehicleLocation],
             ['PIC', v.raw.pic],
           ].map(([l, val]) => ro(l, val)).join('')}

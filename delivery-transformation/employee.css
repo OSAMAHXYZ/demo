@@ -1488,6 +1488,12 @@ table.live-sheet tr.selected td.col-num { box-shadow: inset 4px 0 0 var(--red) !
   min-width: 130px;
 }
 #asg-map-table td.num { text-align: center; }
+#asg-map-table tr.is-vacation td { background: #fffbeb; color: var(--muted); }
+.vac-cell { white-space: nowrap; }
+.vac-toggle, .vac-until { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; cursor: pointer; }
+.vac-until { margin-left: 10px; font-weight: 500; color: var(--muted); }
+.vac-date { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.sel-actions .sel-assign:disabled { opacity: 0.5; cursor: not-allowed; }
 .asg-actions { margin-bottom: 10px; }
 #asg-new-type {
   padding: 6px 9px;
@@ -1758,9 +1764,15 @@ table.live-sheet .col-sa {
   max-width: 140px;
 }
 table.live-sheet .col-phone {
-  min-width: 72px;
-  max-width: 100px;
+  min-width: 96px;
+  max-width: 120px;
 }
+.phone-link {
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.phone-link:hover { text-decoration: underline; }
 table.live-sheet .col-guest {
   min-width: 140px;
   max-width: 200px;

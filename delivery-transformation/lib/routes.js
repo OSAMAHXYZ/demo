@@ -128,10 +128,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       transferCities: TRANSFER_CITIES,
       yesNo: YES_NO,
       users: USERS.map((u) => ({ id: u.id, name: u.name, role: u.role })),
-      employees: USERS.filter((u) => u.role === 'employee').map((u) => ({
-        id: u.id,
-        name: u.name,
-      })),
+      employees: vacationList(),
       currentMonth: currentMonthKey(),
       today: todayKey(),
       imports: store.data.meta.imports || {},
@@ -265,6 +262,23 @@ function createDeliveryTransformationRouter(opts = {}) {
     return store.data.meta.salesTypeMap;
   }
 
+  /** meta.vacations: { employeeId: { until: 'YYYY-MM-DD' | '', by, at } } — empty until = until turned off. */
+  function onVacation(empId) {
+    const v = (store.data.meta.vacations || {})[empId];
+    if (!v) return false;
+    return !v.until || v.until >= todayKey();
+  }
+
+  function vacationList() {
+    const all = store.data.meta.vacations || {};
+    return USERS.filter((u) => u.role === 'employee').map((u) => ({
+      id: u.id,
+      name: u.name,
+      onVacation: onVacation(u.id),
+      until: onVacation(u.id) ? (all[u.id].until || '') : '',
+    }));
+  }
+
   function recordImport(kind, summary) {
     if (!store.data.meta.imports) store.data.meta.imports = {};
     store.data.meta.imports[kind] = summary;
@@ -305,6 +319,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         created: 0,
         updated: 0,
         assigned: 0,
+        skippedVacation: 0,
         skippedOtherMonth: 0,
         skippedNoDate: 0,
         duplicates: 0,
@@ -339,7 +354,8 @@ function createDeliveryTransformationRouter(opts = {}) {
           if (val && !String(v.ops[k] || '').trim()) v.ops[k] = val;
         });
         const emp = findEmployeeByPic(item.raw.pic);
-        if (emp && !v.ops.assignedEmployeeId) {
+        if (emp && !v.ops.assignedEmployeeId && onVacation(emp.id)) summary.skippedVacation += 1;
+        else if (emp && !v.ops.assignedEmployeeId) {
           v.ops.assignedEmployeeId = emp.id;
           v.ops.assignedEmployeeName = emp.name;
           v.ops.assignedBy = req.dtUser.name;
@@ -651,6 +667,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       && (u.id === target || u.name.toLowerCase() === target));
     if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
     if (!emp) return res.status(400).json({ error: 'Unknown employee' });
+    if (onVacation(emp.id)) return res.status(400).json({ error: `${emp.name} is on vacation` });
     const now = new Date().toISOString();
     const results = vins.map((vin) => {
       const v = store.getVehicle(vin);
@@ -769,11 +786,13 @@ function createDeliveryTransformationRouter(opts = {}) {
       .sort((a, b) => String(a.uploadedAt).localeCompare(String(b.uploadedAt)) || a.vin.localeCompare(b.vin))
       .map((p) => {
         const type = normType(p.raw.salesType);
-        const candidates = employees.filter((u) => (map[u.id] || []).some((t) => normType(t) === type));
+        const handlers = employees.filter((u) => (map[u.id] || []).some((t) => normType(t) === type));
+        const candidates = handlers.filter((u) => !onVacation(u.id));
         let suggested = null;
         let reason;
         if (!type) reason = 'No sales type on this VIN';
-        else if (!candidates.length) reason = `No employee set for "${p.raw.salesType}"`;
+        else if (!handlers.length) reason = `No employee set for "${p.raw.salesType}"`;
+        else if (!candidates.length) reason = `${handlers.map((u) => u.name).join(' / ')} on vacation · choose another employee`;
         else {
           suggested = candidates.reduce((best, u) => (load[u.id] < load[best.id] ? u : best), candidates[0]);
           load[suggested.id] += 1;
@@ -804,9 +823,39 @@ function createDeliveryTransformationRouter(opts = {}) {
       rows,
       salesTypeMap: map,
       salesTypes: [...knownTypes].filter(Boolean).sort((a, b) => a.localeCompare(b)),
-      employees: employees.map((u) => ({ id: u.id, name: u.name, monthLoad: loadBefore[u.id] })),
+      employees: employees.map((u) => {
+        const vac = vacationList().find((x) => x.id === u.id);
+        return {
+          id: u.id, name: u.name, monthLoad: loadBefore[u.id], onVacation: vac.onVacation, vacationUntil: vac.until,
+        };
+      }),
     };
   }
+
+  /** Hanouf marks an employee on / off vacation: { employeeId, onVacation, until } */
+  router.put('/vacation', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const body = req.body || {};
+    const emp = USERS.find((u) => u.role === 'employee' && u.id === String(body.employeeId || ''));
+    if (!emp) return res.status(400).json({ error: 'Unknown employee' });
+    const until = /^\d{4}-\d{2}-\d{2}$/.test(String(body.until || '')) ? body.until : '';
+    if (!store.data.meta.vacations) store.data.meta.vacations = {};
+    const was = onVacation(emp.id);
+    if (body.onVacation) {
+      store.data.meta.vacations[emp.id] = { until, by: req.dtUser.name, at: new Date().toISOString() };
+    } else {
+      delete store.data.meta.vacations[emp.id];
+    }
+    store.pushAudit({
+      vin: '',
+      user: req.dtUser.name,
+      action: 'set_vacation',
+      field: emp.name,
+      oldValue: was ? 'vacation' : 'working',
+      newValue: body.onVacation ? `vacation${until ? ` until ${until}` : ''}` : 'working',
+    });
+    store.save();
+    return res.json({ ok: true, ...buildAssignmentView(), canConfirm: true });
+  });
 
   router.get('/assignment', auth, (req, res) => {
     if (!canViewAssignment(req.dtUser)) return res.status(403).json({ error: 'Forbidden for this role' });
@@ -844,6 +893,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       if (store.getVehicle(vin)) { delete pending[vin]; return { vin, ok: false, error: 'Already on the system' }; }
       const emp = USERS.find((u) => u.role === 'employee' && u.id === String((it && it.employeeId) || ''));
       if (!emp) return { vin, ok: false, error: 'Choose an employee' };
+      if (onVacation(emp.id)) return { vin, ok: false, error: `${emp.name} is on vacation` };
       store.upsertVehicle(vin, {
         vin,
         raw: { ...emptyRaw(), ...p.raw, vin },
