@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260923c11" />
+  <link rel="stylesheet" href="coordinator.css?v=20260923c13" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -131,11 +131,15 @@
             <div class="grid grid-2">
               <div>
                 <label for="company_rep">اسم الشركة / Company <span class="req">*</span></label>
-                <input id="company_rep" name="company_rep" type="text" required autocomplete="off" placeholder="اكتب اسم الشركة" />
+                <select id="company_rep" name="company_rep" required>
+                  <option value="">— اختر من الحضور —</option>
+                </select>
               </div>
               <div>
-                <label for="customer_name">مندوب الشركة / Company Rep</label>
-                <input id="customer_name" name="customer_name" type="text" />
+                <label for="customer_name">مندوب الشركة / Name <span class="req">*</span></label>
+                <select id="customer_name" name="customer_name" required>
+                  <option value="">— اختر الاسم من الحضور —</option>
+                </select>
               </div>
               <div>
                 <label for="transfer_date">تاريخ الترحيل / Transfer Date</label>
@@ -268,6 +272,6 @@
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260923c11"></script>
+  <script src="coordinator.js?v=20260923c13"></script>
 </body>
 </html>

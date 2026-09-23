@@ -328,10 +328,11 @@ body.app-mode {
 @media (max-width: 768px) { .grid-2, .grid-4 { grid-template-columns: 1fr; } }
 label { display: block; font-size: .78rem; font-weight: 600; color: var(--tot-muted); margin-bottom: 4px; }
 .req { color: var(--tot-primary); font-weight: 800; }
-input, textarea {
+input, textarea, select {
   width: 100%; padding: 10px 12px; border-radius: 10px;
   border: 1px solid var(--tot-line); font: inherit; background: #f8fafc; color: var(--tot-ink);
 }
+select { cursor: pointer; color-scheme: light; }
 input[readonly], textarea[readonly] { cursor: default; }
 .cars-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 .cars-table th, .cars-table td { border: 1px solid var(--tot-line); padding: 8px; text-align: center; }

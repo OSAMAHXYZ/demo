@@ -182,6 +182,151 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ok: true, entry });
   });
 
+  const ATTEND_HOLD_MS = 2 * 60 * 60 * 1000;
+
+  function attendanceRows() {
+    if (!Array.isArray(store.data.attendance)) store.data.attendance = [];
+    return store.data.attendance;
+  }
+
+  function attendanceOpen(entry, viewerId) {
+    if (!entry || entry.usedAt) return false;
+    if (!entry.heldBy) return true;
+    const heldAt = Date.parse(entry.heldAt || '') || 0;
+    if (heldAt && Date.now() - heldAt > ATTEND_HOLD_MS) {
+      entry.heldBy = '';
+      entry.heldAt = '';
+      return true;
+    }
+    return entry.heldBy === viewerId;
+  }
+
+  function normalizeCityKey(value) {
+    return String(value || '')
+      .trim()
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/ة/g, 'ه')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+  }
+
+  function isOpenCityForAllCompanies(city) {
+    const key = normalizeCityKey(city);
+    if (!key) return true;
+    if (key === 'الرياض' || key === 'جده') return true;
+    return key.includes('اوتومول') || key.includes('automall');
+  }
+
+  function requestCity(req) {
+    return String((req.query && req.query.city) || (req.body && req.body.city) || '').trim();
+  }
+
+  function printedCarsByCompanyForCity(city) {
+    const want = normalizeCityKey(city);
+    const counts = new Map();
+    if (!want) return counts;
+    store.allVehicles().forEach((v) => {
+      if (!isCoordinatorPrinted(v) || !v.ops) return;
+      if (String(v.ops.coordinatorPrintKind || '') === 'warehouse') return;
+      const company = String(v.ops.coordinatorPrintCompany || '').trim();
+      if (!company) return;
+      const printedCity = normalizeCityKey(v.ops.coordinatorPrintCity || v.ops.transferCity);
+      if (printedCity !== want) return;
+      counts.set(company, (counts.get(company) || 0) + 1);
+    });
+    return counts;
+  }
+
+  function attendanceAvailablePayload(viewerId, city) {
+    const groups = new Map();
+    attendanceRows().forEach((entry) => {
+      if (!attendanceOpen(entry, viewerId)) return;
+      const company = String(entry.company || '').trim();
+      if (!company) return;
+      if (!groups.has(company)) groups.set(company, { company, available: 0, people: [] });
+      const g = groups.get(company);
+      const mine = entry.heldBy === viewerId;
+      if (!mine) g.available += 1;
+      g.people.push({
+        id: entry.id,
+        name: entry.name,
+        phone: entry.phone,
+        held: mine,
+      });
+    });
+    let list = [...groups.values()]
+      .filter((g) => g.available > 0 || g.people.some((p) => p.held))
+      .sort((a, b) => a.company.localeCompare(b.company, 'ar'));
+    if (!isOpenCityForAllCompanies(city)) {
+      const counts = printedCarsByCompanyForCity(city);
+      const competing = list.filter((g) => g.available > 0);
+      if (competing.length) {
+        let min = Infinity;
+        competing.forEach((g) => {
+          const n = counts.get(g.company) || 0;
+          if (n < min) min = n;
+        });
+        list = list.filter((g) => {
+          if (g.people.some((p) => p.held)) return true;
+          return g.available > 0 && (counts.get(g.company) || 0) === min;
+        });
+      }
+    }
+    return list;
+  }
+
+  function releaseHoldsFor(viewerId, exceptId) {
+    attendanceRows().forEach((entry) => {
+      if (entry.heldBy === viewerId && entry.id !== exceptId && !entry.usedAt) {
+        entry.heldBy = '';
+        entry.heldAt = '';
+      }
+    });
+  }
+
+  router.get('/attendance/available', auth, (req, res) => {
+    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    res.json({ companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
+  });
+
+  router.post('/attendance/hold', auth, (req, res) => {
+    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const id = String((req.body && req.body.id) || '').trim();
+    const entry = attendanceRows().find((e) => e.id === id);
+    if (!entry || entry.usedAt) {
+      return res.status(404).json({ error: 'لا يوجد حضور متاح لهذا الاسم' });
+    }
+    if (entry.heldBy && entry.heldBy !== req.dtUser.userId) {
+      const heldAt = Date.parse(entry.heldAt || '') || 0;
+      if (!heldAt || Date.now() - heldAt <= ATTEND_HOLD_MS) {
+        return res.status(409).json({ error: 'هذا الاسم محجوز الآن' });
+      }
+    }
+    releaseHoldsFor(req.dtUser.userId, id);
+    entry.heldBy = req.dtUser.userId;
+    entry.heldAt = new Date().toISOString();
+    store.save();
+    return res.json({
+      ok: true,
+      entry: { id: entry.id, name: entry.name, company: entry.company, phone: entry.phone },
+      companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)),
+    });
+  });
+
+  router.post('/attendance/release', auth, (req, res) => {
+    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    releaseHoldsFor(req.dtUser.userId, '');
+    store.save();
+    return res.json({ ok: true, companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
+  });
+
   router.get('/meta', (_req, res) => {
     res.json({
       module: 'delivery-transformation',
@@ -266,6 +411,18 @@ function createDeliveryTransformationRouter(opts = {}) {
       : [req.body && req.body.vin];
     const kind = String((req.body && req.body.kind) || 'memo').trim() || 'memo';
     const now = new Date().toISOString();
+    const printCompany = String((req.body && req.body.company) || '').trim();
+    const printCity = String((req.body && req.body.city) || '').trim();
+    const attendanceId = String((req.body && req.body.attendanceId) || '').trim();
+    if (attendanceId) {
+      const att = attendanceRows().find((e) => e.id === attendanceId);
+      if (att && !att.usedAt) {
+        att.usedAt = now;
+        att.usedBy = req.dtUser.name;
+        att.heldBy = '';
+        att.heldAt = '';
+      }
+    }
     const marked = [];
     raw.forEach((item) => {
       const v = store.getVehicle(item);
@@ -274,6 +431,13 @@ function createDeliveryTransformationRouter(opts = {}) {
       v.ops.coordinatorPrintedAt = now;
       v.ops.coordinatorPrintedBy = req.dtUser.name;
       v.ops.coordinatorPrintKind = kind;
+      if (kind === 'warehouse') {
+        v.ops.coordinatorPrintCompany = '';
+        v.ops.coordinatorPrintCity = '';
+      } else {
+        v.ops.coordinatorPrintCompany = printCompany;
+        v.ops.coordinatorPrintCity = printCity || String((v.ops.transferCity || '')).trim();
+      }
       marked.push(v.vin);
       store.pushAudit({
         vin: v.vin,

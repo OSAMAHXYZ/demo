@@ -34,6 +34,8 @@ const CARRIERS = Object.freeze([
 const TRANSFER_CITIES = Object.freeze([
   'الرياض',
   'جدة',
+  'اوتومول',
+  'أوتومول',
   'الدمام',
   'مكة',
   'المدينة',
@@ -105,6 +107,8 @@ function emptyOps() {
     coordinatorPrintedAt: '',
     coordinatorPrintedBy: '',
     coordinatorPrintKind: '',
+    coordinatorPrintCompany: '',
+    coordinatorPrintCity: '',
   };
 }
 

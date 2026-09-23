@@ -13,6 +13,10 @@
   let transferCities = [];
   let vinPickerMode = 'open-warehouse';
   let activeVinRow = null;
+  let attendanceCompanies = [];
+  let claimedAttendanceId = '';
+  let lastAttendanceCity = '';
+  let cityReloadTimer = null;
   const fieldEls = {};
 
   function showView(name) {
@@ -265,6 +269,96 @@
     }
   }
 
+  function selectedAttendanceName() {
+    const sel = $('customer_name');
+    const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+    return (opt && (opt.dataset.name || opt.textContent) || '').trim();
+  }
+
+  function companyLabel(company, available) {
+    return `${company} — هناك ${available} متوفر`;
+  }
+
+  function renderAttendanceSelects(keepNameId) {
+    const companyEl = $('company_rep');
+    const nameEl = $('customer_name');
+    const currentCompany = companyEl.value;
+    companyEl.innerHTML = '<option value="">— اختر من الحضور —</option>'
+      + attendanceCompanies.map((g) =>
+        `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`
+      ).join('');
+    if (currentCompany && attendanceCompanies.some((g) => g.company === currentCompany)) {
+      companyEl.value = currentCompany;
+    } else {
+      companyEl.value = '';
+    }
+    renderAttendanceNames(keepNameId);
+  }
+
+  function renderAttendanceNames(keepNameId) {
+    const nameEl = $('customer_name');
+    const company = $('company_rep').value;
+    const group = attendanceCompanies.find((g) => g.company === company);
+    const people = (group && group.people) || [];
+    const counts = {};
+    people.forEach((p) => { counts[p.name] = (counts[p.name] || 0) + 1; });
+    nameEl.innerHTML = '<option value="">— اختر الاسم من الحضور —</option>'
+      + people.map((p) => {
+        const extra = counts[p.name] > 1 && p.phone ? ` · ${p.phone}` : '';
+        return `<option value="${esc(p.id)}" data-name="${esc(p.name)}">${esc(p.name)}${esc(extra)}</option>`;
+      }).join('');
+    if (keepNameId && people.some((p) => p.id === keepNameId)) nameEl.value = keepNameId;
+    else nameEl.value = '';
+  }
+
+  function attendanceCity() {
+    return String($('branch_to').value || '').trim();
+  }
+
+  async function loadAttendanceOptions(keepNameId) {
+    if (isWarehouse()) return;
+    lastAttendanceCity = attendanceCity();
+    const q = lastAttendanceCity ? `?city=${encodeURIComponent(lastAttendanceCity)}` : '';
+    const data = await api(`/attendance/available${q}`);
+    attendanceCompanies = data.companies || [];
+    renderAttendanceSelects(keepNameId || claimedAttendanceId);
+    updatePreview();
+  }
+
+  async function holdAttendance(id) {
+    if (!id) return;
+    const data = await api('/attendance/hold', {
+      method: 'POST',
+      json: { id, city: attendanceCity() },
+    });
+    claimedAttendanceId = data.entry && data.entry.id || id;
+    attendanceCompanies = data.companies || attendanceCompanies;
+    renderAttendanceSelects(claimedAttendanceId);
+    updatePreview();
+  }
+
+  async function releaseAttendanceHold() {
+    if (!claimedAttendanceId) return;
+    claimedAttendanceId = '';
+    try {
+      const data = await api('/attendance/release', {
+        method: 'POST',
+        json: { city: attendanceCity() },
+      });
+      attendanceCompanies = data.companies || attendanceCompanies;
+    } catch (_) { /* ignore */ }
+  }
+
+  function onCityForAttendanceChanged() {
+    if (isWarehouse()) return;
+    clearTimeout(cityReloadTimer);
+    cityReloadTimer = setTimeout(async () => {
+      if (attendanceCity() === lastAttendanceCity) return;
+      if (claimedAttendanceId) await releaseAttendanceHold();
+      await loadAttendanceOptions();
+    }, 250);
+  }
+
   function setPrintStatus(msg, type) {
     const el = $('printStatus');
     if (!el) return;
@@ -376,8 +470,9 @@
       invoice_number: fd.get('invoice_number')?.trim(),
       dep_hour: fd.get('dep_hour')?.trim(),
       dep_minute: fd.get('dep_minute')?.trim(),
-      customer_name: fd.get('customer_name')?.trim(),
+      customer_name: selectedAttendanceName() || fd.get('customer_name')?.trim(),
       company_rep: fd.get('company_rep')?.trim() || '',
+      attendanceId: claimedAttendanceId,
       transfer_date: fd.get('transfer_date') || fd.get('doc_date'),
       corresponding_date: fd.get('corresponding_date') || fd.get('transfer_date') || fd.get('doc_date'),
       day_name: fd.get('day_name')?.trim(),
@@ -547,8 +642,13 @@
       return false;
     }
     if (!company) {
-      setPrintStatus('أدخل اسم الشركة قبل الطباعة', 'err');
+      setPrintStatus('اختر الشركة من الحضور قبل الطباعة', 'err');
       $('company_rep').focus();
+      return false;
+    }
+    if (!selectedAttendanceName()) {
+      setPrintStatus('اختر الاسم من الحضور قبل الطباعة', 'err');
+      $('customer_name').focus();
       return false;
     }
     if (!branch) {
@@ -581,8 +681,15 @@
     try {
       await api('/print-complete', {
         method: 'POST',
-        json: { vins: printedVins, kind: isWarehouse() ? 'warehouse' : 'memo' },
+        json: {
+          vins: printedVins,
+          kind: isWarehouse() ? 'warehouse' : 'memo',
+          attendanceId: isWarehouse() ? '' : claimedAttendanceId,
+          company: isWarehouse() ? '' : String($('company_rep').value || '').trim(),
+          city: isWarehouse() ? '' : attendanceCity(),
+        },
       });
+      if (!isWarehouse()) claimedAttendanceId = '';
     } catch (err) {
       setPrintStatus(err.message || 'فشل تحديث قائمة المنسق', 'err');
       return;
@@ -838,6 +945,8 @@
     fill('customer_name', '');
     fill('branch_to', '');
     fill('attachments', '');
+    claimedAttendanceId = '';
+    await loadAttendanceOptions();
     await peekInvoice();
     syncCarCount();
     if (!overlayReady) buildOverlay();
@@ -855,8 +964,10 @@
     const docDate = toIsoDate(v.raw.proformaDate) || today;
     fill('doc_date', docDate);
     fill('company_rep', '');
-    fill('customer_name', v.raw.userName);
+    fill('customer_name', '');
     fill('branch_to', (v.ops && v.ops.transferCity) || '');
+    claimedAttendanceId = '';
+    await loadAttendanceOptions();
     const form = $('deliveryForm');
     form.querySelector('[name="car_model_0"]').value = v.raw.product || '';
     form.querySelector('[name="car_chassis_0"]').value = v.vin || '';
@@ -883,6 +994,27 @@
     document.querySelectorAll('input[name="attach_opt"]').forEach((el) => {
       el.addEventListener('change', syncAttachmentChoice);
     });
+    $('branch_to').addEventListener('change', onCityForAttendanceChanged);
+    $('branch_to').addEventListener('input', onCityForAttendanceChanged);
+    $('company_rep').addEventListener('change', async () => {
+      if (claimedAttendanceId) await releaseAttendanceHold();
+      renderAttendanceNames('');
+      updatePreview();
+    });
+    $('customer_name').addEventListener('change', async () => {
+      const id = $('customer_name').value;
+      if (!id) {
+        await releaseAttendanceHold();
+        await loadAttendanceOptions();
+        return;
+      }
+      try {
+        await holdAttendance(id);
+      } catch (err) {
+        setPrintStatus(err.message || 'تعذر اختيار الاسم', 'err');
+        await loadAttendanceOptions();
+      }
+    });
     $('btnPrint').addEventListener('click', doPrintA4);
     $('btnPrint2').addEventListener('click', doPrintA4);
     $('btnToday').addEventListener('click', setTodayDates);
@@ -904,14 +1036,18 @@
     $('loginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
     $('btnLogout').addEventListener('click', logout);
     $('btnBackWorkspace').addEventListener('click', () => {
-      setPrintMode('sheet');
-      showView('workspace');
-      loadWorkspace().catch(() => {});
+      releaseAttendanceHold().finally(() => {
+        setPrintMode('sheet');
+        showView('workspace');
+        loadWorkspace().catch(() => {});
+      });
     });
     $('brandHome').addEventListener('click', (e) => {
       e.preventDefault();
-      setPrintMode('sheet');
-      showView('workspace');
+      releaseAttendanceHold().finally(() => {
+        setPrintMode('sheet');
+        showView('workspace');
+      });
     });
     $('availableVinSearch').addEventListener('input', filterFleet);
     $('btnMissingVin').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
