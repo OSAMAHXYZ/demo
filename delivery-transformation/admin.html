@@ -3,16 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Delivery Transformation — Admin</title>
+  <title>Delivery Transformation — Data collector</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="admin.css?v=20260923a1" />
+  <link rel="stylesheet" href="admin.css?v=20260923a2" />
 </head>
 <body>
+  <div class="collector-gate" id="collector-gate">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong>TOYOTA</strong>
+          <span>Delivery Transformation</span>
+        </div>
+      </div>
+      <h1>Data collector</h1>
+      <p>Password only · no user login · live attendance and delivery-note totals</p>
+      <div class="field">
+        <label for="collector-pass">Password</label>
+        <input id="collector-pass" type="password" value="1234" autocomplete="current-password" />
+      </div>
+      <button type="button" class="btn-primary" id="collector-btn" style="width:100%">Open collector</button>
+      <div class="login-error" id="collector-error"></div>
+    </div>
+  </div>
+
+  <div class="collector-app hidden" id="collector-app">
   <header class="topnav">
     <div class="brand">
       <div class="brand-mark">T</div>
-      <div><strong>TOYOTA</strong><span>Delivery Transformation · Admin</span></div>
+      <div><strong>TOYOTA</strong><span>Delivery Transformation · Data collector</span></div>
     </div>
     <nav class="nav-links">
       <button type="button" class="tab-btn active" data-tab="dash">Dashboard</button>
@@ -134,9 +155,10 @@
   <div class="drawer-back" id="detail-back">
     <div class="drawer wide" id="detail-drawer"></div>
   </div>
+  </div>
 
   <script src="shared.js"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260923a1"></script>
+  <script src="admin.js?v=20260923a2"></script>
 </body>
 </html>

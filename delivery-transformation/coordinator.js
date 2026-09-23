@@ -53,7 +53,7 @@
         method: 'POST',
         json: { username: $('loginUser').value, password: $('loginPass').value },
       });
-      if (data.user.role !== 'coordinator' && data.user.role !== 'admin') {
+      if (data.user.role !== 'coordinator') {
         status.className = 'ws-toast err';
         status.textContent = 'هذا المستخدم ليس منسق تسليم';
         return;
@@ -68,8 +68,8 @@
 
   function enterApp(user) {
     $('loggedAs').textContent = user.name;
-    $('adminLink').hidden = user.role !== 'admin';
-    $('empLink').hidden = user.role !== 'admin';
+    if ($('adminLink')) $('adminLink').hidden = true;
+    if ($('empLink')) $('empLink').hidden = true;
     showView('workspace');
     loadWorkspace().catch((e) => alert(e.message));
   }
@@ -1073,7 +1073,7 @@
     if (getToken() && getUser()) {
       try {
         const me = await api('/auth/me');
-        if (me.user.role !== 'coordinator' && me.user.role !== 'admin') {
+        if (me.user.role !== 'coordinator') {
           showView('login');
           return;
         }

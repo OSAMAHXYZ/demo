@@ -381,7 +381,9 @@ function createDeliveryTransformationRouter(opts = {}) {
       carriers: allCarriers(),
       transferCities: allCities(),
       yesNo: YES_NO,
-      users: USERS.map((u) => ({ id: u.id, name: u.name, role: u.role })),
+      users: USERS
+        .filter((u) => u.role !== 'admin' && u.id !== 'admin')
+        .map((u) => ({ id: u.id, name: u.name, role: u.role })),
       employees: vacationList(),
       currentMonth: currentMonthKey(),
       today: todayKey(),
@@ -391,9 +393,23 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
   });
 
+  router.post('/auth/collector', (req, res) => {
+    const pass = String((req.body && req.body.password) || '').trim();
+    if (pass !== password) return res.status(401).json({ error: 'Invalid password' });
+    const collector = { id: 'collector', name: 'Collector', role: 'admin' };
+    const token = store.createSession(collector);
+    return res.json({
+      ok: true,
+      token,
+      user: { id: collector.id, name: collector.name, role: collector.role },
+    });
+  });
+
   router.post('/auth/login', (req, res) => {
     const user = store.getUserByLogin(req.body && req.body.username);
-    if (!user) return res.status(401).json({ error: 'Unknown user' });
+    if (!user || user.role === 'admin' || user.id === 'admin') {
+      return res.status(401).json({ error: 'Unknown user' });
+    }
     const pass = String((req.body && req.body.password) || '').trim();
     if (pass !== password) return res.status(401).json({ error: 'Invalid password' });
     const token = store.createSession(user);
@@ -972,7 +988,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     }).sort((a, b) => (b.present - a.present) || (b.notes - a.notes) || a.company.localeCompare(b.company, 'ar'));
 
     const coordinators = USERS
-      .filter((u) => u.role === 'coordinator' || u.role === 'admin')
+      .filter((u) => u.role === 'coordinator')
       .map((u) => {
         const notes = vehicles.filter((v) => isCoordinatorPrinted(v) && v.ops
           && (v.ops.coordinatorPrintedBy === u.name || v.ops.coordinatorPrintedBy === u.id)).length;

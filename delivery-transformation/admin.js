@@ -1,9 +1,53 @@
 (() => {
-  const { api, esc, requireRole, toast } = window.DTX;
-  const user = requireRole(['admin']);
-  if (!user) return;
+  const { api, esc, toast, getToken, getUser, setSession, clearSession } = window.DTX;
 
   const $ = (id) => document.getElementById(id);
+
+  function isCollector(user) {
+    return !!(user && (user.id === 'collector' || user.role === 'admin'));
+  }
+
+  function showCollector(user) {
+    $('collector-gate').classList.add('hidden');
+    $('collector-app').classList.remove('hidden');
+    startApp(user);
+  }
+
+  async function collectorLogin() {
+    $('collector-error').textContent = '';
+    try {
+      const data = await api('/auth/collector', {
+        method: 'POST',
+        json: { password: $('collector-pass').value },
+      });
+      setSession(data.token, data.user);
+      showCollector(data.user);
+    } catch (err) {
+      $('collector-error').textContent = err.message || 'Could not open collector';
+    }
+  }
+
+  $('collector-btn').addEventListener('click', collectorLogin);
+  $('collector-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') collectorLogin(); });
+
+  (async function bootGate() {
+    if (getToken() && isCollector(getUser())) {
+      try {
+        const me = await api('/auth/me');
+        if (isCollector(me.user)) {
+          showCollector(me.user);
+          return;
+        }
+      } catch {
+        clearSession();
+      }
+    }
+  }());
+
+  let started = false;
+  function startApp(user) {
+  if (started) return;
+  started = true;
   const CITY_COLORS = ['#0b2a44', '#1769a8', '#0d6b3c', '#b45309', '#7c3aed', '#eb0a1e', '#0e7490', '#854d0e'];
 
   let dash = null;
@@ -11,6 +55,7 @@
   let dashInFlight = false;
 
   DTXLive.wireHeader(user);
+  if ($('who')) $('who').textContent = 'Collector';
 
   function fmtWhen(iso) {
     if (!iso) return '—';
@@ -352,4 +397,5 @@
   }());
 
   window.addEventListener('beforeunload', () => { if (dashTimer) clearInterval(dashTimer); });
+  }
 })();

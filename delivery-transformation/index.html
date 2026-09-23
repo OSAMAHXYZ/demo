@@ -17,7 +17,7 @@
       </div>
     </div>
     <h1>Sign in</h1>
-    <p>Admin · Delivery Coordinator · Delivery Employee</p>
+    <p>Delivery Coordinator · Delivery Employee</p>
     <div class="user-pills" id="login-pills"></div>
     <div class="field">
       <label for="login-user">User</label>
@@ -36,19 +36,21 @@
     (function () {
       const { api, esc, setSession, getUser, getToken } = DTX;
       const PAGE_BY_ROLE = {
-        admin: 'admin.html',
         hanouf: 'employee.html',
         coordinator: 'coordinator.html',
         employee: 'employee.html',
       };
       const ROLE_LABEL = {
-        admin: 'Admin',
         hanouf: 'Hanouf · uploads',
         coordinator: 'Coordinator',
         employee: 'Employee',
       };
 
       function goToRolePage(user) {
+        if (user && (user.id === 'collector' || user.role === 'admin')) {
+          location.href = 'admin.html';
+          return;
+        }
         location.href = PAGE_BY_ROLE[user.role] || 'index.html';
       }
 
@@ -62,7 +64,7 @@
           } catch (_) { /* fall through to login */ }
         }
         const meta = await api('/meta');
-        const users = meta.users || [];
+        const users = (meta.users || []).filter((u) => u.role !== 'admin' && u.id !== 'admin');
         const select = document.getElementById('login-user');
         select.innerHTML = users.map((u) =>
           `<option value="${esc(u.id)}">${esc(u.name)} (${esc(ROLE_LABEL[u.role] || u.role)})</option>`

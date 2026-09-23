@@ -1,3 +1,12 @@
+.collector-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 12px;
+}
+.collector-app.hidden,
+.collector-gate.hidden { display: none !important; }
+
 .top-right {
   display: flex;
   gap: 8px;

@@ -304,11 +304,7 @@
 
   function renderNav() {
     const nav = $('#side-nav');
-    const links = isAdmin()
-      ? `<p class="sec">Admin</p>
-         <button type="button" data-href="admin.html">Admin page</button>
-         <button type="button" data-href="coordinator.html">Coordinator view</button>`
-      : '';
+    const links = '';
     nav.innerHTML = `<p class="sec">Menu</p>${navItems().map((i) =>
       `<button type="button" data-view="${i.id}" class="${state.view === i.id ? 'active' : ''}">${esc(i.label)}</button>`
     ).join('')}${links}`;
@@ -1395,7 +1391,7 @@
         method: 'POST',
         json: { username: $('#login-user').value, password: $('#login-pass').value },
       });
-      if (data.user.role === 'coordinator') {
+      if (data.user.role === 'coordinator' || data.user.role === 'admin') {
         $('#login-error').textContent = 'This page is for delivery employees. Open the coordinator page to sign in.';
         return;
       }
@@ -1422,7 +1418,7 @@
     if (getToken() && getUser()) {
       try {
         const me = await api('/auth/me');
-        if (me.user.role === 'coordinator') {
+        if (me.user.role === 'coordinator' || me.user.role === 'admin') {
           return;
         }
         state.user = me.user;

@@ -47,14 +47,13 @@ const TRANSFER_CITIES = Object.freeze([
 ]);
 
 /**
- * Users for this isolated app only.
- * - admin: full details + edit
+ * People who can sign in. There is no Admin user.
+ * The admin.html page is a password-only data collector.
  * - hanouf: uploads VINs (current proforma month) + Sales Raw, edits any Live Sheet VIN
  * - coordinator: Live Sheet VIN + details (read-only, no employee entry)
  * - employee: Live Sheet see + edit (ops entry)
  */
 const USERS = Object.freeze([
-  { id: 'admin', name: 'Admin', role: 'admin' },
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
   { id: 'alfadel', name: 'الفاضل', role: 'coordinator' },
   { id: 'albara', name: 'البراء', role: 'coordinator' },
