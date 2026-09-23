@@ -108,6 +108,7 @@ function emptyRaw() {
   return {
     date: '',
     proformaDate: '',
+    invoiceDate: '',
     salesOrder: '',
     vin: '',
     product: '',
@@ -143,6 +144,7 @@ const HEADER_MAP = Object.freeze({
     'sales employee', 'advisor', 'consultant', 'مستشار المبيعات',
   ],
   proformaDate: ['proforma date', 'proforma invoice date', 'pro forma date', 'تاريخ البروفورما'],
+  invoiceDate: ['invoice date', 'invoice dt', 'inv date', 'تاريخ الفاتورة', 'تاريخ الانفويس'],
   gtLocation: ['gt location', 'gt', 'موقع gt'],
   vehicleLocation: ['vehicle location', 'veh loc', 'موقع المركبة', 'location'],
   phone: ['phone number', 'phone', 'mobile', 'رقم الجوال', 'الجوال', 'contact'],
@@ -177,6 +179,7 @@ const RAW_COL = Object.freeze({
   invoiceOwner: 13, // N
   userName: 14, // O
   proformaDate: 15, // P
+  invoiceDate: 21, // V
   phone: 24, // Y
 });
 
@@ -186,6 +189,8 @@ const PIC_ALIASES = Object.freeze({
   ibraheem: 'ibrahim',
   abdulah: 'abdullah',
   abdalla: 'abdullah',
+  hanof: 'hanouf',
+  henouf: 'hanouf',
 });
 
 module.exports = {

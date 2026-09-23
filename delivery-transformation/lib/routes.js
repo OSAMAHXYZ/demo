@@ -25,6 +25,18 @@ function isManager(role) {
   return role === 'admin' || role === 'hanouf';
 }
 
+/** Employees + Hanouf can receive VINs. */
+function isAssignable(u) {
+  return !!(u && (u.role === 'employee' || u.role === 'hanouf'));
+}
+
+function findAssignable(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  const id = PIC_ALIASES[key] || key;
+  return USERS.find((u) => isAssignable(u) && (u.id === id || u.name.toLowerCase() === key)) || null;
+}
+
 function canUploadSalesRaw(sessionUser) {
   if (!sessionUser) return false;
   if (isManager(sessionUser.role)) return true;
@@ -56,10 +68,7 @@ function isDelivered(v) {
 }
 
 function findEmployeeByPic(pic) {
-  const key = String(pic || '').trim().toLowerCase();
-  if (!key) return null;
-  const id = PIC_ALIASES[key] || key;
-  return USERS.find((u) => u.role === 'employee' && (u.id === id || u.name.toLowerCase() === key)) || null;
+  return findAssignable(pic);
 }
 
 function canEditVehicle(v, viewer) {
@@ -262,7 +271,7 @@ function createDeliveryTransformationRouter(opts = {}) {
 
   function vacationList() {
     const all = store.data.meta.vacations || {};
-    return USERS.filter((u) => u.role === 'employee').map((u) => ({
+    return USERS.filter(isAssignable).map((u) => ({
       id: u.id,
       name: u.name,
       onVacation: onVacation(u.id),
@@ -411,15 +420,26 @@ function createDeliveryTransformationRouter(opts = {}) {
         today: todayKey(),
         todayNew: 0,
         todayOnSystem: 0,
+        assignable: 0,
+        skippedNoProforma: 0,
+        skippedInvoiced: 0,
+        skippedOnSystem: 0,
+        duplicates: parsed.duplicates || 0,
       };
       const pending = pendingMap();
       parsed.items.forEach((item) => {
         const v = store.getVehicle(item.vin);
+        const hasProforma = !!String((item.raw && item.raw.proformaDate) || '').trim();
+        const hasInvoice = !!String((item.raw && item.raw.invoiceDate) || '').trim();
+        const canAssign = hasProforma && !hasInvoice;
         const isToday = item.raw.proformaDate === summary.today;
         if (!v) {
           summary.notOnSheet += 1;
-          if (isToday) {
-            summary.todayNew += 1;
+          if (!hasProforma) summary.skippedNoProforma += 1;
+          else if (hasInvoice) summary.skippedInvoiced += 1;
+          else {
+            summary.assignable += 1;
+            if (isToday) summary.todayNew += 1;
             pending[item.vin] = {
               vin: item.vin,
               raw: { ...emptyRaw(), ...(pending[item.vin] ? pending[item.vin].raw : {}), ...item.raw, vin: item.vin },
@@ -430,6 +450,7 @@ function createDeliveryTransformationRouter(opts = {}) {
           }
           return;
         }
+        if (canAssign) summary.skippedOnSystem += 1;
         if (isToday) summary.todayOnSystem += 1;
         summary.matched += 1;
         let changed = false;
@@ -452,7 +473,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         user: req.dtUser.name,
         action: 'upload_sales_raw',
         oldValue: filename,
-        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.notOnSheet} not on Live Sheet · ${summary.todayNew} new today → Assignment`,
+        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.assignable} to Assignment (P filled · V empty)`,
       });
       store.save();
       summary.pendingTotal = Object.keys(pending).length;
@@ -488,7 +509,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       return res.status(409).json({ error: 'VIN already exists' });
     }
     const empId = String(body.assignedEmployeeId || '').trim().toLowerCase();
-    const emp = USERS.find((u) => u.id === empId && u.role === 'employee') || null;
+    const emp = findAssignable(empId);
     const now = new Date().toISOString();
     const vehicle = {
       vin,
@@ -590,9 +611,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     if (req.dtUser.role === 'admin') {
       if (Object.prototype.hasOwnProperty.call(body, 'assignedEmployeeId')) {
         const empId = String(body.assignedEmployeeId || '').trim().toLowerCase();
-        const emp = empId
-          ? USERS.find((u) => u.id === empId && u.role === 'employee')
-          : null;
+        const emp = empId ? findAssignable(empId) : null;
         const old = v.ops.assignedEmployeeName || '';
         v.ops.assignedEmployeeId = emp ? emp.id : '';
         v.ops.assignedEmployeeName = emp ? emp.name : '';
@@ -654,8 +673,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const body = req.body || {};
     const vins = Array.isArray(body.vins) ? body.vins.map(normVin).filter(Boolean) : [];
     const target = String(body.employee || '').trim().toLowerCase();
-    const emp = USERS.find((u) => u.role === 'employee'
-      && (u.id === target || u.name.toLowerCase() === target));
+    const emp = findAssignable(target);
     if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
     if (!emp) return res.status(400).json({ error: 'Unknown employee' });
     if (onVacation(emp.id)) return res.status(400).json({ error: `${emp.name} is on vacation` });
@@ -754,22 +772,25 @@ function createDeliveryTransformationRouter(opts = {}) {
   }
 
   /**
-   * Keep only pending VINs whose Proforma Date (column P) is today and that are not on the system,
-   * then auto-pick an employee so every employee has the same count in each sales type this month.
+   * Keep unique pending VINs that have Proforma Date (column P) and no Invoice Date (column V),
+   * and that are not already on the system. Auto-split evenly by sales type.
    */
   function buildAssignmentView() {
     const today = todayKey();
     const pending = pendingMap();
     let dropped = false;
     Object.keys(pending).forEach((vin) => {
-      if (store.getVehicle(vin) || pending[vin].raw.proformaDate !== today) {
+      const raw = pending[vin].raw || {};
+      const hasProforma = !!String(raw.proformaDate || '').trim();
+      const hasInvoice = !!String(raw.invoiceDate || '').trim();
+      if (store.getVehicle(vin) || !hasProforma || hasInvoice) {
         delete pending[vin];
         dropped = true;
       }
     });
     if (dropped) store.save();
 
-    const employees = USERS.filter((u) => u.role === 'employee');
+    const employees = USERS.filter(isAssignable);
     const available = employees.filter((u) => !onVacation(u.id));
     const month = currentMonthKey();
     const typeLabel = (t) => String(t || '').trim() || '(blank)';
@@ -833,7 +854,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   /** Hanouf marks an employee on / off vacation: { employeeId, onVacation, until } */
   router.put('/vacation', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const body = req.body || {};
-    const emp = USERS.find((u) => u.role === 'employee' && u.id === String(body.employeeId || ''));
+    const emp = findAssignable(body.employeeId);
     if (!emp) return res.status(400).json({ error: 'Unknown employee' });
     const until = /^\d{4}-\d{2}-\d{2}$/.test(String(body.until || '')) ? body.until : '';
     if (!store.data.meta.vacations) store.data.meta.vacations = {};
@@ -878,7 +899,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       const p = pending[vin];
       if (!p) return { vin, ok: false, error: 'Not pending' };
       if (store.getVehicle(vin)) { delete pending[vin]; return { vin, ok: false, error: 'Already on the system' }; }
-      const emp = USERS.find((u) => u.role === 'employee' && u.id === String((it && it.employeeId) || ''));
+      const emp = findAssignable(it && it.employeeId);
       if (!emp) return { vin, ok: false, error: 'Choose an employee' };
       if (onVacation(emp.id)) return { vin, ok: false, error: `${emp.name} is on vacation` };
       store.upsertVehicle(vin, {
@@ -936,7 +957,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   router.get('/team-performance', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const month = monthParam(req.query.month);
     const targets = monthTargets(month);
-    const employees = USERS.filter((u) => u.role === 'employee');
+    const employees = USERS.filter(isAssignable);
     const rows = new Map(employees.map((u) => [u.id, {
       id: u.id, name: u.name, bySalesType: {}, total: 0, delivered: 0,
     }]));
@@ -993,7 +1014,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const current = { ...(store.data.meta.targets[month] || {}) };
     const changes = [];
     Object.entries(input).forEach(([id, val]) => {
-      const emp = USERS.find((u) => u.role === 'employee' && u.id === id);
+      const emp = findAssignable(id);
       if (!emp) return;
       const n = Math.max(0, Math.round(Number(val) || 0));
       if ((Number(current[id]) || 0) === n) return;

@@ -246,7 +246,7 @@
       my: isManager()
         ? ['All VINs', 'Every VIN · edit · hand over to an employee']
         : ['My VINs', 'Your schedule · edit your work · الناقل'],
-      assignment: ['Assignment', `VIN numbers only · Proforma Date (column P) = today (${state.meta.today || ''}) · auto-split evenly by sales type`],
+      assignment: ['Assignment', 'VIN numbers only · Proforma Date (column P) filled · Invoice Date (column V) empty · no duplicate VINs'],
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
       upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
       'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · everyone sees the update time'],
@@ -355,7 +355,8 @@
     const assignBtn = (name, label, extra = '') => (away.has(name)
       ? `<button type="button" class="btn sel-assign ${extra}" disabled title="${esc(name)} is on vacation">${esc(label)} 🌴</button>`
       : `<button type="button" class="btn sel-assign ${extra}" data-emp="${esc(name)}">${esc(label)}</button>`);
-    const meBtn = state.user.role === 'employee' ? assignBtn(state.user.name, '→ Me', 'me') : '';
+    const meBtn = (state.user.role === 'employee' || state.user.role === 'hanouf')
+      ? assignBtn(state.user.name, '→ Me', 'me') : '';
     el.innerHTML = `
       <div class="sel-head">
         <strong>${vins.length}</strong> VIN(s) selected
@@ -455,15 +456,15 @@
       state.meta.employees = state.meta.employees.map((e) => ({ ...e, onVacation: away.has(e.id) }));
     }
     $('#asg-kpis').innerHTML = [
-      ['Today\'s new VINs', d.rows.length, d.rows.length ? 'warn' : 'ok'],
-      ['Proforma date', d.today, ''],
+      ['Ready to assign', d.rows.length, d.rows.length ? 'warn' : 'ok'],
+      ['Unique VINs', d.rows.length, ''],
     ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
 
     $('#asg-actions').style.display = can && d.rows.length ? '' : 'none';
     const list = $('#asg-table');
     list.innerHTML = d.rows.length
       ? d.rows.map((r) => `<button type="button" class="asg-vin ${state.asgSel.has(r.vin) ? 'selected' : ''}" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`).join('')
-      : `<p class="hint">No new VINs with Proforma Date (column P) = ${esc(d.today)}.</p>`;
+      : '<p class="hint">No unique VINs with Proforma Date (column P) filled and Invoice Date (column V) empty.</p>';
     $$('.asg-vin', list).forEach((b) => b.addEventListener('click', () => {
       if (!can) return;
       if (state.asgSel.has(b.dataset.vin)) state.asgSel.delete(b.dataset.vin);
@@ -650,18 +651,20 @@
           <div><strong>${s.matched}</strong><span>VINs matched</span></div>
           <div><strong>${s.updated}</strong><span>VINs with new details</span></div>
           <div><strong>${s.notOnSheet}</strong><span>Not on Live Sheet</span></div>
-          <div><strong>${s.todayNew}</strong><span>New · Proforma today</span></div>
-          <div><strong>${s.todayOnSystem}</strong><span>Today · already on system</span></div>
+          <div><strong>${s.assignable || 0}</strong><span>To Assignment · P filled · V empty</span></div>
+          <div><strong>${s.skippedInvoiced || 0}</strong><span>Skipped · has Invoice Date (V)</span></div>
+          <div><strong>${s.skippedOnSystem || 0}</strong><span>Skipped · already on system</span></div>
+          <div><strong>${s.duplicates || 0}</strong><span>Duplicate VINs ignored</span></div>
         </div>
-        ${s.todayNew ? `<p style="margin-top:10px"><b>${s.todayNew}</b> new VIN(s) with Proforma Date ${esc(s.today)}
+        ${s.assignable ? `<p style="margin-top:10px"><b>${s.assignable}</b> unique VIN(s) with Proforma Date and no Invoice Date
           ${isManager() ? 'are waiting for your confirmation.' : 'were sent to Hanouf to confirm the assignment.'}
           <button type="button" class="btn" id="go-assignment">Open Assignment</button></p>` : ''}`;
       const go = $('#go-assignment');
       if (go) go.addEventListener('click', () => setView('assignment'));
       await loadImportPanels();
       renderNav();
-      if (s.todayNew && isManager()
-        && confirm(`${s.todayNew} new VIN(s) with today's Proforma Date (${s.today}) are not on the system.\n\nReview and confirm their assignment now?`)) {
+      if (s.assignable && isManager()
+        && confirm(`${s.assignable} unique VIN(s) have a Proforma Date and no Invoice Date (column V).\n\nReview and assign them now?`)) {
         setView('assignment');
       }
     } catch (err) {

@@ -145,7 +145,7 @@ function rawFromRow(row, idx, source) {
   Object.keys(source).forEach((field) => {
     if (field === 'vin') return;
     const val = get(field);
-    if (field === 'proformaDate' || field === 'date') raw[field] = normalizeDate(val);
+    if (field === 'proformaDate' || field === 'invoiceDate' || field === 'date') raw[field] = normalizeDate(val);
     else if (field === 'phone') raw[field] = normalizePhone(val);
     else raw[field] = cellString(val);
   });
@@ -193,7 +193,7 @@ function parseDeliverySheet(buffer) {
 
 /** Sales Raw → [{ vin, raw }] (header aliases, or the fixed A/B/C/K/N letter layout). */
 function parseSalesRaw(buffer) {
-  let best = { sheet: '', layout: '', items: [] };
+  let best = { sheet: '', layout: '', items: [], duplicates: 0 };
   readSheets(buffer).forEach(({ name, rows }) => {
     let items = [];
     let layout = '';
@@ -207,7 +207,7 @@ function parseSalesRaw(buffer) {
         Object.entries(RAW_COL).forEach(([field, col]) => {
           if (field === 'vin') return;
           if (field === 'phone') raw[field] = normalizePhone(row[col]);
-          else if (field === 'proformaDate') raw[field] = normalizeDate(row[col]);
+          else if (field === 'proformaDate' || field === 'invoiceDate') raw[field] = normalizeDate(row[col]);
           else raw[field] = cellString(row[col]);
         });
         items.push({ vin, raw });
@@ -225,10 +225,20 @@ function parseSalesRaw(buffer) {
         const raw = rawFromRow(row, idx, HEADER_MAP);
         delete raw.pic;
         if (idx.proformaDate == null) raw.proformaDate = normalizeDate(row[RAW_COL.proformaDate]);
+        if (idx.invoiceDate == null) raw.invoiceDate = normalizeDate(row[RAW_COL.invoiceDate]);
         items.push({ vin, raw });
       });
     }
-    if (items.length > best.items.length) best = { sheet: name, layout, items };
+    const unique = [];
+    const seen = new Set();
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      if (seen.has(items[i].vin)) continue;
+      seen.add(items[i].vin);
+      unique.push(items[i]);
+    }
+    unique.reverse();
+    const dupes = items.length - unique.length;
+    if (unique.length > best.items.length) best = { sheet: name, layout, items: unique, duplicates: dupes };
   });
   return best;
 }
