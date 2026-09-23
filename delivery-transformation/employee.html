@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20260923emp1" />
+  <link rel="stylesheet" href="employee.css?v=20260923emp5" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -132,6 +132,7 @@
             <div class="live-chip-row" id="live-chips"></div>
             <p class="hint" id="live-edit-hint">You can edit your own VINs directly on this sheet · teammates' rows are view only.</p>
             <p class="hint live-save-toast" id="live-save-toast" hidden></p>
+            <div class="sel-bar" id="live-sel-bar"></div>
             <div class="table-wrap live-sheet-wrap">
               <table class="data live-sheet" id="live-table"></table>
             </div>
@@ -143,22 +144,83 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">All your assigned VINs on one page · edit below · select VINs to hand over to another employee</p>
+            <p class="hint">All your assigned VINs on one page · edit below · tick VINs to keep them in view, assign, unassign or remove</p>
             <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar">
               <input type="search" id="my-q" placeholder="Search VIN / order / product…" />
               <select id="my-status"><option value="">All statuses</option></select>
               <button type="button" class="btn" id="my-clear">Clear</button>
             </div>
-            <div class="reassign-bar" id="my-reassign-bar">
-              <div class="reassign-bar-label">
-                <strong id="my-reassign-count">0</strong> VIN(s) selected · give to:
-              </div>
-              <div class="reassign-targets" id="my-reassign-targets"></div>
-              <button type="button" class="btn" id="my-reassign-clear">Clear selection</button>
-            </div>
+            <div class="sel-bar" id="my-sel-bar"></div>
             <div class="table-wrap"><table class="data" id="my-table"></table></div>
             <div class="pager" id="my-pager"></div>
+          </div>
+        </section>
+
+        <!-- ASSIGNMENT (Hanouf / Admin confirm · Sales Raw uploaders view) -->
+        <section class="panel" id="panel-assignment">
+          <div class="kpi-row" id="asg-kpis"></div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>New VINs to assign</h2>
+                <p class="hint" id="asg-hint">
+                  From Sales Raw uploads · only VINs whose <b>Proforma Date (column P)</b> is <b>today</b> and are
+                  <b>not already on the system</b>. The employee is suggested by <b>Sales Type</b>.
+                </p>
+              </div>
+            </div>
+            <div class="toolbar asg-actions" id="asg-actions">
+              <button type="button" class="btn-primary" id="asg-confirm-sel" style="width:auto">Confirm selected</button>
+              <button type="button" class="btn" id="asg-confirm-all">Confirm all</button>
+              <button type="button" class="btn" id="asg-dismiss">Dismiss selected</button>
+            </div>
+            <div class="table-wrap"><table class="data" id="asg-table"></table></div>
+          </div>
+          <div class="card">
+            <h2>Sales type → employee</h2>
+            <p class="hint" id="asg-map-hint">
+              Tick which sales types each employee handles. If several employees share a type, the one with the fewest VINs this month is suggested.
+            </p>
+            <div class="table-wrap"><table class="data" id="asg-map-table"></table></div>
+            <div class="toolbar" id="asg-map-tools" style="margin-top:10px">
+              <input type="text" id="asg-new-type" placeholder="Add sales type…" />
+              <button type="button" class="btn" id="asg-add-type">Add type</button>
+              <button type="button" class="btn-primary" id="asg-map-save" style="width:auto">Save sales types</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- TEAM TARGETS (Hanouf / Admin) -->
+        <section class="panel" id="panel-targets">
+          <div class="toolbar month-toolbar">
+            <label class="month-filter-label">
+              Month
+              <input type="month" id="tgt-month" />
+            </label>
+            <button type="button" class="btn" id="tgt-month-now">This month</button>
+            <label class="month-filter-label">
+              Ach% based on
+              <select id="tgt-basis">
+                <option value="total">All VINs he got</option>
+                <option value="delivered">Delivered / Claimed only</option>
+              </select>
+            </label>
+            <span class="hint" id="tgt-hint"></span>
+          </div>
+          <div class="kpi-row" id="tgt-kpis"></div>
+          <div class="card">
+            <h2>Team performance vs target</h2>
+            <p class="hint">
+              VINs per employee by <b>Sales Type</b> (by Proforma Date month) · type a <b>Target</b> for each employee
+              and press <b>Save targets</b> · Ach% = count ÷ target.
+            </p>
+            <div id="tgt-save-toast" class="save-toast" hidden>Saved ✓</div>
+            <div class="table-wrap"><table class="data tgt-table" id="tgt-table"></table></div>
+            <div class="toolbar" style="margin-top:12px">
+              <button type="button" class="btn-primary" id="tgt-save" style="width:auto">Save targets</button>
+              <span class="hint" id="tgt-unassigned"></span>
+            </div>
           </div>
         </section>
 
@@ -184,7 +246,7 @@
           </div>
         </section>
 
-        <!-- SALES RAW (Hanouf / Admin) -->
+        <!-- SALES RAW (Hanouf / Admin / Rasha / Ruba) -->
         <section class="panel" id="panel-sales-raw">
           <div class="card">
             <h2>Upload Sales Raw</h2>
@@ -213,6 +275,6 @@
   </div>
 
   <script src="shared.js"></script>
-  <script src="employee.js?v=20260923emp1"></script>
+  <script src="employee.js?v=20260923emp5"></script>
 </body>
 </html>

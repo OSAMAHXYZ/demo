@@ -55,8 +55,9 @@ const USERS = Object.freeze([
   { id: 'admin', name: 'Admin', role: 'admin' },
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
   { id: 'coordinator', name: 'Coordinator', role: 'coordinator' },
-  { id: 'rasha', name: 'Rasha', role: 'employee' },
-  { id: 'ruba', name: 'Ruba', role: 'employee' },
+  // canUploadSalesRaw: may upload Sales Raw (updates vehicle details on every VIN)
+  { id: 'rasha', name: 'Rasha', role: 'employee', canUploadSalesRaw: true },
+  { id: 'ruba', name: 'Ruba', role: 'employee', canUploadSalesRaw: true },
   { id: 'ibrahim', name: 'Ibrahim', role: 'employee' },
   { id: 'abdullah', name: 'Abdullah', role: 'employee' },
 ]);
@@ -175,6 +176,7 @@ const RAW_COL = Object.freeze({
   salesType: 10, // K
   invoiceOwner: 13, // N
   userName: 14, // O
+  proformaDate: 15, // P
   phone: 24, // Y
 });
 

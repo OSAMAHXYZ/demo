@@ -11,7 +11,10 @@
     myFilters: { q: '', status: '' },
     liveFingerprint: '',
     liveTimer: null,
-    reassignVins: new Set(),
+    selected: new Set(),
+    selInfo: {},
+    rowIndex: {},
+    liveOnlySelected: false,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -29,6 +32,10 @@
   /** Admin + Hanouf: see and edit every VIN, upload VINs and Sales Raw. */
   function isManager() {
     return !!(state.user && (state.user.role === 'admin' || state.user.role === 'hanouf'));
+  }
+
+  function canUploadSalesRaw() {
+    return isManager() || !!(state.user && state.user.canUploadSalesRaw);
   }
 
   function formatWhen(iso) {
@@ -197,10 +204,15 @@
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'live', label: 'Live Sheet' },
       { id: 'my', label: isManager() ? 'All VINs' : 'My VINs' },
+      ...(canUploadSalesRaw() ? [{
+        id: 'assignment',
+        label: `Assignment${state.meta && state.meta.pendingAssignments ? ` (${state.meta.pendingAssignments})` : ''}`,
+      }] : []),
       ...(isManager() ? [
+        { id: 'targets', label: 'Team Targets' },
         { id: 'upload', label: 'Upload VINs' },
-        { id: 'sales-raw', label: 'Sales Raw' },
       ] : []),
+      ...(canUploadSalesRaw() ? [{ id: 'sales-raw', label: 'Sales Raw' }] : []),
     ];
   }
 
@@ -234,6 +246,8 @@
       my: isManager()
         ? ['All VINs', 'Every VIN · edit · hand over to an employee']
         : ['My VINs', 'Your schedule · edit your work · الناقل'],
+      assignment: ['Assignment', `New VINs · Proforma Date today (${state.meta.today || ''}) · auto-suggested by sales type · Hanouf confirms`],
+      targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
       upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
       'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · everyone sees the update time'],
     };
@@ -251,6 +265,8 @@
       if (state.view === 'dashboard') await loadDashboard();
       if (state.view === 'live') await loadLiveSheet();
       if (state.view === 'my') await loadMy();
+      if (state.view === 'targets') await loadTargets();
+      if (state.view === 'assignment') await loadAssignment();
       if (state.view === 'upload' || state.view === 'sales-raw') await loadImportPanels();
     } catch (err) {
       console.error(err);
@@ -263,7 +279,347 @@
     Object.entries(params || {}).forEach(([k, v]) => { if (v) qs.set(k, v); });
     const data = await api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`);
     renderImports(data.imports);
+    (data.rows || []).forEach((r) => { state.rowIndex[r.vin] = r; });
+    rememberSelInfo(data.rows || []);
     return data;
+  }
+
+  // ——— Selected VINs (every user · kept in view while working) ———
+  function selKey() {
+    return `dt_xform_sel_${state.user ? state.user.id : ''}`;
+  }
+
+  function loadSelection() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(selKey()) || '{}');
+      state.selected = new Set(Array.isArray(saved.vins) ? saved.vins : []);
+      state.selInfo = saved.info && typeof saved.info === 'object' ? saved.info : {};
+    } catch {
+      state.selected = new Set();
+      state.selInfo = {};
+    }
+  }
+
+  function saveSelection() {
+    const info = {};
+    state.selected.forEach((vin) => { if (state.selInfo[vin]) info[vin] = state.selInfo[vin]; });
+    state.selInfo = info;
+    localStorage.setItem(selKey(), JSON.stringify({ vins: [...state.selected], info }));
+  }
+
+  function rememberSelInfo(rows) {
+    let touched = false;
+    rows.forEach((r) => {
+      if (!state.selected.has(r.vin)) return;
+      state.selInfo[r.vin] = {
+        product: r.raw.product || '',
+        employee: r.ops.assignedEmployeeName || '',
+        status: r.ops.opsStatus || '',
+      };
+      touched = true;
+    });
+    if (touched) saveSelection();
+  }
+
+  function setSelected(vin, on) {
+    if (on) state.selected.add(vin);
+    else state.selected.delete(vin);
+    if (on && state.rowIndex[vin]) rememberSelInfo([state.rowIndex[vin]]);
+    saveSelection();
+    $$(`tr[data-vin="${CSS.escape(vin)}"]`).forEach((tr) => {
+      tr.classList.toggle('selected', on);
+      const cb = $('input.sel-check', tr);
+      if (cb) cb.checked = on;
+    });
+    renderSelBars();
+  }
+
+  function renderSelBars() {
+    ['#live-sel-bar', '#my-sel-bar'].forEach((sel) => {
+      const el = $(sel);
+      if (el) renderSelBar(el, sel === '#live-sel-bar');
+    });
+  }
+
+  function renderSelBar(el, isLive) {
+    const vins = [...state.selected];
+    if (!el.dataset.wired) wireSelBar(el);
+    if (!vins.length) {
+      el.classList.remove('has-sel');
+      el.innerHTML = '<span class="hint">Tick ☐ next to any VIN to keep it here while you work · then assign, unassign or remove it.</span>';
+      return;
+    }
+    el.classList.add('has-sel');
+    const others = employeeNames().filter((n) => n !== state.user.name);
+    const meBtn = state.user.role === 'employee'
+      ? `<button type="button" class="btn sel-assign me" data-emp="${esc(state.user.name)}">→ Me</button>` : '';
+    el.innerHTML = `
+      <div class="sel-head">
+        <strong>${vins.length}</strong> VIN(s) selected
+        ${isLive ? `<label class="sel-only"><input type="checkbox" class="sel-only-cb" ${state.liveOnlySelected ? 'checked' : ''} /> Show only selected</label>` : ''}
+        <button type="button" class="btn sel-clear">Clear</button>
+      </div>
+      <div class="sel-chips">${vins.map((vin) => {
+        const i = state.selInfo[vin] || {};
+        return `<span class="sel-chip">
+          <button type="button" class="sel-open" data-vin="${esc(vin)}" title="Open">${esc(vin)}</button>
+          <small>${esc(i.product || '')}${i.employee ? ` · ${esc(i.employee)}` : ' · unassigned'}${i.status ? ` · ${esc(i.status)}` : ''}</small>
+          <button type="button" class="sel-x" data-vin="${esc(vin)}" title="Unselect">×</button>
+        </span>`;
+      }).join('')}</div>
+      <div class="sel-actions">
+        <span class="lbl">Assign to:</span>
+        ${meBtn}
+        ${others.map((n) => `<button type="button" class="btn sel-assign" data-emp="${esc(n)}">→ ${esc(n)}</button>`).join('')}
+        <span class="sel-sep"></span>
+        <button type="button" class="btn sel-unassign">Unassign</button>
+        <button type="button" class="btn sel-remove">Remove from sheet</button>
+      </div>`;
+  }
+
+  function wireSelBar(el) {
+    el.dataset.wired = '1';
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.classList.contains('sel-open')) openVin(b.dataset.vin).catch((err) => alert(err.message));
+      else if (b.classList.contains('sel-x')) setSelected(b.dataset.vin, false);
+      else if (b.classList.contains('sel-clear')) clearSelection();
+      else if (b.classList.contains('sel-assign')) selAction('assign', b.dataset.emp);
+      else if (b.classList.contains('sel-unassign')) selAction('unassign');
+      else if (b.classList.contains('sel-remove')) selAction('remove');
+    });
+    el.addEventListener('change', (e) => {
+      if (!e.target.classList.contains('sel-only-cb')) return;
+      state.liveOnlySelected = e.target.checked;
+      state.liveFingerprint = '';
+      loadLiveSheet().catch((err) => alert(err.message));
+    });
+  }
+
+  function clearSelection() {
+    state.selected.clear();
+    state.liveOnlySelected = false;
+    saveSelection();
+    $$('tr.selected').forEach((tr) => tr.classList.remove('selected'));
+    $$('input.sel-check').forEach((cb) => { cb.checked = false; });
+    state.liveFingerprint = '';
+    refreshView();
+  }
+
+  async function selAction(kind, employee) {
+    const vins = [...state.selected];
+    if (!vins.length) return;
+    const n = vins.length;
+    const ask = {
+      assign: `Assign ${n} VIN(s) to ${employee}?`,
+      unassign: `Unassign ${n} VIN(s)? They stay on the Live Sheet with no employee.`,
+      remove: `Remove ${n} VIN(s) from the Live Sheet for everyone?\n\n${vins.join('\n')}`,
+    }[kind];
+    if (!confirm(ask)) return;
+    try {
+      const res = kind === 'assign'
+        ? await api('/reassign', { method: 'POST', json: { vins, employee } })
+        : await api(`/${kind}`, { method: 'POST', json: { vins } });
+      const results = res.results || [];
+      const ok = results.filter((r) => r.ok);
+      const fail = results.filter((r) => !r.ok);
+      if (kind === 'remove') ok.forEach((r) => state.selected.delete(r.vin));
+      saveSelection();
+      const verb = { assign: `assigned to ${employee}`, unassign: 'unassigned', remove: 'removed' }[kind];
+      alert(`${ok.length} VIN(s) ${verb}${fail.length
+        ? `\n${fail.length} skipped:\n${fail.map((f) => `${f.vin} — ${f.error}`).join('\n')}` : ''}`);
+    } catch (err) {
+      alert(err.message || 'Action failed');
+    }
+    state.liveFingerprint = '';
+    refreshView();
+  }
+
+  // ——— Assignment (sales type → employee · Hanouf confirms) ———
+  async function loadAssignment(data) {
+    const d = data || await api('/assignment');
+    state.asg = d;
+    if (!state.asgChoice) state.asgChoice = {};
+    if (!state.asgSel) state.asgSel = new Set();
+    const live = new Set(d.rows.map((r) => r.vin));
+    [...state.asgSel].forEach((v) => { if (!live.has(v)) state.asgSel.delete(v); });
+    Object.keys(state.asgChoice).forEach((v) => { if (!live.has(v)) delete state.asgChoice[v]; });
+    state.meta.pendingAssignments = d.rows.length;
+    renderNav();
+
+    const can = !!d.canConfirm;
+    const chosen = (r) => (r.vin in state.asgChoice ? state.asgChoice[r.vin] : r.suggestedEmployeeId);
+    const needs = d.rows.filter((r) => !chosen(r)).length;
+    $('#asg-kpis').innerHTML = [
+      ['Waiting to assign', d.rows.length, d.rows.length ? 'warn' : 'ok'],
+      ['Employee suggested', d.rows.length - needs, 'info'],
+      ['Needs an employee', needs, needs ? 'bad' : ''],
+      ['Proforma date', d.today, ''],
+    ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
+
+    $('#asg-actions').style.display = can && d.rows.length ? '' : 'none';
+    const emps = d.employees || [];
+    const table = $('#asg-table');
+    table.innerHTML = `<thead><tr>
+        ${can ? '<th><input type="checkbox" class="checkbox" id="asg-all" /></th>' : ''}
+        <th>VIN</th><th>Product</th><th>Sales Type</th><th>Proforma</th><th>Order</th><th>S/A</th><th>Customer</th>
+        <th>Employee</th><th>Why</th><th>Uploaded</th></tr></thead>
+      <tbody>${d.rows.map((r) => {
+        const pick = chosen(r);
+        const sel = can
+          ? `<select class="asg-emp" data-vin="${esc(r.vin)}"><option value="">— choose —</option>${emps.map((e) =>
+            `<option value="${esc(e.id)}" ${pick === e.id ? 'selected' : ''}>${esc(e.name)}${e.id === r.suggestedEmployeeId ? ' ★' : ''}</option>`).join('')}</select>`
+          : `<b>${esc(r.suggestedEmployeeName || '—')}</b>`;
+        return `<tr class="${pick ? '' : 'asg-missing'} ${state.asgSel.has(r.vin) ? 'selected' : ''}">
+          ${can ? `<td><input type="checkbox" class="checkbox asg-check" data-vin="${esc(r.vin)}" ${state.asgSel.has(r.vin) ? 'checked' : ''} /></td>` : ''}
+          <td class="mono"><b>${esc(r.vin)}</b></td>
+          <td>${esc(na(r.raw.product))}</td>
+          <td><span class="badge info">${esc(na(r.raw.salesType))}</span></td>
+          <td>${esc(na(r.raw.proformaDate))}</td>
+          <td>${esc(na(r.raw.salesOrder))}</td>
+          <td>${esc(na(r.raw.salesAdvisor))}</td>
+          <td>${esc(na(r.raw.userName))}</td>
+          <td>${sel}</td>
+          <td class="hint">${esc(r.reason)}</td>
+          <td class="hint">${esc(r.uploadedBy)} · ${esc(formatWhen(r.uploadedAt))}</td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="${can ? 11 : 10}">No new VINs waiting · upload Sales Raw to check today's Proforma Date.</td></tr>`}</tbody>`;
+    $$('.asg-emp', table).forEach((s) => s.addEventListener('change', () => {
+      state.asgChoice[s.dataset.vin] = s.value;
+      s.closest('tr').classList.toggle('asg-missing', !s.value);
+    }));
+    $$('.asg-check', table).forEach((cb) => cb.addEventListener('change', () => {
+      if (cb.checked) state.asgSel.add(cb.dataset.vin);
+      else state.asgSel.delete(cb.dataset.vin);
+      cb.closest('tr').classList.toggle('selected', cb.checked);
+    }));
+    const all = $('#asg-all');
+    if (all) {
+      all.checked = d.rows.length > 0 && d.rows.every((r) => state.asgSel.has(r.vin));
+      all.addEventListener('change', () => {
+        d.rows.forEach((r) => (all.checked ? state.asgSel.add(r.vin) : state.asgSel.delete(r.vin)));
+        loadAssignment(state.asg);
+      });
+    }
+    renderSalesTypeMap();
+  }
+
+  function renderSalesTypeMap() {
+    const d = state.asg;
+    const can = !!d.canConfirm;
+    if (!state.asgMapDraft) state.asgMapDraft = JSON.parse(JSON.stringify(d.salesTypeMap || {}));
+    const draft = state.asgMapDraft;
+    const types = [...new Set([...(d.salesTypes || []), ...(state.asgExtraTypes || [])])];
+    const has = (id, t) => (draft[id] || []).some((x) => x.toLowerCase() === t.toLowerCase());
+    $('#asg-map-tools').style.display = can ? '' : 'none';
+    $('#asg-map-table').innerHTML = `<thead><tr><th>Employee</th>${types.map((t) => `<th>${esc(t)}</th>`).join('')}<th>VINs this month</th></tr></thead>
+      <tbody>${(d.employees || []).map((e) => `<tr>
+        <td><b>${esc(e.name)}</b></td>
+        ${types.map((t) => `<td class="num"><input type="checkbox" class="checkbox asg-map-cb" data-emp="${esc(e.id)}" data-type="${esc(t)}"
+          ${has(e.id, t) ? 'checked' : ''} ${can ? '' : 'disabled'} /></td>`).join('')}
+        <td class="num">${e.monthLoad}</td>
+      </tr>`).join('')}</tbody>`;
+    $$('.asg-map-cb').forEach((cb) => cb.addEventListener('change', () => {
+      const list = (draft[cb.dataset.emp] || []).filter((x) => x.toLowerCase() !== cb.dataset.type.toLowerCase());
+      if (cb.checked) list.push(cb.dataset.type);
+      draft[cb.dataset.emp] = list;
+    }));
+  }
+
+  async function saveSalesTypeMap() {
+    const data = await api('/assignment/sales-types', { method: 'PUT', json: { map: state.asgMapDraft || {} } });
+    state.asgMapDraft = null;
+    state.asgExtraTypes = [];
+    state.asgChoice = {};
+    await loadAssignment(data);
+    alert('Sales types saved · suggestions updated');
+  }
+
+  async function confirmAssignments(onlySelected) {
+    const rows = state.asg.rows.filter((r) => !onlySelected || state.asgSel.has(r.vin));
+    if (!rows.length) return alert(onlySelected ? 'Tick at least one VIN' : 'Nothing to confirm');
+    const items = rows.map((r) => ({
+      vin: r.vin,
+      employeeId: r.vin in state.asgChoice ? state.asgChoice[r.vin] : r.suggestedEmployeeId,
+    }));
+    const missing = items.filter((i) => !i.employeeId);
+    if (missing.length) return alert(`Choose an employee for:\n${missing.map((i) => i.vin).join('\n')}`);
+    const name = (id) => ((state.asg.employees || []).find((e) => e.id === id) || {}).name || id;
+    if (!confirm(`Confirm assigning ${items.length} VIN(s)?\n\n${items.map((i) => `${i.vin}  →  ${name(i.employeeId)}`).join('\n')}`)) return;
+    const res = await api('/assignment/confirm', { method: 'POST', json: { items } });
+    const ok = res.results.filter((r) => r.ok);
+    const fail = res.results.filter((r) => !r.ok);
+    ok.forEach((r) => state.asgSel.delete(r.vin));
+    alert(`${ok.length} VIN(s) assigned and added to the Live Sheet${fail.length
+      ? `\n${fail.length} skipped:\n${fail.map((f) => `${f.vin} — ${f.error}`).join('\n')}` : ''}`);
+    await loadAssignment(res);
+  }
+
+  async function dismissAssignments() {
+    const vins = [...state.asgSel];
+    if (!vins.length) return alert('Tick at least one VIN');
+    if (!confirm(`Dismiss ${vins.length} VIN(s)? They will not be added to the Live Sheet.\n\n${vins.join('\n')}`)) return;
+    const res = await api('/assignment/dismiss', { method: 'POST', json: { vins } });
+    state.asgSel.clear();
+    await loadAssignment(res);
+  }
+
+  // ——— Team Targets (Hanouf / Admin) ———
+  function achCell(pct) {
+    if (pct == null) return '<span class="hint">no target</span>';
+    const cls = pct >= 100 ? 'ok' : pct >= 70 ? 'warn' : 'bad';
+    return `<div class="ach ach-${cls}"><div class="ach-bar"><span style="width:${Math.min(pct, 100)}%"></span></div><b>${pct}%</b></div>`;
+  }
+
+  async function loadTargets() {
+    const inp = $('#tgt-month');
+    if (!state.targetMonth) state.targetMonth = state.meta.currentMonth;
+    if (inp.value !== state.targetMonth) inp.value = state.targetMonth;
+    const basis = $('#tgt-basis').value;
+    const data = await api(`/team-performance?month=${encodeURIComponent(state.targetMonth)}`);
+    state.targetData = data;
+    const types = data.salesTypes || [];
+    const t = data.totals;
+    const pctKey = basis === 'delivered' ? 'deliveredPct' : 'achPct';
+    $('#tgt-hint').textContent = `Showing ${data.month}${data.month === data.currentMonth ? ' (this month)' : ''}`;
+
+    $('#tgt-kpis').innerHTML = [
+      ['Team VINs', t.total, ''],
+      ['Delivered / Claimed', t.delivered, 'ok'],
+      ['Team target', t.target || '—', 'info'],
+      ['Team Ach%', t[pctKey] == null ? '—' : `${t[pctKey]}%`,
+        t[pctKey] == null ? '' : t[pctKey] >= 100 ? 'ok' : t[pctKey] >= 70 ? 'warn' : 'bad'],
+    ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
+
+    const head = `<thead><tr><th>Employee</th>${types.map((s) => `<th>${esc(s)}</th>`).join('')}
+      <th>Total</th><th>Delivered</th><th>Target</th><th>Ach%</th></tr></thead>`;
+    const body = (data.rows || []).map((r) => `<tr>
+        <td><b>${esc(r.name)}</b></td>
+        ${types.map((s) => `<td class="num">${r.bySalesType[s] || 0}</td>`).join('')}
+        <td class="num"><b>${r.total}</b></td>
+        <td class="num">${r.delivered}</td>
+        <td><input type="number" min="0" step="1" class="tgt-input" data-emp="${esc(r.id)}" value="${r.target || ''}" placeholder="0" /></td>
+        <td>${achCell(r[pctKey])}</td>
+      </tr>`).join('');
+    const foot = `<tfoot><tr><td><b>Total</b></td>
+      ${types.map((s) => `<td class="num"><b>${t.bySalesType[s] || 0}</b></td>`).join('')}
+      <td class="num"><b>${t.total}</b></td><td class="num"><b>${t.delivered}</b></td>
+      <td class="num"><b>${t.target || '—'}</b></td><td>${achCell(t[pctKey])}</td></tr></tfoot>`;
+    $('#tgt-table').innerHTML = `${head}<tbody>${body}</tbody>${foot}`;
+    $('#tgt-unassigned').textContent = data.unassigned
+      ? `${data.unassigned} VIN(s) this month are not assigned to any employee` : '';
+  }
+
+  async function saveTargets() {
+    const targets = {};
+    $$('#tgt-table .tgt-input').forEach((el) => { targets[el.dataset.emp] = el.value; });
+    const res = await api('/targets', { method: 'PUT', json: { month: state.targetMonth, targets } });
+    const toast = $('#tgt-save-toast');
+    toast.hidden = false;
+    toast.textContent = `Saved ✓ targets for ${res.month} · ${new Date().toLocaleTimeString()}`;
+    setTimeout(() => { toast.hidden = true; }, 2500);
+    await loadTargets();
   }
 
   // ——— Upload VINs / Sales Raw (Hanouf / Admin) ———
@@ -325,8 +681,20 @@
           <div><strong>${s.matched}</strong><span>VINs matched</span></div>
           <div><strong>${s.updated}</strong><span>VINs with new details</span></div>
           <div><strong>${s.notOnSheet}</strong><span>Not on Live Sheet</span></div>
-        </div>`;
+          <div><strong>${s.todayNew}</strong><span>New · Proforma today</span></div>
+          <div><strong>${s.todayOnSystem}</strong><span>Today · already on system</span></div>
+        </div>
+        ${s.todayNew ? `<p style="margin-top:10px"><b>${s.todayNew}</b> new VIN(s) with Proforma Date ${esc(s.today)}
+          ${isManager() ? 'are waiting for your confirmation.' : 'were sent to Hanouf to confirm the assignment.'}
+          <button type="button" class="btn" id="go-assignment">Open Assignment</button></p>` : ''}`;
+      const go = $('#go-assignment');
+      if (go) go.addEventListener('click', () => setView('assignment'));
       await loadImportPanels();
+      renderNav();
+      if (s.todayNew && isManager()
+        && confirm(`${s.todayNew} new VIN(s) with today's Proforma Date (${s.today}) are not on the system.\n\nReview and confirm their assignment now?`)) {
+        setView('assignment');
+      }
     } catch (err) {
       box.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
     }
@@ -498,6 +866,7 @@
       setTimeout(() => dot.classList.remove('pulse'), 900);
     }
 
+    renderSelBars();
     if (!changed && silent) return;
     const table = $('#live-table');
     const active = document.activeElement;
@@ -509,7 +878,12 @@
       : readOnlyValue(type, r.ops[field]));
 
     const cols = [
-      { key: 'num', label: '#', html: (_r, i) => i + 1 },
+      {
+        key: 'num',
+        label: '<input type="checkbox" class="checkbox sel-all" title="Select all shown" />',
+        raw: true,
+        html: (r, i) => `<label class="sel-cell"><input type="checkbox" class="checkbox sel-check" data-vin="${esc(r.vin)}" ${state.selected.has(r.vin) ? 'checked' : ''} /><span>${i + 1}</span></label>`,
+      },
       { key: 'employee', label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` },
       { key: 'status', label: 'Status', html: (r) => cell(r, 'opsStatus', 'status') },
       { key: 'vin', label: 'VIN', html: (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>` },
@@ -537,12 +911,34 @@
       { key: 'by', label: 'By', html: (r) => esc(na(r.ops.updatedBy)) },
     ];
 
-    table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${esc(c.label)}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}" data-vin="${esc(r.vin)}">${cols.map((c) =>
+    const shown = state.liveOnlySelected ? rows.filter((r) => state.selected.has(r.vin)) : rows;
+    table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr></thead>
+      <tbody>${shown.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
         `<td class="col-${c.key}">${c.html(r, i)}</td>`).join('')}</tr>`).join('')
-        || `<tr><td colspan="${cols.length}">No VINs on the Live Sheet yet.</td></tr>`}</tbody>`;
+        || `<tr><td colspan="${cols.length}">${state.liveOnlySelected ? 'None of the selected VINs match these filters.' : 'No VINs on the Live Sheet yet.'}</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
     bindEditableCells(table);
+    bindSelChecks(table, shown);
+  }
+
+  function bindSelChecks(table, rows) {
+    $$('.sel-check', table).forEach((cb) => cb.addEventListener('change', () => setSelected(cb.dataset.vin, cb.checked)));
+    const all = $('.sel-all', table);
+    if (!all) return;
+    all.checked = rows.length > 0 && rows.every((r) => state.selected.has(r.vin));
+    all.addEventListener('change', () => {
+      rows.forEach((r) => {
+        if (all.checked) state.selected.add(r.vin);
+        else state.selected.delete(r.vin);
+      });
+      rememberSelInfo(rows);
+      saveSelection();
+      $$('.sel-check', table).forEach((cb) => {
+        cb.checked = all.checked;
+        cb.closest('tr').classList.toggle('selected', all.checked);
+      });
+      renderSelBars();
+    });
   }
 
   // ——— My VINs ———
@@ -599,51 +995,21 @@
 
     ensureDatalists();
     const cols = scheduleColumns();
-    const selected = state.reassignVins;
+    const selected = state.selected;
     const table = $('#my-table');
-    table.innerHTML = `<thead><tr><th></th>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
+    table.innerHTML = `<thead><tr><th><input type="checkbox" class="checkbox sel-all" title="Select all shown" /></th>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
       <tbody>${w.rows.map((r) => {
         const checked = selected.has(r.vin) ? 'checked' : '';
         return `<tr class="${statusRowClass(r.ops.opsStatus)} ${checked ? 'selected' : ''}" data-vin="${esc(r.vin)}">
-          <td><input class="checkbox vin-select-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>
+          <td><input class="checkbox sel-check" type="checkbox" data-vin="${esc(r.vin)}" ${checked} /></td>
           ${cols.map((c) => `<td>${c[1](r)}</td>`).join('')}
         </tr>`;
       }).join('') || `<tr><td colspan="${cols.length + 1}">No VINs assigned to you yet.</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
     bindEditableCells(table);
-    $$('.vin-select-check', table).forEach((cb) => cb.addEventListener('change', () => {
-      if (cb.checked) selected.add(cb.dataset.vin);
-      else selected.delete(cb.dataset.vin);
-      cb.closest('tr').classList.toggle('selected', cb.checked);
-      updateMyReassignBar();
-    }));
+    bindSelChecks(table, w.rows);
     $('#my-pager').innerHTML = `<span>${w.assigned} VIN(s) · all on this page</span>`;
-
-    const targets = $('#my-reassign-targets');
-    targets.innerHTML = employeeNames()
-      .filter((n) => n !== state.user.name)
-      .map((n) => `<button type="button" class="btn reassign-target-btn" data-emp="${esc(n)}">→ ${esc(n)}</button>`)
-      .join('');
-    $$('.reassign-target-btn', targets).forEach((b) => b.addEventListener('click', () => {
-      reassignSelected(b.dataset.emp).catch((e) => alert(e.message));
-    }));
-    updateMyReassignBar();
-  }
-
-  function updateMyReassignBar() {
-    $('#my-reassign-count').textContent = String(state.reassignVins.size);
-  }
-
-  async function reassignSelected(toEmployee) {
-    const vins = [...state.reassignVins];
-    if (!vins.length) return alert('Select at least one VIN first');
-    if (!confirm(`Reassign ${vins.length} VIN(s) to ${toEmployee}?`)) return;
-    const res = await api('/reassign', { method: 'POST', json: { vins, employee: toEmployee } });
-    const ok = (res.results || []).filter((r) => r.ok).length;
-    const fail = (res.results || []).filter((r) => !r.ok);
-    alert(`Reassigned ${ok} VIN(s) to ${toEmployee}${fail.length ? `\n${fail.length} failed` : ''}`);
-    state.reassignVins.clear();
-    await loadMy();
+    renderSelBars();
   }
 
   // ——— VIN drawer ———
@@ -762,6 +1128,7 @@
   function showApp() {
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
+    loadSelection();
     if (isManager()) {
       $('#live-edit-hint').textContent = `${state.user.name} can edit every VIN directly on this sheet.`;
     }
@@ -858,9 +1225,31 @@
     $('#my-status').value = '';
     loadMy();
   });
-  $('#my-reassign-clear').addEventListener('click', () => {
-    state.reassignVins.clear();
-    loadMy();
+  const fail = (err) => alert(err.message || 'Failed');
+  $('#asg-confirm-sel').addEventListener('click', () => confirmAssignments(true).catch(fail));
+  $('#asg-confirm-all').addEventListener('click', () => confirmAssignments(false).catch(fail));
+  $('#asg-dismiss').addEventListener('click', () => dismissAssignments().catch(fail));
+  $('#asg-map-save').addEventListener('click', () => saveSalesTypeMap().catch(fail));
+  $('#asg-add-type').addEventListener('click', () => {
+    const inp = $('#asg-new-type');
+    const t = inp.value.trim();
+    if (!t) return;
+    state.asgExtraTypes = [...new Set([...(state.asgExtraTypes || []), t])];
+    inp.value = '';
+    renderSalesTypeMap();
+  });
+  $('#tgt-month').addEventListener('change', (e) => {
+    state.targetMonth = e.target.value || state.meta.currentMonth;
+    loadTargets().catch((err) => alert(err.message));
+  });
+  $('#tgt-month-now').addEventListener('click', () => {
+    state.targetMonth = state.meta.currentMonth;
+    loadTargets().catch((err) => alert(err.message));
+  });
+  $('#tgt-basis').addEventListener('change', () => loadTargets().catch((err) => alert(err.message)));
+  $('#tgt-save').addEventListener('click', () => saveTargets().catch((err) => alert(err.message)));
+  $('#tgt-table').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.classList.contains('tgt-input')) saveTargets().catch((err) => alert(err.message));
   });
   wireDrop('#upload-drop', '#upload-file', doUpload);
   wireDrop('#sales-raw-drop', '#sales-raw-file', doSalesRaw);

@@ -25,9 +25,38 @@ function isManager(role) {
   return role === 'admin' || role === 'hanouf';
 }
 
+function canUploadSalesRaw(sessionUser) {
+  if (!sessionUser) return false;
+  if (isManager(sessionUser.role)) return true;
+  const u = USERS.find((x) => x.id === sessionUser.userId);
+  return !!(u && u.canUploadSalesRaw);
+}
+
 /** Current month in Riyadh (UTC+3), e.g. "2026-09". */
 function currentMonthKey() {
   return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
+}
+
+/** Today in Riyadh (UTC+3), e.g. "2026-09-23". */
+function todayKey() {
+  return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function normType(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+function inMonth(v, month) {
+  return [
+    v.raw && v.raw.proformaDate,
+    v.raw && v.raw.date,
+    v.ops && v.ops.assignedAt,
+  ].some((d) => String(d || '').slice(0, 7) === month);
+}
+
+function isDelivered(v) {
+  const s = v && v.ops && v.ops.opsStatus;
+  return s === 'Claimed' || s === 'تم التسليم';
 }
 
 function findEmployeeByPic(pic) {
@@ -104,7 +133,9 @@ function createDeliveryTransformationRouter(opts = {}) {
         name: u.name,
       })),
       currentMonth: currentMonthKey(),
+      today: todayKey(),
       imports: store.data.meta.imports || {},
+      pendingAssignments: Object.keys(store.data.meta.pendingAssignments || {}).length,
     });
   });
 
@@ -117,7 +148,12 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({
       ok: true,
       token,
-      user: { id: user.id, name: user.name, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        canUploadSalesRaw: canUploadSalesRaw({ userId: user.id, role: user.role }),
+      },
     });
   });
 
@@ -132,6 +168,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         id: req.dtUser.userId,
         name: req.dtUser.name,
         role: req.dtUser.role,
+        canUploadSalesRaw: canUploadSalesRaw(req.dtUser),
       },
     });
   });
@@ -161,11 +198,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     }
     const month = String((req.query && req.query.month) || '').trim().slice(0, 7);
     if (/^\d{4}-\d{2}$/.test(month)) {
-      list = list.filter((v) => [
-        v.raw && v.raw.proformaDate,
-        v.raw && v.raw.date,
-        v.ops && v.ops.assignedAt,
-      ].some((d) => String(d || '').slice(0, 7) === month));
+      list = list.filter((v) => inMonth(v, month));
     }
     if (!isCoordinator) {
       const eq = (val, pick) => {
@@ -219,6 +252,17 @@ function createDeliveryTransformationRouter(opts = {}) {
     let filename = String(req.headers['x-filename'] || 'upload.xlsx');
     try { filename = decodeURIComponent(filename); } catch (_) { /* keep raw */ }
     return { buf, filename };
+  }
+
+  /** New VINs from Sales Raw (Proforma Date = today) waiting for Hanouf to confirm. */
+  function pendingMap() {
+    if (!store.data.meta.pendingAssignments) store.data.meta.pendingAssignments = {};
+    return store.data.meta.pendingAssignments;
+  }
+
+  function salesTypeMap() {
+    if (!store.data.meta.salesTypeMap) store.data.meta.salesTypeMap = {};
+    return store.data.meta.salesTypeMap;
   }
 
   function recordImport(kind, summary) {
@@ -330,7 +374,9 @@ function createDeliveryTransformationRouter(opts = {}) {
     '/sales-raw',
     express.raw({ limit: RAW_UPLOAD_LIMIT, type: '*/*' }),
     auth,
-    requireRole('admin', 'hanouf'),
+    (req, res, next) => (canUploadSalesRaw(req.dtUser)
+      ? next()
+      : res.status(403).json({ error: 'Forbidden for this role' })),
     (req, res) => {
       const { buf, filename } = uploadedFile(req);
       if (!buf || !buf.length) return res.status(400).json({ error: 'Upload an Excel file' });
@@ -355,13 +401,29 @@ function createDeliveryTransformationRouter(opts = {}) {
         matched: 0,
         updated: 0,
         notOnSheet: 0,
+        today: todayKey(),
+        todayNew: 0,
+        todayOnSystem: 0,
       };
+      const pending = pendingMap();
       parsed.items.forEach((item) => {
         const v = store.getVehicle(item.vin);
+        const isToday = item.raw.proformaDate === summary.today;
         if (!v) {
           summary.notOnSheet += 1;
+          if (isToday) {
+            summary.todayNew += 1;
+            pending[item.vin] = {
+              vin: item.vin,
+              raw: { ...emptyRaw(), ...(pending[item.vin] ? pending[item.vin].raw : {}), ...item.raw, vin: item.vin },
+              uploadedBy: req.dtUser.name,
+              uploadedAt: now,
+              filename,
+            };
+          }
           return;
         }
+        if (isToday) summary.todayOnSystem += 1;
         summary.matched += 1;
         let changed = false;
         Object.entries(item.raw).forEach(([k, val]) => {
@@ -383,9 +445,10 @@ function createDeliveryTransformationRouter(opts = {}) {
         user: req.dtUser.name,
         action: 'upload_sales_raw',
         oldValue: filename,
-        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.notOnSheet} not on Live Sheet`,
+        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.notOnSheet} not on Live Sheet · ${summary.todayNew} new today → Assignment`,
       });
       store.save();
+      summary.pendingTotal = Object.keys(pending).length;
       return res.json({ ok: true, summary });
     }
   );
@@ -592,7 +655,6 @@ function createDeliveryTransformationRouter(opts = {}) {
     const results = vins.map((vin) => {
       const v = store.getVehicle(vin);
       if (!v) return { vin, ok: false, error: 'VIN not found' };
-      if (!canEditVehicle(v, req.dtUser)) return { vin, ok: false, error: 'Not your VIN' };
       if (v.ops.assignedEmployeeId === emp.id) return { vin, ok: false, error: 'Already assigned' };
       const old = v.ops.assignedEmployeeName || '';
       v.ops.assignedEmployeeId = emp.id;
@@ -615,6 +677,54 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ok: true, results });
   });
 
+  function selectedVins(req) {
+    const body = req.body || {};
+    return Array.isArray(body.vins) ? [...new Set(body.vins.map(normVin).filter(Boolean))] : [];
+  }
+
+  /** Unassign selected VINs (they stay on the Live Sheet with no employee). */
+  router.post('/unassign', auth, requireRole('admin', 'hanouf', 'employee'), (req, res) => {
+    const vins = selectedVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const now = new Date().toISOString();
+    const results = vins.map((vin) => {
+      const v = store.getVehicle(vin);
+      if (!v) return { vin, ok: false, error: 'VIN not found' };
+      const old = v.ops.assignedEmployeeName || '';
+      if (!v.ops.assignedEmployeeId) return { vin, ok: false, error: 'Not assigned' };
+      v.ops.assignedEmployeeId = '';
+      v.ops.assignedEmployeeName = '';
+      v.ops.assignedBy = req.dtUser.name;
+      v.ops.assignedAt = now;
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = now;
+      store.upsertVehicle(vin, v);
+      store.pushAudit({
+        vin, user: req.dtUser.name, action: 'unassign', oldValue: old, newValue: '(unassigned)',
+      });
+      return { vin, ok: true };
+    });
+    store.save();
+    return res.json({ ok: true, results });
+  });
+
+  /** Remove selected VINs from the Live Sheet; a full snapshot is kept in the audit log. */
+  router.post('/remove', auth, requireRole('admin', 'hanouf', 'employee'), (req, res) => {
+    const vins = selectedVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const results = vins.map((vin) => {
+      const v = store.getVehicle(vin);
+      if (!v) return { vin, ok: false, error: 'VIN not found' };
+      store.deleteVehicle(vin);
+      store.pushAudit({
+        vin, user: req.dtUser.name, action: 'remove_vin', oldValue: JSON.stringify(v), newValue: '',
+      });
+      return { vin, ok: true };
+    });
+    store.save();
+    return res.json({ ok: true, results });
+  });
+
   router.delete('/vehicles/:vin', auth, requireRole('admin'), (req, res) => {
     const key = normVin(req.params.vin);
     if (!store.getVehicle(key)) return res.status(404).json({ error: 'VIN not found' });
@@ -628,6 +738,243 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
     store.save();
     return res.json({ ok: true });
+  });
+
+  // ——— Assignment: auto-suggest by sales type, Hanouf confirms ———
+  function canViewAssignment(u) {
+    return isManager(u && u.role) || canUploadSalesRaw(u);
+  }
+
+  /** Drop pending VINs that are already on the system, then suggest an employee per VIN. */
+  function buildAssignmentView() {
+    const pending = pendingMap();
+    let dropped = false;
+    Object.keys(pending).forEach((vin) => {
+      if (store.getVehicle(vin)) { delete pending[vin]; dropped = true; }
+    });
+    if (dropped) store.save();
+
+    const map = salesTypeMap();
+    const employees = USERS.filter((u) => u.role === 'employee');
+    const month = currentMonthKey();
+    const load = {};
+    employees.forEach((u) => { load[u.id] = 0; });
+    store.allVehicles().forEach((v) => {
+      const id = v.ops && v.ops.assignedEmployeeId;
+      if (id in load && inMonth(v, month)) load[id] += 1;
+    });
+    const loadBefore = { ...load };
+
+    const rows = Object.values(pending)
+      .sort((a, b) => String(a.uploadedAt).localeCompare(String(b.uploadedAt)) || a.vin.localeCompare(b.vin))
+      .map((p) => {
+        const type = normType(p.raw.salesType);
+        const candidates = employees.filter((u) => (map[u.id] || []).some((t) => normType(t) === type));
+        let suggested = null;
+        let reason;
+        if (!type) reason = 'No sales type on this VIN';
+        else if (!candidates.length) reason = `No employee set for "${p.raw.salesType}"`;
+        else {
+          suggested = candidates.reduce((best, u) => (load[u.id] < load[best.id] ? u : best), candidates[0]);
+          load[suggested.id] += 1;
+          reason = candidates.length > 1
+            ? `${p.raw.salesType} · least loaded of ${candidates.map((u) => u.name).join(' / ')}`
+            : `${p.raw.salesType} → ${suggested.name}`;
+        }
+        return {
+          vin: p.vin,
+          raw: p.raw,
+          uploadedBy: p.uploadedBy,
+          uploadedAt: p.uploadedAt,
+          filename: p.filename,
+          suggestedEmployeeId: suggested ? suggested.id : '',
+          suggestedEmployeeName: suggested ? suggested.name : '',
+          reason,
+        };
+      });
+
+    const knownTypes = new Set();
+    store.allVehicles().forEach((v) => { if (v.raw && v.raw.salesType) knownTypes.add(String(v.raw.salesType).trim()); });
+    Object.values(pending).forEach((p) => { if (p.raw.salesType) knownTypes.add(String(p.raw.salesType).trim()); });
+    Object.values(map).forEach((list) => (list || []).forEach((t) => knownTypes.add(t)));
+
+    return {
+      today: todayKey(),
+      month,
+      rows,
+      salesTypeMap: map,
+      salesTypes: [...knownTypes].filter(Boolean).sort((a, b) => a.localeCompare(b)),
+      employees: employees.map((u) => ({ id: u.id, name: u.name, monthLoad: loadBefore[u.id] })),
+    };
+  }
+
+  router.get('/assignment', auth, (req, res) => {
+    if (!canViewAssignment(req.dtUser)) return res.status(403).json({ error: 'Forbidden for this role' });
+    return res.json({ ...buildAssignmentView(), canConfirm: isManager(req.dtUser.role) });
+  });
+
+  /** Sales type → employees: { map: { employeeId: ["Cash", "Bank"] } } */
+  router.put('/assignment/sales-types', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const input = (req.body && req.body.map) || {};
+    const next = {};
+    USERS.filter((u) => u.role === 'employee').forEach((u) => {
+      const list = Array.isArray(input[u.id]) ? input[u.id] : [];
+      const clean = [...new Map(list.map((t) => String(t || '').trim()).filter(Boolean)
+        .map((t) => [normType(t), t])).values()];
+      if (clean.length) next[u.id] = clean;
+    });
+    store.data.meta.salesTypeMap = next;
+    store.pushAudit({
+      vin: '', user: req.dtUser.name, action: 'set_sales_type_map', oldValue: '', newValue: JSON.stringify(next),
+    });
+    store.save();
+    return res.json({ ok: true, ...buildAssignmentView(), canConfirm: true });
+  });
+
+  /** Hanouf confirms: { items: [{ vin, employeeId }] } → VINs added to the Live Sheet, assigned. */
+  router.post('/assignment/confirm', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'Nothing to confirm' });
+    const pending = pendingMap();
+    const now = new Date().toISOString();
+    const results = items.map((it) => {
+      const vin = normVin(it && it.vin);
+      const p = pending[vin];
+      if (!p) return { vin, ok: false, error: 'Not pending' };
+      if (store.getVehicle(vin)) { delete pending[vin]; return { vin, ok: false, error: 'Already on the system' }; }
+      const emp = USERS.find((u) => u.role === 'employee' && u.id === String((it && it.employeeId) || ''));
+      if (!emp) return { vin, ok: false, error: 'Choose an employee' };
+      store.upsertVehicle(vin, {
+        vin,
+        raw: { ...emptyRaw(), ...p.raw, vin },
+        ops: {
+          ...emptyOps(),
+          assignedEmployeeId: emp.id,
+          assignedEmployeeName: emp.name,
+          assignedBy: req.dtUser.name,
+          assignedAt: now,
+          updatedAt: now,
+          updatedBy: req.dtUser.name,
+        },
+        createdAt: now,
+        createdBy: req.dtUser.name,
+        rawUpdatedAt: now,
+      });
+      delete pending[vin];
+      store.pushAudit({
+        vin, user: req.dtUser.name, action: 'confirm_assignment', oldValue: '(new · sales raw)', newValue: emp.name,
+      });
+      return { vin, ok: true, employee: emp.name };
+    });
+    store.save();
+    return res.json({ ok: true, results, ...buildAssignmentView(), canConfirm: true });
+  });
+
+  router.post('/assignment/dismiss', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const vins = selectedVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const pending = pendingMap();
+    let removed = 0;
+    vins.forEach((vin) => {
+      if (!pending[vin]) return;
+      delete pending[vin];
+      removed += 1;
+      store.pushAudit({ vin, user: req.dtUser.name, action: 'dismiss_assignment', oldValue: 'pending', newValue: '' });
+    });
+    store.save();
+    return res.json({ ok: true, removed, ...buildAssignmentView(), canConfirm: true });
+  });
+
+  function monthParam(val) {
+    const m = String(val || '').trim().slice(0, 7);
+    return /^\d{4}-\d{2}$/.test(m) ? m : currentMonthKey();
+  }
+
+  function monthTargets(month) {
+    const all = store.data.meta.targets || {};
+    return all[month] || {};
+  }
+
+  /** Per-employee count by sales type + total vs. monthly target (Hanouf / Admin). */
+  router.get('/team-performance', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const month = monthParam(req.query.month);
+    const targets = monthTargets(month);
+    const employees = USERS.filter((u) => u.role === 'employee');
+    const rows = new Map(employees.map((u) => [u.id, {
+      id: u.id, name: u.name, bySalesType: {}, total: 0, delivered: 0,
+    }]));
+    const salesTypes = new Set();
+    let unassigned = 0;
+    store.allVehicles().forEach((v) => {
+      if (!inMonth(v, month)) return;
+      const row = rows.get(v.ops && v.ops.assignedEmployeeId);
+      if (!row) { unassigned += 1; return; }
+      const stype = String((v.raw && v.raw.salesType) || '').trim() || '(blank)';
+      salesTypes.add(stype);
+      row.bySalesType[stype] = (row.bySalesType[stype] || 0) + 1;
+      row.total += 1;
+      if (isDelivered(v)) row.delivered += 1;
+    });
+    const pct = (n, t) => (t > 0 ? Math.round((n / t) * 100) : null);
+    const list = [...rows.values()].map((r) => {
+      const target = Number(targets[r.id]) || 0;
+      return {
+        ...r,
+        target,
+        achPct: pct(r.total, target),
+        deliveredPct: pct(r.delivered, target),
+      };
+    });
+    const sum = (k) => list.reduce((s, r) => s + (r[k] || 0), 0);
+    const totals = {
+      bySalesType: {},
+      total: sum('total'),
+      delivered: sum('delivered'),
+      target: sum('target'),
+    };
+    list.forEach((r) => Object.entries(r.bySalesType).forEach(([k, n]) => {
+      totals.bySalesType[k] = (totals.bySalesType[k] || 0) + n;
+    }));
+    totals.achPct = pct(totals.total, totals.target);
+    totals.deliveredPct = pct(totals.delivered, totals.target);
+    res.json({
+      month,
+      currentMonth: currentMonthKey(),
+      salesTypes: [...salesTypes].sort((a, b) => (totals.bySalesType[b] || 0) - (totals.bySalesType[a] || 0)),
+      rows: list,
+      totals,
+      unassigned,
+    });
+  });
+
+  /** Save monthly targets: { month, targets: { employeeId: number } } */
+  router.put('/targets', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const body = req.body || {};
+    const month = monthParam(body.month);
+    const input = body.targets && typeof body.targets === 'object' ? body.targets : {};
+    if (!store.data.meta.targets) store.data.meta.targets = {};
+    const current = { ...(store.data.meta.targets[month] || {}) };
+    const changes = [];
+    Object.entries(input).forEach(([id, val]) => {
+      const emp = USERS.find((u) => u.role === 'employee' && u.id === id);
+      if (!emp) return;
+      const n = Math.max(0, Math.round(Number(val) || 0));
+      if ((Number(current[id]) || 0) === n) return;
+      changes.push({ emp, old: Number(current[id]) || 0, n });
+      if (n) current[id] = n;
+      else delete current[id];
+    });
+    store.data.meta.targets[month] = current;
+    changes.forEach(({ emp, old, n }) => store.pushAudit({
+      vin: '',
+      user: req.dtUser.name,
+      action: 'set_target',
+      field: `${month} · ${emp.name}`,
+      oldValue: String(old),
+      newValue: String(n),
+    }));
+    if (changes.length) store.save();
+    return res.json({ ok: true, month, targets: current, changed: changes.length });
   });
 
   router.get('/audit', auth, requireRole('admin'), (req, res) => {

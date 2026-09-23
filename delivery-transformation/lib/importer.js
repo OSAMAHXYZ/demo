@@ -206,7 +206,9 @@ function parseSalesRaw(buffer) {
         const raw = {};
         Object.entries(RAW_COL).forEach(([field, col]) => {
           if (field === 'vin') return;
-          raw[field] = field === 'phone' ? normalizePhone(row[col]) : cellString(row[col]);
+          if (field === 'phone') raw[field] = normalizePhone(row[col]);
+          else if (field === 'proformaDate') raw[field] = normalizeDate(row[col]);
+          else raw[field] = cellString(row[col]);
         });
         items.push({ vin, raw });
       });
@@ -222,6 +224,7 @@ function parseSalesRaw(buffer) {
         if (!looksLikeVin(vin)) return;
         const raw = rawFromRow(row, idx, HEADER_MAP);
         delete raw.pic;
+        if (idx.proformaDate == null) raw.proformaDate = normalizeDate(row[RAW_COL.proformaDate]);
         items.push({ vin, raw });
       });
     }

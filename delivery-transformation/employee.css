@@ -1406,6 +1406,118 @@ select.cell-edit { cursor: pointer; }
   font-weight: 600;
 }
 
+/* ——— Selected VINs bar ——— */
+.sel-bar {
+  margin: 6px 12px;
+  padding: 7px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #fafcfd;
+  font-size: 0.76rem;
+}
+#my-sel-bar { margin: 0 0 10px; }
+.sel-bar.has-sel {
+  border: 1px solid #f0d2b0;
+  border-style: solid;
+  background: #fff7ed;
+}
+.sel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--navy); }
+.sel-head strong { font-size: 0.95rem; }
+.sel-only { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; cursor: pointer; }
+.sel-head .sel-clear { margin-left: auto; }
+.sel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0;
+  max-height: 84px;
+  overflow: auto;
+}
+.sel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: 1px solid #f0d2b0;
+  border-radius: 999px;
+  padding: 2px 4px 2px 9px;
+}
+.sel-chip small { color: var(--muted); font-size: 0.66rem; }
+.sel-open {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-weight: 800;
+  color: var(--navy);
+  cursor: pointer;
+}
+.sel-open:hover { color: var(--red); text-decoration: underline; }
+.sel-x {
+  border: 0;
+  background: var(--line-soft);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 1;
+  color: var(--muted);
+}
+.sel-x:hover { background: var(--red-soft); color: var(--red); }
+.sel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.sel-actions .lbl { font-weight: 700; color: var(--navy); }
+.sel-actions .btn { padding: 4px 9px; font-size: 0.72rem; }
+.sel-actions .sel-assign { border-color: var(--orange); background: #fff; }
+.sel-actions .sel-assign.me { border-color: var(--green); color: var(--green); font-weight: 800; }
+.sel-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.sel-actions .sel-remove { border-color: var(--red); color: var(--red); }
+.sel-actions .sel-remove:hover { background: var(--red-soft); }
+.sel-cell { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+table.live-sheet tr.selected td.col-num { box-shadow: inset 4px 0 0 var(--red) !important; }
+
+/* ——— Assignment ——— */
+#asg-table td.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+#asg-table tr.asg-missing td { background: #fff1f2; }
+#asg-table tr.asg-missing .asg-emp { border-color: var(--red); }
+#asg-table .asg-emp {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  min-width: 130px;
+}
+#asg-map-table td.num { text-align: center; }
+.asg-actions { margin-bottom: 10px; }
+#asg-new-type {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+}
+
+/* ——— Team Targets ——— */
+.tgt-table td.num { text-align: center; font-variant-numeric: tabular-nums; }
+.tgt-table tfoot td { background: var(--bg-soft); border-top: 2px solid var(--line); }
+.tgt-input {
+  width: 80px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  text-align: center;
+}
+.ach { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.ach b { font-variant-numeric: tabular-nums; min-width: 42px; }
+.ach-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+.ach-bar span { display: block; height: 100%; border-radius: 999px; }
+.ach-ok .ach-bar span { background: var(--green); }
+.ach-ok b { color: var(--green); }
+.ach-warn .ach-bar span { background: var(--orange); }
+.ach-warn b { color: var(--orange); }
+.ach-bad .ach-bar span { background: var(--red); }
+.ach-bad b { color: var(--red); }
+
 /* ——— Drawer ——— */
 .modal-back {
   position: fixed;
@@ -1464,8 +1576,8 @@ select.cell-edit { cursor: pointer; }
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: calc(100vh - var(--topbar-h) - (var(--space) * 2) - 4px);
   height: calc(100dvh - var(--topbar-h) - (var(--space) * 2) - 4px);
   min-height: 0;
@@ -1560,6 +1672,7 @@ button.live-chip.active {
   margin-left: 2px;
 }
 .live-sheet-wrap {
+  flex: 1 1 auto;
   max-height: none !important;
   height: auto !important;
   min-height: 0 !important;
@@ -1568,7 +1681,7 @@ button.live-chip.active {
   overflow: auto;
 }
 table.live-sheet {
-  --live-col-num: 40px;
+  --live-col-num: 58px;
   --live-col-emp: 108px;
   --live-col-status: 132px;
   --live-col-vin: 168px;
