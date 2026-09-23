@@ -7,6 +7,15 @@
 .collector-app.hidden,
 .collector-gate.hidden { display: none !important; }
 
+.kpi-click {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--line);
+}
+.kpi-click:hover { border-color: #1769a8; background: #fff; }
+.kpi-click .kpi-split { color: var(--muted); font-weight: 700; }
+
 .top-right {
   display: flex;
   gap: 8px;

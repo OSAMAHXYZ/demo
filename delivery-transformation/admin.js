@@ -95,13 +95,55 @@
     return Math.max(1, ...list.map((x) => Number(x[key]) || 0));
   }
 
+  function allDrivers() {
+    const rows = [];
+    (dash.companies || []).forEach((c) => {
+      (c.people || []).forEach((p) => rows.push({ ...p, company: c.company }));
+    });
+    return rows.sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'present' ? -1 : 1;
+      return (Date.parse(b.arrivedAt) || 0) - (Date.parse(a.arrivedAt) || 0);
+    });
+  }
+
+  function openAllDrivers() {
+    const people = allDrivers();
+    openDrawer(`
+      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div>
+          <h2>Drivers</h2>
+          <p class="sub">${dash.present} present now · ${dash.left} left · click any company chart for company-only view</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="table-wrap" style="max-height:70vh">
+        <table class="data">
+          <thead><tr><th>Driver</th><th>Company</th><th>Arrived</th><th>Left</th><th>Stay</th><th>VIN</th><th>City</th></tr></thead>
+          <tbody>${people.map((p) => `
+            <tr>
+              <td><b>${esc(p.name)}</b></td>
+              <td>${esc(p.company || '—')}</td>
+              <td>${esc(fmtWhen(p.arrivedAt))}</td>
+              <td class="${p.leftAt ? 'gone' : 'stay'}">${p.leftAt ? esc(fmtWhen(p.leftAt)) : 'Still here'}</td>
+              <td data-stay="${esc(p.id)}">${esc(stayText(p))}</td>
+              <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
+              <td>${esc(p.city || '—')}</td>
+            </tr>`).join('') || '<tr><td colspan="7">No drivers have checked in yet.</td></tr>'}</tbody>
+        </table>
+      </div>`);
+  }
+
   function renderKpis() {
-    $('dash-kpis').innerHTML = [
-      ['Present now', dash.present],
-      ['Drivers left', dash.left],
-      ['Delivery notes', dash.notes],
-      ['Memos', dash.memos],
-    ].map(([l, n]) => `<div class="kpi"><strong>${esc(n)}</strong><span>${esc(l)}</span></div>`).join('');
+    const host = $('dash-kpis');
+    host.innerHTML = `
+      <button type="button" class="kpi kpi-click" id="kpi-drivers" title="Open every driver · arrive, leave, company, VIN">
+        <strong><span class="stay">${esc(dash.present)}</span><span class="kpi-split"> / </span><span class="gone">${esc(dash.left)}</span></strong>
+        <span>Present now / Drivers left</span>
+      </button>
+      <div class="kpi"><strong>${esc(dash.notes)}</strong><span>Delivery notes</span></div>
+      <div class="kpi"><strong>${esc(dash.memos)}</strong><span>Memos</span></div>`;
+    const btn = $('kpi-drivers');
+    if (btn) btn.addEventListener('click', openAllDrivers);
     $('dash-sync').textContent = new Date(dash.at).toLocaleTimeString();
   }
 
