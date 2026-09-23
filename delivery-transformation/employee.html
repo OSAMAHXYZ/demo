@@ -4,97 +4,168 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Delivery Transformation — Delivery Employee</title>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="employee.css?v=20260923emp1" />
 </head>
 <body>
-  <header class="topnav">
-    <div class="brand">
-      <div class="brand-mark">T</div>
-      <div><strong>TOYOTA</strong><span>Delivery Transformation · Delivery Employee</span></div>
-    </div>
-    <nav class="nav-links" id="admin-links" hidden>
-      <a href="admin.html">Admin</a>
-      <a href="coordinator.html">Coordinator view</a>
-      <a href="employee.html" class="active">Employee view</a>
-    </nav>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span id="who" class="badge">—</span>
-      <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="hero">
-      <h1>Live Sheet — delivery entry</h1>
-      <p>Fill in status, dates, الناقل, city, and notes for your VINs. Changes save as soon as you pick a value.</p>
-    </section>
-
-    <div class="kpi-row" id="kpis"></div>
-
-    <div class="card">
-      <div class="toolbar">
-        <input type="search" id="search" placeholder="Search VIN / order / product…" />
-        <label style="display:flex;gap:6px;align-items:center;font-size:.84rem">
-          <input type="checkbox" id="mine-only" checked style="width:auto" /> My VINs only
-        </label>
-        <button type="button" class="btn" id="refresh-btn">Refresh</button>
-        <span class="hint" id="live-meta"></span>
+  <div class="login-screen" id="login-screen">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong>TOYOTA</strong>
+          <span>Delivery Transformation</span>
+        </div>
       </div>
-      <div class="table-wrap"><table class="data" id="live-table"></table></div>
+      <h1>Sign in</h1>
+      <p>Delivery employee · Live Sheet · your delivery schedule</p>
+      <div class="user-pills" id="login-pills"></div>
+      <div class="field">
+        <label for="login-user">User</label>
+        <select id="login-user"></select>
+      </div>
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <input id="login-pass" type="password" value="1234" autocomplete="current-password" />
+      </div>
+      <button type="button" class="btn-primary" id="login-btn">Enter Delivery Transformation</button>
+      <div class="login-error" id="login-error"></div>
     </div>
-  </main>
+  </div>
+
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <strong>TOYOTA</strong>
+          <span>Delivery Transformation</span>
+        </div>
+      </div>
+      <nav class="nav" id="side-nav"></nav>
+      <div class="side-user">
+        <div>
+          <strong id="side-name">—</strong>
+          <span id="side-role">—</span>
+        </div>
+        <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Dashboard</h1>
+          <p class="sub" id="page-sub">Delivery Control Tower</p>
+        </div>
+        <div class="top-actions">
+          <input type="search" class="top-search" id="global-search" placeholder="Search VIN / order / product…" />
+          <button type="button" class="btn" id="refresh-btn">Refresh</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- DASHBOARD -->
+        <section class="panel active" id="panel-dashboard">
+          <div class="toolbar month-toolbar">
+            <label class="month-filter-label">
+              Month
+              <input type="month" id="dash-month" />
+            </label>
+            <button type="button" class="btn" id="dash-month-all">All months</button>
+            <span class="hint" id="dash-month-hint"></span>
+          </div>
+          <div class="kpi-row" id="dash-kpis"></div>
+          <div class="card">
+            <h2>Delivery pipeline</h2>
+            <p class="hint">Your VINs · Assigned → PSFU → Ready → Delivered / Claimed</p>
+            <div class="pipeline" id="dash-pipeline"></div>
+          </div>
+          <div class="dash-grid">
+            <div class="dash-stack">
+              <div class="card">
+                <h2>Sales type mix</h2>
+                <p class="hint">Your VINs by sales type (cash / bank / …)</p>
+                <div class="status-grid" id="dash-sales-types"></div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>Status counts</h2>
+              <p class="hint">How many of your VINs are in each status · click to open on Live Sheet</p>
+              <div class="status-grid" id="dash-status"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- LIVE SHEET -->
+        <section class="panel" id="panel-live">
+          <div class="live-sheet-card">
+            <div class="live-sheet-toolbar">
+              <div class="live-sheet-meta">
+                <span class="live-dot" id="live-dot" title="Live"></span>
+                <span id="live-meta-text">Connecting…</span>
+              </div>
+              <div class="live-sheet-filters">
+                <label class="month-filter-label">
+                  Month
+                  <input type="month" id="live-month" />
+                </label>
+                <input type="search" id="live-q" placeholder="Search VIN / order / product…" />
+                <select id="live-employee">
+                  <option value="">All employees</option>
+                </select>
+                <select id="live-carrier">
+                  <option value="">All الناقل</option>
+                </select>
+                <select id="live-status">
+                  <option value="">All statuses</option>
+                </select>
+                <button type="button" class="btn" id="live-refresh">Refresh now</button>
+              </div>
+            </div>
+            <div class="live-chip-row" id="live-chips"></div>
+            <p class="hint" id="live-edit-hint">You can edit your own VINs directly on this sheet · teammates' rows are view only.</p>
+            <p class="hint live-save-toast" id="live-save-toast" hidden></p>
+            <div class="table-wrap live-sheet-wrap">
+              <table class="data live-sheet" id="live-table"></table>
+            </div>
+          </div>
+        </section>
+
+        <!-- MY VINS -->
+        <section class="panel" id="panel-my">
+          <div class="kpi-row" id="my-kpis"></div>
+          <div class="card">
+            <h2>My delivery schedule</h2>
+            <p class="hint">All your assigned VINs on one page · edit below · select VINs to hand over to another employee</p>
+            <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
+            <div class="toolbar" id="my-toolbar">
+              <input type="search" id="my-q" placeholder="Search VIN / order / product…" />
+              <select id="my-status"><option value="">All statuses</option></select>
+              <button type="button" class="btn" id="my-clear">Clear</button>
+            </div>
+            <div class="reassign-bar" id="my-reassign-bar">
+              <div class="reassign-bar-label">
+                <strong id="my-reassign-count">0</strong> VIN(s) selected · give to:
+              </div>
+              <div class="reassign-targets" id="my-reassign-targets"></div>
+              <button type="button" class="btn" id="my-reassign-clear">Clear selection</button>
+            </div>
+            <div class="table-wrap"><table class="data" id="my-table"></table></div>
+            <div class="pager" id="my-pager"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="vin-drawer-back">
+    <div class="drawer" id="vin-drawer"></div>
+  </div>
 
   <script src="shared.js"></script>
-  <script src="live.js"></script>
-  <script>
-    (async function () {
-      const { api, esc, requireRole } = DTX;
-      const user = requireRole(['employee', 'admin']);
-      if (!user) return;
-      if (user.role === 'admin') {
-        document.getElementById('admin-links').hidden = false;
-        document.getElementById('mine-only').checked = false;
-      }
-      DTXLive.wireHeader(user);
-      await DTXLive.loadMeta();
-
-      async function load() {
-        const q = document.getElementById('search').value.trim();
-        const live = await api(`/live-sheet${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-        const all = live.rows || [];
-        const mine = all.filter((r) => r.ops.assignedEmployeeId === user.id);
-        const rows = document.getElementById('mine-only').checked ? mine : all;
-        const done = mine.filter((r) => r.ops.opsStatus === 'Claimed' || r.ops.opsStatus === 'تم التسليم').length;
-        document.getElementById('kpis').innerHTML = [
-          ['My VINs', mine.length],
-          ['Delivered / Claimed', done],
-          ['Open', mine.length - done],
-          ['All on Live Sheet', live.total],
-        ].map(([l, n]) => `<div class="kpi"><strong>${n}</strong><span>${esc(l)}</span></div>`).join('');
-        document.getElementById('live-meta').textContent =
-          `${rows.length} shown · synced ${new Date(live.at).toLocaleTimeString()}`;
-        DTXLive.renderTable(document.getElementById('live-table'), rows, {
-          mode: 'employee',
-          onOpen: (vin) => DTXLive.openDrawer(vin, { mode: 'employee', onSaved: load }),
-        });
-      }
-
-      let t;
-      document.getElementById('search').addEventListener('input', () => {
-        clearTimeout(t);
-        t = setTimeout(load, 250);
-      });
-      document.getElementById('mine-only').addEventListener('change', load);
-      document.getElementById('refresh-btn').addEventListener('click', load);
-      setInterval(() => {
-        const a = document.activeElement;
-        if (a && a.classList && a.classList.contains('cell-edit')) return;
-        if (document.getElementById('vin-drawer-back')?.classList.contains('open')) return;
-        load().catch(() => {});
-      }, 15000);
-      load().catch((e) => alert(e.message));
-    })();
-  </script>
+  <script src="employee.js?v=20260923emp1"></script>
 </body>
 </html>

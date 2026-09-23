@@ -138,10 +138,38 @@ function createDeliveryTransformationRouter(opts = {}) {
         return hay.includes(q);
       });
     }
-    list.sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+    const month = String((req.query && req.query.month) || '').trim().slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(month)) {
+      list = list.filter((v) => [
+        v.raw && v.raw.proformaDate,
+        v.raw && v.raw.date,
+        v.ops && v.ops.assignedAt,
+      ].some((d) => String(d || '').slice(0, 7) === month));
+    }
+    if (!isCoordinator) {
+      const eq = (val, pick) => {
+        const want = String(val || '').trim().toLowerCase();
+        if (!want) return;
+        list = list.filter((v) => String(pick(v) || '').trim().toLowerCase() === want);
+      };
+      eq(req.query.employee, (v) => v.ops && v.ops.assignedEmployeeName);
+      eq(req.query.status, (v) => v.ops && v.ops.opsStatus);
+      if (req.query.carrier === '__empty__') {
+        list = list.filter((v) => !String((v.ops && v.ops.carrier) || '').trim());
+      } else {
+        eq(req.query.carrier, (v) => v.ops && v.ops.carrier);
+      }
+    }
+    const statusRank = (v) => {
+      const i = STATUSES.indexOf(String((v.ops && v.ops.opsStatus) || ''));
+      return i === -1 ? STATUSES.length : i;
+    };
+    list.sort((a, b) => (isCoordinator ? 0 : statusRank(a) - statusRank(b))
+      || String(a.vin).localeCompare(String(b.vin)));
     const byStatus = {};
     const byEmployee = {};
     const byCarrier = {};
+    const bySalesType = {};
     list.forEach((v) => {
       const st = (v.ops && v.ops.opsStatus) || '(blank)';
       byStatus[st] = (byStatus[st] || 0) + 1;
@@ -149,6 +177,8 @@ function createDeliveryTransformationRouter(opts = {}) {
       byEmployee[emp] = (byEmployee[emp] || 0) + 1;
       const car = String((v.ops && v.ops.carrier) || '').trim() || '(empty)';
       byCarrier[car] = (byCarrier[car] || 0) + 1;
+      const stype = (v.raw && v.raw.salesType) || '(blank)';
+      bySalesType[stype] = (bySalesType[stype] || 0) + 1;
     });
     res.json({
       at: new Date().toISOString(),
@@ -156,6 +186,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       byStatus: isCoordinator ? {} : byStatus,
       byEmployee: isCoordinator ? {} : byEmployee,
       byCarrier: isCoordinator ? {} : byCarrier,
+      bySalesType,
       readOnly: isCoordinator,
       rows: list.map((v) => publicVehicle(v, req.dtUser)),
     });
@@ -349,6 +380,41 @@ function createDeliveryTransformationRouter(opts = {}) {
       vehicle: publicVehicle(v, req.dtUser),
       lastUpdated: v.ops.updatedAt,
     });
+  });
+
+  router.post('/reassign', auth, requireRole('admin', 'employee'), (req, res) => {
+    const body = req.body || {};
+    const vins = Array.isArray(body.vins) ? body.vins.map(normVin).filter(Boolean) : [];
+    const target = String(body.employee || '').trim().toLowerCase();
+    const emp = USERS.find((u) => u.role === 'employee'
+      && (u.id === target || u.name.toLowerCase() === target));
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    if (!emp) return res.status(400).json({ error: 'Unknown employee' });
+    const now = new Date().toISOString();
+    const results = vins.map((vin) => {
+      const v = store.getVehicle(vin);
+      if (!v) return { vin, ok: false, error: 'VIN not found' };
+      if (!canEditVehicle(v, req.dtUser)) return { vin, ok: false, error: 'Not your VIN' };
+      if (v.ops.assignedEmployeeId === emp.id) return { vin, ok: false, error: 'Already assigned' };
+      const old = v.ops.assignedEmployeeName || '';
+      v.ops.assignedEmployeeId = emp.id;
+      v.ops.assignedEmployeeName = emp.name;
+      v.ops.assignedBy = req.dtUser.name;
+      v.ops.assignedAt = now;
+      v.ops.updatedBy = req.dtUser.name;
+      v.ops.updatedAt = now;
+      store.upsertVehicle(vin, v);
+      store.pushAudit({
+        vin,
+        user: req.dtUser.name,
+        action: 'reassign',
+        oldValue: old || '(unassigned)',
+        newValue: emp.name,
+      });
+      return { vin, ok: true };
+    });
+    store.save();
+    return res.json({ ok: true, results });
   });
 
   router.delete('/vehicles/:vin', auth, requireRole('admin'), (req, res) => {
