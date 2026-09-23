@@ -6,6 +6,7 @@
   <title>Delivery Transformation — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="admin.css?v=20260923a1" />
 </head>
 <body>
   <header class="topnav">
@@ -14,152 +15,128 @@
       <div><strong>TOYOTA</strong><span>Delivery Transformation · Admin</span></div>
     </div>
     <nav class="nav-links">
-      <a href="admin.html" class="active">Admin</a>
-      <a href="coordinator.html">Coordinator view</a>
-      <a href="employee.html">Employee view</a>
+      <button type="button" class="tab-btn active" data-tab="dash">Dashboard</button>
+      <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
+      <a href="coordinator.html">Coordinator</a>
+      <a href="employee.html">Employee</a>
+      <a href="attendance.html" target="_blank" rel="noopener">Attendance</a>
     </nav>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div class="top-right">
+      <span class="live-clock" id="live-clock">—</span>
       <span id="who" class="badge">—</span>
       <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
     </div>
   </header>
 
-  <main class="wrap">
-    <section class="hero">
-      <h1>All delivery details</h1>
-      <p>Every VIN with vehicle, customer, and delivery employee entries. Click a VIN to edit anything or reassign the employee.</p>
+  <main class="wrap admin-wrap">
+    <section class="panel-tab active" id="tab-dash">
+      <section class="hero">
+        <h1>Operations dashboard</h1>
+        <p>Live company attendance, delivery-note totals, and city mix — from attendance check-in and coordinator print.</p>
+      </section>
+
+      <div class="kpi-row" id="dash-kpis"></div>
+      <p class="sync-line">Live · last sync <span id="dash-sync">—</span></p>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>1 · Company attendance</h2>
+        <p class="hint">Check-in count updates live. Each delivery note PDF assigns its VIN to the selected company. Click a company for arrive / leave times.</p>
+        <div id="attend-chart" class="chart-list"></div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:14px">
+        <div class="card">
+          <h2>2 · Delivery notes by user</h2>
+          <p class="hint">How many delivery notes each coordinator created in total.</p>
+          <div id="user-chart" class="chart-list"></div>
+        </div>
+        <div class="card">
+          <h2>3 · Companies by city</h2>
+          <p class="hint">Company name + total cars. Click to see the city split and VINs.</p>
+          <div id="city-chart" class="chart-list"></div>
+        </div>
+      </div>
     </section>
 
-    <div class="kpi-row" id="kpis"></div>
+    <section class="panel-tab" id="tab-vins">
+      <section class="hero">
+        <h1>All delivery details</h1>
+        <p>Every VIN with vehicle, customer, and delivery employee entries. Click a VIN to edit or reassign.</p>
+      </section>
 
-    <div class="grid-3" style="margin-bottom:14px">
-      <div class="card"><h2>By status</h2><div id="by-status"></div></div>
-      <div class="card"><h2>By employee</h2><div id="by-employee"></div></div>
-      <div class="card"><h2>By الناقل</h2><div id="by-carrier"></div></div>
-    </div>
+      <div class="kpi-row" id="kpis"></div>
 
-    <div class="card" style="margin-bottom:14px">
-      <h2>Add VIN to Live Sheet</h2>
-      <p class="hint">New VINs appear for the coordinator (details only) and the assigned employee (to fill in).</p>
-      <form id="add-form" class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin:0">
-        <div class="field"><label>VIN *</label><input name="vin" required /></div>
-        <div class="field"><label>Product</label><input name="product" /></div>
-        <div class="field"><label>Sales Type</label><input name="salesType" /></div>
-        <div class="field"><label>Order</label><input name="salesOrder" /></div>
-        <div class="field"><label>S/A</label><input name="salesAdvisor" /></div>
-        <div class="field"><label>Customer</label><input name="userName" /></div>
-        <div class="field"><label>Phone</label><input name="phone" /></div>
-        <div class="field"><label>GT Loc</label><input name="gtLocation" /></div>
-        <div class="field"><label>Veh Loc</label><input name="vehicleLocation" /></div>
-        <div class="field"><label>Employee</label><select name="assignedEmployeeId" id="add-employee"></select></div>
-        <div class="field" style="align-self:end"><button type="submit" class="btn-primary" style="width:100%">Add VIN</button></div>
-      </form>
-    </div>
-
-    <div class="card" style="margin-bottom:14px">
-      <h2>Live Sheet — full details</h2>
-      <div class="toolbar">
-        <input type="search" id="search" placeholder="Search VIN / order / product / employee…" />
-        <button type="button" class="btn" id="refresh-btn">Refresh</button>
-        <span class="hint" id="live-meta"></span>
+      <div class="grid-3" style="margin-bottom:14px">
+        <div class="card"><h2>By status</h2><div id="by-status"></div></div>
+        <div class="card"><h2>By employee</h2><div id="by-employee"></div></div>
+        <div class="card"><h2>By الناقل</h2><div id="by-carrier"></div></div>
       </div>
-      <div class="table-wrap"><table class="data" id="live-table"></table></div>
-    </div>
 
-    <div class="card">
-      <h2>Audit log</h2>
-      <div class="table-wrap" style="max-height:360px"><table class="data" id="audit-table"></table></div>
-    </div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Add VIN to Live Sheet</h2>
+        <p class="hint">New VINs appear for the coordinator and the assigned employee.</p>
+        <form id="add-form" class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin:0">
+          <div class="field"><label>VIN *</label><input name="vin" required /></div>
+          <div class="field"><label>Product</label><input name="product" /></div>
+          <div class="field"><label>Sales Type</label><input name="salesType" /></div>
+          <div class="field"><label>Order</label><input name="salesOrder" /></div>
+          <div class="field"><label>S/A</label><input name="salesAdvisor" /></div>
+          <div class="field"><label>Customer</label><input name="userName" /></div>
+          <div class="field"><label>Phone</label><input name="phone" /></div>
+          <div class="field"><label>GT Loc</label><input name="gtLocation" /></div>
+          <div class="field"><label>Veh Loc</label><input name="vehicleLocation" /></div>
+          <div class="field"><label>Employee</label><select name="assignedEmployeeId" id="add-employee"></select></div>
+          <div class="field" style="align-self:end"><button type="submit" class="btn-primary" style="width:100%">Add VIN</button></div>
+        </form>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>Live Sheet — full details</h2>
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="Search VIN / order / product / employee…" />
+          <button type="button" class="btn" id="refresh-btn">Refresh</button>
+          <span class="hint" id="live-meta"></span>
+        </div>
+        <div class="table-wrap"><table class="data" id="live-table"></table></div>
+      </div>
+
+      <div class="card">
+        <h2>Audit log</h2>
+        <div class="table-wrap" style="max-height:360px"><table class="data" id="audit-table"></table></div>
+      </div>
+    </section>
   </main>
+
+  <aside class="pdf-win" id="pdf-win">
+    <header class="pdf-win-bar">
+      <strong>Cars PDF copy</strong>
+      <div>
+        <button type="button" class="btn-ghost" id="pdf-min" title="Minimize">—</button>
+      </div>
+    </header>
+    <div class="pdf-win-body" id="pdf-win-body">
+      <div class="pdf-list" id="pdf-list"></div>
+      <div class="pdf-add">
+        <h3>Add to the list</h3>
+        <form id="add-company-form" class="add-row">
+          <input name="name" placeholder="New company…" required />
+          <button type="submit" class="btn-primary">Add company</button>
+        </form>
+        <form id="add-city-form" class="add-row">
+          <input name="name" placeholder="New city…" required />
+          <button type="submit" class="btn">Add city</button>
+        </form>
+        <p class="hint" id="list-hint">New names appear on attendance and coordinator print.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="drawer-back" id="detail-back">
+    <div class="drawer wide" id="detail-drawer"></div>
+  </div>
 
   <script src="shared.js"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script>
-    (async function () {
-      const { api, esc, requireRole, toast } = DTX;
-      const user = requireRole(['admin']);
-      if (!user) return;
-      DTXLive.wireHeader(user);
-      const meta = await DTXLive.loadMeta();
-
-      document.getElementById('add-employee').innerHTML = '<option value="">— Unassigned —</option>'
-        + (meta.employees || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-
-      function bars(el, counts) {
-        const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
-        const max = Math.max(1, ...entries.map((e) => e[1]));
-        el.innerHTML = entries.map(([k, n]) => `
-          <div style="display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center;margin:4px 0;font-size:.8rem">
-            <span>${esc(k)}</span>
-            <span style="height:8px;border-radius:4px;background:#e6edf4;overflow:hidden">
-              <span style="display:block;height:100%;width:${(n / max) * 100}%;background:#143a5c"></span>
-            </span>
-            <b>${n}</b>
-          </div>`).join('') || '<span class="hint">—</span>';
-      }
-
-      async function loadAll() {
-        const q = document.getElementById('search').value.trim();
-        const [live, audit] = await Promise.all([
-          api(`/live-sheet${q ? `?q=${encodeURIComponent(q)}` : ''}`),
-          api('/audit?limit=100'),
-        ]);
-        const rows = live.rows || [];
-        const assigned = rows.filter((r) => r.ops.assignedEmployeeId).length;
-        const withCarrier = rows.filter((r) => String(r.ops.carrier || '').trim()).length;
-        document.getElementById('kpis').innerHTML = [
-          ['Total VINs', live.total],
-          ['Assigned', assigned],
-          ['Unassigned', rows.length - assigned],
-          ['With الناقل', withCarrier],
-        ].map(([l, n]) => `<div class="kpi"><strong>${n}</strong><span>${esc(l)}</span></div>`).join('');
-        bars(document.getElementById('by-status'), live.byStatus);
-        bars(document.getElementById('by-employee'), live.byEmployee);
-        bars(document.getElementById('by-carrier'), live.byCarrier);
-        document.getElementById('live-meta').textContent =
-          `${live.total} VINs · synced ${new Date(live.at).toLocaleTimeString()}`;
-
-        DTXLive.renderTable(document.getElementById('live-table'), rows, {
-          mode: 'admin',
-          onOpen: (vin) => DTXLive.openDrawer(vin, { mode: 'admin', onSaved: loadAll }),
-        });
-
-        document.getElementById('audit-table').innerHTML = `<thead><tr><th>Time</th><th>User</th><th>VIN</th><th>Action</th><th>Old</th><th>New</th></tr></thead>
-          <tbody>${(audit.rows || []).map((a) => `<tr>
-            <td>${esc(String(a.at || '').replace('T', ' ').slice(0, 19))}</td>
-            <td>${esc(a.user)}</td><td>${esc(a.vin)}</td><td>${esc(a.action)}</td>
-            <td>${esc(a.oldValue)}</td><td>${esc(a.newValue)}</td></tr>`).join('')
-            || '<tr><td colspan="6">No changes yet.</td></tr>'}</tbody>`;
-      }
-
-      document.getElementById('add-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const body = Object.fromEntries(new FormData(e.target).entries());
-        try {
-          await api('/vehicles', { method: 'POST', json: body });
-          e.target.reset();
-          toast('VIN added');
-          loadAll();
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-
-      let t;
-      document.getElementById('search').addEventListener('input', () => {
-        clearTimeout(t);
-        t = setTimeout(loadAll, 250);
-      });
-      document.getElementById('refresh-btn').addEventListener('click', loadAll);
-      setInterval(() => {
-        const a = document.activeElement;
-        if (a && a.classList && a.classList.contains('cell-edit')) return;
-        if (document.getElementById('vin-drawer-back')?.classList.contains('open')) return;
-        loadAll().catch(() => {});
-      }, 15000);
-
-      loadAll().catch((e) => alert(e.message));
-    })();
-  </script>
+  <script src="admin.js?v=20260923a1"></script>
 </body>
 </html>

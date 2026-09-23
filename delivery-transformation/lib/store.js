@@ -10,11 +10,14 @@ function emptyStore() {
     vehicles: {},
     audit: [],
     attendance: [],
+    prints: [],
     meta: {
       createdAt: new Date().toISOString(),
       updatedAt: null,
       label: 'delivery-transformation',
       memoInvoiceNext: 1000,
+      customCarriers: [],
+      customCities: [],
     },
   };
 }
@@ -36,8 +39,11 @@ function createStore(filePath) {
         vehicles: raw.vehicles && typeof raw.vehicles === 'object' ? raw.vehicles : {},
         audit: Array.isArray(raw.audit) ? raw.audit : [],
         attendance: Array.isArray(raw.attendance) ? raw.attendance : [],
+        prints: Array.isArray(raw.prints) ? raw.prints : [],
         meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : emptyStore().meta,
       };
+      if (!Array.isArray(data.meta.customCarriers)) data.meta.customCarriers = [];
+      if (!Array.isArray(data.meta.customCities)) data.meta.customCities = [];
       if (!Object.keys(data.vehicles).length) {
         seedDemoIfEmpty();
         save();

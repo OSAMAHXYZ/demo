@@ -668,10 +668,12 @@
   async function doPrintA4() {
     if (!validatePrintFields()) return;
     const printedVins = getSelectedVins();
+    let invoiceNumber = '';
     if (!isWarehouse()) {
       try {
         const issued = await api('/print-invoice', { method: 'POST', json: { vin: printedVins[0] || '' } });
-        fill('invoice_number', String(issued.invoiceNumber));
+        invoiceNumber = String(issued.invoiceNumber || '');
+        fill('invoice_number', invoiceNumber);
       } catch (err) {
         setPrintStatus(err.message || 'فشل إصدار رقم المذكرة', 'err');
         return;
@@ -686,6 +688,7 @@
           attendanceId: isWarehouse() ? '' : claimedAttendanceId,
           company: isWarehouse() ? '' : String($('company_rep').value || '').trim(),
           city: isWarehouse() ? '' : attendanceCity(),
+          invoiceNumber,
         },
       });
       if (!isWarehouse()) claimedAttendanceId = '';

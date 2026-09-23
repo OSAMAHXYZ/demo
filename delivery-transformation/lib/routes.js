@@ -167,6 +167,23 @@ function createDeliveryTransformationRouter(opts = {}) {
     return next();
   }
 
+  function customList(key) {
+    const arr = store.data.meta && store.data.meta[key];
+    return Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : [];
+  }
+
+  function allCarriers() {
+    return [...new Set([...CARRIERS, ...customList('customCarriers')])];
+  }
+
+  function allCities() {
+    return [...new Set([...TRANSFER_CITIES, ...customList('customCities')])];
+  }
+
+  function isKnownCompany(name) {
+    return allCarriers().includes(String(name || '').trim());
+  }
+
   function requireRole(...roles) {
     return (req, res, next) => {
       if (!req.dtUser || !roles.includes(req.dtUser.role)) {
@@ -191,7 +208,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     if (name.length < 2) {
       return res.status(400).json({ error: 'أدخل الاسم' });
     }
-    if (!CARRIERS.includes(company)) {
+    if (!isKnownCompany(company)) {
       return res.status(400).json({ error: 'اختر الشركة من القائمة' });
     }
     if (phone.replace(/\D/g, '').length < 9) {
@@ -361,8 +378,8 @@ function createDeliveryTransformationRouter(opts = {}) {
       module: 'delivery-transformation',
       isolated: true,
       statuses: STATUSES,
-      carriers: CARRIERS,
-      transferCities: TRANSFER_CITIES,
+      carriers: allCarriers(),
+      transferCities: allCities(),
       yesNo: YES_NO,
       users: USERS.map((u) => ({ id: u.id, name: u.name, role: u.role })),
       employees: vacationList(),
@@ -447,15 +464,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const printCompany = String((req.body && req.body.company) || '').trim();
     const printCity = String((req.body && req.body.city) || '').trim();
     const attendanceId = String((req.body && req.body.attendanceId) || '').trim();
-    if (attendanceId) {
-      const att = attendanceRows().find((e) => e.id === attendanceId);
-      if (att && !att.usedAt) {
-        att.usedAt = now;
-        att.usedBy = req.dtUser.name;
-        att.heldBy = '';
-        att.heldAt = '';
-      }
-    }
+    const invoiceNumber = String((req.body && req.body.invoiceNumber) || '').trim();
     const marked = [];
     raw.forEach((item) => {
       const v = store.getVehicle(item);
@@ -471,6 +480,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         v.ops.coordinatorPrintCompany = printCompany;
         v.ops.coordinatorPrintCity = printCity || String((v.ops.transferCity || '')).trim();
         if (printCompany) v.ops.carrier = printCompany;
+        if (invoiceNumber) v.ops.coordinatorPrintInvoice = invoiceNumber;
       }
       v.ops.updatedAt = now;
       v.ops.updatedBy = req.dtUser.name;
@@ -483,7 +493,42 @@ function createDeliveryTransformationRouter(opts = {}) {
         newValue: kind,
       });
     });
-    if (marked.length) store.save();
+    if (attendanceId) {
+      const att = attendanceRows().find((e) => e.id === attendanceId);
+      if (att && !att.usedAt) {
+        att.usedAt = now;
+        att.leftAt = now;
+        att.usedBy = req.dtUser.name;
+        att.usedVins = marked.slice();
+        att.usedCity = printCity;
+        att.usedCompany = printCompany || att.company;
+        att.heldBy = '';
+        att.heldAt = '';
+      }
+    }
+    if (!Array.isArray(store.data.prints)) store.data.prints = [];
+    if (marked.length) {
+      store.data.prints.unshift({
+        id: `prn_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        at: now,
+        kind,
+        company: kind === 'warehouse' ? '' : printCompany,
+        city: kind === 'warehouse' ? '' : printCity,
+        vins: marked.map((vin) => {
+          const v = store.getVehicle(vin);
+          return {
+            vin,
+            product: (v && v.raw && v.raw.product) || '',
+            customer: (v && v.raw && v.raw.userName) || '',
+          };
+        }),
+        printedBy: req.dtUser.name,
+        attendanceId,
+        invoiceNumber: kind === 'warehouse' ? '' : invoiceNumber,
+      });
+      if (store.data.prints.length > 2000) store.data.prints.length = 2000;
+    }
+    if (marked.length || attendanceId) store.save();
     return res.json({ ok: true, vins: marked });
   });
 
@@ -872,6 +917,138 @@ function createDeliveryTransformationRouter(opts = {}) {
       meta: store.data.meta,
       vehicles: list.map((v) => publicVehicle(v, req.dtUser)),
     });
+  });
+
+  router.get('/admin/dashboard', auth, requireRole('admin'), (_req, res) => {
+    const attendance = attendanceRows();
+    const vehicles = store.allVehicles();
+    const printed = vehicles.filter((v) => (
+      isCoordinatorPrinted(v) && v.ops && String(v.ops.coordinatorPrintKind || '') !== 'warehouse'
+    ));
+    const warehouse = vehicles.filter((v) => (
+      isCoordinatorPrinted(v) && v.ops && String(v.ops.coordinatorPrintKind || '') === 'warehouse'
+    ));
+
+    const names = new Set(allCarriers());
+    attendance.forEach((e) => { if (e.company) names.add(e.company); });
+    printed.forEach((v) => {
+      const company = String((v.ops && v.ops.coordinatorPrintCompany) || '').trim();
+      if (company) names.add(company);
+    });
+
+    const companies = [...names].map((company) => {
+      const people = attendance.filter((e) => e.company === company).map((e) => ({
+        id: e.id,
+        name: e.name,
+        phone: e.phone,
+        arrivedAt: e.at || '',
+        leftAt: e.leftAt || e.usedAt || '',
+        status: (e.leftAt || e.usedAt) ? 'left' : 'present',
+        vins: Array.isArray(e.usedVins) ? e.usedVins : [],
+        city: e.usedCity || '',
+        usedBy: e.usedBy || '',
+      }));
+      const vins = printed
+        .filter((v) => String((v.ops && v.ops.coordinatorPrintCompany) || '') === company)
+        .map((v) => ({
+          vin: v.vin,
+          product: (v.raw && v.raw.product) || '',
+          customer: (v.raw && v.raw.userName) || '',
+          city: (v.ops && (v.ops.coordinatorPrintCity || v.ops.transferCity)) || '',
+          printedAt: (v.ops && v.ops.coordinatorPrintedAt) || '',
+          printedBy: (v.ops && v.ops.coordinatorPrintedBy) || '',
+          invoice: (v.ops && v.ops.coordinatorPrintInvoice) || '',
+        }));
+      return {
+        company,
+        present: people.filter((p) => p.status === 'present').length,
+        arrived: people.length,
+        left: people.filter((p) => p.status === 'left').length,
+        notes: vins.length,
+        lastAt: people.reduce((max, p) => Math.max(max, Date.parse(p.arrivedAt) || 0), 0),
+        people,
+        vins,
+      };
+    }).sort((a, b) => (b.present - a.present) || (b.notes - a.notes) || a.company.localeCompare(b.company, 'ar'));
+
+    const coordinators = USERS
+      .filter((u) => u.role === 'coordinator' || u.role === 'admin')
+      .map((u) => {
+        const notes = vehicles.filter((v) => isCoordinatorPrinted(v) && v.ops
+          && (v.ops.coordinatorPrintedBy === u.name || v.ops.coordinatorPrintedBy === u.id)).length;
+        return { id: u.id, name: u.name, role: u.role, notes };
+      })
+      .filter((u) => u.role === 'coordinator' || u.notes > 0);
+
+    const companyCities = companies.map((c) => {
+      const byCity = new Map();
+      c.vins.forEach((row) => {
+        const city = String(row.city || '').trim() || '—';
+        if (!byCity.has(city)) byCity.set(city, { city, count: 0, vins: [] });
+        const g = byCity.get(city);
+        g.count += 1;
+        g.vins.push(row);
+      });
+      return {
+        company: c.company,
+        total: c.notes,
+        cities: [...byCity.values()].sort((a, b) => b.count - a.count),
+      };
+    }).filter((c) => c.total > 0);
+
+    return res.json({
+      at: new Date().toISOString(),
+      present: companies.reduce((n, c) => n + c.present, 0),
+      left: companies.reduce((n, c) => n + c.left, 0),
+      notes: printed.length + warehouse.length,
+      memos: printed.length,
+      warehouse: warehouse.length,
+      companies,
+      coordinators,
+      companyCities,
+      prints: (store.data.prints || []).slice(0, 80),
+      carriers: allCarriers(),
+      cities: allCities(),
+    });
+  });
+
+  router.post('/admin/lists', auth, requireRole('admin'), (req, res) => {
+    const type = String((req.body && req.body.type) || '').trim();
+    const name = String((req.body && req.body.name) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Enter a name' });
+    if (type !== 'company' && type !== 'city') {
+      return res.status(400).json({ error: 'type must be company or city' });
+    }
+    if (!store.data.meta || typeof store.data.meta !== 'object') store.data.meta = {};
+    if (type === 'company') {
+      if (allCarriers().includes(name)) {
+        return res.status(409).json({ error: 'Company already in the list' });
+      }
+      if (!Array.isArray(store.data.meta.customCarriers)) store.data.meta.customCarriers = [];
+      store.data.meta.customCarriers.push(name);
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'add_company',
+        oldValue: '',
+        newValue: name,
+      });
+    } else {
+      if (allCities().includes(name)) {
+        return res.status(409).json({ error: 'City already in the list' });
+      }
+      if (!Array.isArray(store.data.meta.customCities)) store.data.meta.customCities = [];
+      store.data.meta.customCities.push(name);
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'add_city',
+        oldValue: '',
+        newValue: name,
+      });
+    }
+    store.save();
+    return res.json({ ok: true, carriers: allCarriers(), cities: allCities() });
   });
 
   router.post('/vehicles', auth, requireRole('admin'), (req, res) => {
