@@ -51,6 +51,8 @@
   const CITY_COLORS = ['#0b2a44', '#1769a8', '#0d6b3c', '#b45309', '#7c3aed', '#eb0a1e', '#0e7490', '#854d0e'];
 
   let dash = null;
+  let perf = null;
+  let empMonth = '';
   let dashTimer = null;
   let dashInFlight = false;
   let pdfQuery = '';
@@ -211,6 +213,74 @@
     host.querySelectorAll('[data-city-co]').forEach((b) => {
       b.addEventListener('click', () => openCompanyCities(b.dataset.cityCo));
     });
+  }
+
+  function achCell(pct) {
+    if (pct == null) return '<span class="hint">no target</span>';
+    const cls = pct >= 100 ? 'ok' : pct >= 70 ? 'warn' : 'bad';
+    return `<div class="ach ach-${cls}"><div class="ach-bar"><span style="width:${Math.min(pct, 100)}%"></span></div><b>${pct}%</b></div>`;
+  }
+
+  function renderEmployees() {
+    const host = $('emp-chart');
+    if (!host) return;
+    const monthInp = $('emp-month');
+    if (monthInp && perf && perf.month && monthInp.value !== perf.month) monthInp.value = perf.month;
+    if ($('emp-month-hint') && perf) {
+      $('emp-month-hint').textContent = perf.month === perf.currentMonth
+        ? `${perf.month} · this month`
+        : (perf.month || '');
+    }
+    if (!perf) {
+      host.innerHTML = '<p class="chart-empty">Could not load employee VIN / Ach% data.</p>';
+      return;
+    }
+    const rows = perf.rows || [];
+    if (!rows.length) {
+      host.innerHTML = '<p class="chart-empty">No employee VIN / target data yet. Set targets on employee.html Team Targets.</p>';
+      return;
+    }
+    const max = Math.max(1, ...rows.map((r) => r.total || 0), ...(perf.totals ? [perf.totals.total] : []));
+    const t = perf.totals || {};
+    host.innerHTML = rows.map((r) => `
+      <button type="button" class="chart-row emp-row" data-emp="${esc(r.id)}">
+        <span class="name">${esc(r.name)}</span>
+        <span class="bar" title="${r.total} VIN"><i class="notes" style="width:${(r.total / max) * 100}%"></i></span>
+        <span class="meta">${r.total} VIN · target ${r.target || '—'}</span>
+        ${achCell(r.achPct)}
+      </button>`).join('') + `
+      <div class="chart-row emp-row" style="cursor:default">
+        <span class="name">Team</span>
+        <span class="bar"><i class="user" style="width:${((t.total || 0) / max) * 100}%"></i></span>
+        <span class="meta">${t.total || 0} VIN · target ${t.target || '—'}</span>
+        ${achCell(t.achPct)}
+      </div>`;
+    host.querySelectorAll('[data-emp]').forEach((b) => {
+      b.addEventListener('click', () => openEmployee(b.dataset.emp));
+    });
+  }
+
+  function openEmployee(id) {
+    const r = ((perf && perf.rows) || []).find((x) => x.id === id);
+    if (!r) return;
+    const types = Object.entries(r.bySalesType || {}).sort((a, b) => b[1] - a[1]);
+    openDrawer(`
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div>
+          <h2>${esc(r.name)}</h2>
+          <p class="sub">${r.total} VIN · ${r.delivered} delivered · target ${r.target || '—'} · Ach% ${r.achPct == null ? 'no target' : `${r.achPct}%`}</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      ${achCell(r.achPct)}
+      <h3 style="margin:14px 0 8px;font-size:.85rem">By sales type</h3>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Sales type</th><th>VINs</th></tr></thead>
+          <tbody>${types.map(([k, n]) => `<tr><td>${esc(k)}</td><td><b>${n}</b></td></tr>`).join('')
+            || '<tr><td colspan="2">No VINs this month.</td></tr>'}</tbody>
+        </table>
+      </div>`);
   }
 
   function printHaystack(p) {
@@ -489,11 +559,21 @@
     if (silent && dashInFlight) return;
     dashInFlight = true;
     try {
-      dash = await api('/admin/dashboard');
+      const monthQs = empMonth ? `?month=${encodeURIComponent(empMonth)}` : '';
+      const [dashData, perfData] = await Promise.all([
+        api('/admin/dashboard'),
+        api(`/team-performance${monthQs}`).catch(() => null),
+      ]);
+      dash = dashData;
+      if (perfData) {
+        perf = perfData;
+        empMonth = perfData.month || empMonth;
+      }
       renderKpis();
       renderAttendance();
       renderUsers();
       renderCities();
+      renderEmployees();
       renderPrints();
     } finally {
       dashInFlight = false;
@@ -521,6 +601,13 @@
 
   document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
   $('detail-back').addEventListener('click', (e) => { if (e.target === $('detail-back')) closeDrawer(); });
+  const empMonthInp = $('emp-month');
+  if (empMonthInp) {
+    empMonthInp.addEventListener('change', (e) => {
+      empMonth = e.target.value || '';
+      loadDash().catch((err) => alert(err.message));
+    });
+  }
   $('pdf-min').addEventListener('click', () => $('pdf-win').classList.toggle('is-min'));
   $('pdf-search').addEventListener('input', (e) => {
     pdfQuery = e.target.value || '';

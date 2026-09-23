@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260923a6" />
+  <link rel="stylesheet" href="admin.css?v=20260923a7" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -77,6 +77,16 @@
           <p class="hint">Company name + total cars. Click to see the city split and VINs.</p>
           <div id="city-chart" class="chart-list"></div>
         </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>4 · Employees vs target</h2>
+        <p class="hint">Same numbers as employee.html Team Targets · total VINs this month · Ach% = VINs ÷ target.</p>
+        <div class="toolbar">
+          <label class="month-filter-label">Month <input type="month" id="emp-month" /></label>
+          <span class="hint" id="emp-month-hint"></span>
+        </div>
+        <div id="emp-chart" class="chart-list"></div>
       </div>
     </section>
 
@@ -166,6 +176,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260923a6"></script>
+  <script src="admin.js?v=20260923a7"></script>
 </body>
 </html>
