@@ -53,6 +53,10 @@
   let dash = null;
   let perf = null;
   let empMonth = '';
+  let kpiOpenId = '';
+  let kpiData = null;
+  let kpiExpanded = false;
+  let kpiDetailKey = '';
   let dashTimer = null;
   let dashInFlight = false;
   let pdfQuery = '';
@@ -256,31 +260,168 @@
         ${achCell(t.achPct)}
       </div>`;
     host.querySelectorAll('[data-emp]').forEach((b) => {
-      b.addEventListener('click', () => openEmployee(b.dataset.emp));
+      b.addEventListener('click', () => openEmployeeKpi(b.dataset.emp));
     });
   }
 
-  function openEmployee(id) {
-    const r = ((perf && perf.rows) || []).find((x) => x.id === id);
-    if (!r) return;
-    const types = Object.entries(r.bySalesType || {}).sort((a, b) => b[1] - a[1]);
-    openDrawer(`
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
-        <div>
-          <h2>${esc(r.name)}</h2>
-          <p class="sub">${r.total} VIN · ${r.delivered} delivered · target ${r.target || '—'} · Ach% ${r.achPct == null ? 'no target' : `${r.achPct}%`}</p>
-        </div>
-        <button type="button" class="btn" id="detail-close">Close</button>
-      </div>
-      ${achCell(r.achPct)}
-      <h3 style="margin:14px 0 8px;font-size:.85rem">By sales type</h3>
-      <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Sales type</th><th>VINs</th></tr></thead>
-          <tbody>${types.map(([k, n]) => `<tr><td>${esc(k)}</td><td><b>${n}</b></td></tr>`).join('')
-            || '<tr><td colspan="2">No VINs this month.</td></tr>'}</tbody>
-        </table>
-      </div>`);
+  function fmtPct(n) {
+    if (n == null || !Number.isFinite(Number(n))) return '—';
+    return `${Math.round(Number(n) * 100) / 100}%`;
+  }
+
+  function ringSvg(pct, status) {
+    const r = 54;
+    const circ = 2 * Math.PI * r;
+    const p = pct == null ? 0 : Math.max(0, Math.min(100, Number(pct)));
+    const off = circ * (1 - p / 100);
+    return `<svg viewBox="0 0 132 132" class="ekpi-svg ekpi-${status || 'empty'}" aria-hidden="true">
+      <circle class="ekpi-track" cx="66" cy="66" r="${r}"></circle>
+      <circle class="ekpi-fill" cx="66" cy="66" r="${r}"
+        stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"></circle>
+    </svg>`;
+  }
+
+  function showEmpList() {
+    kpiOpenId = '';
+    kpiExpanded = false;
+    kpiDetailKey = '';
+    if ($('emp-kpi-view')) $('emp-kpi-view').hidden = true;
+    if ($('emp-list-view')) $('emp-list-view').hidden = false;
+  }
+
+  async function openEmployeeKpi(id, { keepExpand = false } = {}) {
+    kpiOpenId = id;
+    if (!keepExpand) {
+      kpiExpanded = false;
+      kpiDetailKey = '';
+    }
+    if ($('emp-list-view')) $('emp-list-view').hidden = true;
+    if ($('emp-kpi-view')) $('emp-kpi-view').hidden = false;
+    await loadEmployeeKpi();
+  }
+
+  async function loadEmployeeKpi() {
+    if (!kpiOpenId) return;
+    const month = ($('ekpi-month') && $('ekpi-month').value) || empMonth || '';
+    const qs = `?employeeId=${encodeURIComponent(kpiOpenId)}${month ? `&month=${encodeURIComponent(month)}` : ''}`;
+    kpiData = await api(`/kpi/employee${qs}`);
+    empMonth = kpiData.month || empMonth;
+    renderEmployeeKpi();
+  }
+
+  function renderEmployeeKpi() {
+    const d = kpiData;
+    if (!d || !d.employee) return;
+    const empSel = $('ekpi-emp');
+    if (empSel) {
+      const roster = d.roster || [];
+      if (empSel.options.length !== roster.length) {
+        empSel.innerHTML = roster.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+      }
+      empSel.value = d.employee.id;
+    }
+    if ($('ekpi-month') && d.month) $('ekpi-month').value = d.month;
+    const o = d.overall || {};
+    $('ekpi-overall-val').textContent = o.available ? fmtPct(o.pct) : '—';
+    $('ekpi-overall').className = `ekpi-overall ekpi-${o.status || 'empty'}${kpiExpanded ? ' is-open' : ''}`;
+    $('ekpi-overall').setAttribute('aria-expanded', kpiExpanded ? 'true' : 'false');
+    $('ekpi-ring').innerHTML = ringSvg(o.pct, o.status || 'empty');
+    const monthNote = d.month === d.currentMonth ? `${d.month} · this month` : (d.month || '');
+    $('ekpi-hint').textContent = `${d.employee.name} · ${monthNote} · ${d.counts.vinCount} VIN · ${d.counts.delivered} delivered · target ${d.counts.target || '—'}`;
+    $('ekpi-overall-note').textContent = o.message
+      || (o.notes && o.notes.length ? o.notes.join(' ') : (kpiExpanded ? 'Click again to collapse' : 'Click to see the four KPI components'));
+
+    const keys = ['leadTime', 'achievement', 'contribution', 'psfu'];
+    const br = $('ekpi-breakdown');
+    br.hidden = !kpiExpanded;
+    if (kpiExpanded) {
+      br.innerHTML = keys.map((k) => {
+        const x = d.kpis[k];
+        if (!x) return '';
+        return `<button type="button" class="ekpi-card ekpi-${x.status}${kpiDetailKey === k ? ' is-open' : ''}" data-kpi="${k}">
+          <span class="ekpi-card-top">
+            <b>${esc(x.short)}</b>
+            <strong>${x.available ? fmtPct(x.kpiPct) : 'No data'}</strong>
+          </span>
+          <span class="ekpi-bar"><i style="width:${x.available ? Math.min(x.kpiPct || 0, 100) : 0}%"></i></span>
+          <span class="ekpi-card-meta">${esc(x.actualLabel)} · weight ${x.weight}%</span>
+        </button>`;
+      }).join('');
+      br.querySelectorAll('[data-kpi]').forEach((b) => {
+        b.addEventListener('click', () => {
+          kpiDetailKey = kpiDetailKey === b.dataset.kpi ? '' : b.dataset.kpi;
+          renderEmployeeKpi();
+        });
+      });
+    }
+    const host = $('ekpi-detail');
+    const x = kpiDetailKey && d.kpis[kpiDetailKey];
+    if (!x || !kpiExpanded) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+    host.hidden = false;
+    const scoreLine = x.score == null ? '—' : `${x.score} / ${x.maxScore}`;
+    host.innerHTML = `
+      <h3>${esc(x.name)}</h3>
+      ${x.message ? `<p class="ekpi-warn">${esc(x.message)}</p>` : ''}
+      <dl class="ekpi-dl">
+        <div><dt>Actual</dt><dd>${esc(x.actualLabel)}</dd></div>
+        <div><dt>Rule</dt><dd>${esc(x.targetRule || '—')}</dd></div>
+        <div><dt>Score</dt><dd>${esc(scoreLine)}</dd></div>
+        <div><dt>KPI</dt><dd>${x.available ? fmtPct(x.kpiPct) : 'No data'}</dd></div>
+        <div><dt>Weight</dt><dd>${x.weight}%</dd></div>
+        <div><dt>Weighted contribution</dt><dd>${x.contribution == null ? '—' : fmtPct(x.contribution)}</dd></div>
+      </dl>`;
+  }
+
+  function readWeightForm() {
+    const weights = {};
+    const enabled = {};
+    document.querySelectorAll('.wgt-input').forEach((el) => { weights[el.dataset.k] = Number(el.value) || 0; });
+    document.querySelectorAll('.wgt-on').forEach((el) => { enabled[el.dataset.k] = el.checked; });
+    return { weights, enabled };
+  }
+
+  function updateWeightTotal() {
+    const { weights, enabled } = readWeightForm();
+    const total = Object.keys(weights).reduce((s, k) => s + (enabled[k] ? Number(weights[k]) || 0 : 0), 0);
+    if ($('weight-total')) $('weight-total').textContent = `${total}%`;
+    if ($('weight-error')) {
+      $('weight-error').textContent = total === 100 ? '' : `Total must be 100% (now ${total}%).`;
+      $('weight-error').classList.toggle('ekpi-err', total !== 100);
+    }
+  }
+
+  function renderWeightForm(data) {
+    const keys = data.keys || ['leadTime', 'achievement', 'contribution', 'psfu'];
+    $('weight-body').innerHTML = keys.map((k) => `
+      <tr>
+        <td>${esc((data.meta && data.meta[k] && data.meta[k].name) || k)}</td>
+        <td><input type="number" min="0" max="100" step="1" class="wgt-input" data-k="${k}" value="${data.weights[k]}" /></td>
+        <td><input type="checkbox" class="wgt-on" data-k="${k}" ${data.enabled[k] ? 'checked' : ''} /></td>
+      </tr>`).join('');
+    document.querySelectorAll('.wgt-input').forEach((el) => el.addEventListener('input', updateWeightTotal));
+    document.querySelectorAll('.wgt-on').forEach((el) => el.addEventListener('change', updateWeightTotal));
+    updateWeightTotal();
+  }
+
+  async function loadWeights() {
+    renderWeightForm(await api('/kpi/weights'));
+  }
+
+  async function saveWeights() {
+    $('weight-error').textContent = '';
+    try {
+      await api('/kpi/weights', { method: 'PUT', json: readWeightForm() });
+      toast('KPI weights saved');
+      updateWeightTotal();
+      if (kpiOpenId) await loadEmployeeKpi();
+    } catch (err) {
+      $('weight-error').textContent = err.message || 'Could not save';
+      $('weight-error').classList.add('ekpi-err');
+    }
   }
 
   function printHaystack(p) {
@@ -575,6 +716,7 @@
       renderCities();
       renderEmployees();
       renderPrints();
+      if (kpiOpenId) loadEmployeeKpi().catch(() => {});
     } finally {
       dashInFlight = false;
     }
@@ -597,6 +739,7 @@
   function setTab(tab) {
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.panel-tab').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+    if (tab === 'weights') loadWeights().catch((err) => { if ($('weight-error')) $('weight-error').textContent = err.message; });
   }
 
   document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -608,6 +751,26 @@
       loadDash().catch((err) => alert(err.message));
     });
   }
+  if ($('ekpi-back')) $('ekpi-back').addEventListener('click', showEmpList);
+  if ($('ekpi-emp')) {
+    $('ekpi-emp').addEventListener('change', (e) => {
+      if (e.target.value) openEmployeeKpi(e.target.value, { keepExpand: kpiExpanded }).catch((err) => alert(err.message));
+    });
+  }
+  if ($('ekpi-month')) {
+    $('ekpi-month').addEventListener('change', (e) => {
+      empMonth = e.target.value || empMonth;
+      if (kpiOpenId) loadEmployeeKpi().catch((err) => alert(err.message));
+    });
+  }
+  if ($('ekpi-overall')) {
+    $('ekpi-overall').addEventListener('click', () => {
+      kpiExpanded = !kpiExpanded;
+      if (!kpiExpanded) kpiDetailKey = '';
+      renderEmployeeKpi();
+    });
+  }
+  if ($('weight-save')) $('weight-save').addEventListener('click', () => saveWeights());
   $('pdf-min').addEventListener('click', () => $('pdf-win').classList.toggle('is-min'));
   $('pdf-search').addEventListener('input', (e) => {
     pdfQuery = e.target.value || '';

@@ -123,6 +123,21 @@ function findHeaderRow(rows) {
   return -1;
 }
 
+/** Column W / "Lead Time" — days as a number. Ignore Excel date serials. */
+function parseLeadTime(val) {
+  if (val == null || val === '') return '';
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    if (val < 0 || val > 400) return '';
+    return Math.round(val * 100) / 100;
+  }
+  const s = String(val).trim().replace(/,/g, '.');
+  const m = s.match(/(-?\d+(?:\.\d+)?)/);
+  if (!m) return '';
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n < 0 || n > 400) return '';
+  return Math.round(n * 100) / 100;
+}
+
 function looksLikeVin(v) {
   const s = normVin(v);
   return s.length >= 10 && /[A-Z]/.test(s) && /\d/.test(s);
@@ -147,6 +162,7 @@ function rawFromRow(row, idx, source) {
     const val = get(field);
     if (field === 'proformaDate' || field === 'invoiceDate' || field === 'date') raw[field] = normalizeDate(val);
     else if (field === 'phone') raw[field] = normalizePhone(val);
+    else if (field === 'leadTime') raw[field] = parseLeadTime(val);
     else raw[field] = cellString(val);
   });
   return raw;
@@ -208,6 +224,7 @@ function parseSalesRaw(buffer) {
           if (field === 'vin') return;
           if (field === 'phone') raw[field] = normalizePhone(row[col]);
           else if (field === 'proformaDate' || field === 'invoiceDate') raw[field] = normalizeDate(row[col]);
+          else if (field === 'leadTime') raw[field] = parseLeadTime(row[col]);
           else raw[field] = cellString(row[col]);
         });
         items.push({ vin, raw });
@@ -226,6 +243,7 @@ function parseSalesRaw(buffer) {
         delete raw.pic;
         if (idx.proformaDate == null) raw.proformaDate = normalizeDate(row[RAW_COL.proformaDate]);
         if (idx.invoiceDate == null) raw.invoiceDate = normalizeDate(row[RAW_COL.invoiceDate]);
+        if (idx.leadTime == null) raw.leadTime = parseLeadTime(row[RAW_COL.leadTime]);
         items.push({ vin, raw });
       });
     }
@@ -246,6 +264,7 @@ function parseSalesRaw(buffer) {
 module.exports = {
   normVin,
   normalizeDate,
+  parseLeadTime,
   parseDeliverySheet,
   parseSalesRaw,
 };

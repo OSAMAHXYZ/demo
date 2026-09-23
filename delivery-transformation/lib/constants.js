@@ -131,6 +131,7 @@ function emptyRaw() {
     gtLocation: '',
     vehicleLocation: '',
     pic: '',
+    leadTime: '',
   };
 }
 
@@ -159,6 +160,10 @@ const HEADER_MAP = Object.freeze({
   gtLocation: ['gt location', 'gt', 'موقع gt'],
   vehicleLocation: ['vehicle location', 'veh loc', 'موقع المركبة', 'location'],
   phone: ['phone number', 'phone', 'mobile', 'رقم الجوال', 'الجوال', 'contact'],
+  leadTime: [
+    'lead time', 'leadtime', 'delivery lead time', 'lt',
+    'مدة التسليم', 'زمن التسليم', 'lead time days',
+  ],
 });
 
 /** Employee-entry columns that may appear in the delivery sheet */
@@ -191,6 +196,7 @@ const RAW_COL = Object.freeze({
   userName: 14, // O
   proformaDate: 15, // P
   invoiceDate: 21, // V
+  leadTime: 22, // W
   phone: 24, // Y
 });
 

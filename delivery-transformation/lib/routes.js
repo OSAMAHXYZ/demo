@@ -15,6 +15,7 @@ const {
 } = require('./constants');
 const { createStore } = require('./store');
 const { parseDeliverySheet, parseSalesRaw } = require('./importer');
+const kpiEngine = require('./kpi');
 
 const RAW_UPLOAD_LIMIT = '80mb';
 
@@ -835,7 +836,8 @@ function createDeliveryTransformationRouter(opts = {}) {
         summary.matched += 1;
         let changed = false;
         Object.entries(item.raw).forEach(([k, val]) => {
-          if (val && String(v.raw[k] || '') !== val) {
+          if (val === '' || val == null) return;
+          if (String(v.raw[k] ?? '') !== String(val)) {
             v.raw[k] = val;
             changed = true;
           }
@@ -1586,6 +1588,61 @@ function createDeliveryTransformationRouter(opts = {}) {
       totals,
       unassigned,
     });
+  });
+
+  router.get('/kpi/weights', auth, requireRole('admin', 'hanouf'), (_req, res) => {
+    const cfg = kpiEngine.readConfig(store.data.meta);
+    const total = kpiEngine.KPI_KEYS.reduce((s, k) => s + (cfg.enabled[k] ? cfg.weights[k] : 0), 0);
+    res.json({
+      keys: kpiEngine.KPI_KEYS,
+      meta: kpiEngine.KPI_META,
+      weights: cfg.weights,
+      enabled: cfg.enabled,
+      scoring: cfg.scoring,
+      total,
+    });
+  });
+
+  router.put('/kpi/weights', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const body = req.body || {};
+    const check = kpiEngine.validateWeightage(body.weights, body.enabled);
+    if (!check.ok) return res.status(400).json({ error: check.error, total: check.total, weights: check.weights, enabled: check.enabled });
+    store.data.meta.kpiWeights = check.weights;
+    store.data.meta.kpiEnabled = check.enabled;
+    if (body.scoring && typeof body.scoring === 'object') {
+      store.data.meta.kpiScoring = kpiEngine.normalizeScoring(body.scoring);
+    }
+    store.pushAudit({
+      vin: '',
+      user: req.dtUser.name,
+      action: 'set_kpi_weights',
+      field: 'kpi weightage',
+      oldValue: '',
+      newValue: kpiEngine.KPI_KEYS.map((k) => `${k}:${check.enabled[k] ? check.weights[k] : 0}`).join(' · '),
+    });
+    store.save();
+    const cfg = kpiEngine.readConfig(store.data.meta);
+    return res.json({ ok: true, weights: cfg.weights, enabled: cfg.enabled, scoring: cfg.scoring, total: 100 });
+  });
+
+  router.get('/kpi/employee', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const month = monthParam(req.query.month);
+    const cfg = kpiEngine.readConfig(store.data.meta);
+    const result = kpiEngine.computeEmployeeKpi({
+      employeeId: String(req.query.employeeId || '').trim(),
+      month,
+      currentMonth: currentMonthKey(),
+      vehicles: store.allVehicles(),
+      employees: USERS.filter(isAssignable),
+      targets: monthTargets(month),
+      weights: cfg.weights,
+      enabled: cfg.enabled,
+      scoring: cfg.scoring,
+      inMonth,
+      isDelivered,
+    });
+    if (result.error) return res.status(404).json({ error: result.error, roster: result.roster, month: result.month });
+    return res.json(result);
   });
 
   /** Save monthly targets: { month, targets: { employeeId: number } } */

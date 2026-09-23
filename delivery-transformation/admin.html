@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260923a7" />
+  <link rel="stylesheet" href="admin.css?v=20260923a8" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -38,6 +38,7 @@
     </div>
     <nav class="nav-links">
       <button type="button" class="tab-btn active" data-tab="dash">Dashboard</button>
+      <button type="button" class="tab-btn" data-tab="weights">KPI weights</button>
       <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
       <a href="coordinator.html">Coordinator</a>
       <a href="employee.html">Employee</a>
@@ -79,14 +80,63 @@
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:14px">
-        <h2>4 · Employees vs target</h2>
-        <p class="hint">Same numbers as employee.html Team Targets · total VINs this month · Ach% = VINs ÷ target.</p>
-        <div class="toolbar">
-          <label class="month-filter-label">Month <input type="month" id="emp-month" /></label>
-          <span class="hint" id="emp-month-hint"></span>
+      <div class="card" style="margin-bottom:14px" id="emp-card">
+        <div id="emp-list-view">
+          <h2>4 · Employees vs target</h2>
+          <p class="hint">Same numbers as employee.html Team Targets · total VINs this month · Ach% = VINs ÷ target. Click an employee for their Overall KPI.</p>
+          <div class="toolbar">
+            <label class="month-filter-label">Month <input type="month" id="emp-month" /></label>
+            <span class="hint" id="emp-month-hint"></span>
+          </div>
+          <div id="emp-chart" class="chart-list"></div>
         </div>
-        <div id="emp-chart" class="chart-list"></div>
+        <div id="emp-kpi-view" hidden>
+          <div class="ekpi-toolbar">
+            <button type="button" class="btn" id="ekpi-back">← Employees</button>
+            <label class="month-filter-label">Employee
+              <select id="ekpi-emp"></select>
+            </label>
+            <label class="month-filter-label">Month
+              <input type="month" id="ekpi-month" />
+            </label>
+          </div>
+          <p class="hint" id="ekpi-hint"></p>
+          <button type="button" class="ekpi-overall" id="ekpi-overall" aria-expanded="false">
+            <span class="ekpi-ring" id="ekpi-ring"></span>
+            <span class="ekpi-overall-copy">
+              <strong id="ekpi-overall-val">—</strong>
+              <span>Overall KPI</span>
+              <em id="ekpi-overall-note">Click to see the four KPI components</em>
+            </span>
+          </button>
+          <div class="ekpi-breakdown" id="ekpi-breakdown" hidden></div>
+          <div class="ekpi-detail" id="ekpi-detail" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-tab" id="tab-weights">
+      <section class="hero">
+        <h1>KPI weightage</h1>
+        <p>These weights drive the Overall KPI on the collector dashboard. Total of enabled KPIs must be exactly 100%.</p>
+      </section>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data" id="weight-table">
+            <thead>
+              <tr><th>KPI</th><th>Weight %</th><th>Enabled</th></tr>
+            </thead>
+            <tbody id="weight-body"></tbody>
+            <tfoot>
+              <tr><td><b>Total weight</b></td><td><b id="weight-total">100%</b></td><td></td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="hint" id="weight-error"></p>
+        <div class="toolbar" style="margin-top:12px">
+          <button type="button" class="btn-primary" id="weight-save">Save</button>
+          <span class="hint" id="weight-hint">Dashboard uses the new weights immediately after save.</span>
+        </div>
       </div>
     </section>
 
@@ -176,6 +226,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260923a7"></script>
+  <script src="admin.js?v=20260923a8"></script>
 </body>
 </html>
