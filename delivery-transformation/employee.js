@@ -26,6 +26,42 @@
     return !!(state.user && state.user.role === 'admin');
   }
 
+  /** Admin + Hanouf: see and edit every VIN, upload VINs and Sales Raw. */
+  function isManager() {
+    return !!(state.user && (state.user.role === 'admin' || state.user.role === 'hanouf'));
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+  }
+
+  function renderImports(imports) {
+    const raw = (imports && imports.lastSalesRaw) || null;
+    const pill = $('#raw-status-pill');
+    if (pill) {
+      pill.classList.toggle('is-empty', !raw);
+      pill.classList.toggle('is-fresh', !!raw
+        && Date.now() - new Date(raw.at).getTime() < 24 * 60 * 60 * 1000);
+      $('#raw-status-time').textContent = raw ? formatWhen(raw.at) : 'Not uploaded';
+      pill.title = raw ? `Sales Raw by ${raw.by} · ${raw.filename}` : 'Sales Raw not uploaded yet';
+    }
+    const rawCard = $('#sales-raw-last');
+    if (rawCard) {
+      rawCard.textContent = raw
+        ? `${formatWhen(raw.at)} · ${raw.by} · ${raw.filename} · ${raw.updated} VIN(s) updated`
+        : 'Not uploaded yet';
+    }
+    const up = (imports && imports.lastUpload) || null;
+    const upCard = $('#upload-last');
+    if (upCard) {
+      upCard.textContent = up
+        ? `${formatWhen(up.at)} · ${up.by} · ${up.filename} · ${up.month}: ${up.created} new, ${up.updated} updated`
+        : 'Not uploaded yet';
+    }
+  }
+
   function ynBadge(v) {
     const s = String(v || '').trim();
     if (s === 'Yes') return '<span class="badge ok">🟢 Yes</span>';
@@ -160,7 +196,11 @@
     return [
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'live', label: 'Live Sheet' },
-      { id: 'my', label: 'My VINs' },
+      { id: 'my', label: isManager() ? 'All VINs' : 'My VINs' },
+      ...(isManager() ? [
+        { id: 'upload', label: 'Upload VINs' },
+        { id: 'sales-raw', label: 'Sales Raw' },
+      ] : []),
     ];
   }
 
@@ -191,7 +231,11 @@
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
       live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank)'],
-      my: ['My VINs', 'Your schedule · edit your work · الناقل'],
+      my: isManager()
+        ? ['All VINs', 'Every VIN · edit · hand over to an employee']
+        : ['My VINs', 'Your schedule · edit your work · الناقل'],
+      upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
+      'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · everyone sees the update time'],
     };
     const t = titles[view] || ['Delivery Transformation', ''];
     $('#page-title').textContent = t[0];
@@ -207,6 +251,7 @@
       if (state.view === 'dashboard') await loadDashboard();
       if (state.view === 'live') await loadLiveSheet();
       if (state.view === 'my') await loadMy();
+      if (state.view === 'upload' || state.view === 'sales-raw') await loadImportPanels();
     } catch (err) {
       console.error(err);
       alert(err.message || 'Failed to load');
@@ -216,11 +261,96 @@
   async function fetchLive(params) {
     const qs = new URLSearchParams();
     Object.entries(params || {}).forEach(([k, v]) => { if (v) qs.set(k, v); });
-    return api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`);
+    const data = await api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`);
+    renderImports(data.imports);
+    return data;
+  }
+
+  // ——— Upload VINs / Sales Raw (Hanouf / Admin) ———
+  async function loadImportPanels() {
+    state.meta = await api('/meta');
+    $('#upload-month').textContent = state.meta.currentMonth || 'this month';
+    renderImports(state.meta.imports);
+  }
+
+  async function sendFile(path, file) {
+    const res = await fetch(`${window.DTX.API}${path}`, {
+      method: 'POST',
+      headers: {
+        'X-Delivery-Transform-Token': getToken(),
+        'X-Filename': encodeURIComponent(file.name),
+        'Content-Type': 'application/octet-stream',
+      },
+      body: await file.arrayBuffer(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  async function doUpload(file) {
+    if (!file) return;
+    const box = $('#upload-summary');
+    box.hidden = false;
+    box.innerHTML = `<p class="hint">Uploading ${esc(file.name)}…</p>`;
+    try {
+      const { summary: s } = await sendFile('/upload', file);
+      box.innerHTML = `
+        <p><b>Sheet used:</b> ${esc(s.sheet)} · <b>Month applied:</b> ${esc(s.month)}</p>
+        <div class="summary-grid">
+          <div><strong>${s.rows}</strong><span>Rows read</span></div>
+          <div><strong>${s.created}</strong><span>New VINs</span></div>
+          <div><strong>${s.updated}</strong><span>VINs updated</span></div>
+          <div><strong>${s.assigned}</strong><span>Assigned from PIC</span></div>
+          <div><strong>${s.skippedOtherMonth}</strong><span>Skipped · other month</span></div>
+          <div><strong>${s.skippedNoDate}</strong><span>Skipped · no proforma date</span></div>
+        </div>`;
+      await loadImportPanels();
+    } catch (err) {
+      box.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
+    }
+  }
+
+  async function doSalesRaw(file) {
+    if (!file) return;
+    const box = $('#sales-raw-summary');
+    box.hidden = false;
+    box.innerHTML = `<p class="hint">Uploading ${esc(file.name)}…</p>`;
+    try {
+      const { summary: s } = await sendFile('/sales-raw', file);
+      box.innerHTML = `
+        <p><b>Sales Raw applied</b> · ${esc(s.sheet)} · ${esc(s.filename)}</p>
+        <div class="summary-grid">
+          <div><strong>${s.rows}</strong><span>Rows read</span></div>
+          <div><strong>${s.matched}</strong><span>VINs matched</span></div>
+          <div><strong>${s.updated}</strong><span>VINs with new details</span></div>
+          <div><strong>${s.notOnSheet}</strong><span>Not on Live Sheet</span></div>
+        </div>`;
+      await loadImportPanels();
+    } catch (err) {
+      box.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;
+    }
+  }
+
+  function wireDrop(dropSel, inputSel, handler) {
+    const drop = $(dropSel);
+    const input = $(inputSel);
+    drop.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      handler(input.files[0]);
+      input.value = '';
+    });
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('drag');
+      handler(e.dataTransfer.files[0]);
+    });
   }
 
   function myWorkload(rows) {
-    const mine = isAdmin() ? rows : rows.filter(isMine);
+    const mine = isManager() ? rows : rows.filter(isMine);
     const completed = mine.filter(isDone).length;
     const bySalesType = {};
     const byStatus = {};
@@ -251,7 +381,7 @@
     const data = await fetchLive({ month });
     const w = myWorkload(data.rows || []);
     const kpis = [
-      [isAdmin() ? 'All VINs' : 'Assigned to me', w.assigned, ''],
+      [isManager() ? 'All VINs' : 'Assigned to me', w.assigned, ''],
       ['Completed (Claimed)', w.completed, 'ok'],
       ['Remaining', w.remaining, 'warn'],
       ['Progress %', `${w.progress}%`, 'info'],
@@ -287,7 +417,7 @@
         ...state.liveFilters,
         status: b.dataset.status,
         month: state.monthFilter || '',
-        employee: isAdmin() ? '' : state.user.name,
+        employee: isManager() ? '' : state.user.name,
       };
       setView('live');
     }));
@@ -454,7 +584,7 @@
     const data = await fetchLive({
       q: state.myFilters.q,
       status: state.myFilters.status,
-      employee: isAdmin() ? '' : state.user.name,
+      employee: isManager() ? '' : state.user.name,
     });
     const w = myWorkload(data.rows || []);
     const typeKpis = Object.entries(w.bySalesType).sort((a, b) => b[1] - a[1]).slice(0, 6)
@@ -632,6 +762,9 @@
   function showApp() {
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
+    if (isManager()) {
+      $('#live-edit-hint').textContent = `${state.user.name} can edit every VIN directly on this sheet.`;
+    }
     setView('dashboard');
   }
 
@@ -663,7 +796,7 @@
 
   async function boot() {
     state.meta = await api('/meta');
-    const users = (state.meta.users || []).filter((u) => u.role === 'employee');
+    const users = (state.meta.users || []).filter((u) => u.role === 'employee' || u.role === 'hanouf');
     $('#login-user').innerHTML = users.map((u) =>
       `<option value="${esc(u.id)}">${esc(u.name)} (${esc(u.role)})</option>`).join('');
     $('#login-pills').innerHTML = users.map((u) =>
@@ -729,6 +862,8 @@
     state.reassignVins.clear();
     loadMy();
   });
+  wireDrop('#upload-drop', '#upload-file', doUpload);
+  wireDrop('#sales-raw-drop', '#sales-raw-file', doSalesRaw);
 
   boot().catch((e) => { $('#login-error').textContent = e.message; });
 })();

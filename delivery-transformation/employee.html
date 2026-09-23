@@ -61,6 +61,10 @@
           <p class="sub" id="page-sub">Delivery Control Tower</p>
         </div>
         <div class="top-actions">
+          <div class="raw-status-pill is-empty" id="raw-status-pill" title="Last Sales Raw update (shared by everyone)">
+            <span class="raw-status-label">Sales Raw</span>
+            <strong id="raw-status-time">—</strong>
+          </div>
           <input type="search" class="top-search" id="global-search" placeholder="Search VIN / order / product…" />
           <button type="button" class="btn" id="refresh-btn">Refresh</button>
         </div>
@@ -155,6 +159,49 @@
             </div>
             <div class="table-wrap"><table class="data" id="my-table"></table></div>
             <div class="pager" id="my-pager"></div>
+          </div>
+        </section>
+
+        <!-- UPLOAD VINS (Hanouf / Admin) -->
+        <section class="panel" id="panel-upload">
+          <div class="card">
+            <h2>Upload VINs</h2>
+            <p class="hint">
+              Upload the <b>Delivery sheet</b> Excel. Only VINs whose <b>Proforma Date</b> is in
+              <b id="upload-month">this month</b> are added or updated; every other row is skipped.
+              <b>PIC</b> assigns the employee. Existing employee entries (status, dates, الناقل…) are never overwritten.
+            </p>
+            <div class="raw-status-card">
+              <div class="lbl">Last VIN upload</div>
+              <div class="val" id="upload-last">Not uploaded yet</div>
+            </div>
+            <div class="upload-drop" id="upload-drop">
+              <strong>Drop Delivery sheet here</strong>
+              <p class="hint">or click to browse · .xlsx / .xls</p>
+              <input type="file" id="upload-file" accept=".xlsx,.xls" hidden />
+            </div>
+            <div id="upload-summary" hidden></div>
+          </div>
+        </section>
+
+        <!-- SALES RAW (Hanouf / Admin) -->
+        <section class="panel" id="panel-sales-raw">
+          <div class="card">
+            <h2>Upload Sales Raw</h2>
+            <p class="hint">
+              Upload <b>Sales Raw Data</b> to refresh vehicle details (Product, Order, Sales Type, S/A, Owner, Customer,
+              GT / Vehicle Location, Phone) on <b>every VIN</b> on the Live Sheet, any month. Everyone sees the update time in the top bar.
+            </p>
+            <div class="raw-status-card">
+              <div class="lbl">Last Sales Raw update</div>
+              <div class="val" id="sales-raw-last">Not uploaded yet</div>
+            </div>
+            <div class="upload-drop" id="sales-raw-drop">
+              <strong>Drop Sales Raw Excel here</strong>
+              <p class="hint">or click to browse · .xlsx / .xls / .csv</p>
+              <input type="file" id="sales-raw-file" accept=".xlsx,.xls,.csv" hidden />
+            </div>
+            <div id="sales-raw-summary" hidden></div>
           </div>
         </section>
       </div>

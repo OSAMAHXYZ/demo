@@ -8,19 +8,38 @@ const {
   CARRIERS,
   TRANSFER_CITIES,
   USERS,
-  OPS_FIELDS,
+  PIC_ALIASES,
   emptyOps,
   emptyRaw,
 } = require('./constants');
 const { createStore } = require('./store');
+const { parseDeliverySheet, parseSalesRaw } = require('./importer');
+
+const RAW_UPLOAD_LIMIT = '80mb';
 
 function normVin(v) {
   return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function isManager(role) {
+  return role === 'admin' || role === 'hanouf';
+}
+
+/** Current month in Riyadh (UTC+3), e.g. "2026-09". */
+function currentMonthKey() {
+  return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
+}
+
+function findEmployeeByPic(pic) {
+  const key = String(pic || '').trim().toLowerCase();
+  if (!key) return null;
+  const id = PIC_ALIASES[key] || key;
+  return USERS.find((u) => u.role === 'employee' && (u.id === id || u.name.toLowerCase() === key)) || null;
+}
+
 function canEditVehicle(v, viewer) {
   const role = viewer && viewer.role;
-  if (role === 'admin') return true;
+  if (isManager(role)) return true;
   if (role === 'employee') return !!(v && v.ops && v.ops.assignedEmployeeId === viewer.userId);
   return false;
 }
@@ -84,6 +103,8 @@ function createDeliveryTransformationRouter(opts = {}) {
         id: u.id,
         name: u.name,
       })),
+      currentMonth: currentMonthKey(),
+      imports: store.data.meta.imports || {},
     });
   });
 
@@ -188,9 +209,186 @@ function createDeliveryTransformationRouter(opts = {}) {
       byCarrier: isCoordinator ? {} : byCarrier,
       bySalesType,
       readOnly: isCoordinator,
+      imports: store.data.meta.imports || {},
       rows: list.map((v) => publicVehicle(v, req.dtUser)),
     });
   });
+
+  function uploadedFile(req) {
+    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    let filename = String(req.headers['x-filename'] || 'upload.xlsx');
+    try { filename = decodeURIComponent(filename); } catch (_) { /* keep raw */ }
+    return { buf, filename };
+  }
+
+  function recordImport(kind, summary) {
+    if (!store.data.meta.imports) store.data.meta.imports = {};
+    store.data.meta.imports[kind] = summary;
+  }
+
+  /**
+   * Hanouf uploads the delivery sheet — only rows whose proforma date is in the
+   * current month are applied. Existing employee entries are never overwritten.
+   */
+  router.post(
+    '/upload',
+    express.raw({ limit: RAW_UPLOAD_LIMIT, type: '*/*' }),
+    auth,
+    requireRole('admin', 'hanouf'),
+    (req, res) => {
+      const { buf, filename } = uploadedFile(req);
+      if (!buf || !buf.length) return res.status(400).json({ error: 'Upload an Excel file' });
+      let parsed;
+      try {
+        parsed = parseDeliverySheet(buf);
+      } catch (err) {
+        return res.status(400).json({ error: `Could not read the file: ${err.message}` });
+      }
+      if (!parsed.items.length) {
+        return res.status(400).json({ error: 'No VIN column / VIN rows found in this file' });
+      }
+
+      const month = currentMonthKey();
+      const now = new Date().toISOString();
+      const seen = new Set();
+      const summary = {
+        at: now,
+        by: req.dtUser.name,
+        filename,
+        sheet: parsed.sheet,
+        month,
+        rows: parsed.items.length,
+        created: 0,
+        updated: 0,
+        assigned: 0,
+        skippedOtherMonth: 0,
+        skippedNoDate: 0,
+        duplicates: 0,
+      };
+
+      parsed.items.forEach((item) => {
+        if (seen.has(item.vin)) {
+          summary.duplicates += 1;
+          return;
+        }
+        seen.add(item.vin);
+        const proforma = item.raw.proformaDate || item.raw.date || '';
+        if (!proforma) {
+          summary.skippedNoDate += 1;
+          return;
+        }
+        if (proforma.slice(0, 7) !== month) {
+          summary.skippedOtherMonth += 1;
+          return;
+        }
+
+        let v = store.getVehicle(item.vin);
+        const isNew = !v;
+        if (isNew) {
+          v = { vin: item.vin, raw: { ...emptyRaw(), vin: item.vin }, ops: { ...emptyOps() } };
+        }
+        Object.entries(item.raw).forEach(([k, val]) => {
+          if (val) v.raw[k] = val;
+        });
+        if (!v.raw.proformaDate) v.raw.proformaDate = proforma;
+        Object.entries(item.ops).forEach(([k, val]) => {
+          if (val && !String(v.ops[k] || '').trim()) v.ops[k] = val;
+        });
+        const emp = findEmployeeByPic(item.raw.pic);
+        if (emp && !v.ops.assignedEmployeeId) {
+          v.ops.assignedEmployeeId = emp.id;
+          v.ops.assignedEmployeeName = emp.name;
+          v.ops.assignedBy = req.dtUser.name;
+          v.ops.assignedAt = now;
+          summary.assigned += 1;
+        }
+        v.ops.updatedAt = now;
+        v.ops.updatedBy = req.dtUser.name;
+        store.upsertVehicle(item.vin, v);
+        if (isNew) summary.created += 1;
+        else summary.updated += 1;
+      });
+
+      recordImport('lastUpload', summary);
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'upload_vins',
+        oldValue: filename,
+        newValue: `${month}: ${summary.created} new · ${summary.updated} updated · ${summary.skippedOtherMonth} other month skipped`,
+      });
+      store.save();
+      return res.json({ ok: true, summary });
+    }
+  );
+
+  /**
+   * Hanouf uploads Sales Raw — refreshes vehicle details on every matching VIN
+   * (all months), so every user sees the same data.
+   */
+  router.post(
+    '/sales-raw',
+    express.raw({ limit: RAW_UPLOAD_LIMIT, type: '*/*' }),
+    auth,
+    requireRole('admin', 'hanouf'),
+    (req, res) => {
+      const { buf, filename } = uploadedFile(req);
+      if (!buf || !buf.length) return res.status(400).json({ error: 'Upload an Excel file' });
+      let parsed;
+      try {
+        parsed = parseSalesRaw(buf);
+      } catch (err) {
+        return res.status(400).json({ error: `Could not read the file: ${err.message}` });
+      }
+      if (!parsed.items.length) {
+        return res.status(400).json({ error: 'No VIN rows found in this Sales Raw file' });
+      }
+
+      const now = new Date().toISOString();
+      const summary = {
+        at: now,
+        by: req.dtUser.name,
+        filename,
+        sheet: parsed.sheet,
+        layout: parsed.layout,
+        rows: parsed.items.length,
+        matched: 0,
+        updated: 0,
+        notOnSheet: 0,
+      };
+      parsed.items.forEach((item) => {
+        const v = store.getVehicle(item.vin);
+        if (!v) {
+          summary.notOnSheet += 1;
+          return;
+        }
+        summary.matched += 1;
+        let changed = false;
+        Object.entries(item.raw).forEach(([k, val]) => {
+          if (val && String(v.raw[k] || '') !== val) {
+            v.raw[k] = val;
+            changed = true;
+          }
+        });
+        if (changed) {
+          v.rawUpdatedAt = now;
+          store.upsertVehicle(item.vin, v);
+          summary.updated += 1;
+        }
+      });
+
+      recordImport('lastSalesRaw', summary);
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'upload_sales_raw',
+        oldValue: filename,
+        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.notOnSheet} not on Live Sheet`,
+      });
+      store.save();
+      return res.json({ ok: true, summary });
+    }
+  );
 
   router.get('/vehicles/:vin', auth, (req, res) => {
     const v = store.getVehicle(req.params.vin);
@@ -272,7 +470,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         error: 'Coordinator can view Live Sheet VINs only — no employee entry edits',
       });
     }
-    if (req.dtUser.role !== 'admin' && req.dtUser.role !== 'employee') {
+    if (!isManager(req.dtUser.role) && req.dtUser.role !== 'employee') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const key = normVin(req.params.vin);
@@ -382,7 +580,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
   });
 
-  router.post('/reassign', auth, requireRole('admin', 'employee'), (req, res) => {
+  router.post('/reassign', auth, requireRole('admin', 'hanouf', 'employee'), (req, res) => {
     const body = req.body || {};
     const vins = Array.isArray(body.vins) ? body.vins.map(normVin).filter(Boolean) : [];
     const target = String(body.employee || '').trim().toLowerCase();
