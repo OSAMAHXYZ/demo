@@ -1126,9 +1126,13 @@
             cursor: not-allowed;
             pointer-events: none;
         }
-        body.agent-edit-lock .chassis-pick {
+        body.agent-edit-lock .chassis-pick[data-row="0"] {
             pointer-events: none !important;
             cursor: default !important;
+        }
+        body.agent-edit-lock .chassis-pick:not([data-row="0"]) {
+            pointer-events: auto !important;
+            cursor: pointer !important;
         }
         body.agent-edit-lock .field-editable,
         body.agent-edit-lock input.field-editable,
@@ -2229,6 +2233,7 @@
             const name = el.name || '';
             if (AGENT_EDIT_UNLOCKED_IDS.has(id) || AGENT_EDIT_UNLOCKED_IDS.has(name)) return true;
             if (/^car_plate_\d+$/.test(name) || /^car_remarks_\d+$/.test(name)) return true;
+            if (/^car_chassis_[1-9]\d*$/.test(name) || /^car_model_[1-9]\d*$/.test(name)) return true;
             return false;
         }
 
@@ -2286,6 +2291,14 @@
                 branch.classList.remove('field-locked', 'branch-auto-locked');
                 branch.classList.add('field-editable');
             }
+            form.querySelectorAll('.chassis-pick').forEach((el) => {
+                const row = parseInt(el.dataset.row, 10);
+                if (!showroomMode) el.readOnly = true;
+                if (enabled && row > 0) {
+                    el.classList.remove('field-locked');
+                    el.classList.add('field-editable');
+                }
+            });
         }
 
         function clearAgentEditLock() {
@@ -3272,8 +3285,8 @@
         }
 
         function openVinPicker(rowIndex) {
-            if (agentEditLockActive) {
-                setStatus('الشاسيه مقفلة من المنسق — يمكن تعديل اللوحة والملاحظات فقط', 'ok');
+            if (agentEditLockActive && Number(rowIndex) === 0) {
+                setStatus('الشاسيه الأولى مقفلة من المنسق — أضف سيارات إضافية من الصفوف التالية', 'ok');
                 return;
             }
             if (showroomMode || isShowroomAgent()) {

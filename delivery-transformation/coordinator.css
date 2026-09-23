@@ -365,7 +365,7 @@ input[readonly], textarea[readonly] { cursor: default; }
 .status.ok { color: #15803d; }
 .cars-table input { background: #fff; }
 .cars-table input.chassis-pick { cursor: pointer; background: #fff8f8; }
-.cars-table input.chassis-pick[readonly] { cursor: default; }
+.cars-table input.chassis-pick[readonly] { cursor: pointer; }
 body.manual-form-mode .cars-table input.chassis-pick {
   cursor: text;
   background: #fff;

@@ -388,7 +388,6 @@
         const row = parseInt(el.dataset.row, 10);
         if (Number.isNaN(row)) return;
         if (printMode === 'manual') return;
-        if (row === 0) return;
         openAddVinPicker(row);
       });
     });
@@ -767,8 +766,8 @@
     $('attachmentsManual').classList.toggle('hidden', !manual);
     document.querySelectorAll('#carsBody [data-field="chassis"]').forEach((el) => {
       const row = parseInt(el.dataset.row, 10);
-      el.readOnly = manual ? false : row === 0;
-      el.placeholder = manual ? 'اكتب رقم الشاسية' : (row === 0 ? '' : 'انقر للاختيار');
+      el.readOnly = !manual;
+      el.placeholder = manual ? 'اكتب رقم الشاسية' : 'انقر للاختيار';
     });
     $('navTitle').textContent = warehouse ? 'التسليم في المستودع' : 'مذكرة ترحيل السيارات';
     $('printHeroTitle').textContent = warehouse ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل السيارات';
@@ -779,7 +778,7 @@
         : 'اكتب اسم الشركة · الفرع من مدينة الترحيل على Live Sheet · رقم المذكرة تلقائي من 1000';
     $('carsHint').textContent = manual
       ? 'اكتب الموديل ورقم الشاسية يدوياً — بدون اختيار من Live Sheet'
-      : 'انقر الصف التالي لاختيار سيارات إضافية من Live Sheet فقط';
+      : 'انقر أي صف شاسيه لاختيار سيارة من Live Sheet';
     $('previewTitle').textContent = warehouse ? 'معاينة قائمة فحص التسليم' : 'معاينة مذكرة الترحيل';
     const img = $('previewFormImage');
     img.src = warehouse
@@ -892,6 +891,10 @@
     const model = form.querySelector(`[name="car_model_${activeVinRow}"]`);
     if (chassis) chassis.value = row.vin;
     if (model) model.value = (row.raw && row.raw.product) || '';
+    if (activeVinRow === 0 && printMode === 'sheet') {
+      fill('branch_to', (row.ops && row.ops.transferCity) || '');
+      loadAttendanceOptions().catch(() => {});
+    }
     closeVinModal();
     syncCarCount();
     updatePreview();

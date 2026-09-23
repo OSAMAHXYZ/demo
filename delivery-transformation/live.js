@@ -77,7 +77,7 @@
       cols.push({ label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` });
       OPS_COLS.forEach(([k, label, type]) => cols.push({
         label,
-        html: (r) => (r.canEdit ? control(r.vin, k, type, r.ops[k]) : display(type, r.ops[k])),
+        html: (r) => (r.canEdit && type !== 'carrier' ? control(r.vin, k, type, r.ops[k]) : display(type, r.ops[k])),
       }));
       cols.push({ label: 'Updated', html: (r) => esc(na((r.ops.updatedAt || '').replace('T', ' ').slice(0, 16))) });
       cols.push({ label: 'By', html: (r) => esc(na(r.ops.updatedBy)) });
@@ -137,7 +137,7 @@
       opsHtml = `<h3 style="margin:14px 0 6px;font-size:.85rem">Delivery employee entry</h3>
         <div class="drawer-grid">
           ${row('Employee', empHtml)}
-          ${OPS_COLS.map(([k, label, type]) => row(label, v.canEdit
+          ${OPS_COLS.map(([k, label, type]) => row(label, v.canEdit && type !== 'carrier'
             ? control(v.vin, k, type, v.ops[k]).replace(/ data-vin="[^"]*"/, '')
             : display(type, v.ops[k]))).join('')}
           ${row('Updated', esc(na((v.ops.updatedAt || '').replace('T', ' ').slice(0, 16))))}

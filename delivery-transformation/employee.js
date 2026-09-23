@@ -245,7 +245,7 @@
       live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank)'],
       my: isManager()
         ? ['All VINs', 'Every VIN · edit · hand over to an employee']
-        : ['My VINs', 'Your schedule · edit your work · الناقل'],
+        : ['My VINs', 'Your schedule · edit your work'],
       assignment: ['Assignment', 'VIN numbers only · Proforma Date (column P) filled · Invoice Date (column V) empty · no duplicate VINs'],
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
       upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
@@ -890,7 +890,7 @@
     if (silent && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) return;
 
     ensureDatalists();
-    const cell = (r, field, type) => (r.canEdit
+    const cell = (r, field, type) => (r.canEdit && field !== 'carrier'
       ? editableControl(r.vin, field, type, r.ops[field])
       : readOnlyValue(type, r.ops[field]));
 
@@ -988,7 +988,7 @@
       ['Insurance', (r) => editableControl(r.vin, 'insuranceOps', 'yn', r.ops.insuranceOps)],
       ['إصدار الاستمارة', (r) => editableControl(r.vin, 'registrationIssueDate', 'date', r.ops.registrationIssueDate)],
       ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
-      ['الناقل', (r) => editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)],
+      ['الناقل', (r) => readOnlyValue('carrier', r.ops.carrier)],
       ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
       ['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`],
     ];
@@ -1040,7 +1040,6 @@
   function buildDrawerHtml(v, readOnly) {
     const statuses = state.meta.statuses || [];
     const cities = state.meta.transferCities || [];
-    const carriers = state.meta.carriers || [];
     const ro = (label, val) => `<div class="field"><label>${esc(label)}</label><input value="${esc(na(val))}" readonly /></div>`;
     const yn = (key, label, val) => (readOnly ? ro(label, val)
       : `<div class="field"><label>${esc(label)}</label>
@@ -1101,7 +1100,7 @@
             <input list="city-list" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="Search city…" />
             <datalist id="city-list">${cities.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
           </div>`}
-          ${sel('carrier', 'الناقل', carriers, v.ops.carrier, '— الناقل —')}
+          ${ro('الناقل', v.ops.carrier)}
           ${readOnly
             ? `<div class="field"><label>ملاحظات</label><textarea readonly>${esc(v.ops.notes || '')}</textarea></div>`
             : `<div class="field"><label>ملاحظات</label><textarea data-ops="notes" rows="3">${esc(v.ops.notes || '')}</textarea></div>`}

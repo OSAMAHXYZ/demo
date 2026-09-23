@@ -437,6 +437,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       } else {
         v.ops.coordinatorPrintCompany = printCompany;
         v.ops.coordinatorPrintCity = printCity || String((v.ops.transferCity || '')).trim();
+        if (printCompany) v.ops.carrier = printCompany;
       }
       marked.push(v.vin);
       store.pushAudit({
@@ -630,6 +631,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         });
         if (!v.raw.proformaDate) v.raw.proformaDate = proforma;
         Object.entries(item.ops).forEach(([k, val]) => {
+          if (k === 'carrier') return;
           if (val && !String(v.ops[k] || '').trim()) v.ops[k] = val;
         });
         const emp = findEmployeeByPic(item.raw.pic);
@@ -814,7 +816,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       ops: {
         ...emptyOps(),
         opsStatus: String(body.opsStatus || '').trim(),
-        carrier: String(body.carrier || '').trim(),
+        carrier: '',
         transferCity: String(body.transferCity || '').trim(),
         notes: String(body.notes || '').trim(),
         assignedEmployeeId: emp ? emp.id : '',
@@ -876,7 +878,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     for (const f of [
       'guestSentDate', 'signatureReceivedDate', 'accountsSentDate',
       'accountsApprovalDate', 'registrationIssueDate', 'transferCity',
-      'carrier', 'notes', 'guestCenter',
+      'notes', 'guestCenter',
     ]) {
       if (Object.prototype.hasOwnProperty.call(body, f)) setOps(f, body[f]);
     }
