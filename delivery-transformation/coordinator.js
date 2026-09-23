@@ -1,10 +1,15 @@
-/* Delivery Transformation coordinator — Delivery_pdf workspace + read-only VIN details */
+/* Delivery Transformation coordinator — Live Sheet + Delivery_pdf print */
 (() => {
   const { api, esc, na, getToken, getUser, setSession, clearSession } = window.DTX;
 
   const $ = (id) => document.getElementById(id);
+  const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
+  const AR_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+
   let rows = [];
   let poll = null;
+  let overlayReady = false;
+  const fieldEls = {};
 
   function showView(name) {
     $('gateLogin').classList.toggle('hidden', name !== 'login');
@@ -22,7 +27,7 @@
 
   function startPoll() {
     stopPoll();
-    poll = setInterval(() => loadWorkspace({ silent: true }).catch(() => {}), 15000);
+    poll = setInterval(() => loadWorkspace({ silent: true }).catch(() => {}), 5000);
   }
 
   function logout() {
@@ -65,7 +70,7 @@
     const product = r.raw.product || '—';
     const type = r.raw.salesType || '';
     const loc = r.raw.vehicleLocation || r.raw.gtLocation || '';
-    return `<button type="button" class="fleet-card fleet-card--actionable" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(type)}">
+    return `<button type="button" class="fleet-card fleet-card--actionable" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(type)}" data-order="${esc(r.raw.salesOrder || '')}" data-customer="${esc(r.raw.userName || '')}" data-phone="${esc(r.raw.phone || '')}">
       <div class="fc-body">
         <div class="fc-vin">${esc(r.vin)}</div>
         <div class="fc-product">${esc(product)}</div>
@@ -95,7 +100,7 @@
     const cards = [...availEl.querySelectorAll('.fleet-card')];
     let visible = 0;
     cards.forEach((card) => {
-      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company]
+      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company, card.dataset.order, card.dataset.customer, card.dataset.phone]
         .join(' ').toUpperCase().replace(/\s+/g, '');
       const match = !q || hay.includes(q);
       card.classList.toggle('fleet-card--hidden', !match);
@@ -110,6 +115,13 @@
     });
     countEl.textContent = q ? `${visible} نتيجة` : `${cards.length} سيارة`;
     emptyEl.classList.toggle('hidden', visible > 0 || !q);
+    const table = $('coordLiveTable');
+    if (table) {
+      table.querySelectorAll('tbody tr[data-vin]').forEach((tr) => {
+        const card = availEl.querySelector(`.fleet-card[data-vin="${CSS.escape(tr.dataset.vin)}"]`);
+        tr.style.display = card && card.classList.contains('fleet-card--hidden') ? 'none' : '';
+      });
+    }
   }
 
   async function loadWorkspace({ silent = false } = {}) {
@@ -128,33 +140,48 @@
     if (!rows.length) {
       availEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات</strong>انتظر رفع Sales Raw أو VINs</div>';
     } else {
-      availEl.innerHTML = groupBySalesType(rows).map(([type, items]) => {
-        const expand = items.length > 8
-          ? '<button type="button" class="fleet-expand-btn" data-expand>عرض الكل</button>' : '';
-        return `<div class="fleet-company-group">
+      availEl.innerHTML = groupBySalesType(rows).map(([type, items]) => `<div class="fleet-company-group is-expanded">
           <div class="fleet-company-head">
             <div class="fleet-company-name">${esc(type)}<span class="fleet-company-badge">نوع البيع</span></div>
-            <div style="display:flex;align-items:center;gap:8px">
-              ${expand}
-              <div class="fleet-company-count">${items.length} سيارة</div>
-            </div>
+            <div class="fleet-company-count">${items.length} سيارة</div>
           </div>
           <div class="fleet-grid">${items.map(fleetCard).join('')}</div>
-        </div>`;
-      }).join('');
-      availEl.querySelectorAll('[data-expand]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const group = btn.closest('.fleet-company-group');
-          const open = group.classList.toggle('is-expanded');
-          btn.textContent = open ? 'طي القائمة' : 'عرض الكل';
-        });
-      });
+        </div>`).join('');
       availEl.querySelectorAll('.fleet-card').forEach((card) => {
         card.addEventListener('click', () => openDetail(card.dataset.vin));
       });
     }
+    renderLiveTable(rows);
     filterFleet();
+  }
+
+  function renderLiveTable(list) {
+    const table = $('coordLiveTable');
+    const hint = $('liveSheetHint');
+    if (hint) hint.textContent = `${list.length} شاسيه · انقر للطباعة`;
+    const cols = [
+      ['#', (_r, i) => i + 1],
+      ['VIN', (r) => `<button type="button" class="vin-ltr coord-vin" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
+      ['Proforma', (r) => esc(na(r.raw.proformaDate))],
+      ['Order', (r) => esc(na(r.raw.salesOrder))],
+      ['Product', (r) => esc(na(r.raw.product))],
+      ['Sales Type', (r) => esc(na(r.raw.salesType))],
+      ['Customer', (r) => esc(na(r.raw.userName))],
+      ['Invoice Owner', (r) => esc(na(r.raw.invoiceOwner))],
+      ['Phone', (r) => (r.raw.phone ? `<a class="phone-link" href="tel:${esc(r.raw.phone)}">${esc(r.raw.phone)}</a>` : '—')],
+      ['S/A', (r) => esc(na(r.raw.salesAdvisor))],
+      ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
+      ['Veh Loc', (r) => esc(na(r.raw.vehicleLocation))],
+    ];
+    table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead>
+      <tbody>${list.map((r, i) => `<tr data-vin="${esc(r.vin)}">${cols.map((c) => `<td>${c[1](r, i)}</td>`).join('')}</tr>`).join('')
+        || `<tr><td colspan="${cols.length}">لا توجد شاسيهات على Live Sheet</td></tr>`}</tbody>`;
+    table.querySelectorAll('tr[data-vin], .coord-vin').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDetail(el.dataset.vin);
+      });
+    });
   }
 
   function fill(id, val) {
@@ -162,48 +189,364 @@
     if (el) el.value = val && String(val).trim() && val !== 'N/A' ? String(val) : '';
   }
 
-  function previewRow(label, value) {
-    const v = na(value);
-    return `<div class="preview-row"><span>${esc(label)}</span><b>${esc(v)}</b></div>`;
+  function toIsoDate(value) {
+    const s = String(value || '').trim();
+    if (!s || s === 'N/A') return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const dmy = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+    if (dmy) {
+      let y = Number(dmy[3]);
+      if (y < 100) y += 2000;
+      return `${y}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
+    }
+    return '';
+  }
+
+  function getSaudiTodayIso() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
+  }
+
+  function getSaudiWeekdayIndex(isoDate) {
+    const iso = String(isoDate || getSaudiTodayIso()).trim();
+    const weekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Riyadh',
+      weekday: 'short',
+    }).format(new Date(`${iso}T12:00:00+03:00`));
+    return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[weekday] ?? 0;
+  }
+
+  function arabicDayName(isoDate) {
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    return days[getSaudiWeekdayIndex(isoDate)];
+  }
+
+  function splitDateParts(value) {
+    if (!value) return { d: '', m: '', y: '' };
+    const s = String(value).trim();
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return { y: iso[1], m: iso[2], d: iso[3] };
+    const dmy = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
+    if (dmy) return { d: dmy[1], m: dmy[2], y: dmy[3] };
+    return { d: '', m: '', y: '' };
+  }
+
+  function toArabicIndicDigits(s) {
+    return String(s).replace(/\d/g, (d) => AR_DIGITS[Number(d)]);
+  }
+
+  function toHijriPartsFromIso(isoDate) {
+    try {
+      if (!isoDate) return { d: '', m: '', y: '' };
+      const dt = new Date(`${String(isoDate).trim()}T00:00:00`);
+      if (Number.isNaN(dt.getTime())) return { d: '', m: '', y: '' };
+      const fmt = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric',
+        numberingSystem: 'latn',
+      });
+      const parts = fmt.formatToParts(dt) || [];
+      const get = (type) => parts.find((p) => p.type === type)?.value || '';
+      return {
+        d: toArabicIndicDigits(String(get('day')).padStart(2, '0')),
+        m: toArabicIndicDigits(String(get('month')).padStart(2, '0')),
+        y: toArabicIndicDigits(String(get('year'))),
+      };
+    } catch (_) {
+      return { d: '', m: '', y: '' };
+    }
+  }
+
+  function setPrintStatus(msg, type) {
+    const el = $('printStatus');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = 'status no-print' + (type ? ` ${type}` : '');
+  }
+
+  function fillDatalist(id, options) {
+    const list = $(id);
+    if (!list) return;
+    list.innerHTML = (options || []).map((name) => `<option value="${esc(name)}"></option>`).join('');
+  }
+
+  function buildCarRows() {
+    const body = $('carsBody');
+    body.innerHTML = AR_NUMS.map((n, i) => `
+      <tr>
+        <td class="row-no">${n}</td>
+        <td><input name="car_model_${i}" data-field="model" data-row="${i}" aria-label="Model row ${i + 1}"></td>
+        <td><input name="car_chassis_${i}" data-field="chassis" data-row="${i}" class="chassis-pick vin-ltr" ${i === 0 ? 'readonly' : ''} aria-label="Chassis row ${i + 1}"></td>
+        <td><input name="car_plate_${i}" data-field="plate" data-row="${i}" aria-label="Plate row ${i + 1}"></td>
+        <td><input name="car_remarks_${i}" data-field="remarks" data-row="${i}" aria-label="Remarks row ${i + 1}"></td>
+      </tr>
+    `).join('');
+    body.querySelectorAll('input').forEach((el) => {
+      el.addEventListener('input', () => {
+        syncCarCount();
+        updatePreview();
+      });
+    });
+  }
+
+  function countFilledChassis() {
+    const form = $('deliveryForm');
+    return AR_NUMS.reduce((n, _x, i) => {
+      const el = form.querySelector(`[name="car_chassis_${i}"]`);
+      return n + (el && el.value.trim() ? 1 : 0);
+    }, 0);
+  }
+
+  function syncCarCount() {
+    const n = countFilledChassis();
+    $('car_count').value = n ? String(n) : '';
+  }
+
+  function overlayPositionStyle(tag, x, y, w, h) {
+    let left = `${x * 100}%`;
+    const top = `${y * 100}%`;
+    if (/_chassis$/.test(tag)) left = `calc(${x * 100}% + 15.9mm)`;
+    if (/_model$/.test(tag)) left = `calc(${x * 100}% + 4mm)`;
+    if (/_plate$/.test(tag)) left = `calc(${x * 100}% + 10.6mm)`;
+    return `left:${left};top:${top};width:${w * 100}%;height:${h * 100}%`;
+  }
+
+  function buildOverlay() {
+    const overlayFields = $('overlayFields');
+    if (!overlayFields || typeof MUTHAKARA_FIELDS === 'undefined') return;
+    Object.keys(fieldEls).forEach((k) => { delete fieldEls[k]; });
+    const cover = typeof MEMO_NUMBER_COVER !== 'undefined' ? MEMO_NUMBER_COVER : [0.050, 0.122, 0.146, 0.036];
+    const [cx, cy, cw, ch] = cover;
+    const coverHtml = `<div class="overlay-cover" aria-hidden="true" style="left:${cx * 100}%;top:${cy * 100}%;width:${cw * 100}%;height:${ch * 100}%"></div>`;
+    overlayFields.innerHTML = coverHtml + MUTHAKARA_FIELDS.map(([tag, x, y, w, h, align]) => {
+      const dateCls = /^date_[dmy]$/.test(tag) ? ' overlay-field--header-date' : '';
+      const invoiceCls = tag === 'invoice_number' ? ' overlay-field--invoice' : '';
+      const chassisCls = /chassis/.test(tag) ? ' overlay-field--chassis' : '';
+      const cls = `overlay-field align-${align || 'end'}${dateCls}${invoiceCls}${chassisCls}`;
+      return `<div class="${cls}" data-tag="${tag}" style="${overlayPositionStyle(tag, x, y, w, h)}"></div>`;
+    }).join('');
+    overlayFields.querySelectorAll('.overlay-field').forEach((el) => {
+      fieldEls[el.dataset.tag] = el;
+    });
+    overlayReady = true;
+  }
+
+  function collectPayload() {
+    const form = $('deliveryForm');
+    const fd = new FormData(form);
+    const cars = AR_NUMS.map((_, i) => ({
+      model: fd.get(`car_model_${i}`)?.trim() || '',
+      chassis: fd.get(`car_chassis_${i}`)?.trim() || '',
+      plate: fd.get(`car_plate_${i}`)?.trim() || '',
+      remarks: fd.get(`car_remarks_${i}`)?.trim() || '',
+    }));
+    const filled = countFilledChassis();
+    return {
+      doc_date: fd.get('doc_date'),
+      invoice_number: fd.get('invoice_number')?.trim(),
+      dep_hour: fd.get('dep_hour')?.trim(),
+      dep_minute: fd.get('dep_minute')?.trim(),
+      customer_name: fd.get('customer_name')?.trim(),
+      company_rep: fd.get('company_rep')?.trim() || '',
+      transfer_date: fd.get('transfer_date') || fd.get('doc_date'),
+      corresponding_date: fd.get('corresponding_date') || fd.get('transfer_date') || fd.get('doc_date'),
+      day_name: fd.get('day_name')?.trim(),
+      trailer_number: fd.get('trailer_number')?.trim(),
+      car_count: String(filled || fd.get('car_count')?.trim() || ''),
+      branch_to: fd.get('branch_to')?.trim() || '',
+      attachments: fd.get('attachments')?.trim(),
+      cars,
+    };
+  }
+
+  function buildFlatData(body) {
+    const docDate = splitDateParts(body.doc_date);
+    const transferDate = splitDateParts(body.transfer_date || body.doc_date);
+    const correspondingIso = body.corresponding_date || body.transfer_date || body.doc_date;
+    const correspondingDate = splitDateParts(correspondingIso);
+    const correspondingHijri = toHijriPartsFromIso(correspondingIso);
+    const data = {
+      date_d: docDate.d,
+      date_m: docDate.m,
+      date_y: docDate.y,
+      invoice_number: body.invoice_number || '',
+      dep_hour: body.dep_hour || '',
+      dep_minute: body.dep_minute || '',
+      customer_name: body.customer_name || '',
+      company_rep: body.company_rep || '',
+      transfer_d: transferDate.d,
+      transfer_m: transferDate.m,
+      transfer_y: transferDate.y,
+      corresponding_d: correspondingHijri.d || correspondingDate.d,
+      corresponding_m: correspondingHijri.m || correspondingDate.m,
+      corresponding_y: correspondingHijri.y || correspondingDate.y,
+      day_name: body.day_name || '',
+      trailer_number: body.trailer_number || '',
+      car_count: body.car_count || '',
+      branch_to: body.branch_to || '',
+      attachments: body.attachments || '',
+    };
+    const cars = Array.isArray(body.cars) ? body.cars : [];
+    for (let i = 1; i <= 10; i++) {
+      const row = cars[i - 1] || {};
+      data[`car${i}_model`] = row.model || '';
+      data[`car${i}_chassis`] = row.chassis || '';
+      data[`car${i}_plate`] = row.plate || '';
+      data[`car${i}_remarks`] = row.remarks || '';
+    }
+    return data;
+  }
+
+  function updatePreview() {
+    if (!overlayReady) buildOverlay();
+    const data = buildFlatData(collectPayload());
+    Object.keys(fieldEls).forEach((tag) => {
+      fieldEls[tag].textContent = data[tag] || '';
+    });
+  }
+
+  function setTodayDates() {
+    const today = getSaudiTodayIso();
+    $('doc_date').value = today;
+    $('transfer_date').value = today;
+    $('corresponding_date').value = today;
+    $('day_name').value = arabicDayName(today);
+    const timeParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Riyadh',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+    const hour = timeParts.find((p) => p.type === 'hour')?.value || '';
+    const minute = timeParts.find((p) => p.type === 'minute')?.value || '';
+    $('dep_hour').value = hour === '24' ? '00' : hour;
+    $('dep_minute').value = minute;
+    updatePreview();
+  }
+
+  function syncDayFromTransferDate() {
+    const transfer = $('transfer_date').value || $('doc_date').value || getSaudiTodayIso();
+    $('day_name').value = arabicDayName(transfer);
+    updatePreview();
+  }
+
+  function validatePrintFields() {
+    const company = String($('company_rep').value || '').trim();
+    const branch = String($('branch_to').value || '').trim();
+    const invoice = String($('invoice_number').value || '').trim();
+    if (!invoice) {
+      setPrintStatus('أدخل رقم الفاتورة قبل الطباعة', 'err');
+      $('invoice_number').focus();
+      return false;
+    }
+    if (!company) {
+      setPrintStatus('أدخل اسم الشركة قبل الطباعة', 'err');
+      $('company_rep').focus();
+      return false;
+    }
+    if (!branch) {
+      setPrintStatus('اختر المدينة / الفرع قبل الطباعة', 'err');
+      $('branch_to').focus();
+      return false;
+    }
+    if (!countFilledChassis()) {
+      setPrintStatus('لا يوجد رقم شاسيه للطباعة', 'err');
+      return false;
+    }
+    return true;
+  }
+
+  function doPrintA4() {
+    if (!validatePrintFields()) return;
+    buildOverlay();
+    updatePreview();
+    const cleanupPrintCopies = () => {
+      const existing = document.getElementById('printCopies');
+      if (existing) existing.remove();
+    };
+    cleanupPrintCopies();
+    const printSheet = $('printSheet');
+    const copiesContainer = document.createElement('div');
+    copiesContainer.id = 'printCopies';
+    for (let i = 0; i < 3; i++) {
+      const clone = printSheet.cloneNode(true);
+      clone.classList.add('print-copy');
+      clone.removeAttribute('id');
+      clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+      copiesContainer.appendChild(clone);
+    }
+    document.body.insertBefore(copiesContainer, document.body.firstChild);
+    const finish = () => {
+      cleanupPrintCopies();
+      window.removeEventListener('afterprint', finish);
+      setPrintStatus('تمت الطباعة — ٣ نسخ A4', 'ok');
+    };
+    window.addEventListener('afterprint', finish);
+    setPrintStatus('جاري فتح نافذة الطباعة…', 'ok');
+    window.print();
+  }
+
+  function resetPrintForm() {
+    $('deliveryForm').reset();
+    buildCarRows();
+    setPrintStatus('');
   }
 
   async function openDetail(vin) {
     const { vehicle: v } = await api(`/vehicles/${encodeURIComponent(vin)}`);
-    fill('doc_date', v.raw.proformaDate);
+    resetPrintForm();
+    const today = getSaudiTodayIso();
+    const docDate = toIsoDate(v.raw.proformaDate) || today;
+    fill('doc_date', docDate);
     fill('invoice_number', v.raw.salesOrder);
-    fill('sales_type', v.raw.salesType);
-    fill('sales_advisor', v.raw.salesAdvisor);
-    fill('company_rep', v.raw.invoiceOwner);
+    fill('company_rep', v.raw.invoiceOwner || v.raw.userName);
     fill('customer_name', v.raw.userName);
-    fill('phone', v.raw.phone);
-    fill('gt_location', v.raw.gtLocation);
-    fill('vehicle_location', v.raw.vehicleLocation);
-    fill('invoice_date', v.raw.invoiceDate);
-    $('carsBody').innerHTML = `<tr>
-      <td>١</td>
-      <td>${esc(na(v.raw.product))}</td>
-      <td class="vin-ltr">${esc(v.vin)}</td>
-      <td>${esc(na(v.raw.salesOrder))}</td>
-      <td>${esc(na(v.raw.salesType))}</td>
-    </tr>`;
-    $('previewRows').innerHTML = [
-      previewRow('الشاسية', v.vin),
-      previewRow('الموديل', v.raw.product),
-      previewRow('الطلب', v.raw.salesOrder),
-      previewRow('نوع البيع', v.raw.salesType),
-      previewRow('العميل', v.raw.userName),
-      previewRow('مالك الفاتورة', v.raw.invoiceOwner),
-      previewRow('الهاتف', v.raw.phone),
-      previewRow('موقع GT', v.raw.gtLocation),
-      previewRow('موقع المركبة', v.raw.vehicleLocation),
-      previewRow('البروفورما', v.raw.proformaDate),
-    ].join('');
+    fill('transfer_date', today);
+    fill('corresponding_date', today);
+    fill('day_name', arabicDayName(today));
+    const timeParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Riyadh',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+    $('dep_hour').value = (timeParts.find((p) => p.type === 'hour')?.value || '').replace('24', '00');
+    $('dep_minute').value = timeParts.find((p) => p.type === 'minute')?.value || '';
+    const form = $('deliveryForm');
+    form.querySelector('[name="car_model_0"]').value = v.raw.product || '';
+    form.querySelector('[name="car_chassis_0"]').value = v.vin || '';
+    syncCarCount();
+    if (!overlayReady) buildOverlay();
+    updatePreview();
     showView('detail');
+    window.scrollTo(0, 0);
+  }
+
+  function bindPrintForm() {
+    buildCarRows();
+    fillDatalist('company-list', typeof MUTHAKARA_CUSTOMER_OPTIONS !== 'undefined' ? MUTHAKARA_CUSTOMER_OPTIONS : []);
+    fillDatalist('branch-list', typeof MUTHAKARA_BRANCH_OPTIONS !== 'undefined' ? MUTHAKARA_BRANCH_OPTIONS : []);
+    buildOverlay();
+    const form = $('deliveryForm');
+    form.addEventListener('input', updatePreview);
+    form.addEventListener('change', updatePreview);
+    $('transfer_date').addEventListener('change', syncDayFromTransferDate);
+    $('doc_date').addEventListener('change', () => {
+      if (!$('transfer_date').value) $('transfer_date').value = $('doc_date').value;
+      syncDayFromTransferDate();
+    });
+    $('btnPrint').addEventListener('click', doPrintA4);
+    $('btnPrint2').addEventListener('click', doPrintA4);
+    $('btnToday').addEventListener('click', setTodayDates);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      doPrintA4();
+    });
   }
 
   async function boot() {
     const meta = await api('/meta');
-    const users = (meta.users || []).filter((u) => u.role === 'coordinator' || u.role === 'admin');
+    const users = (meta.users || []).filter((u) => u.role === 'coordinator');
     $('loginUser').innerHTML = '<option value="">— اختر الاسم —</option>'
       + users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
 
@@ -219,6 +562,7 @@
       showView('workspace');
     });
     $('availableVinSearch').addEventListener('input', filterFleet);
+    bindPrintForm();
 
     if (getToken() && getUser()) {
       try {

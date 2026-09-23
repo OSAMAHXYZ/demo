@@ -5,6 +5,8 @@
   --tot-line: #E5E7EB;
   --tot-bg: #FAFBFC;
   --nav-h: 64px;
+  --form-w: 210mm;
+  --form-h: 297mm;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { min-height: 100%; }
@@ -156,9 +158,7 @@ body.workspace-mode {
 .fleet-grid {
   display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 }
-.fleet-company-group .fleet-grid { max-height: 148px; overflow: auto; padding: 2px; }
-.fleet-company-group.is-expanded .fleet-grid,
-.fleet-companies.is-searching .fleet-company-group .fleet-grid { max-height: none; }
+.fleet-company-group .fleet-grid { max-height: none; overflow: visible; padding: 2px; }
 .fleet-card {
   text-align: right; border-radius: 10px; border: 1px solid rgba(255,255,255,.1);
   background: rgba(255,255,255,.04); cursor: pointer; color: inherit; font: inherit; width: 100%;
@@ -254,4 +254,199 @@ input[readonly], textarea[readonly] { cursor: default; }
   font-weight: 700; cursor: pointer;
 }
 .btn-primary { background: var(--tot-primary); color: #fff; width: 100%; }
+.btn-secondary {
+  background: #fff; color: var(--tot-ink); border: 1px solid var(--tot-line); width: 100%;
+}
+.actions { display: grid; gap: 10px; margin-top: 8px; }
+.hint { color: var(--tot-muted); font-size: .8rem; margin: 0 0 8px; }
+.status { min-height: 1.2em; font-size: .82rem; font-weight: 700; color: var(--tot-muted); }
+.status.err { color: #b91c1c; }
+.status.ok { color: #15803d; }
+.cars-table input { background: #fff; }
+.cars-table input.chassis-pick { cursor: default; background: #fff8f8; }
+.preview-panel { min-width: 0; }
+.print-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  aspect-ratio: 210 / 297;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+#printCopies { display: none; }
+.print-copy { page-break-after: always; }
+.print-sheet img {
+  width: 100%; height: 100%;
+  object-fit: fill;
+  display: block;
+}
+.overlay-layer {
+  position: absolute;
+  left: 0; top: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.overlay-field {
+  position: absolute;
+  font-family: 'Tajawal', Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  direction: rtl;
+  pointer-events: none;
+  line-height: 1;
+  padding: 0 1px;
+  z-index: 2;
+}
+.overlay-cover {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #000;
+  pointer-events: none;
+  z-index: 1;
+  box-sizing: border-box;
+}
+.overlay-field.align-end {
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding-bottom: 0;
+  transform: translateY(-2px);
+}
+.overlay-field.align-center {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.overlay-field.align-start {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.overlay-field.overlay-field--header-date { font-size: 13px; font-weight: 700; }
+.overlay-field.overlay-field--invoice {
+  color: #EB0A1E;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.overlay-field.overlay-field--chassis {
+  direction: ltr;
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 4px;
+  padding-right: 4px;
+  font-family: ui-monospace, 'Consolas', monospace;
+  font-size: 13px;
+  letter-spacing: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+@media (max-width: 1100px) {
+  .print-sheet { max-width: 100%; }
+}
+
+@page carbonless {
+  size: var(--form-w) var(--form-h);
+  margin: 0;
+}
+
+@media print {
+  html, body {
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+  .page-nav,
+  .form-col,
+  .hero,
+  .no-print,
+  #gateLogin,
+  #agentWorkspace,
+  #mainApp,
+  .ws-shell {
+    display: none !important;
+  }
+  .layout { display: block; max-width: none; padding: 0; margin: 0; }
+  .preview-panel { position: static; width: 100%; }
+  .preview-card { border: none; box-shadow: none; padding: 0; margin: 0; }
+  #printSheet { display: none !important; }
+  #printCopies {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .print-sheet {
+    width: var(--form-w);
+    height: var(--form-h);
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    aspect-ratio: auto;
+    margin: 0;
+    overflow: hidden;
+    page-break-after: avoid;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-copy {
+    page-break-after: always;
+    break-after: page;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-copy:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .overlay-field { font-size: 17px; font-weight: 700; }
+  .overlay-field.overlay-field--header-date { font-size: 15px; font-weight: 700; }
+  .overlay-field.overlay-field--chassis {
+    font-size: 14px;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .overlay-field.overlay-field--invoice {
+    font-size: 18px;
+    color: #EB0A1E !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
 .phone-link { color: #1769a8; text-decoration: none; font-variant-numeric: tabular-nums; }
+.coord-sheet-wrap {
+  overflow: auto;
+  max-height: min(70vh, 720px);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.coord-sheet {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+.coord-sheet th, .coord-sheet td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  white-space: nowrap;
+  text-align: right;
+}
+.coord-sheet th {
+  position: sticky; top: 0; z-index: 2;
+  background: #121a2b; color: #94a3b8;
+  font-size: 0.66rem; letter-spacing: .04em;
+}
+.coord-sheet td { color: #e2e8f0; }
+.coord-sheet tbody tr { cursor: pointer; }
+.coord-sheet tbody tr:hover td { background: rgba(74,222,128,.08); }
+.coord-sheet .vin-ltr { color: #f8fafc; }
+.coord-sheet .phone-link { color: #7dd3fc; }

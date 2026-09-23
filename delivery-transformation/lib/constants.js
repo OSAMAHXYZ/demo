@@ -54,7 +54,8 @@ const TRANSFER_CITIES = Object.freeze([
 const USERS = Object.freeze([
   { id: 'admin', name: 'Admin', role: 'admin' },
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
-  { id: 'coordinator', name: 'Coordinator', role: 'coordinator' },
+  { id: 'alfadel', name: 'الفاضل', role: 'coordinator' },
+  { id: 'albara', name: 'البراء', role: 'coordinator' },
   // canUploadSalesRaw: may upload Sales Raw (updates vehicle details on every VIN)
   { id: 'rasha', name: 'Rasha', role: 'employee', canUploadSalesRaw: true },
   { id: 'ruba', name: 'Ruba', role: 'employee', canUploadSalesRaw: true },
