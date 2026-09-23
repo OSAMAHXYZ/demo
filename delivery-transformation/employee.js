@@ -1174,8 +1174,7 @@
         json: { username: $('#login-user').value, password: $('#login-pass').value },
       });
       if (data.user.role === 'coordinator') {
-        setSession(data.token, data.user);
-        location.href = 'coordinator.html';
+        $('#login-error').textContent = 'This page is for delivery employees. Open the coordinator page to sign in.';
         return;
       }
       setSession(data.token, data.user);
@@ -1202,7 +1201,6 @@
       try {
         const me = await api('/auth/me');
         if (me.user.role === 'coordinator') {
-          location.href = 'coordinator.html';
           return;
         }
         state.user = me.user;

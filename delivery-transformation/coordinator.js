@@ -1071,7 +1071,7 @@
       try {
         const me = await api('/auth/me');
         if (me.user.role !== 'coordinator' && me.user.role !== 'admin') {
-          location.href = 'index.html';
+          showView('login');
           return;
         }
         enterApp(me.user);
