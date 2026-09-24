@@ -516,6 +516,7 @@
     const data = await api(`/live-sheet?${params}`);
     if (data.hubRaw) renderRawStatus(data.hubRaw);
     const rows = data.rows || [];
+    state.liveRows = rows;
     const fingerprint = JSON.stringify(rows.map((r) => [
       r.vin,
       r.ops.opsStatus,
@@ -1409,6 +1410,13 @@
       await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: { [field]: value } });
       el.classList.remove('is-saving');
       el.classList.add('is-saved');
+      // Keep in-memory rows in sync so الناقل does not vanish on re-render
+      const patchLocal = (row) => {
+        if (!row || row.vin !== vin || !row.ops) return;
+        row.ops[field] = value;
+      };
+      (state.assignDisplay || []).forEach(patchLocal);
+      (state.liveRows || []).forEach(patchLocal);
       if (field === 'opsStatus') {
         const tr = el.closest('tr');
         if (tr) {
