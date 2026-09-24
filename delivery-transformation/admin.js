@@ -786,44 +786,155 @@
     return '';
   }
 
-  function renderSchedule() {
-    const kpis = $('sla-kpis');
-    const host = $('sla-chart');
-    if (!host) return;
-    if (!slaDash) {
-      if (kpis) kpis.innerHTML = '';
-      host.innerHTML = '<p class="chart-empty">Could not load VIN schedule.</p>';
-      return;
-    }
-    const t = slaDash.totals || {};
-    if (kpis) {
-      kpis.innerHTML = `
-        <div class="kpi"><strong>${esc(t.vins || 0)}</strong><span>VINs with Proforma</span></div>
-        <div class="kpi"><strong class="stay">${esc(t.green || 0)}</strong><span>On plan (green)</span></div>
-        <div class="kpi"><strong class="sla-late-n">${esc(t.red || 0)}</strong><span>Late / overdue</span></div>
-        <div class="kpi"><strong>${esc(slaDash.noProforma || 0)}</strong><span>No Proforma Date</span></div>`;
-    }
-    const slas = slaDash.sla || [];
-    if (!slas.length) {
-      host.innerHTML = '<p class="chart-empty">No SLA statuses enabled. Set them on the Schedule tab.</p>';
-      return;
-    }
-    const max = Math.max(1, ...slas.map((s) => s.total || 0));
-    host.innerHTML = slas.map((s) => {
-      const g = ((s.green || 0) / max) * 100;
-      const r = ((s.red || 0) / max) * 100;
-      return `<button type="button" class="chart-row sla-row" data-sla="${esc(s.id)}">
-        <span class="name">${esc(s.label)}<small>Day ${s.targetDay}</small></span>
-        <span class="bar" title="${s.green} on plan · ${s.red} late">
-          <i class="present" style="width:${g}%"></i>
-          <i class="sla-late" style="width:${r}%"></i>
-        </span>
-        <span class="meta">${s.green} on plan · ${s.red} late</span>
-      </button>`;
-    }).join('');
-    host.querySelectorAll('[data-sla]').forEach((b) => {
-      b.addEventListener('click', () => openSla(b.dataset.sla));
+  function shiftMonth(ym, delta) {
+    const m = String(ym || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return ym;
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1 + delta, 1));
+    return dt.toISOString().slice(0, 7);
+  }
+
+  function syncMonthInputs() {
+    ['emp-month', 'sla-month', 'ekpi-month'].forEach((id) => {
+      const el = $(id);
+      if (el && empMonth && el.value !== empMonth) el.value = empMonth;
     });
+  }
+
+  function setDashMonth(ym) {
+    empMonth = ym || '';
+    syncMonthInputs();
+    return loadDash();
+  }
+
+  function renderSchedule() {
+    const host = $('sla-chart');
+    const summary = $('vsnd-summary');
+    const monthLbl = $('vsnd-month-label');
+    if (!host) return;
+    syncMonthInputs();
+    if (!slaDash) {
+      if (summary) summary.innerHTML = '';
+      if (monthLbl) monthLbl.textContent = '—';
+      host.innerHTML = '<p class="chart-empty">Could not load VSND schedule.</p>';
+      return;
+    }
+    const cal = slaDash.calendar;
+    if (!cal || !cal.rows) {
+      host.innerHTML = '<p class="chart-empty">No calendar data for this month.</p>';
+      return;
+    }
+    const label = monthLabel(cal.month) || cal.month;
+    if (monthLbl) monthLbl.textContent = `${label} ${String(cal.month || '').slice(0, 4)}`.trim();
+    if (summary) {
+      summary.innerHTML = `
+        <div class="vsnd-pill vsnd-pill-ok">
+          <span class="vsnd-pill-ico" aria-hidden="true">🚚</span>
+          <div>
+            <span class="vsnd-pill-lbl">Delivered (تم التسليم)</span>
+            <strong>${esc(cal.delivered || 0)}</strong>
+            <em>Current Month</em>
+          </div>
+        </div>
+        <div class="vsnd-pill vsnd-pill-bad">
+          <span class="vsnd-pill-ico" aria-hidden="true">⏳</span>
+          <div>
+            <span class="vsnd-pill-lbl">Not Delivered (VSND)</span>
+            <strong>${esc(cal.notDelivered || 0)}</strong>
+            <em>Current Month</em>
+          </div>
+        </div>`;
+    }
+
+    const headers = cal.dayHeaders || [];
+    const headCells = headers.map((h) => `
+      <th class="vsnd-day ${h.future ? 'is-future' : ''}${h.day === cal.todayDay ? ' is-today' : ''}">
+        <b>${h.day}</b><small>${esc(h.weekday)}</small>
+      </th>`).join('');
+
+    const body = (cal.rows || []).map((r) => {
+        const cells = (r.days || []).map((n, i) => {
+        const zone = (r.zones && r.zones[i]) || 'empty';
+        const future = zone === 'future';
+        const show = future ? '—' : (n || 0);
+        const clickable = !future && n > 0;
+        return `<td class="vsnd-cell tone-${esc(r.tone)} zone-${esc(zone)}${clickable ? ' is-hit' : ''}">
+          <button type="button" class="vsnd-val" data-status="${esc(r.status)}" data-day="${i + 1}" ${clickable ? '' : 'disabled'}>${esc(show)}</button>
+        </td>`;
+      }).join('');
+      return `<tr class="vsnd-row tone-${esc(r.tone)}">
+        <th class="vsnd-status">
+          <span class="vsnd-ico" aria-hidden="true">${r.icon || '•'}</span>
+          <span class="vsnd-status-lbl">${esc(r.label)}</span>
+        </th>
+        ${cells}
+        <td class="vsnd-total">
+          <button type="button" class="vsnd-total-btn" data-status="${esc(r.status)}" data-day="">${esc(r.total || 0)}</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const footDays = (cal.dayTotals || []).map((n, i) => {
+      const future = headers[i] && headers[i].future;
+      return `<td class="vsnd-foot-day${future ? ' is-future' : ''}">${future ? '—' : esc(n || 0)}</td>`;
+    }).join('');
+
+    host.innerHTML = `
+      <table class="vsnd-table">
+        <thead>
+          <tr>
+            <th class="vsnd-status-h">Status</th>
+            ${headCells}
+            <th class="vsnd-total-h">Total</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+        <tfoot>
+          <tr>
+            <th class="vsnd-status">Total</th>
+            ${footDays}
+            <td class="vsnd-grand"><span>${esc(cal.grandTotal || 0)}</span></td>
+          </tr>
+        </tfoot>
+      </table>`;
+
+    host.querySelectorAll('.vsnd-val[data-status], .vsnd-total-btn[data-status]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (el.disabled) return;
+        openVsndCell(el.dataset.status, el.dataset.day ? Number(el.dataset.day) : 0);
+      });
+    });
+  }
+
+  function openVsndCell(status, day) {
+    const cal = slaDash && slaDash.calendar;
+    if (!cal) return;
+    const rows = (cal.vins || []).filter((v) => {
+      if (status && v.status !== status) return false;
+      if (day && Number(v.day) !== Number(day)) return false;
+      return true;
+    }).sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+    const title = day ? `${status} · Day ${day}` : status;
+    openDrawer(`
+      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div>
+          <h2>${esc(title)}</h2>
+          <p class="sub">${esc(monthLabel(cal.month) || cal.month)} · ${rows.length} VIN(s) · by Proforma date</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="table-wrap" style="max-height:70vh">
+        <table class="data">
+          <thead><tr><th>VIN</th><th>Product</th><th>Employee</th><th>Proforma</th><th>Status</th></tr></thead>
+          <tbody>${rows.map((r) => `
+            <tr>
+              <td class="detail-vin">${esc(r.vin)}</td>
+              <td>${esc(r.product || '—')}</td>
+              <td>${esc(r.employee || '—')}</td>
+              <td>${esc(r.proforma || '—')}</td>
+              <td>${esc(r.status || '—')}</td>
+            </tr>`).join('') || '<tr><td colspan="5">No VINs in this cell.</td></tr>'}</tbody>
+        </table>
+      </div>`);
   }
 
   function openSla(id) {
@@ -908,8 +1019,12 @@
         perf = perfData;
         empMonth = perfData.month || empMonth;
       }
-      if (slaData) slaDash = slaData;
+      if (slaData) {
+        slaDash = slaData;
+        empMonth = slaData.month || empMonth;
+      }
       if (backupData) backup = backupData;
+      syncMonthInputs();
       renderKpis();
       renderBackup();
       renderAttendance();
@@ -950,8 +1065,23 @@
   const empMonthInp = $('emp-month');
   if (empMonthInp) {
     empMonthInp.addEventListener('change', (e) => {
-      empMonth = e.target.value || '';
-      loadDash().catch((err) => alert(err.message));
+      setDashMonth(e.target.value || '').catch((err) => alert(err.message));
+    });
+  }
+  const slaMonthInp = $('sla-month');
+  if (slaMonthInp) {
+    slaMonthInp.addEventListener('change', (e) => {
+      setDashMonth(e.target.value || '').catch((err) => alert(err.message));
+    });
+  }
+  if ($('vsnd-prev')) {
+    $('vsnd-prev').addEventListener('click', () => {
+      setDashMonth(shiftMonth(empMonth || (slaDash && slaDash.month) || '', -1)).catch((err) => alert(err.message));
+    });
+  }
+  if ($('vsnd-next')) {
+    $('vsnd-next').addEventListener('click', () => {
+      setDashMonth(shiftMonth(empMonth || (slaDash && slaDash.month) || '', 1)).catch((err) => alert(err.message));
     });
   }
   if ($('ekpi-back')) $('ekpi-back').addEventListener('click', showEmpList);

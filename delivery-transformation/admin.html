@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924c2" />
+  <link rel="stylesheet" href="admin.css?v=20260924vsnd1" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -144,11 +144,28 @@
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:14px">
-        <h2>5 · VIN schedule</h2>
-        <p class="hint">Each VIN starts on its own Proforma Date (Day 1). Green = within that VIN’s SLA. Red = late or overdue. Click a status for the VIN list.</p>
-        <div class="kpi-row" id="sla-kpis"></div>
-        <div id="sla-chart" class="chart-list"></div>
+      <div class="card vsnd-card" style="margin-bottom:14px" id="vsnd-card">
+        <div class="vsnd-head">
+          <div class="vsnd-title">
+            <h2>VSND- Schedule</h2>
+            <p class="vsnd-month" id="vsnd-month-label">—</p>
+            <p class="hint">Track vehicles by status based on Proforma date and daily progression</p>
+          </div>
+          <div class="vsnd-summary" id="vsnd-summary"></div>
+          <div class="vsnd-controls">
+            <label class="vsnd-month-pick">
+              <span class="vsnd-cal-ico" aria-hidden="true">📅</span>
+              <input type="month" id="sla-month" />
+            </label>
+            <div class="vsnd-nav">
+              <button type="button" class="vsnd-nav-btn" id="vsnd-prev" title="Previous month">‹</button>
+              <button type="button" class="vsnd-nav-btn" id="vsnd-next" title="Next month">›</button>
+            </div>
+          </div>
+        </div>
+        <div class="vsnd-scroll">
+          <div id="sla-chart" class="vsnd-grid-host" aria-label="VSND Schedule"></div>
+        </div>
       </div>
     </section>
 
@@ -285,6 +302,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924c2"></script>
+  <script src="admin.js?v=20260924vsnd1"></script>
 </body>
 </html>

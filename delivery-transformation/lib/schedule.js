@@ -299,11 +299,125 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
     },
     sla: bySla,
     focusId: focus.id || '',
+    calendar: computeVsndCalendar({ vehicles: pool, today, month, slaItems: items }),
+  };
+}
+
+/** Status × calendar-day grid (VSND Schedule) — Proforma day of month × current ops status. */
+const VSND_ROWS = Object.freeze([
+  { status: 'Claimed', label: 'CLAIMED', tone: 'claimed', icon: '✓' },
+  { status: 'PSFU', label: 'PSFU', tone: 'psfu', icon: '🚚' },
+  { status: 'تم التسليم', label: 'تم التسليم', tone: 'delivered', icon: '🚗' },
+  { status: 'جاهز للتسليم', label: 'جاهز للتسليم', tone: 'ready', icon: '📦' },
+  { status: 'تسليم متقدم', label: 'تسليم متقدم', tone: 'advance', icon: '🚐' },
+  { status: 'صادرة', label: 'صادر', tone: 'issued', icon: '📋' },
+  { status: 'مرور', label: 'مرور', tone: 'traffic', icon: '📄' },
+  { status: 'بطاقة', label: 'بطاقة', tone: 'card', icon: '🪪' },
+  { status: 'فسح', label: 'فسح', tone: 'clearance', icon: '🏢' },
+  { status: 'معلقة', label: 'معلقة', tone: 'hold', icon: '⏸' },
+  { status: 'الغاء', label: 'الغاء', tone: 'cancel', icon: '✕' },
+]);
+
+function daysInMonth(ym) {
+  const m = String(ym || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return 31;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
+}
+
+function weekdayShort(ym, day) {
+  const m = String(ym || '').match(/^(\d{4})-(\d{2})$/);
+  if (!m) return '';
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, day));
+  return dt.toLocaleString('en', { weekday: 'short', timeZone: 'UTC' });
+}
+
+function computeVsndCalendar({ vehicles, today, month, slaItems }) {
+  const ym = month || String(today || '').slice(0, 7);
+  const days = daysInMonth(ym);
+  const todayDay = String(today || '').slice(0, 7) === ym
+    ? Number(String(today).slice(8, 10))
+    : days;
+  const psfuSla = (slaItems || []).find((s) => s.id === 'psfu') || { targetDay: 5 };
+  const psfuTarget = Number(psfuSla.targetDay) || 5;
+
+  const rows = VSND_ROWS.map((meta) => ({
+    ...meta,
+    days: Array.from({ length: days }, () => 0),
+    total: 0,
+  }));
+  const byStatus = new Map(rows.map((r) => [r.status, r]));
+  const dayTotals = Array.from({ length: days }, () => 0);
+  let delivered = 0;
+  let notDelivered = 0;
+  const vinIndex = [];
+
+  (vehicles || []).forEach((v) => {
+    const p = dayKey(v.raw && v.raw.proformaDate);
+    if (!p || p.slice(0, 7) !== ym) return;
+    const day = Number(p.slice(8, 10));
+    if (!day || day < 1 || day > days) return;
+    const status = String((v.ops && v.ops.opsStatus) || '').trim();
+    const row = byStatus.get(status);
+    const entry = {
+      vin: v.vin,
+      employee: (v.ops && v.ops.assignedEmployeeName) || '',
+      status,
+      proforma: p,
+      day,
+      product: (v.raw && v.raw.product) || '',
+    };
+    vinIndex.push(entry);
+    if (status === 'تم التسليم') delivered += 1;
+    else notDelivered += 1;
+    dayTotals[day - 1] += 1;
+    if (!row) return;
+    row.days[day - 1] += 1;
+    row.total += 1;
+  });
+
+  const dayHeaders = Array.from({ length: days }, (_, i) => ({
+    day: i + 1,
+    weekday: weekdayShort(ym, i + 1),
+    future: i + 1 > todayDay,
+  }));
+
+  return {
+    month: ym,
+    today,
+    todayDay,
+    days,
+    dayHeaders,
+    psfuTarget,
+    delivered,
+    notDelivered,
+    grandTotal: delivered + notDelivered,
+    dayTotals,
+    rows: rows.map((r) => {
+      const psfuGreenUntil = Math.max(10, psfuTarget * 2);
+      const zones = r.days.map((n, i) => {
+        const day = i + 1;
+        if (day > todayDay) return 'future';
+        if (r.status === 'PSFU') return day <= psfuGreenUntil ? 'ok' : 'late';
+        if (!n) return 'empty';
+        return 'ok';
+      });
+      return {
+        status: r.status,
+        label: r.label,
+        tone: r.tone,
+        icon: r.icon,
+        days: r.days,
+        zones,
+        total: r.total,
+      };
+    }),
+    vins: vinIndex,
   };
 }
 
 module.exports = {
   DEFAULT_SLA,
+  VSND_ROWS,
   dayKey,
   addDays,
   diffDays,
@@ -313,4 +427,5 @@ module.exports = {
   backfillFromAudit,
   computeVinSla,
   computeDashboard,
+  computeVsndCalendar,
 };
