@@ -365,6 +365,7 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
       proforma: p,
       day,
       product: (v.raw && v.raw.product) || '',
+      city: String((v.ops && (v.ops.transferCity || v.ops.coordinatorPrintCity)) || '').trim(),
     };
     vinIndex.push(entry);
     if (status === 'تم التسليم') delivered += 1;
@@ -381,6 +382,16 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     future: i + 1 > todayDay,
   }));
 
+  const analytics = buildVsndAnalytics({
+    vehicles: vehicles || [],
+    ym,
+    today,
+    todayDay,
+    days,
+    psfuTarget,
+    rows,
+  });
+
   return {
     month: ym,
     today,
@@ -393,13 +404,13 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     grandTotal: delivered + notDelivered,
     dayTotals,
     rows: rows.map((r) => {
-      const psfuGreenUntil = Math.max(10, psfuTarget * 2);
       const zones = r.days.map((n, i) => {
         const day = i + 1;
         if (day > todayDay) return 'future';
-        if (r.status === 'PSFU') return day <= psfuGreenUntil ? 'ok' : 'late';
-        if (!n) return 'empty';
-        return 'ok';
+        // Calendar bands match aging legend: 1–(target-1) on track · target due · later late
+        if (day < psfuTarget) return 'ok';
+        if (day === psfuTarget) return 'due';
+        return 'late';
       });
       return {
         status: r.status,
@@ -412,6 +423,152 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
       };
     }),
     vins: vinIndex,
+    analytics,
+  };
+}
+
+function pct(n, total) {
+  if (!total) return 0;
+  return Math.round((n / total) * 1000) / 10;
+}
+
+function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, rows }) {
+  const vsnd = [];
+  const deliveredByDay = new Map();
+  const vsndByDay = new Map();
+
+  (vehicles || []).forEach((v) => {
+    const p = dayKey(v.raw && v.raw.proformaDate);
+    if (!p || p.slice(0, 7) !== ym) return;
+    const day = Number(p.slice(8, 10));
+    const status = String((v.ops && v.ops.opsStatus) || '').trim();
+    const delivered = status === 'تم التسليم';
+    const age = day && todayDay ? (todayDay - day + 1) : null;
+    const city = String((v.ops && (v.ops.transferCity || v.ops.coordinatorPrintCity)) || '').trim() || 'Other';
+    const employee = String((v.ops && v.ops.assignedEmployeeName) || '').trim() || 'Unassigned';
+    const pack = { vin: v.vin, status, day, age, city, employee, delivered, proforma: p };
+
+    if (delivered) deliveredByDay.set(day, (deliveredByDay.get(day) || 0) + 1);
+    else {
+      vsndByDay.set(day, (vsndByDay.get(day) || 0) + 1);
+      vsnd.push(pack);
+    }
+  });
+
+  const statusColors = {
+    Claimed: '#0d6b3c',
+    PSFU: '#1769a8',
+    'تم التسليم': '#16a34a',
+    'جاهز للتسليم': '#ca8a04',
+    'تسليم متقدم': '#ea580c',
+    'صادرة': '#7c3aed',
+    'مرور': '#0284c7',
+    'بطاقة': '#e11d48',
+    'فسح': '#0f766e',
+    'معلقة': '#64748b',
+    'الغاء': '#eb0a1e',
+  };
+
+  const byStatusAll = (rows || [])
+    .map((r) => ({
+      status: r.status,
+      label: r.label,
+      count: r.total,
+      color: statusColors[r.status] || '#64748b',
+    }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const vsndStatusMap = new Map();
+  vsnd.forEach((v) => {
+    const key = v.status || '(blank)';
+    vsndStatusMap.set(key, (vsndStatusMap.get(key) || 0) + 1);
+  });
+  const vsndTotal = vsnd.length;
+  const byStatusVsnd = [...vsndStatusMap.entries()]
+    .map(([status, count]) => {
+      const meta = VSND_ROWS.find((r) => r.status === status);
+      return {
+        status,
+        label: meta ? meta.label : status,
+        count,
+        pct: pct(count, vsndTotal),
+        color: statusColors[status] || '#64748b',
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  let onTrack = 0;
+  let dueToday = 0;
+  let late = 0;
+  const agingBuckets = [
+    { id: 'd12', label: '1-2 Days', min: 1, max: 2, count: 0, color: '#22c55e' },
+    { id: 'd34', label: '3-4 Days', min: 3, max: 4, count: 0, color: '#84cc16' },
+    { id: 'd5', label: '5 Days', min: 5, max: 5, count: 0, color: '#eab308' },
+    { id: 'd67', label: '6-7 Days', min: 6, max: 7, count: 0, color: '#f97316' },
+    { id: 'd8', label: '8+ Days', min: 8, max: 999, count: 0, color: '#ef4444' },
+  ];
+  vsnd.forEach((v) => {
+    const age = v.age == null ? 999 : v.age;
+    if (age < psfuTarget) onTrack += 1;
+    else if (age === psfuTarget) dueToday += 1;
+    else late += 1;
+    const bucket = agingBuckets.find((b) => age >= b.min && age <= b.max);
+    if (bucket) bucket.count += 1;
+    else agingBuckets[agingBuckets.length - 1].count += 1;
+  });
+
+  const last7 = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = todayDay - i;
+    if (d < 1 || d > days) continue;
+    const [y, m] = ym.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    last7.push({
+      day: d,
+      label: dt.toLocaleString('en', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+      delivered: deliveredByDay.get(d) || 0,
+      vsnd: vsndByDay.get(d) || 0,
+    });
+  }
+
+  const byEmployeeMap = new Map();
+  vsnd.forEach((v) => {
+    byEmployeeMap.set(v.employee, (byEmployeeMap.get(v.employee) || 0) + 1);
+  });
+  const byEmployee = [...byEmployeeMap.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  const byRegionMap = new Map();
+  vsnd.forEach((v) => {
+    byRegionMap.set(v.city, (byRegionMap.get(v.city) || 0) + 1);
+  });
+  const regionColors = ['#1769a8', '#0d6b3c', '#7c3aed', '#ea580c', '#0f766e', '#64748b', '#e11d48'];
+  const byRegion = [...byRegionMap.entries()]
+    .map(([name, count], i) => ({
+      name,
+      count,
+      pct: pct(count, vsndTotal),
+      color: regionColors[i % regionColors.length],
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  return {
+    vsndTotal,
+    byStatusVsnd,
+    topStatus: byStatusAll.slice(0, 5),
+    last7,
+    aging: {
+      onTrack: { count: onTrack, pct: pct(onTrack, vsndTotal), label: `On Track (1-${psfuTarget - 1} days)` },
+      dueToday: { count: dueToday, pct: pct(dueToday, vsndTotal), label: `Due Today (Day ${psfuTarget})` },
+      late: { count: late, pct: pct(late, vsndTotal), label: `Late (${psfuTarget + 1}+ days)` },
+    },
+    agingDist: agingBuckets.map((b) => ({ ...b, pct: pct(b.count, vsndTotal) })),
+    byEmployee,
+    byRegion,
   };
 }
 

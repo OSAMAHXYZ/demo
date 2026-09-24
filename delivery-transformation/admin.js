@@ -65,6 +65,7 @@
 
   DTXLive.wireHeader(user);
   if ($('who')) $('who').textContent = 'Collector';
+  document.body.classList.add('vsnd-screen');
 
   function fmtWhen(iso) {
     if (!iso) return '—';
@@ -806,14 +807,126 @@
     return loadDash();
   }
 
+  function donutSvg(segments, centerLabel, centerSub) {
+    const total = segments.reduce((s, x) => s + (Number(x.count) || 0), 0) || 1;
+    const r = 34;
+    const c = 2 * Math.PI * r;
+    let offset = 0;
+    const arcs = segments.filter((x) => x.count > 0).map((x) => {
+      const len = (x.count / total) * c;
+      const arc = `<circle cx="42" cy="42" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="10"
+        stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+        transform="rotate(-90 42 42)"></circle>`;
+      offset += len;
+      return arc;
+    }).join('');
+    return `<div class="vsnd-donut">
+      <svg viewBox="0 0 84 84" aria-hidden="true">${arcs}
+        <circle cx="42" cy="42" r="24" fill="#fff"></circle>
+      </svg>
+      <div class="vsnd-donut-center"><strong>${esc(centerLabel)}</strong><span>${esc(centerSub || '')}</span></div>
+    </div>`;
+  }
+
+  function legendList(items) {
+    return `<ul class="vsnd-legend-list">${items.map((x) => `
+      <li><i style="background:${esc(x.color)}"></i>
+        <span>${esc(x.label || x.name)}</span>
+        <b>${esc(x.count)}</b>
+        <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
+      </li>`).join('')}</ul>`;
+  }
+
+  function hBars(items, color) {
+    const max = Math.max(1, ...items.map((x) => Number(x.count) || 0));
+    return `<div class="vsnd-hbars">${items.map((x) => `
+      <div class="vsnd-hbar">
+        <span class="vsnd-hbar-lbl">${esc(x.label || x.name)}</span>
+        <span class="vsnd-hbar-track"><i style="width:${((x.count || 0) / max) * 100}%;background:${esc(x.color || color)}"></i></span>
+        <b>${esc(x.count || 0)}</b>
+      </div>`).join('') || '<p class="chart-empty">No data</p>'}</div>`;
+  }
+
+  function renderVsndCharts(cal) {
+    const a = (cal && cal.analytics) || {};
+    const deliveredEl = $('vsnd-kpi-delivered');
+    const vsndEl = $('vsnd-kpi-vsnd');
+    if (deliveredEl) {
+      deliveredEl.innerHTML = `
+        <span class="vsnd-pill-ico" aria-hidden="true">🚚</span>
+        <div>
+          <span class="vsnd-pill-lbl">Delivered · تم التسليم</span>
+          <strong>${esc(cal.delivered || 0)}</strong>
+          <em>Current Month</em>
+        </div>`;
+    }
+    if (vsndEl) {
+      vsndEl.innerHTML = `
+        <span class="vsnd-pill-ico" aria-hidden="true">⏳</span>
+        <div>
+          <span class="vsnd-pill-lbl">Not Delivered (VSND)</span>
+          <strong>${esc(cal.notDelivered || 0)}</strong>
+          <em>Current Month</em>
+        </div>`;
+    }
+
+    const byStatus = a.byStatusVsnd || [];
+    if ($('vsnd-by-status-body')) {
+      $('vsnd-by-status-body').innerHTML = `
+        ${donutSvg(byStatus, String(a.vsndTotal || 0), 'VSND')}
+        ${legendList(byStatus.slice(0, 6))}`;
+    }
+
+    const last7 = a.last7 || [];
+    const max7 = Math.max(1, ...last7.map((d) => (d.delivered || 0) + (d.vsnd || 0)));
+    if ($('vsnd-last7-body')) {
+      $('vsnd-last7-body').innerHTML = `
+        <div class="vsnd-vbars">
+          ${last7.map((d) => {
+            const delH = ((d.delivered || 0) / max7) * 100;
+            const vsH = ((d.vsnd || 0) / max7) * 100;
+            return `<div class="vsnd-vbar" title="${esc(d.label)} · ${d.delivered} delivered · ${d.vsnd} VSND">
+              <div class="vsnd-vbar-stack">
+                <i class="del" style="height:${delH}%"></i>
+                <i class="vs" style="height:${vsH}%"></i>
+              </div>
+              <span>${esc(String(d.label || '').replace(/ .*/, '') || d.day)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="vsnd-mini-legend"><span><i class="del"></i> Delivered</span><span><i class="vs"></i> VSND</span></div>`;
+    }
+
+    const aging = a.aging || {};
+    const agingSeg = [
+      { count: (aging.onTrack && aging.onTrack.count) || 0, color: '#22c55e', label: (aging.onTrack && aging.onTrack.label) || 'On Track', pct: (aging.onTrack && aging.onTrack.pct) || 0 },
+      { count: (aging.dueToday && aging.dueToday.count) || 0, color: '#eab308', label: (aging.dueToday && aging.dueToday.label) || 'Due Today', pct: (aging.dueToday && aging.dueToday.pct) || 0 },
+      { count: (aging.late && aging.late.count) || 0, color: '#ef4444', label: (aging.late && aging.late.label) || 'Late', pct: (aging.late && aging.late.pct) || 0 },
+    ];
+    if ($('vsnd-aging-body')) {
+      $('vsnd-aging-body').innerHTML = `
+        ${donutSvg(agingSeg, String(a.vsndTotal || 0), 'VSND')}
+        ${legendList(agingSeg)}`;
+    }
+
+    if ($('vsnd-top5-body')) $('vsnd-top5-body').innerHTML = hBars(a.topStatus || [], '#1769a8');
+    if ($('vsnd-aging-dist-body')) {
+      const dist = a.agingDist || [];
+      $('vsnd-aging-dist-body').innerHTML = `${donutSvg(dist, String(a.vsndTotal || 0), 'VSND')}${legendList(dist)}`;
+    }
+    if ($('vsnd-emp-body')) $('vsnd-emp-body').innerHTML = hBars(a.byEmployee || [], '#1769a8');
+    if ($('vsnd-region-body')) {
+      const regions = a.byRegion || [];
+      $('vsnd-region-body').innerHTML = `${donutSvg(regions.map((r) => ({ ...r, label: r.name })), String(a.vsndTotal || 0), 'VSND')}${legendList(regions.map((r) => ({ ...r, label: r.name })))}`;
+    }
+  }
+
   function renderSchedule() {
     const host = $('sla-chart');
-    const summary = $('vsnd-summary');
     const monthLbl = $('vsnd-month-label');
     if (!host) return;
     syncMonthInputs();
     if (!slaDash) {
-      if (summary) summary.innerHTML = '';
       if (monthLbl) monthLbl.textContent = '—';
       host.innerHTML = '<p class="chart-empty">Could not load VSND schedule.</p>';
       return;
@@ -824,40 +937,29 @@
       return;
     }
     const label = monthLabel(cal.month) || cal.month;
-    if (monthLbl) monthLbl.textContent = `${label} ${String(cal.month || '').slice(0, 4)}`.trim();
-    if (summary) {
-      summary.innerHTML = `
-        <div class="vsnd-pill vsnd-pill-ok">
-          <span class="vsnd-pill-ico" aria-hidden="true">🚚</span>
-          <div>
-            <span class="vsnd-pill-lbl">Delivered (تم التسليم)</span>
-            <strong>${esc(cal.delivered || 0)}</strong>
-            <em>Current Month</em>
-          </div>
-        </div>
-        <div class="vsnd-pill vsnd-pill-bad">
-          <span class="vsnd-pill-ico" aria-hidden="true">⏳</span>
-          <div>
-            <span class="vsnd-pill-lbl">Not Delivered (VSND)</span>
-            <strong>${esc(cal.notDelivered || 0)}</strong>
-            <em>Current Month</em>
-          </div>
-        </div>`;
+    const year = String(cal.month || '').slice(0, 4);
+    if (monthLbl) monthLbl.textContent = `${label} ${year}`.trim();
+    if ($('vsnd-sched-title')) $('vsnd-sched-title').textContent = `VSND Schedule — ${label} ${year}`.trim();
+    if ($('vsnd-updated')) {
+      $('vsnd-updated').textContent = new Date().toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
     }
+    renderVsndCharts(cal);
 
     const headers = cal.dayHeaders || [];
     const headCells = headers.map((h) => `
-      <th class="vsnd-day ${h.future ? 'is-future' : ''}${h.day === cal.todayDay ? ' is-today' : ''}">
+      <th class="vsnd-day ${h.future ? 'is-future' : ''}${h.day === cal.todayDay ? ' is-today' : ''}${h.day === cal.psfuTarget ? ' is-due' : ''}">
         <b>${h.day}</b><small>${esc(h.weekday)}</small>
       </th>`).join('');
 
     const body = (cal.rows || []).map((r) => {
-        const cells = (r.days || []).map((n, i) => {
+      const cells = (r.days || []).map((n, i) => {
         const zone = (r.zones && r.zones[i]) || 'empty';
         const future = zone === 'future';
         const show = future ? '—' : (n || 0);
         const clickable = !future && n > 0;
-        return `<td class="vsnd-cell tone-${esc(r.tone)} zone-${esc(zone)}${clickable ? ' is-hit' : ''}">
+        return `<td class="vsnd-cell zone-${esc(zone)}${clickable ? ' is-hit' : ''}">
           <button type="button" class="vsnd-val" data-status="${esc(r.status)}" data-day="${i + 1}" ${clickable ? '' : 'disabled'}>${esc(show)}</button>
         </td>`;
       }).join('');
@@ -1056,6 +1158,7 @@
   function setTab(tab) {
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.panel-tab').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+    document.body.classList.toggle('vsnd-screen', tab === 'dash');
     if (tab === 'weights') loadWeights().catch((err) => { if ($('weight-error')) $('weight-error').textContent = err.message; });
     if (tab === 'schedule') loadSlaConfig().catch((err) => { if ($('sla-error')) $('sla-error').textContent = err.message; });
   }
@@ -1082,6 +1185,11 @@
   if ($('vsnd-next')) {
     $('vsnd-next').addEventListener('click', () => {
       setDashMonth(shiftMonth(empMonth || (slaDash && slaDash.month) || '', 1)).catch((err) => alert(err.message));
+    });
+  }
+  if ($('vsnd-refresh')) {
+    $('vsnd-refresh').addEventListener('click', () => {
+      loadDash().catch((err) => alert(err.message));
     });
   }
   if ($('ekpi-back')) $('ekpi-back').addEventListener('click', showEmpList);

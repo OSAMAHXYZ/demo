@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924vsnd1" />
+  <link rel="stylesheet" href="admin.css?v=20260924vsnd2" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -37,9 +37,10 @@
       <div><strong>TOYOTA</strong><span>Delivery Transformation · Data collector</span></div>
     </div>
     <nav class="nav-links">
-      <button type="button" class="tab-btn active" data-tab="dash">Dashboard</button>
+      <button type="button" class="tab-btn active" data-tab="dash">VSND</button>
+      <button type="button" class="tab-btn" data-tab="ops">Ops</button>
       <button type="button" class="tab-btn" data-tab="weights">KPI weights</button>
-      <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
+      <button type="button" class="tab-btn" data-tab="schedule">SLA</button>
       <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
       <a href="coordinator.html">Coordinator</a>
       <a href="employee.html">Employee</a>
@@ -56,10 +57,86 @@
   </header>
 
   <main class="wrap admin-wrap">
-    <section class="panel-tab active" id="tab-dash">
+    <section class="panel-tab active vsnd-board" id="tab-dash">
+      <header class="vsnd-dash-head">
+        <div class="vsnd-dash-title">
+          <h1>VSND Dashboard</h1>
+          <p id="vsnd-month-label">—</p>
+        </div>
+        <div class="vsnd-controls">
+          <label class="vsnd-month-pick">
+            <span class="vsnd-cal-ico" aria-hidden="true">📅</span>
+            <input type="month" id="sla-month" />
+          </label>
+          <div class="vsnd-nav">
+            <button type="button" class="vsnd-nav-btn" id="vsnd-prev" title="Previous month">‹</button>
+            <button type="button" class="vsnd-nav-btn" id="vsnd-next" title="Next month">›</button>
+          </div>
+        </div>
+        <div class="vsnd-dash-actions">
+          <span class="vsnd-updated">Last Update <b id="vsnd-updated">—</b></span>
+          <button type="button" class="btn vsnd-refresh" id="vsnd-refresh">↻ Refresh</button>
+        </div>
+      </header>
+
+      <div class="vsnd-top-row">
+        <div class="vsnd-pill vsnd-pill-ok" id="vsnd-kpi-delivered"></div>
+        <div class="vsnd-pill vsnd-pill-bad" id="vsnd-kpi-vsnd"></div>
+        <div class="vsnd-panel" id="vsnd-by-status">
+          <h3>VSND by Status</h3>
+          <div class="vsnd-panel-body" id="vsnd-by-status-body"></div>
+        </div>
+        <div class="vsnd-panel" id="vsnd-last7">
+          <h3>Delivery vs VSND (Last 7 Days)</h3>
+          <div class="vsnd-panel-body" id="vsnd-last7-body"></div>
+        </div>
+        <div class="vsnd-panel" id="vsnd-aging">
+          <h3>Aging Status (VSND)</h3>
+          <div class="vsnd-panel-body" id="vsnd-aging-body"></div>
+        </div>
+      </div>
+
+      <div class="card vsnd-card vsnd-schedule-card" id="vsnd-card">
+        <div class="vsnd-sched-head">
+          <div>
+            <h2 id="vsnd-sched-title">VSND Schedule</h2>
+            <p class="hint">Track vehicles by status based on Proforma date (Calendar View)</p>
+          </div>
+          <div class="vsnd-legend">
+            <span><i class="lg-ok"></i> On Track</span>
+            <span><i class="lg-due"></i> Due Today</span>
+            <span><i class="lg-late"></i> Late</span>
+          </div>
+        </div>
+        <div class="vsnd-scroll">
+          <div id="sla-chart" class="vsnd-grid-host" aria-label="VSND Schedule"></div>
+        </div>
+      </div>
+
+      <div class="vsnd-bottom-row">
+        <div class="vsnd-panel">
+          <h3>Top 5 Status</h3>
+          <div class="vsnd-panel-body" id="vsnd-top5-body"></div>
+        </div>
+        <div class="vsnd-panel">
+          <h3>Aging Distribution</h3>
+          <div class="vsnd-panel-body" id="vsnd-aging-dist-body"></div>
+        </div>
+        <div class="vsnd-panel">
+          <h3>VSND by Employee</h3>
+          <div class="vsnd-panel-body" id="vsnd-emp-body"></div>
+        </div>
+        <div class="vsnd-panel">
+          <h3>VSND by Region</h3>
+          <div class="vsnd-panel-body" id="vsnd-region-body"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-tab" id="tab-ops">
       <section class="hero">
-        <h1>Operations dashboard</h1>
-        <p>Live company attendance, delivery-note totals, and city mix — from attendance check-in and coordinator print.</p>
+        <h1>Operations</h1>
+        <p>Attendance, delivery notes, employee performance, and backup — kept off the VSND one-screen board.</p>
       </section>
 
       <div class="kpi-row" id="dash-kpis"></div>
@@ -141,30 +218,6 @@
           </button>
           <div class="ekpi-breakdown" id="ekpi-breakdown" hidden></div>
           <div class="ekpi-detail" id="ekpi-detail" hidden></div>
-        </div>
-      </div>
-
-      <div class="card vsnd-card" style="margin-bottom:14px" id="vsnd-card">
-        <div class="vsnd-head">
-          <div class="vsnd-title">
-            <h2>VSND- Schedule</h2>
-            <p class="vsnd-month" id="vsnd-month-label">—</p>
-            <p class="hint">Track vehicles by status based on Proforma date and daily progression</p>
-          </div>
-          <div class="vsnd-summary" id="vsnd-summary"></div>
-          <div class="vsnd-controls">
-            <label class="vsnd-month-pick">
-              <span class="vsnd-cal-ico" aria-hidden="true">📅</span>
-              <input type="month" id="sla-month" />
-            </label>
-            <div class="vsnd-nav">
-              <button type="button" class="vsnd-nav-btn" id="vsnd-prev" title="Previous month">‹</button>
-              <button type="button" class="vsnd-nav-btn" id="vsnd-next" title="Next month">›</button>
-            </div>
-          </div>
-        </div>
-        <div class="vsnd-scroll">
-          <div id="sla-chart" class="vsnd-grid-host" aria-label="VSND Schedule"></div>
         </div>
       </div>
     </section>
@@ -302,6 +355,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924vsnd1"></script>
+  <script src="admin.js?v=20260924vsnd2"></script>
 </body>
 </html>
