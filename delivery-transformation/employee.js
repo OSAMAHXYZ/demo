@@ -278,6 +278,10 @@
     $$('.cell-edit', tableEl).forEach((el) => el.addEventListener('change', () => saveCellEdit(el)));
   }
 
+  function canUseInventory() {
+    return !!(state.user && state.user.canInventory);
+  }
+
   // ——— Nav / views ———
   function navItems() {
     return [
@@ -299,15 +303,17 @@
           ? `Appointment (${(state.appointmentOpen || 0) + (state.appointmentDue || 0)})`
           : 'Appointment',
       }] : []),
+      ...(canUseInventory() ? [{ href: 'inventory-managment.html', label: 'Inventory' }] : []),
     ];
   }
 
   function renderNav() {
     const nav = $('#side-nav');
-    const links = '';
     nav.innerHTML = `<p class="sec">Menu</p>${navItems().map((i) =>
-      `<button type="button" data-view="${i.id}" class="${state.view === i.id ? 'active' : ''}">${esc(i.label)}</button>`
-    ).join('')}${links}`;
+      i.href
+        ? `<button type="button" data-href="${esc(i.href)}">${esc(i.label)}</button>`
+        : `<button type="button" data-view="${i.id}" class="${state.view === i.id ? 'active' : ''}">${esc(i.label)}</button>`
+    ).join('')}`;
     $$('#side-nav button[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
     $$('#side-nav button[data-href]').forEach((b) => b.addEventListener('click', () => { location.href = b.dataset.href; }));
     $('#side-name').textContent = state.user.name;
