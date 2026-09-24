@@ -1,5 +1,9 @@
 (() => {
-  const { api, downloadFile, esc, toast, getToken, getUser, setSession, clearSession } = window.DTX;
+  const { api, downloadFile, esc, toast, getToken, getUser, setSession, clearSession, useSessionScope, migrateCollectorSession } = window.DTX;
+
+  // Keep collector login separate from employee / inventory / coordinator sessions
+  useSessionScope('collector');
+  migrateCollectorSession();
 
   const $ = (id) => document.getElementById(id);
 
@@ -11,6 +15,12 @@
     $('collector-gate').classList.add('hidden');
     $('collector-app').classList.remove('hidden');
     startApp(user);
+  }
+
+  function kickToGate(message) {
+    clearSession();
+    alert(message || 'Sign in again as Collector');
+    location.reload();
   }
 
   async function collectorLogin() {
@@ -38,6 +48,7 @@
           showCollector(me.user);
           return;
         }
+        kickToGate('Collector access required');
       } catch {
         clearSession();
       }
@@ -1736,6 +1747,10 @@
     if (silent && dashInFlight) return;
     dashInFlight = true;
     try {
+      if (!isCollector(getUser()) || !getToken()) {
+        if (!silent) kickToGate('Collector session missing — sign in again');
+        return;
+      }
       const monthQs = empMonth ? `?month=${encodeURIComponent(empMonth)}` : '';
       const [dashData, perfData, slaData, backupData, invData] = await Promise.all([
         api('/admin/dashboard'),
@@ -1769,6 +1784,13 @@
       renderCarrierPanel();
       renderPrints();
       if (kpiOpenId) loadEmployeeKpi().catch(() => {});
+    } catch (err) {
+      const msg = String((err && err.message) || '');
+      if (/forbidden/i.test(msg) || /session expired/i.test(msg) || /unauthorized/i.test(msg)) {
+        if (!silent) kickToGate('Collector session expired or replaced — enter the password again');
+        return;
+      }
+      throw err;
     } finally {
       dashInFlight = false;
     }

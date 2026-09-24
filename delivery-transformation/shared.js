@@ -1,8 +1,20 @@
 /* Delivery Transformation — shared client helpers */
 (function (global) {
   const API = '/api/delivery-transformation';
-  const TOKEN_KEY = 'dt_xform_token';
-  const USER_KEY = 'dt_xform_user';
+  const SCOPES = {
+    default: { token: 'dt_xform_token', user: 'dt_xform_user' },
+    collector: { token: 'dt_xform_collector_token', user: 'dt_xform_collector_user' },
+  };
+  let activeScope = 'default';
+
+  function scopeKeys() {
+    return SCOPES[activeScope] || SCOPES.default;
+  }
+
+  function useSessionScope(scope) {
+    activeScope = SCOPES[scope] ? scope : 'default';
+    return activeScope;
+  }
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -18,25 +30,44 @@
   }
 
   function getToken() {
-    return localStorage.getItem(TOKEN_KEY) || '';
+    return localStorage.getItem(scopeKeys().token) || '';
   }
 
   function getUser() {
     try {
-      return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+      return JSON.parse(localStorage.getItem(scopeKeys().user) || 'null');
     } catch {
       return null;
     }
   }
 
   function setSession(token, user) {
-    localStorage.setItem(TOKEN_KEY, token || '');
-    localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+    localStorage.setItem(scopeKeys().token, token || '');
+    localStorage.setItem(scopeKeys().user, JSON.stringify(user || null));
   }
 
   function clearSession() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(scopeKeys().token);
+    localStorage.removeItem(scopeKeys().user);
+  }
+
+  /** One-time: copy legacy shared collector session into the isolated collector scope. */
+  function migrateCollectorSession() {
+    if (activeScope !== 'collector') return;
+    if (getToken()) return;
+    try {
+      const legacyUser = JSON.parse(localStorage.getItem(SCOPES.default.user) || 'null');
+      const legacyToken = localStorage.getItem(SCOPES.default.token) || '';
+      if (
+        legacyToken
+        && legacyUser
+        && (legacyUser.id === 'collector' || legacyUser.role === 'admin')
+      ) {
+        setSession(legacyToken, legacyUser);
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   async function api(path, opts = {}) {
@@ -49,7 +80,7 @@
     }
     const res = await fetch(`${API}${path}`, { ...opts, headers });
     const ct = res.headers.get('content-type') || '';
-    const data = ct.includes('application/json') ? await res.json() : null;
+    const data = ct.includes('json') ? await res.json() : null;
     if (res.status === 401) {
       clearSession();
       throw new Error('Session expired — sign in again');
@@ -77,7 +108,7 @@
     }
     if (!res.ok) {
       const ct = res.headers.get('content-type') || '';
-      const data = ct.includes('application/json') ? await res.json().catch(() => null) : null;
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
       throw new Error((data && data.error) || res.statusText || 'Download failed');
     }
     const blob = await res.blob();
@@ -125,6 +156,8 @@
     getUser,
     setSession,
     clearSession,
+    useSessionScope,
+    migrateCollectorSession,
     statusBadge,
     toast,
     requireRole,
