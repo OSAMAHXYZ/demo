@@ -6372,6 +6372,85 @@ app.post('/api/delivery-coordinator/claim', (req, res) => {
   res.json({ item: enrichQueueItem(item) });
 });
 
+/**
+ * Agent shortcut: type any VIN + company → put on queue as memo → open & print.
+ * Does not require the VIN to exist in Sales Raw / inventory.
+ */
+app.post('/api/delivery-coordinator/agent-quick-vin', (req, res) => {
+  const auth = authenticateAgent(req.body?.username, req.body?.password);
+  if (!auth.ok) return res.status(401).json({ error: auth.error });
+
+  const vin = normVin(req.body?.vin);
+  if (!vin || vin.length < 6) {
+    return res.status(400).json({ error: 'أدخل رقم شاسيه صحيح (VIN)' });
+  }
+
+  let deliveryCompany = String(
+    req.body?.company || req.body?.deliveryCompany || req.body?.company_rep || ''
+  ).trim();
+  if (!deliveryCompany) {
+    return res.status(400).json({ error: 'اختر الشركة' });
+  }
+
+  ensureOptions();
+  const companyExists = (store.options.companies || []).some(
+    (x) => String(x).toLowerCase() === deliveryCompany.toLowerCase()
+  );
+  if (!companyExists) {
+    store.options.companies = uniqueSorted([...(store.options.companies || []), deliveryCompany]);
+  }
+
+  const veh = resolveVehicleForSubmit(vin);
+  const now = new Date().toISOString();
+  let item = findQueueItem(vin);
+  let created = false;
+
+  if (!item) {
+    item = enrichFromVehicle({
+      vin,
+      status: 'available',
+      agentStatus: '',
+      assignedTo: '',
+      addedAt: now,
+      assignedAt: '',
+      deliveryCompany,
+      company: deliveryCompany,
+      plannedDeliveryMode: 'memo',
+      entryAgent: auth.username,
+    }, veh || {});
+    store.queue.push(item);
+    created = true;
+  } else {
+    const prevCompany = String(item.deliveryCompany || item.company || '').trim();
+    if (
+      prevCompany
+      && !isUnassignedDeliveryCompany(item)
+      && prevCompany.toLowerCase() !== deliveryCompany.toLowerCase()
+    ) {
+      recordQueueCompanyChange(item, deliveryCompany);
+    }
+    item.deliveryCompany = deliveryCompany;
+    item.company = deliveryCompany;
+    item.plannedDeliveryMode = 'memo';
+    if (veh) {
+      if (!item.product && (veh.product || veh.model)) item.product = veh.product || veh.model || '';
+      if (!item.model && (veh.model || veh.product)) item.model = veh.model || veh.product || '';
+      if (!item.customerName && veh.customerName) item.customerName = veh.customerName;
+      if (!item.phone && veh.phone) item.phone = veh.phone;
+      if (!item.gt && veh.gt) item.gt = veh.gt;
+      if (!item.location && veh.location) item.location = veh.location;
+    }
+  }
+
+  syncCoordinatorAssignmentsToDeliveryTeam([item], { by: auth.username || 'agent-quick' });
+  persistAndBroadcast();
+  res.json({
+    ok: true,
+    created,
+    item: enrichQueueItem(item),
+  });
+});
+
 app.post('/api/delivery-coordinator/set-status', (req, res) => {
   const auth = authenticateAgent(req.body?.username, req.body?.password);
   if (!auth.ok) return res.status(401).json({ error: auth.error });

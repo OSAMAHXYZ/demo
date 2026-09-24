@@ -1043,6 +1043,43 @@
             border: 1px solid rgba(235, 10, 30, 0.35) !important;
             background: linear-gradient(165deg, rgba(235, 10, 30, 0.1), rgba(15, 23, 42, 0.04)) !important;
         }
+        .quick-vin-strip {
+            display: grid;
+            grid-template-columns: minmax(160px, 1.2fr) minmax(160px, 1.4fr) auto;
+            gap: 10px;
+            align-items: end;
+            margin-top: 10px;
+        }
+        .quick-vin-strip label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .quick-vin-strip input,
+        .quick-vin-strip select {
+            width: 100%;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font: inherit;
+            background: #fff;
+            color: #0f172a;
+        }
+        .quick-vin-strip input[type="text"] {
+            direction: ltr;
+            text-align: left;
+            letter-spacing: 0.02em;
+            font-weight: 700;
+        }
+        .quick-vin-strip .btn {
+            white-space: nowrap;
+            min-height: 42px;
+        }
+        @media (max-width: 720px) {
+            .quick-vin-strip { grid-template-columns: 1fr; }
+        }
         .quick-print-strip h2 { color: var(--tot-primary); }
         .quick-print-grid {
             display: grid;
@@ -1472,6 +1509,33 @@
             </div>
 
             <div class="ws-stats" id="wsStats"></div>
+
+            <section class="ws-section quick-print-strip" id="adhocVinSection">
+                <div class="ws-section-head">
+                    <h2>طباعة مباشرة — أي VIN</h2>
+                    <span class="hint">اكتب الشاسيه · عيّن الشركة · افتح المذكرة واطبع مباشرة</span>
+                </div>
+                <div class="quick-vin-strip">
+                    <div>
+                        <label for="adhocVinInput">رقم الشاسيه / VIN</label>
+                        <input
+                            type="text"
+                            id="adhocVinInput"
+                            placeholder="الصق أو اكتب أي VIN…"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                    </div>
+                    <div>
+                        <label for="adhocCompany">الشركة / Company</label>
+                        <select id="adhocCompany" aria-label="الشركة">
+                            <option value="">— اختر الشركة —</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="btnAdhocPrint">تعيين + طباعة</button>
+                </div>
+                <p class="ws-toast" id="adhocVinStatus"></p>
+            </section>
 
             <section class="ws-section">
                 <div class="ws-section-head">
@@ -3900,6 +3964,81 @@
             }
         }
 
+        function fillAdhocCompanySelect() {
+            const sel = document.getElementById('adhocCompany');
+            if (!sel) return;
+            const list = (typeof searchableSelectOptions !== 'undefined'
+                && Array.isArray(searchableSelectOptions.company_rep))
+                ? searchableSelectOptions.company_rep
+                : [];
+            const prev = sel.value;
+            sel.innerHTML = `<option value="">— اختر الشركة —</option>${list.map((c) =>
+                `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+            ).join('')}`;
+            if (prev && list.some((c) => String(c) === prev)) sel.value = prev;
+        }
+
+        async function openAdhocVinPrint() {
+            const statusEl = document.getElementById('adhocVinStatus');
+            const vinRaw = String(document.getElementById('adhocVinInput')?.value || '').trim();
+            const vin = vinRaw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const company = String(document.getElementById('adhocCompany')?.value || '').trim();
+            const agent = getAgent();
+            if (!agent?.username) {
+                if (statusEl) {
+                    statusEl.textContent = 'سجّل الدخول أولاً';
+                    statusEl.className = 'ws-toast err';
+                }
+                return;
+            }
+            if (!vin || vin.length < 6) {
+                if (statusEl) {
+                    statusEl.textContent = 'أدخل رقم شاسيه صحيح';
+                    statusEl.className = 'ws-toast err';
+                }
+                return;
+            }
+            if (!company) {
+                if (statusEl) {
+                    statusEl.textContent = 'اختر الشركة';
+                    statusEl.className = 'ws-toast err';
+                }
+                return;
+            }
+            if (statusEl) {
+                statusEl.textContent = 'جاري التعيين…';
+                statusEl.className = 'ws-toast';
+            }
+            try {
+                const res = await fetch('/api/delivery-coordinator/agent-quick-vin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: agent.username,
+                        password: agent.password,
+                        vin,
+                        company,
+                    }),
+                });
+                const data = await readJsonResponse(res);
+                if (!res.ok) throw new Error(data.error || 'فشل التعيين');
+                ensureSearchableOptionAllow(company);
+                await loadWorkspace();
+                if (statusEl) {
+                    statusEl.textContent = data.created
+                        ? `تمت إضافة ${vin} لـ ${company} — افتح المذكرة`
+                        : `تم تحديث ${vin} → ${company}`;
+                    statusEl.className = 'ws-toast ok';
+                }
+                await startDeliveryNote(vin, { forceMode: 'memo' });
+            } catch (err) {
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'فشل التعيين';
+                    statusEl.className = 'ws-toast err';
+                }
+            }
+        }
+
         async function startDeliveryNote(vin, { forceMode = '', fromDisplay = false } = {}) {
             const item = workspaceQueue.find((q) => q.vin === vin)
                 || { vin };
@@ -4557,6 +4696,22 @@
             document.getElementById('loginPass').value = '';
         });
 
+        document.getElementById('btnAdhocPrint')?.addEventListener('click', () => {
+            openAdhocVinPrint().catch((err) => {
+                const statusEl = document.getElementById('adhocVinStatus');
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'فشل';
+                    statusEl.className = 'ws-toast err';
+                }
+            });
+        });
+        document.getElementById('adhocVinInput')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('btnAdhocPrint')?.click();
+            }
+        });
+
         document.getElementById('btnManualLogout')?.addEventListener('click', () => {
             clearAgent();
             showView('login');
@@ -4695,6 +4850,7 @@
                     searchableSelectOptions.company_rep = [...data.companies];
                 }
                 ensureWarehouseCompanyOption();
+                fillAdhocCompanySelect();
                 ['جدة', 'الرياض'].forEach((b) => {
                     if (!searchableSelectOptions.branch_to.some((x) => String(x).trim() === b)) {
                         searchableSelectOptions.branch_to.push(b);
