@@ -16,6 +16,8 @@ const {
 const { createStore } = require('./store');
 const { parseDeliverySheet, parseSalesRaw } = require('./importer');
 const kpiEngine = require('./kpi');
+const exportExcel = require('./export-excel');
+const scheduleEngine = require('./schedule');
 
 const RAW_UPLOAD_LIMIT = '80mb';
 
@@ -57,6 +59,34 @@ function canManageAppointments(sessionUser) {
   if (!sessionUser) return false;
   if (isManager(sessionUser.role)) return true;
   return sessionUser.userId === 'ruba' || sessionUser.id === 'ruba';
+}
+
+function userRecord(sessionUser) {
+  if (!sessionUser) return null;
+  return USERS.find((x) => x.id === sessionUser.userId || x.id === sessionUser.id) || null;
+}
+
+/** Coordinator page + print / attendance. Ruba stays an employee on employee.html. */
+function canCoordinate(sessionUser) {
+  if (!sessionUser) return false;
+  if (sessionUser.role === 'coordinator' || sessionUser.role === 'admin') return true;
+  const rec = userRecord(sessionUser);
+  return !!(rec && rec.canCoordinate);
+}
+
+function canInventory(sessionUser) {
+  const rec = userRecord(sessionUser);
+  return !!(rec && rec.canInventory);
+}
+
+function publicUserFlags(sessionUser) {
+  return {
+    canUploadSalesRaw: canUploadSalesRaw(sessionUser),
+    canEditAnyVin: canEditAnyVin(sessionUser),
+    canManageAppointments: canManageAppointments(sessionUser),
+    canCoordinate: canCoordinate(sessionUser),
+    canInventory: canInventory(sessionUser),
+  };
 }
 
 function isGuestYes(v) {
@@ -333,14 +363,14 @@ function createDeliveryTransformationRouter(opts = {}) {
   }
 
   router.get('/attendance/available', auth, (req, res) => {
-    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+    if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     res.json({ companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
   });
 
   router.post('/attendance/hold', auth, (req, res) => {
-    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+    if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const id = String((req.body && req.body.id) || '').trim();
@@ -366,7 +396,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   });
 
   router.post('/attendance/release', auth, (req, res) => {
-    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+    if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     releaseHoldsFor(req.dtUser.userId, '');
@@ -384,7 +414,13 @@ function createDeliveryTransformationRouter(opts = {}) {
       yesNo: YES_NO,
       users: USERS
         .filter((u) => u.role !== 'admin' && u.id !== 'admin')
-        .map((u) => ({ id: u.id, name: u.name, role: u.role })),
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          canCoordinate: !!u.canCoordinate,
+          canInventory: !!u.canInventory,
+        })),
       employees: vacationList(),
       currentMonth: currentMonthKey(),
       today: todayKey(),
@@ -421,9 +457,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         id: user.id,
         name: user.name,
         role: user.role,
-        canUploadSalesRaw: canUploadSalesRaw({ userId: user.id, role: user.role }),
-        canEditAnyVin: canEditAnyVin({ userId: user.id, role: user.role }),
-        canManageAppointments: canManageAppointments({ userId: user.id, role: user.role }),
+        ...publicUserFlags({ userId: user.id, role: user.role }),
       },
     });
   });
@@ -439,9 +473,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         id: req.dtUser.userId,
         name: req.dtUser.name,
         role: req.dtUser.role,
-        canUploadSalesRaw: canUploadSalesRaw(req.dtUser),
-        canEditAnyVin: canEditAnyVin(req.dtUser),
-        canManageAppointments: canManageAppointments(req.dtUser),
+        ...publicUserFlags(req.dtUser),
       },
     });
   });
@@ -451,7 +483,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   });
 
   router.post('/print-invoice', auth, (req, res) => {
-    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+    if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const invoiceNumber = consumeMemoInvoice();
@@ -470,7 +502,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   });
 
   router.post('/print-complete', auth, (req, res) => {
-    if (req.dtUser.role !== 'coordinator' && req.dtUser.role !== 'admin') {
+    if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const raw = Array.isArray(req.body && req.body.vins)
@@ -550,6 +582,65 @@ function createDeliveryTransformationRouter(opts = {}) {
     }
     if (marked.length || attendanceId) store.save();
     return res.json({ ok: true, vins: marked });
+  });
+
+  router.get('/inventory', auth, (req, res) => {
+    if (!canInventory(req.dtUser)) return res.status(403).json({ error: 'Forbidden' });
+    return res.json(buildInventoryPayload(req.dtUser));
+  });
+
+  router.post('/inventory/claim', auth, (req, res) => {
+    if (!canInventory(req.dtUser)) return res.status(403).json({ error: 'Forbidden' });
+    const vins = selectedInventoryVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const now = new Date().toISOString();
+    const result = applyInventoryClaim(vins, req.dtUser, now);
+    store.save();
+    return res.json({ ok: true, ...result, ...buildInventoryPayload(req.dtUser) });
+  });
+
+  router.post('/inventory/release', auth, (req, res) => {
+    if (!canInventory(req.dtUser)) return res.status(403).json({ error: 'Forbidden' });
+    const vins = selectedInventoryVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const now = new Date().toISOString();
+    const result = applyInventoryClaim(vins, req.dtUser, now, { release: true });
+    store.save();
+    return res.json({ ok: true, ...result, ...buildInventoryPayload(req.dtUser) });
+  });
+
+  function finderKey(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  /** Public Live Sheet lookup — VIN / order only. No customer or phone. */
+  router.get('/vin-finder', (req, res) => {
+    const rawQ = String((req.query && (req.query.q || req.query.vin || req.query.order)) || '').trim();
+    const q = finderKey(rawQ);
+    if (q.length < 4) {
+      return res.status(400).json({ error: 'Type at least 4 characters of the VIN or order number' });
+    }
+    const rows = store.allVehicles()
+      .map((v) => {
+        const vin = finderKey(v.vin);
+        const order = finderKey(v.raw && v.raw.salesOrder);
+        const vinHit = vin.includes(q);
+        const orderHit = order.includes(q);
+        if (!vinHit && !orderHit) return null;
+        const exact = vin === q || order === q;
+        return {
+          vin: v.vin,
+          order: String((v.raw && v.raw.salesOrder) || '').trim(),
+          status: String((v.ops && v.ops.opsStatus) || '').trim(),
+          employee: String((v.ops && v.ops.assignedEmployeeName) || '').trim(),
+          exact,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => Number(b.exact) - Number(a.exact) || String(a.vin).localeCompare(String(b.vin)))
+      .slice(0, 20)
+      .map(({ exact, ...row }) => row);
+    return res.json({ q: rawQ, total: rows.length, rows });
   });
 
   /** Live Sheet — every role can list; edit only admin/employee via PATCH */
@@ -642,6 +733,142 @@ function createDeliveryTransformationRouter(opts = {}) {
     return store.data.meta.pendingAssignments;
   }
 
+  function inventoryOwnerOf(rec) {
+    if (!rec) return { id: '', name: '', at: '' };
+    const src = rec.ops || rec;
+    return {
+      id: String(src.inventoryOwnerId || '').trim(),
+      name: String(src.inventoryOwnerName || '').trim(),
+      at: String(src.inventoryClaimedAt || '').trim(),
+    };
+  }
+
+  function setInventoryOwner(rec, user, now) {
+    const src = rec.ops || rec;
+    src.inventoryOwnerId = user ? (user.userId || user.id) : '';
+    src.inventoryOwnerName = user ? user.name : '';
+    src.inventoryClaimedAt = user ? now : '';
+    if (rec.ops) {
+      rec.ops.updatedAt = now;
+      rec.ops.updatedBy = user ? user.name : rec.ops.updatedBy;
+    }
+  }
+
+  function copyPendingInventory(ops, vin) {
+    const p = pendingMap()[vin];
+    if (!p || !ops || !p.inventoryOwnerId) return;
+    ops.inventoryOwnerId = p.inventoryOwnerId;
+    ops.inventoryOwnerName = p.inventoryOwnerName || '';
+    ops.inventoryClaimedAt = p.inventoryClaimedAt || '';
+  }
+
+  function inventoryRow(vin, raw, owner, source, employee) {
+    return {
+      vin,
+      product: String((raw && raw.product) || '').trim(),
+      salesType: String((raw && raw.salesType) || '').trim(),
+      customer: String((raw && (raw.userName || raw.customer)) || '').trim(),
+      color: String((raw && raw.color) || '').trim(),
+      proformaDate: String((raw && raw.proformaDate) || '').trim(),
+      salesOrder: String((raw && raw.salesOrder) || '').trim(),
+      employee: employee || '',
+      source,
+      stockOwnerId: owner.id,
+      stockOwner: owner.name,
+      claimedAt: owner.at,
+    };
+  }
+
+  function buildInventoryPayload(viewer) {
+    const byVin = new Map();
+    Object.values(pendingMap()).forEach((p) => {
+      if (!p || !p.vin) return;
+      byVin.set(p.vin, inventoryRow(p.vin, p.raw, inventoryOwnerOf(p), 'raw', ''));
+    });
+    store.allVehicles().forEach((v) => {
+      if (isCoordinatorPrinted(v)) return;
+      byVin.set(v.vin, inventoryRow(
+        v.vin,
+        v.raw,
+        inventoryOwnerOf(v),
+        'live',
+        (v.ops && v.ops.assignedEmployeeName) || '',
+      ));
+    });
+    const pool = [...byVin.values()].sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+    const me = viewer && viewer.userId;
+    return {
+      at: new Date().toISOString(),
+      total: pool.length,
+      unclaimed: pool.filter((r) => !r.stockOwnerId).length,
+      mine: pool.filter((r) => r.stockOwnerId === me).length,
+      pool,
+      stock: pool.filter((r) => r.stockOwnerId === me),
+      users: USERS.filter((u) => u.canInventory).map((u) => ({
+        id: u.id,
+        name: u.name,
+        stock: pool.filter((r) => r.stockOwnerId === u.id).length,
+      })),
+    };
+  }
+
+  function selectedInventoryVins(req) {
+    const raw = Array.isArray(req.body && req.body.vins)
+      ? req.body.vins
+      : [req.body && req.body.vin];
+    return [...new Set(raw.map(normVin).filter(Boolean))];
+  }
+
+  function applyInventoryClaim(vins, user, now, { release = false } = {}) {
+    const claimed = [];
+    const missing = [];
+    const blocked = [];
+    vins.forEach((vin) => {
+      const v = store.getVehicle(vin);
+      if (v) {
+        if (isCoordinatorPrinted(v)) {
+          blocked.push(vin);
+          return;
+        }
+        if (!v.ops) v.ops = emptyOps();
+        if (release && v.ops.inventoryOwnerId && v.ops.inventoryOwnerId !== user.userId) {
+          blocked.push(vin);
+          return;
+        }
+        setInventoryOwner(v, release ? null : user, now);
+        store.upsertVehicle(vin, v);
+        claimed.push(vin);
+        store.pushAudit({
+          vin,
+          user: user.name,
+          action: release ? 'inventory_release' : 'inventory_claim',
+          oldValue: release ? user.name : '',
+          newValue: release ? '' : user.name,
+        });
+        return;
+      }
+      const p = pendingMap()[vin];
+      if (!p) {
+        missing.push(vin);
+        return;
+      }
+      if (release && p.inventoryOwnerId && p.inventoryOwnerId !== user.userId) {
+        blocked.push(vin);
+        return;
+      }
+      setInventoryOwner(p, release ? null : user, now);
+      claimed.push(vin);
+      store.pushAudit({
+        vin,
+        user: user.name,
+        action: release ? 'inventory_release' : 'inventory_claim',
+        oldValue: release ? user.name : 'raw',
+        newValue: release ? '' : user.name,
+      });
+    });
+    return { claimed, missing, blocked };
+  }
+
   /** meta.vacations: { employeeId: { until: 'YYYY-MM-DD' | '', by, at } } — empty until = until turned off. */
   function onVacation(empId) {
     const v = (store.data.meta.vacations || {})[empId];
@@ -725,6 +952,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         const isNew = !v;
         if (isNew) {
           v = { vin: item.vin, raw: { ...emptyRaw(), vin: item.vin }, ops: { ...emptyOps() } };
+          copyPendingInventory(v.ops, item.vin);
         }
         Object.entries(item.raw).forEach(([k, val]) => {
           if (val) v.raw[k] = val;
@@ -734,6 +962,7 @@ function createDeliveryTransformationRouter(opts = {}) {
           if (k === 'carrier') return;
           if (val && !String(v.ops[k] || '').trim()) v.ops[k] = val;
         });
+        if (v.ops.opsStatus) scheduleEngine.recordStatusEnter(v.ops, v.ops.opsStatus, now);
         const emp = findEmployeeByPic(item.raw.pic);
         if (emp && !v.ops.assignedEmployeeId && onVacation(emp.id)) summary.skippedVacation += 1;
         else if (emp && !v.ops.assignedEmployeeId) {
@@ -821,12 +1050,16 @@ function createDeliveryTransformationRouter(opts = {}) {
           else {
             summary.assignable += 1;
             if (isToday) summary.todayNew += 1;
+            const prev = pending[item.vin] || {};
             pending[item.vin] = {
               vin: item.vin,
-              raw: { ...emptyRaw(), ...(pending[item.vin] ? pending[item.vin].raw : {}), ...item.raw, vin: item.vin },
+              raw: { ...emptyRaw(), ...(prev.raw || {}), ...item.raw, vin: item.vin },
               uploadedBy: req.dtUser.name,
               uploadedAt: now,
               filename,
+              inventoryOwnerId: prev.inventoryOwnerId || '',
+              inventoryOwnerName: prev.inventoryOwnerName || '',
+              inventoryClaimedAt: prev.inventoryClaimedAt || '',
             };
           }
           return;
@@ -938,6 +1171,31 @@ function createDeliveryTransformationRouter(opts = {}) {
       meta: store.data.meta,
       vehicles: list.map((v) => publicVehicle(v, req.dtUser)),
     });
+  });
+
+  router.get('/backup', auth, requireRole('admin'), (_req, res) => {
+    return res.json(store.backupStatus());
+  });
+
+  router.post('/backup', auth, requireRole('admin'), (req, res) => {
+    const status = store.writeBackup('manual');
+    store.pushAudit({
+      user: req.dtUser.name,
+      action: 'save_backup',
+      oldValue: '',
+      newValue: status.lastAt || 'now',
+    });
+    store.save();
+    return res.json({ ok: true, ...status });
+  });
+
+  router.post('/backup/restore', auth, requireRole('admin'), (req, res) => {
+    try {
+      const status = store.restoreLastBackup(req.dtUser.name);
+      return res.json({ ok: true, ...status });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not restore' });
+    }
   });
 
   router.get('/admin/dashboard', auth, requireRole('admin'), (_req, res) => {
@@ -1114,8 +1372,13 @@ function createDeliveryTransformationRouter(opts = {}) {
         assignedAt: emp ? now : '',
         updatedAt: now,
         updatedBy: req.dtUser.name,
+        statusHistory: [],
       },
     };
+    copyPendingInventory(vehicle.ops, vin);
+    if (vehicle.ops.opsStatus) {
+      scheduleEngine.recordStatusEnter(vehicle.ops, vehicle.ops.opsStatus, now);
+    }
     store.upsertVehicle(vin, vehicle);
     store.pushAudit({
       vin,
@@ -1163,6 +1426,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         return res.status(400).json({ error: `Invalid status: ${s}` });
       }
       setOps('opsStatus', s);
+      if (s) scheduleEngine.recordStatusEnter(v.ops, s, new Date().toISOString());
     }
     for (const f of [
       'guestSentDate', 'signatureReceivedDate', 'accountsSentDate',
@@ -1498,6 +1762,9 @@ function createDeliveryTransformationRouter(opts = {}) {
           assignedAt: now,
           updatedAt: now,
           updatedBy: req.dtUser.name,
+          inventoryOwnerId: p.inventoryOwnerId || '',
+          inventoryOwnerName: p.inventoryOwnerName || '',
+          inventoryClaimedAt: p.inventoryClaimedAt || '',
         },
         createdAt: now,
         createdBy: req.dtUser.name,
@@ -1538,7 +1805,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     return all[month] || {};
   }
 
-  /** Per-employee count by sales type + total vs. monthly target (Hanouf / Admin). */
+  /** Per-employee MTD count by sales type + total vs. monthly target (Hanouf / Admin). */
   router.get('/team-performance', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const month = monthParam(req.query.month);
     const targets = monthTargets(month);
@@ -1547,9 +1814,13 @@ function createDeliveryTransformationRouter(opts = {}) {
       id: u.id, name: u.name, bySalesType: {}, total: 0, delivered: 0,
     }]));
     const salesTypes = new Set();
+    const seenVin = new Set();
     let unassigned = 0;
     store.allVehicles().forEach((v) => {
       if (!inMonth(v, month)) return;
+      const vinKey = normVin(v.vin);
+      if (!vinKey || seenVin.has(vinKey)) return;
+      seenVin.add(vinKey);
       const row = rows.get(v.ops && v.ops.assignedEmployeeId);
       if (!row) { unassigned += 1; return; }
       const stype = String((v.raw && v.raw.salesType) || '').trim() || '(blank)';
@@ -1583,11 +1854,90 @@ function createDeliveryTransformationRouter(opts = {}) {
     res.json({
       month,
       currentMonth: currentMonthKey(),
+      today: todayKey(),
       salesTypes: [...salesTypes].sort((a, b) => (totals.bySalesType[b] || 0) - (totals.bySalesType[a] || 0)),
       rows: list,
       totals,
       unassigned,
     });
+  });
+
+  function sendXlsx(res, wb, filename) {
+    const buf = exportExcel.writeBuffer(wb);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buf.length);
+    return res.send(buf);
+  }
+
+  router.get('/export/live-sheet', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const month = String((req.query && req.query.month) || '').trim().slice(0, 7);
+    let list = store.allVehicles();
+    if (/^\d{4}-\d{2}$/.test(month)) list = list.filter((v) => inMonth(v, month));
+    const rank = (v) => {
+      const i = STATUSES.indexOf(String((v.ops && v.ops.opsStatus) || ''));
+      return i === -1 ? STATUSES.length : i;
+    };
+    list.sort((a, b) => rank(a) - rank(b) || String(a.vin).localeCompare(String(b.vin)));
+    const wb = exportExcel.buildLiveSheetWorkbook(list);
+    return sendXlsx(res, wb, `DT-Live-Sheet-${exportExcel.stamp()}.xlsx`);
+  });
+
+  router.get('/export/admin', auth, requireRole('admin'), (req, res) => {
+    const month = monthParam(req.query.month);
+    const wb = exportExcel.buildAdminWorkbook({
+      month,
+      currentMonth: currentMonthKey(),
+      vehicles: store.allVehicles(),
+      attendance: attendanceRows(),
+      prints: store.data.prints || [],
+      employees: USERS.filter(isAssignable),
+      coordinators: USERS.filter((u) => u.role === 'coordinator'),
+      targets: monthTargets(month),
+      weightsCfg: kpiEngine.readConfig(store.data.meta),
+      carriers: allCarriers(),
+      cities: allCities(),
+      inMonth,
+      isDelivered,
+      kpiEngine,
+    });
+    return sendXlsx(res, wb, `DT-Admin-${exportExcel.stamp()}.xlsx`);
+  });
+
+  router.get('/schedule/config', auth, requireRole('admin', 'hanouf'), (_req, res) => {
+    const items = scheduleEngine.normalizeSla(store.data.meta && store.data.meta.sla);
+    res.json({ items, statuses: STATUSES });
+  });
+
+  router.put('/schedule/config', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const items = scheduleEngine.normalizeSla(req.body && req.body.items);
+    const bad = items.find((x) => !Number.isFinite(x.targetDay) || x.targetDay < 1);
+    if (bad) return res.status(400).json({ error: `Target day for ${bad.label} must be 1 or more` });
+    if (!store.data.meta || typeof store.data.meta !== 'object') store.data.meta = {};
+    store.data.meta.sla = items;
+    store.pushAudit({
+      vin: '',
+      user: req.dtUser.name,
+      action: 'set_sla',
+      field: 'schedule',
+      oldValue: '',
+      newValue: items.map((x) => `${x.id}:${x.enabled ? x.targetDay : 'off'}`).join(' · '),
+    });
+    store.save();
+    return res.json({ ok: true, items });
+  });
+
+  router.get('/schedule/dashboard', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const month = monthParam(req.query.month);
+    const items = scheduleEngine.normalizeSla(store.data.meta && store.data.meta.sla);
+    const dash = scheduleEngine.computeDashboard({
+      vehicles: store.allVehicles(),
+      slaItems: items,
+      today: todayKey(),
+      month,
+      audit: store.data.audit || [],
+    });
+    return res.json({ ...dash, items, currentMonth: currentMonthKey() });
   });
 
   router.get('/kpi/weights', auth, requireRole('admin', 'hanouf'), (_req, res) => {

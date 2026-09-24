@@ -1,5 +1,5 @@
 (() => {
-  const { api, esc, toast, getToken, getUser, setSession, clearSession } = window.DTX;
+  const { api, downloadFile, esc, toast, getToken, getUser, setSession, clearSession } = window.DTX;
 
   const $ = (id) => document.getElementById(id);
 
@@ -57,6 +57,8 @@
   let kpiData = null;
   let kpiExpanded = false;
   let kpiDetailKey = '';
+  let slaDash = null;
+  let backup = null;
   let dashTimer = null;
   let dashInFlight = false;
   let pdfQuery = '';
@@ -153,6 +155,20 @@
     $('dash-sync').textContent = new Date(dash.at).toLocaleTimeString();
   }
 
+  function renderBackup() {
+    const meta = $('backup-meta');
+    if (!meta) return;
+    if (!backup) {
+      meta.textContent = 'Backup status unavailable';
+      return;
+    }
+    const last = backup.lastAt ? fmtWhen(backup.lastAt) : 'not saved yet';
+    const next = backup.nextAt ? fmtWhen(backup.nextAt) : '—';
+    const snap = backup.snapshot || {};
+    const live = backup.live || {};
+    meta.textContent = `Last saved ${last} · next scan ${next} · snapshot ${snap.vehicles || 0} VINs · live ${live.vehicles || 0} VINs`;
+  }
+
   function renderAttendance() {
     const host = $('attend-chart');
     const rows = (dash.companies || []).filter((c) => c.arrived || c.notes);
@@ -219,49 +235,103 @@
     });
   }
 
-  function achCell(pct) {
-    if (pct == null) return '<span class="hint">no target</span>';
-    const cls = pct >= 100 ? 'ok' : pct >= 70 ? 'warn' : 'bad';
-    return `<div class="ach ach-${cls}"><div class="ach-bar"><span style="width:${Math.min(pct, 100)}%"></span></div><b>${pct}%</b></div>`;
+  function monthLabel(ym) {
+    if (!/^\d{4}-\d{2}$/.test(String(ym || ''))) return '';
+    const [y, m] = ym.split('-').map(Number);
+    const name = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en', { month: 'long', timeZone: 'UTC' });
+    return name;
+  }
+
+  function achText(pct) {
+    if (pct == null || !Number.isFinite(Number(pct))) return '—';
+    return `${Math.round(Number(pct))}%`;
+  }
+
+  function wireEmpClicks(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-emp]').forEach((el) => {
+      el.addEventListener('click', () => openEmployeeKpi(el.dataset.emp));
+    });
   }
 
   function renderEmployees() {
     const host = $('emp-chart');
+    const tbody = $('emp-table-body');
     if (!host) return;
     const monthInp = $('emp-month');
     if (monthInp && perf && perf.month && monthInp.value !== perf.month) monthInp.value = perf.month;
     if ($('emp-month-hint') && perf) {
+      const label = monthLabel(perf.month);
       $('emp-month-hint').textContent = perf.month === perf.currentMonth
-        ? `${perf.month} · this month`
-        : (perf.month || '');
+        ? `${label || perf.month} MTD · day 1 → today`
+        : `${label || perf.month} · full month`;
     }
     if (!perf) {
-      host.innerHTML = '<p class="chart-empty">Could not load employee VIN / Ach% data.</p>';
+      host.innerHTML = '<p class="chart-empty">Could not load employee MTD / target data.</p>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4">Could not load employee data.</td></tr>';
       return;
     }
-    const rows = perf.rows || [];
-    if (!rows.length) {
-      host.innerHTML = '<p class="chart-empty">No employee VIN / target data yet. Set targets on employee.html Team Targets.</p>';
-      return;
-    }
-    const max = Math.max(1, ...rows.map((r) => r.total || 0), ...(perf.totals ? [perf.totals.total] : []));
-    const t = perf.totals || {};
-    host.innerHTML = rows.map((r) => `
-      <button type="button" class="chart-row emp-row" data-emp="${esc(r.id)}">
-        <span class="name">${esc(r.name)}</span>
-        <span class="bar" title="${r.total} VIN"><i class="notes" style="width:${(r.total / max) * 100}%"></i></span>
-        <span class="meta">${r.total} VIN · target ${r.target || '—'}</span>
-        ${achCell(r.achPct)}
-      </button>`).join('') + `
-      <div class="chart-row emp-row" style="cursor:default">
-        <span class="name">Team</span>
-        <span class="bar"><i class="user" style="width:${((t.total || 0) / max) * 100}%"></i></span>
-        <span class="meta">${t.total || 0} VIN · target ${t.target || '—'}</span>
-        ${achCell(t.achPct)}
-      </div>`;
-    host.querySelectorAll('[data-emp]').forEach((b) => {
-      b.addEventListener('click', () => openEmployeeKpi(b.dataset.emp));
+    const rows = [...(perf.rows || [])].sort((a, b) => {
+      const ap = a.achPct == null ? -1 : a.achPct;
+      const bp = b.achPct == null ? -1 : b.achPct;
+      return bp - ap || String(a.name).localeCompare(String(b.name));
     });
+    if (!rows.length) {
+      host.innerHTML = '<p class="chart-empty">No employees yet. Anyone on employee.html appears here automatically once targets are managed by Hanouf.</p>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4">No employees yet.</td></tr>';
+      return;
+    }
+    const t = perf.totals || {};
+    const heading = monthLabel(perf.month) || perf.month || 'MTD';
+    const isMtd = perf.month === perf.currentMonth;
+    host.innerHTML = `
+      <div class="emp-perf-head">
+        <strong>Delivery Employee Performance</strong>
+        <span>${esc(heading)} ${isMtd ? 'MTD' : ''}</span>
+      </div>
+      ${rows.map((r) => {
+        const mtd = Number(r.total) || 0;
+        const target = Number(r.target) || 0;
+        const pct = r.achPct;
+        const fill = pct == null ? 0 : Math.min(Math.max(pct, 0), 100);
+        const cls = pct == null ? '' : pct >= 100 ? 'ok' : pct >= 70 ? 'warn' : 'bad';
+        return `<button type="button" class="emp-perf-row ${cls}" data-emp="${esc(r.id)}" title="Open Overall KPI for ${esc(r.name)}">
+          <span class="emp-perf-line">
+            <span class="name">${esc(r.name)}</span>
+            <span class="stat">Target ${target || '—'}</span>
+            <span class="stat">MTD ${mtd}</span>
+            <span class="pct">${achText(pct)}</span>
+          </span>
+          <span class="emp-perf-bar" aria-hidden="true"><i style="width:${fill}%"></i></span>
+        </button>`;
+      }).join('')}
+      <div class="emp-perf-row team">
+        <span class="emp-perf-line">
+          <span class="name">Team</span>
+          <span class="stat">Target ${t.target || '—'}</span>
+          <span class="stat">MTD ${t.total || 0}</span>
+          <span class="pct">${achText(t.achPct)}</span>
+        </span>
+        <span class="emp-perf-bar" aria-hidden="true"><i style="width:${t.achPct == null ? 0 : Math.min(Math.max(t.achPct, 0), 100)}%"></i></span>
+      </div>`;
+    wireEmpClicks(host);
+
+    if (tbody) {
+      tbody.innerHTML = rows.map((r) => `
+        <tr class="emp-table-row" data-emp="${esc(r.id)}" title="Open Overall KPI">
+          <td><b>${esc(r.name)}</b></td>
+          <td class="num">${Number(r.target) || '—'}</td>
+          <td class="num">${Number(r.total) || 0}</td>
+          <td class="num">${achText(r.achPct)}</td>
+        </tr>`).join('') + `
+        <tr class="emp-table-team">
+          <td><b>Team</b></td>
+          <td class="num">${t.target || '—'}</td>
+          <td class="num">${t.total || 0}</td>
+          <td class="num">${achText(t.achPct)}</td>
+        </tr>`;
+      wireEmpClicks(tbody);
+    }
   }
 
   function fmtPct(n) {
@@ -696,25 +766,143 @@
         </div>`).join('')}`);
   }
 
+  function resultClass(result) {
+    if (result === 'LATE') return 'gone';
+    if (result === 'ON TIME' || result === 'ON TRACK') return 'stay';
+    return '';
+  }
+
+  function renderSchedule() {
+    const kpis = $('sla-kpis');
+    const host = $('sla-chart');
+    if (!host) return;
+    if (!slaDash) {
+      if (kpis) kpis.innerHTML = '';
+      host.innerHTML = '<p class="chart-empty">Could not load VIN schedule.</p>';
+      return;
+    }
+    const t = slaDash.totals || {};
+    if (kpis) {
+      kpis.innerHTML = `
+        <div class="kpi"><strong>${esc(t.vins || 0)}</strong><span>VINs with Proforma</span></div>
+        <div class="kpi"><strong class="stay">${esc(t.green || 0)}</strong><span>On plan (green)</span></div>
+        <div class="kpi"><strong class="gone">${esc(t.red || 0)}</strong><span>Late / overdue</span></div>
+        <div class="kpi"><strong>${esc(slaDash.noProforma || 0)}</strong><span>No Proforma Date</span></div>`;
+    }
+    const slas = slaDash.sla || [];
+    if (!slas.length) {
+      host.innerHTML = '<p class="chart-empty">No SLA statuses enabled. Set them on the Schedule tab.</p>';
+      return;
+    }
+    const max = Math.max(1, ...slas.map((s) => s.total || 0));
+    host.innerHTML = slas.map((s) => {
+      const g = ((s.green || 0) / max) * 100;
+      const r = ((s.red || 0) / max) * 100;
+      return `<button type="button" class="chart-row sla-row" data-sla="${esc(s.id)}">
+        <span class="name">${esc(s.label)}<small>Day ${s.targetDay}</small></span>
+        <span class="bar" title="${s.green} on plan · ${s.red} late">
+          <i class="present" style="width:${g}%"></i>
+          <i class="sla-late" style="width:${r}%"></i>
+        </span>
+        <span class="meta">${s.green} on plan · ${s.red} late</span>
+      </button>`;
+    }).join('');
+    host.querySelectorAll('[data-sla]').forEach((b) => {
+      b.addEventListener('click', () => openSla(b.dataset.sla));
+    });
+  }
+
+  function openSla(id) {
+    const s = ((slaDash && slaDash.sla) || []).find((x) => x.id === id);
+    if (!s) return;
+    const rows = (s.rows || []).slice().sort((a, b) => {
+      if (a.zone !== b.zone) return a.zone === 'red' ? -1 : 1;
+      return String(a.vin).localeCompare(String(b.vin));
+    });
+    openDrawer(`
+      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div>
+          <h2>${esc(s.label)}</h2>
+          <p class="sub">Target Day ${s.targetDay} from each VIN’s Proforma · ${s.green} on plan · ${s.red} late</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="table-wrap" style="max-height:70vh">
+        <table class="data">
+          <thead><tr><th>VIN</th><th>Employee</th><th>Proforma</th><th>Target</th><th>Actual</th><th>Result</th></tr></thead>
+          <tbody>${rows.map((r) => `
+            <tr>
+              <td class="detail-vin">${esc(r.vin)}</td>
+              <td>${esc(r.employee || '—')}</td>
+              <td>${esc(r.proforma || '—')}</td>
+              <td>${esc(r.targetDate || '—')}</td>
+              <td>${esc(r.actualAt || '—')}</td>
+              <td class="${resultClass(r.result)}"><b>${esc(r.result)}</b><br /><span class="hint">${esc(r.label)}</span></td>
+            </tr>`).join('') || '<tr><td colspan="6">No VINs with a Proforma Date this month.</td></tr>'}</tbody>
+        </table>
+      </div>`);
+  }
+
+  function renderSlaForm(data) {
+    const host = $('sla-body');
+    if (!host) return;
+    host.innerHTML = (data.items || []).map((x) => `
+      <tr>
+        <td><b>${esc(x.label)}</b></td>
+        <td>${esc((x.statuses || []).join(', '))}</td>
+        <td><input type="number" min="1" max="60" step="1" class="wgt-input sla-day" data-id="${esc(x.id)}" value="${x.targetDay}" /></td>
+        <td><input type="checkbox" class="sla-on" data-id="${esc(x.id)}" ${x.enabled ? 'checked' : ''} /></td>
+      </tr>`).join('');
+  }
+
+  async function loadSlaConfig() {
+    renderSlaForm(await api('/schedule/config'));
+  }
+
+  async function saveSlaConfig() {
+    if ($('sla-error')) $('sla-error').textContent = '';
+    const items = [...document.querySelectorAll('.sla-day')].map((el) => ({
+      id: el.dataset.id,
+      targetDay: Number(el.value),
+      enabled: !!(document.querySelector(`.sla-on[data-id="${el.dataset.id}"]`) || {}).checked,
+    }));
+    try {
+      await api('/schedule/config', { method: 'PUT', json: { items } });
+      toast('Schedule saved');
+      await loadDash();
+    } catch (err) {
+      if ($('sla-error')) {
+        $('sla-error').textContent = err.message || 'Could not save';
+        $('sla-error').classList.add('ekpi-err');
+      }
+    }
+  }
+
   async function loadDash({ silent = false } = {}) {
     if (silent && dashInFlight) return;
     dashInFlight = true;
     try {
       const monthQs = empMonth ? `?month=${encodeURIComponent(empMonth)}` : '';
-      const [dashData, perfData] = await Promise.all([
+      const [dashData, perfData, slaData, backupData] = await Promise.all([
         api('/admin/dashboard'),
         api(`/team-performance${monthQs}`).catch(() => null),
+        api(`/schedule/dashboard${monthQs}`).catch(() => null),
+        api('/backup').catch(() => null),
       ]);
       dash = dashData;
       if (perfData) {
         perf = perfData;
         empMonth = perfData.month || empMonth;
       }
+      if (slaData) slaDash = slaData;
+      if (backupData) backup = backupData;
       renderKpis();
+      renderBackup();
       renderAttendance();
       renderUsers();
       renderCities();
       renderEmployees();
+      renderSchedule();
       renderPrints();
       if (kpiOpenId) loadEmployeeKpi().catch(() => {});
     } finally {
@@ -740,6 +928,7 @@
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.panel-tab').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
     if (tab === 'weights') loadWeights().catch((err) => { if ($('weight-error')) $('weight-error').textContent = err.message; });
+    if (tab === 'schedule') loadSlaConfig().catch((err) => { if ($('sla-error')) $('sla-error').textContent = err.message; });
   }
 
   document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -771,6 +960,54 @@
     });
   }
   if ($('weight-save')) $('weight-save').addEventListener('click', () => saveWeights());
+  if ($('sla-save')) $('sla-save').addEventListener('click', () => saveSlaConfig());
+  async function runExport(path, filename) {
+    try {
+      await downloadFile(path, filename);
+      toast('Excel downloaded');
+    } catch (err) {
+      alert(err.message || 'Could not extract Excel');
+    }
+  }
+  if ($('xls-live')) {
+    $('xls-live').addEventListener('click', () => runExport('/export/live-sheet', 'DT-Live-Sheet.xlsx'));
+  }
+  if ($('xls-admin')) {
+    $('xls-admin').addEventListener('click', () => {
+      const month = ($('ekpi-month') && $('ekpi-month').value) || empMonth || '';
+      const qs = month ? `?month=${encodeURIComponent(month)}` : '';
+      runExport(`/export/admin${qs}`, 'DT-Admin.xlsx');
+    });
+  }
+  if ($('backup-save')) {
+    $('backup-save').addEventListener('click', async () => {
+      $('backup-hint').textContent = 'Saving…';
+      try {
+        backup = await api('/backup', { method: 'POST' });
+        renderBackup();
+        $('backup-hint').textContent = 'Snapshot saved.';
+        toast('Snapshot saved');
+      } catch (err) {
+        $('backup-hint').textContent = err.message || 'Could not save';
+      }
+    });
+  }
+  if ($('backup-restore')) {
+    $('backup-restore').addEventListener('click', async () => {
+      const when = backup && backup.lastAt ? fmtWhen(backup.lastAt) : 'the last snapshot';
+      if (!confirm(`Restore employee.html and coordinator.html from ${when}? Current live data will be replaced.`)) return;
+      $('backup-hint').textContent = 'Restoring…';
+      try {
+        backup = await api('/backup/restore', { method: 'POST' });
+        renderBackup();
+        await loadDash();
+        $('backup-hint').textContent = `Restored ${when}.`;
+        toast('Last data restored');
+      } catch (err) {
+        $('backup-hint').textContent = err.message || 'Could not restore';
+      }
+    });
+  }
   $('pdf-min').addEventListener('click', () => $('pdf-win').classList.toggle('is-min'));
   $('pdf-search').addEventListener('input', (e) => {
     pdfQuery = e.target.value || '';

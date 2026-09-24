@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260923a8" />
+  <link rel="stylesheet" href="admin.css?v=20260924c1" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -39,12 +39,15 @@
     <nav class="nav-links">
       <button type="button" class="tab-btn active" data-tab="dash">Dashboard</button>
       <button type="button" class="tab-btn" data-tab="weights">KPI weights</button>
+      <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
       <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
       <a href="coordinator.html">Coordinator</a>
       <a href="employee.html">Employee</a>
       <a href="attendance.html" target="_blank" rel="noopener">Attendance</a>
     </nav>
     <div class="top-right">
+      <button type="button" class="btn" id="xls-live">Extract Live Sheet</button>
+      <button type="button" class="btn" id="xls-admin">Extract admin Excel</button>
       <span class="live-clock" id="live-clock">—</span>
       <span id="who" class="badge">—</span>
       <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
@@ -60,6 +63,17 @@
 
       <div class="kpi-row" id="dash-kpis"></div>
       <p class="sync-line">Live · last sync <span id="dash-sync">—</span></p>
+
+      <div class="card backup-card" id="backup-card">
+        <h2>Data backup — employee + coordinator</h2>
+        <p class="hint">One snapshot is saved automatically every 6 hours. Restore replaces Live Sheet, Sales Raw, attendance, and prints on employee.html and coordinator.html with that last scan.</p>
+        <div class="backup-meta" id="backup-meta">Last saved — · next scan —</div>
+        <div class="toolbar" style="margin-top:10px">
+          <button type="button" class="btn" id="backup-save">Save snapshot now</button>
+          <button type="button" class="btn-primary" id="backup-restore">Restore last data</button>
+          <span class="hint" id="backup-hint"></span>
+        </div>
+      </div>
 
       <div class="card" style="margin-bottom:14px">
         <h2>1 · Company attendance</h2>
@@ -82,13 +96,28 @@
 
       <div class="card" style="margin-bottom:14px" id="emp-card">
         <div id="emp-list-view">
-          <h2>4 · Employees vs target</h2>
-          <p class="hint">Same numbers as employee.html Team Targets · total VINs this month · Ach% = VINs ÷ target. Click an employee for their Overall KPI.</p>
+          <h2>4 · Delivery Employee Performance</h2>
+          <p class="hint">Live roster from employee.html · targets set by Hanouf · MTD = unique VINs from month start through today · Ach% = MTD ÷ target (not capped at 100%). Click an employee for Overall KPI.</p>
           <div class="toolbar">
             <label class="month-filter-label">Month <input type="month" id="emp-month" /></label>
             <span class="hint" id="emp-month-hint"></span>
           </div>
-          <div id="emp-chart" class="chart-list"></div>
+          <div class="emp-perf-layout">
+            <div id="emp-chart" class="chart-list emp-perf-chart" aria-label="Delivery Employee Performance chart"></div>
+            <div class="table-wrap emp-perf-table-wrap">
+              <table class="data" id="emp-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th class="num">Target</th>
+                    <th class="num">MTD Total</th>
+                    <th class="num">Achievement</th>
+                  </tr>
+                </thead>
+                <tbody id="emp-table-body"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
         <div id="emp-kpi-view" hidden>
           <div class="ekpi-toolbar">
@@ -113,6 +142,13 @@
           <div class="ekpi-detail" id="ekpi-detail" hidden></div>
         </div>
       </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>5 · VIN schedule</h2>
+        <p class="hint">Each VIN starts on its own Proforma Date (Day 1). Green = within that VIN’s SLA. Red = late or overdue. Click a status for the VIN list.</p>
+        <div class="kpi-row" id="sla-kpis"></div>
+        <div id="sla-chart" class="chart-list"></div>
+      </div>
     </section>
 
     <section class="panel-tab" id="tab-weights">
@@ -136,6 +172,28 @@
         <div class="toolbar" style="margin-top:12px">
           <button type="button" class="btn-primary" id="weight-save">Save</button>
           <span class="hint" id="weight-hint">Dashboard uses the new weights immediately after save.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-tab" id="tab-schedule">
+      <section class="hero">
+        <h1>Status SLA schedule</h1>
+        <p>Target day is counted from each VIN’s Proforma Date (Day 1). Changing a day updates the dashboard immediately.</p>
+      </section>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr><th>Status</th><th>Counts as</th><th>Target day</th><th>Enabled</th></tr>
+            </thead>
+            <tbody id="sla-body"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="sla-error"></p>
+        <div class="toolbar" style="margin-top:12px">
+          <button type="button" class="btn-primary" id="sla-save">Save schedule</button>
+          <span class="hint" id="sla-hint">Example: Proforma Sep 1 · PSFU Day 5 → target Sep 5.</span>
         </div>
       </div>
     </section>
@@ -224,8 +282,8 @@
 
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
-  <script src="shared.js"></script>
+  <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260923a8"></script>
+  <script src="admin.js?v=20260924c1"></script>
 </body>
 </html>
