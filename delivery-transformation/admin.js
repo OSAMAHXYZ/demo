@@ -713,45 +713,162 @@
     const c = (dash.companies || []).find((x) => x.company === name);
     if (!c) return;
     const people = (c.people || []).slice().sort((a, b) => (Date.parse(b.arrivedAt) || 0) - (Date.parse(a.arrivedAt) || 0));
+    const freePeople = people.filter((p) => p.status !== 'left');
+    const leftPeople = people.filter((p) => p.status === 'left');
+    const freeCount = c.free != null ? c.free : c.present;
     openDrawer(`
-      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+      <div class="drawer-head vsnd-sheet-head">
         <div>
           <h2>${esc(c.company)}</h2>
-          <p class="sub">${c.present} present · ${c.left} left · ${c.notes} VIN on notes</p>
+          <p class="sub">${esc(freeCount)} free · ${esc(c.left)} left · ${esc(c.notes)} VIN on notes · from attendance + coordinator print</p>
         </div>
         <button type="button" class="btn" id="detail-close">Close</button>
       </div>
-      <h3 style="margin:0 0 8px;font-size:.85rem">Drivers — arrive / leave</h3>
-      <div class="table-wrap" style="max-height:40vh;margin-bottom:14px">
-        <table class="data">
-          <thead><tr><th>Name</th><th>Phone</th><th>Arrived</th><th>Left</th><th>Stay</th><th>VIN</th><th>City</th></tr></thead>
-          <tbody>${people.map((p) => `
-            <tr>
-              <td><b>${esc(p.name)}</b></td>
-              <td>${esc(p.phone || '—')}</td>
-              <td>${esc(fmtWhen(p.arrivedAt))}</td>
-              <td class="${p.leftAt ? 'gone' : 'stay'}">${p.leftAt ? esc(fmtWhen(p.leftAt)) : 'Still here'}</td>
-              <td data-stay="${esc(p.id)}">${esc(stayText(p))}</td>
-              <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
-              <td>${esc(p.city || '—')}</td>
-            </tr>`).join('') || '<tr><td colspan="7">No check-ins for this company yet.</td></tr>'}</tbody>
-        </table>
+      <div class="inv-detail-summary">
+        <div class="inv-detail-card">
+          <h3>Free <span class="hint">· waiting · no VIN yet</span></h3>
+          <div class="inv-detail-nums">
+            <span><em>Free</em><b class="stay">${esc(freeCount)}</b></span>
+          </div>
+          <div class="table-wrap vsnd-sheet-wrap" style="max-height:28vh">
+            <table class="data vsnd-live-table">
+              <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Arrived</th><th>Stay</th></tr></thead>
+              <tbody>${freePeople.map((p, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><b>${esc(p.name)}</b></td>
+                  <td>${esc(p.phone || '—')}</td>
+                  <td>${esc(fmtWhen(p.arrivedAt))}</td>
+                  <td class="stay">${esc(stayText(p))}</td>
+                </tr>`).join('') || '<tr><td colspan="5">No free drivers for this company</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="inv-detail-card">
+          <h3>Left <span class="hint">· got VIN · departed</span></h3>
+          <div class="inv-detail-nums">
+            <span><em>Left</em><b class="gone">${esc(c.left)}</b></span>
+            <span><em>VINs</em><b>${esc(leftPeople.reduce((n, p) => n + ((p.vins && p.vins.length) || 0), 0))}</b></span>
+          </div>
+          <div class="table-wrap vsnd-sheet-wrap" style="max-height:32vh">
+            <table class="data vsnd-live-table">
+              <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Left at</th><th>VIN(s)</th><th>City</th><th>By</th></tr></thead>
+              <tbody>${leftPeople.map((p, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><b>${esc(p.name)}</b></td>
+                  <td>${esc(p.phone || '—')}</td>
+                  <td class="gone">${esc(fmtWhen(p.leftAt))}</td>
+                  <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
+                  <td>${esc(p.city || '—')}</td>
+                  <td>${esc(p.usedBy || '—')}</td>
+                </tr>`).join('') || '<tr><td colspan="7">No drivers left yet for this company</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`, { wide: true });
+  }
+
+  function renderFleetFreeLeft() {
+    const host = $('vsnd-top5-body');
+    if (!host) return;
+    if (!dash) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading attendance…</p>';
+      return;
+    }
+    const freeTotal = dash.free != null ? dash.free : (dash.present || 0);
+    const leftTotal = dash.left || 0;
+    const rows = (dash.companies || [])
+      .filter((c) => (c.free != null ? c.free : c.present) || c.left)
+      .slice()
+      .sort((a, b) => {
+        const af = a.free != null ? a.free : a.present;
+        const bf = b.free != null ? b.free : b.present;
+        return (bf - af) || (b.left - a.left) || String(a.company).localeCompare(String(b.company), 'ar');
+      });
+    const max = Math.max(1, ...rows.map((c) => Math.max(c.free != null ? c.free : c.present, c.left || 0)));
+    host.innerHTML = `
+      <div class="inv-totals fleet-totals">
+        <div class="inv-total in"><span>Free</span><strong>${esc(freeTotal)}</strong></div>
+        <div class="inv-total out"><span>Left</span><strong>${esc(leftTotal)}</strong></div>
+        <button type="button" class="btn inv-more" id="fleet-more-details">More details</button>
       </div>
-      <h3 style="margin:0 0 8px;font-size:.85rem">VINs on delivery notes</h3>
-      <div class="table-wrap" style="max-height:28vh">
-        <table class="data">
-          <thead><tr><th>VIN</th><th>Product</th><th>Customer</th><th>City</th><th>Printed</th><th>By</th></tr></thead>
-          <tbody>${(c.vins || []).map((v) => `
-            <tr>
-              <td class="detail-vin">${esc(v.vin)}</td>
-              <td>${esc(v.product || '—')}</td>
-              <td>${esc(v.customer || '—')}</td>
-              <td>${esc(v.city || '—')}</td>
-              <td>${esc(fmtWhen(v.printedAt))}</td>
-              <td>${esc(v.printedBy || '—')}</td>
-            </tr>`).join('') || '<tr><td colspan="6">No delivery notes for this company yet.</td></tr>'}</tbody>
-        </table>
-      </div>`);
+      <div class="vsnd-hbars fleet-bars">
+        ${rows.map((c) => {
+          const free = c.free != null ? c.free : c.present;
+          const left = c.left || 0;
+          return `<button type="button" class="vsnd-hbar fleet-row" data-fleet-co="${esc(c.company)}" title="${esc(c.company)} · ${free} free · ${left} left">
+            <span class="vsnd-hbar-lbl">${esc(c.company)}</span>
+            <span class="vsnd-hbar-track fleet-track">
+              <i class="fleet-free" style="width:${(free / max) * 100}%"></i>
+              <i class="fleet-left" style="width:${(left / max) * 100}%"></i>
+            </span>
+            <b><span class="stay">${esc(free)}</span><small>/</small><span class="gone">${esc(left)}</span></b>
+          </button>`;
+        }).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No attendance yet</p>'}
+      </div>
+      <div class="vsnd-mini-legend"><span><i class="del"></i> Free</span><span><i class="vs"></i> Left</span></div>`;
+    const more = $('fleet-more-details');
+    if (more) more.onclick = () => openFleetOverview();
+    host.querySelectorAll('[data-fleet-co]').forEach((btn) => {
+      btn.addEventListener('click', () => openCompany(btn.dataset.fleetCo));
+    });
+  }
+
+  function openFleetOverview() {
+    if (!dash) return;
+    const freeTotal = dash.free != null ? dash.free : (dash.present || 0);
+    const leftTotal = dash.left || 0;
+    const rows = (dash.companies || []).filter((c) => (c.free != null ? c.free : c.present) || c.left);
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>Free / Left · all companies</h2>
+          <p class="sub">${esc(freeTotal)} free · ${esc(leftTotal)} left · live from attendance.html + coordinator print</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="inv-detail-summary">
+        ${rows.map((c) => {
+          const free = c.free != null ? c.free : c.present;
+          const people = c.people || [];
+          const freePeople = people.filter((p) => p.status !== 'left');
+          const leftPeople = people.filter((p) => p.status === 'left');
+          return `
+          <div class="inv-detail-card">
+            <h3>${esc(c.company)}</h3>
+            <div class="inv-detail-nums">
+              <span><em>Free</em><b class="stay">${esc(free)}</b></span>
+              <span><em>Left</em><b class="gone">${esc(c.left || 0)}</b></span>
+            </div>
+            <p class="hint" style="margin:0 0 6px">Free</p>
+            <div class="table-wrap" style="max-height:18vh;margin-bottom:10px">
+              <table class="data vsnd-live-table">
+                <thead><tr><th>Name</th><th>Arrived</th><th>Stay</th></tr></thead>
+                <tbody>${freePeople.map((p) => `
+                  <tr><td><b>${esc(p.name)}</b></td><td>${esc(fmtWhen(p.arrivedAt))}</td><td class="stay">${esc(stayText(p))}</td></tr>
+                `).join('') || '<tr><td colspan="3">—</td></tr>'}</tbody>
+              </table>
+            </div>
+            <p class="hint" style="margin:0 0 6px">Left · VIN · time</p>
+            <div class="table-wrap" style="max-height:22vh">
+              <table class="data vsnd-live-table">
+                <thead><tr><th>Name</th><th>Left at</th><th>VIN(s)</th><th>City</th></tr></thead>
+                <tbody>${leftPeople.map((p) => `
+                  <tr>
+                    <td><b>${esc(p.name)}</b></td>
+                    <td class="gone">${esc(fmtWhen(p.leftAt))}</td>
+                    <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
+                    <td>${esc(p.city || '—')}</td>
+                  </tr>`).join('') || '<tr><td colspan="4">—</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+        }).join('') || '<p class="chart-empty">No attendance companies</p>'}
+      </div>`, { wide: true });
   }
 
   function openCompanyCities(name) {
@@ -1097,28 +1214,338 @@
 
     renderInventoryPanel();
 
-    const aging = a.aging || {};
-    const agingSeg = [
-      { count: (aging.onTrack && aging.onTrack.count) || 0, color: '#22c55e', label: (aging.onTrack && aging.onTrack.label) || 'On Track', pct: (aging.onTrack && aging.onTrack.pct) || 0 },
-      { count: (aging.dueToday && aging.dueToday.count) || 0, color: '#eab308', label: (aging.dueToday && aging.dueToday.label) || 'Due Today', pct: (aging.dueToday && aging.dueToday.pct) || 0 },
-      { count: (aging.late && aging.late.count) || 0, color: '#ef4444', label: (aging.late && aging.late.label) || 'Late', pct: (aging.late && aging.late.pct) || 0 },
-    ];
-    if ($('vsnd-aging-body')) {
-      $('vsnd-aging-body').innerHTML = `
-        ${donutSvg(agingSeg, String(a.vsndTotal || 0), 'VSND')}
-        ${legendList(agingSeg)}`;
-    }
+    renderEntryAccuracy(a.entryAccuracy);
 
-    if ($('vsnd-top5-body')) $('vsnd-top5-body').innerHTML = hBars(a.topStatus || [], '#1769a8');
+    if ($('vsnd-top5-body')) renderFleetFreeLeft();
     if ($('vsnd-aging-dist-body')) {
       const dist = a.agingDist || [];
       $('vsnd-aging-dist-body').innerHTML = `${donutSvg(dist, String(a.vsndTotal || 0), 'VSND')}${legendList(dist)}`;
     }
-    if ($('vsnd-emp-body')) $('vsnd-emp-body').innerHTML = hBars(a.byEmployee || [], '#1769a8');
-    if ($('vsnd-region-body')) {
-      const regions = a.byRegion || [];
-      $('vsnd-region-body').innerHTML = `${donutSvg(regions.map((r) => ({ ...r, label: r.name })), String(a.vsndTotal || 0), 'VSND')}${legendList(regions.map((r) => ({ ...r, label: r.name })))}`;
+    if ($('vsnd-emp-body')) renderDisplayCounter();
+    if ($('vsnd-region-body')) renderCarrierPanel();
+  }
+
+  function renderCarrierPanel() {
+    const host = $('vsnd-region-body');
+    if (!host) return;
+    if (!dash) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading…</p>';
+      return;
     }
+    const pivot = dash.carrierPivot || { rows: [], total: 0, cities: [] };
+    const rows = pivot.rows || [];
+    const total = pivot.total || 0;
+    const max = Math.max(1, ...rows.map((r) => r.total || 0));
+    host.innerHTML = `
+      <div class="inv-totals">
+        <div class="inv-total in"><span>VINs</span><strong>${esc(total)}</strong></div>
+        <div class="inv-total out"><span>Companies</span><strong>${esc(rows.length)}</strong></div>
+        <button type="button" class="btn inv-more" id="carrier-show-schedule">Display schedule</button>
+      </div>
+      <div class="vsnd-hbars fleet-bars">
+        ${rows.slice(0, 8).map((r) => `
+          <button type="button" class="vsnd-hbar fleet-row" data-carrier-co="${esc(r.company)}" title="${esc(r.company)} · ${r.total} VIN(s)">
+            <span class="vsnd-hbar-lbl">${esc(r.company)}</span>
+            <span class="vsnd-hbar-track"><i style="width:${((r.total || 0) / max) * 100}%;background:#1769a8"></i></span>
+            <b>${esc(r.total || 0)}</b>
+          </button>`).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator prints yet</p>'}
+      </div>`;
+    const btn = $('carrier-show-schedule');
+    if (btn) btn.onclick = () => openCarrierSchedule();
+    host.querySelectorAll('[data-carrier-co]').forEach((el) => {
+      el.addEventListener('click', () => openCarrierSchedule(el.dataset.carrierCo));
+    });
+  }
+
+  function openCarrierSchedule(focusCompany) {
+    if (!dash || !dash.carrierPivot) return;
+    const pivot = dash.carrierPivot;
+    const cities = pivot.cities || [];
+    const rows = focusCompany
+      ? (pivot.rows || []).filter((r) => r.company === focusCompany)
+      : (pivot.rows || []);
+    const cityTotals = pivot.cityTotals || {};
+    const { na } = window.DTX;
+
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>الناقل × المدينة · schedule</h2>
+          <p class="sub">${esc(pivot.total || 0)} VIN(s) from coordinator.html · click a number for VIN list</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap pivot-wrap">
+        <table class="data vsnd-live-table pivot-table" dir="rtl">
+          <thead>
+            <tr>
+              <th class="pivot-corner">الناقل</th>
+              ${cities.map((c) => `<th>${esc(c)}</th>`).join('')}
+              <th class="pivot-total">Grand Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r) => `
+              <tr>
+                <th class="pivot-row-lbl">${esc(r.company)}</th>
+                ${cities.map((city) => {
+                  const cell = r.cells && r.cells[city];
+                  const n = cell ? cell.count : 0;
+                  if (!n) return '<td class="pivot-empty"></td>';
+                  return `<td class="pivot-hit">
+                    <button type="button" class="pivot-num" data-co="${esc(r.company)}" data-city="${esc(city)}">${esc(n)}</button>
+                  </td>`;
+                }).join('')}
+                <td class="pivot-total">
+                  <button type="button" class="pivot-num" data-co="${esc(r.company)}" data-city="">${esc(r.total || 0)}</button>
+                </td>
+              </tr>`).join('') || `<tr><td colspan="${cities.length + 2}">No prints yet</td></tr>`}
+            <tr class="pivot-grand">
+              <th class="pivot-row-lbl">Grand Total</th>
+              ${cities.map((city) => {
+                const n = cityTotals[city] || 0;
+                if (!n) return '<td class="pivot-empty"></td>';
+                return `<td class="pivot-hit">
+                  <button type="button" class="pivot-num" data-co="" data-city="${esc(city)}">${esc(n)}</button>
+                </td>`;
+              }).join('')}
+              <td class="pivot-total"><b>${esc(pivot.total || 0)}</b></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="pivot-vin-host" class="pivot-vin-host" hidden></div>`, { wide: true });
+
+    const drawer = $('detail-drawer');
+    drawer.querySelectorAll('.pivot-num').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        showPivotVins(btn.dataset.co || '', btn.dataset.city || '', na);
+      });
+    });
+  }
+
+  function showPivotVins(company, city, na) {
+    const pivot = dash && dash.carrierPivot;
+    if (!pivot) return;
+    const host = $('pivot-vin-host');
+    if (!host) return;
+    const list = [];
+    (pivot.rows || []).forEach((r) => {
+      if (company && r.company !== company) return;
+      Object.keys(r.cells || {}).forEach((c) => {
+        if (city && c !== city) return;
+        (r.cells[c].vins || []).forEach((v) => list.push(v));
+      });
+    });
+    list.sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+    const title = [company || 'All الناقل', city || 'All cities'].filter(Boolean).join(' · ');
+    host.hidden = false;
+    host.innerHTML = `
+      <h3 style="margin:12px 0 8px;font-size:.9rem">${esc(title)} · ${list.length} VIN(s)</h3>
+      <div class="table-wrap" style="max-height:32vh">
+        <table class="data vsnd-live-table">
+          <thead>
+            <tr><th>#</th><th>VIN</th><th>الناقل</th><th>City</th><th>Product</th><th>Customer</th><th>Printed</th><th>By</th></tr>
+          </thead>
+          <tbody>${list.map((v, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td><b>${esc(v.vin)}</b></td>
+              <td>${esc(na(v.company))}</td>
+              <td>${esc(na(v.city))}</td>
+              <td>${esc(na(v.product))}</td>
+              <td>${esc(na(v.customer))}</td>
+              <td>${esc(fmtWhen(v.printedAt))}</td>
+              <td>${esc(na(v.printedBy))}</td>
+            </tr>`).join('') || '<tr><td colspan="8">No VINs</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+    host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderDisplayCounter() {
+    const host = $('vsnd-emp-body');
+    if (!host) return;
+    const inv = inventoryDash;
+    if (!inv) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No inventory data</p>';
+      return;
+    }
+    const display = inv.display || 0;
+    const delivery = inv.delivery || 0;
+    const max = Math.max(1, display, delivery);
+    host.innerHTML = `
+      <div class="inv-totals">
+        <div class="inv-total in"><span>Display</span><strong>${esc(display)}</strong></div>
+        <div class="inv-total out"><span>Delivery</span><strong>${esc(delivery)}</strong></div>
+        <button type="button" class="btn inv-more" id="display-more-details">More details</button>
+      </div>
+      <div class="vsnd-hbars">
+        <button type="button" class="vsnd-hbar fleet-row" data-disp-kind="display" title="Display cars">
+          <span class="vsnd-hbar-lbl">Display</span>
+          <span class="vsnd-hbar-track"><i style="width:${(display / max) * 100}%;background:#7c3aed"></i></span>
+          <b>${esc(display)}</b>
+        </button>
+        <button type="button" class="vsnd-hbar fleet-row" data-disp-kind="delivery" title="Delivery cars">
+          <span class="vsnd-hbar-lbl">Delivery</span>
+          <span class="vsnd-hbar-track"><i style="width:${(delivery / max) * 100}%;background:#059669"></i></span>
+          <b>${esc(delivery)}</b>
+        </button>
+      </div>
+      <div class="vsnd-mini-legend"><span><i style="background:#7c3aed"></i> Display</span><span><i style="background:#059669"></i> Delivery</span></div>`;
+    const more = $('display-more-details');
+    if (more) more.onclick = () => openDisplayDetail();
+    host.querySelectorAll('[data-disp-kind]').forEach((btn) => {
+      btn.addEventListener('click', () => openDisplayDetail(btn.dataset.dispKind));
+    });
+  }
+
+  function openDisplayDetail(kind) {
+    const inv = inventoryDash;
+    if (!inv) return;
+    const { na } = window.DTX;
+    const sections = [];
+    if (!kind || kind === 'display') {
+      sections.push({
+        title: 'Display',
+        count: inv.display || 0,
+        rows: inv.displayRows || [],
+        color: '#7c3aed',
+      });
+    }
+    if (!kind || kind === 'delivery') {
+      sections.push({
+        title: 'Delivery',
+        count: inv.delivery || 0,
+        rows: inv.deliveryRows || [],
+        color: '#059669',
+      });
+    }
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>${esc(kind === 'delivery' ? 'Delivery' : kind === 'display' ? 'Display' : 'Display / Delivery')}</h2>
+          <p class="sub">${esc(inv.display || 0)} display · ${esc(inv.delivery || 0)} delivery · labeled by Ruba in inventory</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="inv-detail-summary">
+        ${sections.map((s) => `
+          <div class="inv-detail-card">
+            <h3 style="color:${esc(s.color)}">${esc(s.title)} · ${esc(s.count)}</h3>
+            <div class="table-wrap vsnd-sheet-wrap" style="max-height:36vh">
+              <table class="data vsnd-live-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>VIN</th>
+                    <th>Product</th>
+                    <th>Customer</th>
+                    <th>Stock</th>
+                    <th>Proforma</th>
+                    <th>Claimed</th>
+                  </tr>
+                </thead>
+                <tbody>${(s.rows || []).map((r, i) => `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td><b>${esc(r.vin)}</b></td>
+                    <td>${esc(na(r.product))}</td>
+                    <td>${esc(na(r.customer))}</td>
+                    <td>${esc(na(r.stockOwner))}</td>
+                    <td>${esc(na(r.proformaDate))}</td>
+                    <td>${esc(fmtWhen(r.claimedAt))}</td>
+                  </tr>`).join('') || `<tr><td colspan="7">No ${esc(s.title.toLowerCase())} cars</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>`).join('')}
+      </div>`, { wide: true });
+  }
+
+  function accuracyColor(score) {
+    const n = Number(score) || 0;
+    if (n >= 90) return '#22c55e';
+    if (n >= 70) return '#eab308';
+    return '#ef4444';
+  }
+
+  function renderEntryAccuracy(data) {
+    const host = $('vsnd-aging-body');
+    if (!host) return;
+    if (!data || !Array.isArray(data.users)) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No accuracy data</p>';
+      return;
+    }
+    const avg = data.avg != null ? data.avg : 0;
+    host.innerHTML = `
+      <div class="acc-head">
+        <div class="acc-avg" title="Team average (users with VINs)">
+          <span>Avg</span><strong style="color:${accuracyColor(avg)}">${esc(avg)}</strong><em>/100</em>
+        </div>
+        <button type="button" class="btn inv-more" id="acc-more-details">More details</button>
+      </div>
+      <div class="vsnd-hbars acc-bars">
+        ${data.users.map((u) => `
+          <button type="button" class="vsnd-hbar acc-row" data-acc-user="${esc(u.id)}" title="${esc(u.name)} · ${u.missing || 0} missing · ${u.vins || 0} VIN(s)">
+            <span class="vsnd-hbar-lbl">${esc(u.name)}</span>
+            <span class="vsnd-hbar-track"><i style="width:${Math.max(0, Math.min(100, u.score || 0))}%;background:${esc(u.color || accuracyColor(u.score))}"></i></span>
+            <b>${esc(u.score || 0)}<small>/100</small></b>
+          </button>`).join('')}
+      </div>`;
+    const more = $('acc-more-details');
+    if (more) more.onclick = () => openEntryAccuracyDetail();
+    host.querySelectorAll('[data-acc-user]').forEach((btn) => {
+      btn.addEventListener('click', () => openEntryAccuracyDetail(btn.dataset.accUser));
+    });
+  }
+
+  function openEntryAccuracyDetail(userId) {
+    const data = slaDash && slaDash.calendar && slaDash.calendar.analytics
+      && slaDash.calendar.analytics.entryAccuracy;
+    if (!data) return;
+    const users = userId
+      ? (data.users || []).filter((u) => u.id === userId)
+      : (data.users || []);
+    const title = userId && users[0] ? users[0].name : 'Entry Accuracy';
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>${esc(title)}</h2>
+          <p class="sub">Avg ${esc(data.avg || 0)}/100 · ${esc(data.totalMissing || 0)} missing field(s) · month ${esc(data.month || '—')}</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="inv-detail-summary">
+        ${users.map((u) => `
+          <div class="inv-detail-card">
+            <h3>${esc(u.name)} · <span style="color:${esc(u.color || accuracyColor(u.score))}">${esc(u.score)}/100</span></h3>
+            <div class="inv-detail-nums">
+              <span><em>Filled</em><b>${esc(u.filled || 0)}</b></span>
+              <span><em>Missing</em><b>${esc(u.missing || 0)}</b></span>
+              <span><em>VINs</em><b>${esc(u.vins || 0)}</b></span>
+              <span><em>Audit clears</em><b>${esc((u.clears && u.clears.length) || 0)}</b></span>
+            </div>
+            <div class="table-wrap vsnd-sheet-wrap" style="max-height:32vh">
+              <table class="data vsnd-live-table">
+                <thead>
+                  <tr><th>#</th><th>VIN</th><th>Missing fields</th><th>Status</th></tr>
+                </thead>
+                <tbody>${(u.rows && u.rows.length
+                  ? u.rows.map((r, i) => `
+                      <tr>
+                        <td>${i + 1}</td>
+                        <td><b>${esc(r.vin)}</b></td>
+                        <td>${esc((r.gaps || []).map((g) => g.label || g.field).join(', '))}</td>
+                        <td>${esc(r.status || '—')}</td>
+                      </tr>`).join('')
+                  : '<tr><td colspan="4">No missing entries</td></tr>')}
+                </tbody>
+              </table>
+            </div>
+          </div>`).join('') || '<p class="chart-empty">No users</p>'}
+      </div>`, { wide: true });
   }
 
   function renderSchedule() {
@@ -1337,6 +1764,9 @@
       renderEmployees();
       renderSchedule();
       renderInventoryPanel();
+      renderFleetFreeLeft();
+      renderDisplayCounter();
+      renderCarrierPanel();
       renderPrints();
       if (kpiOpenId) loadEmployeeKpi().catch(() => {});
     } finally {

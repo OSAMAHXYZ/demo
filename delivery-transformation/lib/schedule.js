@@ -5,6 +5,8 @@
  * Day 1 is always that VIN's Proforma Date — never the calendar day of the month.
  */
 
+const { USERS } = require('./constants');
+
 const DEFAULT_SLA = Object.freeze([
   { id: 'psfu', label: 'PSFU', statuses: ['PSFU'], targetDay: 5, enabled: true },
   { id: 'claimed', label: 'CLAIMED', statuses: ['Claimed'], targetDay: 5, enabled: true },
@@ -12,6 +14,44 @@ const DEFAULT_SLA = Object.freeze([
   { id: 'center', label: 'CENTER ARRIVAL', statuses: ['جاهز للتسليم'], targetDay: 7, enabled: true },
   { id: 'delivered', label: 'DELIVERED', statuses: ['تم التسليم'], targetDay: 8, enabled: true },
 ]);
+
+/** Collector entry-accuracy board — fixed roster */
+const ENTRY_ACCURACY_IDS = Object.freeze([
+  'alfadel', 'albara', 'ruba', 'hanouf', 'ibrahim', 'abdullah', 'rasha',
+]);
+
+/** Live Sheet fields that count toward entry accuracy (empty = missing) */
+const ENTRY_CHECK_FIELDS = Object.freeze([
+  'opsStatus',
+  'guestSentDate',
+  'signatureReceivedDate',
+  'accountsSentDate',
+  'accountsApprovalDate',
+  'vin1502',
+  'trafficFile',
+  'trafficFeesOps',
+  'insuranceOps',
+  'registrationIssueDate',
+  'transferCity',
+  'carrier',
+  'guestCenter',
+]);
+
+const ENTRY_FIELD_LABELS = Object.freeze({
+  opsStatus: 'Status',
+  guestSentDate: 'Guest sent',
+  signatureReceivedDate: 'Signature received',
+  accountsSentDate: 'Accounts sent',
+  accountsApprovalDate: 'Accounts approval',
+  vin1502: 'VIN 1502',
+  trafficFile: 'Traffic file',
+  trafficFeesOps: 'Traffic fees',
+  insuranceOps: 'Insurance',
+  registrationIssueDate: 'Registration date',
+  transferCity: 'Transfer city',
+  carrier: 'Carrier',
+  guestCenter: 'Guest Exp',
+});
 
 function dayKey(s) {
   const m = String(s || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -283,6 +323,19 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
   });
 
   const focus = bySla[0] || { total: 0, green: 0, red: 0 };
+  const calendar = computeVsndCalendar({
+    vehicles: vehicles || [],
+    today,
+    month,
+    slaItems: items,
+  });
+  if (calendar && calendar.analytics) {
+    calendar.analytics.entryAccuracy = computeEntryAccuracy({
+      vehicles: vehicles || [],
+      audit: audit || [],
+      month,
+    });
+  }
   return {
     today,
     month,
@@ -299,12 +352,7 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
     },
     sla: bySla,
     focusId: focus.id || '',
-    calendar: computeVsndCalendar({
-      vehicles: vehicles || [],
-      today,
-      month,
-      slaItems: items,
-    }),
+    calendar,
   };
 }
 
@@ -456,6 +504,155 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
 function pct(n, total) {
   if (!total) return 0;
   return Math.round((n / total) * 1000) / 10;
+}
+
+function parseAuditFieldChange(value) {
+  const s = String(value || '');
+  const m = s.match(/^([^:]+):\s*([\s\S]*)$/);
+  if (!m) return null;
+  return { field: m[1].trim(), value: m[2].trim() };
+}
+
+function findAccuracyUser(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  return USERS.find((u) => ENTRY_ACCURACY_IDS.includes(u.id) && u.name.toLowerCase() === key) || null;
+}
+
+/**
+ * Entry accuracy /100 per named user.
+ * Uses assigned + audit-touched VINs for the month; empty Live Sheet fields = missing.
+ * Audit clears to (empty) also count as missing signals when the field is still blank.
+ */
+function computeEntryAccuracy({ vehicles, audit, month }) {
+  const roster = ENTRY_ACCURACY_IDS
+    .map((id) => USERS.find((u) => u.id === id))
+    .filter(Boolean);
+
+  const vinMap = new Map();
+  (vehicles || []).forEach((v) => {
+    if (!v || !v.vin) return;
+    vinMap.set(String(v.vin).toUpperCase(), v);
+  });
+
+  const touched = new Map(roster.map((u) => [u.id, new Set()]));
+  const clearHits = new Map(roster.map((u) => [u.id, []]));
+
+  (vehicles || []).forEach((v) => {
+    const p = dayKey(v.raw && v.raw.proformaDate);
+    if (month && (!p || p.slice(0, 7) !== month)) return;
+    const vin = String(v.vin || '').toUpperCase();
+    if (!vin) return;
+    const empId = String((v.ops && v.ops.assignedEmployeeId) || '').toLowerCase();
+    if (touched.has(empId)) touched.get(empId).add(vin);
+    const updater = findAccuracyUser(v.ops && v.ops.updatedBy);
+    if (updater) touched.get(updater.id).add(vin);
+  });
+
+  (audit || []).forEach((a) => {
+    if (!a || a.action !== 'update') return;
+    const u = findAccuracyUser(a.user);
+    if (!u) return;
+    const atMonth = String(a.at || '').slice(0, 7);
+    const vin = String(a.vin || '').toUpperCase();
+    const v = vin ? vinMap.get(vin) : null;
+    const p = v ? dayKey(v.raw && v.raw.proformaDate) : '';
+    const inMonthVin = !!(month && p && p.slice(0, 7) === month);
+    const inMonthAudit = !!(month && atMonth === month);
+    if (month && !inMonthVin && !inMonthAudit) return;
+    if (vin) touched.get(u.id).add(vin);
+
+    const parsed = parseAuditFieldChange(a.newValue);
+    if (
+      parsed
+      && ENTRY_CHECK_FIELDS.includes(parsed.field)
+      && (!parsed.value || parsed.value === '(empty)')
+    ) {
+      clearHits.get(u.id).push({
+        vin,
+        field: parsed.field,
+        label: ENTRY_FIELD_LABELS[parsed.field] || parsed.field,
+        at: a.at || '',
+      });
+    }
+  });
+
+  const users = roster.map((u) => {
+    let filled = 0;
+    let missing = 0;
+    const gaps = [];
+    const vinList = [];
+
+    touched.get(u.id).forEach((vin) => {
+      const v = vinMap.get(vin);
+      if (!v) return;
+      const p = dayKey(v.raw && v.raw.proformaDate);
+      if (month && (!p || p.slice(0, 7) !== month)) return;
+      const rowGaps = [];
+      const status = String((v.ops && v.ops.opsStatus) || '').trim();
+      if (!status) {
+        missing += 1;
+        rowGaps.push({ field: 'opsStatus', label: ENTRY_FIELD_LABELS.opsStatus });
+      } else {
+        filled += 1;
+        ENTRY_CHECK_FIELDS.forEach((field) => {
+          if (field === 'opsStatus') return;
+          const val = String((v.ops && v.ops[field]) || '').trim();
+          if (val) {
+            filled += 1;
+          } else {
+            missing += 1;
+            rowGaps.push({
+              field,
+              label: ENTRY_FIELD_LABELS[field] || field,
+            });
+          }
+        });
+      }
+      vinList.push({
+        vin,
+        missing: rowGaps.length,
+        gaps: rowGaps,
+        status,
+      });
+      rowGaps.forEach((g) => gaps.push({ vin, ...g }));
+    });
+
+    // Audit clears that emptied a field still blank — already in gaps; track count for UI
+    const clears = (clearHits.get(u.id) || []).filter((c) => {
+      const v = vinMap.get(c.vin);
+      if (!v) return true;
+      return !String((v.ops && v.ops[c.field]) || '').trim();
+    });
+
+    const slots = filled + missing;
+    const score = slots ? Math.round((filled / slots) * 100) : 100;
+
+    return {
+      id: u.id,
+      name: u.name,
+      score,
+      filled,
+      missing,
+      vins: vinList.length,
+      rows: vinList.filter((r) => r.missing > 0).slice(0, 60),
+      gaps: gaps.slice(0, 80),
+      clears: clears.slice(0, 40),
+      color: score >= 90 ? '#22c55e' : score >= 70 ? '#eab308' : '#ef4444',
+    };
+  });
+
+  const withWork = users.filter((u) => u.vins > 0);
+  const avg = withWork.length
+    ? Math.round(withWork.reduce((s, u) => s + u.score, 0) / withWork.length)
+    : 100;
+
+  return {
+    month: month || '',
+    avg,
+    totalMissing: users.reduce((s, u) => s + u.missing, 0),
+    users,
+  };
 }
 
 function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, rows }) {
@@ -623,6 +820,8 @@ function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, r
 module.exports = {
   DEFAULT_SLA,
   VSND_ROWS,
+  ENTRY_ACCURACY_IDS,
+  ENTRY_CHECK_FIELDS,
   dayKey,
   addDays,
   diffDays,
@@ -631,6 +830,7 @@ module.exports = {
   recordStatusEnter,
   backfillFromAudit,
   computeVinSla,
+  computeEntryAccuracy,
   computeDashboard,
   computeVsndCalendar,
 };

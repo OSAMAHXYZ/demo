@@ -596,7 +596,9 @@ function createDeliveryTransformationRouter(opts = {}) {
     const vins = selectedInventoryVins(req);
     if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
     const now = new Date().toISOString();
-    const result = applyInventoryClaim(vins, req.dtUser, now);
+    const label = String((req.body && req.body.label) || '').trim();
+    const result = applyInventoryClaim(vins, req.dtUser, now, { label });
+    if (result.error) return res.status(400).json({ error: result.error });
     store.save();
     return res.json({ ok: true, ...result, ...buildInventoryPayload(req.dtUser) });
   });
@@ -607,6 +609,18 @@ function createDeliveryTransformationRouter(opts = {}) {
     if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
     const now = new Date().toISOString();
     const result = applyInventoryClaim(vins, req.dtUser, now, { release: true });
+    store.save();
+    return res.json({ ok: true, ...result, ...buildInventoryPayload(req.dtUser) });
+  });
+
+  router.post('/inventory/label', auth, (req, res) => {
+    if (!canInventory(req.dtUser)) return res.status(403).json({ error: 'Forbidden' });
+    const vins = selectedInventoryVins(req);
+    if (!vins.length) return res.status(400).json({ error: 'Select at least one VIN' });
+    const now = new Date().toISOString();
+    const label = String((req.body && req.body.label) || '').trim();
+    const result = applyInventoryLabel(vins, req.dtUser, now, label);
+    if (result.error) return res.status(400).json({ error: result.error });
     store.save();
     return res.json({ ok: true, ...result, ...buildInventoryPayload(req.dtUser) });
   });
@@ -745,11 +759,18 @@ function createDeliveryTransformationRouter(opts = {}) {
     };
   }
 
-  function setInventoryOwner(rec, user, now) {
+  function setInventoryOwner(rec, user, now, { label } = {}) {
     const src = rec.ops || rec;
     src.inventoryOwnerId = user ? (user.userId || user.id) : '';
     src.inventoryOwnerName = user ? user.name : '';
     src.inventoryClaimedAt = user ? now : '';
+    if (!user) {
+      src.inventoryLabel = '';
+    } else if (label === 'display' || label === 'delivery') {
+      src.inventoryLabel = label;
+    } else if (!src.inventoryLabel) {
+      src.inventoryLabel = 'delivery';
+    }
     if (rec.ops) {
       rec.ops.updatedAt = now;
       rec.ops.updatedBy = user ? user.name : rec.ops.updatedBy;
@@ -762,9 +783,16 @@ function createDeliveryTransformationRouter(opts = {}) {
     ops.inventoryOwnerId = p.inventoryOwnerId;
     ops.inventoryOwnerName = p.inventoryOwnerName || '';
     ops.inventoryClaimedAt = p.inventoryClaimedAt || '';
+    ops.inventoryLabel = p.inventoryLabel || '';
   }
 
-  function inventoryRow(vin, raw, owner, source, employee) {
+  function inventoryLabelOf(rec) {
+    const src = rec.ops || rec;
+    const label = String(src.inventoryLabel || '').trim().toLowerCase();
+    return label === 'display' || label === 'delivery' ? label : '';
+  }
+
+  function inventoryRow(vin, raw, owner, source, employee, label) {
     return {
       vin,
       product: String((raw && raw.product) || '').trim(),
@@ -778,6 +806,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       stockOwnerId: owner.id,
       stockOwner: owner.name,
       claimedAt: owner.at,
+      label: label || '',
     };
   }
 
@@ -785,7 +814,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const byVin = new Map();
     Object.values(pendingMap()).forEach((p) => {
       if (!p || !p.vin) return;
-      byVin.set(p.vin, inventoryRow(p.vin, p.raw, inventoryOwnerOf(p), 'raw', ''));
+      byVin.set(p.vin, inventoryRow(p.vin, p.raw, inventoryOwnerOf(p), 'raw', '', inventoryLabelOf(p)));
     });
     store.allVehicles().forEach((v) => {
       if (isCoordinatorPrinted(v)) return;
@@ -795,6 +824,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         inventoryOwnerOf(v),
         'live',
         (v.ops && v.ops.assignedEmployeeName) || '',
+        inventoryLabelOf(v),
       ));
     });
     const pool = [...byVin.values()].sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
@@ -822,11 +852,15 @@ function createDeliveryTransformationRouter(opts = {}) {
         stockIn: stock.length,
         stockOut: releasedByUser[u.name] || 0,
         claims: claimedByUser[u.name] || 0,
+        display: stock.filter((r) => r.label === 'display').length,
+        delivery: stock.filter((r) => r.label === 'delivery').length,
         stock,
       };
     });
     const stockIn = users.reduce((s, u) => s + u.stockIn, 0);
     const stockOut = users.reduce((s, u) => s + u.stockOut, 0);
+    const displayRows = pool.filter((r) => r.label === 'display');
+    const deliveryRows = pool.filter((r) => r.label === 'delivery');
 
     return {
       at: new Date().toISOString(),
@@ -835,6 +869,10 @@ function createDeliveryTransformationRouter(opts = {}) {
       mine: pool.filter((r) => r.stockOwnerId === me).length,
       stockIn,
       stockOut,
+      display: displayRows.length,
+      delivery: deliveryRows.length,
+      displayRows,
+      deliveryRows,
       pool,
       stock: pool.filter((r) => r.stockOwnerId === me),
       users,
@@ -848,10 +886,22 @@ function createDeliveryTransformationRouter(opts = {}) {
     return [...new Set(raw.map(normVin).filter(Boolean))];
   }
 
-  function applyInventoryClaim(vins, user, now, { release = false } = {}) {
+  function normalizeInventoryLabel(value, user) {
+    const label = String(value || '').trim().toLowerCase();
+    if (label === 'display' || label === 'delivery') return label;
+    // Ruba must choose; others default to delivery
+    if (user && (user.userId === 'ruba' || user.id === 'ruba')) return '';
+    return 'delivery';
+  }
+
+  function applyInventoryClaim(vins, user, now, { release = false, label = '' } = {}) {
     const claimed = [];
     const missing = [];
     const blocked = [];
+    const tag = release ? '' : normalizeInventoryLabel(label, user);
+    if (!release && (user.userId === 'ruba' || user.id === 'ruba') && !tag) {
+      return { claimed, missing, blocked, error: 'Choose Display or Delivery' };
+    }
     vins.forEach((vin) => {
       const v = store.getVehicle(vin);
       if (v) {
@@ -864,15 +914,16 @@ function createDeliveryTransformationRouter(opts = {}) {
           blocked.push(vin);
           return;
         }
-        setInventoryOwner(v, release ? null : user, now);
+        const prevLabel = inventoryLabelOf(v);
+        setInventoryOwner(v, release ? null : user, now, { label: tag });
         store.upsertVehicle(vin, v);
         claimed.push(vin);
         store.pushAudit({
           vin,
           user: user.name,
           action: release ? 'inventory_release' : 'inventory_claim',
-          oldValue: release ? user.name : '',
-          newValue: release ? '' : user.name,
+          oldValue: release ? `${user.name}${prevLabel ? ` · ${prevLabel}` : ''}` : '',
+          newValue: release ? '' : `${user.name}${tag ? ` · ${tag}` : ''}`,
         });
         return;
       }
@@ -885,17 +936,79 @@ function createDeliveryTransformationRouter(opts = {}) {
         blocked.push(vin);
         return;
       }
-      setInventoryOwner(p, release ? null : user, now);
+      const prevLabel = inventoryLabelOf(p);
+      setInventoryOwner(p, release ? null : user, now, { label: tag });
       claimed.push(vin);
       store.pushAudit({
         vin,
         user: user.name,
         action: release ? 'inventory_release' : 'inventory_claim',
-        oldValue: release ? user.name : 'raw',
-        newValue: release ? '' : user.name,
+        oldValue: release ? `${user.name}${prevLabel ? ` · ${prevLabel}` : ''}` : 'raw',
+        newValue: release ? '' : `${user.name}${tag ? ` · ${tag}` : ''}`,
       });
     });
     return { claimed, missing, blocked };
+  }
+
+  function applyInventoryLabel(vins, user, now, label) {
+    const tag = String(label || '').trim().toLowerCase();
+    if (tag !== 'display' && tag !== 'delivery') {
+      return { updated: [], missing: [], blocked: [], error: 'Label must be display or delivery' };
+    }
+    if (user.userId !== 'ruba' && user.id !== 'ruba') {
+      return { updated: [], missing: [], blocked: [], error: 'Only Ruba can set Display / Delivery' };
+    }
+    const updated = [];
+    const missing = [];
+    const blocked = [];
+    vins.forEach((vin) => {
+      const v = store.getVehicle(vin);
+      if (v) {
+        if (isCoordinatorPrinted(v)) {
+          blocked.push(vin);
+          return;
+        }
+        if (!v.ops) v.ops = emptyOps();
+        if (v.ops.inventoryOwnerId !== user.userId) {
+          blocked.push(vin);
+          return;
+        }
+        const old = inventoryLabelOf(v) || '(none)';
+        v.ops.inventoryLabel = tag;
+        v.ops.updatedAt = now;
+        v.ops.updatedBy = user.name;
+        store.upsertVehicle(vin, v);
+        updated.push(vin);
+        store.pushAudit({
+          vin,
+          user: user.name,
+          action: 'inventory_label',
+          oldValue: old,
+          newValue: tag,
+        });
+        return;
+      }
+      const p = pendingMap()[vin];
+      if (!p) {
+        missing.push(vin);
+        return;
+      }
+      if (p.inventoryOwnerId !== user.userId) {
+        blocked.push(vin);
+        return;
+      }
+      const old = inventoryLabelOf(p) || '(none)';
+      p.inventoryLabel = tag;
+      updated.push(vin);
+      store.pushAudit({
+        vin,
+        user: user.name,
+        action: 'inventory_label',
+        oldValue: old,
+        newValue: tag,
+      });
+    });
+    return { updated, missing, blocked };
   }
 
   /** meta.vacations: { employeeId: { until: 'YYYY-MM-DD' | '', by, at } } — empty until = until turned off. */
@@ -1304,16 +1417,64 @@ function createDeliveryTransformationRouter(opts = {}) {
       };
     }).filter((c) => c.total > 0);
 
+    // الناقل × مدينة schedule from coordinator.html delivery-note prints
+    const pivotMap = new Map(); // company -> city -> vins[]
+    const citySet = new Set();
+    printed.forEach((v) => {
+      const company = String((v.ops && (v.ops.coordinatorPrintCompany || v.ops.carrier)) || '').trim() || '(blank)';
+      const city = String((v.ops && (v.ops.coordinatorPrintCity || v.ops.transferCity)) || '').trim() || '(blank)';
+      citySet.add(city);
+      if (!pivotMap.has(company)) pivotMap.set(company, new Map());
+      const cities = pivotMap.get(company);
+      if (!cities.has(city)) cities.set(city, []);
+      cities.get(city).push({
+        vin: v.vin,
+        product: (v.raw && v.raw.product) || '',
+        customer: (v.raw && v.raw.userName) || '',
+        city,
+        company,
+        printedAt: (v.ops && v.ops.coordinatorPrintedAt) || '',
+        printedBy: (v.ops && v.ops.coordinatorPrintedBy) || '',
+        invoice: (v.ops && v.ops.coordinatorPrintInvoice) || '',
+      });
+    });
+    const pivotCities = [...citySet].sort((a, b) => a.localeCompare(b, 'ar'));
+    const carrierPivot = {
+      total: printed.length,
+      cities: pivotCities,
+      rows: [...pivotMap.entries()]
+        .map(([company, cities]) => {
+          const cells = {};
+          let total = 0;
+          pivotCities.forEach((city) => {
+            const vins = cities.get(city) || [];
+            if (vins.length) {
+              cells[city] = { count: vins.length, vins };
+              total += vins.length;
+            }
+          });
+          return { company, total, cells };
+        })
+        .sort((a, b) => (b.total - a.total) || a.company.localeCompare(b.company, 'ar')),
+    };
+    const cityTotals = {};
+    pivotCities.forEach((city) => {
+      cityTotals[city] = carrierPivot.rows.reduce((s, r) => s + ((r.cells[city] && r.cells[city].count) || 0), 0);
+    });
+    carrierPivot.cityTotals = cityTotals;
+
     return res.json({
       at: new Date().toISOString(),
       present: companies.reduce((n, c) => n + c.present, 0),
+      free: companies.reduce((n, c) => n + c.present, 0),
       left: companies.reduce((n, c) => n + c.left, 0),
       notes: printed.length + warehouse.length,
       memos: printed.length,
       warehouse: warehouse.length,
-      companies,
+      companies: companies.map((c) => ({ ...c, free: c.present })),
       coordinators,
       companyCities,
+      carrierPivot,
       prints: (store.data.prints || []).slice(0, 300),
       carriers: allCarriers(),
       cities: allCities(),

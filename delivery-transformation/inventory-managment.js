@@ -16,6 +16,7 @@
     selected: new Set(),
     poll: null,
     user: null,
+    label: 'delivery',
   };
 
   function showApp(on) {
@@ -25,6 +26,10 @@
 
   function canUse(user) {
     return !!(user && (user.canInventory || ALLOWED.some((u) => u.id === user.id)));
+  }
+
+  function isRuba() {
+    return !!(state.user && state.user.id === 'ruba');
   }
 
   function fillLogin() {
@@ -78,9 +83,24 @@
   function enter(user) {
     state.user = user;
     $('side-name').textContent = user.name;
+    const labelBar = $('label-bar');
+    if (labelBar) labelBar.classList.toggle('hidden', user.id !== 'ruba');
+    const claimBtn = $('claim-btn');
+    if (claimBtn) {
+      claimBtn.textContent = user.id === 'ruba'
+        ? 'Add selected as Display / Delivery'
+        : 'Add selected to my stock';
+    }
+    syncLabelPills();
     showApp(true);
     load().catch((e) => { $('login-error').textContent = e.message; });
     startPoll();
+  }
+
+  function syncLabelPills() {
+    $$('#label-pills button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.label === state.label);
+    });
   }
 
   function startPoll() {
@@ -96,10 +116,17 @@
     state.pool = data.pool || [];
     const keep = new Set(state.pool.map((r) => r.vin));
     state.selected.forEach((vin) => { if (!keep.has(vin)) state.selected.delete(vin); });
+    const extras = isRuba()
+      ? [
+        kpi('Display', data.display || 0),
+        kpi('Delivery', data.delivery || 0),
+      ]
+      : [];
     $('kpi-row').innerHTML = [
       kpi('Open VINs', data.total || 0),
       kpi('Unclaimed', data.unclaimed || 0),
       kpi('My stock', data.mine || 0),
+      ...extras,
       ...(data.users || []).map((u) => kpi(u.name, u.stockIn != null ? u.stockIn : (Array.isArray(u.stock) ? u.stock.length : (u.stock || 0)))),
     ].join('');
     render();
@@ -120,23 +147,44 @@
     return state.pool.filter((r) => {
       if (state.view === 'mine' && r.stockOwnerId !== me) return false;
       if (state.view === 'open' && r.stockOwnerId) return false;
+      if (state.view === 'display' && r.label !== 'display') return false;
+      if (state.view === 'delivery' && r.label !== 'delivery') return false;
       if (!q) return true;
-      const hay = [r.vin, r.product, r.salesType, r.customer, r.employee, r.stockOwner, r.source]
+      const hay = [r.vin, r.product, r.salesType, r.customer, r.employee, r.stockOwner, r.source, r.label]
         .join(' ').toLowerCase();
       return hay.includes(q);
     });
   }
 
+  function labelBadge(label) {
+    if (label === 'display') return '<span class="badge display">Display</span>';
+    if (label === 'delivery') return '<span class="badge delivery">Delivery</span>';
+    return '<span class="badge">—</span>';
+  }
+
   function render() {
     const rows = filtered();
     const me = state.user && state.user.id;
+    const ruba = isRuba();
     $('empty').classList.toggle('hidden', rows.length > 0);
     $('rows').innerHTML = rows.map((r) => {
       const mine = r.stockOwnerId === me;
       const checked = state.selected.has(r.vin) ? ' checked' : '';
-      const action = mine
-        ? `<button type="button" class="row-btn release" data-act="release" data-vin="${esc(r.vin)}">Release</button>`
-        : `<button type="button" class="row-btn claim" data-act="claim" data-vin="${esc(r.vin)}">To my stock</button>`;
+      let action = '';
+      if (mine) {
+        action = `<button type="button" class="row-btn release" data-act="release" data-vin="${esc(r.vin)}">Release</button>`;
+        if (ruba) {
+          action += `
+            <button type="button" class="row-btn label-display${r.label === 'display' ? ' is-on' : ''}" data-act="label" data-label="display" data-vin="${esc(r.vin)}">Display</button>
+            <button type="button" class="row-btn label-delivery${r.label === 'delivery' ? ' is-on' : ''}" data-act="label" data-label="delivery" data-vin="${esc(r.vin)}">Delivery</button>`;
+        }
+      } else if (ruba) {
+        action = `
+          <button type="button" class="row-btn claim" data-act="claim" data-label="display" data-vin="${esc(r.vin)}">Display</button>
+          <button type="button" class="row-btn claim" data-act="claim" data-label="delivery" data-vin="${esc(r.vin)}">Delivery</button>`;
+      } else {
+        action = `<button type="button" class="row-btn claim" data-act="claim" data-vin="${esc(r.vin)}">To my stock</button>`;
+      }
       return `<tr class="${mine ? 'mine' : ''}">
         <td class="chk"><input type="checkbox" data-vin="${esc(r.vin)}"${checked} /></td>
         <td><strong>${esc(r.vin)}</strong></td>
@@ -147,7 +195,8 @@
         <td>${esc(r.employee || '—')}</td>
         <td><span class="badge ${r.source === 'raw' ? 'warn' : 'info'}">${r.source === 'raw' ? 'Sales Raw' : 'Live Sheet'}</span></td>
         <td>${r.stockOwner ? `<span class="badge ok">${esc(r.stockOwner)}</span>` : '<span class="badge">Open</span>'}</td>
-        <td>${action}</td>
+        <td>${labelBadge(r.label)}</td>
+        <td class="acts">${action}</td>
       </tr>`;
     }).join('');
     syncCheckAll();
@@ -162,15 +211,26 @@
     return [...state.selected];
   }
 
-  async function claim(vins) {
+  async function claim(vins, label) {
     if (!vins.length) return;
-    const data = await api('/inventory/claim', { method: 'POST', json: { vins } });
+    const body = { vins };
+    if (isRuba()) {
+      body.label = label || state.label;
+      if (!body.label) throw new Error('Choose Display or Delivery');
+    }
+    const data = await api('/inventory/claim', { method: 'POST', json: body });
     applyPayload(data);
   }
 
   async function release(vins) {
     if (!vins.length) return;
     const data = await api('/inventory/release', { method: 'POST', json: { vins } });
+    applyPayload(data);
+  }
+
+  async function setLabel(vins, label) {
+    if (!vins.length) return;
+    const data = await api('/inventory/label', { method: 'POST', json: { vins, label } });
     applyPayload(data);
   }
 
@@ -190,6 +250,14 @@
       $$('#view-tabs .tab').forEach((b) => b.classList.toggle('active', b === btn));
       render();
     });
+    if ($('label-pills')) {
+      $('label-pills').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-label]');
+        if (!btn) return;
+        state.label = btn.dataset.label;
+        syncLabelPills();
+      });
+    }
     $('claim-btn').addEventListener('click', () => {
       claim(selectedVins()).catch((e) => alert(e.message));
     });
@@ -215,7 +283,10 @@
       const btn = e.target.closest('button[data-act]');
       if (!btn) return;
       const vin = btn.dataset.vin;
-      const run = btn.dataset.act === 'release' ? release([vin]) : claim([vin]);
+      let run;
+      if (btn.dataset.act === 'release') run = release([vin]);
+      else if (btn.dataset.act === 'label') run = setLabel([vin], btn.dataset.label);
+      else run = claim([vin], btn.dataset.label);
       run.catch((err) => alert(err.message));
     });
   }

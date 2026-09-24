@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924inv1" />
+  <link rel="stylesheet" href="admin.css?v=20260924pivot1" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -90,8 +90,8 @@
           <h3>Stock In / Out <span class="hint" style="font-weight:600">· inventory by user</span></h3>
           <div class="vsnd-panel-body" id="vsnd-last7-body"></div>
         </div>
-        <div class="vsnd-panel" id="vsnd-aging">
-          <h3>Aging Status (VSND)</h3>
+        <div class="vsnd-panel" id="vsnd-accuracy">
+          <h3>Entry Accuracy <span class="hint" style="font-weight:600">· /100 · audit + missing fields</span></h3>
           <div class="vsnd-panel-body" id="vsnd-aging-body"></div>
         </div>
       </div>
@@ -114,20 +114,20 @@
       </div>
 
       <div class="vsnd-bottom-row">
-        <div class="vsnd-panel">
-          <h3>Top 5 Status</h3>
+        <div class="vsnd-panel" id="vsnd-fleet">
+          <h3>Free / Left <span class="hint" style="font-weight:600">· live attendance</span></h3>
           <div class="vsnd-panel-body" id="vsnd-top5-body"></div>
         </div>
         <div class="vsnd-panel">
           <h3>Aging Distribution</h3>
           <div class="vsnd-panel-body" id="vsnd-aging-dist-body"></div>
         </div>
-        <div class="vsnd-panel">
-          <h3>VSND by Employee</h3>
+        <div class="vsnd-panel" id="vsnd-display">
+          <h3>Display Counter <span class="hint" style="font-weight:600">· Ruba inventory</span></h3>
           <div class="vsnd-panel-body" id="vsnd-emp-body"></div>
         </div>
-        <div class="vsnd-panel">
-          <h3>VSND by Region</h3>
+        <div class="vsnd-panel" id="vsnd-carrier">
+          <h3>الناقل <span class="hint" style="font-weight:600">· coordinator prints</span></h3>
           <div class="vsnd-panel-body" id="vsnd-region-body"></div>
         </div>
       </div>
@@ -355,6 +355,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924inv1"></script>
+  <script src="admin.js?v=20260924pivot1"></script>
 </body>
 </html>

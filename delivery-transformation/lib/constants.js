@@ -118,6 +118,7 @@ function emptyOps() {
     inventoryOwnerId: '',
     inventoryOwnerName: '',
     inventoryClaimedAt: '',
+    inventoryLabel: '',
   };
 }
 

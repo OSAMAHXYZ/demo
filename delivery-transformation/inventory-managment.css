@@ -220,7 +220,50 @@ table.data tr.mine:hover td { background: #d8f0e4; }
 .badge.ok { background: var(--green-soft); color: var(--green); }
 .badge.info { background: var(--blue-soft); color: var(--blue); }
 .badge.warn { background: #fff4e8; color: #b45309; }
+.badge.display { background: #ede9fe; color: #6d28d9; }
+.badge.delivery { background: #ecfdf5; color: #047857; }
 .empty { text-align: center; color: var(--muted); padding: 24px; }
+.label-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.label-bar.hidden { display: none; }
+.label-bar-lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.label-pills {
+  display: flex;
+  gap: 4px;
+  background: #eef2f6;
+  border-radius: 999px;
+  padding: 3px;
+}
+.label-pills button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: var(--muted);
+  cursor: pointer;
+}
+.label-pills button.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 1px 3px rgba(11, 42, 68, 0.12);
+}
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
 .row-btn {
   border: 1px solid var(--line);
   background: #fff;
@@ -232,3 +275,6 @@ table.data tr.mine:hover td { background: #d8f0e4; }
 }
 .row-btn.claim { color: var(--green); border-color: #b7ddc6; }
 .row-btn.release { color: var(--red); border-color: #f3c0c5; }
+.row-btn.label-display { color: #6d28d9; border-color: #ddd6fe; }
+.row-btn.label-delivery { color: #047857; border-color: #a7f3d0; }
+.row-btn.is-on { background: #0b2a44; color: #fff; border-color: #0b2a44; }

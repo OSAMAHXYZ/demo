@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="inventory-managment.css?v=20260924inv1" />
+  <link rel="stylesheet" href="inventory-managment.css?v=20260924disp1" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -55,7 +55,7 @@
 
     <div class="content">
       <div class="kpi-row" id="kpi-row"></div>
-      <p class="hint">Selecting a VIN puts it in your stock. It is <strong>not</strong> removed from this list until منسق التسليم generates a PDF in coordinator.html.</p>
+      <p class="hint">Selecting a VIN puts it in your stock. It is <strong>not</strong> removed from this list until منسق التسليم generates a PDF in coordinator.html. <strong>Ruba</strong> must label each car as <strong>Display</strong> or <strong>Delivery</strong>.</p>
 
       <div class="toolbar">
         <input type="search" id="search" placeholder="Search VIN / product / customer / stock owner…" />
@@ -63,6 +63,15 @@
           <button type="button" class="tab active" data-view="all">All VINs</button>
           <button type="button" class="tab" data-view="mine">My stock</button>
           <button type="button" class="tab" data-view="open">Unclaimed</button>
+          <button type="button" class="tab" data-view="display">Display</button>
+          <button type="button" class="tab" data-view="delivery">Delivery</button>
+        </div>
+        <div class="label-bar hidden" id="label-bar">
+          <span class="label-bar-lbl">Claim as</span>
+          <div class="label-pills" id="label-pills">
+            <button type="button" data-label="display">Display</button>
+            <button type="button" class="active" data-label="delivery">Delivery</button>
+          </div>
         </div>
         <button type="button" class="btn-primary" id="claim-btn">Add selected to my stock</button>
         <button type="button" class="btn" id="release-btn">Release selected</button>
@@ -81,6 +90,7 @@
               <th>Employee</th>
               <th>Source</th>
               <th>Stock</th>
+              <th>Label</th>
               <th></th>
             </tr>
           </thead>
@@ -92,6 +102,6 @@
   </div>
 
   <script src="shared.js?v=20260923d1"></script>
-  <script src="inventory-managment.js?v=20260924inv1"></script>
+  <script src="inventory-managment.js?v=20260924disp1"></script>
 </body>
 </html>
