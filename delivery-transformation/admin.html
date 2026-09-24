@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924c1" />
+  <link rel="stylesheet" href="admin.css?v=20260924c2" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -98,26 +98,26 @@
       <div class="card" style="margin-bottom:14px" id="emp-card">
         <div id="emp-list-view">
           <h2>4 · Delivery Employee Performance</h2>
-          <p class="hint">Live roster from employee.html · targets set by Hanouf · MTD = unique VINs from month start through today · Ach% = MTD ÷ target (not capped at 100%). Click an employee for Overall KPI.</p>
+          <p class="hint">Green = MTD VINs toward target · Red = still needed to hit target · Ach% = MTD ÷ target (can exceed 100%). Click an employee for Overall KPI.</p>
           <div class="toolbar">
             <label class="month-filter-label">Month <input type="month" id="emp-month" /></label>
             <span class="hint" id="emp-month-hint"></span>
           </div>
-          <div class="emp-perf-layout">
-            <div id="emp-chart" class="chart-list emp-perf-chart" aria-label="Delivery Employee Performance chart"></div>
-            <div class="table-wrap emp-perf-table-wrap">
-              <table class="data" id="emp-table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th class="num">Target</th>
-                    <th class="num">MTD Total</th>
-                    <th class="num">Achievement</th>
-                  </tr>
-                </thead>
-                <tbody id="emp-table-body"></tbody>
-              </table>
-            </div>
+          <div class="kpi-row" id="emp-kpis"></div>
+          <div id="emp-chart" class="chart-list" aria-label="Delivery Employee Performance chart"></div>
+          <div class="table-wrap" style="margin-top:12px">
+            <table class="data" id="emp-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th class="num">Target</th>
+                  <th class="num">MTD Total</th>
+                  <th class="num">To target</th>
+                  <th class="num">Achievement</th>
+                </tr>
+              </thead>
+              <tbody id="emp-table-body"></tbody>
+            </table>
           </div>
         </div>
         <div id="emp-kpi-view" hidden>
@@ -285,6 +285,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924c1"></script>
+  <script src="admin.js?v=20260924c2"></script>
 </body>
 </html>

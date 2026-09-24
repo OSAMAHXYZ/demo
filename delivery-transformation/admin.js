@@ -247,15 +247,21 @@
     return `${Math.round(Number(pct))}%`;
   }
 
-  function wireEmpClicks(root) {
-    if (!root) return;
-    root.querySelectorAll('[data-emp]').forEach((el) => {
-      el.addEventListener('click', () => openEmployeeKpi(el.dataset.emp));
-    });
+  function empGap(r) {
+    const mtd = Number(r.total) || 0;
+    const target = Number(r.target) || 0;
+    return {
+      mtd,
+      target,
+      remaining: Math.max(0, target - mtd),
+      span: Math.max(target, mtd, 0),
+      pct: r.achPct,
+    };
   }
 
   function renderEmployees() {
     const host = $('emp-chart');
+    const kpis = $('emp-kpis');
     const tbody = $('emp-table-body');
     if (!host) return;
     const monthInp = $('emp-month');
@@ -267,8 +273,9 @@
         : `${label || perf.month} · full month`;
     }
     if (!perf) {
+      if (kpis) kpis.innerHTML = '';
       host.innerHTML = '<p class="chart-empty">Could not load employee MTD / target data.</p>';
-      if (tbody) tbody.innerHTML = '<tr><td colspan="4">Could not load employee data.</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5">Could not load employee data.</td></tr>';
       return;
     }
     const rows = [...(perf.rows || [])].sort((a, b) => {
@@ -276,61 +283,68 @@
       const bp = b.achPct == null ? -1 : b.achPct;
       return bp - ap || String(a.name).localeCompare(String(b.name));
     });
+    const t = perf.totals || {};
+    const team = empGap(t);
+    if (kpis) {
+      kpis.innerHTML = `
+        <div class="kpi"><strong>${esc(team.target || 0)}</strong><span>Team target</span></div>
+        <div class="kpi"><strong class="stay">${esc(team.mtd || 0)}</strong><span>MTD total</span></div>
+        <div class="kpi"><strong class="sla-late-n">${esc(team.remaining || 0)}</strong><span>Still to target</span></div>
+        <div class="kpi"><strong>${esc(achText(t.achPct))}</strong><span>Team Ach%</span></div>`;
+    }
     if (!rows.length) {
       host.innerHTML = '<p class="chart-empty">No employees yet. Anyone on employee.html appears here automatically once targets are managed by Hanouf.</p>';
-      if (tbody) tbody.innerHTML = '<tr><td colspan="4">No employees yet.</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5">No employees yet.</td></tr>';
       return;
     }
-    const t = perf.totals || {};
-    const heading = monthLabel(perf.month) || perf.month || 'MTD';
-    const isMtd = perf.month === perf.currentMonth;
-    host.innerHTML = `
-      <div class="emp-perf-head">
-        <strong>Delivery Employee Performance</strong>
-        <span>${esc(heading)} ${isMtd ? 'MTD' : ''}</span>
-      </div>
-      ${rows.map((r) => {
-        const mtd = Number(r.total) || 0;
-        const target = Number(r.target) || 0;
-        const pct = r.achPct;
-        const fill = pct == null ? 0 : Math.min(Math.max(pct, 0), 100);
-        const cls = pct == null ? '' : pct >= 100 ? 'ok' : pct >= 70 ? 'warn' : 'bad';
-        return `<button type="button" class="emp-perf-row ${cls}" data-emp="${esc(r.id)}" title="Open Overall KPI for ${esc(r.name)}">
-          <span class="emp-perf-line">
-            <span class="name">${esc(r.name)}</span>
-            <span class="stat">Target ${target || '—'}</span>
-            <span class="stat">MTD ${mtd}</span>
-            <span class="pct">${achText(pct)}</span>
-          </span>
-          <span class="emp-perf-bar" aria-hidden="true"><i style="width:${fill}%"></i></span>
-        </button>`;
-      }).join('')}
-      <div class="emp-perf-row team">
-        <span class="emp-perf-line">
-          <span class="name">Team</span>
-          <span class="stat">Target ${t.target || '—'}</span>
-          <span class="stat">MTD ${t.total || 0}</span>
-          <span class="pct">${achText(t.achPct)}</span>
+    const max = Math.max(1, ...rows.map((r) => empGap(r).span), team.span || 0);
+    host.innerHTML = rows.map((r) => {
+      const g = empGap(r);
+      const greenW = (g.mtd / max) * 100;
+      const redW = (g.remaining / max) * 100;
+      const targetLabel = g.target ? `Target ${g.target}` : 'No target';
+      return `<button type="button" class="chart-row sla-row" data-emp="${esc(r.id)}" title="Open Overall KPI for ${esc(r.name)}">
+        <span class="name">${esc(r.name)}<small>${esc(targetLabel)}</small></span>
+        <span class="bar" title="${g.mtd} MTD · ${g.remaining} to target · ${achText(g.pct)}">
+          <i class="present" style="width:${greenW}%"></i>
+          <i class="sla-late" style="width:${redW}%"></i>
         </span>
-        <span class="emp-perf-bar" aria-hidden="true"><i style="width:${t.achPct == null ? 0 : Math.min(Math.max(t.achPct, 0), 100)}%"></i></span>
+        <span class="meta">${g.mtd} MTD · ${g.remaining} to target · ${achText(g.pct)}</span>
+      </button>`;
+    }).join('') + `
+      <div class="chart-row sla-row" style="cursor:default">
+        <span class="name">Team<small>Target ${team.target || '—'}</small></span>
+        <span class="bar" title="${team.mtd} MTD · ${team.remaining} to target">
+          <i class="present" style="width:${(team.mtd / max) * 100}%"></i>
+          <i class="sla-late" style="width:${(team.remaining / max) * 100}%"></i>
+        </span>
+        <span class="meta">${team.mtd} MTD · ${team.remaining} to target · ${achText(t.achPct)}</span>
       </div>`;
-    wireEmpClicks(host);
+    host.querySelectorAll('[data-emp]').forEach((b) => {
+      b.addEventListener('click', () => openEmployeeKpi(b.dataset.emp));
+    });
 
     if (tbody) {
-      tbody.innerHTML = rows.map((r) => `
-        <tr class="emp-table-row" data-emp="${esc(r.id)}" title="Open Overall KPI">
+      tbody.innerHTML = rows.map((r) => {
+        const g = empGap(r);
+        return `<tr class="emp-table-row" data-emp="${esc(r.id)}" title="Open Overall KPI">
           <td><b>${esc(r.name)}</b></td>
-          <td class="num">${Number(r.target) || '—'}</td>
-          <td class="num">${Number(r.total) || 0}</td>
-          <td class="num">${achText(r.achPct)}</td>
-        </tr>`).join('') + `
+          <td class="num">${g.target || '—'}</td>
+          <td class="num">${g.mtd}</td>
+          <td class="num">${g.remaining}</td>
+          <td class="num">${achText(g.pct)}</td>
+        </tr>`;
+      }).join('') + `
         <tr class="emp-table-team">
           <td><b>Team</b></td>
-          <td class="num">${t.target || '—'}</td>
-          <td class="num">${t.total || 0}</td>
+          <td class="num">${team.target || '—'}</td>
+          <td class="num">${team.mtd}</td>
+          <td class="num">${team.remaining}</td>
           <td class="num">${achText(t.achPct)}</td>
         </tr>`;
-      wireEmpClicks(tbody);
+      tbody.querySelectorAll('[data-emp]').forEach((el) => {
+        el.addEventListener('click', () => openEmployeeKpi(el.dataset.emp));
+      });
     }
   }
 
@@ -786,7 +800,7 @@
       kpis.innerHTML = `
         <div class="kpi"><strong>${esc(t.vins || 0)}</strong><span>VINs with Proforma</span></div>
         <div class="kpi"><strong class="stay">${esc(t.green || 0)}</strong><span>On plan (green)</span></div>
-        <div class="kpi"><strong class="gone">${esc(t.red || 0)}</strong><span>Late / overdue</span></div>
+        <div class="kpi"><strong class="sla-late-n">${esc(t.red || 0)}</strong><span>Late / overdue</span></div>
         <div class="kpi"><strong>${esc(slaDash.noProforma || 0)}</strong><span>No Proforma Date</span></div>`;
     }
     const slas = slaDash.sla || [];
