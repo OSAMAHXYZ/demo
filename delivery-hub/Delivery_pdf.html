@@ -1540,14 +1540,14 @@
             <section class="ws-section">
                 <div class="ws-section-head">
                     <h2>حسب الشركة — VINs جاهزة للطباعة</h2>
-                    <span class="hint">كل الشركات ظاهرة · ابحث بأي جزء من رقم الشاسيه · انقر للطباعة</span>
+                    <span class="hint">ابحث بأي شيء · شاسيه · شركة · منتج · مدينة · عميل · لوحة · انقر للطباعة</span>
                 </div>
                 <div class="fleet-search-wrap">
                     <input
                         type="search"
                         id="availableVinSearch"
                         class="fleet-search"
-                        placeholder="ابحث برقم الشاسيه أو جزء منه… مثال 7022 أو JTNB"
+                        placeholder="ابحث بأي شيء… VIN / شركة / منتج / مدينة / عميل / لوحة"
                         autocomplete="off"
                         spellcheck="false"
                         inputmode="search"
@@ -1950,7 +1950,7 @@
         <div class="vin-modal-panel">
             <div class="vin-modal-head">
                 <h3 id="vinModalTitle">اختر الشاسيه / VIN</h3>
-                <input type="search" id="vinSearch" placeholder="بحث بالشاسيه، المنتج، اللوحة…" autocomplete="off">
+                <input type="search" id="vinSearch" placeholder="بحث بأي شيء… شاسيه · منتج · لوحة · عميل · جوال · GT…" autocomplete="off">
                 <button type="button" class="vin-modal-close" id="vinModalClose" aria-label="إغلاق">×</button>
             </div>
             <div class="vin-modal-body">
@@ -3702,13 +3702,18 @@
             const product = item.product || item.model || '—';
             const gt = item.gt || item.location || '';
             const city = String(item.plannedBranch || item.deliveryCity || '').trim();
-            return `<div class="fleet-card${extraClass}" data-vin="${item.vin}" data-kind="${kind}" data-company="${String(company).replace(/"/g, '&quot;')}" data-product="${String(product).replace(/"/g, '&quot;')}" data-planned="${planned}" data-city="${String(city).replace(/"/g, '&quot;')}">
+            const customer = String(item.customerName || item.guestName || '').trim();
+            const plate = String(item.plate || '').trim();
+            const phone = String(item.phone || item.guestPhone || '').trim();
+            const attr = (v) => String(v || '').replace(/"/g, '&quot;');
+            return `<div class="fleet-card${extraClass}" data-vin="${attr(item.vin)}" data-kind="${kind}" data-company="${attr(company)}" data-product="${attr(product)}" data-planned="${attr(planned)}" data-city="${attr(city)}" data-customer="${attr(customer)}" data-plate="${attr(plate)}" data-phone="${attr(phone)}" data-gt="${attr(gt)}" data-location="${attr(item.location || '')}" data-search="${attr([item.vin, company, product, city, customer, plate, phone, gt, item.location, item.statusLabel, planned].filter(Boolean).join(' '))}">
                 <div class="fc-body">
                     <div class="fc-vin">${item.vin}</div>
                     <div class="fc-product">${product}</div>
                     <div class="fc-meta">${[
                         company ? company : '',
                         city ? ('→ ' + city) : '',
+                        customer ? customer : '',
                         gt ? ('GT: ' + gt) : '',
                     ].filter(Boolean).join(' · ') || '—'}</div>
                     <span class="fc-badge ${badgeClass}">${badgeText}</span>
@@ -3736,32 +3741,65 @@
             });
         }
 
+        function fleetSearchTokens(raw) {
+            return String(raw || '')
+                .trim()
+                .toUpperCase()
+                .split(/[\s,;/|]+/)
+                .map((t) => t.trim())
+                .filter((t) => t.length >= 1);
+        }
+
+        function fleetCardMatchesSearch(card, tokens) {
+            if (!tokens.length) return true;
+            const hay = String(card.dataset.search || [
+                card.dataset.vin,
+                card.dataset.company,
+                card.dataset.product,
+                card.dataset.city,
+                card.dataset.customer,
+                card.dataset.plate,
+                card.dataset.phone,
+                card.dataset.gt,
+                card.dataset.location,
+            ].filter(Boolean).join(' ')).toUpperCase();
+            const compact = hay.replace(/[^A-Z0-9\u0600-\u06FF]/gi, '');
+            return tokens.every((t) => {
+                const tok = String(t || '').toUpperCase();
+                if (!tok) return true;
+                if (hay.includes(tok)) return true;
+                const compactTok = tok.replace(/[^A-Z0-9\u0600-\u06FF]/gi, '');
+                return compactTok && compact.includes(compactTok);
+            });
+        }
+
         function filterAvailableFleetByVin() {
             const input = document.getElementById('availableVinSearch');
             const countEl = document.getElementById('availableVinSearchCount');
             const emptyEl = document.getElementById('availableVinSearchEmpty');
             const availEl = document.getElementById('availableFleet');
+            const displayEl = document.getElementById('displayFleet');
             if (!input || !availEl) return;
 
-            const q = String(input.value || '').trim().toUpperCase().replace(/\s+/g, '');
-            availEl.classList.toggle('is-searching', Boolean(q));
+            const tokens = fleetSearchTokens(input.value);
+            const q = tokens.length > 0;
+            availEl.classList.toggle('is-searching', q);
             const cards = Array.from(availEl.querySelectorAll('.fleet-card'));
-            if (!cards.length) {
-                if (countEl) countEl.textContent = '';
-                if (emptyEl) emptyEl.classList.add('hidden');
-                return;
-            }
+            const displayCards = displayEl
+                ? Array.from(displayEl.querySelectorAll('.fleet-card'))
+                : [];
 
             let visible = 0;
             cards.forEach((card) => {
-                const vin = String(card.dataset.vin || card.querySelector('.fc-vin')?.textContent || '')
-                    .toUpperCase()
-                    .replace(/\s+/g, '');
-                const company = String(card.dataset.company || '').toUpperCase().replace(/\s+/g, '');
-                const product = String(card.dataset.product || '').toUpperCase().replace(/\s+/g, '');
-                const match = !q || vin.includes(q) || company.includes(q) || product.includes(q);
+                const match = fleetCardMatchesSearch(card, tokens);
                 card.classList.toggle('fleet-card--hidden', !match);
-                card.classList.toggle('fleet-card--hit', Boolean(q) && match);
+                card.classList.toggle('fleet-card--hit', q && match);
+                if (match) visible += 1;
+            });
+            displayCards.forEach((card) => {
+                const match = fleetCardMatchesSearch(card, tokens);
+                card.classList.toggle('fleet-card--hidden', !match);
+                card.classList.toggle('fleet-card--hit', q && match);
                 if (match) visible += 1;
             });
 
@@ -3770,7 +3808,7 @@
                     .filter((c) => !c.classList.contains('fleet-card--hidden'));
                 const anyVisible = visibleCards.length > 0;
                 group.classList.toggle('fleet-company-group--hidden', !anyVisible);
-                group.classList.toggle('fleet-company-group--match', Boolean(q) && anyVisible);
+                group.classList.toggle('fleet-company-group--match', q && anyVisible);
                 const countElLocal = group.querySelector('.fleet-company-count');
                 if (countElLocal) {
                     const total = group.querySelectorAll('.fleet-card').length;
@@ -3780,10 +3818,11 @@
                 }
             });
 
+            const totalCards = cards.length + displayCards.length;
             if (countEl) {
                 countEl.textContent = q
                     ? `${visible} نتيجة`
-                    : `${cards.length} سيارة`;
+                    : `${totalCards} سيارة`;
             }
             if (emptyEl) {
                 emptyEl.classList.toggle('hidden', visible > 0 || !q);

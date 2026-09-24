@@ -5810,7 +5810,12 @@ app.post('/api/delivery-inventory/create-pdf-drafts', (req, res) => {
 });
 
 app.get('/api/delivery-inventory/vehicles', (req, res) => {
-  const search = String(req.query.search || '').trim().toUpperCase();
+  const searchRaw = String(req.query.search || '').trim();
+  const tokens = searchRaw
+    .toUpperCase()
+    .split(/[\s,;/|]+/)
+    .map((t) => t.replace(/[^A-Z0-9\u0600-\u06FF]/gi, ''))
+    .filter((t) => t.length >= 1);
   const limit = Math.min(Number(req.query.limit) || 80, 200);
   const exclude = new Set(
     String(req.query.exclude || '')
@@ -5821,9 +5826,26 @@ app.get('/api/delivery-inventory/vehicles', (req, res) => {
   let list = store.vehicles.filter((v) => {
     const vin = normVin(v.vin);
     if (!vin || exclude.has(vin)) return false;
-    if (!search) return true;
-    const hay = `${vin} ${v.product || ''} ${v.plate || ''} ${v.gt || ''} ${v.location || ''} ${v.phone || ''} ${v.customerName || ''}`.toUpperCase();
-    return hay.includes(search);
+    if (!tokens.length) return true;
+    const hay = [
+      vin,
+      v.product,
+      v.model,
+      v.plate,
+      v.gt,
+      v.location,
+      v.phone,
+      v.customerName,
+      v.userName,
+      v.salesAdvisor,
+      v.invoiceOwner,
+      v.salesOrder,
+      v.salesType,
+      v.proformaDate,
+      v.color,
+    ].map((x) => String(x || '').toUpperCase()).join(' ');
+    const compact = hay.replace(/[^A-Z0-9\u0600-\u06FF]/gi, '');
+    return tokens.every((t) => hay.includes(t) || compact.includes(t.replace(/[^A-Z0-9\u0600-\u06FF]/gi, '')));
   });
   list = list.slice(0, limit);
   res.json({ vehicles: list });
