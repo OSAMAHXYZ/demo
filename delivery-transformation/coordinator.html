@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260923c15" />
+  <link rel="stylesheet" href="coordinator.css?v=20260923c16" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -42,6 +42,7 @@
         </div>
         <div class="ws-user-pill">
           <a href="index.html" class="btn-ghost">المركز</a>
+          <a href="inventory-managment.html" class="btn-ghost">المخزون</a>
           <button type="button" class="btn-warehouse" id="btnWarehouse">التسليم في المستودع</button>
           <strong id="loggedAs">مرحباً</strong>
           <button type="button" class="btn-ghost" id="btnLogout">خروج</button>
@@ -53,13 +54,15 @@
       <section class="ws-section">
         <div class="ws-section-head">
           <h2>حسب نوع البيع — كل VINs Live Sheet</h2>
-          <span class="hint">نفس الشاسيه الظاهرة لموظفي التسليم · انقر للطباعة</span>
+          <span class="hint">انقر نوع البيع للطي أو الفتح · البحث يفتح النتائج المطابقة</span>
         </div>
         <div class="fleet-search-wrap">
           <input type="search" id="availableVinSearch" class="fleet-search"
             placeholder="ابحث برقم الشاسيه أو جزء منه… مثال 7022 أو JTNB"
             autocomplete="off" spellcheck="false" inputmode="search" />
           <span class="fleet-search-count" id="availableVinSearchCount"></span>
+          <button type="button" class="fleet-expand-btn" id="fleet-fold-all">طي الكل</button>
+          <button type="button" class="fleet-expand-btn" id="fleet-open-all">فتح الكل</button>
           <button type="button" class="btn-missing-vin" id="btnMissingVin">
             في حال عدم وجود السيارة في البحث اضغط هنا
           </button>
@@ -270,6 +273,6 @@
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260923c18"></script>
+  <script src="coordinator.js?v=20260924c20"></script>
 </body>
 </html>

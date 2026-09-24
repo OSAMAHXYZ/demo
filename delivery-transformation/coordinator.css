@@ -245,10 +245,25 @@ body.warehouse-form-mode .hero h1 { color: #1d4ed8; }
 .fleet-company-group--hidden, .fleet-card--hidden { display: none !important; }
 .fleet-company-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.06);
+  width: 100%; margin: 0; padding: 2px 0 6px;
+  border: 0; border-bottom: 1px solid rgba(255,255,255,.06);
+  background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: inherit;
 }
+.fleet-company-head:hover { color: #fff; }
 .fleet-company-name { font-size: .84rem; font-weight: 800; color: #f8fafc; }
+.fleet-fold-meta { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .fleet-company-count { font-size: 0.7rem; font-weight: 700; color: #94a3b8; }
+.fleet-chevron {
+  width: 7px; height: 7px;
+  border-inline-end: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: rotate(45deg);
+  transition: transform .15s ease;
+}
+.fleet-company-group.is-expanded .fleet-chevron,
+.fleet-companies.is-searching .fleet-company-group:not(.fleet-company-group--hidden) .fleet-chevron {
+  transform: rotate(-135deg);
+}
 .fleet-company-badge {
   display: inline-flex; padding: 2px 7px; border-radius: 999px;
   font-size: 0.65rem; font-weight: 700; margin-inline-start: 6px;
@@ -257,7 +272,15 @@ body.warehouse-form-mode .hero h1 { color: #1d4ed8; }
 .fleet-grid {
   display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 }
-.fleet-company-group .fleet-grid { max-height: none; overflow: visible; padding: 2px; }
+.fleet-company-group .fleet-grid { display: none; padding: 2px; }
+.fleet-company-group.is-expanded .fleet-grid,
+.fleet-companies.is-searching .fleet-company-group:not(.fleet-company-group--hidden) .fleet-grid {
+  display: grid;
+}
+.fleet-card--hit {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(74, 222, 128, 0.12);
+}
 .fleet-card {
   text-align: right; border-radius: 10px; border: 1px solid rgba(255,255,255,.1);
   background: rgba(255,255,255,.04); cursor: pointer; color: inherit; font: inherit; width: 100%;

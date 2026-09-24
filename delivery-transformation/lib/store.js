@@ -22,9 +22,17 @@ function emptyStore() {
   };
 }
 
+const BACKUP_MS = 6 * 60 * 60 * 1000;
+const BACKUP_SCAN_MS = 60 * 1000;
+
 function createStore(filePath) {
   let data = emptyStore();
   const sessions = new Map();
+  let backupTimer = null;
+
+  function backupPath() {
+    return path.join(path.dirname(filePath), 'delivery-transformation-backup-last.json');
+  }
 
   function load() {
     try {
@@ -154,6 +162,7 @@ function createStore(filePath) {
           assignedAt: now,
           updatedAt: now,
           updatedBy: 'seed',
+          statusHistory: d.status ? [{ status: d.status, at: now }] : [],
         },
       };
     }
@@ -217,7 +226,113 @@ function createStore(filePath) {
     if (data.audit.length > 2000) data.audit.length = 2000;
   }
 
+  function snapshotCounts(src) {
+    const vehicles = src && src.vehicles && typeof src.vehicles === 'object' ? src.vehicles : {};
+    const pending = src && src.meta && src.meta.pendingAssignments && typeof src.meta.pendingAssignments === 'object'
+      ? src.meta.pendingAssignments
+      : {};
+    return {
+      vehicles: Object.keys(vehicles).length,
+      pending: Object.keys(pending).length,
+      attendance: Array.isArray(src && src.attendance) ? src.attendance.length : 0,
+      prints: Array.isArray(src && src.prints) ? src.prints.length : 0,
+    };
+  }
+
+  function readLastBackup() {
+    const file = backupPath();
+    if (!fs.existsSync(file)) return null;
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!raw || typeof raw !== 'object') return null;
+      return raw;
+    } catch (err) {
+      console.error('[delivery-transformation] backup read failed:', err.message);
+      return null;
+    }
+  }
+
+  function writeBackup(reason) {
+    const dir = path.dirname(backupPath());
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const savedAt = new Date().toISOString();
+    const payload = {
+      savedAt,
+      reason: String(reason || 'scheduled'),
+      vehicles: data.vehicles,
+      audit: data.audit,
+      attendance: data.attendance,
+      prints: data.prints,
+      meta: data.meta,
+    };
+    const tmp = `${backupPath()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(payload, null, 2));
+    fs.renameSync(tmp, backupPath());
+    return backupStatus();
+  }
+
+  function restoreLastBackup(by) {
+    const snap = readLastBackup();
+    if (!snap) throw new Error('No saved snapshot yet');
+    const copy = JSON.parse(JSON.stringify(snap));
+    data = {
+      vehicles: copy.vehicles && typeof copy.vehicles === 'object' ? copy.vehicles : {},
+      audit: Array.isArray(copy.audit) ? copy.audit : [],
+      attendance: Array.isArray(copy.attendance) ? copy.attendance : [],
+      prints: Array.isArray(copy.prints) ? copy.prints : [],
+      meta: copy.meta && typeof copy.meta === 'object' ? copy.meta : emptyStore().meta,
+    };
+    if (!Array.isArray(data.meta.customCarriers)) data.meta.customCarriers = [];
+    if (!Array.isArray(data.meta.customCities)) data.meta.customCities = [];
+    pushAudit({
+      user: by || 'Collector',
+      action: 'restore_backup',
+      oldValue: 'live employee + coordinator',
+      newValue: snap.savedAt || '',
+    });
+    save();
+    return backupStatus();
+  }
+
+  function backupStatus() {
+    const last = readLastBackup();
+    const lastAt = last && last.savedAt ? String(last.savedAt) : '';
+    const lastMs = Date.parse(lastAt);
+    const nextAt = Number.isFinite(lastMs)
+      ? new Date(lastMs + BACKUP_MS).toISOString()
+      : new Date().toISOString();
+    return {
+      intervalHours: 6,
+      lastAt,
+      nextAt,
+      due: !Number.isFinite(lastMs) || Date.now() - lastMs >= BACKUP_MS,
+      reason: last ? String(last.reason || '') : '',
+      snapshot: last ? snapshotCounts(last) : snapshotCounts(null),
+      live: snapshotCounts(data),
+    };
+  }
+
+  function scanBackupOnce() {
+    const status = backupStatus();
+    if (!status.due) return status;
+    return writeBackup(status.lastAt ? 'scheduled' : 'initial');
+  }
+
+  function startBackupScanner() {
+    if (backupTimer) return;
+    try { scanBackupOnce(); } catch (err) {
+      console.error('[delivery-transformation] backup scan failed:', err.message);
+    }
+    backupTimer = setInterval(() => {
+      try { scanBackupOnce(); } catch (err) {
+        console.error('[delivery-transformation] backup scan failed:', err.message);
+      }
+    }, BACKUP_SCAN_MS);
+    if (backupTimer.unref) backupTimer.unref();
+  }
+
   load();
+  startBackupScanner();
 
   return {
     load,
@@ -232,6 +347,9 @@ function createStore(filePath) {
     upsertVehicle,
     deleteVehicle,
     pushAudit,
+    writeBackup,
+    restoreLastBackup,
+    backupStatus,
     filePath,
   };
 }

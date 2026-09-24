@@ -66,6 +66,31 @@
     return `<span class="badge warn">${esc(v)}</span>`;
   }
 
+  async function downloadFile(path, filename) {
+    const headers = {};
+    const token = getToken();
+    if (token) headers['X-Delivery-Transform-Token'] = token;
+    const res = await fetch(`${API}${path}`, { headers });
+    if (res.status === 401) {
+      clearSession();
+      throw new Error('Session expired — sign in again');
+    }
+    if (!res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await res.json().catch(() => null) : null;
+      throw new Error((data && data.error) || res.statusText || 'Download failed');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'export.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
   function toast(msg) {
     let el = document.getElementById('dt-toast');
     if (!el) {
@@ -95,6 +120,7 @@
     esc,
     na,
     api,
+    downloadFile,
     getToken,
     getUser,
     setSession,

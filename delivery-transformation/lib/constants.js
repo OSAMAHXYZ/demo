@@ -55,12 +55,14 @@ const TRANSFER_CITIES = Object.freeze([
  */
 const USERS = Object.freeze([
   { id: 'hanouf', name: 'Hanouf', role: 'hanouf' },
-  { id: 'alfadel', name: 'الفاضل', role: 'coordinator' },
-  { id: 'albara', name: 'البراء', role: 'coordinator' },
+  { id: 'alfadel', name: 'الفاضل', role: 'coordinator', canInventory: true },
+  { id: 'albara', name: 'البراء', role: 'coordinator', canInventory: true },
   // canUploadSalesRaw: may upload Sales Raw (updates vehicle details on every VIN)
   // canEditAnyVin: may edit every Live Sheet VIN, not only assigned ones
+  // canCoordinate: may sign in on coordinator.html (print) without losing employee.html
+  // canInventory: delivery-transformation/inventory-managment.html (Ruba / الفاضل / البراء)
   { id: 'rasha', name: 'Rasha', role: 'employee', canUploadSalesRaw: true, canEditAnyVin: true },
-  { id: 'ruba', name: 'Ruba', role: 'employee', canUploadSalesRaw: true },
+  { id: 'ruba', name: 'Ruba', role: 'employee', canUploadSalesRaw: true, canCoordinate: true, canInventory: true },
   { id: 'ibrahim', name: 'Ibrahim', role: 'employee' },
   { id: 'abdullah', name: 'Abdullah', role: 'employee' },
 ]);
@@ -107,11 +109,15 @@ function emptyOps() {
     assignedAt: '',
     updatedBy: '',
     updatedAt: '',
+    statusHistory: [],
     coordinatorPrintedAt: '',
     coordinatorPrintedBy: '',
     coordinatorPrintKind: '',
     coordinatorPrintCompany: '',
     coordinatorPrintCity: '',
+    inventoryOwnerId: '',
+    inventoryOwnerName: '',
+    inventoryClaimedAt: '',
   };
 }
 

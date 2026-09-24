@@ -7,6 +7,7 @@
   const AR_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
   let rows = [];
+  let expandedTypes = new Set();
   let poll = null;
   let overlayReady = false;
   let printMode = 'sheet';
@@ -53,7 +54,7 @@
         method: 'POST',
         json: { username: $('loginUser').value, password: $('loginPass').value },
       });
-      if (data.user.role !== 'coordinator') {
+      if (data.user.role !== 'coordinator' && !data.user.canCoordinate) {
         status.className = 'ws-toast err';
         status.textContent = 'هذا المستخدم ليس منسق تسليم';
         return;
@@ -113,11 +114,17 @@
         .join(' ').toUpperCase().replace(/\s+/g, '');
       const match = !q || hay.includes(q);
       card.classList.toggle('fleet-card--hidden', !match);
+      card.classList.toggle('fleet-card--hit', Boolean(q) && match);
       if (match) visible += 1;
     });
     availEl.querySelectorAll('.fleet-company-group').forEach((group) => {
       const vis = [...group.querySelectorAll('.fleet-card')].filter((c) => !c.classList.contains('fleet-card--hidden'));
       group.classList.toggle('fleet-company-group--hidden', !vis.length);
+      const type = group.dataset.type || '';
+      const open = Boolean(q) || expandedTypes.has(type);
+      group.classList.toggle('is-expanded', open);
+      const head = group.querySelector('.fleet-company-head');
+      if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
       const count = group.querySelector('.fleet-company-count');
       const total = group.querySelectorAll('.fleet-card').length;
       if (count) count.textContent = q ? `${vis.length} من ${total}` : `${total} سيارة`;
@@ -151,15 +158,33 @@
     if (!rows.length) {
       availEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات</strong>انتظر رفع Sales Raw أو VINs</div>';
     } else {
-      availEl.innerHTML = groupBySalesType(rows).map(([type, items]) => `<div class="fleet-company-group is-expanded">
-          <div class="fleet-company-head">
-            <div class="fleet-company-name">${esc(type)}<span class="fleet-company-badge">نوع البيع</span></div>
-            <div class="fleet-company-count">${items.length} سيارة</div>
-          </div>
+      availEl.innerHTML = groupBySalesType(rows).map(([type, items]) => {
+        const open = expandedTypes.has(type);
+        return `<div class="fleet-company-group${open ? ' is-expanded' : ''}" data-type="${esc(type)}">
+          <button type="button" class="fleet-company-head" data-fold-type="${esc(type)}" aria-expanded="${open ? 'true' : 'false'}">
+            <span class="fleet-company-name">${esc(type)}<span class="fleet-company-badge">نوع البيع</span></span>
+            <span class="fleet-fold-meta">
+              <span class="fleet-company-count">${items.length} سيارة</span>
+              <span class="fleet-chevron" aria-hidden="true"></span>
+            </span>
+          </button>
           <div class="fleet-grid">${items.map(fleetCard).join('')}</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       availEl.querySelectorAll('.fleet-card').forEach((card) => {
         card.addEventListener('click', () => openDetail(card.dataset.vin));
+      });
+      availEl.querySelectorAll('[data-fold-type]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (String(($('availableVinSearch') && $('availableVinSearch').value) || '').trim()) return;
+          const type = btn.dataset.foldType;
+          if (expandedTypes.has(type)) expandedTypes.delete(type);
+          else expandedTypes.add(type);
+          const group = btn.closest('.fleet-company-group');
+          const open = expandedTypes.has(type);
+          if (group) group.classList.toggle('is-expanded', open);
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
       });
     }
     renderLiveTable(rows);
@@ -1037,7 +1062,7 @@
     const meta = await api('/meta');
     transferCities = meta.transferCities || [];
     fillBranchList();
-    const users = (meta.users || []).filter((u) => u.role === 'coordinator');
+    const users = (meta.users || []).filter((u) => u.role === 'coordinator' || u.canCoordinate);
     $('loginUser').innerHTML = '<option value="">— اختر الاسم —</option>'
       + users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
 
@@ -1059,6 +1084,20 @@
       });
     });
     $('availableVinSearch').addEventListener('input', filterFleet);
+    if ($('fleet-fold-all')) {
+      $('fleet-fold-all').addEventListener('click', () => {
+        expandedTypes.clear();
+        filterFleet();
+      });
+    }
+    if ($('fleet-open-all')) {
+      $('fleet-open-all').addEventListener('click', () => {
+        $('availableFleet').querySelectorAll('.fleet-company-group').forEach((g) => {
+          if (g.dataset.type) expandedTypes.add(g.dataset.type);
+        });
+        filterFleet();
+      });
+    }
     $('btnMissingVin').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
     $('btnMissingVinEmpty').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
     $('btnWarehouse').addEventListener('click', () => {
@@ -1076,7 +1115,7 @@
     if (getToken() && getUser()) {
       try {
         const me = await api('/auth/me');
-        if (me.user.role !== 'coordinator') {
+        if (me.user.role !== 'coordinator' && !me.user.canCoordinate) {
           showView('login');
           return;
         }
