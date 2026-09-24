@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924vsnd2" />
+  <link rel="stylesheet" href="admin.css?v=20260924inv1" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -83,11 +83,11 @@
         <div class="vsnd-pill vsnd-pill-ok" id="vsnd-kpi-delivered"></div>
         <div class="vsnd-pill vsnd-pill-bad" id="vsnd-kpi-vsnd"></div>
         <div class="vsnd-panel" id="vsnd-by-status">
-          <h3>VSND by Status</h3>
+          <h3>VSND by Status <span class="hint" style="font-weight:600">· click a status for Live Sheet VINs</span></h3>
           <div class="vsnd-panel-body" id="vsnd-by-status-body"></div>
         </div>
-        <div class="vsnd-panel" id="vsnd-last7">
-          <h3>Delivery vs VSND (Last 7 Days)</h3>
+        <div class="vsnd-panel" id="vsnd-inventory">
+          <h3>Stock In / Out <span class="hint" style="font-weight:600">· inventory by user</span></h3>
           <div class="vsnd-panel-body" id="vsnd-last7-body"></div>
         </div>
         <div class="vsnd-panel" id="vsnd-aging">
@@ -355,6 +355,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260923d1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924vsnd2"></script>
+  <script src="admin.js?v=20260924inv1"></script>
 </body>
 </html>

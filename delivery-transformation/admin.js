@@ -58,6 +58,7 @@
   let kpiExpanded = false;
   let kpiDetailKey = '';
   let slaDash = null;
+  let inventoryDash = null;
   let backup = null;
   let dashTimer = null;
   let dashInFlight = false;
@@ -693,15 +694,19 @@
     });
   }
 
-  function closeDrawer() {
-    $('detail-back').classList.remove('open');
-  }
-
-  function openDrawer(html) {
-    $('detail-drawer').innerHTML = html;
+  function openDrawer(html, { wide = false } = {}) {
+    const drawer = $('detail-drawer');
+    drawer.classList.toggle('vsnd-sheet', !!wide);
+    drawer.innerHTML = html;
     $('detail-back').classList.add('open');
     const close = $('detail-close');
     if (close) close.onclick = closeDrawer;
+  }
+
+  function closeDrawer() {
+    $('detail-back').classList.remove('open');
+    const drawer = $('detail-drawer');
+    if (drawer) drawer.classList.remove('vsnd-sheet');
   }
 
   function openCompany(name) {
@@ -807,34 +812,243 @@
     return loadDash();
   }
 
-  function donutSvg(segments, centerLabel, centerSub) {
+  function donutSvg(segments, centerLabel, centerSub, { clickable = false } = {}) {
     const total = segments.reduce((s, x) => s + (Number(x.count) || 0), 0) || 1;
     const r = 34;
     const c = 2 * Math.PI * r;
     let offset = 0;
     const arcs = segments.filter((x) => x.count > 0).map((x) => {
       const len = (x.count / total) * c;
-      const arc = `<circle cx="42" cy="42" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="10"
+      const key = esc(x.status || x.name || x.label || '');
+      const arc = `<circle class="${clickable ? 'vsnd-arc-hit' : ''}" cx="42" cy="42" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="10"
         stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
-        transform="rotate(-90 42 42)"></circle>`;
+        transform="rotate(-90 42 42)" ${clickable ? `data-status="${key}" role="button" tabindex="0"` : ''}></circle>`;
       offset += len;
       return arc;
     }).join('');
-    return `<div class="vsnd-donut">
+    return `<div class="vsnd-donut${clickable ? ' is-clickable' : ''}">
       <svg viewBox="0 0 84 84" aria-hidden="true">${arcs}
         <circle cx="42" cy="42" r="24" fill="#fff"></circle>
       </svg>
-      <div class="vsnd-donut-center"><strong>${esc(centerLabel)}</strong><span>${esc(centerSub || '')}</span></div>
+      <button type="button" class="vsnd-donut-center${clickable ? ' is-hit' : ''}" ${clickable ? 'data-status=""' : 'disabled'} title="All VSND">
+        <strong>${esc(centerLabel)}</strong><span>${esc(centerSub || '')}</span>
+      </button>
     </div>`;
   }
 
-  function legendList(items) {
-    return `<ul class="vsnd-legend-list">${items.map((x) => `
-      <li><i style="background:${esc(x.color)}"></i>
+  function legendList(items, { clickable = false } = {}) {
+    return `<ul class="vsnd-legend-list${clickable ? ' is-clickable' : ''}">${items.map((x) => `
+      <li ${clickable ? `class="vsnd-legend-hit" data-status="${esc(x.status || '')}" role="button" tabindex="0"` : ''}>
+        <i style="background:${esc(x.color)}"></i>
         <span>${esc(x.label || x.name)}</span>
         <b>${esc(x.count)}</b>
         <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
       </li>`).join('')}</ul>`;
+  }
+
+  function wireVsndStatusHits(root) {
+    if (!root) return;
+    const open = (status) => openVsndStatusDetail(status || '').catch((err) => alert(err.message));
+    root.querySelectorAll('[data-status]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        open(el.dataset.status);
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open(el.dataset.status);
+        }
+      });
+    });
+  }
+
+  function isOpenVsndRow(v, month) {
+    const p = String((v.raw && v.raw.proformaDate) || '').slice(0, 10);
+    const inv = String((v.raw && v.raw.invoiceDate) || '').trim();
+    return !!(p && p.slice(0, 7) === month && !inv);
+  }
+
+  function renderInventoryPanel() {
+    const host = $('vsnd-last7-body');
+    if (!host) return;
+    const inv = inventoryDash;
+    if (!inv) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No inventory data</p>';
+      return;
+    }
+    const users = inv.users || [];
+    const max = Math.max(1, ...users.map((u) => Math.max(u.stockIn || 0, u.stockOut || 0)));
+    const stockIn = inv.stockIn != null ? inv.stockIn : users.reduce((s, u) => s + (u.stockIn || 0), 0);
+    const stockOut = inv.stockOut != null ? inv.stockOut : users.reduce((s, u) => s + (u.stockOut || 0), 0);
+    host.innerHTML = `
+      <div class="inv-totals">
+        <div class="inv-total in"><span>Stock In</span><strong>${esc(stockIn)}</strong></div>
+        <div class="inv-total out"><span>Stock Out</span><strong>${esc(stockOut)}</strong></div>
+        <button type="button" class="btn inv-more" id="inv-more-details">More details</button>
+      </div>
+      <div class="vsnd-vbars inv-vbars">
+        ${users.map((u) => {
+          const inH = ((u.stockIn || 0) / max) * 100;
+          const outH = ((u.stockOut || 0) / max) * 100;
+          return `<div class="vsnd-vbar" title="${esc(u.name)} · ${u.stockIn || 0} in · ${u.stockOut || 0} out">
+            <div class="vsnd-vbar-stack inv-stack">
+              <i class="del" style="height:${inH}%"></i>
+              <i class="vs" style="height:${outH}%"></i>
+            </div>
+            <span>${esc(u.name)}</span>
+          </div>`;
+        }).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No inventory users</p>'}
+      </div>
+      <div class="vsnd-mini-legend"><span><i class="del"></i> Stock In</span><span><i class="vs"></i> Stock Out</span></div>`;
+    const more = $('inv-more-details');
+    if (more) more.onclick = () => openInventoryDetail();
+  }
+
+  function openInventoryDetail() {
+    const inv = inventoryDash;
+    if (!inv) return;
+    const { na } = window.DTX;
+    const users = inv.users || [];
+    const stockIn = inv.stockIn != null ? inv.stockIn : users.reduce((s, u) => s + (u.stockIn || 0), 0);
+    const stockOut = inv.stockOut != null ? inv.stockOut : users.reduce((s, u) => s + (u.stockOut || 0), 0);
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>Inventory · Stock In / Out</h2>
+          <p class="sub">${esc(stockIn)} in · ${esc(stockOut)} out · ${esc(inv.unclaimed || 0)} unclaimed · ${esc(inv.total || 0)} open VINs</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="inv-detail-summary">
+        ${users.map((u) => `
+          <div class="inv-detail-card">
+            <h3>${esc(u.name)}</h3>
+            <div class="inv-detail-nums">
+              <span><em>In</em><b>${esc(u.stockIn || 0)}</b></span>
+              <span><em>Out</em><b>${esc(u.stockOut || 0)}</b></span>
+              <span><em>Claims</em><b>${esc(u.claims || 0)}</b></span>
+            </div>
+            <div class="table-wrap vsnd-sheet-wrap" style="max-height:28vh">
+              <table class="data vsnd-live-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>VIN</th>
+                    <th>Product</th>
+                    <th>Sales Type</th>
+                    <th>Customer</th>
+                    <th>Proforma</th>
+                    <th>Claimed</th>
+                  </tr>
+                </thead>
+                <tbody>${(u.stock || []).map((r, i) => `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td><b>${esc(r.vin)}</b></td>
+                    <td>${esc(na(r.product))}</td>
+                    <td>${esc(na(r.salesType))}</td>
+                    <td>${esc(na(r.customer))}</td>
+                    <td>${esc(na(r.proformaDate))}</td>
+                    <td>${esc(fmtWhen(r.claimedAt))}</td>
+                  </tr>`).join('') || '<tr><td colspan="7">No VINs currently in stock</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>`).join('') || '<p class="chart-empty">No inventory users</p>'}
+      </div>`, { wide: true });
+  }
+
+  async function openVsndStatusDetail(status) {
+    const cal = slaDash && slaDash.calendar;
+    const month = (cal && cal.month) || empMonth || '';
+    const qs = new URLSearchParams();
+    if (month) qs.set('month', month);
+    const statusFilter = status === '(blank)' ? '' : status;
+    if (statusFilter) qs.set('status', statusFilter);
+    openDrawer(`
+      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div>
+          <h2>${esc(status || 'All VSND')}</h2>
+          <p class="sub">Loading Live Sheet…</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>`, { wide: true });
+
+    const data = await api(`/live-sheet?${qs.toString()}`);
+    let rows = (data.rows || []).filter((v) => isOpenVsndRow(v, month));
+    if (status === '(blank)') {
+      rows = rows.filter((v) => !String((v.ops && v.ops.opsStatus) || '').trim());
+    } else if (statusFilter) {
+      rows = rows.filter((v) => String((v.ops && v.ops.opsStatus) || '') === statusFilter);
+    }
+    const label = status || 'All statuses';
+    const monthNote = monthLabel(month) || month;
+    const { statusBadge, na } = window.DTX;
+
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>${esc(label)}</h2>
+          <p class="sub">${esc(monthNote)} · ${rows.length} open VSND VIN(s) · Col P · no Col V · Live Sheet details</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap">
+        <table class="data vsnd-live-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>VIN</th>
+              <th>Proforma</th>
+              <th>Order</th>
+              <th>Product</th>
+              <th>Sales Type</th>
+              <th>Customer</th>
+              <th>Owner</th>
+              <th>Phone</th>
+              <th>S/A</th>
+              <th>Employee</th>
+              <th>Status</th>
+              <th>مدينة الترحيل</th>
+              <th>الناقل</th>
+              <th>GT Loc</th>
+              <th>Veh Loc</th>
+            </tr>
+          </thead>
+          <tbody>${rows.map((r, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td><button type="button" class="vin-btn" data-vin="${esc(r.vin)}">${esc(r.vin)}</button></td>
+              <td>${esc(na(r.raw.proformaDate))}</td>
+              <td>${esc(na(r.raw.salesOrder))}</td>
+              <td>${esc(na(r.raw.product))}</td>
+              <td>${esc(na(r.raw.salesType))}</td>
+              <td>${esc(na(r.raw.userName))}</td>
+              <td>${esc(na(r.raw.invoiceOwner))}</td>
+              <td>${r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}">${esc(r.raw.phone)}</a>` : '—'}</td>
+              <td>${esc(na(r.raw.salesAdvisor))}</td>
+              <td><b>${esc(na(r.ops.assignedEmployeeName))}</b></td>
+              <td>${statusBadge(r.ops.opsStatus)}</td>
+              <td>${esc(na(r.ops.transferCity))}</td>
+              <td>${esc(na(r.ops.carrier))}</td>
+              <td>${esc(na(r.raw.gtLocation))}</td>
+              <td>${esc(na(r.raw.vehicleLocation))}</td>
+            </tr>`).join('') || '<tr><td colspan="16">No open VSND VINs for this status.</td></tr>'}
+          </tbody>
+        </table>
+      </div>`, { wide: true });
+
+    $('detail-drawer').querySelectorAll('.vin-btn[data-vin]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (window.DTXLive && DTXLive.openDrawer) {
+          DTXLive.openDrawer(btn.dataset.vin, {
+            mode: 'admin',
+            onSaved: () => openVsndStatusDetail(status).catch(() => {}),
+          });
+        }
+      });
+    });
   }
 
   function hBars(items, color) {
@@ -857,7 +1071,7 @@
         <div>
           <span class="vsnd-pill-lbl">Delivered · تم التسليم</span>
           <strong>${esc(cal.delivered || 0)}</strong>
-          <em>Current Month</em>
+          <em>Current Month · Col V</em>
         </div>`;
     }
     if (vsndEl) {
@@ -866,36 +1080,22 @@
         <div>
           <span class="vsnd-pill-lbl">Not Delivered (VSND)</span>
           <strong>${esc(cal.notDelivered || 0)}</strong>
-          <em>Current Month</em>
+          <em>Current Month · Col P · no V</em>
         </div>`;
+      vsndEl.classList.add('is-hit');
+      vsndEl.title = 'Open all open VSND VINs';
+      vsndEl.onclick = () => openVsndStatusDetail('').catch((err) => alert(err.message));
     }
 
     const byStatus = a.byStatusVsnd || [];
     if ($('vsnd-by-status-body')) {
       $('vsnd-by-status-body').innerHTML = `
-        ${donutSvg(byStatus, String(a.vsndTotal || 0), 'VSND')}
-        ${legendList(byStatus.slice(0, 6))}`;
+        ${donutSvg(byStatus, String(a.vsndTotal || 0), 'VSND', { clickable: true })}
+        ${legendList(byStatus, { clickable: true })}`;
+      wireVsndStatusHits($('vsnd-by-status-body'));
     }
 
-    const last7 = a.last7 || [];
-    const max7 = Math.max(1, ...last7.map((d) => (d.delivered || 0) + (d.vsnd || 0)));
-    if ($('vsnd-last7-body')) {
-      $('vsnd-last7-body').innerHTML = `
-        <div class="vsnd-vbars">
-          ${last7.map((d) => {
-            const delH = ((d.delivered || 0) / max7) * 100;
-            const vsH = ((d.vsnd || 0) / max7) * 100;
-            return `<div class="vsnd-vbar" title="${esc(d.label)} · ${d.delivered} delivered · ${d.vsnd} VSND">
-              <div class="vsnd-vbar-stack">
-                <i class="del" style="height:${delH}%"></i>
-                <i class="vs" style="height:${vsH}%"></i>
-              </div>
-              <span>${esc(String(d.label || '').replace(/ .*/, '') || d.day)}</span>
-            </div>`;
-          }).join('')}
-        </div>
-        <div class="vsnd-mini-legend"><span><i class="del"></i> Delivered</span><span><i class="vs"></i> VSND</span></div>`;
-    }
+    renderInventoryPanel();
 
     const aging = a.aging || {};
     const agingSeg = [
@@ -1110,11 +1310,12 @@
     dashInFlight = true;
     try {
       const monthQs = empMonth ? `?month=${encodeURIComponent(empMonth)}` : '';
-      const [dashData, perfData, slaData, backupData] = await Promise.all([
+      const [dashData, perfData, slaData, backupData, invData] = await Promise.all([
         api('/admin/dashboard'),
         api(`/team-performance${monthQs}`).catch(() => null),
         api(`/schedule/dashboard${monthQs}`).catch(() => null),
         api('/backup').catch(() => null),
+        api('/inventory').catch(() => null),
       ]);
       dash = dashData;
       if (perfData) {
@@ -1126,6 +1327,7 @@
         empMonth = slaData.month || empMonth;
       }
       if (backupData) backup = backupData;
+      inventoryDash = invData;
       syncMonthInputs();
       renderKpis();
       renderBackup();
@@ -1134,6 +1336,7 @@
       renderCities();
       renderEmployees();
       renderSchedule();
+      renderInventoryPanel();
       renderPrints();
       if (kpiOpenId) loadEmployeeKpi().catch(() => {});
     } finally {

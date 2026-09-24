@@ -299,7 +299,12 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
     },
     sla: bySla,
     focusId: focus.id || '',
-    calendar: computeVsndCalendar({ vehicles: pool, today, month, slaItems: items }),
+    calendar: computeVsndCalendar({
+      vehicles: vehicles || [],
+      today,
+      month,
+      slaItems: items,
+    }),
   };
 }
 
@@ -347,29 +352,51 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
   }));
   const byStatus = new Map(rows.map((r) => [r.status, r]));
   const dayTotals = Array.from({ length: days }, () => 0);
+  const seenDelivered = new Set();
+  const seenVsnd = new Set();
   let delivered = 0;
   let notDelivered = 0;
   const vinIndex = [];
 
   (vehicles || []).forEach((v) => {
+    const vinKey = String((v && v.vin) || '').trim().toUpperCase();
     const p = dayKey(v.raw && v.raw.proformaDate);
+    const inv = dayKey(v.raw && v.raw.invoiceDate);
+    const status = String((v.ops && v.ops.opsStatus) || '').trim();
+
+    // Delivered = Sales Raw Col V (invoiceDate) in the selected month
+    if (inv && inv.slice(0, 7) === ym) {
+      if (vinKey && !seenDelivered.has(vinKey)) {
+        seenDelivered.add(vinKey);
+        delivered += 1;
+      }
+    }
+
+    // Not Delivered (VSND) = Col P in month · Col V empty
+    const isVsnd = !!(p && p.slice(0, 7) === ym && !inv);
+    if (isVsnd && vinKey && !seenVsnd.has(vinKey)) {
+      seenVsnd.add(vinKey);
+      notDelivered += 1;
+    }
+
+    // Schedule grid: all VINs with Proforma (Col P) in this month
     if (!p || p.slice(0, 7) !== ym) return;
     const day = Number(p.slice(8, 10));
     if (!day || day < 1 || day > days) return;
-    const status = String((v.ops && v.ops.opsStatus) || '').trim();
     const row = byStatus.get(status);
     const entry = {
       vin: v.vin,
       employee: (v.ops && v.ops.assignedEmployeeName) || '',
       status,
       proforma: p,
+      invoiceDate: inv || '',
       day,
       product: (v.raw && v.raw.product) || '',
       city: String((v.ops && (v.ops.transferCity || v.ops.coordinatorPrintCity)) || '').trim(),
+      isVsnd,
+      isDelivered: !!inv,
     };
     vinIndex.push(entry);
-    if (status === 'تم التسليم') delivered += 1;
-    else notDelivered += 1;
     dayTotals[day - 1] += 1;
     if (!row) return;
     row.days[day - 1] += 1;
@@ -407,7 +434,6 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
       const zones = r.days.map((n, i) => {
         const day = i + 1;
         if (day > todayDay) return 'future';
-        // Calendar bands match aging legend: 1–(target-1) on track · target due · later late
         if (day < psfuTarget) return 'ok';
         if (day === psfuTarget) return 'due';
         return 'late';
@@ -436,23 +462,45 @@ function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, r
   const vsnd = [];
   const deliveredByDay = new Map();
   const vsndByDay = new Map();
+  const seenDel = new Set();
+  const seenVsnd = new Set();
 
   (vehicles || []).forEach((v) => {
+    const vinKey = String((v && v.vin) || '').trim().toUpperCase();
     const p = dayKey(v.raw && v.raw.proformaDate);
-    if (!p || p.slice(0, 7) !== ym) return;
-    const day = Number(p.slice(8, 10));
+    const inv = dayKey(v.raw && v.raw.invoiceDate);
     const status = String((v.ops && v.ops.opsStatus) || '').trim();
-    const delivered = status === 'تم التسليم';
-    const age = day && todayDay ? (todayDay - day + 1) : null;
     const city = String((v.ops && (v.ops.transferCity || v.ops.coordinatorPrintCity)) || '').trim() || 'Other';
     const employee = String((v.ops && v.ops.assignedEmployeeName) || '').trim() || 'Unassigned';
-    const pack = { vin: v.vin, status, day, age, city, employee, delivered, proforma: p };
 
-    if (delivered) deliveredByDay.set(day, (deliveredByDay.get(day) || 0) + 1);
-    else {
-      vsndByDay.set(day, (vsndByDay.get(day) || 0) + 1);
-      vsnd.push(pack);
+    // Last-7 delivered bars: Col V day in month
+    if (inv && inv.slice(0, 7) === ym) {
+      const d = Number(inv.slice(8, 10));
+      if (d && (!vinKey || !seenDel.has(`${vinKey}:${d}`))) {
+        if (vinKey) seenDel.add(`${vinKey}:${d}`);
+        deliveredByDay.set(d, (deliveredByDay.get(d) || 0) + 1);
+      }
     }
+
+    // VSND pool + last-7 VSND bars: Col P in month · Col V empty
+    if (!(p && p.slice(0, 7) === ym && !inv)) return;
+    const day = Number(p.slice(8, 10));
+    if (vinKey) {
+      if (seenVsnd.has(vinKey)) return;
+      seenVsnd.add(vinKey);
+    }
+    const age = day && todayDay ? (todayDay - day + 1) : null;
+    vsndByDay.set(day, (vsndByDay.get(day) || 0) + 1);
+    vsnd.push({
+      vin: v.vin,
+      status,
+      day,
+      age,
+      city,
+      employee,
+      delivered: false,
+      proforma: p,
+    });
   });
 
   const statusColors = {

@@ -495,7 +495,7 @@
   .ekpi-breakdown, .ekpi-dl { grid-template-columns: 1fr; }
 }
 
-/* ——— VSND Schedule (status × calendar day) ——— */
+/* âââ VSND Schedule (status Ã calendar day) âââ */
 .vsnd-card { padding: 18px 18px 14px; overflow: hidden; }
 .vsnd-head {
   display: flex;
@@ -856,7 +856,7 @@
   .vsnd-controls { margin-left: 0; width: 100%; justify-content: flex-start; }
 }
 
-/* ��� One-screen VSND Dashboard ��� */
+/*  One-screen VSND Dashboard  */
 body.vsnd-screen {
   height: 100vh;
   overflow: hidden;
@@ -1131,6 +1131,96 @@ body.vsnd-screen #tab-vins {
 .vsnd-mini-legend .del { background: #22c55e; }
 .vsnd-mini-legend .vs { background: #ef4444; }
 
+.inv-totals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.inv-total {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  min-width: 56px;
+}
+.inv-total span {
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.inv-total strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: #0b2a44;
+}
+.inv-total.in { background: #ecfdf5; }
+.inv-total.in strong { color: #15803d; }
+.inv-total.out { background: #fef2f2; }
+.inv-total.out strong { color: #dc2626; }
+.inv-more {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-color: #bfdbfe;
+  color: #1769a8;
+  background: #eff6ff;
+}
+.inv-vbars { height: 72px; }
+.inv-stack {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
+  background: transparent;
+  overflow: visible;
+}
+.inv-stack i {
+  flex: 1;
+  border-radius: 4px 4px 2px 2px;
+  min-height: 2px;
+}
+.inv-detail-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+}
+.inv-detail-card h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: #0b2a44;
+}
+.inv-detail-nums {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.inv-detail-nums span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.inv-detail-nums em {
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+.inv-detail-nums b {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  color: #0b2a44;
+}
+
 .vsnd-schedule-card {
   min-height: 0;
   display: flex;
@@ -1212,3 +1302,60 @@ body.vsnd-screen .vsnd-total-btn {
   .vsnd-top-row,
   .vsnd-bottom-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* VSND by Status  clickable drill-down */
+.vsnd-pill.is-hit { cursor: pointer; }
+.vsnd-pill.is-hit:hover { filter: brightness(0.98); box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15); }
+.vsnd-legend-list.is-clickable .vsnd-legend-hit {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+}
+.vsnd-legend-list.is-clickable .vsnd-legend-hit:hover {
+  background: #f1f5f9;
+}
+.vsnd-arc-hit {
+  cursor: pointer;
+  pointer-events: stroke;
+}
+.vsnd-arc-hit:hover { stroke-opacity: 0.85; }
+.vsnd-donut-center {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+.vsnd-donut-center.is-hit { cursor: pointer; }
+.vsnd-donut-center.is-hit:hover strong { color: #1769a8; }
+.vsnd-donut-center:disabled { cursor: default; }
+
+.drawer.vsnd-sheet {
+  width: min(1200px, 98vw);
+  max-width: 98vw;
+}
+.vsnd-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.vsnd-sheet-wrap {
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+.vsnd-live-table {
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.vsnd-live-table .vin-btn {
+  border: 0;
+  background: none;
+  color: #1769a8;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.vsnd-live-table .vin-btn:hover { text-decoration: underline; }

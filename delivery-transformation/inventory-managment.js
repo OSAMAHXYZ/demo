@@ -100,7 +100,7 @@
       kpi('Open VINs', data.total || 0),
       kpi('Unclaimed', data.unclaimed || 0),
       kpi('My stock', data.mine || 0),
-      ...(data.users || []).map((u) => kpi(u.name, u.stock)),
+      ...(data.users || []).map((u) => kpi(u.name, u.stockIn != null ? u.stockIn : (Array.isArray(u.stock) ? u.stock.length : (u.stock || 0)))),
     ].join('');
     render();
   }

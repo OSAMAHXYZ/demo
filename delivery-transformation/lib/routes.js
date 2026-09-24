@@ -585,7 +585,9 @@ function createDeliveryTransformationRouter(opts = {}) {
   });
 
   router.get('/inventory', auth, (req, res) => {
-    if (!canInventory(req.dtUser)) return res.status(403).json({ error: 'Forbidden' });
+    if (!canInventory(req.dtUser) && req.dtUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     return res.json(buildInventoryPayload(req.dtUser));
   });
 
@@ -797,18 +799,45 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
     const pool = [...byVin.values()].sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
     const me = viewer && viewer.userId;
+
+    const releasedByUser = {};
+    const claimedByUser = {};
+    (store.data.audit || []).forEach((a) => {
+      if (!a) return;
+      const who = String(a.user || '').trim();
+      if (!who) return;
+      if (a.action === 'inventory_release') {
+        releasedByUser[who] = (releasedByUser[who] || 0) + 1;
+      }
+      if (a.action === 'inventory_claim') {
+        claimedByUser[who] = (claimedByUser[who] || 0) + 1;
+      }
+    });
+
+    const users = USERS.filter((u) => u.canInventory).map((u) => {
+      const stock = pool.filter((r) => r.stockOwnerId === u.id);
+      return {
+        id: u.id,
+        name: u.name,
+        stockIn: stock.length,
+        stockOut: releasedByUser[u.name] || 0,
+        claims: claimedByUser[u.name] || 0,
+        stock,
+      };
+    });
+    const stockIn = users.reduce((s, u) => s + u.stockIn, 0);
+    const stockOut = users.reduce((s, u) => s + u.stockOut, 0);
+
     return {
       at: new Date().toISOString(),
       total: pool.length,
       unclaimed: pool.filter((r) => !r.stockOwnerId).length,
       mine: pool.filter((r) => r.stockOwnerId === me).length,
+      stockIn,
+      stockOut,
       pool,
       stock: pool.filter((r) => r.stockOwnerId === me),
-      users: USERS.filter((u) => u.canInventory).map((u) => ({
-        id: u.id,
-        name: u.name,
-        stock: pool.filter((r) => r.stockOwnerId === u.id).length,
-      })),
+      users,
     };
   }
 
