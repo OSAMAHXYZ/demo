@@ -278,3 +278,66 @@ table.data tr.mine:hover td { background: #d8f0e4; }
 .row-btn.label-display { color: #6d28d9; border-color: #ddd6fe; }
 .row-btn.label-delivery { color: #047857; border-color: #a7f3d0; }
 .row-btn.is-on { background: #0b2a44; color: #fff; border-color: #0b2a44; }
+
+#claim-display-btn {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+#claim-delivery-btn {
+  background: #047857;
+  border-color: #047857;
+}
+
+.label-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(11, 42, 68, 0.45);
+}
+.label-modal.hidden { display: none !important; }
+.label-modal-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 18px 50px rgba(11, 42, 68, 0.28);
+}
+.label-modal-card h2 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  color: var(--navy);
+}
+.label-modal-vins {
+  margin: 10px 0 14px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--navy);
+  background: #f4f7fb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  direction: ltr;
+  text-align: left;
+}
+.label-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.label-modal-actions .label-pick {
+  flex: 1;
+  min-width: 110px;
+}
+.label-modal-actions .label-pick.delivery {
+  background: #047857;
+  border-color: #047857;
+}
+.label-modal-actions .label-pick:not(.delivery) {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}

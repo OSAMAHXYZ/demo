@@ -2,6 +2,7 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const {
   STATUSES,
@@ -18,6 +19,7 @@ const { parseDeliverySheet, parseSalesRaw } = require('./importer');
 const kpiEngine = require('./kpi');
 const exportExcel = require('./export-excel');
 const scheduleEngine = require('./schedule');
+const monthClose = require('./month-close');
 
 const RAW_UPLOAD_LIMIT = '80mb';
 
@@ -166,6 +168,7 @@ function createDeliveryTransformationRouter(opts = {}) {
   const dataFile = opts.dataFile
     || path.join(opts.root || process.cwd(), 'delivery-transformation-data.json');
   const store = createStore(dataFile);
+  monthClose.startMonthCloseScanner(store);
 
   function peekMemoInvoice() {
     const n = Number(store.data.meta && store.data.meta.memoInvoiceNext);
@@ -404,8 +407,15 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ok: true, companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
   });
 
-  router.get('/meta', (_req, res) => {
-    res.json({
+  router.get('/meta', (req, res) => {
+    // Optional auth for month-close banner when token present
+    const token = String(
+      req.headers['x-delivery-transform-token']
+      || req.headers['x-dt-token']
+      || ''
+    ).trim();
+    const session = token ? store.getSession(token) : null;
+    const payload = {
       module: 'delivery-transformation',
       isolated: true,
       statuses: STATUSES,
@@ -427,7 +437,53 @@ function createDeliveryTransformationRouter(opts = {}) {
       imports: store.data.meta.imports || {},
       pendingAssignments: Object.keys(store.data.meta.pendingAssignments || {}).length,
       memoInvoiceNext: peekMemoInvoice(),
-    });
+    };
+    if (session && isManager(session.role)) {
+      payload.monthClose = monthClose.monthCloseStatus(store);
+    }
+    res.json(payload);
+  });
+
+  router.get('/month-close', auth, requireRole('admin', 'hanouf'), (_req, res) => {
+    res.json(monthClose.monthCloseStatus(store));
+  });
+
+  router.get('/month-close/download', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const status = monthClose.monthCloseStatus(store);
+    if (!status.ready && !status.purged) {
+      return res.status(404).json({ error: 'No month archive ready yet (runs automatically on day 1)' });
+    }
+    const mc = store.data.meta.monthClose;
+    if (!mc || !mc.archiveFile || !fs.existsSync(mc.archiveFile)) {
+      return res.status(404).json({ error: 'Archive file missing — wait for day-1 prepare' });
+    }
+    monthClose.markDownloaded(store, req.dtUser.name);
+    const name = `DT-Month-Close-${mc.forMonth || 'archive'}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    return res.sendFile(path.resolve(mc.archiveFile));
+  });
+
+  router.post('/month-close/apply', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    try {
+      const result = monthClose.applyMonthClosePurge(store, req.dtUser.name);
+      return res.json({
+        ok: true,
+        ...result,
+        monthClose: monthClose.monthCloseStatus(store),
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not apply month close' });
+    }
+  });
+
+  router.post('/month-close/prepare', auth, requireRole('admin'), (req, res) => {
+    try {
+      monthClose.forcePrepare(store, req.dtUser.name);
+      return res.json({ ok: true, monthClose: monthClose.monthCloseStatus(store) });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not prepare month close' });
+    }
   });
 
   router.post('/auth/collector', (req, res) => {
@@ -1615,8 +1671,12 @@ function createDeliveryTransformationRouter(opts = {}) {
       if (s && !STATUSES.includes(s)) {
         return res.status(400).json({ error: `Invalid status: ${s}` });
       }
+      const prevStatus = String(v.ops.opsStatus || '').trim();
+      const nowIso = new Date().toISOString();
       setOps('opsStatus', s);
-      if (s) scheduleEngine.recordStatusEnter(v.ops, s, new Date().toISOString());
+      if (s && s !== prevStatus) {
+        scheduleEngine.recordStatusTransition(v.ops, prevStatus, s, nowIso, req.dtUser.name);
+      }
     }
     for (const f of [
       'guestSentDate', 'signatureReceivedDate', 'accountsSentDate',
@@ -2094,27 +2154,124 @@ function createDeliveryTransformationRouter(opts = {}) {
     return sendXlsx(res, wb, `DT-Admin-${exportExcel.stamp()}.xlsx`);
   });
 
-  router.get('/schedule/config', auth, requireRole('admin', 'hanouf'), (_req, res) => {
+  router.get('/schedule/config', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const items = scheduleEngine.normalizeSla(store.data.meta && store.data.meta.sla);
-    res.json({ items, statuses: STATUSES });
+    const control = scheduleEngine.slaEngine.readControl(store.data.meta);
+    const canEdit = !!(req.dtUser && req.dtUser.role === 'admin');
+    res.json({
+      items,
+      control,
+      history: scheduleEngine.slaEngine.readHistory(store.data.meta).slice(0, 80),
+      statuses: STATUSES,
+      canEdit,
+    });
   });
 
-  router.put('/schedule/config', auth, requireRole('admin', 'hanouf'), (req, res) => {
-    const items = scheduleEngine.normalizeSla(req.body && req.body.items);
+  function summarizeControl(c) {
+    if (!c) return '';
+    const rules = (c.rules || [])
+      .filter((r) => r.active)
+      .map((r) => `${r.status}:W${r.warningValue}/B${r.breachValue}`)
+      .join(' · ');
+    const d = c.delivery || {};
+    return `${rules} | delivery ${d.targetDays}d from ${d.startFrom}`;
+  }
+
+  function buildControlDiff(prev, next) {
+    const diffs = [];
+    const prevMap = new Map((prev.rules || []).map((r) => [r.id, r]));
+    (next.rules || []).forEach((r) => {
+      const o = prevMap.get(r.id);
+      if (!o) {
+        diffs.push({ status: r.status, field: 'added', old: '', neu: `${r.warningValue}/${r.breachValue}` });
+        return;
+      }
+      ['warningValue', 'breachValue', 'noMoveWarnValue', 'noMoveBreachValue', 'active'].forEach((f) => {
+        if (String(o[f]) !== String(r[f])) {
+          diffs.push({ status: r.status, field: f, old: o[f], neu: r[f] });
+        }
+      });
+    });
+    const pd = prev.delivery || {};
+    const nd = next.delivery || {};
+    ['targetDays', 'warningDays', 'breachDays', 'startFrom', 'dayType', 'active'].forEach((f) => {
+      if (String(pd[f]) !== String(nd[f])) {
+        diffs.push({ status: 'DELIVERY', field: f, old: pd[f], neu: nd[f] });
+      }
+    });
+    return diffs;
+  }
+
+  router.put('/schedule/config', auth, requireRole('admin'), (req, res) => {
+    const body = req.body || {};
+    if (!store.data.meta || typeof store.data.meta !== 'object') store.data.meta = {};
+    const prev = scheduleEngine.slaEngine.readControl(store.data.meta);
+    const reason = String(body.reason || '').trim();
+    if (!reason) {
+      return res.status(400).json({ error: 'Reason is required for every SLA change' });
+    }
+
+    if (body.control && typeof body.control === 'object') {
+      const next = {
+        rules: Array.isArray(body.control.rules) ? body.control.rules : prev.rules,
+        delivery: body.control.delivery || prev.delivery,
+        priority: body.control.priority || prev.priority,
+      };
+      scheduleEngine.slaEngine.writeControl(store.data.meta, next, req.dtUser.name);
+      const saved = scheduleEngine.slaEngine.readControl(store.data.meta);
+      scheduleEngine.slaEngine.pushHistory(store.data.meta, {
+        admin: req.dtUser.name,
+        reason,
+        kind: 'control',
+        oldValue: summarizeControl(prev),
+        newValue: summarizeControl(saved),
+        detail: buildControlDiff(prev, saved),
+      });
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'set_sla_control',
+        field: 'slaControl',
+        oldValue: reason,
+        newValue: summarizeControl(saved),
+      });
+      store.save();
+      return res.json({
+        ok: true,
+        control: saved,
+        history: scheduleEngine.slaEngine.readHistory(store.data.meta).slice(0, 80),
+        canEdit: true,
+      });
+    }
+
+    const items = scheduleEngine.normalizeSla(body.items);
     const bad = items.find((x) => !Number.isFinite(x.targetDay) || x.targetDay < 1);
     if (bad) return res.status(400).json({ error: `Target day for ${bad.label} must be 1 or more` });
-    if (!store.data.meta || typeof store.data.meta !== 'object') store.data.meta = {};
+    const oldLegacy = scheduleEngine.normalizeSla(store.data.meta.sla);
     store.data.meta.sla = items;
+    scheduleEngine.slaEngine.pushHistory(store.data.meta, {
+      admin: req.dtUser.name,
+      reason,
+      kind: 'legacy_target_day',
+      oldValue: oldLegacy.map((x) => `${x.id}:${x.enabled ? x.targetDay : 'off'}`).join(' · '),
+      newValue: items.map((x) => `${x.id}:${x.enabled ? x.targetDay : 'off'}`).join(' · '),
+    });
     store.pushAudit({
       vin: '',
       user: req.dtUser.name,
       action: 'set_sla',
       field: 'schedule',
-      oldValue: '',
+      oldValue: reason,
       newValue: items.map((x) => `${x.id}:${x.enabled ? x.targetDay : 'off'}`).join(' · '),
     });
     store.save();
-    return res.json({ ok: true, items });
+    return res.json({
+      ok: true,
+      items,
+      control: scheduleEngine.slaEngine.readControl(store.data.meta),
+      history: scheduleEngine.slaEngine.readHistory(store.data.meta).slice(0, 80),
+      canEdit: true,
+    });
   });
 
   router.get('/schedule/dashboard', auth, requireRole('admin', 'hanouf'), (req, res) => {
@@ -2123,11 +2280,18 @@ function createDeliveryTransformationRouter(opts = {}) {
     const dash = scheduleEngine.computeDashboard({
       vehicles: store.allVehicles(),
       slaItems: items,
+      slaControl: store.data.meta && store.data.meta.slaControl,
       today: todayKey(),
       month,
       audit: store.data.audit || [],
+      now: new Date().toISOString(),
     });
-    return res.json({ ...dash, items, currentMonth: currentMonthKey() });
+    return res.json({
+      ...dash,
+      items,
+      canEditSla: !!(req.dtUser && req.dtUser.role === 'admin'),
+      currentMonth: currentMonthKey(),
+    });
   });
 
   router.get('/kpi/weights', auth, requireRole('admin', 'hanouf'), (_req, res) => {

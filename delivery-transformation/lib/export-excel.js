@@ -246,6 +246,7 @@ function buildAdminWorkbook(opts) {
 module.exports = {
   stamp,
   writeBuffer,
+  appendSheet,
   buildLiveSheetWorkbook,
   buildAdminWorkbook,
 };

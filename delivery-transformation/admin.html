@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20260924pivot1" />
+  <link rel="stylesheet" href="admin.css?v=20260925month1" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -83,12 +83,18 @@
         <div class="vsnd-pill vsnd-pill-ok" id="vsnd-kpi-delivered"></div>
         <div class="vsnd-pill vsnd-pill-bad" id="vsnd-kpi-vsnd"></div>
         <div class="vsnd-panel" id="vsnd-by-status">
-          <h3>VSND by Status <span class="hint" style="font-weight:600">· click a status for Live Sheet VINs</span></h3>
-          <div class="vsnd-panel-body" id="vsnd-by-status-body"></div>
+          <h3>
+            VSND by Status
+            <button type="button" class="btn inv-more vsnd-wide-btn" id="vsnd-status-wide" title="Open wide chart">Wide chart</button>
+          </h3>
+          <div class="vsnd-panel-body vsnd-status-compact" id="vsnd-by-status-body"></div>
         </div>
         <div class="vsnd-panel" id="vsnd-inventory">
-          <h3>Stock In / Out <span class="hint" style="font-weight:600">· inventory by user</span></h3>
-          <div class="vsnd-panel-body" id="vsnd-last7-body"></div>
+          <h3>
+            Stock In / Out
+            <button type="button" class="btn inv-more vsnd-wide-btn" id="inv-wide-btn" title="Open wide chart">Wide chart</button>
+          </h3>
+          <div class="vsnd-panel-body vsnd-inv-compact" id="vsnd-last7-body"></div>
         </div>
         <div class="vsnd-panel" id="vsnd-accuracy">
           <h3>Entry Accuracy <span class="hint" style="font-weight:600">· /100 · audit + missing fields</span></h3>
@@ -100,16 +106,26 @@
         <div class="vsnd-sched-head">
           <div>
             <h2 id="vsnd-sched-title">VSND Schedule</h2>
-            <p class="hint">Track vehicles by status based on Proforma date (Calendar View)</p>
+            <p class="hint">Unique VINs by Proforma date × current status · cell colour from live SLA conditions</p>
           </div>
           <div class="vsnd-legend">
             <span><i class="lg-ok"></i> On Track</span>
-            <span><i class="lg-due"></i> Due Today</span>
-            <span><i class="lg-late"></i> Late</span>
+            <span><i class="lg-due"></i> At Risk / Due</span>
+            <span><i class="lg-late"></i> Breached / Late / No Movement</span>
           </div>
         </div>
+        <div class="kpi-row sla-kpi-row" id="vsnd-sla-kpis" style="margin-bottom:10px"></div>
         <div class="vsnd-scroll">
           <div id="sla-chart" class="vsnd-grid-host" aria-label="VSND Schedule"></div>
+        </div>
+        <div class="vsnd-alerts" id="vsnd-schedule-alerts">
+          <div class="vsnd-alerts-head">
+            <h3>Schedule alerts</h3>
+            <span class="hint" id="vsnd-alerts-meta">Live from VSND schedule · SLA conditions</span>
+          </div>
+          <div class="vsnd-alerts-body" id="vsnd-alerts-body">
+            <p class="chart-empty">No schedule alerts</p>
+          </div>
         </div>
       </div>
 
@@ -249,22 +265,65 @@
 
     <section class="panel-tab" id="tab-schedule">
       <section class="hero">
-        <h1>Status SLA schedule</h1>
-        <p>Target day is counted from each VIN’s Proforma Date (Day 1). Changing a day updates the dashboard immediately.</p>
+        <h1>SLA Control Center</h1>
+        <p>Admin-controlled status &amp; delivery SLAs · live ages from employee.html status history · no hard-coded breach hours.</p>
       </section>
-      <div class="card">
+
+      <div class="kpi-row sla-kpi-row" id="sla-control-kpis"></div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+          <div>
+            <h2>SLA Settings</h2>
+            <p class="hint">Warning / Breach / No-movement thresholds in hours · Active rules drive the VSND schedule colours instantly.</p>
+          </div>
+          <button type="button" class="btn-primary" id="sla-add-rule" style="width:auto">+ Add SLA Condition</button>
+        </div>
         <div class="table-wrap">
           <table class="data">
             <thead>
-              <tr><th>Status</th><th>Counts as</th><th>Target day</th><th>Enabled</th></tr>
+              <tr>
+                <th>Status</th>
+                <th>Warning</th>
+                <th>Breach</th>
+                <th>No Move Warn</th>
+                <th>No Move Breach</th>
+                <th>Active</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody id="sla-body"></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>Delivery 5-day SLA</h2>
+        <p class="hint">Default: Proforma + target days · delivered status = تم التسليم · historical COMPLETED ON TIME / LATE is preserved.</p>
+        <div class="kpi-row" id="sla-delivery-form" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin:0"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>Save changes</h2>
+        <div class="field">
+          <label for="sla-reason">Reason (required)</label>
+          <input id="sla-reason" placeholder="e.g. Management request" />
+        </div>
         <p class="hint" id="sla-error"></p>
         <div class="toolbar" style="margin-top:12px">
-          <button type="button" class="btn-primary" id="sla-save">Save schedule</button>
-          <span class="hint" id="sla-hint">Example: Proforma Sep 1 · PSFU Day 5 → target Sep 5.</span>
+          <button type="button" class="btn-primary" id="sla-save">Save SLA rules</button>
+          <span class="hint" id="sla-hint">Only admin can edit · managers can view.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>SLA Change History</h2>
+        <p class="hint">Every threshold change is logged permanently.</p>
+        <div class="table-wrap" style="max-height:320px">
+          <table class="data">
+            <thead><tr><th>When</th><th>Admin</th><th>Reason</th><th>Changes</th></tr></thead>
+            <tbody id="sla-history-body"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -355,6 +414,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20260924scope1"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20260924scope1"></script>
+  <script src="admin.js?v=20260925month1"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /* Delivery Transformation — employee app (same layout & flow as deliveryteam) */
 (() => {
-  const { api, esc, getToken, getUser, setSession, clearSession } = window.DTX;
+  const { api, esc, getToken, getUser, setSession, clearSession, downloadFile } = window.DTX;
 
   const state = {
     user: null,
@@ -242,40 +242,222 @@
     document.body.appendChild(dl);
   }
 
-  async function saveCellEdit(el) {
-    const vin = el.dataset.vin;
-    const field = el.dataset.field;
-    if (!vin || !field) return;
-    el.classList.add('is-saving');
+  /** Pending entry edits — survive refresh/logout until the server acknowledges them */
+  const pendingOps = new Map();
+  const saveTimers = new Map();
+  let flushInFlight = null;
+
+  function pendKey(vin, field) {
+    return `${vin}::${field}`;
+  }
+
+  function draftStorageKey() {
+    return `dt_xform_ops_draft_${state.user ? state.user.id : 'anon'}`;
+  }
+
+  function persistDrafts() {
+    if (!state.user) return;
+    const obj = {};
+    pendingOps.forEach((v, k) => {
+      obj[k] = { vin: v.vin, field: v.field, value: v.value };
+    });
     try {
-      await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: { [field]: el.value } });
-      el.classList.remove('is-saving');
-      el.classList.add('is-saved');
-      if (field === 'opsStatus') {
-        const tr = el.closest('tr');
-        if (tr) {
-          tr.className = tr.className.split(' ').filter((c) => !c.startsWith('row-status-')).join(' ');
-          const cls = statusRowClass(el.value);
-          if (cls) tr.classList.add(cls);
-        }
-      }
-      const toast = (state.view === 'live' ? $('#live-save-toast') : $('#my-save-toast'));
-      if (toast) {
-        toast.hidden = false;
-        toast.textContent = `Saved ✓ ${FIELD_LABELS[field] || field} · ${new Date().toLocaleTimeString()}`;
-        setTimeout(() => { toast.hidden = true; }, 2200);
-      }
-      setTimeout(() => el.classList.remove('is-saved'), 1200);
-      if (field === 'guestCenter') loadAppointmentBadge().catch(() => {});
-      if (state.view === 'live') loadLiveSheet({ silent: true }).catch(() => {});
-    } catch (err) {
-      el.classList.remove('is-saving');
-      alert(err.message || 'Save failed');
+      localStorage.setItem(draftStorageKey(), JSON.stringify(obj));
+    } catch {
+      /* ignore quota */
     }
   }
 
+  function loadDrafts() {
+    pendingOps.clear();
+    if (!state.user) return;
+    try {
+      const raw = JSON.parse(localStorage.getItem(draftStorageKey()) || '{}');
+      Object.entries(raw).forEach(([k, v]) => {
+        if (v && v.vin && v.field != null) {
+          pendingOps.set(k, { vin: v.vin, field: v.field, value: v.value == null ? '' : String(v.value) });
+        }
+      });
+    } catch {
+      pendingOps.clear();
+    }
+  }
+
+  function markPending(vin, field, value) {
+    const key = pendKey(vin, field);
+    pendingOps.set(key, { vin, field, value: value == null ? '' : String(value) });
+    if (state.rowIndex[vin] && state.rowIndex[vin].ops) {
+      state.rowIndex[vin].ops[field] = pendingOps.get(key).value;
+      if (state.rowIndex[vin].ops.updatedAt !== undefined) {
+        state.rowIndex[vin].ops.updatedAt = new Date().toISOString();
+      }
+    }
+    persistDrafts();
+  }
+
+  function applyPendingToRows(rows) {
+    (rows || []).forEach((r) => {
+      if (!r || !r.ops) return;
+      pendingOps.forEach((p) => {
+        if (p.vin === r.vin) r.ops[p.field] = p.value;
+      });
+    });
+    return rows;
+  }
+
+  function hasPendingEdits() {
+    return pendingOps.size > 0;
+  }
+
+  function showSaveToast(field, ok) {
+    const toast = (state.view === 'live' ? $('#live-save-toast') : $('#my-save-toast'));
+    if (!toast) return;
+    toast.hidden = false;
+    toast.textContent = ok
+      ? `Saved ✓ ${FIELD_LABELS[field] || field} · ${new Date().toLocaleTimeString()}`
+      : `Saving… ${FIELD_LABELS[field] || field}`;
+    if (ok) setTimeout(() => { toast.hidden = true; }, 2200);
+  }
+
+  async function pushOpsPatch(vin, field, value, { keepalive = false } = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getToken();
+    if (token) headers['X-Delivery-Transform-Token'] = token;
+    const res = await fetch(`/api/delivery-transformation/vehicles/${encodeURIComponent(vin)}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ [field]: value }),
+      keepalive: !!keepalive,
+    });
+    const ct = res.headers.get('content-type') || '';
+    const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+    if (!res.ok) throw new Error((data && data.error) || res.statusText || 'Save failed');
+    return data;
+  }
+
+  async function commitPending(vin, field, value, el) {
+    const key = pendKey(vin, field);
+    markPending(vin, field, value);
+    if (el) {
+      el.classList.add('is-saving');
+      el.classList.remove('is-saved');
+    }
+    showSaveToast(field, false);
+    try {
+      await pushOpsPatch(vin, field, value);
+      const cur = pendingOps.get(key);
+      if (cur && String(cur.value) === String(value)) {
+        pendingOps.delete(key);
+        persistDrafts();
+      }
+      if (el) {
+        el.classList.remove('is-saving');
+        el.classList.add('is-saved');
+        setTimeout(() => el.classList.remove('is-saved'), 1200);
+      }
+      if (field === 'opsStatus' && el) {
+        const tr = el.closest('tr');
+        if (tr) {
+          tr.className = tr.className.split(' ').filter((c) => !c.startsWith('row-status-')).join(' ');
+          const cls = statusRowClass(value);
+          if (cls) tr.classList.add(cls);
+        }
+      }
+      showSaveToast(field, true);
+      if (field === 'guestCenter') loadAppointmentBadge().catch(() => {});
+      // Invalidate fingerprint so next poll picks up server truth without wiping now
+      state.liveFingerprint = '';
+    } catch (err) {
+      if (el) el.classList.remove('is-saving');
+      throw err;
+    }
+  }
+
+  function queueCellEdit(el, { immediate = false } = {}) {
+    const vin = el.dataset.vin;
+    const field = el.dataset.field;
+    if (!vin || !field) return;
+    const value = el.value;
+    markPending(vin, field, value);
+    const key = pendKey(vin, field);
+    if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
+    const run = () => {
+      saveTimers.delete(key);
+      commitPending(vin, field, value, el).catch((err) => {
+        alert(err.message || 'Save failed — your entry is kept locally until it syncs');
+      });
+    };
+    if (immediate) run();
+    else saveTimers.set(key, setTimeout(run, 350));
+  }
+
+  async function flushPendingOps({ keepalive = false } = {}) {
+    if (flushInFlight && !keepalive) return flushInFlight;
+    // Capture in-progress inputs before leaving
+    $$('.cell-edit').forEach((el) => {
+      if (el.dataset.vin && el.dataset.field) markPending(el.dataset.vin, el.dataset.field, el.value);
+    });
+    if (state._drawerVin) {
+      $$('#vin-drawer [data-ops]').forEach((el) => {
+        if (el.dataset.ops) markPending(state._drawerVin, el.dataset.ops, el.value);
+      });
+    }
+    saveTimers.forEach((t) => clearTimeout(t));
+    saveTimers.clear();
+    const items = [...pendingOps.values()];
+    if (!items.length) return;
+
+    if (keepalive) {
+      persistDrafts();
+      const token = getToken();
+      items.forEach((item) => {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['X-Delivery-Transform-Token'] = token;
+        try {
+          fetch(`/api/delivery-transformation/vehicles/${encodeURIComponent(item.vin)}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ [item.field]: item.value }),
+            keepalive: true,
+          });
+        } catch {
+          /* drafts remain in localStorage */
+        }
+      });
+      return;
+    }
+
+    flushInFlight = (async () => {
+      for (const item of items) {
+        try {
+          await pushOpsPatch(item.vin, item.field, item.value);
+          const key = pendKey(item.vin, item.field);
+          const cur = pendingOps.get(key);
+          if (cur && String(cur.value) === String(item.value)) {
+            pendingOps.delete(key);
+          }
+        } catch (err) {
+          console.error('[entry save]', err.message || err);
+        }
+      }
+      persistDrafts();
+      flushInFlight = null;
+    })();
+    return flushInFlight;
+  }
+
   function bindEditableCells(tableEl) {
-    $$('.cell-edit', tableEl).forEach((el) => el.addEventListener('change', () => saveCellEdit(el)));
+    $$('.cell-edit', tableEl).forEach((el) => {
+      const tag = (el.tagName || '').toLowerCase();
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      const isSelect = tag === 'select';
+      const isInstant = isSelect || type === 'date' || type === 'checkbox';
+      el.addEventListener('change', () => queueCellEdit(el, { immediate: true }));
+      if (!isInstant) {
+        el.addEventListener('input', () => queueCellEdit(el, { immediate: false }));
+      }
+      el.addEventListener('blur', () => queueCellEdit(el, { immediate: true }));
+    });
   }
 
   function canUseInventory() {
@@ -339,7 +521,7 @@
   function refreshViewSilent() {
     if (state.view === 'live') return loadLiveSheet({ silent: true });
     if (state.view === 'dashboard') return loadDashboard();
-    if (state.view === 'my') return loadMy();
+    if (state.view === 'my') return loadMy({ silent: true });
     if (state.view === 'appointment') return loadAppointments({ silent: true });
     return Promise.resolve();
   }
@@ -388,6 +570,7 @@
     Object.entries(params || {}).forEach(([k, v]) => { if (v) qs.set(k, v); });
     const data = await api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`);
     renderImports(data.imports);
+    applyPendingToRows(data.rows || []);
     (data.rows || []).forEach((r) => { state.rowIndex[r.vin] = r; });
     rememberSelInfo(data.rows || []);
     return data;
@@ -1009,6 +1192,7 @@
     if (!changed && silent) return;
     const table = $('#live-table');
     const active = document.activeElement;
+    // Never wipe mid-edit: keep typing / pending drafts on screen
     if (silent && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) return;
 
     ensureDatalists();
@@ -1118,7 +1302,7 @@
     ];
   }
 
-  async function loadMy() {
+  async function loadMy({ silent = false } = {}) {
     const statusSel = $('#my-status');
     if (statusSel && !statusSel.dataset.filled) {
       statusSel.innerHTML = `<option value="">All statuses</option>${(state.meta.statuses || []).map((s) =>
@@ -1130,6 +1314,11 @@
       status: state.myFilters.status,
       employee: isManager() ? '' : state.user.name,
     });
+    const table = $('#my-table');
+    const active = document.activeElement;
+    if (silent && table && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) {
+      return;
+    }
     const w = myWorkload(data.rows || []);
     const typeKpis = Object.entries(w.bySalesType).sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([l, v]) => [l, v, 'info']);
@@ -1144,7 +1333,6 @@
     ensureDatalists();
     const cols = scheduleColumns();
     const selected = state.selected;
-    const table = $('#my-table');
     table.innerHTML = `<thead><tr><th><input type="checkbox" class="checkbox sel-all" title="Select all shown" /></th>${cols.map((c) => `<th>${esc(c[0])}</th>`).join('')}</tr></thead>
       <tbody>${w.rows.map((r) => {
         const checked = selected.has(r.vin) ? 'checked' : '';
@@ -1333,35 +1521,71 @@
 
   async function openVin(vin) {
     const { vehicle: v } = await api(`/vehicles/${encodeURIComponent(vin)}`);
+    applyPendingToRows([v]);
+    state._drawerVin = vin;
     const back = $('#vin-drawer-back');
     const drawer = $('#vin-drawer');
     const readOnly = !v.canEdit;
     drawer.innerHTML = buildDrawerHtml(v, readOnly);
+    drawer.dataset.drawerVin = vin;
     back.classList.add('open');
-    const close = () => {
+    const close = async () => {
+      await flushPendingOps().catch(() => {});
       back.classList.remove('open');
+      state._drawerVin = '';
       refreshView();
     };
-    $('#drawer-close', drawer).onclick = close;
-    back.onclick = (e) => { if (e.target === back) close(); };
+    $('#drawer-close', drawer).onclick = () => { close().catch(() => {}); };
+    back.onclick = (e) => { if (e.target === back) close().catch(() => {}); };
     if (readOnly) return;
 
-    async function savePatch(patch) {
+    async function savePatch(patch, el) {
+      const field = Object.keys(patch)[0];
+      const value = patch[field];
       try {
-        const res = await api(`/vehicles/${encodeURIComponent(vin)}`, { method: 'PATCH', json: patch });
+        markPending(vin, field, value);
+        await pushOpsPatch(vin, field, value);
+        const key = pendKey(vin, field);
+        const cur = pendingOps.get(key);
+        if (cur && String(cur.value) === String(value)) {
+          pendingOps.delete(key);
+          persistDrafts();
+        }
+        if (v.ops) v.ops[field] = value;
         const line = $('#save-line', drawer);
         if (line) {
           line.hidden = false;
-          line.textContent = `Saved ✓ · ${new Date(res.lastUpdated || Date.now()).toLocaleTimeString()}`;
+          line.textContent = `Saved ✓ · ${new Date().toLocaleTimeString()}`;
           setTimeout(() => { line.hidden = true; }, 2500);
         }
         const last = $('#last-updated', drawer);
-        if (last && res.lastUpdated) last.textContent = `Last updated: ${res.lastUpdated}`;
+        if (last) last.textContent = `Last updated: ${new Date().toISOString()}`;
+        if (el) {
+          el.classList.add('is-saved');
+          setTimeout(() => el.classList.remove('is-saved'), 1200);
+        }
       } catch (err) {
-        alert(err.message || 'Save failed');
+        alert(err.message || 'Save failed — entry kept locally until it syncs');
       }
     }
-    $$('[data-ops]', drawer).forEach((el) => el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value })));
+    $$('[data-ops]', drawer).forEach((el) => {
+      const tag = (el.tagName || '').toLowerCase();
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      const instant = tag === 'select' || type === 'date';
+      el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value }, el));
+      if (!instant) {
+        el.addEventListener('input', () => {
+          markPending(vin, el.dataset.ops, el.value);
+          const key = pendKey(vin, el.dataset.ops);
+          if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
+          saveTimers.set(key, setTimeout(() => {
+            saveTimers.delete(key);
+            savePatch({ [el.dataset.ops]: el.value }, el);
+          }, 350));
+        });
+      }
+      el.addEventListener('blur', () => savePatch({ [el.dataset.ops]: el.value }, el));
+    });
     $$('[data-yn]', drawer).forEach((group) => {
       $$('button', group).forEach((b) => b.addEventListener('click', () => {
         $$('button', group).forEach((x) => x.classList.remove('active'));
@@ -1372,19 +1596,69 @@
   }
 
   // ——— Session ———
+  function renderMonthCloseBanner(mc) {
+    const ban = $('#month-close-banner');
+    if (!ban) return;
+    const show = !!(isManager() && mc && mc.pending);
+    ban.classList.toggle('hidden', !show);
+    if (!show) return;
+    const title = $('#month-close-title');
+    const text = $('#month-close-text');
+    const applyBtn = $('#month-close-apply');
+    if (title) title.textContent = `Month ${mc.forMonth || ''} archive ready`;
+    if (text) {
+      text.textContent = mc.downloaded
+        ? `Excel downloaded · click Clear Live Sheet to remove ${mc.willRemove || 0} VIN(s) with status PSFU / Claimed / تم التسليم (keep ${mc.willKeep || 0}).`
+        : `Day-1 archive · download Excel first (${mc.total || 0} VINs). Then clear PSFU / Claimed / تم التسليم from the Live Sheet (keep other statuses).`;
+    }
+    if (applyBtn) applyBtn.disabled = !mc.downloaded;
+  }
+
+  async function refreshMonthClose() {
+    if (!isManager()) return;
+    try {
+      const mc = await api('/month-close');
+      renderMonthCloseBanner(mc);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function downloadMonthClose() {
+    await downloadFile('/month-close/download', `DT-Month-Close.xlsx`);
+    await refreshMonthClose();
+    alert('Excel downloaded. After you save it, click Clear Live Sheet.');
+  }
+
+  async function applyMonthClose() {
+    if (!confirm('Remove all VINs with status PSFU, Claimed, or تم التسليم from the Live Sheet? Other statuses stay.')) return;
+    const res = await api('/month-close/apply', { method: 'POST', json: {} });
+    renderMonthCloseBanner(res.monthClose);
+    alert(`Done · kept ${res.kept || 0} · removed ${res.removed || 0}`);
+    refreshView().catch(() => {});
+  }
+
   function showApp() {
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     loadSelection();
+    loadDrafts();
     startGuestTick();
     if (canEditAnyVin()) {
       $('#live-edit-hint').textContent = `${state.user.name} can edit every VIN directly on this sheet.`;
     }
     loadAppointmentBadge().catch(() => {});
     setView('dashboard');
+    flushPendingOps().catch(() => {});
+    refreshMonthClose().catch(() => {});
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await flushPendingOps({ keepalive: true });
+    } catch {
+      /* keep going */
+    }
     api('/auth/logout', { method: 'POST' }).catch(() => {});
     clearSession();
     location.reload();
@@ -1437,9 +1711,23 @@
 
   // ——— Events ———
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && state.user && $('#app').classList.contains('is-on')) {
+    if (document.hidden) {
+      flushPendingOps({ keepalive: true }).catch(() => {});
+      return;
+    }
+    if (state.user && $('#app').classList.contains('is-on')) {
       refreshViewSilent().catch(() => {});
     }
+  });
+  window.addEventListener('pagehide', () => {
+    flushPendingOps({ keepalive: true }).catch(() => {});
+  });
+  window.addEventListener('beforeunload', () => {
+    // Capture + persist drafts synchronously; keepalive fetch runs in pagehide
+    $$('.cell-edit').forEach((el) => {
+      if (el.dataset.vin && el.dataset.field) markPending(el.dataset.vin, el.dataset.field, el.value);
+    });
+    persistDrafts();
   });
   window.addEventListener('focus', () => {
     if (state.user && $('#app').classList.contains('is-on')) {
@@ -1448,8 +1736,21 @@
   });
   $('#login-btn').addEventListener('click', login);
   $('#login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
-  $('#logout-btn').addEventListener('click', logout);
-  $('#refresh-btn').addEventListener('click', refreshView);
+  $('#logout-btn').addEventListener('click', () => { logout().catch(() => location.reload()); });
+  $('#refresh-btn').addEventListener('click', () => {
+    flushPendingOps().then(() => refreshView()).catch(() => refreshView());
+    refreshMonthClose().catch(() => {});
+  });
+  if ($('#month-close-download')) {
+    $('#month-close-download').addEventListener('click', () => {
+      downloadMonthClose().catch((err) => alert(err.message || 'Download failed'));
+    });
+  }
+  if ($('#month-close-apply')) {
+    $('#month-close-apply').addEventListener('click', () => {
+      applyMonthClose().catch((err) => alert(err.message || 'Clear failed'));
+    });
+  }
   $('#global-search').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     state.liveFilters.q = e.target.value.trim();

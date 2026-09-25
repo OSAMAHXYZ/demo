@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="inventory-managment.css?v=20260924disp1" />
+  <link rel="stylesheet" href="inventory-managment.css?v=20260925label2" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -67,12 +67,14 @@
           <button type="button" class="tab" data-view="delivery">Delivery</button>
         </div>
         <div class="label-bar hidden" id="label-bar">
-          <span class="label-bar-lbl">Claim as</span>
+          <span class="label-bar-lbl">Type for selected</span>
           <div class="label-pills" id="label-pills">
             <button type="button" data-label="display">Display</button>
             <button type="button" class="active" data-label="delivery">Delivery</button>
           </div>
         </div>
+        <button type="button" class="btn-primary hidden" id="claim-display-btn">Add as Display</button>
+        <button type="button" class="btn-primary hidden" id="claim-delivery-btn">Add as Delivery</button>
         <button type="button" class="btn-primary" id="claim-btn">Add selected to my stock</button>
         <button type="button" class="btn" id="release-btn">Release selected</button>
       </div>
@@ -101,7 +103,20 @@
     </div>
   </div>
 
-  <script src="shared.js?v=20260923d1"></script>
-  <script src="inventory-managment.js?v=20260924disp1"></script>
+  <div class="label-modal hidden" id="label-modal" aria-hidden="true">
+    <div class="label-modal-card">
+      <h2 id="label-modal-title">Label this car</h2>
+      <p class="hint" id="label-modal-sub">Choose Display or Delivery for the selected VIN(s).</p>
+      <div class="label-modal-vins" id="label-modal-vins"></div>
+      <div class="label-modal-actions">
+        <button type="button" class="btn-primary label-pick" data-pick="display" id="label-pick-display">Display</button>
+        <button type="button" class="btn-primary label-pick delivery" data-pick="delivery" id="label-pick-delivery">Delivery</button>
+        <button type="button" class="btn" id="label-modal-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared.js?v=20260924scope1"></script>
+  <script src="inventory-managment.js?v=20260925label2"></script>
 </body>
 </html>

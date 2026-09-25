@@ -2322,3 +2322,33 @@ table.live-sheet tr.row-guest-exp td.col-vin {
   }
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Month-close manager banner */
+.month-close-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 16px 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+}
+.month-close-banner.hidden { display: none !important; }
+.month-close-copy strong {
+  display: block;
+  color: #9a3412;
+  font-size: 0.95rem;
+}
+.month-close-copy p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: #7c2d12;
+}
+.month-close-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

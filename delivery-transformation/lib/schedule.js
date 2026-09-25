@@ -3,9 +3,11 @@
 /**
  * VIN schedule / SLA engine.
  * Day 1 is always that VIN's Proforma Date — never the calendar day of the month.
+ * Hour-based SLA conditions live in ./sla-engine (admin-controlled).
  */
 
 const { USERS } = require('./constants');
+const slaEngine = require('./sla-engine');
 
 const DEFAULT_SLA = Object.freeze([
   { id: 'psfu', label: 'PSFU', statuses: ['PSFU'], targetDay: 5, enabled: true },
@@ -104,13 +106,12 @@ function normalizeSla(input) {
   });
 }
 
-function recordStatusEnter(ops, status, at) {
-  const s = String(status || '').trim();
-  if (!s || !ops) return false;
-  if (!Array.isArray(ops.statusHistory)) ops.statusHistory = [];
-  if (ops.statusHistory.some((h) => h && h.status === s)) return false;
-  ops.statusHistory.push({ status: s, at: at || new Date().toISOString() });
-  return true;
+function recordStatusEnter(ops, status, at, by) {
+  return slaEngine.recordStatusEnter(ops, status, at, by);
+}
+
+function recordStatusTransition(ops, previousStatus, newStatus, at, by) {
+  return slaEngine.recordStatusTransition(ops, previousStatus, newStatus, at, by);
 }
 
 function backfillFromAudit(vehicle, auditRows) {
@@ -278,7 +279,7 @@ function computeVinSla(vehicle, sla, today, auditRows) {
   };
 }
 
-function computeDashboard({ vehicles, slaItems, today, month, audit }) {
+function computeDashboard({ vehicles, slaItems, slaControl: slaControlRaw, today, month, audit, now }) {
   const items = normalizeSla(slaItems).filter((s) => s.enabled);
   const auditByVin = {};
   (audit || []).forEach((a) => {
@@ -323,11 +324,19 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
   });
 
   const focus = bySla[0] || { total: 0, green: 0, red: 0 };
+  const slaControl = slaEngine.readControl({
+    slaControl: slaControlRaw,
+    sla: slaItems,
+  });
+  const nowIso = now || new Date().toISOString();
+  const controlEval = slaEngine.evaluatePool(pool, slaControl, nowIso, { month });
   const calendar = computeVsndCalendar({
     vehicles: vehicles || [],
     today,
     month,
     slaItems: items,
+    slaControl,
+    now: nowIso,
   });
   if (calendar && calendar.analytics) {
     calendar.analytics.entryAccuracy = computeEntryAccuracy({
@@ -350,6 +359,9 @@ function computeDashboard({ vehicles, slaItems, today, month, audit }) {
       green: bySla.reduce((s, x) => s + x.green, 0),
       red: bySla.reduce((s, x) => s + x.red, 0),
     },
+    controlCenter: controlEval.kpis,
+    conditionRows: controlEval.rows,
+    slaControl,
     sla: bySla,
     focusId: focus.id || '',
     calendar,
@@ -384,7 +396,7 @@ function weekdayShort(ym, day) {
   return dt.toLocaleString('en', { weekday: 'short', timeZone: 'UTC' });
 }
 
-function computeVsndCalendar({ vehicles, today, month, slaItems }) {
+function computeVsndCalendar({ vehicles, today, month, slaItems, slaControl, now }) {
   const ym = month || String(today || '').slice(0, 7);
   const days = daysInMonth(ym);
   const todayDay = String(today || '').slice(0, 7) === ym
@@ -392,16 +404,20 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     : days;
   const psfuSla = (slaItems || []).find((s) => s.id === 'psfu') || { targetDay: 5 };
   const psfuTarget = Number(psfuSla.targetDay) || 5;
+  const control = slaControl || slaEngine.readControl({ sla: slaItems });
+  const nowIso = now || new Date().toISOString();
 
   const rows = VSND_ROWS.map((meta) => ({
     ...meta,
     days: Array.from({ length: days }, () => 0),
+    zones: Array.from({ length: days }, () => 'empty'),
     total: 0,
   }));
   const byStatus = new Map(rows.map((r) => [r.status, r]));
   const dayTotals = Array.from({ length: days }, () => 0);
   const seenDelivered = new Set();
   const seenVsnd = new Set();
+  const seenGrid = new Set();
   let delivered = 0;
   let notDelivered = 0;
   const vinIndex = [];
@@ -412,7 +428,6 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     const inv = dayKey(v.raw && v.raw.invoiceDate);
     const status = String((v.ops && v.ops.opsStatus) || '').trim();
 
-    // Delivered = Sales Raw Col V (invoiceDate) in the selected month
     if (inv && inv.slice(0, 7) === ym) {
       if (vinKey && !seenDelivered.has(vinKey)) {
         seenDelivered.add(vinKey);
@@ -420,18 +435,24 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
       }
     }
 
-    // Not Delivered (VSND) = Col P in month · Col V empty
     const isVsnd = !!(p && p.slice(0, 7) === ym && !inv);
     if (isVsnd && vinKey && !seenVsnd.has(vinKey)) {
       seenVsnd.add(vinKey);
       notDelivered += 1;
     }
 
-    // Schedule grid: all VINs with Proforma (Col P) in this month
     if (!p || p.slice(0, 7) !== ym) return;
     const day = Number(p.slice(8, 10));
     if (!day || day < 1 || day > days) return;
+
+    // Unique VIN once on the schedule grid
+    if (vinKey) {
+      if (seenGrid.has(vinKey)) return;
+      seenGrid.add(vinKey);
+    }
+
     const row = byStatus.get(status);
+    const evalRow = slaEngine.evaluateVin(v, control, nowIso);
     const entry = {
       vin: v.vin,
       employee: (v.ops && v.ops.assignedEmployeeName) || '',
@@ -443,12 +464,24 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
       city: String((v.ops && (v.ops.transferCity || v.ops.coordinatorPrintCity)) || '').trim(),
       isVsnd,
       isDelivered: !!inv,
+      statusChangedAt: evalRow.statusChangedAt,
+      statusAgeHours: evalRow.statusAgeHours,
+      slaWarning: evalRow.slaWarning,
+      slaBreach: evalRow.slaBreach,
+      condition: evalRow.condition,
+      conditionLabel: evalRow.conditionLabel,
+      zone: evalRow.zone,
+      deliveryDueDate: evalRow.deliveryDueDate,
+      deliveryDate: evalRow.deliveryDate,
+      deliverySlaResult: evalRow.deliverySlaResult,
     };
     vinIndex.push(entry);
-    dayTotals[day - 1] += 1;
     if (!row) return;
     row.days[day - 1] += 1;
     row.total += 1;
+    dayTotals[day - 1] += 1;
+    const cellZones = row._cellZones || (row._cellZones = Array.from({ length: days }, () => []));
+    cellZones[day - 1].push(evalRow.zone);
   });
 
   const dayHeaders = Array.from({ length: days }, (_, i) => ({
@@ -467,6 +500,8 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     rows,
   });
 
+  const gridTotal = dayTotals.reduce((s, n) => s + n, 0);
+
   return {
     month: ym,
     today,
@@ -476,15 +511,25 @@ function computeVsndCalendar({ vehicles, today, month, slaItems }) {
     psfuTarget,
     delivered,
     notDelivered,
-    grandTotal: delivered + notDelivered,
+    grandTotal: gridTotal,
     dayTotals,
     rows: rows.map((r) => {
       const zones = r.days.map((n, i) => {
         const day = i + 1;
         if (day > todayDay) return 'future';
-        if (day < psfuTarget) return 'ok';
-        if (day === psfuTarget) return 'due';
-        return 'late';
+        if (!n) {
+          // empty future-relative day styling from legacy PSFU day bands
+          if (day < psfuTarget) return 'ok';
+          if (day === psfuTarget) return 'due';
+          return 'late';
+        }
+        const cellList = (r._cellZones && r._cellZones[i]) || [];
+        const worst = slaEngine.worstZone(cellList);
+        if (worst === 'red') return 'late';
+        if (worst === 'yellow') return 'due';
+        if (worst === 'green') return 'ok';
+        if (worst === 'grey') return 'future';
+        return 'ok';
       });
       return {
         status: r.status,
@@ -828,9 +873,11 @@ module.exports = {
   actualDays,
   normalizeSla,
   recordStatusEnter,
+  recordStatusTransition,
   backfillFromAudit,
   computeVinSla,
   computeEntryAccuracy,
   computeDashboard,
   computeVsndCalendar,
+  slaEngine,
 };

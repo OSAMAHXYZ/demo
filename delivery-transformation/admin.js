@@ -940,23 +940,27 @@
     return loadDash();
   }
 
-  function donutSvg(segments, centerLabel, centerSub, { clickable = false } = {}) {
+  function donutSvg(segments, centerLabel, centerSub, { clickable = false, size = 84 } = {}) {
     const total = segments.reduce((s, x) => s + (Number(x.count) || 0), 0) || 1;
-    const r = 34;
+    const box = Number(size) || 84;
+    const cx = box / 2;
+    const r = Math.round(box * 0.405);
+    const inner = Math.round(box * 0.286);
+    const stroke = Math.max(8, Math.round(box * 0.12));
     const c = 2 * Math.PI * r;
     let offset = 0;
     const arcs = segments.filter((x) => x.count > 0).map((x) => {
       const len = (x.count / total) * c;
       const key = esc(x.status || x.name || x.label || '');
-      const arc = `<circle class="${clickable ? 'vsnd-arc-hit' : ''}" cx="42" cy="42" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="10"
+      const arc = `<circle class="${clickable ? 'vsnd-arc-hit' : ''}" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="${stroke}"
         stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
-        transform="rotate(-90 42 42)" ${clickable ? `data-status="${key}" role="button" tabindex="0"` : ''}></circle>`;
+        transform="rotate(-90 ${cx} ${cx})" ${clickable ? `data-status="${key}" role="button" tabindex="0"` : ''}></circle>`;
       offset += len;
       return arc;
     }).join('');
-    return `<div class="vsnd-donut${clickable ? ' is-clickable' : ''}">
-      <svg viewBox="0 0 84 84" aria-hidden="true">${arcs}
-        <circle cx="42" cy="42" r="24" fill="#fff"></circle>
+    return `<div class="vsnd-donut${clickable ? ' is-clickable' : ''}" style="width:${box}px;height:${box}px">
+      <svg viewBox="0 0 ${box} ${box}" aria-hidden="true">${arcs}
+        <circle cx="${cx}" cy="${cx}" r="${inner}" fill="#fff"></circle>
       </svg>
       <button type="button" class="vsnd-donut-center${clickable ? ' is-hit' : ''}" ${clickable ? 'data-status=""' : 'disabled'} title="All VSND">
         <strong>${esc(centerLabel)}</strong><span>${esc(centerSub || '')}</span>
@@ -964,14 +968,38 @@
     </div>`;
   }
 
-  function legendList(items, { clickable = false } = {}) {
-    return `<ul class="vsnd-legend-list${clickable ? ' is-clickable' : ''}">${items.map((x) => `
+  function legendList(items, { clickable = false, wide = false } = {}) {
+    return `<ul class="vsnd-legend-list${clickable ? ' is-clickable' : ''}${wide ? ' is-wide' : ''}">${items.map((x) => `
       <li ${clickable ? `class="vsnd-legend-hit" data-status="${esc(x.status || '')}" role="button" tabindex="0"` : ''}>
         <i style="background:${esc(x.color)}"></i>
         <span>${esc(x.label || x.name)}</span>
         <b>${esc(x.count)}</b>
         <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
       </li>`).join('')}</ul>`;
+  }
+
+  function openWideVsndStatusChart() {
+    const cal = slaDash && slaDash.calendar;
+    const a = (cal && cal.analytics) || {};
+    const byStatus = a.byStatusVsnd || [];
+    const total = a.vsndTotal || 0;
+    const monthNote = monthLabel(cal && cal.month) || (cal && cal.month) || '';
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>VSND by Status</h2>
+          <p class="sub">${esc(monthNote)} · ${total} open VSND · click a slice or row for Live Sheet VINs</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="vsnd-wide-chart" id="vsnd-wide-status-chart">
+        ${donutSvg(byStatus, String(total), 'VSND', { clickable: true, size: 220 })}
+        <div class="vsnd-wide-legend">
+          ${legendList(byStatus, { clickable: true, wide: true })}
+          <p class="hint" style="margin-top:10px">Tip: click the centre for all open VSND VINs.</p>
+        </div>
+      </div>`, { wide: true });
+    wireVsndStatusHits($('vsnd-wide-status-chart'));
   }
 
   function wireVsndStatusHits(root) {
@@ -1006,31 +1034,33 @@
       return;
     }
     const users = inv.users || [];
-    const max = Math.max(1, ...users.map((u) => Math.max(u.stockIn || 0, u.stockOut || 0)));
     const stockIn = inv.stockIn != null ? inv.stockIn : users.reduce((s, u) => s + (u.stockIn || 0), 0);
     const stockOut = inv.stockOut != null ? inv.stockOut : users.reduce((s, u) => s + (u.stockOut || 0), 0);
+    const max = Math.max(1, ...users.map((u) => Math.max(u.stockIn || 0, u.stockOut || 0)), stockIn, stockOut);
     host.innerHTML = `
-      <div class="inv-totals">
-        <div class="inv-total in"><span>Stock In</span><strong>${esc(stockIn)}</strong></div>
-        <div class="inv-total out"><span>Stock Out</span><strong>${esc(stockOut)}</strong></div>
-        <button type="button" class="btn inv-more" id="inv-more-details">More details</button>
-      </div>
-      <div class="vsnd-vbars inv-vbars">
-        ${users.map((u) => {
-          const inH = ((u.stockIn || 0) / max) * 100;
-          const outH = ((u.stockOut || 0) / max) * 100;
-          return `<div class="vsnd-vbar" title="${esc(u.name)} · ${u.stockIn || 0} in · ${u.stockOut || 0} out">
-            <div class="vsnd-vbar-stack inv-stack">
-              <i class="del" style="height:${inH}%"></i>
-              <i class="vs" style="height:${outH}%"></i>
-            </div>
-            <span>${esc(u.name)}</span>
-          </div>`;
-        }).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No inventory users</p>'}
-      </div>
-      <div class="vsnd-mini-legend"><span><i class="del"></i> Stock In</span><span><i class="vs"></i> Stock Out</span></div>`;
-    const more = $('inv-more-details');
-    if (more) more.onclick = () => openInventoryDetail();
+      <div class="inv-compact-wrap">
+        <div class="inv-totals inv-totals-compact">
+          <div class="inv-total in"><span>Stock In</span><strong>${esc(stockIn)}</strong></div>
+          <div class="inv-total out"><span>Stock Out</span><strong>${esc(stockOut)}</strong></div>
+        </div>
+        <div class="inv-hbar-list">
+          ${users.map((u) => {
+            const inW = ((u.stockIn || 0) / max) * 100;
+            const outW = ((u.stockOut || 0) / max) * 100;
+            return `<div class="inv-hbar-row" title="${esc(u.name)} · ${u.stockIn || 0} in · ${u.stockOut || 0} out">
+              <span class="inv-hbar-name">${esc(u.name)}</span>
+              <span class="inv-hbar-tracks">
+                <span class="inv-hbar-track in"><i style="width:${inW}%"></i></span>
+                <span class="inv-hbar-track out"><i style="width:${outW}%"></i></span>
+              </span>
+              <span class="inv-hbar-nums"><b class="in">${esc(u.stockIn || 0)}</b>/<b class="out">${esc(u.stockOut || 0)}</b></span>
+            </div>`;
+          }).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No inventory users</p>'}
+        </div>
+        <div class="vsnd-mini-legend"><span><i class="del"></i> In</span><span><i class="vs"></i> Out</span></div>
+      </div>`;
+    const wide = $('inv-wide-btn');
+    if (wide) wide.onclick = () => openInventoryDetail();
   }
 
   function openInventoryDetail() {
@@ -1218,9 +1248,22 @@
     const byStatus = a.byStatusVsnd || [];
     if ($('vsnd-by-status-body')) {
       $('vsnd-by-status-body').innerHTML = `
-        ${donutSvg(byStatus, String(a.vsndTotal || 0), 'VSND', { clickable: true })}
-        ${legendList(byStatus, { clickable: true })}`;
+        ${donutSvg(byStatus, String(a.vsndTotal || 0), 'VSND', { clickable: true, size: 72 })}
+        ${legendList(byStatus, { clickable: true })}
+        <button type="button" class="vsnd-expand-hit" id="vsnd-status-expand" title="Open wide chart">⤢</button>`;
       wireVsndStatusHits($('vsnd-by-status-body'));
+      const expand = $('vsnd-status-expand');
+      if (expand) expand.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openWideVsndStatusChart();
+      });
+    }
+    const wideBtn = $('vsnd-status-wide');
+    if (wideBtn) {
+      wideBtn.onclick = (e) => {
+        e.stopPropagation();
+        openWideVsndStatusChart();
+      };
     }
 
     renderInventoryPanel();
@@ -1584,6 +1627,11 @@
       });
     }
     renderVsndCharts(cal);
+    if (slaDash && slaDash.controlCenter) {
+      renderControlKpis('vsnd-sla-kpis', slaDash.controlCenter);
+      renderControlKpis('sla-control-kpis', slaDash.controlCenter);
+    }
+    renderScheduleAlerts(cal);
 
     const headers = cal.dayHeaders || [];
     const headCells = headers.map((h) => `
@@ -1645,6 +1693,77 @@
     });
   }
 
+  function scheduleAlertRank(condition) {
+    const order = [
+      'SLA_BREACHED', 'NO_MOVEMENT', 'DELIVERY_LATE', 'COMPLETED_LATE',
+      'DUE_TODAY', 'AT_RISK', 'MISSING_DATA',
+    ];
+    const i = order.indexOf(condition);
+    return i >= 0 ? i : 99;
+  }
+
+  function isScheduleAlert(condition) {
+    return scheduleAlertRank(condition) < 99;
+  }
+
+  function renderScheduleAlerts(cal) {
+    const host = $('vsnd-alerts-body');
+    const meta = $('vsnd-alerts-meta');
+    if (!host) return;
+    const vins = (cal && cal.vins) || [];
+    const alerts = vins
+      .filter((v) => isScheduleAlert(v.condition) || v.zone === 'red' || v.zone === 'yellow')
+      .slice()
+      .sort((a, b) => {
+        const ra = scheduleAlertRank(a.condition);
+        const rb = scheduleAlertRank(b.condition);
+        if (ra !== rb) return ra - rb;
+        return (b.statusAgeHours || 0) - (a.statusAgeHours || 0);
+      });
+
+    const breached = alerts.filter((a) => a.condition === 'SLA_BREACHED' || a.condition === 'NO_MOVEMENT' || a.condition === 'DELIVERY_LATE').length;
+    const risk = alerts.filter((a) => a.condition === 'AT_RISK' || a.condition === 'DUE_TODAY').length;
+    if (meta) {
+      meta.textContent = alerts.length
+        ? `${alerts.length} alert(s) · ${breached} critical · ${risk} at risk/due · live from schedule`
+        : 'No schedule alerts · all on track';
+    }
+
+    if (!alerts.length) {
+      host.innerHTML = '<p class="chart-empty">No schedule alerts right now</p>';
+      return;
+    }
+
+    const tone = (c) => {
+      if (c === 'SLA_BREACHED' || c === 'NO_MOVEMENT' || c === 'DELIVERY_LATE' || c === 'COMPLETED_LATE') return 'crit';
+      if (c === 'AT_RISK' || c === 'DUE_TODAY') return 'warn';
+      return 'info';
+    };
+
+    host.innerHTML = `
+      <div class="vsnd-alert-list">
+        ${alerts.map((r) => `
+          <button type="button" class="vsnd-alert-row tone-${tone(r.condition)}"
+            data-status="${esc(r.status)}" data-day="${esc(r.day)}" data-vin="${esc(r.vin)}"
+            title="Open schedule cell">
+            <span class="vsnd-alert-badge">${esc(r.conditionLabel || r.condition || 'ALERT')}</span>
+            <span class="vsnd-alert-vin"><b>${esc(r.vin)}</b></span>
+            <span class="vsnd-alert-model">${esc(r.product || '—')}</span>
+            <span class="vsnd-alert-status">${esc(r.status || '—')}</span>
+            <span class="vsnd-alert-age">${r.statusAgeHours != null ? `${esc(r.statusAgeHours)}h` : '—'}</span>
+            <span class="vsnd-alert-pro">${esc(r.proforma || '—')}</span>
+          </button>`).join('')}
+      </div>`;
+
+    host.querySelectorAll('.vsnd-alert-row').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const day = Number(btn.dataset.day) || 0;
+        const status = btn.dataset.status || '';
+        openVsndCell(status, day);
+      });
+    });
+  }
+
   function openVsndCell(status, day) {
     const cal = slaDash && slaDash.calendar;
     if (!cal) return;
@@ -1652,27 +1771,47 @@
       if (status && v.status !== status) return false;
       if (day && Number(v.day) !== Number(day)) return false;
       return true;
-    }).sort((a, b) => String(a.vin).localeCompare(String(b.vin)));
+    }).sort((a, b) => {
+      const za = a.zone === 'red' ? 0 : a.zone === 'yellow' ? 1 : 2;
+      const zb = b.zone === 'red' ? 0 : b.zone === 'yellow' ? 1 : 2;
+      if (za !== zb) return za - zb;
+      return String(a.vin).localeCompare(String(b.vin));
+    });
     const title = day ? `${status} · Day ${day}` : status;
+    const condClass = (c) => {
+      if (c === 'SLA_BREACHED' || c === 'NO_MOVEMENT' || c === 'DELIVERY_LATE' || c === 'COMPLETED_LATE') return 'sla-bad';
+      if (c === 'AT_RISK' || c === 'DUE_TODAY') return 'sla-warn';
+      if (c === 'ON_TRACK' || c === 'COMPLETED_ON_TIME') return 'sla-ok';
+      return '';
+    };
     openDrawer(`
       <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
         <div>
           <h2>${esc(title)}</h2>
-          <p class="sub">${esc(monthLabel(cal.month) || cal.month)} · ${rows.length} VIN(s) · by Proforma date</p>
+          <p class="sub">${esc(monthLabel(cal.month) || cal.month)} · ${rows.length} unique VIN(s) · Proforma date × status</p>
         </div>
         <button type="button" class="btn" id="detail-close">Close</button>
       </div>
       <div class="table-wrap" style="max-height:70vh">
         <table class="data">
-          <thead><tr><th>VIN</th><th>Product</th><th>Employee</th><th>Proforma</th><th>Status</th></tr></thead>
+          <thead>
+            <tr>
+              <th>VIN</th><th>Model</th><th>Proforma</th><th>Status since</th>
+              <th>Age</th><th>SLA</th><th>Condition</th><th>Delivery due</th>
+            </tr>
+          </thead>
           <tbody>${rows.map((r) => `
             <tr>
-              <td class="detail-vin">${esc(r.vin)}</td>
+              <td class="detail-vin"><b>${esc(r.vin)}</b></td>
               <td>${esc(r.product || '—')}</td>
-              <td>${esc(r.employee || '—')}</td>
               <td>${esc(r.proforma || '—')}</td>
-              <td>${esc(r.status || '—')}</td>
-            </tr>`).join('') || '<tr><td colspan="5">No VINs in this cell.</td></tr>'}</tbody>
+              <td>${esc((r.statusChangedAt || '').replace('T', ' ').slice(0, 16) || 'MISSING')}</td>
+              <td>${r.statusAgeHours != null ? `${esc(r.statusAgeHours)}h` : '—'}</td>
+              <td>${r.slaBreach != null ? `${esc(r.slaBreach)}h` : '—'}</td>
+              <td class="${condClass(r.condition)}"><b>${esc(r.conditionLabel || r.condition || '—')}</b></td>
+              <td>${esc(r.deliveryDueDate || '—')}${r.deliverySlaResult ? `<br><span class="hint">${esc(r.deliverySlaResult)}</span>` : ''}</td>
+            </tr>`).join('') || '<tr><td colspan="8">No VINs in this cell.</td></tr>'}
+          </tbody>
         </table>
       </div>`);
   }
@@ -1708,32 +1847,214 @@
       </div>`);
   }
 
-  function renderSlaForm(data) {
-    const host = $('sla-body');
+  function renderControlKpis(hostId, kpis) {
+    const host = $(hostId);
     if (!host) return;
-    host.innerHTML = (data.items || []).map((x) => `
-      <tr>
-        <td><b>${esc(x.label)}</b></td>
-        <td>${esc((x.statuses || []).join(', '))}</td>
-        <td><input type="number" min="1" max="60" step="1" class="wgt-input sla-day" data-id="${esc(x.id)}" value="${x.targetDay}" /></td>
-        <td><input type="checkbox" class="sla-on" data-id="${esc(x.id)}" ${x.enabled ? 'checked' : ''} /></td>
-      </tr>`).join('');
+    const k = kpis || {};
+    const cards = [
+      ['TOTAL VINs', k.total || 0, ''],
+      ['ON TRACK', k.ON_TRACK || 0, 'ok'],
+      ['AT RISK', k.AT_RISK || 0, 'warn'],
+      ['DUE TODAY', k.DUE_TODAY || 0, 'warn'],
+      ['SLA BREACHED', k.SLA_BREACHED || 0, 'bad'],
+      ['NO MOVEMENT', k.NO_MOVEMENT || 0, 'bad'],
+      ['DELIVERY LATE', k.DELIVERY_LATE || 0, 'bad'],
+    ];
+    host.innerHTML = cards.map(([l, v, c]) =>
+      `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`
+    ).join('');
+  }
+
+  let slaConfigState = null;
+
+  function renderSlaForm(data) {
+    slaConfigState = data;
+    const canEdit = !!(data && data.canEdit);
+    const control = (data && data.control) || { rules: [], delivery: {} };
+    const host = $('sla-body');
+    if (host) {
+      host.innerHTML = (control.rules || []).map((x) => `
+        <tr data-rule-id="${esc(x.id)}">
+          <td><b>${esc(x.status)}</b></td>
+          <td><input type="number" min="0" step="1" class="wgt-input sla-f" data-f="warningValue" value="${esc(x.warningValue)}" ${canEdit ? '' : 'disabled'} /> h</td>
+          <td><input type="number" min="0" step="1" class="wgt-input sla-f" data-f="breachValue" value="${esc(x.breachValue)}" ${canEdit ? '' : 'disabled'} /> h</td>
+          <td><input type="number" min="0" step="1" class="wgt-input sla-f" data-f="noMoveWarnValue" value="${esc(x.noMoveWarnValue)}" ${canEdit ? '' : 'disabled'} /> h</td>
+          <td><input type="number" min="0" step="1" class="wgt-input sla-f" data-f="noMoveBreachValue" value="${esc(x.noMoveBreachValue)}" ${canEdit ? '' : 'disabled'} /> h</td>
+          <td><input type="checkbox" class="sla-f" data-f="active" ${x.active ? 'checked' : ''} ${canEdit ? '' : 'disabled'} /></td>
+          <td>${canEdit ? `<button type="button" class="btn sla-edit-row" data-id="${esc(x.id)}">Edit</button>` : 'View'}</td>
+        </tr>`).join('') || '<tr><td colspan="7">No SLA rules</td></tr>';
+    }
+
+    const dHost = $('sla-delivery-form');
+    const d = control.delivery || {};
+    if (dHost) {
+      dHost.innerHTML = `
+        <div class="field"><label>Target days</label><input type="number" min="1" id="sla-del-target" value="${esc(d.targetDays != null ? d.targetDays : 5)}" ${canEdit ? '' : 'disabled'} /></div>
+        <div class="field"><label>Warning days</label><input type="number" min="0" id="sla-del-warn" value="${esc(d.warningDays != null ? d.warningDays : 4)}" ${canEdit ? '' : 'disabled'} /></div>
+        <div class="field"><label>Breach days</label><input type="number" min="0" id="sla-del-breach" value="${esc(d.breachDays != null ? d.breachDays : 5)}" ${canEdit ? '' : 'disabled'} /></div>
+        <div class="field"><label>Start from</label>
+          <select id="sla-del-start" ${canEdit ? '' : 'disabled'}>
+            <option value="proforma"${d.startFrom === 'proforma' ? ' selected' : ''}>Proforma Date</option>
+            <option value="claimed"${d.startFrom === 'claimed' ? ' selected' : ''}>CLAIMED Date</option>
+            <option value="psfu"${d.startFrom === 'psfu' ? ' selected' : ''}>PSFU Date</option>
+          </select>
+        </div>
+        <div class="field"><label>Day type</label>
+          <select id="sla-del-type" ${canEdit ? '' : 'disabled'}>
+            <option value="calendar"${d.dayType !== 'working' ? ' selected' : ''}>Calendar days</option>
+            <option value="working"${d.dayType === 'working' ? ' selected' : ''}>Working days</option>
+          </select>
+        </div>
+        <div class="field"><label>Active</label>
+          <select id="sla-del-active" ${canEdit ? '' : 'disabled'}>
+            <option value="yes"${d.active !== false ? ' selected' : ''}>YES</option>
+            <option value="no"${d.active === false ? ' selected' : ''}>NO</option>
+          </select>
+        </div>`;
+    }
+
+    const hist = $('sla-history-body');
+    if (hist) {
+      hist.innerHTML = (data.history || []).map((h) => {
+        const changes = Array.isArray(h.detail) && h.detail.length
+          ? h.detail.map((dd) => `${dd.status}.${dd.field}: ${dd.old} → ${dd.neu}`).join('<br>')
+          : esc(h.newValue || '—');
+        return `<tr>
+          <td>${esc((h.at || '').replace('T', ' ').slice(0, 19))}</td>
+          <td>${esc(h.admin || '—')}</td>
+          <td>${esc(h.reason || '—')}</td>
+          <td class="hint">${changes}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="4">No SLA changes yet</td></tr>';
+    }
+
+    if ($('sla-save')) $('sla-save').disabled = !canEdit;
+    if ($('sla-add-rule')) $('sla-add-rule').disabled = !canEdit;
+    if ($('sla-hint')) {
+      $('sla-hint').textContent = canEdit
+        ? 'Admin · changes apply to live VSND immediately after save'
+        : 'View only · ask an admin to change SLA rules';
+    }
+
+    if (host && canEdit) {
+      host.querySelectorAll('.sla-edit-row').forEach((btn) => {
+        btn.addEventListener('click', () => openSlaRuleEditor(btn.dataset.id));
+      });
+    }
+  }
+
+  function openSlaRuleEditor(id) {
+    if (!slaConfigState || !slaConfigState.canEdit) return;
+    const rule = ((slaConfigState.control && slaConfigState.control.rules) || []).find((r) => r.id === id);
+    if (!rule) return;
+    openDrawer(`
+      <div class="drawer-head" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
+        <div><h2>${esc(rule.status)} SLA</h2><p class="sub">Edit thresholds · hours</p></div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="field"><label>Warning After (hours)</label><input type="number" id="edit-warn" value="${esc(rule.warningValue)}" /></div>
+      <div class="field"><label>Breach After (hours)</label><input type="number" id="edit-breach" value="${esc(rule.breachValue)}" /></div>
+      <div class="field"><label>No Movement Warning</label><input type="number" id="edit-nmw" value="${esc(rule.noMoveWarnValue)}" /></div>
+      <div class="field"><label>No Movement Breach</label><input type="number" id="edit-nmb" value="${esc(rule.noMoveBreachValue)}" /></div>
+      <div class="field"><label>Active</label>
+        <select id="edit-active"><option value="yes"${rule.active ? ' selected' : ''}>YES</option><option value="no"${!rule.active ? ' selected' : ''}>NO</option></select>
+      </div>
+      <button type="button" class="btn-primary" id="edit-sla-apply" style="margin-top:12px">Apply to form</button>
+    `);
+    const apply = $('edit-sla-apply');
+    if (apply) {
+      apply.onclick = () => {
+        const tr = document.querySelector('#sla-body tr[data-rule-id="' + CSS.escape(id) + '"]');
+        if (tr) {
+          const set = (f, v) => {
+            const el = tr.querySelector('[data-f="' + f + '"]');
+            if (!el) return;
+            if (el.type === 'checkbox') el.checked = !!v;
+            else el.value = v;
+          };
+          set('warningValue', Number($('edit-warn').value));
+          set('breachValue', Number($('edit-breach').value));
+          set('noMoveWarnValue', Number($('edit-nmw').value));
+          set('noMoveBreachValue', Number($('edit-nmb').value));
+          set('active', $('edit-active').value === 'yes');
+        }
+        closeDrawer();
+        toast('Updated in form — click Save SLA rules');
+      };
+    }
+  }
+
+  function collectControlFromForm() {
+    const rules = [...document.querySelectorAll('#sla-body tr[data-rule-id]')].map((tr) => {
+      const id = tr.dataset.ruleId;
+      const prev = ((slaConfigState && slaConfigState.control && slaConfigState.control.rules) || [])
+        .find((r) => r.id === id) || {};
+      const val = (f) => {
+        const el = tr.querySelector('[data-f="' + f + '"]');
+        if (!el) return prev[f];
+        if (el.type === 'checkbox') return el.checked;
+        return Number(el.value);
+      };
+      const statusEl = tr.querySelector('b');
+      return {
+        id,
+        status: prev.status || (statusEl ? statusEl.textContent : id),
+        warningValue: val('warningValue'),
+        breachValue: val('breachValue'),
+        noMoveWarnValue: val('noMoveWarnValue'),
+        noMoveBreachValue: val('noMoveBreachValue'),
+        active: val('active'),
+        warningUnit: 'hours',
+        breachUnit: 'hours',
+        noMoveWarnUnit: 'hours',
+        noMoveBreachUnit: 'hours',
+        calculationType: prev.calculationType || 'status_age',
+      };
+    });
+    return {
+      rules,
+      delivery: {
+        targetDays: Number(($('sla-del-target') && $('sla-del-target').value) || 5),
+        warningDays: Number(($('sla-del-warn') && $('sla-del-warn').value) || 4),
+        breachDays: Number(($('sla-del-breach') && $('sla-del-breach').value) || 5),
+        startFrom: ($('sla-del-start') && $('sla-del-start').value) || 'proforma',
+        dayType: ($('sla-del-type') && $('sla-del-type').value) || 'calendar',
+        active: (($('sla-del-active') && $('sla-del-active').value) || 'yes') === 'yes',
+        deliveredStatus: 'تم التسليم',
+      },
+      priority: (slaConfigState && slaConfigState.control && slaConfigState.control.priority) || undefined,
+    };
   }
 
   async function loadSlaConfig() {
     renderSlaForm(await api('/schedule/config'));
+    if (slaDash && slaDash.controlCenter) {
+      renderControlKpis('sla-control-kpis', slaDash.controlCenter);
+    }
   }
 
   async function saveSlaConfig() {
     if ($('sla-error')) $('sla-error').textContent = '';
-    const items = [...document.querySelectorAll('.sla-day')].map((el) => ({
-      id: el.dataset.id,
-      targetDay: Number(el.value),
-      enabled: !!(document.querySelector(`.sla-on[data-id="${el.dataset.id}"]`) || {}).checked,
-    }));
+    if (slaConfigState && slaConfigState.canEdit === false) {
+      if ($('sla-error')) $('sla-error').textContent = 'Only admin can change SLA rules';
+      return;
+    }
+    const reason = String(($('sla-reason') && $('sla-reason').value) || '').trim();
+    if (!reason) {
+      if ($('sla-error')) {
+        $('sla-error').textContent = 'Enter a reason for this SLA change';
+        $('sla-error').classList.add('ekpi-err');
+      }
+      return;
+    }
     try {
-      await api('/schedule/config', { method: 'PUT', json: { items } });
-      toast('Schedule saved');
+      const data = await api('/schedule/config', {
+        method: 'PUT',
+        json: { control: collectControlFromForm(), reason },
+      });
+      toast('SLA rules saved');
+      renderSlaForm(Object.assign({}, data, { canEdit: true }));
+      if ($('sla-reason')) $('sla-reason').value = '';
       await loadDash();
     } catch (err) {
       if ($('sla-error')) {
@@ -1741,6 +2062,37 @@
         $('sla-error').classList.add('ekpi-err');
       }
     }
+  }
+
+  function addSlaCondition() {
+    if (!slaConfigState || !slaConfigState.canEdit) return;
+    const status = prompt('Status name (must match Live Sheet status exactly):');
+    if (!status) return;
+    const host = $('sla-body');
+    if (!host) return;
+    const id = 'custom_' + Date.now();
+    const tr = document.createElement('tr');
+    tr.dataset.ruleId = id;
+    tr.innerHTML = `
+      <td><b>${esc(status.trim())}</b></td>
+      <td><input type="number" min="0" class="wgt-input sla-f" data-f="warningValue" value="24" /> h</td>
+      <td><input type="number" min="0" class="wgt-input sla-f" data-f="breachValue" value="48" /> h</td>
+      <td><input type="number" min="0" class="wgt-input sla-f" data-f="noMoveWarnValue" value="24" /> h</td>
+      <td><input type="number" min="0" class="wgt-input sla-f" data-f="noMoveBreachValue" value="48" /> h</td>
+      <td><input type="checkbox" class="sla-f" data-f="active" checked /></td>
+      <td>New</td>`;
+    host.appendChild(tr);
+    if (!slaConfigState.control) slaConfigState.control = { rules: [] };
+    slaConfigState.control.rules.push({
+      id,
+      status: status.trim(),
+      warningValue: 24,
+      breachValue: 48,
+      noMoveWarnValue: 24,
+      noMoveBreachValue: 48,
+      active: true,
+    });
+    toast('Condition added — set reason and Save');
   }
 
   async function loadDash({ silent = false } = {}) {
@@ -1868,6 +2220,7 @@
   }
   if ($('weight-save')) $('weight-save').addEventListener('click', () => saveWeights());
   if ($('sla-save')) $('sla-save').addEventListener('click', () => saveSlaConfig());
+  if ($('sla-add-rule')) $('sla-add-rule').addEventListener('click', () => addSlaCondition());
   async function runExport(path, filename) {
     try {
       await downloadFile(path, filename);

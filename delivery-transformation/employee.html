@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20260923emp17" />
+  <link rel="stylesheet" href="employee.css?v=20260925month1" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -69,6 +69,17 @@
           <button type="button" class="btn" id="refresh-btn">Refresh</button>
         </div>
       </header>
+
+      <div class="month-close-banner hidden" id="month-close-banner" role="alert">
+        <div class="month-close-copy">
+          <strong id="month-close-title">Month archive ready</strong>
+          <p id="month-close-text">Download the Excel archive, then clear PSFU / Claimed / تم التسليم from the Live Sheet.</p>
+        </div>
+        <div class="month-close-actions">
+          <button type="button" class="btn-primary" id="month-close-download">Download Excel</button>
+          <button type="button" class="btn" id="month-close-apply" disabled>Clear Live Sheet</button>
+        </div>
+      </div>
 
       <div class="content">
         <!-- DASHBOARD -->
@@ -135,7 +146,7 @@
               </div>
             </div>
             <div class="live-chip-row" id="live-chips"></div>
-            <p class="hint" id="live-edit-hint">You can edit your own VINs directly on this sheet · teammates' rows are view only.</p>
+            <p class="hint" id="live-edit-hint">You can edit your own VINs directly on this sheet · every change is saved automatically and kept after refresh or logout.</p>
             <p class="hint live-save-toast" id="live-save-toast" hidden></p>
             <div class="sel-bar" id="live-sel-bar"></div>
             <div class="table-wrap live-sheet-wrap">
@@ -149,7 +160,7 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">All your assigned VINs on one page · edit below · tick VINs to keep them in view, assign, unassign or remove</p>
+            <p class="hint">All your assigned VINs on one page · edits save automatically and stay after refresh or logout · tick VINs to keep them in view, assign, unassign or remove</p>
             <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar">
               <input type="search" id="my-q" placeholder="Search VIN / order / product…" />
@@ -290,7 +301,7 @@
     <div class="drawer" id="vin-drawer"></div>
   </div>
 
-  <script src="shared.js"></script>
-  <script src="employee.js?v=20260923emp18"></script>
+  <script src="shared.js?v=20260924scope1"></script>
+  <script src="employee.js?v=20260925month1"></script>
 </body>
 </html>

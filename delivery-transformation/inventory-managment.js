@@ -17,6 +17,7 @@
     poll: null,
     user: null,
     label: 'delivery',
+    labelWait: null,
   };
 
   function showApp(on) {
@@ -29,7 +30,9 @@
   }
 
   function isRuba() {
-    return !!(state.user && state.user.id === 'ruba');
+    const u = state.user;
+    if (!u) return false;
+    return u.id === 'ruba' || String(u.name || '').toLowerCase() === 'ruba';
   }
 
   function fillLogin() {
@@ -80,17 +83,19 @@
     location.reload();
   }
 
+  function syncRubaToolbar() {
+    const ruba = isRuba();
+    const labelBar = $('label-bar');
+    if (labelBar) labelBar.classList.toggle('hidden', !ruba);
+    if ($('claim-btn')) $('claim-btn').classList.toggle('hidden', ruba);
+    if ($('claim-display-btn')) $('claim-display-btn').classList.toggle('hidden', !ruba);
+    if ($('claim-delivery-btn')) $('claim-delivery-btn').classList.toggle('hidden', !ruba);
+  }
+
   function enter(user) {
     state.user = user;
     $('side-name').textContent = user.name;
-    const labelBar = $('label-bar');
-    if (labelBar) labelBar.classList.toggle('hidden', user.id !== 'ruba');
-    const claimBtn = $('claim-btn');
-    if (claimBtn) {
-      claimBtn.textContent = user.id === 'ruba'
-        ? 'Add selected as Display / Delivery'
-        : 'Add selected to my stock';
-    }
+    syncRubaToolbar();
     syncLabelPills();
     showApp(true);
     load().catch((e) => { $('login-error').textContent = e.message; });
@@ -211,6 +216,45 @@
     return [...state.selected];
   }
 
+  function openLabelModal(vins) {
+    const list = (vins || []).filter(Boolean);
+    return new Promise((resolve) => {
+      const modal = $('label-modal');
+      if (!modal || !list.length) {
+        resolve('');
+        return;
+      }
+      if (state.labelWait) {
+        state.labelWait('');
+        state.labelWait = null;
+      }
+      state.labelWait = resolve;
+      $('label-modal-title').textContent = list.length === 1
+        ? 'Label this car'
+        : `Label ${list.length} cars`;
+      $('label-modal-sub').textContent = 'Choose Display or Delivery before adding to your stock.';
+      $('label-modal-vins').textContent = list.join('\n');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    });
+  }
+
+  function closeLabelModal(pick) {
+    const modal = $('label-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+    const fn = state.labelWait;
+    state.labelWait = null;
+    if (fn) fn(pick || '');
+  }
+
+  async function askLabel(vins) {
+    if (!isRuba()) return state.label || 'delivery';
+    return openLabelModal(vins);
+  }
+
   async function claim(vins, label) {
     if (!vins.length) return;
     const body = { vins };
@@ -219,7 +263,34 @@
       if (!body.label) throw new Error('Choose Display or Delivery');
     }
     const data = await api('/inventory/claim', { method: 'POST', json: body });
+    vins.forEach((vin) => state.selected.delete(vin));
     applyPayload(data);
+  }
+
+  async function claimSelectedWith(label) {
+    const vins = selectedVins();
+    if (!vins.length) {
+      alert('Select at least one VIN');
+      return;
+    }
+    await claim(vins, label);
+  }
+
+  async function claimSelectedAsk() {
+    const vins = selectedVins();
+    if (!vins.length) {
+      alert('Select at least one VIN');
+      return;
+    }
+    if (!isRuba()) {
+      await claim(vins);
+      return;
+    }
+    const label = await askLabel(vins);
+    if (!label) return;
+    state.label = label;
+    syncLabelPills();
+    await claim(vins, label);
   }
 
   async function release(vins) {
@@ -259,10 +330,29 @@
       });
     }
     $('claim-btn').addEventListener('click', () => {
-      claim(selectedVins()).catch((e) => alert(e.message));
+      claimSelectedAsk().catch((e) => alert(e.message));
     });
+    if ($('claim-display-btn')) {
+      $('claim-display-btn').addEventListener('click', () => {
+        claimSelectedWith('display').catch((e) => alert(e.message));
+      });
+    }
+    if ($('claim-delivery-btn')) {
+      $('claim-delivery-btn').addEventListener('click', () => {
+        claimSelectedWith('delivery').catch((e) => alert(e.message));
+      });
+    }
     $('release-btn').addEventListener('click', () => {
       release(selectedVins()).catch((e) => alert(e.message));
+    });
+    if ($('label-modal-cancel')) {
+      $('label-modal-cancel').addEventListener('click', () => closeLabelModal(''));
+    }
+    $$('#label-modal .label-pick').forEach((btn) => {
+      btn.addEventListener('click', () => closeLabelModal(btn.dataset.pick || ''));
+    });
+    $('label-modal')?.addEventListener('click', (e) => {
+      if (e.target === $('label-modal')) closeLabelModal('');
     });
     $('check-all').addEventListener('change', () => {
       const on = $('check-all').checked;
@@ -275,9 +365,38 @@
     $('rows').addEventListener('change', (e) => {
       const box = e.target.closest('input[type="checkbox"][data-vin]');
       if (!box) return;
-      if (box.checked) state.selected.add(box.dataset.vin);
-      else state.selected.delete(box.dataset.vin);
+      const vin = box.dataset.vin;
+      if (!box.checked) {
+        state.selected.delete(vin);
+        syncCheckAll();
+        return;
+      }
+      state.selected.add(vin);
       syncCheckAll();
+      // Ruba: selecting an open car → choose Display / Delivery, then claim
+      if (isRuba()) {
+        const row = state.pool.find((r) => r.vin === vin);
+        if (row && !row.stockOwnerId) {
+          askLabel([vin]).then(async (label) => {
+            if (!label) {
+              box.checked = false;
+              state.selected.delete(vin);
+              syncCheckAll();
+              return;
+            }
+            state.label = label;
+            syncLabelPills();
+            try {
+              await claim([vin], label);
+            } catch (err) {
+              alert(err.message || 'Claim failed');
+              box.checked = false;
+              state.selected.delete(vin);
+              syncCheckAll();
+            }
+          });
+        }
+      }
     });
     $('rows').addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-act]');
