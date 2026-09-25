@@ -172,6 +172,7 @@
   top: 12px;
   right: 16px;
   bottom: auto;
+  left: auto;
   width: min(360px, calc(100vw - 24px));
   background: #fff;
   border: 1px solid var(--line);
@@ -180,10 +181,15 @@
   z-index: 70;
   overflow: hidden;
   max-height: calc(100vh - 24px);
+  touch-action: none;
 }
 body.vsnd-screen .pdf-win {
   top: 52px;
   right: 12px;
+}
+.pdf-win.is-dragging {
+  box-shadow: 0 18px 48px rgba(11, 42, 68, 0.28);
+  user-select: none;
 }
 .pdf-win.is-min {
   width: auto;
@@ -199,13 +205,20 @@ body.vsnd-screen .pdf-win {
   padding: 8px 10px;
   background: #0b2a44;
   color: #fff;
+  cursor: grab;
 }
-.pdf-win-bar strong { font-size: 0.82rem; }
+.pdf-win-bar:active,
+.pdf-win.is-dragging .pdf-win-bar { cursor: grabbing; }
+.pdf-win-bar strong {
+  font-size: 0.82rem;
+  pointer-events: none;
+}
 .pdf-win-bar .btn-ghost {
   color: #fff;
   border-color: rgba(255,255,255,.25);
   padding: 2px 8px;
   min-width: 28px;
+  cursor: pointer;
 }
 .pdf-win-body { max-height: min(62vh, 560px); overflow: auto; }
 .pdf-tools {
@@ -506,7 +519,7 @@ body.vsnd-screen .pdf-win {
   .ekpi-breakdown, .ekpi-dl { grid-template-columns: 1fr; }
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ VSND Schedule (status ÃÂÃÂ calendar day) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ VSND Schedule (status ÃÂÃÂÃÂÃÂ calendar day) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ */
 .vsnd-card { padding: 18px 18px 14px; overflow: hidden; }
 .vsnd-head {
   display: flex;
@@ -867,7 +880,7 @@ body.vsnd-screen .pdf-win {
   .vsnd-controls { margin-left: 0; width: 100%; justify-content: flex-start; }
 }
 
-/* ÃÂÃÂÃÂ One-screen VSND Dashboard ÃÂÃÂÃÂ */
+/* ÃÂÃÂÃÂÃÂÃÂÃÂ One-screen VSND Dashboard ÃÂÃÂÃÂÃÂÃÂÃÂ */
 body.vsnd-screen {
   height: 100vh;
   overflow: hidden;
@@ -1545,7 +1558,7 @@ body.vsnd-screen .vsnd-total-btn {
   .vsnd-bottom-row { grid-template-columns: 1fr 1fr; }
 }
 
-/* VSND by Status ÃÂ clickable drill-down */
+/* VSND by Status ÃÂÃÂ clickable drill-down */
 .vsnd-pill.is-hit { cursor: pointer; }
 .vsnd-pill.is-hit:hover { filter: brightness(0.98); box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15); }
 .vsnd-legend-list.is-clickable .vsnd-legend-hit {

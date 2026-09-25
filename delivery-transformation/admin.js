@@ -2269,6 +2269,75 @@
     });
   }
   $('pdf-min').addEventListener('click', () => $('pdf-win').classList.toggle('is-min'));
+
+  (function enablePdfWinDrag() {
+    const win = $('pdf-win');
+    const bar = win && win.querySelector('.pdf-win-bar');
+    if (!win || !bar) return;
+    const POS_KEY = 'dt_xform_pdf_win_pos';
+    let drag = null;
+
+    function clamp(left, top) {
+      const pad = 8;
+      const w = win.offsetWidth || 200;
+      const h = win.offsetHeight || 40;
+      const maxL = Math.max(pad, window.innerWidth - w - pad);
+      const maxT = Math.max(pad, window.innerHeight - h - pad);
+      return {
+        left: Math.min(maxL, Math.max(pad, left)),
+        top: Math.min(maxT, Math.max(pad, top)),
+      };
+    }
+
+    function applyPos(left, top) {
+      const p = clamp(left, top);
+      win.style.left = `${p.left}px`;
+      win.style.top = `${p.top}px`;
+      win.style.right = 'auto';
+      win.style.bottom = 'auto';
+      return p;
+    }
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+      if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+        applyPos(saved.left, saved.top);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button != null && e.button !== 0) return;
+      if (e.target.closest('button, a, input, select, textarea')) return;
+      const rect = win.getBoundingClientRect();
+      drag = {
+        id: e.pointerId,
+        ox: e.clientX - rect.left,
+        oy: e.clientY - rect.top,
+      };
+      win.classList.add('is-dragging');
+      try { bar.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      e.preventDefault();
+    });
+
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag || drag.id !== e.pointerId) return;
+      applyPos(e.clientX - drag.ox, e.clientY - drag.oy);
+    });
+
+    function endDrag(e) {
+      if (!drag || (e.pointerId != null && drag.id !== e.pointerId)) return;
+      const rect = win.getBoundingClientRect();
+      const p = applyPos(rect.left, rect.top);
+      try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+      win.classList.remove('is-dragging');
+      drag = null;
+    }
+
+    bar.addEventListener('pointerup', endDrag);
+    bar.addEventListener('pointercancel', endDrag);
+  })();
   $('pdf-search').addEventListener('input', (e) => {
     pdfQuery = e.target.value || '';
     renderPrints();
