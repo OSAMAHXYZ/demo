@@ -1558,9 +1558,20 @@ body.vsnd-screen .vsnd-total-btn {
   .vsnd-bottom-row { grid-template-columns: 1fr 1fr; }
 }
 
-/* VSND by Status ÃÂÃÂ clickable drill-down */
+/* VSND by Status — clickable drill-down */
 .vsnd-pill.is-hit { cursor: pointer; }
 .vsnd-pill.is-hit:hover { filter: brightness(0.98); box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15); }
+.vsnd-co-perf-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+  max-height: 280px;
+  overflow: auto;
+}
+.vsnd-co-perf-chart .vsnd-hbar {
+  pointer-events: none;
+}
 .vsnd-legend-list.is-clickable .vsnd-legend-hit {
   cursor: pointer;
   border-radius: 6px;

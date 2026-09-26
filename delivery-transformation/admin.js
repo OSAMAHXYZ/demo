@@ -747,9 +747,9 @@
               <tbody>${freePeople.map((p, i) => `
                 <tr>
                   <td>${i + 1}</td>
-                  <td><b>${esc(p.name)}</b></td>
-                  <td>${esc(p.phone || '—')}</td>
-                  <td>${esc(fmtWhen(p.arrivedAt))}</td>
+              <td><b>${esc(p.name)}</b></td>
+              <td>${esc(p.phone || '—')}</td>
+              <td>${esc(fmtWhen(p.arrivedAt))}</td>
                   <td class="stay">${esc(stayText(p))}</td>
                 </tr>`).join('') || '<tr><td colspan="5">No free drivers for this company</td></tr>'}
               </tbody>
@@ -771,13 +771,13 @@
                   <td><b>${esc(p.name)}</b></td>
                   <td>${esc(p.phone || '—')}</td>
                   <td class="gone">${esc(fmtWhen(p.leftAt))}</td>
-                  <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
-                  <td>${esc(p.city || '—')}</td>
+              <td class="detail-vin">${esc((p.vins || []).join(', ') || '—')}</td>
+              <td>${esc(p.city || '—')}</td>
                   <td>${esc(p.usedBy || '—')}</td>
                 </tr>`).join('') || '<tr><td colspan="7">No drivers left yet for this company</td></tr>'}
               </tbody>
-            </table>
-          </div>
+        </table>
+      </div>
         </div>
       </div>`, { wide: true });
   }
@@ -875,7 +875,7 @@
                     <td>${esc(p.city || '—')}</td>
                   </tr>`).join('') || '<tr><td colspan="4">—</td></tr>'}
                 </tbody>
-              </table>
+        </table>
             </div>
           </div>`;
         }).join('') || '<p class="chart-empty">No attendance companies</p>'}
@@ -1271,12 +1271,81 @@
     renderEntryAccuracy(a.entryAccuracy);
 
     if ($('vsnd-top5-body')) renderFleetFreeLeft();
-    if ($('vsnd-aging-dist-body')) {
-      const dist = a.agingDist || [];
-      $('vsnd-aging-dist-body').innerHTML = `${donutSvg(dist, String(a.vsndTotal || 0), 'VSND')}${legendList(dist)}`;
-    }
+    if ($('vsnd-aging-dist-body')) renderDaysToSalesPanel();
     if ($('vsnd-emp-body')) renderDisplayCounter();
     if ($('vsnd-region-body')) renderCarrierPanel();
+  }
+
+  function renderDaysToSalesPanel() {
+    const host = $('vsnd-aging-dist-body');
+    if (!host) return;
+    const perf = slaDash && slaDash.companyPerformance;
+    const dist = (perf && perf.daysDist) || [];
+    const totals = (perf && perf.totals) || {};
+    const completed = totals.completedVins || 0;
+    if (!dist.length && !(totals.totalUniqueVins > 0)) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator assignments in this month yet.</p>';
+      return;
+    }
+    host.innerHTML = `${donutSvg(dist, String(completed), 'Sold', { size: 96 })}
+      ${legendList(dist)}`;
+    host.title = 'Click for company performance table';
+    host.style.cursor = 'pointer';
+    host.onclick = () => openCompanyPerformanceDrawer();
+  }
+
+  function openCompanyPerformanceDrawer() {
+    const perf = slaDash && slaDash.companyPerformance;
+    if (!perf) {
+      alert('Company performance not loaded yet');
+      return;
+    }
+    const companies = perf.companies || [];
+    const totals = perf.totals || {};
+    const maxAvg = Math.max(1, ...companies.map((c) => Number(c.averageDaysToSales) || 0));
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>Company performance</h2>
+          <p class="sub">Coordinator assignment → Hanouf Sales Raw · Avg days = completed only · ${esc(totals.totalUniqueVins || 0)} VIN(s) · ${esc(totals.completedVins || 0)} completed · avg ${totals.averageDaysToSales == null ? '—' : esc(totals.averageDaysToSales)}</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="vsnd-co-perf-chart">
+        ${companies.map((c) => {
+          const avg = c.averageDaysToSales;
+          const w = avg == null ? 0 : (avg / maxAvg) * 100;
+          return `<div class="vsnd-hbar fleet-row" title="${esc(c.companyName)}">
+            <span class="vsnd-hbar-lbl">${esc(c.companyName)}</span>
+            <span class="vsnd-hbar-track"><i style="width:${w}%;background:#1769a8"></i></span>
+            <b>${avg == null ? '—' : esc(avg)}</b>
+          </div>`;
+        }).join('') || '<p class="chart-empty">No companies in range</p>'}
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap">
+        <table class="data vsnd-live-table">
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th class="num">Total VINs</th>
+              <th class="num">Completed</th>
+              <th class="num">Pending</th>
+              <th class="num">Avg. Days to Sales</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${companies.map((c) => `<tr>
+              <td>${esc(c.companyName)}</td>
+              <td class="num">${esc(c.totalUniqueVins)}</td>
+              <td class="num">${esc(c.completedVins)}</td>
+              <td class="num">${esc(c.pendingVins)}</td>
+              <td class="num"><b>${c.averageDaysToSales == null ? '—' : esc(c.averageDaysToSales)}</b></td>
+            </tr>`).join('') || '<tr><td colspan="5">No data</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:10px">Sales dates come only from Hanouf Sales Raw uploads on employee.html. Assignment date = coordinator print company date. Filter = VSND month (assignment).</p>
+    `, { wide: true });
   }
 
   function renderCarrierPanel() {
@@ -1648,7 +1717,7 @@
         return `<td class="vsnd-cell zone-${esc(zone)}${clickable ? ' is-hit' : ''}">
           <button type="button" class="vsnd-val" data-status="${esc(r.status)}" data-day="${i + 1}" ${clickable ? '' : 'disabled'}>${esc(show)}</button>
         </td>`;
-      }).join('');
+    }).join('');
       return `<tr class="vsnd-row tone-${esc(r.tone)}">
         <th class="vsnd-status">
           <span class="vsnd-ico" aria-hidden="true">${r.icon || '•'}</span>

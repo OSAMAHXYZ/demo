@@ -20,6 +20,7 @@ const kpiEngine = require('./kpi');
 const exportExcel = require('./export-excel');
 const scheduleEngine = require('./schedule');
 const monthClose = require('./month-close');
+const companyPerformance = require('./company-performance');
 
 const RAW_UPLOAD_LIMIT = '80mb';
 
@@ -1281,6 +1282,15 @@ function createDeliveryTransformationRouter(opts = {}) {
       });
 
       recordImport('lastSalesRaw', summary);
+      if (companyPerformance.isHanoufUser(req.dtUser)) {
+        companyPerformance.recordHanoufSalesRaw(store, parsed.items, {
+          at: now,
+          filename,
+        });
+        summary.hanoufSalesIndexed = true;
+      } else {
+        summary.hanoufSalesIndexed = false;
+      }
       store.pushAudit({
         vin: '',
         user: req.dtUser.name,
@@ -2286,12 +2296,53 @@ function createDeliveryTransformationRouter(opts = {}) {
       audit: store.data.audit || [],
       now: new Date().toISOString(),
     });
+    const [y, m] = String(month || currentMonthKey()).split('-').map(Number);
+    const from = Number.isFinite(y) && Number.isFinite(m)
+      ? `${y}-${String(m).padStart(2, '0')}-01`
+      : '';
+    const lastDay = Number.isFinite(y) && Number.isFinite(m)
+      ? new Date(Date.UTC(y, m, 0)).getUTCDate()
+      : 28;
+    const to = from
+      ? `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      : '';
+    const coPerf = companyPerformance.buildCompanyPerformance(store, { from, to });
     return res.json({
       ...dash,
       items,
       canEditSla: !!(req.dtUser && req.dtUser.role === 'admin'),
       currentMonth: currentMonthKey(),
+      companyPerformance: coPerf,
     });
+  });
+
+  /**
+   * Company performance: coordinator assignment → Hanouf Sales Raw sales date.
+   * Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD (filters by assignment date)
+   *        ?month=YYYY-MM (assignment month shortcut)
+   *        ?debug=1 to include VIN-level rows
+   */
+  router.get('/company-performance', auth, (req, res) => {
+    const role = req.dtUser && req.dtUser.role;
+    const allowed = role === 'admin' || role === 'hanouf' || role === 'coordinator'
+      || (req.dtUser && req.dtUser.canCoordinate);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden for this role' });
+
+    let from = String(req.query.from || '').trim();
+    let to = String(req.query.to || '').trim();
+    const month = monthParam(req.query.month);
+    if ((!from || !to) && month) {
+      const [y, m] = month.split('-').map(Number);
+      from = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+    const result = companyPerformance.buildCompanyPerformance(store, { from, to });
+    if (String(req.query.debug || '') !== '1') {
+      const { debug, ...rest } = result;
+      return res.json(rest);
+    }
+    return res.json(result);
   });
 
   router.get('/kpi/weights', auth, requireRole('admin', 'hanouf'), (_req, res) => {

@@ -592,3 +592,100 @@ body.manual-form-mode .cars-table input.chassis-pick {
 .coord-sheet tbody tr:hover td { background: rgba(74,222,128,.08); }
 .coord-sheet .vin-ltr { color: #f8fafc; }
 .coord-sheet .phone-link { color: #7dd3fc; }
+
+/* Company performance */
+.co-perf-section { margin-top: 8px; }
+.co-perf-filters {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin: 0 0 12px; padding: 0 2px;
+}
+.co-perf-filters label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 600; color: #94a3b8;
+}
+.co-perf-filters input[type="date"] {
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: #1e293b; color: #f8fafc; font: inherit;
+}
+.co-perf-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.co-perf-donut-card, .co-perf-chart-card {
+  background: #121a2b;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.co-perf-donut-card h3, .co-perf-chart-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+.co-perf-donut-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.co-perf-donut {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+.co-perf-donut svg { width: 100%; height: 100%; }
+.co-perf-donut-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.co-perf-donut-center strong {
+  font-size: 1.35rem; font-weight: 800; color: #f8fafc; line-height: 1;
+}
+.co-perf-donut-center span {
+  font-size: 0.68rem; color: #94a3b8; margin-top: 2px;
+}
+.co-perf-legend {
+  list-style: none; margin: 0; padding: 0;
+  flex: 1; display: grid; gap: 4px;
+}
+.co-perf-legend li {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  gap: 8px; align-items: center;
+  font-size: 0.72rem; color: #cbd5e1;
+}
+.co-perf-legend i {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.co-perf-legend b { font-variant-numeric: tabular-nums; color: #f8fafc; }
+.co-perf-legend em { color: #94a3b8; font-style: normal; min-width: 2.5rem; text-align: end; }
+.co-perf-bars {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 220px; overflow: auto;
+}
+.co-perf-bar {
+  display: grid;
+  grid-template-columns: minmax(72px, 120px) 1fr auto;
+  gap: 8px; align-items: center;
+  font-size: 0.75rem; color: #e2e8f0;
+}
+.co-perf-bar-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.co-perf-bar-track {
+  height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden;
+}
+.co-perf-bar-track i {
+  display: block; height: 100%; background: #22c55e; border-radius: 999px;
+}
+.co-perf-bar b { font-variant-numeric: tabular-nums; min-width: 2rem; text-align: end; }
+.co-perf-table-wrap { max-height: 320px; }
+.co-perf-table .num { text-align: left; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  .co-perf-layout { grid-template-columns: 1fr; }
+}

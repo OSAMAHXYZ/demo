@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260923c16" />
+  <link rel="stylesheet" href="coordinator.css?v=20260926cperf1" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -50,6 +50,46 @@
       </div>
 
       <div class="ws-stats" id="wsStats"></div>
+
+      <section class="ws-section co-perf-section" id="coPerfSection">
+        <div class="ws-section-head">
+          <h2>Company performance</h2>
+          <span class="hint">Assignment → Hanouf Sales Raw · unique VIN · avg days uses completed only</span>
+        </div>
+        <div class="co-perf-filters">
+          <label>From <input type="date" id="coPerfFrom" /></label>
+          <label>To <input type="date" id="coPerfTo" /></label>
+          <button type="button" class="btn-ghost" id="coPerfApply">Apply</button>
+          <button type="button" class="btn-ghost" id="coPerfMonth">This month</button>
+          <span class="hint" id="coPerfMeta">—</span>
+        </div>
+        <div class="co-perf-layout">
+          <div class="co-perf-donut-card" id="coPerfDonut">
+            <h3>Days to Sales</h3>
+            <div class="co-perf-donut-body" id="coPerfDonutBody"></div>
+          </div>
+          <div class="co-perf-chart-card">
+            <h3>Avg. Days by Company</h3>
+            <div class="co-perf-bars" id="coPerfBars"></div>
+          </div>
+        </div>
+        <div class="table-wrap co-perf-table-wrap">
+          <table class="coord-sheet co-perf-table" id="coPerfTable">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th class="num">Total VINs</th>
+                <th class="num">Completed</th>
+                <th class="num">Pending</th>
+                <th class="num">Avg. Days to Sales</th>
+              </tr>
+            </thead>
+            <tbody id="coPerfTbody">
+              <tr><td colspan="5">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="ws-section">
         <div class="ws-section-head">
@@ -273,6 +313,6 @@
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260924c20"></script>
+  <script src="coordinator.js?v=20260926cperf1"></script>
 </body>
 </html>

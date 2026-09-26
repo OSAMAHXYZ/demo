@@ -18,6 +18,8 @@
   let claimedAttendanceId = '';
   let lastAttendanceCity = '';
   let cityReloadTimer = null;
+  let companyPerf = null;
+  let companyPerfDebug = [];
   const fieldEls = {};
 
   function showView(name) {
@@ -189,7 +191,128 @@
     }
     renderLiveTable(rows);
     filterFleet();
+    loadCompanyPerformance({ silent: true }).catch(() => {});
   }
+
+  function monthRange(d = new Date()) {
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const from = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const last = new Date(y, m + 1, 0).getDate();
+    const to = `${y}-${String(m + 1).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+    return { from, to };
+  }
+
+  function setCoPerfMonthDefaults() {
+    const range = monthRange();
+    const fromEl = $('coPerfFrom');
+    const toEl = $('coPerfTo');
+    if (fromEl && !fromEl.value) fromEl.value = range.from;
+    if (toEl && !toEl.value) toEl.value = range.to;
+  }
+
+  function coPerfDonutSvg(segments, centerLabel, centerSub) {
+    const total = segments.reduce((s, x) => s + (Number(x.count) || 0), 0) || 1;
+    const box = 120;
+    const cx = box / 2;
+    const r = 48;
+    const inner = 34;
+    const stroke = 14;
+    const c = 2 * Math.PI * r;
+    let offset = 0;
+    const arcs = segments.filter((x) => x.count > 0).map((x) => {
+      const len = (x.count / total) * c;
+      const arc = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${esc(x.color)}" stroke-width="${stroke}"
+        stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cx})"></circle>`;
+      offset += len;
+      return arc;
+    }).join('');
+    return `<div class="co-perf-donut">
+      <svg viewBox="0 0 ${box} ${box}" aria-hidden="true">${arcs}
+        <circle cx="${cx}" cy="${cx}" r="${inner}" fill="#fff"></circle>
+      </svg>
+      <div class="co-perf-donut-center"><strong>${esc(centerLabel)}</strong><span>${esc(centerSub || '')}</span></div>
+    </div>`;
+  }
+
+  function renderCompanyPerformance(data) {
+    companyPerf = data || null;
+    companyPerfDebug = (data && data.debug) || [];
+    const meta = $('coPerfMeta');
+    const tbody = $('coPerfTbody');
+    const bars = $('coPerfBars');
+    const donutBody = $('coPerfDonutBody');
+    if (!tbody) return;
+
+    const companies = (data && data.companies) || [];
+    const totals = (data && data.totals) || {};
+    const dist = (data && data.daysDist) || [];
+
+    if (meta) {
+      meta.textContent = `${totals.totalUniqueVins || 0} VIN · ${totals.completedVins || 0} completed · avg ${totals.averageDaysToSales == null ? '—' : totals.averageDaysToSales} days · Hanouf sales map ${totals.hanoufSalesVinCount || 0}`;
+    }
+
+    if (donutBody) {
+      const completed = totals.completedVins || 0;
+      if (!completed) {
+        donutBody.innerHTML = '<p class="ws-empty" style="margin:0;padding:12px">No completed sales in range</p>';
+      } else {
+        donutBody.innerHTML = `${coPerfDonutSvg(dist, String(completed), 'Sold')}
+          <ul class="co-perf-legend">${dist.map((x) => `
+            <li><i style="background:${esc(x.color)}"></i><span>${esc(x.label)}</span><b>${esc(x.count)}</b><em>${esc(x.pct)}%</em></li>
+          `).join('')}</ul>`;
+      }
+    }
+
+    if (bars) {
+      const maxAvg = Math.max(1, ...companies.map((c) => Number(c.averageDaysToSales) || 0));
+      bars.innerHTML = companies.map((c) => {
+        const avg = c.averageDaysToSales;
+        const w = avg == null ? 0 : (avg / maxAvg) * 100;
+        return `<div class="co-perf-bar" title="${esc(c.companyName)}
+Total VINs: ${c.totalUniqueVins}
+Completed: ${c.completedVins}
+Pending: ${c.pendingVins}
+Average: ${avg == null ? '—' : avg + ' days'}">
+          <span class="co-perf-bar-name">${esc(c.companyName)}</span>
+          <span class="co-perf-bar-track"><i style="width:${w}%"></i></span>
+          <b>${avg == null ? '—' : esc(avg)}</b>
+        </div>`;
+      }).join('') || '<p class="ws-empty" style="margin:0;padding:8px">No companies</p>';
+    }
+
+    tbody.innerHTML = companies.map((c) => `<tr>
+      <td>${esc(c.companyName)}</td>
+      <td class="num">${esc(c.totalUniqueVins)}</td>
+      <td class="num">${esc(c.completedVins)}</td>
+      <td class="num">${esc(c.pendingVins)}</td>
+      <td class="num"><b>${c.averageDaysToSales == null ? '—' : esc(c.averageDaysToSales)}</b></td>
+    </tr>`).join('') || '<tr><td colspan="5">No assignments in this date range</td></tr>';
+  }
+
+  async function loadCompanyPerformance({ silent = false } = {}) {
+    setCoPerfMonthDefaults();
+    const from = ($('coPerfFrom') && $('coPerfFrom').value) || '';
+    const to = ($('coPerfTo') && $('coPerfTo').value) || '';
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    qs.set('debug', '1');
+    const data = await api(`/company-performance?${qs.toString()}`);
+    renderCompanyPerformance(data);
+    if (!silent && $('coPerfMeta')) {
+      /* meta already updated */
+    }
+    return data;
+  }
+
+  function getCompanyPerformanceDebug() {
+    return companyPerfDebug.slice();
+  }
+
+  window.getCompanyPerformanceDebug = getCompanyPerformanceDebug;
+  window.getCompanyPerformance = () => companyPerf;
 
   function renderLiveTable(list) {
     const table = $('coordLiveTable');
@@ -1110,6 +1233,20 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && $('vinModal').classList.contains('open')) closeVinModal();
     });
+    if ($('coPerfApply')) {
+      $('coPerfApply').addEventListener('click', () => {
+        loadCompanyPerformance().catch((e) => alert(e.message));
+      });
+    }
+    if ($('coPerfMonth')) {
+      $('coPerfMonth').addEventListener('click', () => {
+        const range = monthRange();
+        if ($('coPerfFrom')) $('coPerfFrom').value = range.from;
+        if ($('coPerfTo')) $('coPerfTo').value = range.to;
+        loadCompanyPerformance().catch((e) => alert(e.message));
+      });
+    }
+    setCoPerfMonthDefaults();
     bindPrintForm();
 
     if (getToken() && getUser()) {
