@@ -14,7 +14,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20260921res1"></script>
+  <script src="plan-tracker.js?v=20260926ptfix"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260920st1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
@@ -1027,6 +1027,7 @@
             </div>
             <div class="aa-cc-toolbar pt-toolbar">
               <button type="button" class="btn" id="pt-refresh">Refresh snapshots</button>
+              <button type="button" class="btn" id="pt-export-debug" title="Export planTrackerDebug JSON">Export Debug</button>
               <button type="button" class="btn-primary" id="pt-export">Export Excel</button>
             </div>
           </header>
@@ -1038,7 +1039,7 @@
             <div class="bas-retail-head">
               <div class="bas-retail-title">
                 <h3>Free stock · prior / last month</h3>
-                <span class="hint">Unique RES VINs with Allocation Date before this month — still counted after they leave · excluded from 315 bar only</span>
+                <span class="hint">RES · Age 0 · Allocation Date before this month — unique VINs · excluded from 315 progress</span>
               </div>
               <div class="bas-retail-total-card">
                 <span class="bas-retail-total-lab">Free stock</span>
