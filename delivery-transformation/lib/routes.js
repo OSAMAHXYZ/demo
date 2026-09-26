@@ -2306,6 +2306,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const to = from
       ? `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       : '';
+    // Always include VIN-level debug for Days to Sales More Details
     const coPerf = companyPerformance.buildCompanyPerformance(store, { from, to });
     return res.json({
       ...dash,

@@ -1561,16 +1561,65 @@ body.vsnd-screen .vsnd-total-btn {
 /* VSND by Status — clickable drill-down */
 .vsnd-pill.is-hit { cursor: pointer; }
 .vsnd-pill.is-hit:hover { filter: brightness(0.98); box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15); }
-.vsnd-co-perf-chart {
+.vsnd-legend-list.is-scroll {
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-content: start;
+}
+.dts-detail-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: end;
+  margin: 0 0 12px;
+}
+.dts-detail-filters label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 0 0 14px;
-  max-height: 280px;
-  overflow: auto;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
 }
-.vsnd-co-perf-chart .vsnd-hbar {
-  pointer-events: none;
+.dts-detail-filters select,
+.dts-detail-filters input {
+  min-width: 140px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+  color: #0f172a;
+}
+.dts-f-search { flex: 1; min-width: 180px; }
+.dts-f-search input { width: 100%; }
+.dts-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.dts-sum-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.dts-sum-card span {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.dts-sum-card strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0b2a44;
+}
+@media (max-width: 800px) {
+  .dts-summary { grid-template-columns: 1fr 1fr; }
 }
 .vsnd-legend-list.is-clickable .vsnd-legend-hit {
   cursor: pointer;

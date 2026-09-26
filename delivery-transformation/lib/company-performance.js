@@ -233,13 +233,20 @@ function buildCompanyPerformance(store, opts = {}) {
 
   byVin.forEach((asg) => {
     const match = matchSales(asg, hanoufMap);
+    let bucket = null;
+    if (match.status === 'COMPLETED' && match.daysToSales != null) {
+      const days = match.daysToSales;
+      const meta = DAYS_BUCKETS.find((b) => days >= b.min && days <= b.max) || DAYS_BUCKETS[DAYS_BUCKETS.length - 1];
+      bucket = meta.label;
+    }
     const row = {
       company: asg.company,
       vin: asg.vin,
       assignmentDate: asg.assignmentDate,
       salesDate: match.salesDate,
       daysToSales: match.daysToSales,
-      status: match.status,
+      bucket,
+      status: match.status === 'COMPLETED' ? 'SOLD' : (match.status === 'DATA_QUALITY' ? 'DATA_QUALITY' : 'PENDING'),
       qualityFlag: match.qualityFlag,
       city: asg.city,
       printedBy: asg.printedBy,
@@ -264,7 +271,7 @@ function buildCompanyPerformance(store, opts = {}) {
       c.sumDays += match.daysToSales;
     } else if (match.status === 'DATA_QUALITY') {
       c.qualityIssues += 1;
-      c.pendingVins += 1; // still not a completed duration
+      c.pendingVins += 1;
     } else {
       c.pendingVins += 1;
     }
@@ -299,7 +306,7 @@ function buildCompanyPerformance(store, opts = {}) {
     };
   });
 
-  const completed = debugRows.filter((r) => r.status === 'COMPLETED');
+  const completed = debugRows.filter((r) => r.status === 'SOLD');
   const buckets = DAYS_BUCKETS.map((b) => ({ ...b, count: 0 }));
   completed.forEach((r) => {
     const days = r.daysToSales;
@@ -312,14 +319,21 @@ function buildCompanyPerformance(store, opts = {}) {
     pct: completedTotal ? Math.round((b.count / completedTotal) * 1000) / 10 : 0,
   }));
 
+  const fastestSale = completedTotal
+    ? Math.min(...completed.map((r) => r.daysToSales))
+    : null;
+  const eightPlus = completed.filter((r) => r.daysToSales >= 8).length;
+
   const totals = {
     totalUniqueVins: debugRows.length,
     completedVins: completedTotal,
-    pendingVins: debugRows.filter((r) => r.status === 'PENDING').length,
+    pendingVins: debugRows.filter((r) => r.status === 'PENDING' || r.status === 'DATA_QUALITY').length,
     qualityIssues: debugRows.filter((r) => r.status === 'DATA_QUALITY').length,
     averageDaysToSales: completedTotal
       ? Math.round((completed.reduce((s, r) => s + r.daysToSales, 0) / completedTotal) * 10) / 10
       : null,
+    fastestSale,
+    eightPlus,
     hanoufSalesVinCount: Object.keys(hanoufMap).length,
   };
 

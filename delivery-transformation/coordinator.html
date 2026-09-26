@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260926cperf1" />
+  <link rel="stylesheet" href="coordinator.css?v=20260926dts2" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -65,7 +65,13 @@
         </div>
         <div class="co-perf-layout">
           <div class="co-perf-donut-card" id="coPerfDonut">
-            <h3>Days to Sales</h3>
+            <div class="co-perf-donut-head">
+              <div>
+                <h3>Days to Sales</h3>
+                <p class="co-perf-sub">Assignment → Hanouf</p>
+              </div>
+              <button type="button" class="btn-ghost" id="coPerfMore">More Details</button>
+            </div>
             <div class="co-perf-donut-body" id="coPerfDonutBody"></div>
           </div>
           <div class="co-perf-chart-card">
@@ -310,9 +316,57 @@
     </div>
   </div>
 
+  <div class="dts-modal no-print" id="dtsModal" hidden>
+    <div class="dts-modal-panel" role="dialog" aria-modal="true" aria-labelledby="dtsModalTitle">
+      <div class="dts-modal-head">
+        <div>
+          <h2 id="dtsModalTitle">Days to Sales — Assignment → Hanouf</h2>
+          <p class="hint">Unique VIN · Hanouf Sales Raw only</p>
+        </div>
+        <button type="button" class="vin-modal-close" id="dtsModalClose" aria-label="Close">×</button>
+      </div>
+      <div class="dts-modal-filters">
+        <label>Company
+          <select id="dtsCoCompany"><option value="">All Companies</option></select>
+        </label>
+        <label>Bucket
+          <select id="dtsCoBucket"><option value="">All</option></select>
+        </label>
+        <label>Status
+          <select id="dtsCoStatus">
+            <option value="ALL">All</option>
+            <option value="SOLD">Sold</option>
+            <option value="PENDING">Pending</option>
+          </select>
+        </label>
+        <label class="dts-co-search">Search
+          <input type="search" id="dtsCoSearch" placeholder="Search VIN..." autocomplete="off" />
+        </label>
+      </div>
+      <div class="dts-modal-summary" id="dtsCoSummary"></div>
+      <div class="dts-modal-table-wrap">
+        <table class="coord-sheet co-perf-table">
+          <thead>
+            <tr>
+              <th>VIN</th>
+              <th>Company</th>
+              <th>Assignment Date</th>
+              <th>Hanouf Sales Date</th>
+              <th class="num">Days to Sales</th>
+              <th>Bucket</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="dtsCoTbody"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="dtsCoFoot"></p>
+    </div>
+  </div>
+
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260926cperf1"></script>
+  <script src="coordinator.js?v=20260926dts2"></script>
 </body>
 </html>

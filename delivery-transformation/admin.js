@@ -1279,74 +1279,225 @@
   function renderDaysToSalesPanel() {
     const host = $('vsnd-aging-dist-body');
     if (!host) return;
+    const more = $('vsnd-dts-more');
+    if (more) {
+      more.onclick = (e) => {
+        e.stopPropagation();
+        openDaysToSalesDetails({});
+      };
+    }
     const perf = slaDash && slaDash.companyPerformance;
     const dist = (perf && perf.daysDist) || [];
     const totals = (perf && perf.totals) || {};
     const completed = totals.completedVins || 0;
     if (!dist.length && !(totals.totalUniqueVins > 0)) {
       host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator assignments in this month yet.</p>';
+      host.onclick = null;
+      host.style.cursor = '';
       return;
     }
     host.innerHTML = `${donutSvg(dist, String(completed), 'Sold', { size: 96 })}
-      ${legendList(dist)}`;
-    host.title = 'Click for company performance table';
-    host.style.cursor = 'pointer';
-    host.onclick = () => openCompanyPerformanceDrawer();
+      <ul class="vsnd-legend-list is-clickable is-scroll">${dist.map((x) => `
+        <li class="vsnd-legend-hit" data-dts-bucket="${esc(x.label)}" role="button" tabindex="0" title="Open ${esc(x.label)} VINs">
+          <i style="background:${esc(x.color)}"></i>
+          <span>${esc(x.label)}</span>
+          <b>${esc(x.count)}</b>
+          <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
+        </li>`).join('')}</ul>`;
+    host.style.cursor = '';
+    host.onclick = null;
+    host.querySelectorAll('[data-dts-bucket]').forEach((el) => {
+      const open = () => openDaysToSalesDetails({ bucket: el.dataset.dtsBucket || '' });
+      el.addEventListener('click', (e) => { e.stopPropagation(); open(); });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
   }
 
-  function openCompanyPerformanceDrawer() {
+  function getDaysToSalesData() {
     const perf = slaDash && slaDash.companyPerformance;
-    if (!perf) {
-      alert('Company performance not loaded yet');
+    const rows = (perf && perf.debug) || [];
+    return rows.map((r) => ({
+      vin: r.vin,
+      company: r.company,
+      assignmentDate: r.assignmentDate,
+      salesDate: r.salesDate || null,
+      daysToSales: r.daysToSales == null ? null : r.daysToSales,
+      bucket: r.bucket || null,
+      status: r.status === 'SOLD' || r.status === 'COMPLETED' ? 'SOLD' : (r.status === 'DATA_QUALITY' ? 'DATA_QUALITY' : 'PENDING'),
+    }));
+  }
+
+  function fmtDtsDate(iso) {
+    if (!iso) return '—';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return esc(iso);
+    const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    try {
+      return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (_) {
+      return esc(iso);
+    }
+  }
+
+  function summarizeDaysToSales(rows) {
+    const sold = rows.filter((r) => r.status === 'SOLD' && r.daysToSales != null);
+    const avg = sold.length
+      ? Math.round((sold.reduce((s, r) => s + r.daysToSales, 0) / sold.length) * 10) / 10
+      : null;
+    const fastest = sold.length ? Math.min(...sold.map((r) => r.daysToSales)) : null;
+    const eightPlus = sold.filter((r) => r.daysToSales >= 8).length;
+    return {
+      totalSold: sold.length,
+      averageDays: avg,
+      fastestSale: fastest,
+      eightPlus,
+    };
+  }
+
+  let dtsDetailState = { company: '', bucket: '', status: 'ALL', q: '' };
+
+  async function ensureDaysToSalesDebug() {
+    const perf = slaDash && slaDash.companyPerformance;
+    if (perf && Array.isArray(perf.debug) && perf.debug.length) return perf;
+    if (perf && Array.isArray(perf.debug)) return perf;
+    // Fetch VIN-level rows if schedule payload omitted debug
+    const month = empMonth || '';
+    const qs = new URLSearchParams({ debug: '1' });
+    if (month) qs.set('month', month);
+    const data = await api(`/company-performance?${qs.toString()}`);
+    if (slaDash) slaDash.companyPerformance = { ...(slaDash.companyPerformance || {}), ...data };
+    return data;
+  }
+
+  async function openDaysToSalesDetails(opts = {}) {
+    try {
+      await ensureDaysToSalesDebug();
+    } catch (err) {
+      alert(err.message || 'Could not load Days to Sales details');
       return;
     }
-    const companies = perf.companies || [];
-    const totals = perf.totals || {};
-    const maxAvg = Math.max(1, ...companies.map((c) => Number(c.averageDaysToSales) || 0));
+    const all = getDaysToSalesData();
+    const companies = [...new Set(all.map((r) => r.company).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+    dtsDetailState = {
+      company: opts.company || '',
+      bucket: opts.bucket || '',
+      status: opts.status || 'ALL',
+      q: '',
+    };
+
     openDrawer(`
       <div class="drawer-head vsnd-sheet-head">
         <div>
-          <h2>Company performance</h2>
-          <p class="sub">Coordinator assignment → Hanouf Sales Raw · Avg days = completed only · ${esc(totals.totalUniqueVins || 0)} VIN(s) · ${esc(totals.completedVins || 0)} completed · avg ${totals.averageDaysToSales == null ? '—' : esc(totals.averageDaysToSales)}</p>
+          <h2>Days to Sales — Assignment → Hanouf</h2>
+          <p class="sub">Unique VIN · Hanouf Sales Raw only · assignment date filter = VSND month</p>
         </div>
         <button type="button" class="btn" id="detail-close">Close</button>
       </div>
-      <div class="vsnd-co-perf-chart">
-        ${companies.map((c) => {
-          const avg = c.averageDaysToSales;
-          const w = avg == null ? 0 : (avg / maxAvg) * 100;
-          return `<div class="vsnd-hbar fleet-row" title="${esc(c.companyName)}">
-            <span class="vsnd-hbar-lbl">${esc(c.companyName)}</span>
-            <span class="vsnd-hbar-track"><i style="width:${w}%;background:#1769a8"></i></span>
-            <b>${avg == null ? '—' : esc(avg)}</b>
-          </div>`;
-        }).join('') || '<p class="chart-empty">No companies in range</p>'}
+      <div class="dts-detail-filters">
+        <label>Company
+          <select id="dts-f-company">
+            <option value="">All Companies</option>
+            ${companies.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          </select>
+        </label>
+        <label>Bucket
+          <select id="dts-f-bucket">
+            <option value="">All</option>
+            ${(slaDash && slaDash.companyPerformance && slaDash.companyPerformance.daysDist || []).map((b) => `<option value="${esc(b.label)}">${esc(b.label)}</option>`).join('')}
+          </select>
+        </label>
+        <label>Status
+          <select id="dts-f-status">
+            <option value="ALL">All</option>
+            <option value="SOLD">Sold</option>
+            <option value="PENDING">Pending</option>
+          </select>
+        </label>
+        <label class="dts-f-search">Search
+          <input type="search" id="dts-f-q" placeholder="Search VIN..." autocomplete="off" />
+        </label>
       </div>
+      <div class="dts-summary" id="dts-summary"></div>
       <div class="table-wrap vsnd-sheet-wrap">
         <table class="data vsnd-live-table">
           <thead>
             <tr>
+              <th>VIN</th>
               <th>Company</th>
-              <th class="num">Total VINs</th>
-              <th class="num">Completed</th>
-              <th class="num">Pending</th>
-              <th class="num">Avg. Days to Sales</th>
+              <th>Assignment Date</th>
+              <th>Hanouf Sales Date</th>
+              <th class="num">Days to Sales</th>
+              <th>Bucket</th>
+              <th>Status</th>
             </tr>
           </thead>
-          <tbody>
-            ${companies.map((c) => `<tr>
-              <td>${esc(c.companyName)}</td>
-              <td class="num">${esc(c.totalUniqueVins)}</td>
-              <td class="num">${esc(c.completedVins)}</td>
-              <td class="num">${esc(c.pendingVins)}</td>
-              <td class="num"><b>${c.averageDaysToSales == null ? '—' : esc(c.averageDaysToSales)}</b></td>
-            </tr>`).join('') || '<tr><td colspan="5">No data</td></tr>'}
-          </tbody>
+          <tbody id="dts-detail-tbody"></tbody>
         </table>
       </div>
-      <p class="hint" style="margin-top:10px">Sales dates come only from Hanouf Sales Raw uploads on employee.html. Assignment date = coordinator print company date. Filter = VSND month (assignment).</p>
+      <p class="hint" id="dts-detail-foot" style="margin-top:8px"></p>
     `, { wide: true });
+
+    const companyEl = $('dts-f-company');
+    const bucketEl = $('dts-f-bucket');
+    const statusEl = $('dts-f-status');
+    const qEl = $('dts-f-q');
+    if (companyEl) companyEl.value = dtsDetailState.company;
+    if (bucketEl) bucketEl.value = dtsDetailState.bucket;
+    if (statusEl) statusEl.value = dtsDetailState.status;
+    const rerender = () => {
+      dtsDetailState.company = companyEl ? companyEl.value : '';
+      dtsDetailState.bucket = bucketEl ? bucketEl.value : '';
+      dtsDetailState.status = statusEl ? statusEl.value : 'ALL';
+      dtsDetailState.q = qEl ? qEl.value.trim() : '';
+      renderDaysToSalesDetailTable();
+    };
+    [companyEl, bucketEl, statusEl].forEach((el) => {
+      if (el) el.addEventListener('change', rerender);
+    });
+    if (qEl) qEl.addEventListener('input', rerender);
+    renderDaysToSalesDetailTable();
   }
+
+  function renderDaysToSalesDetailTable() {
+    const tbody = $('dts-detail-tbody');
+    const summaryEl = $('dts-summary');
+    const foot = $('dts-detail-foot');
+    if (!tbody) return;
+    let rows = getDaysToSalesData();
+    if (dtsDetailState.company) rows = rows.filter((r) => r.company === dtsDetailState.company);
+    if (dtsDetailState.bucket) rows = rows.filter((r) => r.bucket === dtsDetailState.bucket);
+    if (dtsDetailState.status === 'SOLD') rows = rows.filter((r) => r.status === 'SOLD');
+    if (dtsDetailState.status === 'PENDING') rows = rows.filter((r) => r.status !== 'SOLD');
+    const q = String(dtsDetailState.q || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (q) rows = rows.filter((r) => String(r.vin || '').includes(q));
+
+    const sum = summarizeDaysToSales(
+      // Summary ignores bucket/status/search? Spec: company filter updates summary. Bucket filter also filters table; summary should recalculate for visible/filtered set when company changes. Spec §9: company filter recalculates summary. Spec §8: bucket filter shows filtered list. I'll recalculate summary from company-filtered base (before bucket/status/search) when only company matters for cards — but also "based only on the selected company". For bucket click, summary of that bucket's sold VINs is more useful.
+      // Use currently filtered rows for summary so all filters stay consistent.
+      rows
+    );
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="dts-sum-card"><span>Total Sold</span><strong>${esc(sum.totalSold)}</strong></div>
+        <div class="dts-sum-card"><span>Average Days</span><strong>${sum.averageDays == null ? '—' : esc(sum.averageDays)}</strong></div>
+        <div class="dts-sum-card"><span>Fastest Sale</span><strong>${sum.fastestSale == null ? '—' : esc(sum.fastestSale)}</strong></div>
+        <div class="dts-sum-card"><span>8+ Days</span><strong>${esc(sum.eightPlus)}</strong></div>`;
+    }
+    tbody.innerHTML = rows.map((r) => `<tr>
+      <td class="detail-vin">${esc(r.vin)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(fmtDtsDate(r.assignmentDate))}</td>
+      <td>${r.salesDate ? esc(fmtDtsDate(r.salesDate)) : '—'}</td>
+      <td class="num">${r.daysToSales == null ? '—' : esc(r.daysToSales)}</td>
+      <td>${r.bucket ? esc(r.bucket) : '—'}</td>
+      <td><span class="badge ${r.status === 'SOLD' ? 'stay' : 'gone'}">${esc(r.status === 'SOLD' ? 'Sold' : 'Pending')}</span></td>
+    </tr>`).join('') || '<tr><td colspan="7">No VINs match these filters</td></tr>';
+    if (foot) foot.textContent = `${rows.length} VIN(s) · Sold ${sum.totalSold} · Avg ${sum.averageDays == null ? '—' : sum.averageDays}`;
+  }
+
+  window.getDaysToSalesData = getDaysToSalesData;
 
   function renderCarrierPanel() {
     const host = $('vsnd-region-body');

@@ -20,6 +20,7 @@
   let cityReloadTimer = null;
   let companyPerf = null;
   let companyPerfDebug = [];
+  let dtsCoState = { company: '', bucket: '', status: 'ALL', q: '' };
   const fieldEls = {};
 
   function showView(name) {
@@ -236,6 +237,44 @@
     </div>`;
   }
 
+  function getDaysToSalesData() {
+    return (companyPerfDebug || []).map((r) => ({
+      vin: r.vin,
+      company: r.company,
+      assignmentDate: r.assignmentDate,
+      salesDate: r.salesDate || null,
+      daysToSales: r.daysToSales == null ? null : r.daysToSales,
+      bucket: r.bucket || null,
+      status: (r.status === 'SOLD' || r.status === 'COMPLETED')
+        ? 'SOLD'
+        : (r.status === 'DATA_QUALITY' ? 'DATA_QUALITY' : 'PENDING'),
+    }));
+  }
+
+  function fmtDtsDate(iso) {
+    if (!iso) return '—';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return String(iso);
+    const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    try {
+      return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (_) {
+      return String(iso);
+    }
+  }
+
+  function summarizeDaysToSales(rows) {
+    const sold = rows.filter((r) => r.status === 'SOLD' && r.daysToSales != null);
+    return {
+      totalSold: sold.length,
+      averageDays: sold.length
+        ? Math.round((sold.reduce((s, r) => s + r.daysToSales, 0) / sold.length) * 10) / 10
+        : null,
+      fastestSale: sold.length ? Math.min(...sold.map((r) => r.daysToSales)) : null,
+      eightPlus: sold.filter((r) => r.daysToSales >= 8).length,
+    };
+  }
+
   function renderCompanyPerformance(data) {
     companyPerf = data || null;
     companyPerfDebug = (data && data.debug) || [];
@@ -255,13 +294,25 @@
 
     if (donutBody) {
       const completed = totals.completedVins || 0;
-      if (!completed) {
-        donutBody.innerHTML = '<p class="ws-empty" style="margin:0;padding:12px">No completed sales in range</p>';
+      if (!completed && !(totals.totalUniqueVins > 0)) {
+        donutBody.innerHTML = '<p class="ws-empty" style="margin:0;padding:12px">No assignments in range</p>';
       } else {
         donutBody.innerHTML = `${coPerfDonutSvg(dist, String(completed), 'Sold')}
-          <ul class="co-perf-legend">${dist.map((x) => `
-            <li><i style="background:${esc(x.color)}"></i><span>${esc(x.label)}</span><b>${esc(x.count)}</b><em>${esc(x.pct)}%</em></li>
+          <ul class="co-perf-legend is-scroll">${dist.map((x) => `
+            <li class="co-perf-legend-hit" data-dts-bucket="${esc(x.label)}" role="button" tabindex="0">
+              <i style="background:${esc(x.color)}"></i>
+              <span>${esc(x.label)}</span>
+              <b>${esc(x.count)}</b>
+              <em>${esc(x.pct)}%</em>
+            </li>
           `).join('')}</ul>`;
+        donutBody.querySelectorAll('[data-dts-bucket]').forEach((el) => {
+          const open = () => openDaysToSalesModal({ bucket: el.dataset.dtsBucket || '' });
+          el.addEventListener('click', open);
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+          });
+        });
       }
     }
 
@@ -291,6 +342,76 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     </tr>`).join('') || '<tr><td colspan="5">No assignments in this date range</td></tr>';
   }
 
+  function openDaysToSalesModal(opts = {}) {
+    const modal = $('dtsModal');
+    if (!modal) return;
+    const all = getDaysToSalesData();
+    const companies = [...new Set(all.map((r) => r.company).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+    const buckets = ((companyPerf && companyPerf.daysDist) || []).map((b) => b.label);
+    dtsCoState = {
+      company: opts.company || '',
+      bucket: opts.bucket || '',
+      status: opts.status || 'ALL',
+      q: '',
+    };
+    const companyEl = $('dtsCoCompany');
+    const bucketEl = $('dtsCoBucket');
+    const statusEl = $('dtsCoStatus');
+    const qEl = $('dtsCoSearch');
+    if (companyEl) {
+      companyEl.innerHTML = '<option value="">All Companies</option>'
+        + companies.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      companyEl.value = dtsCoState.company;
+    }
+    if (bucketEl) {
+      bucketEl.innerHTML = '<option value="">All</option>'
+        + buckets.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+      bucketEl.value = dtsCoState.bucket;
+    }
+    if (statusEl) statusEl.value = dtsCoState.status;
+    if (qEl) qEl.value = '';
+    modal.hidden = false;
+    renderDaysToSalesModalTable();
+  }
+
+  function closeDaysToSalesModal() {
+    const modal = $('dtsModal');
+    if (modal) modal.hidden = true;
+  }
+
+  function renderDaysToSalesModalTable() {
+    const tbody = $('dtsCoTbody');
+    const summaryEl = $('dtsCoSummary');
+    const foot = $('dtsCoFoot');
+    if (!tbody) return;
+    let rows = getDaysToSalesData();
+    if (dtsCoState.company) rows = rows.filter((r) => r.company === dtsCoState.company);
+    if (dtsCoState.bucket) rows = rows.filter((r) => r.bucket === dtsCoState.bucket);
+    if (dtsCoState.status === 'SOLD') rows = rows.filter((r) => r.status === 'SOLD');
+    if (dtsCoState.status === 'PENDING') rows = rows.filter((r) => r.status !== 'SOLD');
+    const q = String(dtsCoState.q || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (q) rows = rows.filter((r) => String(r.vin || '').includes(q));
+
+    const sum = summarizeDaysToSales(rows);
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="dts-sum-card"><span>Total Sold</span><strong>${esc(sum.totalSold)}</strong></div>
+        <div class="dts-sum-card"><span>Average Days</span><strong>${sum.averageDays == null ? '—' : esc(sum.averageDays)}</strong></div>
+        <div class="dts-sum-card"><span>Fastest Sale</span><strong>${sum.fastestSale == null ? '—' : esc(sum.fastestSale)}</strong></div>
+        <div class="dts-sum-card"><span>8+ Days</span><strong>${esc(sum.eightPlus)}</strong></div>`;
+    }
+    tbody.innerHTML = rows.map((r) => `<tr>
+      <td class="vin-ltr">${esc(r.vin)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(fmtDtsDate(r.assignmentDate))}</td>
+      <td>${r.salesDate ? esc(fmtDtsDate(r.salesDate)) : '—'}</td>
+      <td class="num">${r.daysToSales == null ? '—' : esc(r.daysToSales)}</td>
+      <td>${r.bucket ? esc(r.bucket) : '—'}</td>
+      <td>${esc(r.status === 'SOLD' ? 'Sold' : 'Pending')}</td>
+    </tr>`).join('') || '<tr><td colspan="7">No VINs match these filters</td></tr>';
+    if (foot) foot.textContent = `${rows.length} VIN(s) · Sold ${sum.totalSold} · Avg ${sum.averageDays == null ? '—' : sum.averageDays}`;
+  }
+
   async function loadCompanyPerformance({ silent = false } = {}) {
     setCoPerfMonthDefaults();
     const from = ($('coPerfFrom') && $('coPerfFrom').value) || '';
@@ -301,9 +422,6 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     qs.set('debug', '1');
     const data = await api(`/company-performance?${qs.toString()}`);
     renderCompanyPerformance(data);
-    if (!silent && $('coPerfMeta')) {
-      /* meta already updated */
-    }
     return data;
   }
 
@@ -313,6 +431,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
 
   window.getCompanyPerformanceDebug = getCompanyPerformanceDebug;
   window.getCompanyPerformance = () => companyPerf;
+  window.getDaysToSalesData = getDaysToSalesData;
 
   function renderLiveTable(list) {
     const table = $('coordLiveTable');
@@ -1246,6 +1365,30 @@ Average: ${avg == null ? '—' : avg + ' days'}">
         loadCompanyPerformance().catch((e) => alert(e.message));
       });
     }
+    if ($('coPerfMore')) {
+      $('coPerfMore').addEventListener('click', () => openDaysToSalesModal({}));
+    }
+    if ($('dtsModalClose')) $('dtsModalClose').addEventListener('click', closeDaysToSalesModal);
+    if ($('dtsModal')) {
+      $('dtsModal').addEventListener('click', (e) => {
+        if (e.target === $('dtsModal')) closeDaysToSalesModal();
+      });
+    }
+    const wireDtsFilter = (id, key, eventName) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener(eventName || 'change', () => {
+        dtsCoState[key] = key === 'q' ? el.value.trim() : el.value;
+        renderDaysToSalesModalTable();
+      });
+    };
+    wireDtsFilter('dtsCoCompany', 'company');
+    wireDtsFilter('dtsCoBucket', 'bucket');
+    wireDtsFilter('dtsCoStatus', 'status');
+    wireDtsFilter('dtsCoSearch', 'q', 'input');
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('dtsModal') && !$('dtsModal').hidden) closeDaysToSalesModal();
+    });
     setCoPerfMonthDefaults();
     bindPrintForm();
 
