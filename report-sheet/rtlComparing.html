@@ -106,9 +106,7 @@
     .not-raw { border: 1px solid #eef2f7; border-radius: 14px; padding: 10px 12px; background: #fafaf8; display: flex; flex-direction: column; min-height: 150px; }
     .not-raw-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .not-raw-count { font-family: "Manrope", sans-serif; font-weight: 800; color: var(--toyota); font-size: 1.1rem; }
-    .not-raw-list { overflow: auto; max-height: 170px; font-size: 0.78rem; }
-    .not-raw-list div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed #ece9e3; }
-    .not-raw-list span { color: var(--muted); }
+    .not-raw-summary { display: grid; gap: 6px; }
     .sales-msg { color: var(--muted); font-size: 0.85rem; }
     .swap-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
     .swap-bars { display: grid; gap: 8px; align-content: start; }
@@ -277,7 +275,33 @@
             <b>Not in raw data</b>
             <span id="not-raw-count" class="not-raw-count">0</span>
           </div>
-          <div id="not-raw-list" class="not-raw-list"></div>
+          <div class="sub" id="not-raw-latest" style="margin-bottom:6px"></div>
+          <div id="not-raw-list" class="not-raw-summary"></div>
+        </div>
+      </div>
+      <div class="not-raw-table">
+        <div class="card-head" style="margin:14px 0 8px">
+          <div>
+            <h2 style="font-size:0.98rem">Not in raw data — location in the latest RTL file</h2>
+            <div class="sub">Still Retail Electronic Sales in the latest file = with me = <b>free stock</b></div>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:300px">
+          <table>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>VIN</th>
+                <th>Product</th>
+                <th>Suffix</th>
+                <th>Allocation date</th>
+                <th>Latest RTL · Search Area</th>
+                <th>Latest RTL · Location</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="not-raw-body"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -792,9 +816,44 @@
     delivered: { text: "Delivered", color: "#047857", cls: "ok" },
     proforma: { text: "Proforma", color: "#1d4ed8", cls: "info" },
     nodate: { text: "In raw, no P/V date", color: "#c2410c", cls: "warn" },
-    notraw: { text: "Not in raw data", color: "#a8a29e", cls: "err" }
+    notraw: { text: "Not in raw data", color: "#a8a29e", cls: "err" },
+    free: { text: "Not in raw data · free stock (still RES)", color: "#047857", cls: "ok" },
+    "nr-moved": { text: "Not in raw data · moved to other area", color: "#eb0a1e", cls: "err" },
+    "nr-gone": { text: "Not in raw data · not in latest RTL file", color: "#1d4ed8", cls: "info" }
+  };
+  const LATEST_META = {
+    free: { text: "Free stock (with me)", cls: "ok" },
+    moved: { text: "Moved to other area", cls: "err" },
+    gone: { text: "Not in latest RTL file", cls: "info" }
   };
   let salesFilter = "";
+
+  function latestOkFile(fileList) {
+    for (let i = fileList.length - 1; i >= 0; i -= 1) {
+      if (fileList[i].ok) return fileList[i];
+    }
+    return null;
+  }
+
+  /** Where the VIN is in the newest RTL file: still RES (with me), another area, or missing. */
+  function latestInfo(vin, lf) {
+    if (!lf) return { kind: "", date: "" };
+    const rec = lf.byVin && lf.byVin.get(vin);
+    if (!rec) return { kind: "gone", date: lf.date, area: "", location: "" };
+    return {
+      kind: isTargetArea(rec.area) ? "free" : "moved",
+      date: lf.date,
+      area: rec.area || "(blank area)",
+      location: rec.location || ""
+    };
+  }
+
+  function salesFilterMatch(r, key) {
+    if (key === "free") return r.sales.kind === "notraw" && r.latest.kind === "free";
+    if (key === "nr-moved") return r.sales.kind === "notraw" && r.latest.kind === "moved";
+    if (key === "nr-gone") return r.sales.kind === "notraw" && r.latest.kind === "gone";
+    return r.sales.kind === key;
+  }
 
   function salesInfo(vin) {
     if (!sales.ok) return { kind: "", text: "—" };
@@ -1130,8 +1189,10 @@
     const scoped = selectedFileKey ? fl.filter((f) => f.key === selectedFileKey) : fl;
     let rows = aggregateVins(fl, scoped);
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
+    const lf = latestOkFile(fl);
     rows.forEach((r) => {
       r.sales = salesInfo(r.vin);
+      r.latest = latestInfo(r.vin, lf);
       r.swap = swapInfo(r.vin, fl);
       r.display = displayInfo(r.vin);
     });
@@ -1147,7 +1208,7 @@
 
   function currentVinRows(base) {
     let rows = base || baseVinRows();
-    if (salesFilter) rows = rows.filter((r) => r.sales.kind === salesFilter);
+    if (salesFilter) rows = rows.filter((r) => salesFilterMatch(r, salesFilter));
     if (swapFilter === "out") rows = rows.filter((r) => r.swap.out);
     else if (swapFilter === "in") rows = rows.filter((r) => r.swap.in);
     else if (swapFilter === "both") rows = rows.filter((r) => r.swap.in && r.swap.out);
@@ -1264,6 +1325,8 @@
     const legend = $("#sales-legend");
     const donut = $("#sales-donut");
     const notRawList = $("#not-raw-list");
+    $("#not-raw-body").innerHTML = "";
+    $("#not-raw-latest").textContent = "";
     if (!sales.loaded) {
       sub.textContent = "Loading Sales Raw from Admin Push…";
       legend.innerHTML = "";
@@ -1304,11 +1367,37 @@
       ${counts.nodate ? leg("nodate", "In raw, no Proforma / Invoice") : ""}
       ${leg("notraw", "Not in raw data")}`;
 
-    const notRaw = base.filter((r) => r.sales.kind === "notraw");
+    const order = { free: 0, moved: 1, gone: 2 };
+    const notRaw = base.filter((r) => r.sales.kind === "notraw")
+      .sort((a, b) => (order[a.latest.kind] ?? 3) - (order[b.latest.kind] ?? 3) || a.vin.localeCompare(b.vin));
+    const nr = { free: 0, moved: 0, gone: 0 };
+    notRaw.forEach((r) => { if (nr[r.latest.kind] != null) nr[r.latest.kind] += 1; });
+    const latestDate = (notRaw[0] && notRaw[0].latest.date) || (latestOkFile(visibleFiles()) || {}).date || "";
     $("#not-raw-count").textContent = notRaw.length.toLocaleString();
+    $("#not-raw-latest").textContent = latestDate ? `Checked against the latest RTL file: ${latestDate}` : "";
+    const nrBtn = (key, kind) => `<button type="button" class="sales-leg${salesFilter === key ? " active" : ""}" data-sales="${key}">
+        <span><span class="dot" style="background:${SALES_META[key].color}"></span>${LATEST_META[kind].text}</span>
+        <span><b>${nr[kind].toLocaleString()}</b></span>
+      </button>`;
     notRawList.innerHTML = notRaw.length
-      ? notRaw.map((r) => `<div><b class="mono">${esc(r.vin)}</b><span>${esc([r.product, r.suffix].filter(Boolean).join(" · "))}</span></div>`).join("")
+      ? nrBtn("free", "free") + nrBtn("nr-moved", "moved") + nrBtn("nr-gone", "gone")
       : `<div class="sales-msg">Every VIN is in Sales Raw.</div>`;
+
+    $("#not-raw-body").innerHTML = notRaw.length
+      ? notRaw.map((r, i) => {
+        const meta = LATEST_META[r.latest.kind] || { text: "—", cls: "info" };
+        return `<tr>
+          <td class="num">${i + 1}</td>
+          <td class="mono"><b>${esc(r.vin)}</b></td>
+          <td>${esc(r.product || "—")}</td>
+          <td>${esc(r.suffix || "—")}</td>
+          <td class="mono">${esc(r.allocKey || "—")}</td>
+          <td>${esc(r.latest.area || "—")}</td>
+          <td>${esc(r.latest.location || "—")}</td>
+          <td><span class="pill ${meta.cls}">${meta.text}</span>${r.latest.kind === "gone" ? ` <span class="mono">last seen ${esc(r.lastSeenDate || "—")}</span>` : ""}</td>
+        </tr>`;
+      }).join("")
+      : `<tr><td colspan="8" class="empty">Every VIN is in Sales Raw.</td></tr>`;
 
     $("#sales-filter-tag").innerHTML = salesFilter
       ? `VIN table filtered: ${esc(SALES_META[salesFilter].text)}<button type="button" data-sales="">Show all</button>`
@@ -1422,12 +1511,15 @@
     const rows = currentVinRows();
     const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place",
       "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Swapped in from", "Swapped in on", "Swapped out to", "Swapped out on", "Display Central 1",
+      "Latest RTL file", "Latest RTL Search Area", "Latest RTL Location", "Free stock (not in raw, still RES)",
       "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
     rows.forEach((r, i) => {
       const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.allocKey, STATUS_META[r.status].text, r.label, placeText(r.current),
         r.sales.kind ? SALES_META[r.sales.kind].text : "", r.sales.proformaKey || "", r.sales.invoiceKey || "",
         r.swap.in ? r.swap.in.area : "", r.swap.in ? r.swap.in.date : "", r.swap.out ? r.swap.out.area : "", r.swap.out ? r.swap.out.date : "",
         r.display ? `Yes (row ${r.display.row}, col ${r.display.col})` : "No",
+        r.latest.date || "", r.latest.kind === "gone" ? "Not in latest file" : (r.latest.area || ""), r.latest.location || "",
+        salesFilterMatch(r, "free") ? "Yes" : "No",
         r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
       lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
     });
@@ -1497,7 +1589,7 @@
   window.getRtlComparingData = () => ({
     allocMonth: allocMonth(),
     files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, res: (f.res || []).length, matches: matchesFor(f).length, issue: f.issue })),
-    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, swap: swapText(swapInfo(r.vin, visibleFiles())), display: displayInfo(r.vin), dates: r.dates })),
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, swap: swapText(swapInfo(r.vin, visibleFiles())), display: displayInfo(r.vin), latest: latestInfo(r.vin, latestOkFile(visibleFiles())), dates: r.dates })),
     display: { ok: display.ok, issue: display.issue, sheet: display.sheet, vins: display.vins },
     sales: { ok: sales.ok, issue: sales.issue, fileName: sales.fileName, source: sales.source, rows: sales.rows, headerP: sales.headerP, headerV: sales.headerV }
   });
