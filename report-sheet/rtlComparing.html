@@ -109,6 +109,7 @@
       display: inline-block; padding: 2px 8px; border-radius: 999px;
       font-size: 0.7rem; font-weight: 700; border: 1px solid transparent;
     }
+    .pill.long { white-space: normal; max-width: 520px; line-height: 1.35; border-radius: 10px; }
     .pill.ok { background: #ecfdf5; color: var(--ok); border-color: #a7f3d0; }
     .pill.warn { background: #fff7ed; color: var(--warn); border-color: #fed7aa; }
     .pill.err { background: #fef2f2; color: var(--toyota); border-color: #fecaca; }
@@ -237,8 +238,9 @@
   const RTL_IDB_KEY = "by_date_v1";
 
   const TARGET_AREA = "retail electronic sales";
-  const H_AREA = "search area desc";
-  const H_AGEING = ["allocation ageing", "allocation aging"];
+  const AREA_EXACT = ["searchareadesc"];
+  const AREA_ALT = ["searchareadescription", "vehiclesearchareadesc", "vehiclesearcharea", "vehsearcharea", "searcharea"];
+  const AGEING_ALT = ["ageing", "aging", "age", "agingdays", "ageingdays", "agedays", "stockage", "boaging", "daysaging"];
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -251,6 +253,10 @@
 
   function normText(s) {
     return String(s ?? "").replace(/\u00a0/g, " ").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function compactHeader(s) {
+    return normText(s).replace(/[^a-z0-9]/g, "");
   }
 
   function normVin(s) {
@@ -297,21 +303,48 @@
   }
 
   /* ---------- Excel parsing ---------- */
+  function findIdx(compact, names) {
+    for (const n of names) {
+      const i = compact.indexOf(n);
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+
   function findHeaderLayout(matrix) {
-    const limit = Math.min(matrix.length, 30);
+    const limit = Math.min(matrix.length, 60);
     for (let r = 0; r < limit; r += 1) {
-      const row = (matrix[r] || []).map(normText);
-      const idxArea = row.indexOf(H_AREA);
-      const idxAge = row.findIndex((h) => H_AGEING.includes(h));
+      const raw = matrix[r] || [];
+      const compact = raw.map(compactHeader);
+      let idxArea = findIdx(compact, AREA_EXACT);
+      const areaExact = idxArea >= 0;
+      if (!areaExact) idxArea = findIdx(compact, AREA_ALT);
+      let idxAge = compact.findIndex((h) => h.startsWith("allocationage"));
+      const ageExact = idxAge >= 0;
+      if (!ageExact) idxAge = findIdx(compact, AGEING_ALT);
       if (idxArea < 0 || idxAge < 0) continue;
-      let idxVin = row.findIndex((h) => h === "vin" || h === "vin no" || h === "vin number" || h === "chassis" || h === "chassis no");
-      if (idxVin < 0) idxVin = row.findIndex((h) => h.includes("vin") || h.includes("chassis"));
-      const idxProduct = row.findIndex((h) => h === "product" || h === "model");
-      const idxSuffix = row.findIndex((h) => h === "suffix" || h === "sfx" || h.includes("suffix"));
-      const idxYear = row.findIndex((h) => h === "model year" || h === "year" || h === "my");
-      return { headerRow: r, idxArea, idxAge, idxVin, idxProduct, idxSuffix, idxYear };
+      let idxVin = findIdx(compact, ["vin", "vinno", "vinnumber", "chassis", "chassisno", "chassisnumber"]);
+      if (idxVin < 0) idxVin = compact.findIndex((h) => h.includes("vin") || h.includes("chassis"));
+      const idxProduct = findIdx(compact, ["product", "model"]);
+      const idxSuffix = compact.findIndex((h) => h === "sfx" || h.includes("suffix"));
+      const idxYear = findIdx(compact, ["modelyear", "year", "my"]);
+      const notes = [];
+      if (!areaExact) notes.push(`used "${String(raw[idxArea]).trim()}" as Search Area Desc`);
+      if (!ageExact) notes.push(`used "${String(raw[idxAge]).trim()}" as Allocation Ageing`);
+      return { headerRow: r, idxArea, idxAge, idxVin, idxProduct, idxSuffix, idxYear, note: notes.join("; ") };
     }
     return null;
+  }
+
+  function guessHeaders(matrix) {
+    const limit = Math.min(matrix.length, 60);
+    let best = [];
+    for (let r = 0; r < limit; r += 1) {
+      const cells = (matrix[r] || []).map((c) => String(c ?? "").trim()).filter(Boolean);
+      if (cells.some((c) => /vin|chassis/i.test(c))) return cells;
+      if (cells.length > best.length) best = cells;
+    }
+    return best;
   }
 
   function scanWorkbook(buffer) {
@@ -320,7 +353,11 @@
     for (const name of wb.SheetNames || []) {
       const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: false });
       const layout = findHeaderLayout(matrix);
-      if (!layout) { missing.push(name); continue; }
+      if (!layout) {
+        const headers = guessHeaders(matrix);
+        missing.push(`${name}: ${headers.slice(0, 25).join(" | ") || "empty"}`);
+        continue;
+      }
       if (layout.idxVin < 0) {
         return { ok: false, issue: `Sheet "${name}" has no VIN column`, rows: 0, matches: [] };
       }
@@ -341,21 +378,21 @@
           year: layout.idxYear >= 0 ? String(line[layout.idxYear] ?? "").trim() : ""
         });
       }
-      return { ok: true, issue: "", rows, matches: Array.from(seen.values()), sheet: name };
+      return { ok: true, issue: layout.note || "", rows, matches: Array.from(seen.values()), sheet: name };
     }
     return {
       ok: false,
-      issue: `Columns "Search Area Desc" and "Allocation Ageing" not found (${missing.join(", ") || "no sheets"})`,
+      issue: `Columns "Search Area Desc" and "Allocation Ageing" not found. Headers in file — ${missing.join(" || ") || "no sheets"}`,
       rows: 0,
       matches: []
     };
   }
 
   /* ---------- Snapshot JSON fallback (raw columns kept in vehicle.details) ---------- */
-  function detailValue(details, wanted) {
+  function detailValue(details, test) {
     if (!details) return undefined;
     for (const [k, v] of Object.entries(details)) {
-      if (wanted.includes(normText(k))) return v;
+      if (test(compactHeader(k))) return v;
     }
     return undefined;
   }
@@ -367,8 +404,9 @@
     for (const v of vehicles) {
       const vin = normVin(v.vin);
       if (!vin) continue;
-      let area = detailValue(v.details, [H_AREA]);
-      let ageing = detailValue(v.details, H_AGEING);
+      let area = detailValue(v.details, (h) => AREA_EXACT.includes(h));
+      if (area === undefined) area = detailValue(v.details, (h) => AREA_ALT.includes(h));
+      let ageing = detailValue(v.details, (h) => h.startsWith("allocationage"));
       if (area === undefined) { area = v.vehicleSearchArea; }
       if (ageing === undefined) { ageing = v.age; exactColumns = false; }
       if (!isTargetArea(area) || !isAgeingZero(ageing)) continue;
@@ -560,9 +598,9 @@
     }
     body.innerHTML = fl.map((f) => {
       const pill = !f.ok
-        ? `<span class="pill err" title="${esc(f.issue)}">${esc(f.issue)}</span>`
+        ? `<span class="pill err long" title="${esc(f.issue)}">${esc(f.issue)}</span>`
         : f.issue
-          ? `<span class="pill warn" title="${esc(f.issue)}">${esc(f.issue)}</span>`
+          ? `<span class="pill warn long" title="${esc(f.issue)}">${esc(f.issue)}</span>`
           : `<span class="pill ok">OK</span>`;
       const src = f.source === "Server Excel" ? "ok" : f.source === "Browser Excel" ? "info" : "warn";
       return `<tr class="file-row${selectedFileKey === f.key ? " selected" : ""}" data-key="${esc(f.key)}">
