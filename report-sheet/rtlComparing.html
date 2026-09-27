@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RTL Comparing — Retail Electronic Sales · Allocation Ageing 0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f1ec;
+      --ink: #18191c;
+      --muted: #77736c;
+      --line: #e5e1da;
+      --card: #ffffff;
+      --toyota: #eb0a1e;
+      --ok: #047857;
+      --warn: #c2410c;
+      --info: #1d4ed8;
+      --shadow: 0 12px 38px rgba(32, 31, 28, 0.045);
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    .wrap { max-width: 1540px; margin: 0 auto; padding: 28px 20px 48px; }
+    .top {
+      display: flex; flex-wrap: wrap; justify-content: space-between;
+      gap: 16px; align-items: flex-end; margin-bottom: 20px;
+    }
+    .brand { display: flex; gap: 12px; align-items: center; }
+    .brand img { width: 40px; height: 40px; object-fit: contain; }
+    .brand strong {
+      display: block; font-family: "Manrope", sans-serif;
+      font-size: 1.35rem; letter-spacing: -0.02em;
+    }
+    .brand span { color: var(--muted); font-size: 0.88rem; }
+    .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav-links a, button, select, input[type="search"] {
+      font: inherit; font-size: 0.85rem; font-weight: 600;
+      color: var(--ink); background: #fff;
+      border: 1px solid rgba(0,0,0,.08); border-radius: 12px;
+      padding: 0.55rem 0.9rem; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+      text-decoration: none;
+    }
+    button { cursor: pointer; }
+    button.primary { background: var(--toyota); color: #fff; border-color: var(--toyota); }
+    button:disabled { opacity: .55; cursor: default; }
+    input[type="search"] { min-width: 240px; font-weight: 500; }
+    .rule {
+      margin: 0 0 18px; padding: 12px 14px; border-radius: 14px;
+      background: #fff7f7; border: 1px solid rgba(235, 10, 30, 0.18);
+      color: #9a3412; font-size: 0.9rem; line-height: 1.5;
+    }
+    .rule code { background: #fff; padding: 1px 6px; border-radius: 6px; border: 1px solid #f3d6d6; }
+    .kpis {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px; margin-bottom: 18px;
+    }
+    .kpi {
+      background: var(--card); border: 1px solid rgba(0,0,0,.065);
+      border-radius: 18px; padding: 16px 18px; box-shadow: var(--shadow);
+    }
+    .kpi small {
+      display: block; color: var(--muted); font-size: 0.72rem;
+      text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+    }
+    .kpi b { display: block; font-family: "Manrope", sans-serif; font-size: 1.9rem; margin-top: 4px; }
+    .kpi.main b { color: var(--toyota); }
+    .card {
+      background: var(--card); border: 1px solid rgba(0,0,0,.065);
+      border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+    .card-head {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      justify-content: space-between; margin-bottom: 12px;
+    }
+    .card h2 { margin: 0; font-family: "Manrope", sans-serif; font-size: 1.1rem; letter-spacing: -0.02em; }
+    .card .sub { color: var(--muted); font-size: 0.83rem; margin-top: 2px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .status { font-size: 0.85rem; color: var(--muted); margin: 0 0 14px; min-height: 1.2em; }
+    .status.err { color: var(--toyota); }
+    .table-wrap { overflow: auto; max-height: 560px; border: 1px solid #eef2f7; border-radius: 14px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th, td {
+      padding: 0.5rem 0.65rem; border-bottom: 1px solid #eef2f7;
+      text-align: left; vertical-align: top; white-space: nowrap;
+    }
+    th {
+      position: sticky; top: 0; background: #f8fafc; font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); z-index: 1;
+    }
+    tfoot td { position: sticky; bottom: 0; background: #fff5f5; font-weight: 800; border-top: 2px solid #f3d6d6; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.wrap-cell { white-space: normal; min-width: 260px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
+    tr.file-row { cursor: pointer; }
+    tr.file-row:hover td { background: #fafaf8; }
+    tr.file-row.selected td { background: #fff1f2; }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 700; border: 1px solid transparent;
+    }
+    .pill.ok { background: #ecfdf5; color: var(--ok); border-color: #a7f3d0; }
+    .pill.warn { background: #fff7ed; color: var(--warn); border-color: #fed7aa; }
+    .pill.err { background: #fef2f2; color: var(--toyota); border-color: #fecaca; }
+    .pill.info { background: #eff6ff; color: var(--info); border-color: #bfdbfe; }
+    .date-chip {
+      display: inline-block; margin: 1px 3px 1px 0; padding: 1px 6px;
+      border-radius: 6px; background: #f4f4f2; font-size: 0.72rem;
+    }
+    .empty { padding: 26px; text-align: center; color: var(--muted); }
+    .filter-tag { font-size: 0.8rem; color: var(--info); font-weight: 600; }
+    .filter-tag button { padding: 2px 8px; font-size: 0.75rem; margin-left: 6px; }
+    @media (max-width: 900px) {
+      .kpis { grid-template-columns: 1fr 1fr; }
+      input[type="search"] { min-width: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <img src="../images/logo/toyota.png" alt="" onerror="this.style.display='none'" />
+        <div>
+          <strong>RTL Comparing</strong>
+          <span>Retail Electronic Sales · Allocation Ageing 0 — across every Data Uploader file</span>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a href="data-uploader.html">Data Uploader</a>
+        <a href="index.html">Live Dashboard</a>
+      </div>
+    </div>
+
+    <p class="rule">
+      A row is counted when <code>Search Area Desc</code> is exactly <b>Retail Electronic Sales</b>
+      and <code>Allocation Ageing</code> is <b>0</b>. Every RTL file submitted in the Data Uploader is scanned;
+      a VIN is counted once per file, and once in the unique total.
+    </p>
+
+    <div class="toolbar" style="margin-bottom:14px">
+      <select id="mode" title="Which uploaded files to scan">
+        <option value="active">Active file per day</option>
+        <option value="all">Every upload (all snapshots)</option>
+      </select>
+      <select id="month" title="Filter by month">
+        <option value="">All months</option>
+      </select>
+      <button id="reload" class="primary" type="button">Reload files</button>
+    </div>
+    <p id="status" class="status">Loading…</p>
+
+    <div class="kpis">
+      <div class="kpi"><small>Files scanned</small><b id="k-files">0</b></div>
+      <div class="kpi"><small>Matching rows (sum of files)</small><b id="k-rows">0</b></div>
+      <div class="kpi main"><small>Unique VINs total</small><b id="k-unique">0</b></div>
+      <div class="kpi"><small>Files with issues</small><b id="k-issues">0</b></div>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Files</h2>
+          <div class="sub">Click a file to show only its VINs below.</div>
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height:360px">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>File name</th>
+              <th>Read from</th>
+              <th class="num">Rows in file</th>
+              <th class="num">Matching VINs</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="files-body"></tbody>
+          <tfoot id="files-foot"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>VINs <span id="vin-count" style="color:var(--toyota)"></span></h2>
+          <div class="sub" id="vin-sub">Unique VINs across all scanned files.</div>
+        </div>
+        <div class="toolbar">
+          <span id="file-filter" class="filter-tag"></span>
+          <input id="search" type="search" placeholder="Search VIN, product, suffix…" />
+          <button id="copy" type="button">Copy VINs</button>
+          <button id="export" type="button">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>VIN</th>
+              <th>Product</th>
+              <th>Suffix</th>
+              <th>Year</th>
+              <th class="num">Files</th>
+              <th>First seen</th>
+              <th>Last seen</th>
+              <th>Dates</th>
+            </tr>
+          </thead>
+          <tbody id="vins-body"></tbody>
+          <tfoot id="vins-foot"></tfoot>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+(function () {
+  const API_META = "/api/rtl-daily/meta";
+  const API_SNAPSHOT = "/api/rtl-daily/";
+  const API_BY_DAY_EXCEL = (dateKey) => `/api/rtl-daily/by-day/${encodeURIComponent(dateKey)}/excel`;
+  const RTL_IDB_NAME = "toyota_rtl_daily_files_v1";
+  const RTL_IDB_STORE = "day_files";
+  const RTL_IDB_KEY = "by_date_v1";
+
+  const TARGET_AREA = "retail electronic sales";
+  const H_AREA = "search area desc";
+  const H_AGEING = ["allocation ageing", "allocation aging"];
+
+  const $ = (sel) => document.querySelector(sel);
+
+  let files = [];
+  let selectedFileKey = "";
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function normText(s) {
+    return String(s ?? "").replace(/\u00a0/g, " ").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function normVin(s) {
+    return String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function isTargetArea(value) {
+    return normText(value) === TARGET_AREA;
+  }
+
+  function isAgeingZero(value) {
+    const s = String(value ?? "").trim().replace(/[, ]/g, "");
+    if (!s) return false;
+    const n = Number(s);
+    return Number.isFinite(n) && n === 0;
+  }
+
+  function setStatus(msg, isErr) {
+    const el = $("#status");
+    el.textContent = msg;
+    el.classList.toggle("err", Boolean(isErr));
+  }
+
+  /* ---------- IndexedDB (browser copy saved by Data Uploader) ---------- */
+  function idbGetRtlDays() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open(RTL_IDB_NAME, 1); } catch { return resolve({}); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(RTL_IDB_STORE)) db.createObjectStore(RTL_IDB_STORE);
+      };
+      req.onerror = () => resolve({});
+      req.onsuccess = () => {
+        try {
+          const db = req.result;
+          const tx = db.transaction(RTL_IDB_STORE, "readonly");
+          const get = tx.objectStore(RTL_IDB_STORE).get(RTL_IDB_KEY);
+          get.onsuccess = () => resolve(get.result && typeof get.result === "object" ? get.result : {});
+          get.onerror = () => resolve({});
+        } catch { resolve({}); }
+      };
+    });
+  }
+
+  /* ---------- Excel parsing ---------- */
+  function findHeaderLayout(matrix) {
+    const limit = Math.min(matrix.length, 30);
+    for (let r = 0; r < limit; r += 1) {
+      const row = (matrix[r] || []).map(normText);
+      const idxArea = row.indexOf(H_AREA);
+      const idxAge = row.findIndex((h) => H_AGEING.includes(h));
+      if (idxArea < 0 || idxAge < 0) continue;
+      let idxVin = row.findIndex((h) => h === "vin" || h === "vin no" || h === "vin number" || h === "chassis" || h === "chassis no");
+      if (idxVin < 0) idxVin = row.findIndex((h) => h.includes("vin") || h.includes("chassis"));
+      const idxProduct = row.findIndex((h) => h === "product" || h === "model");
+      const idxSuffix = row.findIndex((h) => h === "suffix" || h === "sfx" || h.includes("suffix"));
+      const idxYear = row.findIndex((h) => h === "model year" || h === "year" || h === "my");
+      return { headerRow: r, idxArea, idxAge, idxVin, idxProduct, idxSuffix, idxYear };
+    }
+    return null;
+  }
+
+  function scanWorkbook(buffer) {
+    const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+    const missing = [];
+    for (const name of wb.SheetNames || []) {
+      const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: false });
+      const layout = findHeaderLayout(matrix);
+      if (!layout) { missing.push(name); continue; }
+      if (layout.idxVin < 0) {
+        return { ok: false, issue: `Sheet "${name}" has no VIN column`, rows: 0, matches: [] };
+      }
+      const seen = new Map();
+      let rows = 0;
+      for (let r = layout.headerRow + 1; r < matrix.length; r += 1) {
+        const line = matrix[r] || [];
+        const vin = normVin(line[layout.idxVin]);
+        if (!vin) continue;
+        rows += 1;
+        if (!isTargetArea(line[layout.idxArea])) continue;
+        if (!isAgeingZero(line[layout.idxAge])) continue;
+        if (seen.has(vin)) continue;
+        seen.set(vin, {
+          vin,
+          product: layout.idxProduct >= 0 ? String(line[layout.idxProduct] ?? "").trim() : "",
+          suffix: layout.idxSuffix >= 0 ? String(line[layout.idxSuffix] ?? "").trim() : "",
+          year: layout.idxYear >= 0 ? String(line[layout.idxYear] ?? "").trim() : ""
+        });
+      }
+      return { ok: true, issue: "", rows, matches: Array.from(seen.values()), sheet: name };
+    }
+    return {
+      ok: false,
+      issue: `Columns "Search Area Desc" and "Allocation Ageing" not found (${missing.join(", ") || "no sheets"})`,
+      rows: 0,
+      matches: []
+    };
+  }
+
+  /* ---------- Snapshot JSON fallback (raw columns kept in vehicle.details) ---------- */
+  function detailValue(details, wanted) {
+    if (!details) return undefined;
+    for (const [k, v] of Object.entries(details)) {
+      if (wanted.includes(normText(k))) return v;
+    }
+    return undefined;
+  }
+
+  function scanSnapshot(snap) {
+    const vehicles = Array.isArray(snap && snap.vehicles) ? snap.vehicles : [];
+    const seen = new Map();
+    let exactColumns = true;
+    for (const v of vehicles) {
+      const vin = normVin(v.vin);
+      if (!vin) continue;
+      let area = detailValue(v.details, [H_AREA]);
+      let ageing = detailValue(v.details, H_AGEING);
+      if (area === undefined) { area = v.vehicleSearchArea; }
+      if (ageing === undefined) { ageing = v.age; exactColumns = false; }
+      if (!isTargetArea(area) || !isAgeingZero(ageing)) continue;
+      if (seen.has(vin)) continue;
+      seen.set(vin, { vin, product: v.product || "", suffix: v.suffix || "", year: v.year || "" });
+    }
+    return {
+      ok: true,
+      issue: exactColumns ? "" : "Allocation Ageing column missing in saved snapshot — used stored age",
+      rows: vehicles.length,
+      matches: Array.from(seen.values())
+    };
+  }
+
+  /* ---------- File list ---------- */
+  async function loadMeta() {
+    try {
+      const res = await fetch(API_META, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      return { error: err.message || String(err), snapshots: [], activeByDay: {} };
+    }
+  }
+
+  function buildFileList(meta, idbMap, mode) {
+    const list = [];
+    const snapshots = Array.isArray(meta.snapshots) ? meta.snapshots : [];
+    const activeByDay = meta.activeByDay || {};
+    const snapById = new Map(snapshots.map((s) => [s.id, s]));
+
+    if (mode === "all") {
+      for (const s of snapshots) {
+        if (!s.date) continue;
+        list.push({
+          key: s.id,
+          date: s.date,
+          id: s.id,
+          fileName: s.fileName || "",
+          active: activeByDay[s.date] === s.id,
+          at: Number(s.at) || 0
+        });
+      }
+    } else {
+      const byDate = new Map();
+      for (const [date, id] of Object.entries(activeByDay)) {
+        const s = snapById.get(id) || {};
+        byDate.set(date, { key: date, date, id, fileName: s.fileName || "", active: true, at: Number(s.at) || 0 });
+      }
+      const newestFirst = snapshots.slice().sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0));
+      for (const s of newestFirst) {
+        if (!s.date || byDate.has(s.date)) continue;
+        byDate.set(s.date, { key: s.date, date: s.date, id: s.id, fileName: s.fileName || "", active: true, at: Number(s.at) || 0 });
+      }
+      list.push(...byDate.values());
+    }
+
+    const known = new Set(list.map((f) => f.date));
+    for (const [date, pack] of Object.entries(idbMap || {})) {
+      if (known.has(date) || !pack || !pack.buffer) continue;
+      list.push({ key: `idb:${date}`, date, id: "", fileName: pack.fileName || "", active: true, at: Number(pack.at) || 0, idbOnly: true });
+    }
+
+    list.sort((a, b) => a.date.localeCompare(b.date) || a.at - b.at);
+    return list;
+  }
+
+  async function readFile(entry, idbMap) {
+    if (entry.active && !entry.idbOnly) {
+      try {
+        const res = await fetch(API_BY_DAY_EXCEL(entry.date), { cache: "no-store" });
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          return { source: "Server Excel", ...scanWorkbook(buf) };
+        }
+      } catch { /* fall through */ }
+    }
+    const pack = idbMap && idbMap[entry.date];
+    if (entry.active && pack && pack.buffer) {
+      try {
+        return { source: "Browser Excel", ...scanWorkbook(pack.buffer) };
+      } catch { /* fall through */ }
+    }
+    if (entry.id) {
+      const res = await fetch(API_SNAPSHOT + encodeURIComponent(entry.id), { cache: "no-store" });
+      if (res.ok) {
+        const snap = await res.json();
+        if (!entry.fileName && snap.fileName) entry.fileName = snap.fileName;
+        return { source: "Saved snapshot", ...scanSnapshot(snap) };
+      }
+      return { source: "—", ok: false, issue: `Snapshot not found (HTTP ${res.status})`, rows: 0, matches: [] };
+    }
+    return { source: "—", ok: false, issue: "No file available", rows: 0, matches: [] };
+  }
+
+  async function reload() {
+    const btn = $("#reload");
+    btn.disabled = true;
+    selectedFileKey = "";
+    files = [];
+    render();
+    try {
+      setStatus("Loading uploaded files list…");
+      const [meta, idbMap] = await Promise.all([loadMeta(), idbGetRtlDays()]);
+      const list = buildFileList(meta, idbMap, $("#mode").value);
+      if (!list.length) {
+        setStatus(meta.error ? `Server unavailable (${meta.error}) and no files saved in this browser.` : "No files have been submitted in the Data Uploader yet.", Boolean(meta.error));
+        return;
+      }
+      for (let i = 0; i < list.length; i += 1) {
+        const entry = list[i];
+        setStatus(`Scanning file ${i + 1} of ${list.length} — ${entry.date}${entry.fileName ? " · " + entry.fileName : ""}`);
+        let result;
+        try {
+          result = await readFile(entry, idbMap);
+        } catch (err) {
+          result = { source: "—", ok: false, issue: err.message || String(err), rows: 0, matches: [] };
+        }
+        files.push({ ...entry, ...result });
+        render();
+      }
+      populateMonths();
+      const warn = meta.error ? ` Server unavailable (${meta.error}) — used browser copies only.` : "";
+      setStatus(`Done. Scanned ${files.length} file(s).${warn}`, Boolean(meta.error));
+    } finally {
+      btn.disabled = false;
+      render();
+    }
+  }
+
+  /* ---------- Aggregation + rendering ---------- */
+  function visibleFiles() {
+    const month = $("#month").value;
+    return month ? files.filter((f) => f.date.startsWith(month)) : files;
+  }
+
+  function aggregateVins(fileList) {
+    const map = new Map();
+    for (const f of fileList) {
+      for (const m of f.matches || []) {
+        let row = map.get(m.vin);
+        if (!row) {
+          row = { vin: m.vin, product: "", suffix: "", year: "", dates: [], fileKeys: new Set() };
+          map.set(m.vin, row);
+        }
+        if (!row.product && m.product) row.product = m.product;
+        if (!row.suffix && m.suffix) row.suffix = m.suffix;
+        if (!row.year && m.year) row.year = m.year;
+        row.fileKeys.add(f.key);
+        if (!row.dates.includes(f.date)) row.dates.push(f.date);
+      }
+    }
+    const rows = Array.from(map.values());
+    rows.forEach((r) => r.dates.sort());
+    rows.sort((a, b) => a.dates[0].localeCompare(b.dates[0]) || a.vin.localeCompare(b.vin));
+    return rows;
+  }
+
+  function populateMonths() {
+    const sel = $("#month");
+    const cur = sel.value;
+    const months = Array.from(new Set(files.map((f) => f.date.slice(0, 7)))).sort();
+    sel.innerHTML = '<option value="">All months</option>' + months.map((m) => `<option value="${m}">${m}</option>`).join("");
+    if (months.includes(cur)) sel.value = cur;
+  }
+
+  function currentVinRows() {
+    const fl = visibleFiles();
+    const scoped = selectedFileKey ? fl.filter((f) => f.key === selectedFileKey) : fl;
+    let rows = aggregateVins(scoped);
+    const q = normText($("#search").value);
+    if (q) {
+      rows = rows.filter((r) =>
+        r.vin.toLowerCase().includes(q.replace(/[^a-z0-9]/g, "")) ||
+        normText(r.product).includes(q) ||
+        normText(r.suffix).includes(q)
+      );
+    }
+    return rows;
+  }
+
+  function renderFiles(fl, uniqueTotal) {
+    const body = $("#files-body");
+    const foot = $("#files-foot");
+    if (!fl.length) {
+      body.innerHTML = `<tr><td colspan="6" class="empty">No files scanned yet.</td></tr>`;
+      foot.innerHTML = "";
+      return;
+    }
+    body.innerHTML = fl.map((f) => {
+      const pill = !f.ok
+        ? `<span class="pill err" title="${esc(f.issue)}">${esc(f.issue)}</span>`
+        : f.issue
+          ? `<span class="pill warn" title="${esc(f.issue)}">${esc(f.issue)}</span>`
+          : `<span class="pill ok">OK</span>`;
+      const src = f.source === "Server Excel" ? "ok" : f.source === "Browser Excel" ? "info" : "warn";
+      return `<tr class="file-row${selectedFileKey === f.key ? " selected" : ""}" data-key="${esc(f.key)}">
+        <td class="mono">${esc(f.date)}${f.active ? "" : ' <span class="pill info">older upload</span>'}</td>
+        <td title="${esc(f.fileName)}">${esc(f.fileName || "—")}</td>
+        <td><span class="pill ${src}">${esc(f.source)}</span></td>
+        <td class="num">${(f.rows || 0).toLocaleString()}</td>
+        <td class="num"><b>${(f.matches || []).length.toLocaleString()}</b></td>
+        <td>${pill}</td>
+      </tr>`;
+    }).join("");
+    const sumRows = fl.reduce((s, f) => s + (f.rows || 0), 0);
+    const sumMatches = fl.reduce((s, f) => s + (f.matches || []).length, 0);
+    foot.innerHTML = `<tr>
+      <td colspan="3">Total — ${fl.length} file(s) · ${uniqueTotal.toLocaleString()} unique VINs</td>
+      <td class="num">${sumRows.toLocaleString()}</td>
+      <td class="num">${sumMatches.toLocaleString()}</td>
+      <td></td>
+    </tr>`;
+  }
+
+  function renderVins(rows) {
+    const body = $("#vins-body");
+    const foot = $("#vins-foot");
+    $("#vin-count").textContent = `(${rows.length.toLocaleString()})`;
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="9" class="empty">No VINs match Retail Electronic Sales with Allocation Ageing 0.</td></tr>`;
+      foot.innerHTML = "";
+      return;
+    }
+    body.innerHTML = rows.map((r, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="mono"><b>${esc(r.vin)}</b></td>
+      <td>${esc(r.product || "—")}</td>
+      <td>${esc(r.suffix || "—")}</td>
+      <td>${esc(r.year || "—")}</td>
+      <td class="num">${r.fileKeys.size}</td>
+      <td class="mono">${esc(r.dates[0])}</td>
+      <td class="mono">${esc(r.dates[r.dates.length - 1])}</td>
+      <td class="wrap-cell">${r.dates.map((d) => `<span class="date-chip">${esc(d.slice(5))}</span>`).join("")}</td>
+    </tr>`).join("");
+    const appearances = rows.reduce((s, r) => s + r.fileKeys.size, 0);
+    foot.innerHTML = `<tr>
+      <td colspan="5">Total unique VINs: ${rows.length.toLocaleString()}</td>
+      <td class="num">${appearances.toLocaleString()}</td>
+      <td colspan="3"></td>
+    </tr>`;
+  }
+
+  function render() {
+    const fl = visibleFiles();
+    const allUnique = aggregateVins(fl);
+    renderFiles(fl, allUnique.length);
+    renderVins(currentVinRows());
+
+    $("#k-files").textContent = fl.length.toLocaleString();
+    $("#k-rows").textContent = fl.reduce((s, f) => s + (f.matches || []).length, 0).toLocaleString();
+    $("#k-unique").textContent = allUnique.length.toLocaleString();
+    $("#k-issues").textContent = fl.filter((f) => !f.ok || f.issue).length.toLocaleString();
+
+    const sel = selectedFileKey && files.find((f) => f.key === selectedFileKey);
+    $("#file-filter").innerHTML = sel
+      ? `Showing file ${esc(sel.date)}${sel.fileName ? " · " + esc(sel.fileName) : ""}<button type="button" id="clear-file">Show all</button>`
+      : "";
+    $("#vin-sub").textContent = sel
+      ? "VINs matching in the selected file."
+      : "Unique VINs across all scanned files (each VIN listed once).";
+  }
+
+  function exportCsv() {
+    const rows = currentVinRows();
+    const lines = [["#", "VIN", "Product", "Suffix", "Year", "Files", "First seen", "Last seen", "Dates"].join(",")];
+    rows.forEach((r, i) => {
+      const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
+      lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
+    });
+    lines.push(`"Total","${rows.length}"`);
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `rtl-comparing-res-age0-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  async function copyVins() {
+    const text = currentVinRows().map((r) => r.vin).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(`Copied ${currentVinRows().length} VIN(s) to clipboard.`);
+    } catch {
+      setStatus("Clipboard not available in this browser.", true);
+    }
+  }
+
+  $("#files-body").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.file-row");
+    if (!tr) return;
+    const key = tr.getAttribute("data-key");
+    selectedFileKey = selectedFileKey === key ? "" : key;
+    render();
+  });
+  $("#file-filter").addEventListener("click", (e) => {
+    if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
+  });
+  $("#search").addEventListener("input", render);
+  $("#month").addEventListener("change", () => { selectedFileKey = ""; render(); });
+  $("#mode").addEventListener("change", reload);
+  $("#reload").addEventListener("click", reload);
+  $("#export").addEventListener("click", exportCsv);
+  $("#copy").addEventListener("click", copyVins);
+
+  window.getRtlComparingData = () => ({
+    files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, matches: (f.matches || []).length, issue: f.issue })),
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, dates: r.dates }))
+  });
+
+  reload();
+})();
+  </script>
+</body>
+</html>
