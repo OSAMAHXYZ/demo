@@ -107,6 +107,26 @@
     .not-raw-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .not-raw-count { font-family: "Manrope", sans-serif; font-weight: 800; color: var(--toyota); font-size: 1.1rem; }
     .not-raw-summary { display: grid; gap: 6px; }
+    .sum-chart { display: grid; gap: 7px; }
+    .sum-row {
+      display: grid; grid-template-columns: 250px 1fr 64px; align-items: center; gap: 12px;
+      padding: 6px 10px; border-radius: 10px; border: 1px solid #eef2f7; background: #fff;
+      box-shadow: none; text-align: left; font-weight: 600; font-size: 0.82rem;
+    }
+    .sum-row.active { outline: 2px solid var(--ink); }
+    .sum-row.total { background: #fff7f7; border-color: #f3d6d6; }
+    .sum-row small { display: block; color: var(--muted); font-weight: 500; font-size: 0.72rem; }
+    .sum-track { display: flex; height: 22px; background: #f4f3f0; border-radius: 7px; overflow: hidden; }
+    .sum-seg {
+      height: 100%; color: #fff; font-size: 0.7rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden;
+    }
+    .sum-row > b { font-family: "Manrope", sans-serif; font-size: 1.1rem; text-align: right; }
+    .sum-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 0.76rem; color: var(--muted); }
+    .sum-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .sum-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    #free-filters button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .pair-arrow { color: var(--muted); font-weight: 800; text-align: center; }
     .sales-msg { color: var(--muted); font-size: 0.85rem; }
     .swap-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
     .swap-bars { display: grid; gap: 8px; align-content: start; }
@@ -230,6 +250,80 @@
       <button type="button" class="status-chip warn" data-status="realloc"><small>RES, allocation date changed</small><b id="s-realloc">0</b></button>
       <button type="button" class="status-chip info" data-status="gone"><small>Not in latest file</small><b id="s-gone">0</b></button>
     </div>
+
+    <section class="card" id="summary-card">
+      <div class="card-head">
+        <div>
+          <h2>Month summary</h2>
+          <div class="sub" id="summary-sub">Total · Delivered · Proforma · Moved in · Moved out · Free stock — click a bar to filter the VIN table</div>
+        </div>
+        <span id="summary-filter-tag" class="filter-tag"></span>
+      </div>
+      <div id="summary-chart" class="sum-chart"></div>
+      <div id="summary-legend" class="sum-legend"></div>
+
+      <div class="sum-block" id="free-block">
+        <div class="card-head" style="margin:16px 0 8px">
+          <div>
+            <h2 style="font-size:0.98rem">Free stock <span id="free-count" style="color:var(--ok)"></span></h2>
+            <div class="sub" id="free-sub">Retail Electronic Sales in the latest RTL file and not in Sales Raw</div>
+          </div>
+          <div class="toolbar" id="free-filters">
+            <button type="button" data-free="current">Current month</button>
+            <button type="button" data-free="older">Older</button>
+            <button type="button" data-free="all">All</button>
+            <button type="button" id="free-export">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:300px">
+          <table>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>VIN</th>
+                <th>Product</th>
+                <th>Suffix</th>
+                <th>Allocation date</th>
+                <th>Label</th>
+                <th>Location</th>
+                <th>Display</th>
+              </tr>
+            </thead>
+            <tbody id="free-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="sum-block">
+        <div class="card-head" style="margin:16px 0 8px">
+          <div>
+            <h2 style="font-size:0.98rem">Swapped with what <span id="pair-count" style="color:var(--toyota)"></span></h2>
+            <div class="sub">Each car moved out is paired with a car moved in of the same product + suffix (then same product), closest date first</div>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:320px">
+          <table>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Match</th>
+                <th>Moved out VIN</th>
+                <th>Model</th>
+                <th>Out date</th>
+                <th>Went to</th>
+                <th></th>
+                <th>Moved in VIN</th>
+                <th>Model</th>
+                <th>In date</th>
+                <th>Came from</th>
+                <th>Moved in · Sales Raw</th>
+              </tr>
+            </thead>
+            <tbody id="pair-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <section class="card">
       <div class="card-head">
@@ -1213,6 +1307,7 @@
     else if (swapFilter === "in") rows = rows.filter((r) => r.swap.in);
     else if (swapFilter === "both") rows = rows.filter((r) => r.swap.in && r.swap.out);
     if (displayFilter) rows = rows.filter((r) => r.display);
+    if (summaryFilter) rows = rows.filter((r) => summaryMatch(r, summaryFilter));
     const q = normText($("#search").value);
     if (q) {
       rows = rows.filter((r) =>
@@ -1404,6 +1499,214 @@
       : "";
   }
 
+  /* ---------- Month summary ---------- */
+  let summaryFilter = "";
+  let freeFilter = "all";
+
+  const SUM_COLORS = {
+    delivered: "#047857",
+    proforma: "#1d4ed8",
+    nodate: "#c2410c",
+    notraw: "#a8a29e",
+    out: "#eb0a1e",
+    open: "#d6d3cd",
+    current: "#10b981",
+    older: "#78716c"
+  };
+
+  /** Latest RTL file: Retail Electronic Sales VINs not in Sales Raw, labelled by Allocation Date month. */
+  function freeStockRows() {
+    const lf = latestOkFile(visibleFiles());
+    if (!lf || !sales.ok) return { lf, rows: [] };
+    const mk = allocMonth();
+    const rows = [];
+    lf.byVin.forEach((rec) => {
+      if (!isTargetArea(rec.area) || sales.byVin.has(rec.vin)) return;
+      let label = "other";
+      if (rec.allocKey && rec.allocKey.startsWith(mk)) label = "current";
+      else if (rec.allocKey && rec.allocKey < `${mk}-01`) label = "older";
+      rows.push({ ...rec, label, display: displayInfo(rec.vin) });
+    });
+    const rank = { current: 0, older: 1, other: 2 };
+    rows.sort((a, b) => rank[a.label] - rank[b.label] || (b.allocKey || "").localeCompare(a.allocKey || "") || a.vin.localeCompare(b.vin));
+    return { lf, rows };
+  }
+
+  function modelKey(r) {
+    return `${normText(r.product)}|${normText(r.suffix)}`;
+  }
+
+  /** Pair each moved-out VIN with a moved-in VIN: same product + suffix first, then same product, closest date. */
+  function pairSwaps(base) {
+    const outs = base.filter((r) => r.swap.out).sort((a, b) => a.swap.out.date.localeCompare(b.swap.out.date));
+    const ins = base.filter((r) => r.swap.in);
+    const used = new Set();
+    const pairs = [];
+    const days = (a, b) => Math.abs(new Date(a) - new Date(b)) / 86400000;
+    const pick = (out, test) => {
+      let best = null;
+      ins.forEach((inn) => {
+        if (used.has(inn.vin) || inn.vin === out.vin || !test(inn)) return;
+        if (!best || days(inn.swap.in.date, out.swap.out.date) < days(best.swap.in.date, out.swap.out.date)) best = inn;
+      });
+      return best;
+    };
+    const pendingOut = [];
+    outs.forEach((out) => {
+      const inn = pick(out, (i) => modelKey(i) === modelKey(out));
+      if (inn) { used.add(inn.vin); pairs.push({ match: "Same model + suffix", out, inn }); } else pendingOut.push(out);
+    });
+    pendingOut.forEach((out) => {
+      const inn = out.product ? pick(out, (i) => normText(i.product) === normText(out.product)) : null;
+      if (inn) { used.add(inn.vin); pairs.push({ match: "Same model", out, inn }); } else pairs.push({ match: "Moved out only", out, inn: null });
+    });
+    ins.filter((i) => !used.has(i.vin)).forEach((inn) => pairs.push({ match: "Moved in only", out: null, inn }));
+    return pairs;
+  }
+
+  function summaryMatch(r, key) {
+    const sold = r.sales.kind === "delivered" || r.sales.kind === "proforma";
+    if (key === "delivered") return r.sales.kind === "delivered";
+    if (key === "proforma") return r.sales.kind === "proforma";
+    if (key === "in") return Boolean(r.swap.in);
+    if (key === "in-sold") return Boolean(r.swap.in) && sold;
+    if (key === "out") return Boolean(r.swap.out);
+    return true;
+  }
+
+  function renderSummary(base) {
+    const count = (fn) => base.filter(fn).length;
+    const total = base.length;
+    const k = (kind) => count((r) => r.sales.kind === kind);
+    const delivered = k("delivered");
+    const proforma = k("proforma");
+    const ins = base.filter((r) => r.swap.in);
+    const inDel = ins.filter((r) => r.sales.kind === "delivered").length;
+    const inPro = ins.filter((r) => r.sales.kind === "proforma").length;
+    const outN = count((r) => r.swap.out);
+    const free = freeStockRows();
+    const freeCur = free.rows.filter((r) => r.label === "current").length;
+    const freeOld = free.rows.filter((r) => r.label === "older").length;
+    const freeOther = free.rows.length - freeCur - freeOld;
+
+    const rowsDef = [
+      { key: "", cls: "total", label: "Total VINs (mine this month)", sub: "RES · Allocation Date in month", total,
+        segs: [["delivered", delivered], ["proforma", proforma], ["nodate", k("nodate")], ["notraw", k("notraw")]] },
+      { key: "delivered", label: "Delivered", sub: "Sales Raw Col V Invoice Date", total: delivered, segs: [["delivered", delivered]] },
+      { key: "proforma", label: "Proforma", sub: "Col P date, no Invoice", total: proforma, segs: [["proforma", proforma]] },
+      { key: "in", label: "Moved in (other → me)", sub: "all moved-in VINs", total: ins.length,
+        segs: [["delivered", inDel], ["proforma", inPro], ["open", ins.length - inDel - inPro]] },
+      { key: "in-sold", label: "Moved in + Delivered / Proforma", sub: `${inDel} delivered · ${inPro} proforma`, total: inDel + inPro,
+        segs: [["delivered", inDel], ["proforma", inPro]] },
+      { key: "out", label: "Moved out from me", sub: "RES → other area", total: outN, segs: [["out", outN]] },
+      { key: "free", label: "Free stock", sub: free.lf ? `latest RTL ${free.lf.date} · not in Sales Raw` : "needs RTL + Sales Raw",
+        total: free.rows.length, segs: [["current", freeCur], ["older", freeOld], ["open", freeOther]] }
+    ];
+    const scale = Math.max(1, ...rowsDef.map((d) => d.total));
+    $("#summary-chart").innerHTML = rowsDef.map((d) => {
+      const segs = d.segs.filter(([, n]) => n > 0).map(([c, n]) =>
+        `<span class="sum-seg" style="width:${(n / scale) * 100}%;background:${SUM_COLORS[c]}" title="${n}">${(n / scale) > 0.05 ? n.toLocaleString() : ""}</span>`).join("");
+      return `<button type="button" class="sum-row ${d.cls || ""}${summaryFilter === d.key && d.key ? " active" : ""}" data-sum="${d.key}">
+          <span>${d.label}<small>${esc(d.sub)}</small></span>
+          <span class="sum-track">${segs}</span>
+          <b>${d.total.toLocaleString()}</b>
+        </button>`;
+    }).join("");
+    $("#summary-legend").innerHTML = [
+      ["delivered", "Delivered"], ["proforma", "Proforma"], ["nodate", "In raw, no P/V"], ["notraw", "Not in raw data"],
+      ["out", "Moved out"], ["open", "Not delivered / proforma yet"], ["current", "Free stock · current month"], ["older", "Free stock · older"]
+    ].map(([c, t]) => `<span><i style="background:${SUM_COLORS[c]}"></i>${t}</span>`).join("");
+    const tagText = { delivered: "Delivered", proforma: "Proforma", in: "Moved in", "in-sold": "Moved in + Delivered / Proforma", out: "Moved out" };
+    $("#summary-filter-tag").innerHTML = summaryFilter && tagText[summaryFilter]
+      ? `VIN table filtered: ${tagText[summaryFilter]}<button type="button" data-sum="">Show all</button>`
+      : "";
+
+    renderFreeStock(free, { freeCur, freeOld, freeOther });
+    renderPairs(base);
+  }
+
+  function freeVisible(free) {
+    return freeFilter === "all" ? free.rows : free.rows.filter((r) => r.label === freeFilter);
+  }
+
+  function renderFreeStock(free, n) {
+    document.querySelectorAll("#free-filters [data-free]").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-free") === freeFilter);
+      const key = b.getAttribute("data-free");
+      const num = key === "current" ? n.freeCur : key === "older" ? n.freeOld : free.rows.length;
+      b.textContent = `${key === "current" ? "Current month" : key === "older" ? "Older" : "All"} (${num.toLocaleString()})`;
+    });
+    const body = $("#free-body");
+    if (!sales.ok || !free.lf) {
+      $("#free-count").textContent = "";
+      body.innerHTML = `<tr><td colspan="8" class="empty">${!free.lf ? "No RTL file scanned yet." : "Sales Raw is needed to know which cars are not sold."}</td></tr>`;
+      return;
+    }
+    $("#free-sub").textContent = `Retail Electronic Sales in the latest RTL file (${free.lf.date}) and not in Sales Raw · current month = Allocation Date in ${monthLabel(allocMonth())}`;
+    const rows = freeVisible(free);
+    $("#free-count").textContent = `(${rows.length.toLocaleString()})`;
+    const labelPill = (l) => l === "current"
+      ? `<span class="pill ok">Current month</span>`
+      : l === "older" ? `<span class="pill warn">Older</span>` : `<span class="pill info">No / later date</span>`;
+    body.innerHTML = rows.length
+      ? rows.map((r, i) => `<tr>
+          <td class="num">${i + 1}</td>
+          <td class="mono"><b>${esc(r.vin)}</b></td>
+          <td>${esc(r.product || "—")}</td>
+          <td>${esc(r.suffix || "—")}</td>
+          <td class="mono">${esc(r.allocKey || "—")}</td>
+          <td>${labelPill(r.label)}</td>
+          <td>${esc(r.location || "—")}</td>
+          <td>${r.display ? `<span class="pill err">Display</span>` : "—"}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="8" class="empty">No free stock for this filter.</td></tr>`;
+  }
+
+  function renderPairs(base) {
+    const pairs = pairSwaps(base);
+    const paired = pairs.filter((p) => p.out && p.inn).length;
+    $("#pair-count").textContent = `(${paired} paired · ${pairs.filter((p) => !p.inn).length} out only · ${pairs.filter((p) => !p.out).length} in only)`;
+    const model = (r) => esc([r.product, r.suffix].filter(Boolean).join(" · ") || "—");
+    const salesPill = (r) => r && r.sales.kind ? `<span class="pill ${SALES_META[r.sales.kind].cls}">${SALES_META[r.sales.kind].text}</span>` : "—";
+    const matchCls = { "Same model + suffix": "ok", "Same model": "info", "Moved out only": "err", "Moved in only": "warn" };
+    $("#pair-body").innerHTML = pairs.length
+      ? pairs.map((p, i) => `<tr>
+          <td class="num">${i + 1}</td>
+          <td><span class="pill ${matchCls[p.match]}">${p.match}</span></td>
+          <td class="mono">${p.out ? `<b>${esc(p.out.vin)}</b>` : "—"}</td>
+          <td>${p.out ? model(p.out) : "—"}</td>
+          <td class="mono">${p.out ? esc(p.out.swap.out.date) : "—"}</td>
+          <td>${p.out ? esc(p.out.swap.out.place) : "—"}</td>
+          <td class="pair-arrow">⇄</td>
+          <td class="mono">${p.inn ? `<b>${esc(p.inn.vin)}</b>` : "—"}</td>
+          <td>${p.inn ? model(p.inn) : "—"}</td>
+          <td class="mono">${p.inn ? esc(p.inn.swap.in.date) : "—"}</td>
+          <td>${p.inn ? esc(p.inn.swap.in.place) : "—"}</td>
+          <td>${salesPill(p.inn)}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="12" class="empty">No swaps between the scanned RTL files.</td></tr>`;
+  }
+
+  function exportFreeStock() {
+    const free = freeStockRows();
+    const rows = freeVisible(free);
+    const lines = [["#", "VIN", "Product", "Suffix", "Allocation Date", "Label", "Search Area", "Location", "Display Central 1", "Latest RTL file"].join(",")];
+    rows.forEach((r, i) => {
+      const label = r.label === "current" ? "Current month" : r.label === "older" ? "Older" : "No / later date";
+      const cells = [i + 1, r.vin, r.product, r.suffix, r.allocKey, label, r.area, r.location, r.display ? "Yes" : "No", free.lf ? free.lf.date : ""];
+      lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
+    });
+    lines.push(`"Total","${rows.length}"`);
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `free-stock-${freeFilter}-${allocMonth()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
   function areaCounts(rows, pick) {
     const map = new Map();
     rows.forEach((r) => {
@@ -1478,6 +1781,7 @@
     const allUnique = aggregateVins(fl);
     renderFiles(fl, allUnique.length);
     const base = baseVinRows();
+    renderSummary(base);
     renderSales(base);
     renderSwaps(base);
     renderDisplay(base);
@@ -1555,6 +1859,24 @@
     if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
   });
   $("#search").addEventListener("input", render);
+  $("#summary-card").addEventListener("click", (e) => {
+    if (e.target.id === "free-export") { exportFreeStock(); return; }
+    const freeBtn = e.target.closest("[data-free]");
+    if (freeBtn) {
+      freeFilter = freeBtn.getAttribute("data-free");
+      render();
+      return;
+    }
+    const row = e.target.closest("[data-sum]");
+    if (!row) return;
+    const key = row.getAttribute("data-sum") || "";
+    if (key === "free") {
+      $("#free-block").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    summaryFilter = summaryFilter === key ? "" : key;
+    render();
+  });
   $("#display-filter-btn").addEventListener("click", () => {
     displayFilter = !displayFilter;
     render();
