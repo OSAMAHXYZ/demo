@@ -110,6 +110,23 @@
     .not-raw-list div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed #ece9e3; }
     .not-raw-list span { color: var(--muted); }
     .sales-msg { color: var(--muted); font-size: 0.85rem; }
+    .swap-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+    .swap-bars { display: grid; gap: 8px; align-content: start; }
+    .swap-bar {
+      display: grid; grid-template-columns: 150px 1fr 48px; align-items: center; gap: 10px;
+      padding: 6px 8px; border-radius: 10px; border: 1px solid #eef2f7; background: #fff;
+      box-shadow: none; text-align: left; font-weight: 600; font-size: 0.8rem;
+    }
+    .swap-bar.active { outline: 2px solid var(--ink); }
+    .swap-track { height: 12px; background: #f1efeb; border-radius: 999px; overflow: hidden; }
+    .swap-fill { height: 100%; border-radius: 999px; }
+    .swap-bar b { font-family: "Manrope", sans-serif; font-size: 1rem; text-align: right; }
+    .swap-net { font-size: 0.8rem; color: var(--muted); padding: 2px 8px; }
+    .swap-list { border: 1px solid #eef2f7; border-radius: 14px; padding: 10px 12px; background: #fafaf8; font-size: 0.78rem; }
+    .swap-list > div { max-height: 130px; overflow: auto; margin-top: 6px; }
+    .swap-list .row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed #ece9e3; }
+    .swap-list .row b { font-family: "Manrope", sans-serif; }
+    @media (max-width: 900px) { .swap-grid { grid-template-columns: 1fr; } }
     @media (max-width: 900px) { .sales-grid { grid-template-columns: 1fr; } }
     .card {
       background: var(--card); border: 1px solid rgba(0,0,0,.065);
@@ -265,6 +282,21 @@
       </div>
     </section>
 
+    <section class="card" id="swap-card">
+      <div class="card-head">
+        <div>
+          <h2>Swapped cars</h2>
+          <div class="sub">Search Area changes between RTL files for these VINs · click a bar to filter the VIN table</div>
+        </div>
+        <span id="swap-filter-tag" class="filter-tag"></span>
+      </div>
+      <div class="swap-grid">
+        <div class="swap-bars" id="swap-bars"></div>
+        <div class="swap-list"><b>Moved out to</b><div id="swap-out-areas"></div></div>
+        <div class="swap-list"><b>Moved in from</b><div id="swap-in-areas"></div></div>
+      </div>
+    </section>
+
     <section class="card">
       <div class="card-head">
         <div>
@@ -291,6 +323,7 @@
               <th>Status now</th>
               <th>Current place (Search Area · Location)</th>
               <th>Sales Raw</th>
+              <th>Swap</th>
               <th class="num">Files matched</th>
               <th>First matched</th>
               <th>Last matched</th>
@@ -920,6 +953,28 @@
     };
   }
 
+  /** Latest RES → other area (out) and other area → RES (in) change between consecutive sightings. */
+  function swapInfo(vin, fileList) {
+    let prev = null;
+    let out = null;
+    let inn = null;
+    for (const f of fileList) {
+      if (!f.ok) continue;
+      const rec = f.byVin && f.byVin.get(vin);
+      if (!rec) continue;
+      const isRes = isTargetArea(rec.area);
+      if (prev) {
+        const wasRes = isTargetArea(prev.rec.area);
+        if (wasRes && !isRes) out = { date: f.date, fromDate: prev.date, area: rec.area || "(blank area)", place: placeText(rec) };
+        if (!wasRes && isRes) inn = { date: f.date, fromDate: prev.date, area: prev.rec.area || "(blank area)", place: placeText(prev.rec) };
+      }
+      prev = { rec, date: f.date };
+    }
+    return { out, in: inn };
+  }
+
+  let swapFilter = "";
+
   const STATUS_META = {
     in: { text: "In RES", cls: "ok" },
     moved: { text: "Moved", cls: "err" },
@@ -967,13 +1022,26 @@
     const scoped = selectedFileKey ? fl.filter((f) => f.key === selectedFileKey) : fl;
     let rows = aggregateVins(fl, scoped);
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
-    rows.forEach((r) => { r.sales = salesInfo(r.vin); });
+    rows.forEach((r) => {
+      r.sales = salesInfo(r.vin);
+      r.swap = swapInfo(r.vin, fl);
+    });
     return rows;
+  }
+
+  function swapText(s) {
+    const parts = [];
+    if (s.in) parts.push(`In ← ${s.in.area} (${s.in.date})`);
+    if (s.out) parts.push(`Out → ${s.out.area} (${s.out.date})`);
+    return parts.join(" · ");
   }
 
   function currentVinRows(base) {
     let rows = base || baseVinRows();
     if (salesFilter) rows = rows.filter((r) => r.sales.kind === salesFilter);
+    if (swapFilter === "out") rows = rows.filter((r) => r.swap.out);
+    else if (swapFilter === "in") rows = rows.filter((r) => r.swap.in);
+    else if (swapFilter === "both") rows = rows.filter((r) => r.swap.in && r.swap.out);
     const q = normText($("#search").value);
     if (q) {
       rows = rows.filter((r) =>
@@ -981,7 +1049,8 @@
         normText(r.product).includes(q) ||
         normText(r.suffix).includes(q) ||
         normText(r.label).includes(q) ||
-        normText(r.sales.text).includes(q)
+        normText(r.sales.text).includes(q) ||
+        normText(swapText(r.swap)).includes(q)
       );
     }
     return rows;
@@ -1029,7 +1098,7 @@
     const foot = $("#vins-foot");
     $("#vin-count").textContent = `(${rows.length.toLocaleString()})`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="13" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="14" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
       foot.innerHTML = "";
       return;
     }
@@ -1046,6 +1115,10 @@
       <td>${r.sales.kind
         ? `<span class="pill ${SALES_META[r.sales.kind].cls}">${SALES_META[r.sales.kind].text}</span> <span class="mono">${esc(r.sales.invoiceKey || r.sales.proformaKey || "")}</span>`
         : "—"}</td>
+      <td class="status-cell">${[
+        r.swap.in ? `<div><span class="pill ok">In</span> from ${esc(r.swap.in.area)} <span class="mono">${esc(r.swap.in.date)}</span></div>` : "",
+        r.swap.out ? `<div><span class="pill err">Out</span> to ${esc(r.swap.out.area)} <span class="mono">${esc(r.swap.out.date)}</span></div>` : ""
+      ].join("") || "—"}</td>
       <td class="num">${r.fileKeys.size}</td>
       <td class="mono">${esc(r.dates[0])}</td>
       <td class="mono">${esc(r.dates[r.dates.length - 1])}</td>
@@ -1053,7 +1126,7 @@
     </tr>`).join("");
     const appearances = rows.reduce((s, r) => s + r.fileKeys.size, 0);
     foot.innerHTML = `<tr>
-      <td colspan="9">Total unique VINs: ${rows.length.toLocaleString()}</td>
+      <td colspan="10">Total unique VINs: ${rows.length.toLocaleString()}</td>
       <td class="num">${appearances.toLocaleString()}</td>
       <td colspan="3"></td>
     </tr>`;
@@ -1131,12 +1204,49 @@
       : "";
   }
 
+  function areaCounts(rows, pick) {
+    const map = new Map();
+    rows.forEach((r) => {
+      const s = pick(r);
+      if (s) map.set(s.area, (map.get(s.area) || 0) + 1);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }
+
+  function renderSwaps(base) {
+    const outN = base.filter((r) => r.swap.out).length;
+    const inN = base.filter((r) => r.swap.in).length;
+    const bothN = base.filter((r) => r.swap.in && r.swap.out).length;
+    const max = Math.max(outN, inN, 1);
+    const bar = (key, label, n, color) => `<button type="button" class="swap-bar${swapFilter === key ? " active" : ""}" data-swap="${key}">
+        <span>${label}</span>
+        <span class="swap-track"><span class="swap-fill" style="display:block;width:${(n / max) * 100}%;background:${color}"></span></span>
+        <b>${n.toLocaleString()}</b>
+      </button>`;
+    const net = inN - outN;
+    $("#swap-bars").innerHTML =
+      bar("out", "Moved out (RES → other)", outN, "#eb0a1e")
+      + bar("in", "Moved in (other → RES)", inN, "#047857")
+      + (bothN ? bar("both", "Both in and out", bothN, "#c2410c") : "")
+      + `<div class="swap-net">Net for me: <b>${net > 0 ? "+" : ""}${net.toLocaleString()}</b> of ${base.length.toLocaleString()} VINs</div>`;
+    const list = (entries) => entries.length
+      ? entries.map(([area, n]) => `<div class="row"><span>${esc(area)}</span><b>${n.toLocaleString()}</b></div>`).join("")
+      : `<div class="sales-msg">None</div>`;
+    $("#swap-out-areas").innerHTML = list(areaCounts(base, (r) => r.swap.out));
+    $("#swap-in-areas").innerHTML = list(areaCounts(base, (r) => r.swap.in));
+    const labels = { out: "Moved out", in: "Moved in", both: "Both in and out" };
+    $("#swap-filter-tag").innerHTML = swapFilter
+      ? `VIN table filtered: ${labels[swapFilter]}<button type="button" data-swap="">Show all</button>`
+      : "";
+  }
+
   function render() {
     const fl = visibleFiles();
     const allUnique = aggregateVins(fl);
     renderFiles(fl, allUnique.length);
     const base = baseVinRows();
     renderSales(base);
+    renderSwaps(base);
     renderVins(currentVinRows(base));
 
     $("#k-files").textContent = fl.length.toLocaleString();
@@ -1166,10 +1276,12 @@
   function exportCsv() {
     const rows = currentVinRows();
     const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place",
-      "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
+      "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Swapped in from", "Swapped in on", "Swapped out to", "Swapped out on",
+      "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
     rows.forEach((r, i) => {
       const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.allocKey, STATUS_META[r.status].text, r.label, placeText(r.current),
         r.sales.kind ? SALES_META[r.sales.kind].text : "", r.sales.proformaKey || "", r.sales.invoiceKey || "",
+        r.swap.in ? r.swap.in.area : "", r.swap.in ? r.swap.in.date : "", r.swap.out ? r.swap.out.area : "", r.swap.out ? r.swap.out.date : "",
         r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
       lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
     });
@@ -1205,6 +1317,13 @@
     if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
   });
   $("#search").addEventListener("input", render);
+  $("#swap-card").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-swap]");
+    if (!btn) return;
+    const key = btn.getAttribute("data-swap") || "";
+    swapFilter = swapFilter === key ? "" : key;
+    render();
+  });
   $("#sales-card").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-sales]");
     if (!btn) return;
@@ -1228,7 +1347,7 @@
   window.getRtlComparingData = () => ({
     allocMonth: allocMonth(),
     files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, res: (f.res || []).length, matches: matchesFor(f).length, issue: f.issue })),
-    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, dates: r.dates })),
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, swap: swapText(swapInfo(r.vin, visibleFiles())), dates: r.dates })),
     sales: { ok: sales.ok, issue: sales.issue, fileName: sales.fileName, source: sales.source, rows: sales.rows, headerP: sales.headerP, headerV: sales.headerV }
   });
 
