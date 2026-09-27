@@ -297,6 +297,32 @@
       </div>
     </section>
 
+    <section class="card" id="display-card">
+      <div class="card-head">
+        <div>
+          <h2>Display cars <span id="display-count" style="color:var(--toyota)"></span></h2>
+          <div class="sub" id="display-sub">Stock E-Sales from Admin Push · sheet "Display Central 1"</div>
+        </div>
+        <button type="button" id="display-filter-btn" data-display="toggle">Show only display cars in VIN table</button>
+      </div>
+      <div class="table-wrap" style="max-height:260px">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>VIN</th>
+              <th>Product</th>
+              <th>Suffix</th>
+              <th>Status now</th>
+              <th>Sales Raw</th>
+              <th>Found in Display Central 1</th>
+            </tr>
+          </thead>
+          <tbody id="display-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card">
       <div class="card-head">
         <div>
@@ -324,6 +350,7 @@
               <th>Current place (Search Area · Location)</th>
               <th>Sales Raw</th>
               <th>Swap</th>
+              <th>Display</th>
               <th class="num">Files matched</th>
               <th>First matched</th>
               <th>Last matched</th>
@@ -778,6 +805,86 @@
     return { kind: "nodate", text: "In raw data · no Proforma / Invoice date", ...rec };
   }
 
+  /* ---------- Display Central 1 (Admin Push slot "central" · Stock E-Sales) ---------- */
+  const CENTRAL_API = "/api/report-sheet/file/central";
+  const DISPLAY_SHEET = "display central 1";
+
+  let display = { loaded: false, ok: false, issue: "", fileName: "", source: "", sheet: "", vins: 0, byVin: new Map(), byTail: new Map() };
+  let displayFilter = false;
+
+  function colLetter(i) {
+    let s = "";
+    let n = i + 1;
+    while (n > 0) {
+      const m = (n - 1) % 26;
+      s = String.fromCharCode(65 + m) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  function parseDisplayCentral(buffer) {
+    const wb = XLSX.read(buffer, { type: "array" });
+    const names = wb.SheetNames || [];
+    const sheet = names.find((n) => normText(n) === DISPLAY_SHEET);
+    if (!sheet) {
+      return { ok: false, issue: `Sheet "Display Central 1" not found in Stock E-Sales. Sheets: ${names.join(", ") || "none"}`, byVin: new Map(), byTail: new Map(), vins: 0 };
+    }
+    const matrix = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, defval: "", raw: false, blankrows: true });
+    const byVin = new Map();
+    const byTail = new Map();
+    matrix.forEach((line, r) => {
+      (line || []).forEach((cellValue, c) => {
+        const text = String(cellValue ?? "").toUpperCase();
+        const cleaned = text.replace(/[^A-Z0-9]/g, "");
+        if (!cleaned) return;
+        const at = { row: r + 1, col: colLetter(c) };
+        const wholeIsVin = cleaned.length === 17 && /\d/.test(cleaned) && /[A-Z]/.test(cleaned);
+        const tokens = wholeIsVin ? [cleaned] : text.split(/[^A-Z0-9]+/).filter(Boolean);
+        tokens.forEach((t) => {
+          if (t.length === 17 && /\d/.test(t) && /[A-Z]/.test(t)) {
+            if (!byVin.has(t)) byVin.set(t, { ...at, via: "VIN" });
+          } else if (t.length >= 8 && t.length <= 16 && /\d{4}/.test(t)) {
+            // Chassis tail written instead of the full VIN
+            const key = t.slice(-8);
+            if (!byTail.has(key)) byTail.set(key, { ...at, via: "chassis tail", tail: t });
+          }
+        });
+      });
+    });
+    return { ok: true, issue: "", sheet, byVin, byTail, vins: byVin.size + byTail.size };
+  }
+
+  async function loadDisplayCentral() {
+    try {
+      const res = await fetch(CENTRAL_API, { cache: "no-store" });
+      if (res.ok) {
+        let fileName = "central.xlsx";
+        const hdr = res.headers.get("X-Report-Sheet-Name");
+        if (hdr) { try { fileName = decodeURIComponent(hdr); } catch { /* keep */ } }
+        return { loaded: true, source: "Server", fileName, ...parseDisplayCentral(await res.arrayBuffer()) };
+      }
+    } catch { /* fall back to browser copy */ }
+    const payload = await idbGetReportFiles();
+    const f = payload && payload.files && payload.files.central;
+    if (f && f.buffer) {
+      try {
+        return { loaded: true, source: "Browser", fileName: f.name || "central.xlsx", ...parseDisplayCentral(f.buffer) };
+      } catch (err) {
+        return { loaded: true, ok: false, issue: err.message || String(err), byVin: new Map(), byTail: new Map(), vins: 0 };
+      }
+    }
+    return { loaded: true, ok: false, issue: "Stock E-Sales has not been pushed from Admin Push yet", byVin: new Map(), byTail: new Map(), vins: 0 };
+  }
+
+  function displayInfo(vin) {
+    if (!display.ok) return null;
+    const direct = display.byVin.get(vin);
+    if (direct) return direct;
+    const tailHit = display.byTail.get(vin.slice(-8));
+    return tailHit && vin.endsWith(tailHit.tail) ? tailHit : null;
+  }
+
   /* ---------- File list ---------- */
   async function loadMeta() {
     try {
@@ -867,8 +974,9 @@
     render();
     try {
       setStatus("Loading uploaded files list…");
-      const [meta, idbMap, salesPack] = await Promise.all([loadMeta(), idbGetRtlDays(), loadSalesRaw()]);
+      const [meta, idbMap, salesPack, displayPack] = await Promise.all([loadMeta(), idbGetRtlDays(), loadSalesRaw(), loadDisplayCentral()]);
       sales = salesPack;
+      display = displayPack;
       const list = buildFileList(meta, idbMap, $("#mode").value);
       if (!list.length) {
         setStatus(meta.error ? `Server unavailable (${meta.error}) and no files saved in this browser.` : "No files have been submitted in the Data Uploader yet.", Boolean(meta.error));
@@ -1025,6 +1133,7 @@
     rows.forEach((r) => {
       r.sales = salesInfo(r.vin);
       r.swap = swapInfo(r.vin, fl);
+      r.display = displayInfo(r.vin);
     });
     return rows;
   }
@@ -1042,6 +1151,7 @@
     if (swapFilter === "out") rows = rows.filter((r) => r.swap.out);
     else if (swapFilter === "in") rows = rows.filter((r) => r.swap.in);
     else if (swapFilter === "both") rows = rows.filter((r) => r.swap.in && r.swap.out);
+    if (displayFilter) rows = rows.filter((r) => r.display);
     const q = normText($("#search").value);
     if (q) {
       rows = rows.filter((r) =>
@@ -1098,7 +1208,7 @@
     const foot = $("#vins-foot");
     $("#vin-count").textContent = `(${rows.length.toLocaleString()})`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="14" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="15" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
       foot.innerHTML = "";
       return;
     }
@@ -1119,6 +1229,7 @@
         r.swap.in ? `<div><span class="pill ok">In</span> from ${esc(r.swap.in.area)} <span class="mono">${esc(r.swap.in.date)}</span></div>` : "",
         r.swap.out ? `<div><span class="pill err">Out</span> to ${esc(r.swap.out.area)} <span class="mono">${esc(r.swap.out.date)}</span></div>` : ""
       ].join("") || "—"}</td>
+      <td>${r.display ? `<span class="pill err">Display</span> <span class="mono">row ${r.display.row}</span>` : "—"}</td>
       <td class="num">${r.fileKeys.size}</td>
       <td class="mono">${esc(r.dates[0])}</td>
       <td class="mono">${esc(r.dates[r.dates.length - 1])}</td>
@@ -1126,7 +1237,7 @@
     </tr>`).join("");
     const appearances = rows.reduce((s, r) => s + r.fileKeys.size, 0);
     foot.innerHTML = `<tr>
-      <td colspan="10">Total unique VINs: ${rows.length.toLocaleString()}</td>
+      <td colspan="11">Total unique VINs: ${rows.length.toLocaleString()}</td>
       <td class="num">${appearances.toLocaleString()}</td>
       <td colspan="3"></td>
     </tr>`;
@@ -1240,6 +1351,39 @@
       : "";
   }
 
+  function renderDisplay(base) {
+    const body = $("#display-body");
+    const btn = $("#display-filter-btn");
+    btn.textContent = displayFilter ? "Show all VINs in VIN table" : "Show only display cars in VIN table";
+    btn.classList.toggle("primary", displayFilter);
+    if (!display.loaded) {
+      $("#display-sub").textContent = "Loading Stock E-Sales from Admin Push…";
+      $("#display-count").textContent = "";
+      body.innerHTML = "";
+      return;
+    }
+    if (!display.ok) {
+      $("#display-sub").innerHTML = `<span class="pill err long">${esc(display.issue)}</span>`;
+      $("#display-count").textContent = "";
+      body.innerHTML = `<tr><td colspan="7" class="empty">Push Stock E-Sales (slot 3) in Admin Push, then press Reload files.</td></tr>`;
+      return;
+    }
+    $("#display-sub").textContent = `${display.fileName} (${display.source.toLowerCase()} copy) · sheet "${display.sheet}" · ${display.vins.toLocaleString()} VIN(s) written in the sheet`;
+    const hits = base.filter((r) => r.display);
+    $("#display-count").textContent = `(${hits.length.toLocaleString()} of ${base.length.toLocaleString()})`;
+    body.innerHTML = hits.length
+      ? hits.map((r, i) => `<tr>
+          <td class="num">${i + 1}</td>
+          <td class="mono"><b>${esc(r.vin)}</b></td>
+          <td>${esc(r.product || "—")}</td>
+          <td>${esc(r.suffix || "—")}</td>
+          <td><span class="pill ${STATUS_META[r.status].cls}">${STATUS_META[r.status].text}</span></td>
+          <td>${r.sales.kind ? `<span class="pill ${SALES_META[r.sales.kind].cls}">${SALES_META[r.sales.kind].text}</span>` : "—"}</td>
+          <td class="mono">Row ${r.display.row} · Col ${esc(r.display.col)}${r.display.via === "VIN" ? "" : ` · ${esc(r.display.via)} ${esc(r.display.tail)}`}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="7" class="empty">None of these VINs are written in Display Central 1.</td></tr>`;
+  }
+
   function render() {
     const fl = visibleFiles();
     const allUnique = aggregateVins(fl);
@@ -1247,6 +1391,7 @@
     const base = baseVinRows();
     renderSales(base);
     renderSwaps(base);
+    renderDisplay(base);
     renderVins(currentVinRows(base));
 
     $("#k-files").textContent = fl.length.toLocaleString();
@@ -1276,12 +1421,13 @@
   function exportCsv() {
     const rows = currentVinRows();
     const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place",
-      "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Swapped in from", "Swapped in on", "Swapped out to", "Swapped out on",
+      "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Swapped in from", "Swapped in on", "Swapped out to", "Swapped out on", "Display Central 1",
       "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
     rows.forEach((r, i) => {
       const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.allocKey, STATUS_META[r.status].text, r.label, placeText(r.current),
         r.sales.kind ? SALES_META[r.sales.kind].text : "", r.sales.proformaKey || "", r.sales.invoiceKey || "",
         r.swap.in ? r.swap.in.area : "", r.swap.in ? r.swap.in.date : "", r.swap.out ? r.swap.out.area : "", r.swap.out ? r.swap.out.date : "",
+        r.display ? `Yes (row ${r.display.row}, col ${r.display.col})` : "No",
         r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
       lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
     });
@@ -1317,6 +1463,10 @@
     if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
   });
   $("#search").addEventListener("input", render);
+  $("#display-filter-btn").addEventListener("click", () => {
+    displayFilter = !displayFilter;
+    render();
+  });
   $("#swap-card").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-swap]");
     if (!btn) return;
@@ -1347,7 +1497,8 @@
   window.getRtlComparingData = () => ({
     allocMonth: allocMonth(),
     files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, res: (f.res || []).length, matches: matchesFor(f).length, issue: f.issue })),
-    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, swap: swapText(swapInfo(r.vin, visibleFiles())), dates: r.dates })),
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, swap: swapText(swapInfo(r.vin, visibleFiles())), display: displayInfo(r.vin), dates: r.dates })),
+    display: { ok: display.ok, issue: display.issue, sheet: display.sheet, vins: display.vins },
     sales: { ok: sales.ok, issue: sales.issue, fileName: sales.fileName, source: sales.source, rows: sales.rows, headerP: sales.headerP, headerV: sales.headerV }
   });
 
