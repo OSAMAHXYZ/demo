@@ -91,6 +91,26 @@
     .status-chip.info b { color: var(--info); }
     .status-chip.active { outline: 2px solid var(--ink); }
     td.status-cell { white-space: normal; min-width: 240px; max-width: 360px; }
+    .sales-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+    .sales-chart { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+    .sales-legend { display: grid; gap: 6px; flex: 1; min-width: 220px; }
+    .sales-leg {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 7px 10px; border-radius: 10px; border: 1px solid #eef2f7; background: #fff;
+      box-shadow: none; font-weight: 600; text-align: left;
+    }
+    .sales-leg .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 8px; }
+    .sales-leg b { font-family: "Manrope", sans-serif; font-size: 1.05rem; }
+    .sales-leg small { color: var(--muted); font-weight: 600; margin-left: 6px; }
+    .sales-leg.active { outline: 2px solid var(--ink); }
+    .not-raw { border: 1px solid #eef2f7; border-radius: 14px; padding: 10px 12px; background: #fafaf8; display: flex; flex-direction: column; min-height: 150px; }
+    .not-raw-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .not-raw-count { font-family: "Manrope", sans-serif; font-weight: 800; color: var(--toyota); font-size: 1.1rem; }
+    .not-raw-list { overflow: auto; max-height: 170px; font-size: 0.78rem; }
+    .not-raw-list div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed #ece9e3; }
+    .not-raw-list span { color: var(--muted); }
+    .sales-msg { color: var(--muted); font-size: 0.85rem; }
+    @media (max-width: 900px) { .sales-grid { grid-template-columns: 1fr; } }
     .card {
       background: var(--card); border: 1px solid rgba(0,0,0,.065);
       border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
@@ -222,6 +242,29 @@
       </div>
     </section>
 
+    <section class="card" id="sales-card">
+      <div class="card-head">
+        <div>
+          <h2>Sales Raw check</h2>
+          <div class="sub" id="sales-sub">Sales Raw from Admin Push · Col P Proforma Date · Col V Invoice Date</div>
+        </div>
+        <span id="sales-filter-tag" class="filter-tag"></span>
+      </div>
+      <div class="sales-grid">
+        <div class="sales-chart">
+          <svg id="sales-donut" viewBox="0 0 120 120" width="150" height="150" aria-label="Sales Raw status"></svg>
+          <div class="sales-legend" id="sales-legend"></div>
+        </div>
+        <div class="not-raw">
+          <div class="not-raw-head">
+            <b>Not in raw data</b>
+            <span id="not-raw-count" class="not-raw-count">0</span>
+          </div>
+          <div id="not-raw-list" class="not-raw-list"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="card">
       <div class="card-head">
         <div>
@@ -247,6 +290,7 @@
               <th>Allocation date</th>
               <th>Status now</th>
               <th>Current place (Search Area · Location)</th>
+              <th>Sales Raw</th>
               <th class="num">Files matched</th>
               <th>First matched</th>
               <th>Last matched</th>
@@ -438,7 +482,12 @@
       const idxSuffix = compact.findIndex((h) => h === "sfx" || h.includes("suffix"));
       const idxYear = findIdx(compact, ["modelyear", "year", "my"]);
       let idxLoc = findIdx(compact, ["allocatedlocation", "allocationlocation", "location", "loc"]);
-      if (idxLoc < 0) idxLoc = compact.findIndex((h) => h.includes("location") && !h.includes("search"));
+      if (idxLoc < 0) {
+        idxLoc = raw.findIndex((h) => {
+          const n = normText(h);
+          return /\blocation\b/.test(n) && !n.includes("search");
+        });
+      }
       const notes = [];
       if (!areaExact) notes.push(`used "${String(raw[idxArea]).trim()}" as Search Area Desc`);
       if (!allocExact) notes.push(`used "${String(raw[idxAlloc]).trim()}" as Allocation Date`);
@@ -558,6 +607,144 @@
     return packFile(records, vehicles.length, missingColumn ? "Allocation Date column missing in saved snapshot" : "");
   }
 
+  /* ---------- Sales Raw (Admin Push slot "sales") ---------- */
+  const SALES_API = "/api/report-sheet/file/sales";
+  const REPORT_IDB_NAME = "toyota_report_sheet_v1";
+  const REPORT_IDB_STORE = "kv";
+  const REPORT_IDB_KEY = "workbook_files_v1";
+  const SALES_COL_P = 15;
+  const SALES_COL_V = 21;
+
+  let sales = { loaded: false, ok: false, issue: "", fileName: "", source: "", rows: 0, byVin: new Map(), headerP: "", headerV: "" };
+
+  function idbGetReportFiles() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open(REPORT_IDB_NAME, 1); } catch { return resolve(null); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(REPORT_IDB_STORE)) db.createObjectStore(REPORT_IDB_STORE);
+      };
+      req.onerror = () => resolve(null);
+      req.onsuccess = () => {
+        try {
+          const tx = req.result.transaction(REPORT_IDB_STORE, "readonly");
+          const get = tx.objectStore(REPORT_IDB_STORE).get(REPORT_IDB_KEY);
+          get.onsuccess = () => resolve(get.result || null);
+          get.onerror = () => resolve(null);
+        } catch { resolve(null); }
+      };
+    });
+  }
+
+  function extractVin(raw) {
+    const cleaned = String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!cleaned) return "";
+    const m = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/) || cleaned.match(/[A-Z0-9]{17}/);
+    return m ? m[0] : "";
+  }
+
+  function laterKey(a, b) {
+    if (!a) return b || "";
+    if (!b) return a;
+    return a > b ? a : b;
+  }
+
+  function parseSalesRaw(buffer) {
+    const wb = XLSX.read(buffer, { type: "array" });
+    const names = wb.SheetNames || [];
+    const sheetName = names.find((n) => /raw\s*data|row\s*data|rowdata/i.test(n))
+      || names.find((n) => /sales/i.test(n))
+      || names[0];
+    if (!sheetName) return { ok: false, issue: "Sales Raw workbook has no sheets", rows: 0, byVin: new Map() };
+    const matrix = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "", raw: true, blankrows: false });
+
+    let headerIdx = -1;
+    let idxVin = -1;
+    const limit = Math.min(matrix.length, 40);
+    for (let r = 0; r < limit; r += 1) {
+      const compact = (matrix[r] || []).map(compactHeader);
+      const i = compact.findIndex((h) => ["vin", "vinno", "vinnumber", "chassis", "chassisno"].includes(h) || h.includes("vehicleidentification"));
+      if (i >= 0) { headerIdx = r; idxVin = i; break; }
+      if (headerIdx < 0 && compact.some((h) => h.includes("proforma"))) headerIdx = r;
+    }
+    if (headerIdx < 0) headerIdx = 0;
+    const headerRow = matrix[headerIdx] || [];
+
+    const byVin = new Map();
+    let rows = 0;
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      let vin = idxVin >= 0 ? extractVin(line[idxVin]) : "";
+      if (!vin) {
+        for (let i = 0; i < line.length; i += 1) {
+          if (i === SALES_COL_P || i === SALES_COL_V) continue;
+          vin = extractVin(line[i]);
+          if (vin) break;
+        }
+      }
+      if (!vin) continue;
+      rows += 1;
+      const proformaKey = toDateKey(line[SALES_COL_P]);
+      const invoiceKey = toDateKey(line[SALES_COL_V]);
+      const prev = byVin.get(vin) || { proformaKey: "", invoiceKey: "", rows: 0 };
+      byVin.set(vin, {
+        proformaKey: laterKey(prev.proformaKey, proformaKey),
+        invoiceKey: laterKey(prev.invoiceKey, invoiceKey),
+        rows: prev.rows + 1
+      });
+    }
+    return {
+      ok: true,
+      issue: rows ? "" : "No VINs found in Sales Raw",
+      rows,
+      byVin,
+      sheet: sheetName,
+      headerP: String(headerRow[SALES_COL_P] ?? "").trim(),
+      headerV: String(headerRow[SALES_COL_V] ?? "").trim()
+    };
+  }
+
+  async function loadSalesRaw() {
+    try {
+      const res = await fetch(SALES_API, { cache: "no-store" });
+      if (res.ok) {
+        let fileName = "sales.xlsx";
+        const hdr = res.headers.get("X-Report-Sheet-Name");
+        if (hdr) { try { fileName = decodeURIComponent(hdr); } catch { /* keep */ } }
+        const parsed = parseSalesRaw(await res.arrayBuffer());
+        return { loaded: true, source: "Server", fileName, ...parsed };
+      }
+    } catch { /* fall back to browser copy */ }
+    const payload = await idbGetReportFiles();
+    const f = payload && payload.files && payload.files.sales;
+    if (f && f.buffer) {
+      try {
+        return { loaded: true, source: "Browser", fileName: f.name || "sales.xlsx", ...parseSalesRaw(f.buffer) };
+      } catch (err) {
+        return { loaded: true, ok: false, issue: err.message || String(err), rows: 0, byVin: new Map() };
+      }
+    }
+    return { loaded: true, ok: false, issue: "Sales Raw has not been pushed from Admin Push yet", rows: 0, byVin: new Map() };
+  }
+
+  const SALES_META = {
+    delivered: { text: "Delivered", color: "#047857", cls: "ok" },
+    proforma: { text: "Proforma", color: "#1d4ed8", cls: "info" },
+    nodate: { text: "In raw, no P/V date", color: "#c2410c", cls: "warn" },
+    notraw: { text: "Not in raw data", color: "#a8a29e", cls: "err" }
+  };
+  let salesFilter = "";
+
+  function salesInfo(vin) {
+    if (!sales.ok) return { kind: "", text: "—" };
+    const rec = sales.byVin.get(vin);
+    if (!rec) return { kind: "notraw", text: "Not in raw data" };
+    if (rec.invoiceKey) return { kind: "delivered", text: `Delivered · ${rec.invoiceKey}`, ...rec };
+    if (rec.proformaKey) return { kind: "proforma", text: `Proforma · ${rec.proformaKey}`, ...rec };
+    return { kind: "nodate", text: "In raw data · no Proforma / Invoice date", ...rec };
+  }
+
   /* ---------- File list ---------- */
   async function loadMeta() {
     try {
@@ -647,7 +834,8 @@
     render();
     try {
       setStatus("Loading uploaded files list…");
-      const [meta, idbMap] = await Promise.all([loadMeta(), idbGetRtlDays()]);
+      const [meta, idbMap, salesPack] = await Promise.all([loadMeta(), idbGetRtlDays(), loadSalesRaw()]);
+      sales = salesPack;
       const list = buildFileList(meta, idbMap, $("#mode").value);
       if (!list.length) {
         setStatus(meta.error ? `Server unavailable (${meta.error}) and no files saved in this browser.` : "No files have been submitted in the Data Uploader yet.", Boolean(meta.error));
@@ -687,7 +875,7 @@
   function placeText(rec) {
     if (!rec) return "";
     const area = rec.area || "(blank area)";
-    return rec.location ? `${area} · ${rec.location}` : area;
+    return rec.location && normText(rec.location) !== normText(area) ? `${area} · ${rec.location}` : area;
   }
 
   /** Where a VIN that belonged to the condition is now, judged across every scanned file in order. */
@@ -774,18 +962,26 @@
     if (months.includes(cur)) sel.value = cur;
   }
 
-  function currentVinRows() {
+  function baseVinRows() {
     const fl = visibleFiles();
     const scoped = selectedFileKey ? fl.filter((f) => f.key === selectedFileKey) : fl;
     let rows = aggregateVins(fl, scoped);
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
+    rows.forEach((r) => { r.sales = salesInfo(r.vin); });
+    return rows;
+  }
+
+  function currentVinRows(base) {
+    let rows = base || baseVinRows();
+    if (salesFilter) rows = rows.filter((r) => r.sales.kind === salesFilter);
     const q = normText($("#search").value);
     if (q) {
       rows = rows.filter((r) =>
         r.vin.toLowerCase().includes(q.replace(/[^a-z0-9]/g, "")) ||
         normText(r.product).includes(q) ||
         normText(r.suffix).includes(q) ||
-        normText(r.label).includes(q)
+        normText(r.label).includes(q) ||
+        normText(r.sales.text).includes(q)
       );
     }
     return rows;
@@ -833,7 +1029,7 @@
     const foot = $("#vins-foot");
     $("#vin-count").textContent = `(${rows.length.toLocaleString()})`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="12" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="13" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
       foot.innerHTML = "";
       return;
     }
@@ -847,6 +1043,9 @@
       <td class="status-cell"><span class="pill ${STATUS_META[r.status].cls}">${STATUS_META[r.status].text}</span>
         ${r.status === "in" ? "" : `<div style="margin-top:3px">${esc(r.label)}</div>`}</td>
       <td title="${esc(placeText(r.current))}">${esc(placeText(r.current) || "—")}</td>
+      <td>${r.sales.kind
+        ? `<span class="pill ${SALES_META[r.sales.kind].cls}">${SALES_META[r.sales.kind].text}</span> <span class="mono">${esc(r.sales.invoiceKey || r.sales.proformaKey || "")}</span>`
+        : "—"}</td>
       <td class="num">${r.fileKeys.size}</td>
       <td class="mono">${esc(r.dates[0])}</td>
       <td class="mono">${esc(r.dates[r.dates.length - 1])}</td>
@@ -854,17 +1053,91 @@
     </tr>`).join("");
     const appearances = rows.reduce((s, r) => s + r.fileKeys.size, 0);
     foot.innerHTML = `<tr>
-      <td colspan="8">Total unique VINs: ${rows.length.toLocaleString()}</td>
+      <td colspan="9">Total unique VINs: ${rows.length.toLocaleString()}</td>
       <td class="num">${appearances.toLocaleString()}</td>
       <td colspan="3"></td>
     </tr>`;
+  }
+
+  function donutSvg(parts, total) {
+    const r = 46;
+    const c = 2 * Math.PI * r;
+    let offset = 0;
+    const rings = parts.filter((p) => p.value > 0).map((p) => {
+      const len = (p.value / total) * c;
+      const seg = `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${p.color}" stroke-width="18"
+        stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 60 60)"></circle>`;
+      offset += len;
+      return seg;
+    }).join("");
+    return `<circle cx="60" cy="60" r="${r}" fill="none" stroke="#f1efeb" stroke-width="18"></circle>${rings}
+      <text x="60" y="57" text-anchor="middle" font-family="Manrope, sans-serif" font-weight="800" font-size="20" fill="#18191c">${total.toLocaleString()}</text>
+      <text x="60" y="73" text-anchor="middle" font-size="9" fill="#77736c">VINs</text>`;
+  }
+
+  function renderSales(base) {
+    const sub = $("#sales-sub");
+    const legend = $("#sales-legend");
+    const donut = $("#sales-donut");
+    const notRawList = $("#not-raw-list");
+    if (!sales.loaded) {
+      sub.textContent = "Loading Sales Raw from Admin Push…";
+      legend.innerHTML = "";
+      donut.innerHTML = "";
+      notRawList.innerHTML = "";
+      $("#not-raw-count").textContent = "0";
+      return;
+    }
+    if (!sales.ok) {
+      sub.innerHTML = `<span class="pill err long">${esc(sales.issue)}</span>`;
+      legend.innerHTML = `<div class="sales-msg">Push the Sales Raw file (slot 4) in Admin Push, then press Reload files.</div>`;
+      donut.innerHTML = "";
+      notRawList.innerHTML = "";
+      $("#not-raw-count").textContent = "—";
+      return;
+    }
+    const cols = `Col P "${sales.headerP || "?"}" · Col V "${sales.headerV || "?"}"`;
+    sub.textContent = `${sales.fileName} (${sales.source.toLowerCase()} copy, sheet "${sales.sheet}") · ${sales.rows.toLocaleString()} VIN rows · ${cols}`;
+
+    const counts = { delivered: 0, proforma: 0, nodate: 0, notraw: 0 };
+    base.forEach((r) => { if (counts[r.sales.kind] != null) counts[r.sales.kind] += 1; });
+    const total = base.length;
+    const inRaw = counts.delivered + counts.proforma + counts.nodate;
+    donut.innerHTML = total
+      ? donutSvg(Object.keys(counts).map((k) => ({ value: counts[k], color: SALES_META[k].color })), total)
+      : "";
+    const pct = (n) => (total ? `${Math.round((n / total) * 100)}%` : "0%");
+    const leg = (k, label) => `<button type="button" class="sales-leg${salesFilter === k ? " active" : ""}" data-sales="${k}">
+        <span><span class="dot" style="background:${SALES_META[k].color}"></span>${label}</span>
+        <span><b>${counts[k].toLocaleString()}</b><small>${pct(counts[k])}</small></span>
+      </button>`;
+    legend.innerHTML = `
+      <button type="button" class="sales-leg${salesFilter === "" ? " active" : ""}" data-sales="">
+        <span>In raw data (mine)</span><span><b>${inRaw.toLocaleString()}</b><small>of ${total.toLocaleString()}</small></span>
+      </button>
+      ${leg("delivered", "Delivered (Col V Invoice Date)")}
+      ${leg("proforma", "Proforma (Col P, no Invoice)")}
+      ${counts.nodate ? leg("nodate", "In raw, no Proforma / Invoice") : ""}
+      ${leg("notraw", "Not in raw data")}`;
+
+    const notRaw = base.filter((r) => r.sales.kind === "notraw");
+    $("#not-raw-count").textContent = notRaw.length.toLocaleString();
+    notRawList.innerHTML = notRaw.length
+      ? notRaw.map((r) => `<div><b class="mono">${esc(r.vin)}</b><span>${esc([r.product, r.suffix].filter(Boolean).join(" · "))}</span></div>`).join("")
+      : `<div class="sales-msg">Every VIN is in Sales Raw.</div>`;
+
+    $("#sales-filter-tag").innerHTML = salesFilter
+      ? `VIN table filtered: ${esc(SALES_META[salesFilter].text)}<button type="button" data-sales="">Show all</button>`
+      : "";
   }
 
   function render() {
     const fl = visibleFiles();
     const allUnique = aggregateVins(fl);
     renderFiles(fl, allUnique.length);
-    renderVins(currentVinRows());
+    const base = baseVinRows();
+    renderSales(base);
+    renderVins(currentVinRows(base));
 
     $("#k-files").textContent = fl.length.toLocaleString();
     $("#k-rows").textContent = fl.reduce((s, f) => s + matchesFor(f).length, 0).toLocaleString();
@@ -892,9 +1165,11 @@
 
   function exportCsv() {
     const rows = currentVinRows();
-    const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place", "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
+    const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place",
+      "Sales Raw", "Proforma Date (P)", "Invoice Date (V)", "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
     rows.forEach((r, i) => {
       const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.allocKey, STATUS_META[r.status].text, r.label, placeText(r.current),
+        r.sales.kind ? SALES_META[r.sales.kind].text : "", r.sales.proformaKey || "", r.sales.invoiceKey || "",
         r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
       lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
     });
@@ -930,6 +1205,12 @@
     if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
   });
   $("#search").addEventListener("input", render);
+  $("#sales-card").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-sales]");
+    if (!btn) return;
+    salesFilter = btn.getAttribute("data-sales") || "";
+    render();
+  });
   $("#status-strip").addEventListener("click", (e) => {
     const chip = e.target.closest(".status-chip");
     if (!chip) return;
@@ -947,7 +1228,8 @@
   window.getRtlComparingData = () => ({
     allocMonth: allocMonth(),
     files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, res: (f.res || []).length, matches: matchesFor(f).length, issue: f.issue })),
-    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, dates: r.dates }))
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, sales: salesInfo(r.vin).kind, dates: r.dates })),
+    sales: { ok: sales.ok, issue: sales.issue, fileName: sales.fileName, source: sales.source, rows: sales.rows, headerP: sales.headerP, headerV: sales.headerV }
   });
 
   reload();
