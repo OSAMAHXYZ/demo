@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RTL Comparing — Retail Electronic Sales · Allocation Ageing 0</title>
+  <title>RTL Comparing — Retail Electronic Sales · Allocation Date in month</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
@@ -43,7 +43,8 @@
     }
     .brand span { color: var(--muted); font-size: 0.88rem; }
     .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
-    .nav-links a, button, select, input[type="search"] {
+    .field-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+    .nav-links a, button, select, input[type="search"], input[type="month"] {
       font: inherit; font-size: 0.85rem; font-weight: 600;
       color: var(--ink); background: #fff;
       border: 1px solid rgba(0,0,0,.08); border-radius: 12px;
@@ -74,6 +75,22 @@
     }
     .kpi b { display: block; font-family: "Manrope", sans-serif; font-size: 1.9rem; margin-top: 4px; }
     .kpi.main b { color: var(--toyota); }
+    .status-strip {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px; margin-bottom: 18px;
+    }
+    .status-chip {
+      text-align: left; border-radius: 14px; padding: 10px 14px;
+      border: 1px solid rgba(0,0,0,.08); background: #fff;
+    }
+    .status-chip small { display: block; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .status-chip b { display: block; font-family: "Manrope", sans-serif; font-size: 1.35rem; margin-top: 2px; }
+    .status-chip.ok b { color: var(--ok); }
+    .status-chip.err b { color: var(--toyota); }
+    .status-chip.warn b { color: var(--warn); }
+    .status-chip.info b { color: var(--info); }
+    .status-chip.active { outline: 2px solid var(--ink); }
+    td.status-cell { white-space: normal; min-width: 240px; max-width: 360px; }
     .card {
       background: var(--card); border: 1px solid rgba(0,0,0,.065);
       border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
@@ -123,6 +140,7 @@
     .filter-tag button { padding: 2px 8px; font-size: 0.75rem; margin-left: 6px; }
     @media (max-width: 900px) {
       .kpis { grid-template-columns: 1fr 1fr; }
+      .status-strip { grid-template-columns: 1fr 1fr; }
       input[type="search"] { min-width: 0; width: 100%; }
     }
   </style>
@@ -134,7 +152,7 @@
         <img src="../images/logo/toyota.png" alt="" onerror="this.style.display='none'" />
         <div>
           <strong>RTL Comparing</strong>
-          <span>Retail Electronic Sales · Allocation Ageing 0 — across every Data Uploader file</span>
+          <span>Retail Electronic Sales · Allocation Date in the selected month — across every Data Uploader file</span>
         </div>
       </div>
       <div class="nav-links">
@@ -145,17 +163,19 @@
 
     <p class="rule">
       A row is counted when <code>Search Area Desc</code> is exactly <b>Retail Electronic Sales</b>
-      and <code>Allocation Ageing</code> is <b>0</b>. Every RTL file submitted in the Data Uploader is scanned;
-      a VIN is counted once per file, and once in the unique total.
+      and <code>Allocation Date</code> is inside <b id="rule-month">the current month</b>. Every RTL file submitted
+      in the Data Uploader is scanned; a VIN is counted once per file, and once in the unique total.
     </p>
 
     <div class="toolbar" style="margin-bottom:14px">
+      <label class="field-label" for="alloc-month">Allocation month</label>
+      <input id="alloc-month" type="month" title="Allocation Date must be inside this month" />
       <select id="mode" title="Which uploaded files to scan">
         <option value="active">Active file per day</option>
         <option value="all">Every upload (all snapshots)</option>
       </select>
-      <select id="month" title="Filter by month">
-        <option value="">All months</option>
+      <select id="month" title="Only scan files uploaded in this month">
+        <option value="">All upload months</option>
       </select>
       <button id="reload" class="primary" type="button">Reload files</button>
     </div>
@@ -163,9 +183,17 @@
 
     <div class="kpis">
       <div class="kpi"><small>Files scanned</small><b id="k-files">0</b></div>
-      <div class="kpi"><small>Matching rows (sum of files)</small><b id="k-rows">0</b></div>
+      <div class="kpi"><small>Matching VINs (sum of files)</small><b id="k-rows">0</b></div>
       <div class="kpi main"><small>Unique VINs total</small><b id="k-unique">0</b></div>
       <div class="kpi"><small>Files with issues</small><b id="k-issues">0</b></div>
+    </div>
+
+    <div class="status-strip" id="status-strip">
+      <button type="button" class="status-chip" data-status=""><small>Belongs to me (ever matched)</small><b id="s-all">0</b></button>
+      <button type="button" class="status-chip ok" data-status="in"><small>Still in RES</small><b id="s-in">0</b></button>
+      <button type="button" class="status-chip err" data-status="moved"><small>Moved to other place</small><b id="s-moved">0</b></button>
+      <button type="button" class="status-chip warn" data-status="realloc"><small>RES, allocation date changed</small><b id="s-realloc">0</b></button>
+      <button type="button" class="status-chip info" data-status="gone"><small>Not in latest file</small><b id="s-gone">0</b></button>
     </div>
 
     <section class="card">
@@ -183,6 +211,7 @@
               <th>File name</th>
               <th>Read from</th>
               <th class="num">Rows in file</th>
+              <th class="num">RES VINs (any date)</th>
               <th class="num">Matching VINs</th>
               <th>Status</th>
             </tr>
@@ -215,10 +244,13 @@
               <th>Product</th>
               <th>Suffix</th>
               <th>Year</th>
-              <th class="num">Files</th>
-              <th>First seen</th>
-              <th>Last seen</th>
-              <th>Dates</th>
+              <th>Allocation date</th>
+              <th>Status now</th>
+              <th>Current place (Search Area · Location)</th>
+              <th class="num">Files matched</th>
+              <th>First matched</th>
+              <th>Last matched</th>
+              <th>Matched dates</th>
             </tr>
           </thead>
           <tbody id="vins-body"></tbody>
@@ -240,7 +272,8 @@
   const TARGET_AREA = "retail electronic sales";
   const AREA_EXACT = ["searchareadesc"];
   const AREA_ALT = ["searchareadescription", "vehiclesearchareadesc", "vehiclesearcharea", "vehsearcharea", "searcharea"];
-  const AGEING_ALT = ["ageing", "aging", "age", "agingdays", "ageingdays", "agedays", "stockage", "boaging", "daysaging"];
+  const ALLOC_DATE_ALT = ["allocdate", "allocateddate", "allocationdt", "agdate", "ag"];
+  const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -267,11 +300,87 @@
     return normText(value) === TARGET_AREA;
   }
 
-  function isAgeingZero(value) {
-    const s = String(value ?? "").trim().replace(/[, ]/g, "");
-    if (!s) return false;
-    const n = Number(s);
-    return Number.isFinite(n) && n === 0;
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function keyOf(y, m, d) {
+    return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  function serialToKey(serial) {
+    const day = Math.floor(serial);
+    if (day <= 20000 || day >= 100000) return "";
+    const utc = new Date(EXCEL_EPOCH_UTC + day * 86400000);
+    return keyOf(utc.getUTCFullYear(), utc.getUTCMonth() + 1, utc.getUTCDate());
+  }
+
+  function validYmd(y, m, d) {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  }
+
+  /** Allocation Date cell (Excel serial, Date, or text) → "YYYY-MM-DD", or "" when not a date. */
+  function toDateKey(v) {
+    if (v == null || v === "") return "";
+    if (typeof v === "number" && Number.isFinite(v)) return serialToKey(v);
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      return serialToKey(Math.round((v.getTime() - EXCEL_EPOCH_UTC) / 86400000));
+    }
+    const s = String(v).trim();
+    if (!s) return "";
+    if (/^\d+(\.\d+)?$/.test(s)) return serialToKey(Number(s));
+
+    let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+    if (m) {
+      const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+      return validYmd(y, mo, d) ? keyOf(y, mo, d) : "";
+    }
+
+    // M/D/YYYY or D/M/YYYY — when both parts ≤ 12, pick the reading closest to today.
+    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s|$)/);
+    if (m) {
+      const a = Number(m[1]), b = Number(m[2]);
+      let y = Number(m[3]);
+      if (y < 100) y += 2000;
+      const us = validYmd(y, a, b) ? new Date(y, a - 1, b) : null;
+      const eu = validYmd(y, b, a) ? new Date(y, b - 1, a) : null;
+      let chosen = null;
+      if (a > 12) chosen = eu;
+      else if (b > 12) chosen = us;
+      else if (us && eu) {
+        const now = Date.now();
+        chosen = Math.abs(us - now) <= Math.abs(eu - now) ? us : eu;
+      } else chosen = us || eu;
+      return chosen ? keyOf(chosen.getFullYear(), chosen.getMonth() + 1, chosen.getDate()) : "";
+    }
+
+    const t = Date.parse(s);
+    if (Number.isNaN(t)) return "";
+    const d = new Date(t);
+    return keyOf(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+
+  function currentMonthRiyadh() {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit" })
+      .format(new Date())
+      .slice(0, 7);
+  }
+
+  function allocMonth() {
+    return $("#alloc-month").value || currentMonthRiyadh();
+  }
+
+  function monthLabel(mk) {
+    const [y, m] = mk.split("-").map(Number);
+    if (!y || !m) return mk;
+    return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+  }
+
+  function matchesFor(f) {
+    const mk = allocMonth();
+    return (f.res || []).filter((r) => r.allocKey && r.allocKey.startsWith(mk));
   }
 
   function setStatus(msg, isErr) {
@@ -319,19 +428,21 @@
       let idxArea = findIdx(compact, AREA_EXACT);
       const areaExact = idxArea >= 0;
       if (!areaExact) idxArea = findIdx(compact, AREA_ALT);
-      let idxAge = compact.findIndex((h) => h.startsWith("allocationage"));
-      const ageExact = idxAge >= 0;
-      if (!ageExact) idxAge = findIdx(compact, AGEING_ALT);
-      if (idxArea < 0 || idxAge < 0) continue;
+      let idxAlloc = compact.findIndex((h) => h.startsWith("allocationdate"));
+      const allocExact = idxAlloc >= 0;
+      if (!allocExact) idxAlloc = findIdx(compact, ALLOC_DATE_ALT);
+      if (idxArea < 0 || idxAlloc < 0) continue;
       let idxVin = findIdx(compact, ["vin", "vinno", "vinnumber", "chassis", "chassisno", "chassisnumber"]);
       if (idxVin < 0) idxVin = compact.findIndex((h) => h.includes("vin") || h.includes("chassis"));
       const idxProduct = findIdx(compact, ["product", "model"]);
       const idxSuffix = compact.findIndex((h) => h === "sfx" || h.includes("suffix"));
       const idxYear = findIdx(compact, ["modelyear", "year", "my"]);
+      let idxLoc = findIdx(compact, ["allocatedlocation", "allocationlocation", "location", "loc"]);
+      if (idxLoc < 0) idxLoc = compact.findIndex((h) => h.includes("location") && !h.includes("search"));
       const notes = [];
       if (!areaExact) notes.push(`used "${String(raw[idxArea]).trim()}" as Search Area Desc`);
-      if (!ageExact) notes.push(`used "${String(raw[idxAge]).trim()}" as Allocation Ageing`);
-      return { headerRow: r, idxArea, idxAge, idxVin, idxProduct, idxSuffix, idxYear, note: notes.join("; ") };
+      if (!allocExact) notes.push(`used "${String(raw[idxAlloc]).trim()}" as Allocation Date`);
+      return { headerRow: r, idxArea, idxAlloc, idxVin, idxProduct, idxSuffix, idxYear, idxLoc, note: notes.join("; ") };
     }
     return null;
   }
@@ -347,11 +458,35 @@
     return best;
   }
 
+  function joinIssues(...parts) {
+    return parts.filter(Boolean).join("; ");
+  }
+
+  function badDateNote(n) {
+    return n ? `${n} RES VIN(s) with blank/invalid Allocation Date` : "";
+  }
+
+  /** Every VIN in the file (first row wins) + the Retail Electronic Sales subset. */
+  function packFile(records, rows, issue, extra) {
+    const byVin = new Map();
+    for (const rec of records) {
+      if (!byVin.has(rec.vin)) byVin.set(rec.vin, rec);
+    }
+    const res = [];
+    let badDates = 0;
+    byVin.forEach((rec) => {
+      if (!isTargetArea(rec.area)) return;
+      res.push(rec);
+      if (!rec.allocKey) badDates += 1;
+    });
+    return { ok: true, rows, byVin, res, issue: joinIssues(issue, badDateNote(badDates)), ...(extra || {}) };
+  }
+
   function scanWorkbook(buffer) {
-    const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+    const wb = XLSX.read(buffer, { type: "array" });
     const missing = [];
     for (const name of wb.SheetNames || []) {
-      const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: false });
+      const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "", raw: true });
       const layout = findHeaderLayout(matrix);
       if (!layout) {
         const headers = guessHeaders(matrix);
@@ -359,32 +494,32 @@
         continue;
       }
       if (layout.idxVin < 0) {
-        return { ok: false, issue: `Sheet "${name}" has no VIN column`, rows: 0, matches: [] };
+        return { ok: false, issue: `Sheet "${name}" has no VIN column`, rows: 0, res: [], byVin: new Map() };
       }
-      const seen = new Map();
-      let rows = 0;
+      const cell = (line, idx) => (idx >= 0 ? String(line[idx] ?? "").trim() : "");
+      const records = [];
       for (let r = layout.headerRow + 1; r < matrix.length; r += 1) {
         const line = matrix[r] || [];
         const vin = normVin(line[layout.idxVin]);
         if (!vin) continue;
-        rows += 1;
-        if (!isTargetArea(line[layout.idxArea])) continue;
-        if (!isAgeingZero(line[layout.idxAge])) continue;
-        if (seen.has(vin)) continue;
-        seen.set(vin, {
+        records.push({
           vin,
-          product: layout.idxProduct >= 0 ? String(line[layout.idxProduct] ?? "").trim() : "",
-          suffix: layout.idxSuffix >= 0 ? String(line[layout.idxSuffix] ?? "").trim() : "",
-          year: layout.idxYear >= 0 ? String(line[layout.idxYear] ?? "").trim() : ""
+          area: cell(line, layout.idxArea),
+          allocKey: toDateKey(line[layout.idxAlloc]),
+          location: cell(line, layout.idxLoc),
+          product: cell(line, layout.idxProduct),
+          suffix: cell(line, layout.idxSuffix),
+          year: cell(line, layout.idxYear)
         });
       }
-      return { ok: true, issue: layout.note || "", rows, matches: Array.from(seen.values()), sheet: name };
+      return packFile(records, records.length, layout.note, { sheet: name });
     }
     return {
       ok: false,
-      issue: `Columns "Search Area Desc" and "Allocation Ageing" not found. Headers in file — ${missing.join(" || ") || "no sheets"}`,
+      issue: `Columns "Search Area Desc" and "Allocation Date" not found. Headers in file — ${missing.join(" || ") || "no sheets"}`,
       rows: 0,
-      matches: []
+      res: [],
+      byVin: new Map()
     };
   }
 
@@ -399,26 +534,28 @@
 
   function scanSnapshot(snap) {
     const vehicles = Array.isArray(snap && snap.vehicles) ? snap.vehicles : [];
-    const seen = new Map();
-    let exactColumns = true;
+    const records = [];
+    let missingColumn = false;
     for (const v of vehicles) {
       const vin = normVin(v.vin);
       if (!vin) continue;
       let area = detailValue(v.details, (h) => AREA_EXACT.includes(h));
       if (area === undefined) area = detailValue(v.details, (h) => AREA_ALT.includes(h));
-      let ageing = detailValue(v.details, (h) => h.startsWith("allocationage"));
-      if (area === undefined) { area = v.vehicleSearchArea; }
-      if (ageing === undefined) { ageing = v.age; exactColumns = false; }
-      if (!isTargetArea(area) || !isAgeingZero(ageing)) continue;
-      if (seen.has(vin)) continue;
-      seen.set(vin, { vin, product: v.product || "", suffix: v.suffix || "", year: v.year || "" });
+      if (area === undefined) area = v.vehicleSearchArea;
+      let alloc = detailValue(v.details, (h) => h.startsWith("allocationdate"));
+      if (alloc === undefined) alloc = detailValue(v.details, (h) => ALLOC_DATE_ALT.includes(h));
+      if (alloc === undefined) { alloc = v.allocationDate; missingColumn = missingColumn || alloc === undefined; }
+      records.push({
+        vin,
+        area: String(area ?? "").trim(),
+        allocKey: toDateKey(alloc),
+        location: String(v.location || "").trim(),
+        product: v.product || "",
+        suffix: v.suffix || "",
+        year: v.year || ""
+      });
     }
-    return {
-      ok: true,
-      issue: exactColumns ? "" : "Allocation Ageing column missing in saved snapshot — used stored age",
-      rows: vehicles.length,
-      matches: Array.from(seen.values())
-    };
+    return packFile(records, vehicles.length, missingColumn ? "Allocation Date column missing in saved snapshot" : "");
   }
 
   /* ---------- File list ---------- */
@@ -497,9 +634,9 @@
         if (!entry.fileName && snap.fileName) entry.fileName = snap.fileName;
         return { source: "Saved snapshot", ...scanSnapshot(snap) };
       }
-      return { source: "—", ok: false, issue: `Snapshot not found (HTTP ${res.status})`, rows: 0, matches: [] };
+      return { source: "—", ok: false, issue: `Snapshot not found (HTTP ${res.status})`, rows: 0, res: [] };
     }
-    return { source: "—", ok: false, issue: "No file available", rows: 0, matches: [] };
+    return { source: "—", ok: false, issue: "No file available", rows: 0, res: [] };
   }
 
   async function reload() {
@@ -523,7 +660,7 @@
         try {
           result = await readFile(entry, idbMap);
         } catch (err) {
-          result = { source: "—", ok: false, issue: err.message || String(err), rows: 0, matches: [] };
+          result = { source: "—", ok: false, issue: err.message || String(err), rows: 0, res: [] };
         }
         files.push({ ...entry, ...result });
         render();
@@ -543,24 +680,88 @@
     return month ? files.filter((f) => f.date.startsWith(month)) : files;
   }
 
-  function aggregateVins(fileList) {
+  function isMatch(rec) {
+    return Boolean(rec && isTargetArea(rec.area) && rec.allocKey && rec.allocKey.startsWith(allocMonth()));
+  }
+
+  function placeText(rec) {
+    if (!rec) return "";
+    const area = rec.area || "(blank area)";
+    return rec.location ? `${area} · ${rec.location}` : area;
+  }
+
+  /** Where a VIN that belonged to the condition is now, judged across every scanned file in order. */
+  function trackVin(vin, fileList) {
+    let lastOk = -1;
+    let lastMatch = -1;
+    let lastSeen = -1;
+    fileList.forEach((f, i) => {
+      if (!f.ok) return;
+      lastOk = i;
+      const rec = f.byVin && f.byVin.get(vin);
+      if (!rec) return;
+      lastSeen = i;
+      if (isMatch(rec)) lastMatch = i;
+    });
+    if (lastSeen < 0 || lastMatch < 0) return { status: "in", label: "In RES", current: null };
+    const current = fileList[lastSeen].byVin.get(vin);
+    const lastSeenDate = fileList[lastSeen].date;
+    const goneNote = lastSeen < lastOk ? ` — not in latest file (last seen ${lastSeenDate})` : "";
+
+    if (lastSeen === lastMatch) {
+      return lastSeen === lastOk
+        ? { status: "in", label: "In RES", current, lastSeenDate }
+        : { status: "gone", label: `Not in latest file — last seen ${lastSeenDate} in RES`, current, lastSeenDate };
+    }
+
+    let movedIdx = lastMatch + 1;
+    while (movedIdx < fileList.length && !(fileList[movedIdx].byVin && fileList[movedIdx].byVin.get(vin))) movedIdx += 1;
+    const movedDate = fileList[movedIdx] ? fileList[movedIdx].date : lastSeenDate;
+
+    if (isTargetArea(current.area)) {
+      return {
+        status: "realloc",
+        label: `Still RES, Allocation Date changed to ${current.allocKey || "blank"} (since ${movedDate})${goneNote}`,
+        current, lastSeenDate, movedDate
+      };
+    }
+    return {
+      status: "moved",
+      label: `Moved to ${placeText(current)} (since ${movedDate})${goneNote}`,
+      current, lastSeenDate, movedDate
+    };
+  }
+
+  const STATUS_META = {
+    in: { text: "In RES", cls: "ok" },
+    moved: { text: "Moved", cls: "err" },
+    realloc: { text: "Allocation changed", cls: "warn" },
+    gone: { text: "Not in latest file", cls: "info" }
+  };
+  let statusFilter = "";
+
+  function aggregateVins(fileList, scopeList) {
     const map = new Map();
-    for (const f of fileList) {
-      for (const m of f.matches || []) {
+    for (const f of scopeList || fileList) {
+      for (const m of matchesFor(f)) {
         let row = map.get(m.vin);
         if (!row) {
-          row = { vin: m.vin, product: "", suffix: "", year: "", dates: [], fileKeys: new Set() };
+          row = { vin: m.vin, product: "", suffix: "", year: "", allocKey: "", dates: [], fileKeys: new Set() };
           map.set(m.vin, row);
         }
         if (!row.product && m.product) row.product = m.product;
         if (!row.suffix && m.suffix) row.suffix = m.suffix;
         if (!row.year && m.year) row.year = m.year;
+        if (m.allocKey) row.allocKey = m.allocKey;
         row.fileKeys.add(f.key);
         if (!row.dates.includes(f.date)) row.dates.push(f.date);
       }
     }
     const rows = Array.from(map.values());
-    rows.forEach((r) => r.dates.sort());
+    rows.forEach((r) => {
+      r.dates.sort();
+      Object.assign(r, trackVin(r.vin, fileList));
+    });
     rows.sort((a, b) => a.dates[0].localeCompare(b.dates[0]) || a.vin.localeCompare(b.vin));
     return rows;
   }
@@ -569,20 +770,22 @@
     const sel = $("#month");
     const cur = sel.value;
     const months = Array.from(new Set(files.map((f) => f.date.slice(0, 7)))).sort();
-    sel.innerHTML = '<option value="">All months</option>' + months.map((m) => `<option value="${m}">${m}</option>`).join("");
+    sel.innerHTML = '<option value="">All upload months</option>' + months.map((m) => `<option value="${m}">${m}</option>`).join("");
     if (months.includes(cur)) sel.value = cur;
   }
 
   function currentVinRows() {
     const fl = visibleFiles();
     const scoped = selectedFileKey ? fl.filter((f) => f.key === selectedFileKey) : fl;
-    let rows = aggregateVins(scoped);
+    let rows = aggregateVins(fl, scoped);
+    if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     const q = normText($("#search").value);
     if (q) {
       rows = rows.filter((r) =>
         r.vin.toLowerCase().includes(q.replace(/[^a-z0-9]/g, "")) ||
         normText(r.product).includes(q) ||
-        normText(r.suffix).includes(q)
+        normText(r.suffix).includes(q) ||
+        normText(r.label).includes(q)
       );
     }
     return rows;
@@ -592,7 +795,7 @@
     const body = $("#files-body");
     const foot = $("#files-foot");
     if (!fl.length) {
-      body.innerHTML = `<tr><td colspan="6" class="empty">No files scanned yet.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="7" class="empty">No files scanned yet.</td></tr>`;
       foot.innerHTML = "";
       return;
     }
@@ -608,15 +811,18 @@
         <td title="${esc(f.fileName)}">${esc(f.fileName || "—")}</td>
         <td><span class="pill ${src}">${esc(f.source)}</span></td>
         <td class="num">${(f.rows || 0).toLocaleString()}</td>
-        <td class="num"><b>${(f.matches || []).length.toLocaleString()}</b></td>
+        <td class="num">${(f.res || []).length.toLocaleString()}</td>
+        <td class="num"><b>${matchesFor(f).length.toLocaleString()}</b></td>
         <td>${pill}</td>
       </tr>`;
     }).join("");
     const sumRows = fl.reduce((s, f) => s + (f.rows || 0), 0);
-    const sumMatches = fl.reduce((s, f) => s + (f.matches || []).length, 0);
+    const sumRes = fl.reduce((s, f) => s + (f.res || []).length, 0);
+    const sumMatches = fl.reduce((s, f) => s + matchesFor(f).length, 0);
     foot.innerHTML = `<tr>
       <td colspan="3">Total — ${fl.length} file(s) · ${uniqueTotal.toLocaleString()} unique VINs</td>
       <td class="num">${sumRows.toLocaleString()}</td>
+      <td class="num">${sumRes.toLocaleString()}</td>
       <td class="num">${sumMatches.toLocaleString()}</td>
       <td></td>
     </tr>`;
@@ -627,7 +833,7 @@
     const foot = $("#vins-foot");
     $("#vin-count").textContent = `(${rows.length.toLocaleString()})`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="9" class="empty">No VINs match Retail Electronic Sales with Allocation Ageing 0.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="12" class="empty">No Retail Electronic Sales VINs with Allocation Date in ${esc(monthLabel(allocMonth()))}.</td></tr>`;
       foot.innerHTML = "";
       return;
     }
@@ -637,6 +843,10 @@
       <td>${esc(r.product || "—")}</td>
       <td>${esc(r.suffix || "—")}</td>
       <td>${esc(r.year || "—")}</td>
+      <td class="mono">${esc(r.allocKey || "—")}</td>
+      <td class="status-cell"><span class="pill ${STATUS_META[r.status].cls}">${STATUS_META[r.status].text}</span>
+        ${r.status === "in" ? "" : `<div style="margin-top:3px">${esc(r.label)}</div>`}</td>
+      <td title="${esc(placeText(r.current))}">${esc(placeText(r.current) || "—")}</td>
       <td class="num">${r.fileKeys.size}</td>
       <td class="mono">${esc(r.dates[0])}</td>
       <td class="mono">${esc(r.dates[r.dates.length - 1])}</td>
@@ -644,7 +854,7 @@
     </tr>`).join("");
     const appearances = rows.reduce((s, r) => s + r.fileKeys.size, 0);
     foot.innerHTML = `<tr>
-      <td colspan="5">Total unique VINs: ${rows.length.toLocaleString()}</td>
+      <td colspan="8">Total unique VINs: ${rows.length.toLocaleString()}</td>
       <td class="num">${appearances.toLocaleString()}</td>
       <td colspan="3"></td>
     </tr>`;
@@ -657,8 +867,18 @@
     renderVins(currentVinRows());
 
     $("#k-files").textContent = fl.length.toLocaleString();
-    $("#k-rows").textContent = fl.reduce((s, f) => s + (f.matches || []).length, 0).toLocaleString();
+    $("#k-rows").textContent = fl.reduce((s, f) => s + matchesFor(f).length, 0).toLocaleString();
+    $("#rule-month").textContent = monthLabel(allocMonth());
     $("#k-unique").textContent = allUnique.length.toLocaleString();
+    const countBy = (s) => allUnique.filter((r) => r.status === s).length.toLocaleString();
+    $("#s-all").textContent = allUnique.length.toLocaleString();
+    $("#s-in").textContent = countBy("in");
+    $("#s-moved").textContent = countBy("moved");
+    $("#s-realloc").textContent = countBy("realloc");
+    $("#s-gone").textContent = countBy("gone");
+    document.querySelectorAll(".status-chip").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-status") === statusFilter);
+    });
     $("#k-issues").textContent = fl.filter((f) => !f.ok || f.issue).length.toLocaleString();
 
     const sel = selectedFileKey && files.find((f) => f.key === selectedFileKey);
@@ -672,16 +892,17 @@
 
   function exportCsv() {
     const rows = currentVinRows();
-    const lines = [["#", "VIN", "Product", "Suffix", "Year", "Files", "First seen", "Last seen", "Dates"].join(",")];
+    const lines = [["#", "VIN", "Product", "Suffix", "Year", "Allocation Date", "Status", "Status detail", "Current place", "Files matched", "First matched", "Last matched", "Matched dates"].join(",")];
     rows.forEach((r, i) => {
-      const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
+      const cells = [i + 1, r.vin, r.product, r.suffix, r.year, r.allocKey, STATUS_META[r.status].text, r.label, placeText(r.current),
+        r.fileKeys.size, r.dates[0], r.dates[r.dates.length - 1], r.dates.join(" ")];
       lines.push(cells.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","));
     });
     lines.push(`"Total","${rows.length}"`);
     const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `rtl-comparing-res-age0-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `rtl-comparing-res-alloc-${allocMonth()}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -709,6 +930,14 @@
     if (e.target.id === "clear-file") { selectedFileKey = ""; render(); }
   });
   $("#search").addEventListener("input", render);
+  $("#status-strip").addEventListener("click", (e) => {
+    const chip = e.target.closest(".status-chip");
+    if (!chip) return;
+    statusFilter = chip.getAttribute("data-status") || "";
+    render();
+  });
+  $("#alloc-month").value = currentMonthRiyadh();
+  $("#alloc-month").addEventListener("change", render);
   $("#month").addEventListener("change", () => { selectedFileKey = ""; render(); });
   $("#mode").addEventListener("change", reload);
   $("#reload").addEventListener("click", reload);
@@ -716,8 +945,9 @@
   $("#copy").addEventListener("click", copyVins);
 
   window.getRtlComparingData = () => ({
-    files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, matches: (f.matches || []).length, issue: f.issue })),
-    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, dates: r.dates }))
+    allocMonth: allocMonth(),
+    files: files.map((f) => ({ date: f.date, fileName: f.fileName, source: f.source, rows: f.rows, res: (f.res || []).length, matches: matchesFor(f).length, issue: f.issue })),
+    uniqueVins: aggregateVins(visibleFiles()).map((r) => ({ vin: r.vin, allocKey: r.allocKey, status: r.status, label: r.label, dates: r.dates }))
   });
 
   reload();
