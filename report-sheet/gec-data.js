@@ -17,9 +17,25 @@
     "50652": "Shahad Almutairi",
   };
   const UNKNOWN_PROMOTER = "Unknown Promoter";
+  /** Column R blank → the customer was entered without a promoter. */
+  const ASSIGNMENT_ERROR = "Assignment Error";
+  /** Column R filled, but not an official promoter number. Never merged with ASSIGNMENT_ERROR. */
+  const INVALID_PROMOTER = "Invalid Promoter";
 
   /** Approved GEC conversion statuses. “Won” is deliberately NOT here. Compared case-insensitively. */
   const CONVERSION_STATUSES = ["Order Created", "Vehicle Assigned", "Pro-Forma", "Delivered", "Sales Order"];
+
+  /**
+   * Default GEC CONTROL rules (Admin → GEC CONTROL overrides them).
+   * Stage of a record = first match of: conversion → lead → visitor (enabled entries only).
+   * A status in no list at all counts as a lead and is flagged under Attention.
+   */
+  const DEFAULT_CONTROL = {
+    visitor: [{ name: "Open", enabled: true }, { name: "Submit", enabled: true }],
+    lead: ["Order Created", "In Process", "Vehicle Assigned", "Pro-Forma"].map((name) => ({ name, enabled: true })),
+    conversion: [...CONVERSION_STATUSES.map((name) => ({ name, enabled: true })), { name: "Won", enabled: false }],
+  };
+  const CONTROL_GROUPS = ["visitor", "lead", "conversion"];
 
   /** Sales Order values that are NOT an order (e.g. 264 × “NO ORDER” in Sep 2026). */
   const NO_ORDER_VALUES = ["no order", "no orders", "no so", "no sales order", "not ordered", "without order",
@@ -37,19 +53,24 @@
       label: "Management-approved · September 2026",
       total: 738,
       knownPromoter: 690,
-      unknownPromoter: 48,
+      assignmentErrors: 48,
       responded: 401,
       noOrder: 264,
       salesOrders: 144,
       converted: 112,
       conversionRate: 0.152,
+      responseRate: 0.543,
+      salesOrderRate: 0.195,
     },
   };
 
   const config = {
     PROMOTER_MAP,
     UNKNOWN_PROMOTER,
+    ASSIGNMENT_ERROR,
+    INVALID_PROMOTER,
     CONVERSION_STATUSES,
+    DEFAULT_CONTROL,
     NO_ORDER_VALUES,
     NO_RESPONSE_VALUES,
     VALIDATION_TARGETS,
@@ -71,15 +92,99 @@
   // ==================== Central business rules ====================
 
   const norm = (s) => str(s).toLowerCase().replace(/\s+/g, " ");
-  let conversionSet = null;
   let noOrderSet = null;
   let noResponseSet = null;
-  function resetRuleCaches() { conversionSet = null; noOrderSet = null; noResponseSet = null; }
+  function resetRuleCaches() { noOrderSet = null; noResponseSet = null; }
 
-  /** THE conversion rule: Status is one of CONVERSION_STATUSES. */
-  function isConverted(status) {
-    if (!conversionSet) conversionSet = new Set(config.CONVERSION_STATUSES.map(norm));
-    return conversionSet.has(norm(status));
+  // ---------- GEC CONTROL (admin-configured status rules) ----------
+
+  function cloneControl(c) {
+    const out = {};
+    CONTROL_GROUPS.forEach((g) => { out[g] = (c[g] || []).map((x) => ({ name: x.name, enabled: !!x.enabled })); });
+    return out;
+  }
+
+  /** Any stored shape → { visitor, lead, conversion: [{ name, enabled }] } (trimmed, de-duplicated per group). */
+  function normalizeControl(input) {
+    let src = input;
+    if (typeof src === "string") { try { src = JSON.parse(src); } catch { src = null; } }
+    if (!src || typeof src !== "object" || !CONTROL_GROUPS.some((g) => Array.isArray(src[g]))) return cloneControl(DEFAULT_CONTROL);
+    const out = {};
+    CONTROL_GROUPS.forEach((g) => {
+      const seen = new Set();
+      out[g] = (Array.isArray(src[g]) ? src[g] : []).map((x) => (typeof x === "string" ? { name: x, enabled: true } : x))
+        .filter((x) => x && str(x.name))
+        .map((x) => ({ name: str(x.name), enabled: x.enabled !== false }))
+        .filter((x) => { const k = norm(x.name); if (seen.has(k)) return false; seen.add(k); return true; });
+    });
+    return out;
+  }
+
+  const controlSignature = (c) => CONTROL_GROUPS.map((g) => c[g].map((x) => `${norm(x.name)}${x.enabled ? "+" : "-"}`).join(",")).join("|");
+
+  let activeControl = cloneControl(DEFAULT_CONTROL);
+  let controlSig = controlSignature(activeControl);
+  let controlSets = null;
+  const stageCache = new Map();
+
+  function sets() {
+    if (!controlSets) {
+      controlSets = {};
+      CONTROL_GROUPS.forEach((g) => { controlSets[g] = new Set(activeControl[g].filter((x) => x.enabled).map((x) => norm(x.name))); });
+      controlSets.known = new Set(CONTROL_GROUPS.flatMap((g) => activeControl[g].map((x) => norm(x.name))));
+    }
+    return controlSets;
+  }
+
+  /** Apply Admin → GEC CONTROL rules. Returns true when the rules changed. */
+  function setControl(input) {
+    const next = normalizeControl(input);
+    const sig = controlSignature(next);
+    if (sig === controlSig) return false;
+    activeControl = next;
+    controlSig = sig;
+    controlSets = null;
+    stageCache.clear();
+    return true;
+  }
+
+  const getControl = () => cloneControl(activeControl);
+  const defaultControl = () => cloneControl(DEFAULT_CONTROL);
+  const enabledStatuses = (group) => activeControl[group].filter((x) => x.enabled).map((x) => x.name);
+
+  /**
+   * Status → "converted" | "lead" | "visitor" | "unlisted".
+   * converted and unlisted records are leads; visitor-stage records (Open / Submit) are registrations, not leads.
+   */
+  function classifyStatus(status) {
+    const k = norm(status);
+    let stage = stageCache.get(k);
+    if (stage) return stage;
+    const s = sets();
+    if (s.conversion.has(k)) stage = "converted";
+    else if (s.lead.has(k)) stage = "lead";
+    else if (s.visitor.has(k)) stage = "visitor";
+    else if (s.known.has(k)) stage = "lead";
+    else stage = "unlisted";
+    stageCache.set(k, stage);
+    return stage;
+  }
+
+  /** THE conversion rule: Status is an enabled GEC CONTROL conversion status. */
+  const isConverted = (status) => classifyStatus(status) === "converted";
+
+  /** Stamp stage fields on every record for the active rules (no re-parse; skipped when already current). */
+  function applyControl(dataset) {
+    if (!dataset || !dataset.records || dataset._controlSig === controlSig) return dataset;
+    dataset.records.forEach((r) => {
+      const stage = classifyStatus(r.status);
+      r.stage = stage;
+      r.isLead = stage !== "visitor";
+      r.converted = stage === "converted" ? 1 : 0;
+      r.unlisted = stage === "unlisted";
+    });
+    dataset._controlSig = controlSig;
+    return dataset;
   }
 
   /** Sales Order cell → "order" | "noOrder" (NO ORDER) | "placeholder" | "blank". Only "order" counts. */
@@ -111,10 +216,17 @@
     return str(v).replace(/^'/, "").replace(/\.0+$/, "").replace(/\s+/g, "");
   }
 
+  /**
+   * Column R → promoter assignment. Three separate outcomes:
+   * official number → "promoter" · blank → "blank" (Assignment Error) · anything else → "invalid" (Invalid Promoter).
+   */
   function promoterFromEmployee(v) {
     const key = employeeKey(v);
     const name = key ? config.PROMOTER_MAP[key] : "";
-    return { key, name: name || UNKNOWN_PROMOTER, known: !!name };
+    if (name) return { key, name, known: true, assignment: "promoter" };
+    return key
+      ? { key, name: INVALID_PROMOTER, known: false, assignment: "invalid" }
+      : { key, name: ASSIGNMENT_ERROR, known: false, assignment: "blank" };
   }
 
   /** Visitor sheet promoter cell (employee number or name) → official promoter. */
@@ -132,6 +244,21 @@
   }
 
   const officialPromoters = () => Object.values(config.PROMOTER_MAP);
+
+  const promoterNameCache = new Map();
+  /** Consultant cell names an official promoter (by name or employee number) → not a sales advisor. */
+  function isPromoterName(v) {
+    const s = norm(v);
+    if (!s) return false;
+    let hit = promoterNameCache.get(s);
+    if (hit != null) return hit;
+    hit = Object.entries(config.PROMOTER_MAP).some(([key, name]) => {
+      const pn = norm(name);
+      return s === pn || s.includes(pn) || new RegExp(`(^|\\D)${key}(\\D|$)`).test(s);
+    });
+    promoterNameCache.set(s, hit);
+    return hit;
+  }
 
   // ==================== Text / date helpers ====================
 
@@ -416,7 +543,7 @@
 
   function emptyQuality() {
     return { sourceRows: 0, uniqueTransactions: 0, duplicateRows: 0, duplicateTransactions: 0, missingTxn: 0,
-      knownPromoter: 0, unknownPromoter: 0, blankEmployee: 0, unmappedEmployee: 0, unknownModels: 0, undated: 0,
+      knownPromoter: 0, blankEmployee: 0, unmappedEmployee: 0, blankEmployeeCells: 0, unknownModels: 0, undated: 0,
       noOrder: 0, orderPlaceholders: 0, actualOrders: 0 };
   }
 
@@ -445,24 +572,21 @@
     return { analysed, best: analysed.slice().sort((a, b) => b.sheetScore - a.sheetScore)[0] };
   }
 
-  /** Employee Number = column R when its header (or content) is the employee number; header match otherwise. */
+  /**
+   * Promoter assignment source of truth = column R. Never inferred from Employee Responsible, Sales Employee,
+   * Sales Response, Status or any other column — a differently-named header only produces a warning.
+   */
   function resolveEmployeeColumn(colMap, headers, matrix, headerIdx, warnings) {
     const r = colIndex(config.EMPLOYEE_NUMBER_COLUMN);
     const field = LEAD_FIELDS.find((f) => f.key === "employeeNumber");
+    const other = colMap.employeeNumber;
+    Object.keys(colMap).forEach((k) => { if (colMap[k] === r) delete colMap[k]; });
+    colMap.employeeNumber = r;
     const rHeaderOk = r < headers.length && matchScore(field, normHeader(headers[r])) > 0;
-    const rHasNumbers = matrix.slice(headerIdx + 1, headerIdx + 200)
-      .some((line) => config.PROMOTER_MAP[employeeKey(line[r])]);
-    if (rHeaderOk || rHasNumbers) {
-      if (colMap.employeeNumber !== r) {
-        Object.keys(colMap).forEach((k) => { if (colMap[k] === r) delete colMap[k]; });
-        colMap.employeeNumber = r;
-      }
-      if (!rHeaderOk) warnings.push(`Column ${config.EMPLOYEE_NUMBER_COLUMN} header is “${headers[r]}” — used as Employee Number because it contains promoter employee numbers.`);
-    } else if (colMap.employeeNumber != null) {
-      warnings.push(`Employee Number found in column ${colLetter(colMap.employeeNumber)} (“${headers[colMap.employeeNumber]}”), not column ${config.EMPLOYEE_NUMBER_COLUMN}.`);
-    } else if (r < headers.length) {
-      colMap.employeeNumber = r;
-      warnings.push(`No “Employee Number” header — using column ${config.EMPLOYEE_NUMBER_COLUMN} (“${headers[r]}”).`);
+    if (r >= headers.length) warnings.push(`The lead sheet has no column ${config.EMPLOYEE_NUMBER_COLUMN} — every lead will read as an Assignment Error.`);
+    else if (!rHeaderOk) {
+      warnings.push(`Column ${config.EMPLOYEE_NUMBER_COLUMN} header is “${headers[r] || "(blank)"}” — still used as the promoter Employee Number (column ${config.EMPLOYEE_NUMBER_COLUMN} is the source of truth)`
+        + (other != null && other !== r ? `; column ${colLetter(other)} (“${headers[other]}”) is ignored.` : "."));
     }
   }
 
@@ -502,6 +626,7 @@
       if (!line.some((v) => str(v) !== "")) continue;
       if (TOTAL_ROW.test(str(line.find((v) => str(v)) || ""))) continue;
       quality.sourceRows += 1;
+      if (!employeeKey(cell(line, "employeeNumber"))) quality.blankEmployeeCells += 1;
       const txnRaw = cell(line, "txn");
       const key = typeof txnRaw === "number" ? (Number.isFinite(txnRaw) ? String(txnRaw) : "") : str(txnRaw).replace(/^'/, "");
       if (!key) { quality.missingTxn += 1; continue; }
@@ -556,9 +681,13 @@
         employeeNumber: promoter.key,
         promoter: promoter.name,
         promoterKnown: promoter.known,
+        assignment: promoter.assignment,
         status,
         statusLabel: status || "(blank)",
-        converted: isConverted(status) ? 1 : 0,
+        stage: "",
+        isLead: true,
+        unlisted: false,
+        converted: 0,
         salesResponse: shown("salesResponse"),
         responded: hasSalesResponse(respCell) ? 1 : 0,
         salesOrder: shown("salesOrder"),
@@ -569,7 +698,7 @@
         source: str(cell(line, "source")) || "(blank)",
         consultant,
         consultantLabel: consultant || config.unassignedLabel,
-        unassigned: colMap.consultant != null && !consultant,
+        noAdvisor: colMap.consultant != null && !consultant,
         customer: shown("customer"),
         phone: shown("phone"),
         responseMinutes: responseMinutesOf(leadDate, leadSerialOf(cell(line, "createdDate"), cell(line, "createdTime")), respCell),
@@ -582,22 +711,20 @@
     quality.duplicateRows = dupGroups.reduce((s, g) => s + g.rows.length - 1, 0);
     quality.duplicateTransactions = dupGroups.length;
     records.forEach((x) => {
-      if (x.promoterKnown) quality.knownPromoter += 1;
-      else {
-        quality.unknownPromoter += 1;
-        if (x.employeeNumber) quality.unmappedEmployee += 1; else quality.blankEmployee += 1;
-      }
+      if (x.assignment === "promoter") quality.knownPromoter += 1;
+      else if (x.assignment === "invalid") quality.unmappedEmployee += 1;
+      else quality.blankEmployee += 1;
       if (!x.model) quality.unknownModels += 1;
       if (!x.leadDate) quality.undated += 1;
       if (x.salesOrderState === "noOrder") quality.noOrder += 1;
       else if (x.salesOrderState === "placeholder") quality.orderPlaceholders += 1;
       else if (x.salesOrderState === "order") quality.actualOrders += 1;
     });
-    if (quality.knownPromoter + quality.unknownPromoter !== records.length) warnings.push("Promoter mapping does not add up to total leads.");
+    if (quality.knownPromoter + quality.blankEmployee + quality.unmappedEmployee !== records.length) warnings.push("Column R assignment (promoter + blank + invalid) does not add up to unique transactions.");
     if (quality.undated) warnings.push(`${quality.undated} transaction(s) have no readable Created Date — counted in totals, not in daily views.`);
 
     const days = records.map((x) => x.day).filter(Boolean).sort();
-    return {
+    return applyControl({
       ok: records.length > 0,
       fileName: options.fileName || "",
       sheetName: best.name,
@@ -617,7 +744,7 @@
       sheets,
       visitors,
       _source: { matrix, headerIdx: best.headerIdx, colMap },
-    };
+    });
   }
 
   // ==================== Visitors (independent dataset) ====================
@@ -706,13 +833,14 @@
     });
   }
 
-  /** Visitors only carry date + promoter, so only those filters apply. */
-  function applyVisitorFilters(visitors, f) {
+  /** Visitors only carry date + promoter + purpose, so only those filters apply. */
+  function applyVisitorFilters(visitors, f, ignorePurpose) {
     const filters = f || {};
     return visitors.filter((v) => {
       if (filters.from && (!v.day || v.day < filters.from)) return false;
       if (filters.to && (!v.day || v.day > filters.to)) return false;
       if (filters.promoter && v.promoter !== filters.promoter) return false;
+      if (!ignorePurpose && filters.purpose && v.purpose !== filters.purpose) return false;
       return true;
     });
   }
@@ -738,10 +866,11 @@
     }).sort((a, b) => b.leads - a.leads || a.name.localeCompare(b.name));
   }
 
+  /** Sales advisors = consultants on lead records, excluding the official promoters. */
   function consultantTable(rows) {
     const map = new Map();
     rows.forEach((r) => {
-      if (!r.consultant) return;
+      if (!r.consultant || isPromoterName(r.consultant)) return;
       const e = map.get(r.consultant) || { name: r.consultant, leads: 0, responded: 0, salesOrders: 0, converted: 0 };
       e.leads += 1;
       e.responded += r.responded;
@@ -837,44 +966,120 @@
     return { unit: bk.unit, buckets: bk.list, rows: names.map((nm) => ({ name: nm, values: cells.get(nm), total: cells.get(nm).reduce((s, x) => s + x, 0) })) };
   }
 
+  /** Lead status distribution: enabled lead statuses, then conversion statuses, then everything else seen in the leads. */
+  function leadStatusTable(rows) {
+    const counts = new Map();
+    const labels = new Map();
+    rows.forEach((r) => {
+      const k = norm(r.status);
+      counts.set(k, (counts.get(k) || 0) + 1);
+      if (!labels.has(k)) labels.set(k, r.statusLabel);
+    });
+    const out = [];
+    const used = new Set();
+    const push = (name, kind) => {
+      const k = norm(name);
+      if (used.has(k)) return;
+      used.add(k);
+      out.push({ status: labels.get(k) || name, key: k, count: counts.get(k) || 0, kind, share: ratio(counts.get(k) || 0, rows.length) });
+    };
+    enabledStatuses("lead").forEach((s) => push(s, classifyStatus(s) === "converted" ? "conversion" : "lead"));
+    enabledStatuses("conversion").forEach((s) => push(s, "conversion"));
+    [...counts.keys()].forEach((k) => { if (!used.has(k)) push(labels.get(k), classifyStatus(k) === "unlisted" ? "unlisted" : "other"); });
+    return out.sort((a, b) => (b.count > 0) - (a.count > 0) || b.count - a.count);
+  }
+
+  function purposeTable(visitorRows) {
+    const map = new Map();
+    visitorRows.forEach((v) => map.set(v.purpose, (map.get(v.purpose) || 0) + v.count));
+    const total = sumBy(visitorRows, (v) => v.count);
+    return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([purpose, count]) => ({ purpose, count, share: ratio(count, total) }));
+  }
+
+  // ---------- Memoised compute (parse once · normalise once · cache per filter set) ----------
+
+  const objIds = new WeakMap();
+  let nextObjId = 1;
+  const idOf = (o) => { if (!o) return 0; let id = objIds.get(o); if (!id) { id = nextObjId++; objIds.set(o, id); } return id; };
+  const computeCache = new Map();
+  const COMPUTE_CACHE_MAX = 60;
+  const FILTER_KEYS = ["from", "to", "promoter", "model", "source", "status", "consultant", "purpose"];
+
   /**
    * @param dataset lead dataset (parseWorkbook); visitors come from opts.visitors or dataset.visitors
-   * @param filters { from, to, promoter, model, source, status, consultant }
+   * @param filters { from, to, promoter, model, source, status, consultant, purpose }
    * @param opts { visitors, slaMinutes }
    */
   function compute(dataset, filters, opts) {
     const options = opts || {};
-    const all = (dataset && dataset.records) || [];
     const f = filters || {};
     const vds = options.visitors !== undefined ? options.visitors : (dataset && dataset.visitors) || null;
+    applyControl(dataset);
+    const key = [idOf(dataset), idOf(vds), controlSig, options.slaMinutes || "", ...FILTER_KEYS.map((k) => f[k] || "")].join("\u0001");
+    const hit = computeCache.get(key);
+    if (hit) { computeCache.delete(key); computeCache.set(key, hit); return hit; }
+    const res = computeFresh(dataset, f, options, vds);
+    computeCache.set(key, res);
+    if (computeCache.size > COMPUTE_CACHE_MAX) computeCache.delete(computeCache.keys().next().value);
+    return res;
+  }
+
+  function computeFresh(dataset, f, options, vds) {
+    const all = (dataset && dataset.records) || [];
     const hasVisitors = !!(vds && vds.ok);
     /** Visitors have no model/source/status/consultant — a Visitor→Lead rate under those filters would compare different populations. */
     const leadOnlyFilter = !!(f.model || f.source || f.status || f.consultant);
-    const rows = applyFilters(all, f);
+    /** Leads carry no visit purpose — Visitor→Lead under a purpose filter would compare different populations too. */
+    const purposeFilter = !!f.purpose;
+    const scoped = applyFilters(all, f);
+    const rows = scoped.filter((r) => r.isLead);
+    const registered = scoped.filter((r) => !r.isLead);
     const visitorRows = hasVisitors ? applyVisitorFilters(vds.records, f) : [];
+    const purposeRows = hasVisitors && purposeFilter ? applyVisitorFilters(vds.records, f, true) : visitorRows;
     const total = rows.length;
     const converted = sumBy(rows, (r) => r.converted);
     const responded = sumBy(rows, (r) => r.responded);
     const salesOrders = sumBy(rows, (r) => r.hasSalesOrder);
     const knownPromoter = sumBy(rows, (r) => (r.promoterKnown ? 1 : 0));
+    /** Column R counts over every customer record in scope (leads + visitor-stage registrations). */
+    const blankRRows = scoped.filter((r) => r.assignment === "blank");
+    const invalidRRows = scoped.filter((r) => r.assignment === "invalid");
     const visitors = hasVisitors ? sumBy(visitorRows, (v) => v.count) : null;
     const sla = Number(options.slaMinutes) > 0 ? Number(options.slaMinutes) : config.SLA_MINUTES;
     const timed = rows.filter((r) => r.responseMinutes != null);
     const from = f.from || (dataset && dataset.range.from) || "";
     const to = f.to || (dataset && dataset.range.to) || "";
     const promoters = promoterTable(rows, visitorRows, hasVisitors);
-    if (leadOnlyFilter) promoters.forEach((p) => { p.visitorToLead = null; });
+    if (leadOnlyFilter || purposeFilter) promoters.forEach((p) => { p.visitorToLead = null; });
+    const v2lComparable = hasVisitors && !leadOnlyFilter && !purposeFilter;
+    const hasConsultant = !!(dataset && dataset.hasConsultant);
+    const advisors = consultantTable(rows);
+    const promoterConsultantRows = hasConsultant ? rows.filter((r) => r.consultant && isPromoterName(r.consultant)) : [];
+    const unlistedRows = rows.filter((r) => r.unlisted);
+    const unlistedStatuses = countValues(unlistedRows, (r) => r.statusLabel).map(([status, count]) => ({ status, count }));
     return {
       rows,
+      leadRecords: rows,
+      customerRows: scoped,
+      registeredRows: registered,
       visitorRows,
+      visitorRecords: visitorRows,
       hasVisitors,
       leadOnlyFilter,
-      hasConsultant: !!(dataset && dataset.hasConsultant),
+      purposeFilter,
+      hasConsultant,
       totalAll: all.length,
+      leadsAll: all.reduce((s, r) => s + (r.isLead ? 1 : 0), 0),
       kpis: {
         visitors,
         total,
-        visitorToLead: hasVisitors && !leadOnlyFilter ? ratio(total, visitors) : null,
+        visitorToLead: v2lComparable ? ratio(total, visitors) : null,
+        visitorToConversion: v2lComparable ? ratio(converted, visitors) : null,
+        registeredNotLead: registered.length,
+        unlisted: unlistedRows.length,
+        promoterConsultant: promoterConsultantRows.length,
+        visitorUnknownPromoter: hasVisitors ? sumBy(visitorRows.filter((v) => !v.promoterKnown), (v) => v.count) : null,
         responded,
         responseRate: ratio(responded, total),
         salesOrders,
@@ -883,8 +1088,14 @@
         converted,
         conversionRate: ratio(converted, total),
         knownPromoter,
-        unknownPromoter: total - knownPromoter,
-        unassigned: dataset && dataset.hasConsultant ? sumBy(rows, (r) => (r.unassigned ? 1 : 0)) : null,
+        /** ASSIGNMENT ERRORS = customers whose column R is blank. Never merged with invalidPromoter. */
+        assignmentErrors: blankRRows.length,
+        /** INVALID PROMOTER = column R has a value that is not an official promoter number. */
+        invalidPromoter: invalidRRows.length,
+        /** Lead-only splits, used where figures must reconcile with Registered Leads. */
+        assignmentErrorLeads: sumBy(blankRRows, (r) => (r.isLead ? 1 : 0)),
+        invalidPromoterLeads: sumBy(invalidRRows, (r) => (r.isLead ? 1 : 0)),
+        noAdvisor: dataset && dataset.hasConsultant ? sumBy(rows, (r) => (r.noAdvisor ? 1 : 0)) : null,
         noResponse: total - responded,
       },
       /** Timing layer — not displayed while config.SHOW_TIMING is false. */
@@ -902,9 +1113,16 @@
       ].map((s) => ({ ...s, pctOfLeads: ratio(s.count, total) })),
       trend: buildTrend(rows, visitorRows, hasVisitors, from, to),
       promoters,
-      consultants: consultantTable(rows),
+      promoterPerformance: promoters,
+      consultants: advisors,
+      advisorPerformance: advisors,
+      promoterConsultantRows,
+      unlistedStatuses,
+      leadStatus: leadStatusTable(rows),
+      purposes: purposeTable(purposeRows),
       models: groupModels(rows),
       range: { from, to },
+      gecControlConfig: getControl(),
     };
   }
 
@@ -916,9 +1134,10 @@
 
   function filterOptions(dataset) {
     const all = (dataset && dataset.records) || [];
-    const hasUnknown = all.some((r) => !r.promoterKnown);
+    const hasBlank = all.some((r) => r.assignment === "blank");
+    const hasInvalid = all.some((r) => r.assignment === "invalid");
     return {
-      promoters: [...officialPromoters(), ...(hasUnknown ? [UNKNOWN_PROMOTER] : [])],
+      promoters: [...officialPromoters(), ...(hasBlank ? [ASSIGNMENT_ERROR] : []), ...(hasInvalid ? [INVALID_PROMOTER] : [])],
       models: optionList(all, "modelGroup"),
       sources: optionList(all, "source"),
       statuses: optionList(all, "statusLabel"),
@@ -937,9 +1156,12 @@
     converted: (r) => r.converted === 1,
     conversionRate: (r) => r.converted === 1,
     knownPromoter: (r) => r.promoterKnown,
-    unknownPromoter: (r) => !r.promoterKnown,
-    unassigned: (r) => r.unassigned,
+    assignmentErrors: (r) => r.assignment === "blank",
+    invalidPromoter: (r) => r.assignment === "invalid",
+    noAdvisor: (r) => r.noAdvisor,
     noResponse: (r) => r.responded === 0,
+    unlisted: (r) => r.unlisted,
+    promoterConsultant: (r) => !!r.consultant && isPromoterName(r.consultant),
   };
 
   // ==================== Validation (developer) ====================
@@ -982,26 +1204,31 @@
       const rows = [
         ["Total Leads", t.total, k.total],
         ["Known Promoter", t.knownPromoter, k.knownPromoter],
-        ["Unknown Promoter", t.unknownPromoter, k.unknownPromoter],
+        ["Assignment Errors (blank column R)", t.assignmentErrors, k.assignmentErrors],
+        ["Invalid Promoter (non-official column R)", t.invalidPromoter, k.invalidPromoter],
         ["Sales Response", t.responded, k.responded],
         ["NO ORDER", t.noOrder, k.noOrder],
         ["Actual Orders", t.salesOrders, k.salesOrders],
         ["Converted", t.converted, k.converted],
         ["Conversion Rate %", rate1(t.conversionRate), rate1(k.conversionRate)],
-      ].map(([label, expected, actual]) => ({ label, expected, actual, pass: expected === actual }));
+        ["Response Rate %", rate1(t.responseRate), rate1(k.responseRate)],
+        ["Sales Order Rate %", rate1(t.salesOrderRate), rate1(k.salesOrderRate)],
+      ].filter((x) => x[1] != null).map(([label, expected, actual]) => ({ label, expected, actual, pass: expected === actual }));
       out.targets = { period, label: t.label, rows, passed: rows.filter((x) => x.pass).length };
     } else out.targets = { period, label: `No approved targets configured for ${period || "this file"}`, rows: [], passed: 0 };
 
-    // 2 · Promoter mapping check (calculated, never hard-coded)
-    const pc = officialPromoters().map((name) => ({ name, count: dataset.records.filter((r) => r.promoter === name).length }));
-    pc.push({ name: UNKNOWN_PROMOTER, count: dataset.records.filter((r) => !r.promoterKnown).length });
+    // 2 · Promoter mapping check (calculated, never hard-coded; leads only)
+    const leadsAll = dataset.records.filter((r) => r.isLead);
+    const pc = officialPromoters().map((name) => ({ name, count: leadsAll.filter((r) => r.promoter === name).length }));
+    pc.push({ name: ASSIGNMENT_ERROR, count: leadsAll.filter((r) => r.assignment === "blank").length });
+    pc.push({ name: INVALID_PROMOTER, count: leadsAll.filter((r) => r.assignment === "invalid").length });
     const pcTotal = pc.reduce((s, x) => s + x.count, 0);
-    out.promoterCheck = { rows: pc, total: pcTotal, leads: dataset.records.length, ok: pcTotal === dataset.records.length,
+    out.promoterCheck = { rows: pc, total: pcTotal, leads: leadsAll.length, ok: pcTotal === leadsAll.length,
       expectedTotal: t ? t.total : null, column: dataset.colMap.employeeNumber != null ? colLetter(dataset.colMap.employeeNumber) : "—" };
 
     // 3 · Value breakdowns (what the rules saw)
     out.breakdowns = {
-      status: countValues(dataset.records, (r) => r.statusLabel).map(([v, c]) => ({ value: v, count: c, converted: isConverted(v) })),
+      status: countValues(dataset.records, (r) => r.statusLabel).map(([v, c]) => ({ value: v, count: c, converted: isConverted(v), stage: classifyStatus(v) })),
       salesOrder: countValues(dataset.records, (r) => r.salesOrderState).map(([v, c]) => ({ value: v, count: c })),
       salesOrderPlaceholders: countValues(dataset.records.filter((r) => r.salesOrderState === "placeholder" || r.salesOrderState === "noOrder"), (r) => r.salesOrder).map(([v, c]) => ({ value: v, count: c })),
       responseValues: countValues(dataset.records, (r) => (r.responded ? "(has response)" : (r.salesResponse ? `“${r.salesResponse}” → not a response` : "(blank)"))).map(([v, c]) => ({ value: v, count: c })),
@@ -1030,23 +1257,39 @@
         if (!prev || (dm && (!dp || dm >= dp))) latest.set(key, line);
       }
     }
-    let conv = 0; let resp = 0; let orders = 0; let noOrd = 0; let known = 0;
+    let conv = 0; let resp = 0; let orders = 0; let noOrd = 0; let known = 0; let leadCount = 0; let regCount = 0;
+    let blankR = 0; let invalidR = 0; let blankRLeads = 0; let invalidRLeads = 0;
     latest.forEach((line) => {
+      const rKey = employeeKey(at(line, "employeeNumber"));
+      const isReg = classifyStatus(at(line, "status")) === "visitor";
+      if (!rKey) { blankR += 1; if (!isReg) blankRLeads += 1; }
+      else if (!config.PROMOTER_MAP[rKey]) { invalidR += 1; if (!isReg) invalidRLeads += 1; }
+      if (isReg) { regCount += 1; return; }
+      leadCount += 1;
       if (isConverted(at(line, "status"))) conv += 1;
       if (hasSalesResponse(at(line, "salesResponse"))) resp += 1;
       const so = salesOrderState(at(line, "salesOrder"));
       if (so === "order") orders += 1;
       if (so === "noOrder") noOrd += 1;
-      if (config.PROMOTER_MAP[employeeKey(at(line, "employeeNumber"))]) known += 1;
+      if (config.PROMOTER_MAP[rKey]) known += 1;
     });
+    const rCol = out.promoterCheck.column;
     add("Source rows read", rows, dataset.quality.sourceRows);
-    add("Total leads = unique Transaction No.", latest.size, k.total, "No filters");
-    add("Known + Unknown promoter = Total leads", k.total, k.knownPromoter + k.unknownPromoter);
-    add("Known promoter leads (column " + out.promoterCheck.column + ")", known, k.knownPromoter);
+    add("Unique Transaction No.", latest.size, dataset.records.length, "No filters");
+    add("Leads = unique transactions − visitor-stage", leadCount, k.total, enabledStatuses("visitor").join(" · ") || "no visitor statuses");
+    add("Registered, not yet lead (visitor stage)", regCount, k.registeredNotLead);
+    add("Leads + registered = unique transactions", dataset.records.length, k.total + k.registeredNotLead);
+    add("Known promoter leads (column " + rCol + ")", known, k.knownPromoter);
+    add("Assignment Errors = customers with blank column " + rCol, blankR, k.assignmentErrors, "unique Transaction No. · leads + registered");
+    add("Invalid Promoter = customers with a non-official column " + rCol + " value", invalidR, k.invalidPromoter, "unique Transaction No. · leads + registered");
+    add("Assignment Errors (leads only)", blankRLeads, k.assignmentErrorLeads);
+    add("Invalid Promoter (leads only)", invalidRLeads, k.invalidPromoterLeads);
+    add("Assigned + Assignment Errors + Invalid = Total leads", k.total, k.knownPromoter + k.assignmentErrorLeads + k.invalidPromoterLeads);
     add("Sales Response (field not empty)", resp, k.responded);
     add("Actual Sales Orders (NO ORDER excluded)", orders, k.salesOrders);
     add("NO ORDER rows (unique)", noOrd, k.noOrder);
-    add("Converted = isConverted(Status)", conv, k.converted, config.CONVERSION_STATUSES.join(" · "));
+    add("Converted = isConverted(Status)", conv, k.converted, enabledStatuses("conversion").join(" · "));
+    add("Every converted record is a lead", sumBy(dataset.records, (r) => r.converted), k.converted);
     add("Missing Transaction No. rows", missing, dataset.quality.missingTxn);
     add("Duplicate rows = rows − unique − missing", rows - latest.size - missing, dataset.quality.duplicateRows);
     add("No transaction counted twice", dataset.records.length, new Set(dataset.records.map((r) => r.id)).size);
@@ -1057,9 +1300,10 @@
     add("Daily responses reconcile", m.kpis.responded, sumB("responded"));
     add("Daily sales orders reconcile", m.kpis.salesOrders, sumB("salesOrders"));
     add("Daily converted reconciles", m.kpis.converted, sumB("converted"));
-    add("Promoter leads + unknown = filtered leads", m.kpis.total, sumBy(m.promoters, (p) => p.leads) + m.kpis.unknownPromoter);
-    add("Promoter converted + unknown = converted", m.kpis.converted, sumBy(m.promoters, (p) => p.converted) + sumBy(m.rows.filter((r) => !r.promoterKnown), (r) => r.converted));
-    if (m.hasConsultant) add("Consultant leads + unassigned = filtered leads", m.kpis.total, sumBy(m.consultants, (c) => c.leads) + (m.kpis.unassigned || 0));
+    add("Promoter leads + assignment errors + invalid = filtered leads", m.kpis.total, sumBy(m.promoters, (p) => p.leads) + m.kpis.assignmentErrorLeads + m.kpis.invalidPromoterLeads);
+    add("Promoter converted + unassigned/invalid converted = converted", m.kpis.converted, sumBy(m.promoters, (p) => p.converted) + sumBy(m.rows.filter((r) => !r.promoterKnown), (r) => r.converted));
+    if (m.hasConsultant) add("Advisor leads + promoter-assigned + no advisor = filtered leads", m.kpis.total, sumBy(m.consultants, (c) => c.leads) + m.kpis.promoterConsultant + (m.kpis.noAdvisor || 0));
+    add("Lead status counts = filtered leads", m.kpis.total, sumBy(m.leadStatus, (s) => s.count));
     add("Model leads = filtered leads", m.kpis.total, sumBy(m.models, (x) => x.leads));
     if (m.hasVisitors) add("Promoter visitors + unknown = total visitors", m.kpis.visitors, sumBy(m.promoters, (p) => p.visitors || 0) + sumBy(m.visitorRows.filter((v) => !v.promoterKnown), (v) => v.count));
     add("Filters do not change the underlying data", sigBefore, sigAfter);
@@ -1073,8 +1317,18 @@
     config,
     PROMOTER_MAP,
     UNKNOWN_PROMOTER,
+    ASSIGNMENT_ERROR,
+    INVALID_PROMOTER,
     CONVERSION_STATUSES,
     isConverted,
+    classifyStatus,
+    setControl,
+    getControl,
+    defaultControl,
+    normalizeControl,
+    applyControl,
+    enabledStatuses,
+    isPromoterName,
     salesOrderState,
     isActualSalesOrder,
     hasSalesResponse,

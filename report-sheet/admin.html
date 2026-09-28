@@ -12,8 +12,41 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20260928gec4"></script>
+  <script src="data-store.js?v=20260928gcc1"></script>
+  <script src="gec-data.js?v=20260928gcc1"></script>
   <script src="allocation-plan-data.js"></script>
+  <style>
+    .gec-ctl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+    .gec-ctl-col { border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .gec-ctl-col[data-group="visitor"] { border-top: 3px solid #7c3aed; }
+    .gec-ctl-col[data-group="lead"] { border-top: 3px solid #2563eb; }
+    .gec-ctl-col[data-group="conversion"] { border-top: 3px solid #059669; }
+    .gec-ctl-head b { display: block; font-size: 13px; letter-spacing: 0.1em; }
+    .gec-ctl-head small { display: block; opacity: 0.7; font-size: 12px; margin-top: 2px; }
+    .gec-ctl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .gec-ctl-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(148, 163, 184, 0.1); }
+    .gec-ctl-list li.is-off { opacity: 0.55; }
+    .gec-ctl-list li.is-off span { text-decoration: line-through; }
+    .gec-ctl-list label { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0; font-weight: 600; }
+    .gec-ctl-list label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gec-ctl-list input[type="checkbox"] { width: 16px; height: 16px; flex: none; }
+    .gec-ctl-list button { border: 0; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; opacity: 0.55; color: inherit; padding: 2px 6px; }
+    .gec-ctl-list button:hover { opacity: 1; color: #e11d48; }
+    .gec-ctl-empty { opacity: 0.6; font-size: 12px; padding: 6px 2px; }
+    .gec-ctl-add { display: flex; gap: 6px; }
+    .gec-ctl-add input { flex: 1; min-width: 0; }
+    .gec-ctl-dirty { color: #d97706; font-weight: 700; }
+    .gec-found-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .gec-found-table th, .gec-found-table td { padding: 7px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.25); text-align: left; }
+    .gec-found-table td.num, .gec-found-table th.num { text-align: right; }
+    .gec-found-table .stage { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .gec-found-table .stage.s-visitor { background: #f3efff; color: #6d28d9; }
+    .gec-found-table .stage.s-lead { background: #ebf2ff; color: #1d4ed8; }
+    .gec-found-table .stage.s-converted { background: #e6f7f0; color: #047857; }
+    .gec-found-table .stage.s-unlisted { background: #fff4e2; color: #b45309; }
+    .gec-found-table button { margin-right: 4px; padding: 3px 9px; font-size: 12px; }
+    @media (max-width: 1100px) { .gec-ctl-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body class="live-app admin-page toyota-theme">
   <div class="app-frame">
@@ -41,6 +74,10 @@
         <button type="button" class="tab side-nav-item" data-admin-panel="allocation" id="tab-allocation">
           <span class="side-nav-icon" aria-hidden="true">▦</span>
           <span class="side-nav-label">Allocation Plan</span>
+        </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="gec" id="tab-gec">
+          <span class="side-nav-icon" aria-hidden="true">◎</span>
+          <span class="side-nav-label">GEC Control</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -161,6 +198,35 @@
           <p class="foot" style="margin:0;padding:12px 0">Loading allocation plan…</p>
         </div>
         <p class="foot" id="allocation-foot"></p>
+      </div>
+    </section>
+
+    <section class="admin-panel" id="panel-gec" hidden>
+      <div class="xl-toolbar admin-toolbar">
+        <button type="button" class="btn-primary" id="gec-control-save">Save GEC Control</button>
+        <button type="button" class="btn" id="gec-control-reset">Reset to defaults</button>
+        <span class="hint" id="gec-control-hint">Saving applies the rules to every live GEC dashboard immediately · pushed files stay as they are</span>
+      </div>
+
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>GEC CONTROL · status rules</h2>
+          <span class="admin-section-tag">Visitor · Lead · Conversion</span>
+        </div>
+        <p class="admin-lead">
+          Every GEC record is classified by its <b>Status</b> — first enabled match of <b>Conversion → Lead → Visitor</b> (upper/lower case ignored).
+          <b>Visitor</b> statuses are registrations, not leads. <b>Conversion</b> statuses count as converted and still count as leads.
+          A status in no list counts as a lead and is flagged under <b>Attention</b> on the dashboard until you classify it here.
+        </p>
+        <div class="gec-ctl-grid" id="gec-ctl-grid"></div>
+      </div>
+
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Statuses in the GEC File</h2>
+          <span class="admin-section-tag" id="gec-found-tag">From the file in slot 7</span>
+        </div>
+        <div id="gec-found"><p class="foot" style="margin:0">Upload the GEC File in Excel Uploads to list its statuses here.</p></div>
       </div>
     </section>
 
@@ -578,13 +644,140 @@
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
+    const gec = $("#panel-gec");
     uploads.hidden = which !== "uploads";
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
+    if (gec) gec.hidden = which !== "gec";
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.adminPanel === which);
     });
     if (which === "allocation") renderAllocationPanel();
+    if (which === "gec") { renderGecControl(); renderGecFound(); }
+  }
+
+  // ---------- GEC CONTROL (visitor / lead / conversion status rules) ----------
+
+  const Gec = window.GecData;
+  const GEC_GROUPS = [
+    { id: "visitor", title: "VISITOR STATUS", sub: "Registered, not yet leads" },
+    { id: "lead", title: "LEAD STATUS", sub: "Counted as registered leads" },
+    { id: "conversion", title: "CONVERSION STATUS", sub: "Counted as converted (still a lead)" },
+  ];
+  const XLSX_SRC = "https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js";
+  let gecDraft = Gec.normalizeControl(Store.readGecControl());
+  let gecSaved = JSON.stringify(gecDraft);
+  let gecFound = { buffer: null, rows: null, error: "" };
+  const gecDirty = () => JSON.stringify(gecDraft) !== gecSaved;
+
+  function setGecHint(text, cls) {
+    const el = $("#gec-control-hint");
+    el.innerHTML = text;
+    el.className = "hint" + (cls ? " " + cls : "");
+  }
+
+  function renderGecControl() {
+    $("#gec-ctl-grid").innerHTML = GEC_GROUPS.map((g) => {
+      const list = gecDraft[g.id];
+      return `<div class="gec-ctl-col" data-group="${g.id}">
+        <div class="gec-ctl-head"><b>${g.title}</b><small>${g.sub}</small></div>
+        <ul class="gec-ctl-list">${list.length ? list.map((x, i) => `
+          <li class="${x.enabled ? "" : "is-off"}">
+            <label title="${x.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}"><input type="checkbox" data-gec-toggle="${g.id}" data-i="${i}"${x.enabled ? " checked" : ""} /><span>${escapeHtml(x.name)}</span></label>
+            <button type="button" data-gec-remove="${g.id}" data-i="${i}" title="Remove “${escapeHtml(x.name)}”" aria-label="Remove">×</button>
+          </li>`).join("") : `<li class="gec-ctl-empty">No statuses</li>`}</ul>
+        <form class="gec-ctl-add" data-gec-add="${g.id}"><input type="text" placeholder="Add status…" maxlength="80" aria-label="Add ${g.title.toLowerCase()}" /><button type="submit" class="btn">Add</button></form>
+      </div>`;
+    }).join("");
+    if (gecDirty()) setGecHint('<span class="gec-ctl-dirty">Unsaved changes</span> — click <b>Save GEC Control</b> to apply them to every live dashboard');
+  }
+
+  function addGecStatus(group, name) {
+    const clean = String(name || "").replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    const list = gecDraft[group];
+    const hit = list.find((x) => x.name.toLowerCase() === clean.toLowerCase());
+    if (hit) hit.enabled = true;
+    else list.push({ name: clean, enabled: true });
+    renderGecControl();
+    renderGecFound();
+  }
+
+  function loadScriptOnce(src) {
+    if (document.querySelector(`script[src="${src}"]`) && window.XLSX) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Could not load the Excel reader"));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function renderGecFound() {
+    const box = $("#gec-found");
+    const slot = slots.gec;
+    if (!slot || !slot.buffer) {
+      $("#gec-found-tag").textContent = "No GEC File";
+      box.innerHTML = `<p class="foot" style="margin:0">Upload the GEC File in <b>Excel Uploads</b> (slot 7) to list its statuses and classify them here.</p>`;
+      return;
+    }
+    $("#gec-found-tag").textContent = slot.name;
+    if (gecFound.buffer !== slot.buffer) {
+      gecFound = { buffer: slot.buffer, rows: null, error: "" };
+      box.innerHTML = `<p class="foot" style="margin:0">Reading ${escapeHtml(slot.name)}…</p>`;
+      try {
+        await loadScriptOnce(XLSX_SRC);
+        const ds = Gec.parseBuffer(slot.buffer, { fileName: slot.name });
+        const counts = new Map();
+        ds.records.forEach((r) => {
+          const e = counts.get(r.status.toLowerCase()) || { status: r.status, label: r.statusLabel, count: 0 };
+          e.count += 1;
+          counts.set(r.status.toLowerCase(), e);
+        });
+        gecFound.rows = [...counts.values()].sort((a, b) => b.count - a.count);
+        gecFound.total = ds.records.length;
+      } catch (err) {
+        gecFound.error = err.message || String(err);
+      }
+      if (gecFound.buffer !== slot.buffer) return;
+    }
+    if (gecFound.error) { box.innerHTML = `<p class="foot" style="margin:0">Could not read the GEC File: ${escapeHtml(gecFound.error)}</p>`; return; }
+    if (!gecFound.rows) return;
+    Gec.setControl(gecDraft);
+    const STAGE = { visitor: "Visitor (registered)", lead: "Lead", converted: "Converted", unlisted: "Not classified → lead" };
+    const unlisted = gecFound.rows.filter((r) => Gec.classifyStatus(r.status) === "unlisted");
+    box.innerHTML = `<p class="foot" style="margin:0">${formatNumber(gecFound.total)} unique transactions · ${gecFound.rows.length} statuses${unlisted.length ? ` · <b class="gec-ctl-dirty">${unlisted.length} not classified</b>` : " · all classified"} · stage uses the rules above (including unsaved changes)</p>
+      <table class="gec-found-table"><thead><tr><th>Status</th><th class="num">Records</th><th>Stage</th><th>Add to</th></tr></thead><tbody>
+      ${gecFound.rows.map((r) => {
+        const stage = Gec.classifyStatus(r.status);
+        const name = r.status;
+        return `<tr><td>${escapeHtml(r.label)}</td><td class="num">${formatNumber(r.count)}</td>
+          <td><span class="stage s-${stage}">${STAGE[stage]}</span></td>
+          <td>${name ? GEC_GROUPS.map((g) => `<button type="button" class="btn" data-gec-found="${g.id}" data-name="${escapeHtml(name)}">${g.id[0].toUpperCase() + g.id.slice(1)}</button>`).join("") : '<span class="hint">blank status</span>'}</td></tr>`;
+      }).join("")}</tbody></table>`;
+  }
+
+  async function saveGecControl() {
+    const control = Gec.normalizeControl(gecDraft);
+    gecDraft = control;
+    setGecHint("Saving…", "busy");
+    let at = Date.now();
+    let serverOk = true;
+    try {
+      const res = await Store.saveGecControlToServer(control);
+      at = Number(res.at) || at;
+    } catch (err) {
+      serverOk = false;
+      showError(`GEC Control saved on this browser only — server: ${err.message || err}`);
+    }
+    Store.writeGecControl(control, at);
+    Store.notifyGecControl();
+    gecSaved = JSON.stringify(control);
+    renderGecControl();
+    renderGecFound();
+    setGecHint(serverOk ? `Saved · applied to every live GEC dashboard (${new Date(at).toLocaleTimeString()})` : "Saved on this browser only", serverOk ? "ok" : "err");
+    setStatus(serverOk ? "GEC Control saved" : "GEC Control saved locally", serverOk ? "ok" : "err");
   }
 
   async function onFileChosen(slotId, file) {
@@ -614,6 +807,10 @@
       await Store.syncFromServer();
       employeeTargets = loadEmployeeTargets();
       allocationValues = loadAllocationValues();
+      if (!gecDirty()) {
+        gecDraft = Gec.normalizeControl(Store.readGecControl());
+        gecSaved = JSON.stringify(gecDraft);
+      }
       renderTargetsPanel();
       renderAllocationPanel();
     } catch {
@@ -809,11 +1006,46 @@
     if (!input) return;
     onFileChosen(input.dataset.slot, input.files[0]);
   });
+  $("#gec-ctl-grid").addEventListener("change", (e) => {
+    const t = e.target.closest("[data-gec-toggle]");
+    if (!t) return;
+    const item = gecDraft[t.dataset.gecToggle][Number(t.dataset.i)];
+    if (item) item.enabled = t.checked;
+    renderGecControl();
+    renderGecFound();
+  });
+  $("#gec-ctl-grid").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-gec-remove]");
+    if (!b) return;
+    gecDraft[b.dataset.gecRemove].splice(Number(b.dataset.i), 1);
+    renderGecControl();
+    renderGecFound();
+  });
+  $("#gec-ctl-grid").addEventListener("submit", (e) => {
+    const form = e.target.closest("[data-gec-add]");
+    if (!form) return;
+    e.preventDefault();
+    addGecStatus(form.dataset.gecAdd, form.querySelector("input").value);
+  });
+  $("#gec-found").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-gec-found]");
+    if (b) addGecStatus(b.dataset.gecFound, b.dataset.name);
+  });
+  $("#gec-control-save").addEventListener("click", saveGecControl);
+  $("#gec-control-reset").addEventListener("click", () => {
+    if (!confirm("Reset GEC Control to the default status lists? (Click Save to apply.)")) return;
+    gecDraft = Gec.defaultControl();
+    renderGecControl();
+    renderGecFound();
+  });
 
   showAdminPanel("uploads");
   renderTargetsPanel();
   renderAllocationPanel();
-  hydrateFromStore().then(renderSlots);
+  hydrateFromStore().then(() => {
+    renderSlots();
+    if (!$("#panel-gec").hidden) { renderGecControl(); renderGecFound(); }
+  });
 })();
 </script>
 </body>

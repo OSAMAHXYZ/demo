@@ -15,9 +15,11 @@
   const ALLOCATION_PLAN_PUSH_KEY = "toyota_admin_allocation_plan_push_v1";
   const GEC_SLA_KEY = "toyota_admin_gec_sla_minutes_v1";
   const GEC_SLA_DEFAULT = 5;
+  const GEC_CONTROL_KEY = "toyota_admin_gec_control_v1";
   const CHANNEL = "toyota_targets_live";
   const API_META = "/api/report-sheet/meta";
   const API_PUSH = "/api/report-sheet/push";
+  const API_GEC_CONTROL = "/api/report-sheet/gec-control";
   const API_CLEAR = "/api/report-sheet/clear";
   const API_FILE = "/api/report-sheet/file";
 
@@ -101,6 +103,59 @@
     localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, at }));
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
     localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
+    applyGecControlFromMeta(meta);
+  }
+
+  // ---------- GEC CONTROL (visitor / lead / conversion status rules) ----------
+
+  function readGecControlEntry() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(GEC_CONTROL_KEY) || "null");
+      return raw && raw.control && typeof raw.control === "object" ? raw : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Saved GEC CONTROL rules, or null (= built-in defaults in gec-data.js). */
+  function readGecControl() {
+    const e = readGecControlEntry();
+    return e ? e.control : null;
+  }
+
+  function writeGecControl(control, at) {
+    if (!control) {
+      localStorage.removeItem(GEC_CONTROL_KEY);
+      return;
+    }
+    localStorage.setItem(GEC_CONTROL_KEY, JSON.stringify({ control, at: Number(at) || Date.now() }));
+  }
+
+  /** Server copy wins when it is at least as new as the local one. Returns true when local rules changed. */
+  function applyGecControlFromMeta(meta) {
+    if (!meta || !meta.gecControl || typeof meta.gecControl !== "object") return false;
+    const serverAt = Number(meta.gecControlAt) || 0;
+    const local = readGecControlEntry();
+    if (local && Number(local.at) > serverAt) return false;
+    if (local && JSON.stringify(local.control) === JSON.stringify(meta.gecControl)) return false;
+    writeGecControl(meta.gecControl, serverAt || Date.now());
+    return true;
+  }
+
+  /** Save GEC CONTROL rules for every laptop (does not touch the pushed files). */
+  async function saveGecControlToServer(control) {
+    const res = await fetch(API_GEC_CONTROL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gecControl: control || null }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+    return data;
+  }
+
+  function notifyGecControl() {
+    try { global.dispatchEvent(new CustomEvent("gec-control-updated")); } catch { /* ignore */ }
   }
 
   function normGecSla(v) {
@@ -253,6 +308,7 @@
     workingDays,
     allocationValues,
     gecSlaMinutes,
+    gecControl,
     filesBySlot,
   }) {
     const files = {};
@@ -273,6 +329,7 @@
         workingDays: Math.max(1, Number(workingDays) || 22),
         allocationValues: allocationValues || {},
         gecSlaMinutes: normGecSla(gecSlaMinutes),
+        gecControl: gecControl !== undefined ? gecControl : readGecControl(),
         files,
       }),
     });
@@ -311,6 +368,7 @@
     const checkMeta = async (reason) => {
       try {
         const meta = await fetchServerMeta();
+        if (applyGecControlFromMeta(meta)) notifyGecControl();
         const at = Number(meta && meta.at) || 0;
         if (at && at !== lastAt) {
           lastAt = at;
@@ -346,6 +404,8 @@
               lastAt = at;
               notify("Live sync — Admin Push");
             }
+          } else if (msg.type === "gec_control_updated") {
+            checkMeta("GEC CONTROL");
           }
         } catch {
           /* ignore */
@@ -398,6 +458,11 @@
     ALLOCATION_PLAN_PUSH_KEY,
     GEC_SLA_KEY,
     readGecSlaMinutes,
+    GEC_CONTROL_KEY,
+    readGecControl,
+    writeGecControl,
+    saveGecControlToServer,
+    notifyGecControl,
     CHANNEL,
     saveWorkbookFiles,
     loadWorkbookFiles,

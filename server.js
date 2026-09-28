@@ -356,8 +356,47 @@ function defaultReportSheetMeta() {
     workingDays: 22,
     allocationValues: {},
     gecSlaMinutes: 5,
+    gecControl: null,
+    gecControlAt: 0,
     fileNames: {}
   };
+}
+
+const GEC_CONTROL_GROUPS = ['visitor', 'lead', 'conversion'];
+
+/** Admin → GEC CONTROL rules: { visitor, lead, conversion: [{ name, enabled }] } or null when invalid. */
+function sanitizeGecControl(input) {
+  if (!input || typeof input !== 'object') return null;
+  if (!GEC_CONTROL_GROUPS.some((g) => Array.isArray(input[g]))) return null;
+  const out = {};
+  for (const g of GEC_CONTROL_GROUPS) {
+    const seen = new Set();
+    out[g] = (Array.isArray(input[g]) ? input[g] : [])
+      .map((x) => (typeof x === 'string' ? { name: x, enabled: true } : x))
+      .filter((x) => x && typeof x === 'object')
+      .map((x) => ({ name: String(x.name == null ? '' : x.name).replace(/\s+/g, ' ').trim().slice(0, 80), enabled: x.enabled !== false }))
+      .filter((x) => {
+        const k = x.name.toLowerCase();
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 80);
+  }
+  return out;
+}
+
+function broadcastGecControlUpdate(at) {
+  const payload = JSON.stringify({ type: 'gec_control_updated', at: at || Date.now() });
+  for (const client of wsClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
 function loadReportSheetMeta() {
@@ -378,9 +417,14 @@ function saveReportSheetMeta(meta) {
   fs.renameSync(tmp, REPORT_SHEET_META);
 }
 
+function reportSlotId(slot) {
+  const key = String(slot || '').trim().toLowerCase();
+  return REPORT_SLOT_IDS.find((id) => id.toLowerCase() === key) || null;
+}
+
 function reportSheetFilePath(slot) {
-  const id = String(slot || '').trim().toLowerCase();
-  if (!REPORT_SLOT_IDS.includes(id)) return null;
+  const id = reportSlotId(slot);
+  if (!id) return null;
   return path.join(REPORT_SHEET_FILES, id);
 }
 
@@ -4557,8 +4601,31 @@ app.get('/api/report-sheet/meta', (_req, res) => {
       ? meta.allocationValues
       : {},
     gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
+    gecControl: sanitizeGecControl(meta.gecControl),
+    gecControlAt: Number(meta.gecControlAt) || 0,
     fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {}
   });
+});
+
+/** Admin → GEC CONTROL: saves status rules only (pushed files and other settings stay untouched). */
+app.post('/api/report-sheet/gec-control', (req, res) => {
+  try {
+    const body = req.body || {};
+    const control = body.gecControl == null ? null : sanitizeGecControl(body.gecControl);
+    if (body.gecControl != null && !control) {
+      return res.status(400).json({ error: 'Invalid GEC CONTROL payload — expected { visitor, lead, conversion } lists' });
+    }
+    const meta = loadReportSheetMeta();
+    const at = Date.now();
+    meta.gecControl = control;
+    meta.gecControlAt = at;
+    saveReportSheetMeta(meta);
+    broadcastGecControlUpdate(at);
+    return res.json({ ok: true, at, gecControl: control });
+  } catch (err) {
+    console.error('[report-sheet/gec-control]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
 });
 
 app.get('/api/report-sheet/file/:slot', (req, res) => {
@@ -4567,7 +4634,7 @@ app.get('/api/report-sheet/file/:slot', (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
   const meta = loadReportSheetMeta();
-  const slot = String(req.params.slot || '').trim().toLowerCase();
+  const slot = reportSlotId(req.params.slot);
   const name = (meta.fileNames && meta.fileNames[slot]) || `${slot}.xlsx`;
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('X-Report-Sheet-Name', encodeURIComponent(name));
@@ -4584,6 +4651,10 @@ app.post('/api/report-sheet/push', (req, res) => {
     const filesIn = body.files && typeof body.files === 'object' ? body.files : {};
     const fileNames = {};
     const slots = [];
+    const prevMeta = loadReportSheetMeta();
+    const pushedControl = sanitizeGecControl(body.gecControl);
+    const prevControl = sanitizeGecControl(prevMeta.gecControl);
+    const controlChanged = !!pushedControl && JSON.stringify(pushedControl) !== JSON.stringify(prevControl);
 
     clearReportSheetFiles();
 
@@ -4631,6 +4702,8 @@ app.post('/api/report-sheet/push', (req, res) => {
         ? body.allocationValues
         : {},
       gecSlaMinutes: positiveOr(body.gecSlaMinutes, 5),
+      gecControl: pushedControl || prevControl,
+      gecControlAt: controlChanged ? at : (Number(prevMeta.gecControlAt) || 0),
       fileNames
     };
     saveReportSheetMeta(meta);
@@ -4660,8 +4733,12 @@ app.post('/api/report-sheet/push', (req, res) => {
 app.post('/api/report-sheet/clear', (_req, res) => {
   try {
     clearReportSheetFiles();
+    const prev = loadReportSheetMeta();
     const meta = defaultReportSheetMeta();
     meta.at = Date.now();
+    // GEC CONTROL is configuration, not pushed data — keep it.
+    meta.gecControl = sanitizeGecControl(prev.gecControl);
+    meta.gecControlAt = Number(prev.gecControlAt) || 0;
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(meta.at);
     return res.json({ ok: true, at: meta.at });
