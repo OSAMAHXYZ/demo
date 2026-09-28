@@ -26,7 +26,7 @@ const RTL_DAILY_FILES_DIR = path.join(RTL_DAILY_DIR, 'excel');
 const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
 const LEGACY_RTL_DAILY_DIR = path.join(ROOT, 'report-sheet-data', 'rtl-daily');
 const REPORT_SLOT_IDS = Object.freeze([
-  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec'
+  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors'
 ]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Timestamped snapshot id: 2026-09-09T14-30-05-123-ab12 (or legacy YYYY-MM-DD). */
@@ -339,6 +339,11 @@ function ensureReportSheetDirs() {
   if (!fs.existsSync(REPORT_SHEET_FILES)) fs.mkdirSync(REPORT_SHEET_FILES, { recursive: true });
 }
 
+function positiveOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 function defaultReportSheetMeta() {
   return {
     at: 0,
@@ -350,6 +355,7 @@ function defaultReportSheetMeta() {
     accessoriesSettled: 0,
     workingDays: 22,
     allocationValues: {},
+    gecSlaMinutes: 5,
     fileNames: {}
   };
 }
@@ -4550,6 +4556,7 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     allocationValues: meta.allocationValues && typeof meta.allocationValues === 'object'
       ? meta.allocationValues
       : {},
+    gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
     fileNames: meta.fileNames && typeof meta.fileNames === 'object' ? meta.fileNames : {}
   });
 });
@@ -4623,6 +4630,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       allocationValues: body.allocationValues && typeof body.allocationValues === 'object'
         ? body.allocationValues
         : {},
+      gecSlaMinutes: positiveOr(body.gecSlaMinutes, 5),
       fileNames
     };
     saveReportSheetMeta(meta);

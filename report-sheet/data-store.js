@@ -13,13 +13,15 @@
   const WORKING_DAYS_PUSH_KEY = "toyota_admin_working_days_push_v1";
   const ALLOCATION_PLAN_KEY = "toyota_admin_allocation_plan_v1";
   const ALLOCATION_PLAN_PUSH_KEY = "toyota_admin_allocation_plan_push_v1";
+  const GEC_SLA_KEY = "toyota_admin_gec_sla_minutes_v1";
+  const GEC_SLA_DEFAULT = 5;
   const CHANNEL = "toyota_targets_live";
   const API_META = "/api/report-sheet/meta";
   const API_PUSH = "/api/report-sheet/push";
   const API_CLEAR = "/api/report-sheet/clear";
   const API_FILE = "/api/report-sheet/file";
 
-  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories", "gec"];
+  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories", "gec", "gecVisitors"];
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -98,6 +100,21 @@
       : {};
     localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, at }));
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
+    localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
+  }
+
+  function normGecSla(v) {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : GEC_SLA_DEFAULT;
+  }
+
+  function readGecSlaMinutes() {
+    try {
+      const raw = localStorage.getItem(GEC_SLA_KEY);
+      return normGecSla(raw ? JSON.parse(raw).minutes : GEC_SLA_DEFAULT);
+    } catch {
+      return GEC_SLA_DEFAULT;
+    }
   }
 
   /**
@@ -235,6 +252,7 @@
     accessoriesSettled,
     workingDays,
     allocationValues,
+    gecSlaMinutes,
     filesBySlot,
   }) {
     const files = {};
@@ -254,6 +272,7 @@
         accessoriesSettled: Math.max(0, Number(accessoriesSettled) || 0),
         workingDays: Math.max(1, Number(workingDays) || 22),
         allocationValues: allocationValues || {},
+        gecSlaMinutes: normGecSla(gecSlaMinutes),
         files,
       }),
     });
@@ -377,6 +396,8 @@
     WORKING_DAYS_PUSH_KEY,
     ALLOCATION_PLAN_KEY,
     ALLOCATION_PLAN_PUSH_KEY,
+    GEC_SLA_KEY,
+    readGecSlaMinutes,
     CHANNEL,
     saveWorkbookFiles,
     loadWorkbookFiles,
