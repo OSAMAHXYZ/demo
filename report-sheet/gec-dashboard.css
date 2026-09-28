@@ -1,26 +1,47 @@
-/* GEC Control Center · one-screen executive dashboard (no page scroll at 1920×1080) */
-body.gec-mode { overflow: hidden !important; }
+/*
+ * Control Center design system · shared by the GEC Control Center and the Sales Control Center
+ * (both roots carry .gec-root). One screen at 1920×1080, no page scroll.
+ */
+body.gec-mode, body.sc-mode { overflow: hidden !important; }
 body:not(.gec-mode) > #gec-host { display: none; }
+body:not(.sc-mode) > #sales-host { display: none; }
 
 .gec-root {
-  --gec-bg: #070b12;
-  --gec-panel: #0d1420;
-  --gec-panel-2: #111a29;
-  --gec-line: rgba(148, 163, 184, 0.12);
-  --gec-line-2: rgba(148, 163, 184, 0.2);
-  --gec-text: #e7edf6;
-  --gec-muted: #8d9bb0;
-  --gec-dim: #5f6d82;
-  --gec-accent: #eb0a1e;
+  /* Design tokens */
+  --bg: #070b12;
+  --panel: #0d1420;
+  --panel-2: #111a29;
+  --panel-hover: #16223a;
+  --border: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.2);
+  --text: #e7edf6;
+  --muted: #8d9bb0;
+  --dim: #5f6d82;
+  --accent: #eb0a1e;
+  --info: #5aa9ff;
+  --success: #34d399;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  --radius: 12px;
+
+  --gec-bg: var(--bg);
+  --gec-panel: var(--panel);
+  --gec-panel-2: var(--panel-2);
+  --gec-line: var(--border);
+  --gec-line-2: var(--border-strong);
+  --gec-text: var(--text);
+  --gec-muted: var(--muted);
+  --gec-dim: var(--dim);
+  --gec-accent: var(--accent);
   --gec-visit: #a78bfa;
-  --gec-leads: #5aa9ff;
+  --gec-leads: var(--info);
   --gec-assigned: #8b9cff;
   --gec-resp: #22c3d6;
   --gec-so: #f2b24c;
-  --gec-conv: #34d399;
-  --gec-warn: #f59e0b;
-  --gec-bad: #f43f5e;
-  --gec-radius: 12px;
+  --gec-conv: var(--success);
+  --gec-warn: var(--warning);
+  --gec-bad: var(--danger);
+  --gec-radius: var(--radius);
   --gec-gap: clamp(6px, 0.85vh, 12px);
 
   position: fixed;
@@ -113,7 +134,7 @@ body:not(.gec-mode) > #gec-host { display: none; }
   font-size: 12px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap;
   transition: border-color 0.15s, background 0.15s;
 }
-.gec-btn:hover { border-color: rgba(90, 169, 255, 0.5); background: #16223a; }
+.gec-btn:hover { border-color: rgba(90, 169, 255, 0.5); background: var(--panel-hover); }
 .gec-btn:focus-visible, .gec-root [data-drill]:focus-visible, .gec-root .gec-rank-row:focus-visible { outline: 2px solid var(--gec-leads); outline-offset: 2px; }
 .gec-btn.is-icon { width: 30px; padding: 0; display: inline-grid; place-items: center; }
 .gec-btn.is-exit:hover { border-color: rgba(244, 63, 94, 0.6); }
@@ -369,22 +390,22 @@ body:not(.gec-mode) > #gec-host { display: none; }
 .gec-muted-val { color: var(--gec-dim); font-style: italic; }
 .gec-modal-foot { flex: none; padding: 8px 18px; border-top: 1px solid var(--gec-line); font-size: 11.5px; color: var(--gec-dim); }
 
-/* #gec-host scope outranks the page theme's table rules (class chains + !important) */
-#gec-host .gec-table { width: 100%; border-collapse: separate !important; border-spacing: 0 !important; font-size: 12.5px !important; background: transparent !important; }
-#gec-host .gec-table th {
+/* Host-ID scope outranks the page theme's table rules (class chains + !important) */
+:is(#gec-host, #sales-host) .gec-table { width: 100%; border-collapse: separate !important; border-spacing: 0 !important; font-size: 12.5px !important; background: transparent !important; }
+:is(#gec-host, #sales-host) .gec-table th {
   position: sticky; top: 0; z-index: 1; background: #101a2a !important; text-align: left;
   font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gec-muted) !important;
   padding: 9px 12px !important; border: 0 !important; border-bottom: 1px solid var(--gec-line-2) !important; white-space: nowrap; box-shadow: none !important;
 }
-#gec-host .gec-table td {
+:is(#gec-host, #sales-host) .gec-table td {
   padding: 7px 12px !important; background: transparent !important; color: var(--gec-text) !important; font-size: 12.5px !important;
   border: 0 !important; border-bottom: 1px solid rgba(148, 163, 184, 0.07) !important;
   white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle !important;
 }
-#gec-host .gec-table tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.015) !important; }
-#gec-host .gec-table tbody tr:hover td { background: rgba(90, 169, 255, 0.07) !important; }
-#gec-host .gec-table tbody tr:hover { background: transparent !important; }
-#gec-host .gec-table td.num, #gec-host .gec-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+:is(#gec-host, #sales-host) .gec-table tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.015) !important; }
+:is(#gec-host, #sales-host) .gec-table tbody tr:hover td { background: rgba(90, 169, 255, 0.07) !important; }
+:is(#gec-host, #sales-host) .gec-table tbody tr:hover { background: transparent !important; }
+:is(#gec-host, #sales-host) .gec-table td.num, :is(#gec-host, #sales-host) .gec-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .gec-table tr.is-click { cursor: pointer; }
 .gec-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--gec-line-2); color: var(--gec-muted); }
 .gec-pill.s-converted { color: var(--gec-conv); border-color: rgba(52, 211, 153, 0.4); }
@@ -419,8 +440,8 @@ body:not(.gec-mode) > #gec-host { display: none; }
 .gec-valid section h4 { padding: 0 12px; }
 .gec-pad { margin: 0; padding: 8px 12px; font-size: 12px; }
 .gec-dim { color: var(--gec-dim); }
-#gec-host .gec-table tr.is-bad td { background: rgba(244, 63, 94, 0.08) !important; }
-#gec-host .gec-table tr.is-total td { font-weight: 700 !important; border-top: 1px solid var(--gec-line-2) !important; }
+:is(#gec-host, #sales-host) .gec-table tr.is-bad td { background: rgba(244, 63, 94, 0.08) !important; }
+:is(#gec-host, #sales-host) .gec-table tr.is-total td { font-weight: 700 !important; border-top: 1px solid var(--gec-line-2) !important; }
 .gec-rules code { font-family: "Space Grotesk", monospace; color: var(--gec-text); font-size: 12px; }
 .gec-rules { padding: 0 18px 18px; font-size: 12.5px; color: var(--gec-muted); line-height: 1.6; }
 .gec-rules h4 { color: var(--gec-text); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; margin: 14px 0 6px; }
