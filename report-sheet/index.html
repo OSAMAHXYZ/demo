@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20260920force1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
@@ -1825,35 +1826,11 @@
   const ALLOCATION_PLAN_KEY = Store.ALLOCATION_PLAN_KEY;
   const ALLOCATION_PLAN_PUSH_KEY = Store.ALLOCATION_PLAN_PUSH_KEY;
   const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
-  const DEFAULT_EMPLOYEE_NAMES = [
-    "Samaher Abdulmoghni Al Amri",
-    "Haneen Talal Aqeel Al Madani",
-    "Not assigned",
-    "Wasim Kathem Awad",
-    "Ahmed Saleh Ahmed Binmahfoodh",
-    "Ghina Assad Alameer",
-    "Amjad Ahmed Alwafi",
-    "Ghadeer Abdulhadi Attia Altayyari",
-    "Maryam Salah Abdulrahman Tabakh",
-    "Muteb Abdullah Nasser Al Shehri",
-    "Mansuor Ali Al Qahtani",
-    "Ahmed Mahmoud Yousef Al Fitni",
-    "Mohammed Abkar Mohammed Abkar Negry",
-    "Mohammed Al Khateeb",
-    "Mohsen Zuhair Ali Al Attas",
-    "Fatmah Mohammed Alasseri",
-    "Essa Meraizeeq Almutairy",
-    "Moath Khalel Al Hjoouj",
-    "Khulood Abdulmajeed Albaloushi",
-    "Raoum Fahad Samkari",
-    "Alawiyyah Rafi Saad Al Shehri",
-    "Manal Moshref Almalki",
-    "Lujen Sami Saeed Bazhair",
-    "Muhannad Abdullah Makdour Minyawi",
-    "Maqbool Omar Ashour",
-    "Tawdod Al Sharef",
-    "Ali Muharraq A Alharbi",
-  ];
+  const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
+  const DEFAULT_EMPLOYEE_NAMES = EMPLOYEE_ROSTER.map((e) => e.name);
+  const EMPLOYEE_CODE_TO_NAME = new Map(
+    EMPLOYEE_ROSTER.filter((e) => e.code).map((e) => [String(e.code).replace(/^0+/, ""), e.name])
+  );
 
   /**
    * Canonical admin/target name → alternate spellings from Sales Raw / Cancelled / Excel.
@@ -1954,10 +1931,10 @@
 
   /** Plant / salesman code / notes defaults (Excel Month-to-Date columns) */
   const EMPLOYEE_META = {
-    "samaher abdulmoghni alamri": { plant: "Telesales North", code: "36684", note: "Vacation" },
-    "haneen talal aqeel almadani": { plant: "Telesales North", code: "36685", note: "Vacation" },
+    "samaher abdulmoghni alamri": { plant: "Telesales North", code: "", note: "Vacation" },
+    "haneen talal aqeel almadani": { plant: "Telesales North", code: "", note: "Vacation" },
     "not assigned": { plant: "eCommerce Sales – Retail", code: "", note: "Vacation" },
-    "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "12020", note: "Fleet" },
+    "wasim kathem awad": { plant: "eCommerce Sales – Retail", code: "", note: "Fleet" },
   };
 
   /**
@@ -2054,6 +2031,11 @@
     Object.keys(EMPLOYEE_NAME_ALIASES).forEach((canon) => {
       registerNameGroup(map, canon, EMPLOYEE_NAME_ALIASES[canon]);
       rosterKeys.add(normalizeNameLoose(canon));
+    });
+    EMPLOYEE_ROSTER.forEach((e) => {
+      if (!e.aliases || !e.aliases.length) return;
+      registerNameGroup(map, e.name, e.aliases);
+      rosterKeys.add(normalizeNameLoose(e.name));
     });
 
     // 2) Roster / admin targets fold into alias groups when they match any spelling
@@ -2167,9 +2149,49 @@
     return { canonical: scored[0].canonical, key: scored[0].key };
   }
 
+  /** Known HR employee ID in a cell ("49602", "49602 - Name", "Name (49602)") → roster name. */
+  function employeeNameFromCode(v) {
+    const nums = String(v ?? "").match(/(?<!\d)\d{4,7}(?!\d)/g);
+    if (!nums) return "";
+    for (const n of nums) {
+      const name = EMPLOYEE_CODE_TO_NAME.get(n.replace(/^0+/, ""));
+      if (name) return name;
+    }
+    return "";
+  }
+
+  const EMPLOYEE_CODE_HEADER = /salesman[\s._-]*(code|id|no|number)|employee[\s._-]*(code|id|no|number)|\bemp[\s._-]*(code|id|no)\b|staff[\s._-]*(id|no|number)|رقم\s*(الموظف|البائع)/;
+
+  /** Employee from a salesman / employee code column (headers aligned with cells). */
+  function employeeNameFromCodeCells(headers, cells) {
+    for (let i = 0; i < headers.length; i += 1) {
+      if (!EMPLOYEE_CODE_HEADER.test(normHeader(headers[i]))) continue;
+      const name = employeeNameFromCode(cells[i]);
+      if (name) return name;
+    }
+    return "";
+  }
+
+  function employeeNameFromCodeFields(row) {
+    if (!row) return "";
+    return employeeNameFromCodeCells(Object.keys(row), Object.values(row));
+  }
+
+  function employeeCodeForName(name) {
+    const key = nameKey(name);
+    if (!key) return "";
+    const hit = EMPLOYEE_ROSTER.find((e) => e.code && nameKey(e.name) === key);
+    return hit ? hit.code : "";
+  }
+
   function resolveEmployeeIdentity(name) {
     const loose = normalizeNameLoose(name);
     if (!loose) return null;
+    const byCode = employeeNameFromCode(name);
+    if (byCode) {
+      const codeKey = normalizeNameLoose(byCode);
+      return NAME_IDENTITY_MAP.get(codeKey) || { canonical: byCode, key: codeKey };
+    }
     if (NAME_IDENTITY_MAP.has(loose)) return NAME_IDENTITY_MAP.get(loose);
     if (loose === "not assigned" || loose === "unassigned" || loose === "eb2c" || loose === "b2c") {
       const canon = "Not assigned";
@@ -2214,7 +2236,9 @@
 
   function employeeMeta(name) {
     const key = nameKey(name);
-    return EMPLOYEE_META[key] || { plant: "eCommerce Sales – Retail", code: "", note: "" };
+    const meta = EMPLOYEE_META[key] || { plant: "eCommerce Sales – Retail", code: "", note: "" };
+    const code = employeeCodeForName(name);
+    return code ? { ...meta, code } : meta;
   }
 
   function isPlaceholderName(name) {
@@ -3077,7 +3101,8 @@
       const vin = extractVinValue(line[idxI]);
       if (!vin) continue;
 
-      const salesman = resolveSalesmanName(cellToString(line[idxSalesman]).trim());
+      const salesman = employeeNameFromCodeCells(uniqueHeaders, line)
+        || resolveSalesmanName(cellToString(line[idxSalesman]).trim());
       if (!salesman) continue;
 
       const obj = {
@@ -3180,7 +3205,8 @@
       if (!amount) continue;
 
       const vin = extractVinValue(line[idxI]) || upperTrim(cellToString(line[idxI]));
-      const salesman = resolveSalesmanName(cellToString(line[idxL]).trim());
+      const salesman = employeeNameFromCodeCells(uniqueHeaders, line)
+        || resolveSalesmanName(cellToString(line[idxL]).trim());
       const obj = {
         vin,
         amount,
@@ -3802,6 +3828,11 @@
       });
       if (plantIdx >= 0) obj.plant = cellToString(line[plantIdx]).trim();
       if (codeIdx >= 0) obj.salesmanCode = cellToString(line[codeIdx]).trim();
+      const codeName = employeeNameFromCode(obj.salesmanCode) || employeeNameFromCodeCells(headers, line);
+      if (codeName) {
+        obj.salesman = codeName;
+        obj._salesmanRaw = codeName;
+      }
 
       // Prefer VIN column by header name, else scan row for a 17-char VIN
       const vinHeaderIdx = headers.findIndex((h) => {
@@ -4182,7 +4213,7 @@
         id: i,
         boNumber: cellToString(get(r, "boNumber")),
         customer: maskPersonName(cellToString(get(r, "customer"))),
-        salesman: resolveSalesmanName(get(r, "salesman")),
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(get(r, "salesman")),
         product: product || "—",
         category,
         year: cellToString(get(r, "year")),
@@ -14493,7 +14524,7 @@
       const year = boeYearValue(r, get);
       const yearLetter = boeYearColLetter(r);
       const boNumber = colF || cellToString(get(r, "boNumber")).trim();
-      const salesman = resolveSalesmanName(get(r, "salesman"));
+      const salesman = employeeNameFromCodeFields(r) || resolveSalesmanName(get(r, "salesman"));
 
       const errors = [];
       const errorLetters = new Set();
@@ -15743,7 +15774,7 @@
         ext,
         int: intc,
         key: makeKey(product, suffix, year, ext, intc),
-        salesman: resolveSalesmanName(getBo(r, "salesman")),
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(getBo(r, "salesman")),
         boNumber: cellToString(getBo(r, "boNumber")),
         orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
         orderTs: orderDate ? orderDate.getTime() : idx,
@@ -16079,7 +16110,7 @@
         product,
         suffix,
         pairs,
-        salesman: resolveSalesmanName(getBo(r, "salesman")),
+        salesman: employeeNameFromCodeFields(r) || resolveSalesmanName(getBo(r, "salesman")),
         boNumber: cellToString(getBo(r, "boNumber") || cellByLetter(r, "A")),
         orderDate: orderDate ? cellToString(orderDate) : cellToString(orderRaw),
         orderTs: orderDate ? orderDate.getTime() : idx,

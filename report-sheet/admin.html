@@ -7,10 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="dashboard.css?v=20260914eu2" />
+  <link rel="stylesheet" href="dashboard.css?v=20260928id1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
+  <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js"></script>
   <script src="allocation-plan-data.js"></script>
 </head>
@@ -189,35 +190,8 @@
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
   ];
 
-  const DEFAULT_EMPLOYEE_NAMES = [
-    "Samaher Abdulmoghni Al Amri",
-    "Haneen Talal Aqeel Al Madani",
-    "Not assigned",
-    "Wasim Kathem Awad",
-    "Ahmed Saleh Ahmed Binmahfoodh",
-    "Ghina Assad Alameer",
-    "Amjad Ahmed Alwafi",
-    "Ghadeer Abdulhadi Attia Altayyari",
-    "Maryam Salah Abdulrahman Tabakh",
-    "Muteb Abdullah Nasser Al Shehri",
-    "Mansuor Ali Al Qahtani",
-    "Ahmed Mahmoud Yousef Al Fitni",
-    "Mohammed Abkar Mohammed Abkar Negry",
-    "Mohammed Al Khateeb",
-    "Mohsen Zuhair Ali Al Attas",
-    "Fatmah Mohammed Alasseri",
-    "Essa Meraizeeq Almutairy",
-    "Moath Khalel Al Hjoouj",
-    "Khulood Abdulmajeed Albaloushi",
-    "Raoum Fahad Samkari",
-    "Alawiyyah Rafi Saad Al Shehri",
-    "Manal Moshref Almalki",
-    "Lujen Sami Saeed Bazhair",
-    "Muhannad Abdullah Makdour Minyawi",
-    "Maqbool Omar Ashour",
-    "Tawdod Al Sharef",
-    "Ali Muharraq A Alharbi",
-  ];
+  const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
+  const DEFAULT_EMPLOYEE_NAMES = EMPLOYEE_ROSTER.map((e) => e.name);
   const EMPLOYEE_COUNT = DEFAULT_EMPLOYEE_NAMES.length;
   const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({ id: i + 1, name, target: 0 }));
 
@@ -253,6 +227,13 @@
   }
   function isPlaceholderName(name) {
     return /^Employee\s*\d+$/i.test(String(name || "").trim());
+  }
+  function employeeCodeFor(name) {
+    const norm = (v) => String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const n = norm(name);
+    if (!n) return "";
+    const hit = EMPLOYEE_ROSTER.find((e) => [e.name, ...(e.aliases || [])].some((x) => norm(x) === n));
+    return hit ? hit.code : "";
   }
   function detectFileType(file) {
     const name = (file.name || "").toLowerCase();
@@ -526,13 +507,15 @@
       <div class="admin-side-stat"><span>Total target</span><b>${formatNumber(totalTarget)}</b></div>
     `;
     $("#target-grid").innerHTML = employeeTargets.map((e, i) => {
-      const hidden = q && !String(e.name).toLowerCase().includes(q) ? ' style="display:none"' : "";
+      const code = employeeCodeFor(e.name);
+      const hidden = q && !String(e.name).toLowerCase().includes(q) && !code.includes(q) ? ' style="display:none"' : "";
       const onVac = !!e.vacation;
       const onGuest = !!e.guestExpCenter;
       return `<div class="target-row${onVac ? " is-vacation" : ""}${onGuest ? " is-guest" : ""}"${hidden}>
         <div class="idx">${e.id}</div>
         <input data-emp-name="${i}" type="text" value="${escapeHtml(e.name || DEFAULT_EMPLOYEES[i].name)}" placeholder="Employee name" autocomplete="off" />
         <div class="target-row-controls">
+          ${code ? `<span class="target-emp-code" title="Employee ID">ID ${escapeHtml(code)}</span>` : ""}
           <label class="target-vacation" title="Target counts as 0 · shows VACATION on report">
             <input data-emp-vacation="${i}" type="checkbox"${onVac ? " checked" : ""} />
             <span>Vacation</span>
