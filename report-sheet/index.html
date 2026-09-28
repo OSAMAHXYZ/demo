@@ -2776,6 +2776,17 @@
     return "";
   }
 
+  /** Row arrays where index 0 is always Excel Col A, even when the used range starts at B+ (blank Col A). */
+  function sheetMatrixFromColA(sheet) {
+    const opts = { header: 1, defval: "", blankrows: false, raw: true, cellDates: true };
+    try {
+      const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+      range.s.c = 0;
+      opts.range = range;
+    } catch { /* fall back to the sheet's own range */ }
+    return XLSX.utils.sheet_to_json(sheet, opts);
+  }
+
   function sheetRows(workbook, sheetName) {
     if (!sheetName || !workbook.Sheets[sheetName]) return [];
     const sheet = workbook.Sheets[sheetName];
@@ -3036,9 +3047,7 @@
       names[0];
     if (!workbook.Sheets[preferred]) return [];
 
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
-      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
-    });
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
     if (!matrix.length) return [];
 
     let headerIdx = 0;
@@ -3164,9 +3173,7 @@
     const preferred = accessoriesVsndSheetName(workbook);
     if (!preferred || !workbook.Sheets[preferred]) return [];
 
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
-      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
-    });
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
     if (!matrix.length) return [];
 
     let headerIdx = 0;
@@ -3211,6 +3218,7 @@
         vin,
         amount,
         salesman,
+        _colL: salesman,
         _sheet: preferred,
         _kind: "vsnd",
         __cells: line,
@@ -3229,37 +3237,36 @@
     const preferred = names[0];
     if (!workbook.Sheets[preferred]) return [];
 
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
-      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
-    });
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
     if (!matrix.length) return [];
-
-    let headerIdx = 0;
-    let bestHits = -1;
-    const markers = ["vin", "chassis", "amount", "accessories", "accessory", "date"];
-    const scanLimit = Math.min(matrix.length, 40);
-    for (let i = 0; i < scanLimit; i += 1) {
-      const cells = (matrix[i] || []).map((c) => normHeader(c));
-      if (!cells.some(Boolean)) continue;
-      const hits = markers.filter((m) => cells.some((c) => c === m || c.includes(m))).length;
-      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
-      if (hits >= 2) break;
-    }
 
     // Fixed letters per business rule: D = VIN, L = amount (headers only for optional date)
     const idxD = colLetterToIndex("D");
     const idxL = colLetterToIndex("L");
-    let idxDate = -1;
-    const headerRow = matrix[headerIdx] || [];
-    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
-    const findHeaderIdx = (tests) => headers.findIndex((h) => tests.some((t) => t(normHeader(h))));
 
-    const headerVin = findHeaderIdx([
-      (n) => n === "vin" || n === "vin no" || n === "vin number" || n === "chassis",
-      (n) => n.includes("vin") || n.includes("chassis"),
-    ]);
+    // Header = last non-empty row above the first row with a VIN in Col D (skips title / report-date rows)
+    const firstDataIdx = matrix.findIndex((line) => !!extractVinValue((line || [])[idxD]));
+    let headerIdx = -1;
+    for (let i = (firstDataIdx < 0 ? Math.min(matrix.length, 1) : firstDataIdx) - 1; i >= 0; i -= 1) {
+      if ((matrix[i] || []).some((c) => cellToString(c).trim() !== "")) { headerIdx = i; break; }
+    }
+
+    let idxDate = -1;
+    const headerRow = headerIdx >= 0
+      ? (matrix[headerIdx] || [])
+      : new Array(Math.max(idxL + 1, (matrix[0] || []).length)).fill("");
+    const headers = headerRow.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
+    const findHeaderIdx = (tests) => {
+      for (const t of tests) {
+        const i = headers.findIndex((h, j) => j !== idxD && j !== idxL && t(normHeader(h)));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
     const headerDate = findHeaderIdx([
-      (n) => n.includes("date") || n === "order date" || n === "transaction date",
+      (n) => n === "date" || n === "التاريخ",
+      (n) => /(invoice|transaction|sales|order|posting)\s*date/.test(n) || /تاريخ\s*(الفاتورة|البيع)/.test(n),
+      (n) => n.includes("date") || n.includes("تاريخ"),
     ]);
     if (headerDate >= 0) idxDate = headerDate;
 
@@ -3271,7 +3278,7 @@
     });
     const width = Math.max(uniqueHeaders.length, idxL + 1, idxD + 1, idxDate + 1);
 
-    const start = bestHits >= 1 || headerVin >= 0 ? headerIdx + 1 : 1;
+    const start = headerIdx + 1;
     const rows = [];
     for (let r = start; r < matrix.length; r += 1) {
       const line = padCells(matrix[r] || [], width);
@@ -3306,17 +3313,40 @@
       if (!vin) return;
       const name = resolveSalesmanName(r._salesmanRaw || r.salesman);
       if (!name) return;
-      // Prefer first non-empty; keep stable for duplicates
-      if (!map.has(vin)) map.set(vin, name);
+      // First row wins, unless a later row names a real roster employee instead of Not assigned / unknown
+      if (!map.has(vin) || salesmanMatchRank(name) > salesmanMatchRank(map.get(vin))) map.set(vin, name);
     });
     return map;
   }
 
-  function accessorySalesmanForRow(r, vinMap) {
+  /** 2 = roster employee · 1 = named but not on roster · 0 = Not assigned / blank */
+  function salesmanMatchRank(name) {
+    const key = nameKey(name);
+    if (!key || key === normalizeNameLoose("Not assigned")) return 0;
+    return isRosterEmployee(name) ? 2 : 1;
+  }
+
+  /** VIN → salesman from the Accessories VSND sheet (Col L employee). */
+  function accessoriesVsndVinEmployeeMap() {
+    const map = new Map();
+    (slots.accessories.vsndRows || []).forEach((r) => {
+      const vin = extractVinValue(r && r.vin);
+      const name = vin ? resolveSalesmanName(r.salesman) : "";
+      if (!name) return;
+      if (!map.has(vin) || salesmanMatchRank(name) > salesmanMatchRank(map.get(vin))) map.set(vin, name);
+    });
+    return map;
+  }
+
+  /** Sales Raw VIN owner first, then Accessories VSND sheet · unmatched VINs → Not assigned so totals equal the file. */
+  function accessorySalesmanForRow(r, vinMap, vsndMap) {
     if (!r) return "";
     const vin = extractVinValue(r.vin);
-    if (vin && vinMap && vinMap.has(vin)) return vinMap.get(vin);
-    return resolveSalesmanName(r.salesman) || "";
+    const candidates = [
+      vin && vinMap ? vinMap.get(vin) : "",
+      vin && vsndMap ? vsndMap.get(vin) : "",
+    ].filter(Boolean);
+    return candidates.find((n) => salesmanMatchRank(n) === 2) || candidates[0] || "Not assigned";
   }
 
   function colLetterToIndex(letter) {
@@ -3696,9 +3726,7 @@
       names[0];
     if (!workbook.Sheets[preferred]) return [];
 
-    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[preferred], {
-      header: 1, defval: "", blankrows: false, raw: true, cellDates: true,
-    });
+    const matrix = sheetMatrixFromColA(workbook.Sheets[preferred]);
     if (!matrix.length) return [];
 
     let headerIdx = 0;
@@ -4559,19 +4587,19 @@
     const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
     const useSettledPool = settled > 0 && totalAdminTarget > 0;
     const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
+    const vsndMap = accessoriesVsndVinEmployeeMap();
     const soldByKey = new Map();
     let matchedRows = 0;
     let unmatchedVin = 0;
     (slots.accessories.rows || []).forEach((r) => {
       if (!accessoriesInPeriod(r, live, prevMonthKey)) return;
-      const salesman = accessorySalesmanForRow(r, vinMap);
+      const vin = extractVinValue(r.vin);
+      if (!vinMap.has(vin) && !vsndMap.has(vin)) unmatchedVin += 1;
+      else matchedRows += 1;
+      const salesman = accessorySalesmanForRow(r, vinMap, vsndMap);
       r.salesman = salesman; // keep detail tables / filters in sync
       const key = nameKey(salesman);
-      if (!key) {
-        unmatchedVin += 1;
-        return;
-      }
-      matchedRows += 1;
+      if (!key) return;
       soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
     });
 
@@ -4581,17 +4609,16 @@
     (slots.accessories.vsndRows || []).forEach((r) => {
       const amount = Number(r.amount) || 0;
       if (!amount) return;
-      let salesman = resolveSalesmanName(r.salesman);
-      if (!salesman) {
-        const vin = extractVinValue(r.vin);
-        if (vin && vinMap.has(vin)) salesman = vinMap.get(vin);
-      }
-      r.salesman = salesman || r.salesman || "";
+      const vin = extractVinValue(r.vin);
+      const candidates = [
+        resolveSalesmanName(r._colL != null ? r._colL : r.salesman),
+        vin ? vinMap.get(vin) : "",
+      ].filter(Boolean);
+      if (!candidates.length) progressUnmatched += 1;
+      const salesman = candidates.find((n) => salesmanMatchRank(n) === 2) || candidates[0] || "Not assigned";
+      r.salesman = salesman;
       const key = nameKey(salesman);
-      if (!key) {
-        progressUnmatched += 1;
-        return;
-      }
+      if (!key) return;
       progressRows += 1;
       progressByKey.set(key, (progressByKey.get(key) || 0) + amount);
     });
@@ -4771,9 +4798,10 @@
 
   function accessoriesRawRowsForSalesman(key, live, prevMonthKey) {
     const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
+    const vsndMap = accessoriesVsndVinEmployeeMap();
     return (slots.accessories.rows || []).filter((r) => {
       if (!accessoriesInPeriod(r, live, prevMonthKey)) return false;
-      const salesman = accessorySalesmanForRow(r, vinMap);
+      const salesman = accessorySalesmanForRow(r, vinMap, vsndMap);
       r.salesman = salesman;
       return nameKey(salesman) === key;
     });
