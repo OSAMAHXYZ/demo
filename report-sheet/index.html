@@ -10,7 +10,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20260920force1"></script>
+  <script src="data-store.js?v=20260928gec1"></script>
+  <script src="gec-data.js?v=20260928gec2"></script>
+  <script src="gec-dashboard.js?v=20260928gec2"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
@@ -20,6 +22,7 @@
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
+  <link rel="stylesheet" href="gec-dashboard.css?v=20260928gec2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -101,6 +104,9 @@
 
     <section id="dashboard">
       <!-- Panel tabs are rendered in the left sidebar (#panel-tabs) -->
+
+      <!-- PANEL: GEC Control Center (full-viewport overlay, see gec-dashboard.css) -->
+      <div class="panel-section" id="panel-gec" style="display:none"><div id="gec-host"></div></div>
 
       <!-- PANEL: Summary · Delivered vs Proforma -->
       <div class="panel-section dvp-summary" id="panel-summary" style="display:none">
@@ -1813,6 +1819,7 @@
     { id: "sales", n: 4, title: "Sales Raw Data", ar: "بيانات المبيعات", blurb: "Required for Sales Report · Col A name · P proforma · V delivery" },
     { id: "cancelled", n: 5, title: "Cancelled BOs", ar: "أوامر ملغاة", blurb: "Cancelled list · Col I VIN · all rows · duplicates included" },
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
+    { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Guest Experience Center leads · GEC Dashboard" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -4521,13 +4528,17 @@
         const f = payload.files[d.id];
         if (!f || !f.buffer) continue;
         const wb = bufferToWorkbook(f.name, f.buffer, { firstSheetOnly: d.id === "backorder" });
-        const rows = rowsForSlot(d.id, wb);
+        const gecDataset = d.id === "gec" && window.GecData
+          ? window.GecData.parseWorkbook(wb, { fileName: f.name })
+          : null;
+        const rows = gecDataset ? gecDataset.records : rowsForSlot(d.id, wb);
         const slot = {
           file: { name: f.name, size: f.size || f.buffer.byteLength },
           rows,
           name: f.name,
           sheet: d.id === "backorder" ? ((wb.SheetNames || [])[0] || "") : "",
         };
+        if (gecDataset) slot.gec = gecDataset;
         if (d.id === "central") {
           slot.reservedRows = esalesReservedStockRows(wb);
           slot.reservedSheet = esalesReservedSheetName(wb) || "";
@@ -6782,6 +6793,7 @@
   const PANEL_DEFS = [
     { id: "summary", label: "Summary · Del vs Prof" },
     { id: "salesreport", label: "Sales Dashboard" },
+    { id: "gec", label: "GEC Dashboard" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
@@ -6792,6 +6804,7 @@
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
   let activePanel = "salesreport";
+  let panelBeforeGec = "";
 
   function hasSalesRaw() {
     return slotHasRows("sales");
@@ -6831,6 +6844,7 @@
       if (p.id === "reservedvehicles") return true;
       if (p.id === "allocationaudit") return true;
       if (p.id === "plantracker") return true;
+      if (p.id === "gec") return true;
       if (p.id === "boerrors") return true;
       // BO + Allocation + Stock & BO Dashboard always visible — empty state when files missing
       return true;
@@ -7440,12 +7454,28 @@
     });
   }
 
+  function renderGecPanel() {
+    const host = $("#gec-host");
+    if (!host || !window.GecDashboard) return;
+    if (host.parentNode !== document.body) document.body.appendChild(host);
+    window.GecDashboard.render(host, (slots.gec && slots.gec.gec) || null, {
+      lastUpdated: Number(Store.readDataPushStamp().at) || 0,
+      onRefresh: () => refreshFromAdmin("Refreshed", { force: true }),
+      onExit: () => {
+        const others = visiblePanels().filter((p) => p.id !== "gec").map((p) => p.id);
+        switchPanel(others.includes(panelBeforeGec) ? panelBeforeGec : (others[0] || "dashboard"));
+      },
+    });
+  }
+
   function switchPanel(panelId) {
     const panels = visiblePanels();
     if (!panels.some((p) => p.id === panelId)) {
       panelId = panels[0] ? panels[0].id : "dashboard";
     }
+    if (panelId === "gec" && activePanel !== "gec") panelBeforeGec = activePanel;
     activePanel = panelId;
+    document.body.classList.toggle("gec-mode", panelId === "gec");
     PANEL_DEFS.forEach((p) => {
       const el = document.getElementById("panel-" + p.id);
       if (el) el.style.display = p.id === panelId ? "" : "none";
@@ -7453,6 +7483,7 @@
     const iconMap = {
       summary: "◫",
       salesreport: "▣",
+      gec: "✦",
       bodashboard: "▤",
       boerrors: "⚠",
       boallocstock: "▦",
@@ -7482,6 +7513,7 @@
       dateEl.textContent = `TOYOTA · ${d}`;
     }
     if (panelId === "summary") renderSummaryDashboard();
+    if (panelId === "gec") renderGecPanel();
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "allocationaudit") renderAllocationAudit();
     if (panelId === "plantracker") renderPlanTrackerPanel();
@@ -21529,14 +21561,18 @@
     const navDash = $("#nav-dashboard");
     if (navDash) navDash.disabled = false;
     switchNav("dashboard");
-    if (hasSalesReportInputs()) activePanel = "salesreport";
+    const hasGec = !!(slots.gec && slots.gec.gec && slots.gec.gec.records && slots.gec.gec.records.length);
+    const onlyGec = hasGec && SLOT_DEFS.every((s) => s.id === "gec" || !(slots[s.id] && slots[s.id].file));
+    if (activePanel === "gec" || onlyGec) activePanel = "gec";
+    else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
     else activePanel = "dashboard"; // stock-only (or no preferred inputs) → Stock & BO Dashboard, not Stock Dashboard
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
 
     const paintActive = () => {
-      if (activePanel === "summary") renderSummaryDashboard();
+      if (activePanel === "gec") renderGecPanel();
+      else if (activePanel === "summary") renderSummaryDashboard();
       else if (activePanel === "salesreport" && hasSalesReportInputs()) {
         window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
         renderSalesReportKpis(d.salesReport);
