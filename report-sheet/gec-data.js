@@ -531,11 +531,49 @@
 
   // ==================== Parse ====================
 
-  function readWorkbook(buffer, fileName) {
-    if (/\.csv$/i.test(String(fileName || ""))) {
-      return global.XLSX.read(new TextDecoder("utf-8").decode(buffer), { type: "string", cellDates: false });
+  /** CSV bytes → text. CRM exports arrive as UTF-8 (± BOM), UTF-16 (“Unicode Text”) or Windows-1256 (Arabic). */
+  function decodeText(bytes) {
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+    const n = Math.min(bytes.length, 4000);
+    let oddNul = 0;
+    let evenNul = 0;
+    for (let i = 0; i < n; i += 1) if (!bytes[i]) { if (i % 2) oddNul += 1; else evenNul += 1; }
+    if (oddNul > n / 8) return new TextDecoder("utf-16le").decode(bytes);
+    if (evenNul > n / 8) return new TextDecoder("utf-16be").decode(bytes);
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return new TextDecoder("windows-1256").decode(bytes);
     }
-    return global.XLSX.read(buffer, { type: "array", cellDates: false });
+  }
+
+  /** Field separator of a delimited text file: the one that splits the first lines most (outside quotes). */
+  function guessDelimiter(text) {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim()).slice(0, 5);
+    const counts = { ",": 0, ";": 0, "\t": 0, "|": 0 };
+    lines.forEach((line) => {
+      let quoted = false;
+      for (const ch of line) {
+        if (ch === '"') quoted = !quoted;
+        else if (!quoted && counts[ch] != null) counts[ch] += 1;
+      }
+    });
+    return Object.keys(counts).reduce((a, b) => (counts[b] > counts[a] ? b : a), ",");
+  }
+
+  function readWorkbook(buffer, fileName) {
+    const bytes = new Uint8Array(buffer);
+    const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+    const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+    if (zip || ole || !/\.(csv|tsv|txt)$/i.test(String(fileName || ""))) {
+      return global.XLSX.read(buffer, { type: "array", cellDates: false });
+    }
+    let text = decodeText(bytes);
+    if (/^\s*</.test(text)) return global.XLSX.read(text, { type: "string", cellDates: false });
+    const sep = /^sep=(.)\r?\n/i.exec(text);
+    if (sep) text = text.slice(sep[0].length);
+    return global.XLSX.read(text, { type: "string", cellDates: false, FS: sep ? sep[1] : guessDelimiter(text) });
   }
 
   /** GEC File (ArrayBuffer) → lead dataset (+ visitors when the workbook has a visitor sheet). */
