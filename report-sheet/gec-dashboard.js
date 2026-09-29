@@ -1,11 +1,16 @@
 /**
  * GEC Control Center · one-screen light executive dashboard (presentation only — rules live in gec-data.js).
  * Fixed 100vh layout, no page scroll; detail lives in modals (the only scrolling surface).
- * Usage: GecDashboard.render(hostEl, leadDataset, { visitors, control, lastUpdated, onRefresh, onExit })
+ * Usage: GecDashboard.render(hostEl, leadDataset, { visitors, sales, backorder, control, lastUpdated, onRefresh, onExit })
  */
 (function (global) {
   const Data = () => global.GecData;
   const cfg = () => Data().config;
+  /** Letter of the detected “Employee Number” column (it can move between files). */
+  const empCol = () => {
+    const m = state.dataset && state.dataset.mapping.find((x) => x.key === "employeeNumber");
+    return (m && m.letter) || cfg().EMPLOYEE_NUMBER_COLUMN;
+  };
 
   const EMPTY_FILTERS = { from: "", to: "", promoter: "", model: "", source: "", status: "", consultant: "", purpose: "" };
 
@@ -14,6 +19,8 @@
     root: null,
     dataset: null,
     visitors: null,
+    orders: null,
+    orderSrc: { sales: null, bo: null },
     ctx: {},
     sig: "",
     filters: { ...EMPTY_FILTERS },
@@ -93,6 +100,7 @@
     route: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
     funnel: '<path d="M22 3H2l8 9.46V19l4 2v-8.54z"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    car: '<path d="M5 17H3v-4.5a2 2 0 0 1 .6-1.4L6 9l1.6-3.2A2 2 0 0 1 9.4 5h5.2a2 2 0 0 1 1.8 1.1L18 9l2.4 2.1a2 2 0 0 1 .6 1.4V17h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5M6 9h12"/>',
   };
   const icon = (name, cls) => `<svg class="gcc-ic${cls ? ` ${cls}` : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 
@@ -101,16 +109,17 @@
     { key: "total", label: "Registered Leads", icon: "lead", tone: "blue", spark: "leads" },
     { key: "visitorToLead", label: "Visitor → Lead", icon: "trend", tone: "indigo", spark: "v2l", rate: true },
     { key: "responded", label: "Sales Response", icon: "msg", tone: "cyan", spark: "responded" },
-    { key: "salesOrders", label: "Sales Orders", icon: "receipt", tone: "amber", spark: "salesOrders" },
     { key: "converted", label: "Converted", icon: "check", tone: "green", spark: "converted" },
-    { key: "assignmentErrors", label: "Assignment Errors", icon: "alert", tone: "rose", side: true },
+    { key: "assignmentErrors", label: "No Promoter Assigned", icon: "alert", tone: "rose", side: true },
+    { key: "noProduct", label: "No Product", icon: "car", tone: "rose", side: true },
   ];
 
   const DRILL_TITLES = {
     total: "Registered leads (unique Transaction No.)",
-    knownPromoter: "Leads assigned to an official promoter (column R)",
-    assignmentErrors: "Assignment Errors · customers with no promoter assignment (column R blank)",
-    invalidPromoter: "Invalid Promoter · column R has a value that is not an official promoter number",
+    get knownPromoter() { return `Leads assigned to an official promoter (Employee Number · column ${empCol()})`; },
+    get assignmentErrors() { return `No promoter assigned · customers with Employee Number (column ${empCol()}) blank`; },
+    noProduct: "No product · customers with column D or column G blank",
+    get invalidPromoter() { return `Invalid Promoter · Employee Number (column ${empCol()}) is not an official promoter number`; },
     responded: "Leads with a Sales Response",
     responseRate: "Leads with a Sales Response",
     salesOrders: "Leads with an actual Sales Order",
@@ -174,12 +183,13 @@
             </div>
             <div class="gcc-chart"><canvas data-el="chart" aria-label="Visitors and leads per day (bars), sales orders and converted (lines)"></canvas></div>
           </article>
-          <article class="gcc-card gcc-purpose">
+          <article class="gcc-card gcc-cars">
             <div class="gcc-card-head">
-              <h2><span class="gcc-h-ic t-violet">${icon("target")}</span>Visitor Purpose</h2>
-              <button type="button" class="gcc-link" data-drill="kpi" data-key="visitors" title="Open visitor records">Records ↗</button>
+              <h2><span class="gcc-h-ic t-green">${icon("car")}</span>Top Cars <small>converted → now</small></h2>
+              <button type="button" class="gcc-link" data-act="cars-all" title="All models · converted and current Sales Raw / Back Order status">All ↗</button>
             </div>
-            <div class="gcc-bars" data-el="purpose"></div>
+            <div class="gcc-car-sum" data-el="car-sum"></div>
+            <div class="gcc-bars" data-el="cars"></div>
           </article>
           <article class="gcc-card gcc-status">
             <div class="gcc-card-head">
@@ -324,6 +334,8 @@
     else if (act === "unlisted") openUnlisted();
     else if (act === "registered") openRegistered();
     else if (act === "rank-all") openRankAll(d.kind);
+    else if (act === "cars-all") openCarsAll();
+    else if (act === "car-state") openCarState(d.state);
     else if (act === "modal-close") closeModal();
     else if (act === "modal-tab") { state.modal.active = Number(d.tab) || 0; state.modal.search = ""; el("m-search").value = ""; renderModalTable(); }
     else if (act === "modal-filter" && state.modal.filterAction) {
@@ -341,6 +353,7 @@
     else if (kind === "advisor") openAdvisor(d.name);
     else if (kind === "cell") openCell(d.kind, d.name, d.metric);
     else if (kind === "status") openStatus(d.key);
+    else if (kind === "car") openCar(d.name);
     else if (kind === "quality") openInfo();
   }
 
@@ -406,7 +419,7 @@
 
   // ---------- Compute (memoised in GecData.compute) ----------
 
-  const computeWith = (filters) => Data().compute(state.dataset, filters, { visitors: state.visitors });
+  const computeWith = (filters) => Data().compute(state.dataset, filters, { visitors: state.visitors, orders: state.orders });
 
   /** Days with any record inside the global date filter (for the Daily view stepper). */
   function dataDays() {
@@ -442,7 +455,7 @@
     renderKpis();
     renderJourneys();
     renderTrend();
-    renderPurpose();
+    renderCars();
     renderStatus();
     renderPerf("promoter");
     renderPerf("advisor");
@@ -517,15 +530,20 @@
         if (k.visitorToLead == null) return { na: true, sub: m.purposeFilter ? "n/a · purpose applies to visitors only" : "n/a · model/source/status filter" };
         return { value: k.visitorToLead, fmt: (v) => pct(v), sub: `<b>${n(k.total)}</b> leads ÷ ${n(k.visitors)} visitors` };
       case "responded":
-        return { value: k.responded, fmt: n, sub: `<b>${pct(k.responseRate)}</b> of leads` };
+        return { value: k.responded, fmt: n, sub: `${link("noResponse", `<b>${n(k.noResponse)}</b> not responded`)} · ${pct(k.responseRate)} of ${n(k.total)} leads` };
       case "salesOrders":
         return { value: k.salesOrders, fmt: n, sub: `<b>${pct(k.salesOrderRate)}</b> · ${link("noOrder", `${n(k.noOrder)} NO ORDER`)} excluded` };
       case "converted":
         return { value: k.converted, fmt: n, sub: `<b>${pct(k.conversionRate)}</b> lead → conversion` };
       case "assignmentErrors":
         return {
-          value: k.assignmentErrors, fmt: n, sub: "Customers with no promoter assignment",
+          value: k.assignmentErrors, fmt: n, sub: `Employee Number (column ${empCol()}) blank`,
           side: `<span class="gcc-kpi-side${k.invalidPromoter ? " is-bad" : ""}" role="button" tabindex="0" data-drill="kpi" data-key="invalidPromoter" title="${esc(DRILL_TITLES.invalidPromoter)}"><small>Invalid promoter</small><b class="gcc-num">${n(k.invalidPromoter)}</b></span>`,
+        };
+      case "noProduct":
+        return {
+          value: k.noProduct, fmt: n, sub: `Column ${cfg().PRODUCT_COLUMNS.join(" or ")} blank`,
+          side: `<span class="gcc-kpi-side" role="button" tabindex="0" data-drill="kpi" data-key="noProduct" title="${esc(DRILL_TITLES.noProduct)} · leads only"><small>Leads</small><b class="gcc-num">${n(k.noProductLeads)}</b></span>`,
         };
       default:
         return { na: true, sub: "" };
@@ -716,28 +734,62 @@
     while (limit > 1 && box.scrollHeight > box.clientHeight + 1) draw(--limit);
   }
 
-  function renderPurpose() {
+  // ---------- Top cars · converted → Sales Raw / Back Order status ----------
+
+  const ORDER_STATES = [
+    { key: "delivered", label: "Delivered" },
+    { key: "proforma", label: "Pro-Forma" },
+    { key: "backorder", label: "Back Order" },
+    { key: "notFound", label: "Not found" },
+  ];
+  const ORDER_LABEL = Object.fromEntries(ORDER_STATES.map((s) => [s.key, s.label]));
+  const orderOf = (r) => Data().orderStatus(r, state.orders);
+  const orderStateOf = (r) => { const o = orderOf(r); return o ? o.status : ""; };
+
+  function carTotals(list) {
+    const t = { leads: 0, converted: 0, delivered: 0, proforma: 0, backorder: 0, notFound: 0 };
+    list.forEach((c) => Object.keys(t).forEach((k) => { t[k] += c[k] || 0; }));
+    return t;
+  }
+
+  function carTitle(c, hasOrders) {
+    const split = hasOrders ? ` · ${ORDER_STATES.map((s) => `${s.label} ${n(c[s.key])}`).join(" · ")}` : "";
+    return `${c.name} · ${n(c.converted)} converted of ${n(c.leads)} leads${split} · open records`;
+  }
+
+  function renderCars() {
     const m = state.metrics;
-    const box = el("purpose");
-    if (!m.hasVisitors) {
-      box.innerHTML = `<div class="gcc-empty-note">${icon("users")}<b>No visitor file</b><span>Upload <b>GEC Visitors</b> (Date · Promoter · Visit Purpose) in Admin Push.</span></div>`;
-      return;
-    }
-    const list = m.purposes;
-    if (!list.length) { box.innerHTML = `<div class="gcc-empty-note"><span>No visitors in this selection.</span></div>`; return; }
-    const sel = state.filters.purpose;
+    const box = el("cars");
+    const sum = el("car-sum");
+    const list = m.cars.filter((c) => c.converted > 0);
+    const t = carTotals(list);
+    sum.innerHTML = !m.hasOrders
+      ? `<span class="gcc-muted">Push <b>Sales Raw Data</b> / <b>Back Order</b> to see Pro-Forma &amp; Delivered</span>`
+      : ORDER_STATES.filter((s) => s.key !== "notFound" || t.notFound).map((s) =>
+        `<button type="button" class="gcc-car-chip s-${s.key}" data-act="car-state" data-state="${s.key}" title="Converted leads · ${esc(s.label)} · open records"><i></i>${esc(s.label)} <b class="gcc-num">${n(t[s.key])}</b></button>`).join("");
+    if (!m.kpis.total) { box.innerHTML = `<div class="gcc-empty-note"><span>No leads in this selection.</span></div>`; return; }
+    if (!list.length) { box.innerHTML = `<div class="gcc-empty-note">${icon("car")}<span>No converted leads in this selection.</span></div>`; return; }
+    const sel = state.filters.model;
     fitBars(box, (limit) => {
       let shown = list.slice(0, limit);
-      if (sel && !shown.some((p) => p.purpose === sel)) { const s = list.find((p) => p.purpose === sel); if (s) shown = [...shown.slice(0, limit - 1), s]; }
-      const max = Math.max(1, ...shown.map((p) => p.count));
+      if (sel && !shown.some((c) => c.name === sel)) { const s = list.find((c) => c.name === sel); if (s) shown = [...shown.slice(0, limit - 1), s]; }
+      const max = Math.max(1, ...shown.map((c) => c.converted));
       const rest = list.length - shown.length;
-      box.innerHTML = shown.map((p) => `
-        <button type="button" class="gcc-bar t-violet${sel === p.purpose ? " is-on" : ""}${sel && sel !== p.purpose ? " is-dim" : ""}" data-act="purpose" data-value="${esc(p.purpose)}" title="${sel === p.purpose ? "Clear purpose filter" : `Filter the dashboard by “${esc(p.purpose)}”`}">
-          <span class="gcc-bar-lab" dir="auto">${esc(p.purpose)}</span>
-          <span class="gcc-bar-val gcc-num">${n(p.count)}</span>
-          <span class="gcc-bar-pct gcc-num">${pct(p.share)}</span>
-          <span class="gcc-bar-track"><i style="--w:${w100(p.count / max)}"></i></span>
-        </button>`).join("") + (rest > 0 ? `<button type="button" class="gcc-link gcc-bars-more" data-drill="kpi" data-key="visitors">+ ${n(rest)} more purposes ↗</button>` : "");
+      box.innerHTML = shown.map((c) => {
+        const segs = m.hasOrders
+          ? ORDER_STATES.map((s) => (c[s.key] ? `<i class="s-${s.key}" style="flex:${c[s.key]}"></i>` : "")).join("")
+          : `<i class="s-converted" style="flex:1"></i>`;
+        const split = m.hasOrders
+          ? `<b class="s-proforma">${n(c.proforma)}</b> PF · <b class="s-delivered">${n(c.delivered)}</b> Del`
+          : `${n(c.leads)} leads`;
+        return `
+        <button type="button" class="gcc-bar gcc-car t-green${sel === c.name ? " is-on" : ""}${sel && sel !== c.name ? " is-dim" : ""}" data-drill="car" data-name="${esc(c.name)}" title="${esc(carTitle(c, m.hasOrders))}">
+          <span class="gcc-bar-lab" dir="auto">${esc(c.name)}</span>
+          <span class="gcc-car-split gcc-num">${split}</span>
+          <span class="gcc-bar-val gcc-num">${n(c.converted)}</span>
+          <span class="gcc-car-track"><span style="--w:${w100(c.converted / max)}">${segs}</span></span>
+        </button>`;
+      }).join("") + (rest > 0 ? `<button type="button" class="gcc-link gcc-bars-more" data-act="cars-all">+ ${n(rest)} more cars ↗</button>` : "");
     });
   }
 
@@ -847,9 +899,9 @@
         <div class="gcc-rows">${rows}</div>
         <div class="gcc-perf-foot">
           <span class="gcc-foot-notes">
-            ${blankR ? `<span class="gcc-warn-chip" role="button" tabindex="0" data-drill="kpi" data-key="assignmentErrors" title="${esc(DRILL_TITLES.assignmentErrors)} — not in any promoter's performance">${icon("alert")}<b class="gcc-num">${n(blankR)}</b> Assignment Errors</span>` : ""}
+            ${blankR ? `<span class="gcc-warn-chip" role="button" tabindex="0" data-drill="kpi" data-key="assignmentErrors" title="${esc(DRILL_TITLES.assignmentErrors)} — not in any promoter's performance">${icon("alert")}<b class="gcc-num">${n(blankR)}</b> No promoter assigned</span>` : ""}
             ${invalidR ? `<span class="gcc-warn-chip" role="button" tabindex="0" data-drill="kpi" data-key="invalidPromoter" title="${esc(DRILL_TITLES.invalidPromoter)} — not in any promoter's performance">${icon("alert")}<b class="gcc-num">${n(invalidR)}</b> Invalid Promoter</span>` : ""}
-            ${blankR || invalidR ? `<span class="gcc-muted">not ranked</span>` : `<span class="gcc-muted">Every lead has an official promoter in column R</span>`}
+            ${blankR || invalidR ? `<span class="gcc-muted">not ranked</span>` : `<span class="gcc-muted">Every lead has an official promoter (Employee Number · column ${empCol()})</span>`}
           </span>
           <button type="button" class="gcc-link" data-act="rank-all" data-kind="promoter">Full table ↗</button>
         </div>
@@ -940,7 +992,8 @@
     const items = [];
     const chip = (tone, count, label, attrs, title) => items.push(`<button type="button" class="gcc-att t-${tone}" ${attrs} title="${esc(title || label)}"><b class="gcc-num">${n(count)}</b>${esc(label)}</button>`);
     if (ds && ds.ok) {
-      if (k.assignmentErrors) chip("rose", k.assignmentErrors, "Assignment Errors", 'data-drill="kpi" data-key="assignmentErrors"', DRILL_TITLES.assignmentErrors);
+      if (k.assignmentErrors) chip("rose", k.assignmentErrors, "No promoter assigned", 'data-drill="kpi" data-key="assignmentErrors"', DRILL_TITLES.assignmentErrors);
+      if (k.noProduct) chip("rose", k.noProduct, "No product", 'data-drill="kpi" data-key="noProduct"', DRILL_TITLES.noProduct);
       if (k.invalidPromoter) chip("amber", k.invalidPromoter, "Invalid Promoter", 'data-drill="kpi" data-key="invalidPromoter"', DRILL_TITLES.invalidPromoter);
       if (k.noOrder) chip("rose", k.noOrder, "NO ORDER", 'data-drill="kpi" data-key="noOrder"', "Sales Order = “NO ORDER” — never counted as an order");
       if (k.unlisted) {
@@ -975,13 +1028,29 @@
   // ---------- Modal engine (tabs · search · the only scrolling surface) ----------
 
   const stagePill = (r) => `<span class="gcc-pill st-${r.stage || "lead"}">${esc(STAGE_LABEL[r.stage] || "Lead")}</span>`;
+  /** Current Sales Raw / Back Order status; unmatched non-converted leads stay blank. */
+  const nowText = (r) => { const s = orderStateOf(r); return !s || (s === "notFound" && !r.converted) ? "" : ORDER_LABEL[s]; };
 
-  function leadColumns(rows) {
+  const errorsOf = (r) => [
+    r.assignment === "blank" ? Data().ASSIGNMENT_ERROR : r.assignment === "invalid" ? Data().INVALID_PROMOTER : "",
+    r.noProduct ? Data().NO_PRODUCT : "",
+  ].filter(Boolean);
+
+  function productColumns() {
+    return ((state.dataset && state.dataset.productColumns) || []).map((p, i) => ({
+      h: `${p.header || "Column"} (${p.letter})`, dir: true, v: (r) => (r.product && r.product[i]) || "",
+      html: (r) => (r.product && r.product[i] ? esc(r.product[i]) : '<span class="gcc-flag">blank</span>'),
+    }));
+  }
+
+  function leadColumns(rows, withProduct) {
     const cols = [
       { h: "Transaction No.", v: (r) => r.id },
+      { h: "Errors", v: (r) => errorsOf(r).join(" · "), html: (r) => errorsOf(r).map((e) => `<span class="gcc-pill st-error">${esc(e)}</span>`).join(" ") },
+      ...(withProduct ? productColumns() : []),
       { h: "Lead date", v: (r) => fmtDate(r.leadDate, true) },
       { h: "Promoter", v: (r) => r.promoter },
-      { h: "Emp. No. (R)", v: (r) => r.employeeNumber, num: true },
+      { h: `Emp. No. (${empCol()})`, v: (r) => r.employeeNumber, num: true },
       { h: "Sales advisor", v: (r) => r.consultant, dir: true },
       { h: "Model", v: (r) => r.modelGroup, dir: true },
       { h: "Source", v: (r) => (r.source === "(blank)" ? "" : r.source) },
@@ -990,6 +1059,14 @@
       { h: "Sales Response", v: (r) => r.salesResponse, dir: true, html: (r) => (r.responded ? esc(r.salesResponse) : (r.salesResponse ? `<span class="gcc-muted-val">${esc(r.salesResponse)}</span>` : "")) },
       { h: "Sales Order", v: (r) => r.salesOrder,
         html: (r) => (r.salesOrderState === "order" ? `<span class="gcc-pill st-order">${esc(r.salesOrder)}</span>` : r.salesOrder ? `<span class="gcc-muted-val">${esc(r.salesOrder)}</span>` : "") },
+      ...(state.orders && state.orders.ready ? [
+        { h: "Now", v: nowText, html: (r) => { const t = nowText(r); return t ? `<span class="gcc-pill st-${orderStateOf(r)}">${esc(t)}</span>` : ""; } },
+        { h: "Matched in", v: (r) => { const o = orderOf(r); return o && o.source ? `${o.sourceLabel} · ${o.via}` : ""; } },
+        { h: "Pro-forma date", v: (r) => { const o = orderOf(r); return o ? fmtDate(o.proformaDate) : ""; } },
+        { h: "Delivery date", v: (r) => { const o = orderOf(r); return o ? fmtDate(o.deliveryDate) : ""; } },
+        { h: "BO No.", v: (r) => { const o = orderOf(r); return o ? o.boNumber : ""; } },
+        { h: "BO / sales status", v: (r) => { const o = orderOf(r); return o ? o.sourceStatus : ""; }, dir: true },
+      ] : []),
       cfg().SHOW_TIMING ? { h: "Response", v: (r) => minutesText(r.responseMinutes), num: true } : null,
       { h: "Customer", v: (r) => r.customer, dir: true },
       { h: "Rows", v: (r) => (r.rowCount > 1 ? String(r.rowCount) : ""), num: true },
@@ -1014,7 +1091,7 @@
     { h: "Excel row", v: (v) => String(v.rowNo), num: true },
   ];
 
-  const leadView = (label, rows) => ({ label, rows, type: "leads" });
+  const leadView = (label, rows, withProduct) => ({ label, rows, type: "leads", withProduct: !!withProduct });
   const visitorView = (label, rows) => ({ label, rows, type: "visitors", columns: VISITOR_COLUMNS, countOf: (list) => list.reduce((s, v) => s + v.count, 0) });
 
   /**
@@ -1066,7 +1143,7 @@
     }).join("") : "";
     if (!view) { el("m-body").innerHTML = ""; el("m-foot").textContent = ""; return; }
     el("m-allcols-wrap").hidden = view.type !== "leads";
-    const cols = view.columns || (m.allCols ? rawColumns() : leadColumns(view.rows));
+    const cols = view.columns || (m.allCols ? rawColumns() : leadColumns(view.rows, view.withProduct));
     const q = m.search.trim().toLowerCase();
     const idx = view.rows.map((r, i) => i).filter((i) => !q || cols.some((c) => String(c.v(view.rows[i]) || "").toLowerCase().includes(q)));
     const shown = idx.slice(0, MODAL_MAX_ROWS);
@@ -1118,12 +1195,12 @@
     if (key === "visitorsUnknown") { openVisitors(m.visitorRows.filter((v) => !v.promoterKnown), "Visitors · unknown promoter"); return; }
     if (key === "visitorToLead") { openV2L(); return; }
     if (key === "registered") { openRegistered(); return; }
-    if (key === "assignmentErrors" || key === "invalidPromoter") { openAssignment(key); return; }
+    if (key === "assignmentErrors" || key === "invalidPromoter" || key === "noProduct") { openAssignment(key); return; }
     const rows = predicateRows(key, m.rows);
     const views = [leadView("Leads", rows)];
     if (key === "total") {
-      views.push(leadView("Assigned promoter", predicateRows("knownPromoter", rows)), leadView("Assignment Errors", predicateRows("assignmentErrors", rows)),
-        leadView("Invalid Promoter", predicateRows("invalidPromoter", rows)),
+      views.push(leadView("Assigned promoter", predicateRows("knownPromoter", rows)), leadView("No promoter assigned", predicateRows("assignmentErrors", rows)),
+        leadView("Invalid Promoter", predicateRows("invalidPromoter", rows)), leadView("No product", predicateRows("noProduct", rows), true),
         leadView("Responded", predicateRows("responded", rows)), leadView("Sales Orders", predicateRows("salesOrders", rows)), leadView("Converted", predicateRows("converted", rows)), statusView(rows));
     }
     if (key === "salesOrders" || key === "salesOrderRate") views.push(leadView("NO ORDER (excluded)", predicateRows("noOrder", m.rows)));
@@ -1131,23 +1208,29 @@
     openModal({ title: DRILL_TITLES[key] || "Leads", sub: filterSubtitle(), stats: leadStats(rows), views });
   }
 
-  /** Column R drill: every customer record in scope (leads + visitor-stage registrations), not just leads. */
+  /** Error drills (Employee Number · columns D/G): every customer record in scope (leads + visitor-stage registrations), not just leads. */
   function openAssignment(key) {
     const m = state.metrics;
+    const product = key === "noProduct";
     const rows = predicateRows(key, m.customerRows);
     const leads = rows.filter((r) => r.isLead);
     const reg = rows.length - leads.length;
-    const views = [leadView("Customers", rows)];
-    if (reg) views.push(leadView("Leads", leads), leadView("Registered (visitor stage)", rows.filter((r) => !r.isLead)));
+    const views = [leadView("Customers", rows, product)];
+    if (reg) views.push(leadView("Leads", leads, product), leadView("Registered (visitor stage)", rows.filter((r) => !r.isLead), product));
     if (key === "invalidPromoter") views.push(employeeBreakdownView(rows));
+    const others = [
+      ["assignmentErrors", "No promoter assigned"], ["invalidPromoter", "Invalid Promoter"], ["noProduct", "No product"],
+    ].filter(([k]) => k !== key).map(([k, label]) => ({ label: `${label} (separate)`, value: n(m.kpis[k]) }));
     openModal({
       title: DRILL_TITLES[key],
-      sub: `${filterSubtitle()} · column R ${key === "assignmentErrors" ? "is blank" : "is not an official promoter number"} · not in any promoter's performance`,
+      sub: product
+        ? `${filterSubtitle()} · column ${cfg().PRODUCT_COLUMNS.join(" or column ")} is blank`
+        : `${filterSubtitle()} · Employee Number (column ${empCol()}) ${key === "assignmentErrors" ? "is blank" : "is not an official promoter number"} · not in any promoter's performance`,
       stats: [
         { label: "Customers", value: n(rows.length) },
         { label: "Leads", value: n(leads.length) },
         { label: "Registered (visitor stage)", value: n(reg) },
-        { label: key === "assignmentErrors" ? "Invalid Promoter (separate)" : "Assignment Errors (separate)", value: n(key === "assignmentErrors" ? m.kpis.invalidPromoter : m.kpis.assignmentErrors) },
+        ...others,
       ],
       views,
     });
@@ -1159,8 +1242,8 @@
     const list = [...map.entries()].sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count }));
     return {
       label: "By Employee Number", type: "table", rows: list,
-      columns: [{ h: "Employee Number (column R)", v: (x) => x.value }, { h: "Leads", v: (x) => n(x.count), num: true }],
-      onRow: (x) => openModal({ title: `${x.value === "(blank)" ? "Assignment Error" : "Invalid Promoter"} · column R = ${x.value}`, sub: filterSubtitle(), views: [leadView("Leads", rows.filter((r) => (r.employeeNumber || "(blank)") === x.value))] }),
+      columns: [{ h: `Employee Number (column ${empCol()})`, v: (x) => x.value }, { h: "Leads", v: (x) => n(x.count), num: true }],
+      onRow: (x) => openModal({ title: `${x.value === "(blank)" ? Data().ASSIGNMENT_ERROR : Data().INVALID_PROMOTER} · Employee Number = ${x.value}`, sub: filterSubtitle(), views: [leadView("Leads", rows.filter((r) => (r.employeeNumber || "(blank)") === x.value))] }),
     };
   }
 
@@ -1191,6 +1274,78 @@
       stats: leadStats(rows),
       views: [leadView("Leads", rows)],
       filterAction: exact ? { key: "status", value: label } : null,
+    });
+  }
+
+  const ORDER_MATCH_NOTE = "converted leads looked up in Sales Raw Data / Back Order by Transaction No. (then Sales Order)";
+
+  function orderStats(leads, conv) {
+    const stats = [{ label: "Leads", value: n(leads.length) }, { label: "Converted", value: `${n(conv.length)} · ${pct(ratio(conv.length, leads.length))}` }];
+    if (!state.metrics.hasOrders) return stats;
+    return stats.concat(ORDER_STATES.map((s) => {
+      const c = conv.filter((r) => orderStateOf(r) === s.key).length;
+      return { label: s.label, value: `${n(c)} · ${pct(ratio(c, conv.length))}`, cls: s.key === "notFound" && c ? "is-warn" : "" };
+    }));
+  }
+
+  const orderViews = (conv) => (state.metrics.hasOrders
+    ? ORDER_STATES.map((s) => leadView(s.label, conv.filter((r) => orderStateOf(r) === s.key))).filter((v) => v.rows.length)
+    : []);
+
+  function openCar(name) {
+    const m = state.metrics;
+    const leads = m.rows.filter((r) => r.modelGroup === name);
+    const conv = predicateRows("converted", leads);
+    const exact = Data().filterOptions(state.dataset).models.includes(name);
+    openModal({
+      title: `Top car · ${name}`,
+      sub: `${filterSubtitle("model")} · ${m.hasOrders ? ORDER_MATCH_NOTE : "push Sales Raw Data / Back Order to see Pro-Forma & Delivered"}`,
+      stats: orderStats(leads, conv),
+      views: [leadView("Converted", conv), ...orderViews(conv), leadView("All leads", leads)],
+      filterAction: exact ? { key: "model", value: name } : null,
+    });
+  }
+
+  function openCarState(key) {
+    const m = state.metrics;
+    const conv = predicateRows("converted", m.rows).filter((r) => orderStateOf(r) === key);
+    const byCar = new Map();
+    conv.forEach((r) => byCar.set(r.modelGroup, (byCar.get(r.modelGroup) || 0) + 1));
+    const cars = [...byCar.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+    openModal({
+      title: `Converted · now ${ORDER_LABEL[key] || key}`,
+      sub: `${filterSubtitle()} · ${ORDER_MATCH_NOTE}`,
+      stats: [{ label: ORDER_LABEL[key] || key, value: n(conv.length) }, { label: "Converted", value: n(m.kpis.converted) }, { label: "Share", value: pct(ratio(conv.length, m.kpis.converted)) }],
+      views: [leadView("Leads", conv), {
+        label: "By car", type: "table", rows: cars,
+        columns: [{ h: "Model", v: (x) => x.name, dir: true }, { h: ORDER_LABEL[key] || key, v: (x) => n(x.count), num: true }],
+        onRow: (x) => openCar(x.name),
+      }],
+    });
+  }
+
+  function openCarsAll() {
+    const m = state.metrics;
+    const list = m.cars;
+    const conv = predicateRows("converted", m.rows);
+    const ho = m.hasOrders;
+    openModal({
+      title: "Top cars · converted → Pro-Forma / Delivered",
+      sub: `${filterSubtitle()} · ${ho ? ORDER_MATCH_NOTE : "push Sales Raw Data / Back Order to see Pro-Forma & Delivered"} · click a row`,
+      stats: orderStats(m.rows, conv),
+      views: [{
+        label: "By car", type: "table", rows: list,
+        columns: [
+          { h: "#", v: (x) => String(list.indexOf(x) + 1), num: true },
+          { h: "Model", v: (x) => x.name, dir: true },
+          { h: "Leads", v: (x) => n(x.leads), num: true },
+          { h: "Converted", v: (x) => n(x.converted), num: true },
+          { h: "Lead → Conversion", v: (x) => pct(ratio(x.converted, x.leads)), num: true },
+          ...(ho ? ORDER_STATES.map((s) => ({ h: s.label, v: (x) => n(x[s.key]), num: true })) : []),
+          ...(ho ? [{ h: "Delivered % of converted", v: (x) => pct(ratio(x.delivered, x.converted)), num: true }] : []),
+        ],
+        onRow: (x) => openCar(x.name),
+      }, leadView("Converted", conv), ...orderViews(conv)],
     });
   }
 
@@ -1381,7 +1536,7 @@
       const list = rankList(src.promoters, state.view.promoter.rank, ["leads", "converted", "visitors"]);
       openModal({
         title: "Promoter performance · Visitor → Lead → Conversion",
-        sub: `${whenLabel("promoter")} · ${filterSubtitle("promoter")} · Assignment Errors and Invalid Promoter not ranked · click a row`,
+        sub: `${whenLabel("promoter")} · ${filterSubtitle("promoter")} · No promoter assigned and Invalid Promoter not ranked · click a row`,
         views: [{
           label: "Promoters", type: "table", rows: list,
           columns: [
@@ -1443,8 +1598,9 @@
         <div><span>Unique transactions</span><b>${n(q.uniqueTransactions)}</b></div>
         <div class="${q.duplicateRows ? "warn" : ""}"><span>Duplicate rows</span><b>${n(q.duplicateRows)}</b><em>${n(q.duplicateTransactions)} transactions repeated · latest row kept</em></div>
         <div class="${q.missingTxn ? "warn" : ""}"><span>Missing Transaction No.</span><b>${n(q.missingTxn)}</b><em>rows ignored</em></div>
-        <div class="${q.blankEmployee ? "warn" : ""}"><span>Assignment Errors · blank column R (unique transactions)</span><b>${n(q.blankEmployee)}</b><em>${n(q.blankEmployeeCells)} blank column R cells across all ${n(q.sourceRows)} source rows</em></div>
-        <div class="${q.unmappedEmployee ? "warn" : ""}"><span>Invalid Promoter · column R not official (unique transactions)</span><b>${n(q.unmappedEmployee)}</b></div>
+        <div class="${q.blankEmployee ? "warn" : ""}"><span>No promoter assigned · blank Employee Number (unique transactions)</span><b>${n(q.blankEmployee)}</b><em>${n(q.blankEmployeeCells)} blank column ${empCol()} cells across all ${n(q.sourceRows)} source rows</em></div>
+        <div class="${q.noProduct ? "warn" : ""}"><span>No product · blank column ${c.PRODUCT_COLUMNS.join(" or ")} (unique transactions)</span><b>${n(q.noProduct)}</b><em>${(ds.productColumns || []).map((p) => `${esc(p.letter)} = “${esc(p.header || "no header")}”`).join(" · ")}</em></div>
+        <div class="${q.unmappedEmployee ? "warn" : ""}"><span>Invalid Promoter · Employee Number not official (unique transactions)</span><b>${n(q.unmappedEmployee)}</b></div>
         <div><span>NO ORDER (all records)</span><b>${n(q.noOrder)}</b><em>${n(q.orderPlaceholders)} other placeholders · ${n(q.actualOrders)} actual orders</em></div>
         <div class="${q.undated ? "warn" : ""}"><span>No readable Created Date</span><b>${n(q.undated)}</b></div>
         <div><span>Visitors</span><b>${vs && vs.ok ? n(vs.total) : "—"}</b><em>${vs && vs.ok ? `${esc(vs.fileName || "")} · sheet “${esc(vs.sheetName)}”` : "no visitor data"}</em></div>
@@ -1467,7 +1623,12 @@
         <li><b>Visitor → Lead</b> = registered leads ÷ visitors (visitor file, independent of leads). <b>Lead → Conversion</b> = converted ÷ leads.</li>
         <li><b>Sales advisors</b> — ${col("consultant")} on lead records, excluding the official promoters. Conversion % = converted ÷ leads received.</li>
         <li><b>Response time / SLA</b> — not shown (timing data not validated).</li>
+        <li><b>Top cars</b> — converted leads per ${col("model")}. Each converted Transaction No. (then its Sales Order number) is looked up in <b>Sales Raw Data</b> and <b>Back Order</b>: Sales Raw with a delivery / invoice date (Col V) → <b>Delivered</b>, without → <b>Pro-Forma</b>; only in Back Order → <b>Back Order</b> (unless its status says delivered / pro-forma); in neither → <b>Not found</b>.</li>
       </ul>
+      <h4>Order status matching</h4>
+      ${state.orders && state.orders.ready
+        ? `<ul>${state.orders.sources.map((s) => `<li><b>${esc(s.label)}</b> — ${n(s.rows)} rows · ${s.fullScan ? "no transaction / order column found, every column scanned for long codes" : `matched on ${s.columns.map((h) => `“${esc(h)}”`).join(", ")}`}</li>`).join("")}</ul>`
+        : `<p class="gcc-muted">No Sales Raw Data or Back Order pushed — Top Cars shows converted counts only.</p>`}
       <h4>Official promoter list</h4><div class="gcc-chips">${promoters}</div>`;
     const sheets = ds ? `<h4>Sheets in file</h4><ul>${ds.sheets.map((s) => `<li>${esc(s.name)} — ${n(s.rows)} rows, ${s.fields} recognised columns${s.name === ds.sheetName ? " <b>(leads)</b>" : ""}${vs && vs.ok && s.name === vs.sheetName ? " <b>(visitors)</b>" : ""}</li>`).join("")}</ul>` : "";
     const warnList = [...((ds && ds.warnings) || []), ...((vs && vs.warnings) || [])];
@@ -1477,7 +1638,7 @@
       sub: ds ? `${ds.fileName || "GEC File"} · sheet “${ds.sheetName}” · header row ${ds.headerRow}` : "No GEC File loaded",
       html: `<div class="gcc-map-grid">${mapping}</div><div class="gcc-rules">${quality}${rules}${warn}${sheets}
         ${state.debug ? `<p class="gcc-debug-hint"><button type="button" class="gcc-btn" data-act="validate">Open validation</button> Management targets, promoter mapping check and raw-cell reconciliation.</p>` : ""}</div>`,
-      foot: "Columns are detected from the header row (Employee Number = column R), so next month's file works without changes.",
+      foot: `Columns are detected from the header row (Employee Number found in column ${empCol()} by reading the header from the first cell), so next month's file works without changes.`,
     });
   }
 
@@ -1501,7 +1662,7 @@
     ]) + `<p class="gcc-pad ${pc.ok && (pc.expectedTotal == null || pc.total === pc.expectedTotal) ? "" : "gcc-warn-line"}">${
       !pc.ok ? `⚠ Promoter total ${n(pc.total)} ≠ leads ${n(pc.leads)}`
         : pc.expectedTotal != null && pc.total !== pc.expectedTotal ? `⚠ Total ${n(pc.total)} ≠ approved ${n(pc.expectedTotal)}`
-          : `Promoters + Assignment Errors + Invalid Promoter = ${n(pc.total)} leads ✓`} · Employee Number column ${esc(pc.column)}</p>`;
+          : `Promoters + No promoter assigned + Invalid Promoter = ${n(pc.total)} leads ✓`} · Employee Number column ${esc(pc.column)}</p>`;
     const b = res.breakdowns;
     const statusHtml = tbl(["Status", { h: "Records", num: true }, "Stage"], b.status.map((s) =>
       `<tr><td>${esc(s.value)}</td><td class="num">${n(s.count)}</td><td>${stagePill(s)}</td></tr>`));
@@ -1509,11 +1670,12 @@
       `<tr><td>${esc({ order: "Actual order (counted)", noOrder: "NO ORDER (excluded)", placeholder: "Placeholder (excluded)", blank: "Blank" }[s.value] || s.value)}</td><td class="num">${n(s.count)}</td></tr>`))
       + (b.salesOrderPlaceholders.length ? tbl(["Excluded value", { h: "Records", num: true }], b.salesOrderPlaceholders.map((s) => `<tr><td>“${esc(s.value)}”</td><td class="num">${n(s.count)}</td></tr>`)) : "");
     const respHtml = tbl(["Sales Response", { h: "Records", num: true }], b.responseValues.map((s) => `<tr><td>${esc(s.value)}</td><td class="num">${n(s.count)}</td></tr>`));
-    const empHtml = b.employees.length ? tbl(["Column R value (blank = Assignment Error)", { h: "Records", num: true }], b.employees.map((s) => `<tr><td>${esc(s.value)}</td><td class="num">${n(s.count)}</td></tr>`)) : `<p class="gcc-pad">All employee numbers are official promoters.</p>`;
+    const empHtml = b.employees.length ? tbl([`Employee Number · column ${empCol()} (blank = No promoter assigned)`, { h: "Records", num: true }], b.employees.map((s) => `<tr><td>${esc(s.value)}</td><td class="num">${n(s.count)}</td></tr>`)) : `<p class="gcc-pad">All employee numbers are official promoters.</p>`;
     const t = res.totals;
     const kRows = [["Total Visitors", "visitors"], ["Registered Leads", "total"], ["Registered, not yet lead", "registeredNotLead"], ["Visitor → Lead", "visitorToLead", true],
-      ["Assigned promoter (column R)", "knownPromoter"], ["Assignment Errors (blank R · all customers)", "assignmentErrors"], ["Invalid Promoter (non-official R · all customers)", "invalidPromoter"],
-      ["Assignment Errors · leads only", "assignmentErrorLeads"], ["Invalid Promoter · leads only", "invalidPromoterLeads"],
+      ["Assigned promoter (Employee Number)", "knownPromoter"], ["No promoter assigned (blank Employee Number · all customers)", "assignmentErrors"], ["Invalid Promoter (non-official Employee Number · all customers)", "invalidPromoter"],
+      ["No promoter assigned · leads only", "assignmentErrorLeads"], ["Invalid Promoter · leads only", "invalidPromoterLeads"],
+      ["No product (blank D or G · all customers)", "noProduct"], ["No product · leads only", "noProductLeads"],
       ["Sales Response", "responded"], ["Response rate", "responseRate", true],
       ["Actual Sales Orders", "salesOrders"], ["Sales Order rate", "salesOrderRate", true], ["NO ORDER", "noOrder"], ["Converted", "converted"],
       ["Lead → Conversion", "conversionRate", true], ["Unlisted status leads", "unlisted"], ["No sales advisor", "noAdvisor"], ["Assigned to promoter", "promoterConsultant"]];
@@ -1539,7 +1701,7 @@
         <section><h4>Status → GEC CONTROL stage</h4>${statusHtml}</section>
         <section><h4>Sales Order values</h4>${soHtml}</section>
         <section><h4>Sales Response values</h4>${respHtml}</section>
-        <section><h4>Column R · not an official promoter</h4>${empHtml}</section>
+        <section><h4>Employee Number (column ${empCol()}) · not an official promoter</h4>${empHtml}</section>
         <section><h4>Daily totals (filtered)</h4>${daysHtml}</section>
         <section class="span2"><h4>Reconciliation · independent pass over raw sheet cells</h4>${checksHtml}</section>
       </div>`,
@@ -1561,6 +1723,12 @@
     state.dataset = dataset && dataset.records ? dataset : null;
     const extVisitors = state.ctx.visitors && state.ctx.visitors.ok ? state.ctx.visitors : null;
     state.visitors = extVisitors || (state.dataset && state.dataset.visitors) || null;
+    const sales = Array.isArray(state.ctx.sales) && state.ctx.sales.length ? state.ctx.sales : null;
+    const bo = Array.isArray(state.ctx.backorder) && state.ctx.backorder.length ? state.ctx.backorder : null;
+    if (!state.orders || sales !== state.orderSrc.sales || bo !== state.orderSrc.bo) {
+      state.orders = Data().buildOrderIndex(sales, bo);
+      state.orderSrc = { sales, bo };
+    }
     const sig = datasetSig(state.dataset, state.visitors);
     if (sig !== state.sig) {
       state.sig = sig;

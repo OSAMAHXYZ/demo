@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -11,8 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20260928gcc1"></script>
-  <script src="gec-data.js?v=20260928colr1"></script>
-  <script src="gec-dashboard.js?v=20260928colr1"></script>
+<script src="gec-data.js?v=20260929emp1"></script>
+<script src="gec-dashboard.js?v=20260929emp1"></script>
   <script src="sales-control.js?v=20260928sc1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
@@ -25,7 +25,7 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
   <link rel="stylesheet" href="gec-dashboard.css?v=20260928sc1" />
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
-  <link rel="stylesheet" href="gec-control.css?v=20260928gcc1" />
+  <link rel="stylesheet" href="gec-control.css?v=20260929err1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -7430,6 +7430,8 @@
     if (host.parentNode !== document.body) document.body.appendChild(host);
     window.GecDashboard.render(host, (slots.gec && slots.gec.gec) || null, {
       visitors: (slots.gecVisitors && slots.gecVisitors.visitors) || null,
+      sales: (slots.sales && slots.sales.rows) || null,
+      backorder: (slots.backorder && slots.backorder.rows) || null,
       control: Store.readGecControl(),
       lastUpdated: Number(Store.readDataPushStamp().at) || 0,
       onRefresh: () => refreshFromAdmin("Refreshed", { force: true }),
