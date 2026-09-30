@@ -26,7 +26,7 @@ const RTL_DAILY_FILES_DIR = path.join(RTL_DAILY_DIR, 'excel');
 const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
 const LEGACY_RTL_DAILY_DIR = path.join(ROOT, 'report-sheet-data', 'rtl-daily');
 const REPORT_SLOT_IDS = Object.freeze([
-  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors'
+  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors', 'lexusB2c'
 ]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Timestamped snapshot id: 2026-09-09T14-30-05-123-ab12 (or legacy YYYY-MM-DD). */
@@ -4745,6 +4745,121 @@ app.post('/api/report-sheet/clear', (_req, res) => {
   } catch (err) {
     console.error('[report-sheet/clear]', err);
     return res.status(500).json({ error: err.message || 'Clear failed' });
+  }
+});
+
+/**
+ * Lexus Controller · per-order user data (cell edits, note, follow-ups, first seen).
+ * Separate file so Admin Push / Clear never overwrite what users entered.
+ */
+const LEXUS_TRACKER_FILE = path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json');
+const LEXUS_KEY_RE = /^[A-Z0-9][A-Z0-9\-_/#.]{0,79}$/;
+
+function loadLexusTracker() {
+  try {
+    if (!fs.existsSync(LEXUS_TRACKER_FILE)) return { at: 0, orders: {} };
+    const parsed = JSON.parse(fs.readFileSync(LEXUS_TRACKER_FILE, 'utf8'));
+    return {
+      at: Number(parsed && parsed.at) || 0,
+      orders: parsed && parsed.orders && typeof parsed.orders === 'object' ? parsed.orders : {}
+    };
+  } catch {
+    return { at: 0, orders: {} };
+  }
+}
+
+function saveLexusTracker(data) {
+  fs.mkdirSync(path.dirname(LEXUS_TRACKER_FILE), { recursive: true });
+  const tmp = `${LEXUS_TRACKER_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
+  fs.renameSync(tmp, LEXUS_TRACKER_FILE);
+}
+
+function broadcastLexusTracker(at, keys) {
+  const payload = JSON.stringify({ type: 'lexus_tracker_updated', at, keys });
+  for (const client of wsClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+const lexusText = (v, max) => String(v == null ? '' : v).slice(0, max);
+
+app.get('/api/lexus-tracker/state', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(loadLexusTracker());
+});
+
+/** Orders shown for the first time start their 24 h follow-up clock now (existing ones keep theirs). */
+app.post('/api/lexus-tracker/seen', (req, res) => {
+  try {
+    const keys = Array.isArray(req.body && req.body.keys) ? req.body.keys : [];
+    const data = loadLexusTracker();
+    const at = Date.now();
+    const added = [];
+    for (const raw of keys.slice(0, 20000)) {
+      const key = String(raw || '').trim().toUpperCase();
+      if (!LEXUS_KEY_RE.test(key)) continue;
+      const entry = data.orders[key] || (data.orders[key] = {});
+      if (!entry.firstSeenAt) {
+        entry.firstSeenAt = at;
+        added.push(key);
+      }
+    }
+    if (added.length) {
+      data.at = at;
+      saveLexusTracker(data);
+      broadcastLexusTracker(at, added.slice(0, 50));
+    }
+    return res.json({ ok: true, at: data.at, added: added.length });
+  } catch (err) {
+    console.error('[lexus-tracker/seen]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+/** body: { key, by, edits?: { [header]: string|null }, note?: string, followUp?: true } */
+app.post('/api/lexus-tracker/order', (req, res) => {
+  try {
+    const body = req.body || {};
+    const key = String(body.key || '').trim().toUpperCase();
+    if (!LEXUS_KEY_RE.test(key)) return res.status(400).json({ error: 'Invalid order key' });
+    const by = lexusText(body.by, 60).trim();
+    const data = loadLexusTracker();
+    const at = Date.now();
+    const entry = data.orders[key] || (data.orders[key] = {});
+    if (!entry.firstSeenAt) entry.firstSeenAt = at;
+
+    if (body.edits && typeof body.edits === 'object') {
+      const edits = entry.edits && typeof entry.edits === 'object' ? entry.edits : {};
+      Object.entries(body.edits).slice(0, 200).forEach(([header, value]) => {
+        const h = lexusText(header, 120);
+        if (!h) return;
+        if (value === null) delete edits[h];
+        else edits[h] = lexusText(value, 2000);
+      });
+      entry.edits = edits;
+    }
+    if (body.note !== undefined) entry.note = lexusText(body.note, 4000);
+    if (body.followUp === true) {
+      const list = Array.isArray(entry.followUps) ? entry.followUps : [];
+      list.push({ at, by });
+      entry.followUps = list.slice(-200);
+    }
+    entry.updatedAt = at;
+    entry.updatedBy = by;
+    data.at = at;
+    saveLexusTracker(data);
+    broadcastLexusTracker(at, [key]);
+    return res.json({ ok: true, at, key, order: entry });
+  } catch (err) {
+    console.error('[lexus-tracker/order]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
   }
 });
 
