@@ -33,6 +33,9 @@
     cols: [],
     rows: [],
     sel: { key: "", c: 0 },
+    anchor: null,
+    dragging: false,
+    colFilters: {},
     editing: null,
     fuDialog: null,
     live: { busy: new Set(), error: "", errorAt: 0 },
@@ -62,12 +65,73 @@
     if (!state.model || !state.model.ready) return [];
     const q = state.search.trim().toLowerCase();
     const fn = FILTER_FN[state.filter] || FILTER_FN.all;
+    const rules = activeColRules();
     return state.model.orders.filter((o) => {
       if (!fn(o)) return false;
       if (state.editedOnly && !o.editCount && !o.note) return false;
+      if (rules.length && !rules.every(([col, rule]) => matchRule(cellText(o, col), rule))) return false;
       if (!q) return true;
       return (o.cells.join(" ") + " " + o.note + " " + Core.trackText(o.track)).toLowerCase().includes(q);
     });
+  }
+
+  // ---------- Column filters (one box per column · saved per user in this browser only) ----------
+
+  const CF_HINT = "contains · =exact · !not · empty for blank cells";
+  const colKey = (col) => (col.kind === "file" ? `f:${col.header}` : `s:${col.id}`);
+  const cfStoreKey = () => `lxc-colfilters:${(Core.getUser() || "guest").trim().toLowerCase()}`;
+
+  function loadColFilters() {
+    try { state.colFilters = JSON.parse(localStorage.getItem(cfStoreKey()) || "{}") || {}; } catch { state.colFilters = {}; }
+  }
+
+  function saveColFilters() {
+    try {
+      const clean = Object.fromEntries(Object.entries(state.colFilters).filter(([, v]) => String(v || "").trim()));
+      state.colFilters = clean;
+      if (Object.keys(clean).length) localStorage.setItem(cfStoreKey(), JSON.stringify(clean));
+      else localStorage.removeItem(cfStoreKey());
+    } catch { /* storage blocked */ }
+  }
+
+  function activeColRules() {
+    return state.cols
+      .map((col) => [col, String(state.colFilters[colKey(col)] || "").trim()])
+      .filter(([, rule]) => rule);
+  }
+
+  function matchRule(value, rule) {
+    const v = value.replace(/\s+/g, " ").toLowerCase();
+    const r = rule.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!r) return true;
+    if (r === "empty" || r === '""') return v === "";
+    if (r === "!empty" || r === '!""') return v !== "";
+    if (r.startsWith("!")) return !v.includes(r.slice(1).trim());
+    if (r.startsWith("=")) return v === r.slice(1).trim();
+    return r.split(" ").every((part) => v.includes(part));
+  }
+
+  function clearColFilters() {
+    state.colFilters = {};
+    saveColFilters();
+    render();
+  }
+
+  let cfListFor = "";
+  function fillFilterList(key) {
+    const col = state.cols.find((c) => colKey(c) === key);
+    const list = $("lxc-cf-list");
+    if (!col || !list || !state.model || !state.model.ready) return;
+    const sig = `${key}|${state.model.orders.length}|${state.data ? state.data.at : 0}`;
+    if (cfListFor === sig) return;
+    cfListFor = sig;
+    const seen = new Map();
+    state.model.orders.forEach((o) => {
+      const v = cellText(o, col).replace(/\s+/g, " ");
+      if (v && v.length <= 80) seen.set(v, (seen.get(v) || 0) + 1);
+    });
+    const values = [...seen.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).slice(0, 400);
+    list.innerHTML = values.map((v) => `<option value="${esc(v)}"></option>`).join("");
   }
 
   // ---------- Model ----------
@@ -168,6 +232,11 @@
     if (col.id === "last") return lastText(o);
     if (col.id === "note") return o.note;
     return "";
+  }
+
+  function cellText(o, col) {
+    const v = String(cellValue(o, col) ?? "").trim();
+    return v === "—" ? "" : v;
   }
 
   function followUpText(o) {
@@ -292,16 +361,42 @@
     const cols = state.cols;
     const head1 = `<tr class="lxc-letters"><th class="lxc-corner"></th>${cols.map((c, i) => `<th class="${c.kind === "sys" ? "is-sys" : ""}" data-col="${i}">${c.letter}</th>`).join("")}</tr>`;
     const head2 = `<tr class="lxc-heads"><th class="lxc-corner">#</th>${cols.map((c) => `<th class="${c.kind === "sys" ? "is-sys" : ""}" title="${esc(c.header)}">${esc(c.header)}</th>`).join("")}</tr>`;
-    const body = state.rows.map((o, r) => `<tr class="${o.due ? "is-due" : ""}${o.category === "cancelled" ? " is-cancelled" : ""}"><td class="lxc-rn" title="Details sheet row ${o.sheetRow}">${o.sheetRow}</td>${cols.map((col, c) => cellHtml(o, col, r, c)).join("")}</tr>`).join("");
+    const colRules = activeColRules().length;
+    const head3 = `<tr class="lxc-frow"><th class="lxc-corner">${colRules
+      ? `<button type="button" class="lxc-cf-x" data-cf-clear title="Clear all column filters">✕</button>`
+      : `<span title="Type in a box to filter that column · ${esc(CF_HINT)}">▼</span>`}</th>${cols.map((c) => {
+      const key = colKey(c);
+      const v = state.colFilters[key] || "";
+      return `<th class="${c.kind === "sys" ? "is-sys" : ""}${v ? " is-on" : ""}"><input type="search" class="lxc-cf" data-cf="${esc(key)}" value="${esc(v)}" list="lxc-cf-list" autocomplete="off" spellcheck="false" placeholder="Filter…" title="${esc(`${c.header}: ${CF_HINT}`)}" aria-label="Filter ${esc(c.header)}" /></th>`;
+    }).join("")}</tr>`;
+    const body = state.rows.map((o, r) => `<tr class="${o.due ? "is-due" : ""}${o.category === "cancelled" ? " is-cancelled" : ""}"><td class="lxc-rn" data-rn="${r}" title="Details sheet row ${o.sheetRow} · click to select the row">${o.sheetRow}</td>${cols.map((col, c) => cellHtml(o, col, r, c)).join("")}</tr>`).join("");
+    const emptyMsg = colRules ? "No orders match your column filters." : "No orders match this filter.";
     const scroll = $("lxc-scroll");
+    const grid = $("lxc-grid");
     const top = scroll.scrollTop;
     const left = scroll.scrollLeft;
-    $("lxc-grid").innerHTML = `<thead>${head1}${head2}</thead><tbody>${body || `<tr><td class="lxc-rn"></td><td colspan="${cols.length}" style="color:#94a3b8;padding:14px 10px">No orders match this filter.</td></tr>`}</tbody>`;
+    const focused = document.activeElement;
+    const keep = focused && focused.classList && focused.classList.contains("lxc-cf") && grid.contains(focused)
+      ? { key: focused.dataset.cf, start: focused.selectionStart, end: focused.selectionEnd }
+      : null;
+    grid.innerHTML = `<thead>${head1}${head2}${head3}</thead><tbody>${body || `<tr><td class="lxc-rn"></td><td colspan="${cols.length}" style="color:#94a3b8;padding:14px 10px">${emptyMsg}</td></tr>`}</tbody>`;
+    const heads = grid.querySelector("tr.lxc-heads");
+    if (heads) grid.style.setProperty("--lxc-ftop", `${heads.offsetTop + heads.offsetHeight}px`);
     scroll.scrollTop = top;
     scroll.scrollLeft = left;
+    if (keep) {
+      const input = [...grid.querySelectorAll("input.lxc-cf")].find((i) => i.dataset.cf === keep.key);
+      if (input) {
+        input.focus({ preventScroll: true });
+        try { input.setSelectionRange(keep.start, keep.end); } catch { /* not supported */ }
+      }
+    }
+    const cfBtn = $("lxc-cf-clear");
+    cfBtn.hidden = !colRules;
+    cfBtn.textContent = `Clear column filters (${colRules})`;
     const s = state.model.summary;
     const editedCells = state.model.orders.reduce((a, o) => a + o.editCount, 0);
-    $("lxc-status-right").textContent = `${n(state.rows.length)} of ${n(s.total)} orders shown · ${n(editedCells)} edited cells · ${n(s.followUps)} follow-ups logged`;
+    $("lxc-status-right").textContent = `${n(state.rows.length)} of ${n(s.total)} orders shown${colRules ? ` · ${colRules} column filter${colRules === 1 ? "" : "s"}` : ""} · ${n(editedCells)} edited cells · ${n(s.followUps)} follow-ups logged`;
     applySelection(false);
   }
 
@@ -316,37 +411,160 @@
     return $("lxc-grid").querySelector(`td[data-r="${r}"][data-c="${c}"]`);
   }
 
+  // Range = anchor cell → active cell (state.sel); both follow the order key so filters and re-renders keep them.
+  function rangeBounds() {
+    const r = selRowIndex();
+    if (r < 0) return null;
+    const c = Math.max(0, Math.min(state.cols.length - 1, state.sel.c));
+    let ar = r;
+    let ac = c;
+    if (state.anchor) {
+      const i = state.rows.findIndex((o) => o.key === state.anchor.key);
+      if (i >= 0) { ar = i; ac = Math.max(0, Math.min(state.cols.length - 1, state.anchor.c)); }
+    }
+    return { r1: Math.min(r, ar), r2: Math.max(r, ar), c1: Math.min(c, ac), c2: Math.max(c, ac) };
+  }
+
+  function rangeSize(b) {
+    return b ? (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1) : 0;
+  }
+
   function applySelection(scroll) {
     const grid = $("lxc-grid");
-    grid.querySelectorAll(".is-sel, .is-colsel, .is-rowsel").forEach((el) => el.classList.remove("is-sel", "is-colsel", "is-rowsel"));
+    grid.querySelectorAll(".is-sel, .is-colsel, .is-rowsel, .is-range").forEach((el) => el.classList.remove("is-sel", "is-colsel", "is-rowsel", "is-range"));
     const r = selRowIndex();
-    if (r < 0) { $("lxc-namebox").textContent = ""; $("lxc-fxval").textContent = ""; return; }
+    if (r < 0) { $("lxc-namebox").textContent = ""; $("lxc-fxval").textContent = ""; renderSelInfo(null); return; }
     const c = Math.max(0, Math.min(state.cols.length - 1, state.sel.c));
     state.sel = { key: state.rows[r].key, c };
+    const b = rangeBounds();
+    const multi = rangeSize(b) > 1;
+    const body = grid.tBodies[0];
+    for (let i = b.r1; i <= b.r2; i += 1) {
+      const tr = body && body.rows[i];
+      if (!tr) continue;
+      const rn = tr.cells[0];
+      if (rn && rn.classList.contains("lxc-rn")) rn.classList.add("is-rowsel");
+      if (multi) for (let j = b.c1; j <= b.c2; j += 1) { const cell = tr.cells[j + 1]; if (cell) cell.classList.add("is-range"); }
+    }
+    for (let j = b.c1; j <= b.c2; j += 1) {
+      const th = grid.querySelector(`th[data-col="${j}"]`);
+      if (th) th.classList.add("is-colsel");
+    }
     const td = cellEl(r, c);
     if (td) {
       td.classList.add("is-sel");
-      const rn = td.parentElement.querySelector(".lxc-rn");
-      if (rn) rn.classList.add("is-rowsel");
       if (scroll) td.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
-    const th = grid.querySelector(`th[data-col="${c}"]`);
-    if (th) th.classList.add("is-colsel");
     const o = state.rows[r];
     const col = state.cols[c];
-    $("lxc-namebox").textContent = `${col.letter}${o.sheetRow}`;
+    $("lxc-namebox").textContent = multi
+      ? `${state.cols[b.c1].letter}${state.rows[b.r1].sheetRow}:${state.cols[b.c2].letter}${state.rows[b.r2].sheetRow}`
+      : `${col.letter}${o.sheetRow}`;
     const v = cellValue(o, col);
     const fileNote = col.kind === "file" && Object.prototype.hasOwnProperty.call(o.edits, col.header) ? `   ·   file value: ${o.fileCells[col.idx] || "(blank)"}` : "";
     $("lxc-fxval").textContent = `${v}${fileNote}`;
+    renderSelInfo(multi ? b : null);
   }
 
-  function moveSel(dr, dc) {
+  function renderSelInfo(b) {
+    const el = $("lxc-selinfo");
+    if (!b) { el.textContent = ""; return; }
+    const size = rangeSize(b);
+    let filled = 0;
+    let sum = 0;
+    let nums = 0;
+    if (size <= 50000) {
+      for (let r = b.r1; r <= b.r2; r += 1) {
+        for (let c = b.c1; c <= b.c2; c += 1) {
+          const v = cellText(state.rows[r], state.cols[c]);
+          if (!v) continue;
+          filled += 1;
+          if (state.cols[c].kind === "file" && /^-?[\d,]+(\.\d+)?$/.test(v) && !/^0\d|^\d{7,}$/.test(v)) { sum += Number(v.replace(/,/g, "")); nums += 1; }
+        }
+      }
+    }
+    const parts = [`${n(b.r2 - b.r1 + 1)}R × ${n(b.c2 - b.c1 + 1)}C`, `Count: ${n(filled)}`];
+    if (nums > 1) parts.push(`Sum: ${fmtN.format(Math.round(sum * 100) / 100)}`);
+    el.textContent = `${parts.join("   ")}   ·   Ctrl+C copy · Ctrl+Shift+C with headers`;
+  }
+
+  function moveSel(dr, dc, extend) {
     if (!state.rows.length) return;
+    if (extend && !state.anchor) state.anchor = { ...state.sel };
+    if (!extend) state.anchor = null;
     const r = Math.max(0, Math.min(state.rows.length - 1, selRowIndex() + dr));
     const c = Math.max(0, Math.min(state.cols.length - 1, state.sel.c + dc));
     state.sel = { key: state.rows[r].key, c };
     applySelection(true);
   }
+
+  function selectBlock(r1, c1, r2, c2) {
+    if (!state.rows.length) return;
+    const clampR = (r) => Math.max(0, Math.min(state.rows.length - 1, r));
+    const clampC = (c) => Math.max(0, Math.min(state.cols.length - 1, c));
+    state.sel = { key: state.rows[clampR(r1)].key, c: clampC(c1) };
+    state.anchor = { key: state.rows[clampR(r2)].key, c: clampC(c2) };
+    applySelection(false);
+  }
+
+  function inRange(r, c) {
+    const b = rangeBounds();
+    return !!b && r >= b.r1 && r <= b.r2 && c >= b.c1 && c <= b.c2;
+  }
+
+  // ---------- Copy (TSV + bordered HTML table so Excel / Outlook paste as cells) ----------
+
+  let copyPayload = null;
+
+  function buildCopy(withHeaders) {
+    const b = rangeBounds();
+    if (!b) return null;
+    const cols = state.cols.slice(b.c1, b.c2 + 1);
+    const grid = [];
+    if (withHeaders) grid.push(cols.map((c) => c.header));
+    for (let r = b.r1; r <= b.r2; r += 1) grid.push(cols.map((col) => cellText(state.rows[r], col)));
+    const tsvCell = (v) => (/[\t\r\n"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const text = grid.map((line) => line.map(tsvCell).join("\t")).join("\r\n");
+    const td = "border:1px solid #9aa5b1;padding:4px 8px;white-space:nowrap;vertical-align:top";
+    const th = `${td};background:#e9efe9;font-weight:bold`;
+    // Long digit strings / leading zeros (VINs, order numbers, phones) must stay text in Excel.
+    const keepText = (v) => (/^\+?0\d|^\d{12,}$/.test(v) ? ";mso-number-format:'\\@'" : "");
+    const cellHtmlOut = (v) => esc(v).replace(/\r?\n/g, '<br style="mso-data-placement:same-cell">');
+    const html = `<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt">${grid.map((line, i) =>
+      `<tr>${line.map((v) => (withHeaders && i === 0 ? `<th style="${th}">${esc(v)}</th>` : `<td style="${td}${keepText(v)}">${cellHtmlOut(v)}</td>`)).join("")}</tr>`
+    ).join("")}</table>`;
+    return { text, html, cells: rangeSize(b) };
+  }
+
+  function copyRange(withHeaders) {
+    const p = buildCopy(withHeaders);
+    if (!p) return;
+    const done = () => {
+      const msg = `Copied ${n(p.cells)} cell${p.cells === 1 ? "" : "s"}${withHeaders ? " with headers" : ""}`;
+      setStatus(msg);
+      toast(msg);
+    };
+    copyPayload = p;
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    copyPayload = null;
+    if (ok) { done(); return; }
+    if (navigator.clipboard && window.ClipboardItem) {
+      navigator.clipboard.write([new window.ClipboardItem({
+        "text/plain": new Blob([p.text], { type: "text/plain" }),
+        "text/html": new Blob([p.html], { type: "text/html" }),
+      })]).then(done, () => toast("Copy blocked by the browser", true));
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(p.text).then(done, () => toast("Copy blocked by the browser", true));
+    }
+  }
+
+  document.addEventListener("copy", (e) => {
+    if (!copyPayload || !e.clipboardData) return;
+    e.clipboardData.setData("text/plain", copyPayload.text);
+    e.clipboardData.setData("text/html", copyPayload.html);
+    e.preventDefault();
+  });
 
   function startEdit(initial) {
     const r = selRowIndex();
@@ -611,8 +829,9 @@
   function openMenu(x, y, o, col) {
     const menu = $("lxc-menu");
     const items = [];
-    const v = cellValue(o, col);
-    items.push(`<button type="button" data-menu="copy">Copy cell</button>`);
+    const size = rangeSize(rangeBounds());
+    items.push(`<button type="button" data-menu="copy">${size > 1 ? `Copy ${n(size)} cells` : "Copy cell"}<kbd>Ctrl+C</kbd></button>`);
+    items.push(`<button type="button" data-menu="copy-h">Copy with headers<kbd>Ctrl+Shift+C</kbd></button>`);
     if (col.editable) items.push(`<button type="button" data-menu="edit">Edit cell</button>`);
     if (col.kind === "file" && Object.prototype.hasOwnProperty.call(o.edits, col.header)) {
       items.push(`<button type="button" data-menu="revert">Revert to file value</button><p>File value: ${esc(o.fileCells[col.idx] || "(blank)")}</p>`);
@@ -630,7 +849,7 @@
       if (!b) return;
       menu.hidden = true;
       const act = b.dataset.menu;
-      if (act === "copy") navigator.clipboard && navigator.clipboard.writeText(v).then(() => toast("Copied"), () => {});
+      if (act === "copy" || act === "copy-h") copyRange(act === "copy-h");
       else if (act === "edit") startEdit();
       else if (act === "revert") saveEdit(o.key, { edits: { [col.header]: null } });
       else if (act === "clear-note") saveEdit(o.key, { note: "" });
@@ -646,6 +865,8 @@
     user.addEventListener("change", () => {
       Core.setUser(user.value);
       user.closest(".lxc-user").classList.toggle("is-missing", !user.value.trim());
+      loadColFilters();
+      render();
     });
 
     document.addEventListener("click", (e) => {
@@ -665,19 +886,88 @@
     $("lxc-refresh").addEventListener("click", () => loadAll(true));
     $("lxc-export").addEventListener("click", exportExcel);
 
+    $("lxc-cf-clear").addEventListener("click", clearColFilters);
+
     const grid = $("lxc-grid");
+    const focusSheet = () => $("lxc-scroll").focus({ preventScroll: true });
     grid.addEventListener("click", (e) => {
+      if (e.target.closest("[data-cf-clear]")) { clearColFilters(); return; }
       const fu = e.target.closest("[data-fu]");
       if (fu) { followUp(fu.dataset.fu); return; }
       const live = e.target.closest("[data-live]");
-      if (live) { checkLive(live.dataset.live); return; }
+      if (live) { checkLive(live.dataset.live); }
+    });
+
+    // Excel-style selection: click · drag · Shift+click · column letter · row number
+    grid.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || e.target.closest("button, input, a, select, textarea")) return;
+      const last = state.rows.length - 1;
+      const letter = e.target.closest("tr.lxc-letters th[data-col]");
+      if (letter && last >= 0) {
+        e.preventDefault();
+        if (state.editing) commitEdit(0, 0);
+        const c = Number(letter.dataset.col);
+        const ac = e.shiftKey && state.anchor ? state.anchor.c : c;
+        selectBlock(0, c, last, ac);
+        focusSheet();
+        return;
+      }
+      const rn = e.target.closest("td.lxc-rn[data-rn]");
+      if (rn) {
+        e.preventDefault();
+        if (state.editing) commitEdit(0, 0);
+        const r = Number(rn.dataset.rn);
+        const aIdx = e.shiftKey && state.anchor ? state.rows.findIndex((o) => o.key === state.anchor.key) : -1;
+        selectBlock(r, 0, aIdx >= 0 ? aIdx : r, state.cols.length - 1);
+        focusSheet();
+        return;
+      }
       const td = e.target.closest("td[data-r]");
       if (!td || td.classList.contains("is-editing")) return;
       const o = state.rows[Number(td.dataset.r)];
       if (!o) return;
-      state.sel = { key: o.key, c: Number(td.dataset.c) };
+      e.preventDefault();
+      if (state.editing) commitEdit(0, 0);
+      const cell = { key: o.key, c: Number(td.dataset.c) };
+      if (e.shiftKey) {
+        if (!state.anchor) state.anchor = { ...state.sel };
+        state.sel = cell;
+      } else {
+        state.sel = cell;
+        state.anchor = { ...cell };
+        state.dragging = true;
+      }
       applySelection(false);
-      $("lxc-scroll").focus({ preventScroll: true });
+      focusSheet();
+    });
+    grid.addEventListener("mouseover", (e) => {
+      if (!state.dragging) return;
+      const td = e.target.closest("td[data-r]");
+      if (!td) return;
+      const o = state.rows[Number(td.dataset.r)];
+      const c = Number(td.dataset.c);
+      if (!o || (o.key === state.sel.key && c === state.sel.c)) return;
+      state.sel = { key: o.key, c };
+      applySelection(false);
+    });
+    document.addEventListener("mouseup", () => { state.dragging = false; });
+
+    let cfTimer = null;
+    grid.addEventListener("input", (e) => {
+      const input = e.target.closest("input.lxc-cf");
+      if (!input) return;
+      state.colFilters[input.dataset.cf] = input.value;
+      clearTimeout(cfTimer);
+      cfTimer = setTimeout(() => { saveColFilters(); render(); }, 160);
+    });
+    grid.addEventListener("focusin", (e) => {
+      const input = e.target.closest("input.lxc-cf");
+      if (input) fillFilterList(input.dataset.cf);
+    });
+    grid.addEventListener("keydown", (e) => {
+      const input = e.target.closest("input.lxc-cf");
+      if (!input) return;
+      if (e.key === "Enter" || (e.key === "Escape" && !input.value)) { e.preventDefault(); focusSheet(); }
     });
     grid.addEventListener("dblclick", (e) => {
       const td = e.target.closest("td[data-r]");
@@ -687,10 +977,13 @@
     grid.addEventListener("contextmenu", (e) => {
       const td = e.target.closest("td[data-r]");
       if (!td) return;
-      const o = state.rows[Number(td.dataset.r)];
+      const r = Number(td.dataset.r);
+      const c = Number(td.dataset.c);
+      const o = state.rows[r];
       if (!o) return;
       e.preventDefault();
-      state.sel = { key: o.key, c: Number(td.dataset.c) };
+      if (!inRange(r, c)) state.anchor = null;
+      state.sel = { key: o.key, c };
       applySelection(false);
       openMenu(e.clientX, e.clientY, o, state.cols[state.sel.c]);
     });
@@ -698,13 +991,16 @@
     $("lxc-scroll").addEventListener("keydown", (e) => {
       if (state.editing || e.target !== $("lxc-scroll")) return;
       const k = e.key;
-      if (k === "ArrowDown") { e.preventDefault(); moveSel(1, 0); }
-      else if (k === "ArrowUp") { e.preventDefault(); moveSel(-1, 0); }
-      else if (k === "ArrowRight") { e.preventDefault(); moveSel(0, 1); }
-      else if (k === "ArrowLeft") { e.preventDefault(); moveSel(0, -1); }
-      else if (k === "Tab") { e.preventDefault(); moveSel(0, e.shiftKey ? -1 : 1); }
-      else if (k === "PageDown") { e.preventDefault(); moveSel(20, 0); }
-      else if (k === "PageUp") { e.preventDefault(); moveSel(-20, 0); }
+      const ext = e.shiftKey;
+      if (k === "ArrowDown") { e.preventDefault(); moveSel(1, 0, ext); }
+      else if (k === "ArrowUp") { e.preventDefault(); moveSel(-1, 0, ext); }
+      else if (k === "ArrowRight") { e.preventDefault(); moveSel(0, 1, ext); }
+      else if (k === "ArrowLeft") { e.preventDefault(); moveSel(0, -1, ext); }
+      else if (k === "Tab") { e.preventDefault(); moveSel(0, e.shiftKey ? -1 : 1, false); }
+      else if (k === "PageDown") { e.preventDefault(); moveSel(20, 0, ext); }
+      else if (k === "PageUp") { e.preventDefault(); moveSel(-20, 0, ext); }
+      else if (k === "Escape" && state.anchor) { e.preventDefault(); state.anchor = null; applySelection(false); }
+      else if ((e.ctrlKey || e.metaKey) && (k === "a" || k === "A")) { e.preventDefault(); selectBlock(0, 0, state.rows.length - 1, state.cols.length - 1); }
       else if (k === "Enter" || k === "F2") { e.preventDefault(); startEdit(); }
       else if (k === "Delete" || k === "Backspace") {
         const col = state.cols[state.sel.c];
@@ -716,8 +1012,8 @@
           else saveEdit(o.key, { note: "" });
         }
       } else if ((e.ctrlKey || e.metaKey) && (k === "c" || k === "C")) {
-        const r = selRowIndex();
-        if (r >= 0 && navigator.clipboard) navigator.clipboard.writeText(cellValue(state.rows[r], state.cols[state.sel.c])).catch(() => {});
+        e.preventDefault();
+        copyRange(e.shiftKey);
       } else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const col = state.cols[state.sel.c];
         if (col && col.editable) { e.preventDefault(); startEdit(k); }
@@ -738,6 +1034,7 @@
 
   // ---------- Start ----------
 
+  loadColFilters();
   bind();
   setupNotifyButton();
   render();

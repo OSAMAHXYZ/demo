@@ -161,7 +161,34 @@ button, input { font: inherit; color: inherit; }
 .lxc-grid td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
 .lxc-grid td.is-edited { background: #fff7d1; position: relative; }
 .lxc-grid td.is-edited::after { content: ""; position: absolute; right: 0; top: 0; border-style: solid; border-width: 0 7px 7px 0; border-color: transparent #e8590c transparent transparent; }
+.lxc-grid td.is-range { box-shadow: inset 0 0 0 9999px rgba(33, 115, 70, 0.13); }
 .lxc-grid td.is-sel { outline: 2px solid var(--xl-green); outline-offset: -2px; position: relative; z-index: 1; }
+.lxc-grid td.lxc-rn[data-rn], .lxc-grid thead tr.lxc-letters th[data-col] { cursor: pointer; user-select: none; }
+.lxc-grid thead tr.lxc-letters th[data-col]:hover { background: #e4ece6; }
+
+/* Column filter row */
+.lxc-grid thead tr.lxc-frow th {
+  top: var(--lxc-ftop, 47px); height: 27px; padding: 2px 3px; background: #f7faf8; border-bottom: 1px solid #c3d3c8; overflow: visible;
+}
+.lxc-grid thead tr.lxc-frow th.is-sys { background: #eef0f3; }
+.lxc-grid thead tr.lxc-frow th.lxc-corner { color: #9aa5b1; font-size: 10px; }
+.lxc-cf {
+  display: block; width: 100%; min-width: 72px; height: 22px; padding: 0 6px; border: 1px solid #d3dbd5; border-radius: 4px;
+  background: #fff; font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 12px; color: #111; outline: none;
+}
+.lxc-cf::placeholder { color: #a7b0ba; }
+.lxc-cf:focus { border-color: var(--xl-green); box-shadow: 0 0 0 2px rgba(33, 115, 70, 0.16); }
+.lxc-grid thead tr.lxc-frow th.is-on .lxc-cf { background: #fff7d1; border-color: #e0a93b; font-weight: 700; }
+.lxc-cf-x {
+  width: 22px; height: 20px; padding: 0; border: 1px solid #fca5a5; border-radius: 4px; background: #fff1f2; color: #b91c1c;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.lxc-cf-x:hover { background: #fee2e2; }
+.lxc-cf-clear {
+  height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid #f0c36d; background: #fff7d1; color: #92400e;
+  font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.lxc-cf-clear:hover { background: #fdecb2; }
 .lxc-grid td.is-editing { padding: 0; outline: 2px solid var(--xl-green); outline-offset: -2px; }
 .lxc-grid td.is-editing input {
   width: 100%; min-width: 140px; height: 23px; border: 0; outline: none; padding: 0 7px; background: #fff; font: inherit; font-size: 13px;
@@ -218,6 +245,7 @@ button, input { font: inherit; color: inherit; }
   border-right: 1px solid var(--xl-grid); border-bottom: 3px solid var(--xl-green);
 }
 .lxc-status-right { margin-left: auto; white-space: nowrap; }
+.lxc-selinfo { color: var(--xl-green); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .lxc-empty { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255, 255, 255, 0.92); font-family: "Outfit", sans-serif; }
 .lxc-empty-card { max-width: 520px; text-align: center; padding: 28px 32px; border-radius: 18px; border: 1px solid var(--line); background: #fff; box-shadow: 0 20px 50px -24px rgba(15, 23, 42, 0.35); }
@@ -231,6 +259,7 @@ button, input { font: inherit; color: inherit; }
 }
 .lxc-menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; background: none; border-radius: 7px; cursor: pointer; }
 .lxc-menu button:hover { background: #f1f5f9; }
+.lxc-menu kbd { float: right; margin-left: 16px; font-family: inherit; font-size: 11px; color: var(--dim); }
 .lxc-menu p { margin: 4px 10px 6px; font-size: 11.5px; color: var(--muted); max-width: 320px; white-space: normal; }
 .lxc-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; padding: 10px 16px; border-radius: 10px;
