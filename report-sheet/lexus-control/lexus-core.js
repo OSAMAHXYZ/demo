@@ -443,6 +443,9 @@
 
   // ---------- Pushed files ----------
 
+  /** Parsed workbooks of the last push; reused until the push stamp or a file changes (Excel is parsed once per push). */
+  let parsedMemo = null;
+
   /**
    * Latest Admin Push → parsed Lexus B2C, Back Order and Sales Raw.
    * @param {{ force?: boolean }} [opts]
@@ -457,6 +460,13 @@
     const at = Number((sync && sync.at) || (payload && payload.at) || Store.readDataPushStamp().at) || 0;
     const out = { at, fromServer: !!(sync && sync.fromServer), b2c: null, bo: null, sales: null, files: {} };
     Object.keys(files).forEach((id) => { out.files[id] = { name: files[id].name, size: files[id].size }; });
+    const sig = [SLOT, "backorder", "sales"].map((id) => {
+      const f = files[id];
+      return f && f.buffer ? `${id}:${f.name}:${f.buffer.byteLength}` : `${id}:-`;
+    }).join("|") + `|${at}`;
+    if (parsedMemo && parsedMemo.sig === sig) {
+      return { ...out, b2c: parsedMemo.b2c, bo: parsedMemo.bo, sales: parsedMemo.sales };
+    }
     const b2cFile = files[SLOT];
     if (b2cFile && b2cFile.buffer) {
       try { out.b2c = parseB2c(b2cFile.buffer, b2cFile.name); } catch (err) { out.b2c = { ok: false, error: err.message || String(err), rows: [], headers: [] }; }
@@ -467,6 +477,7 @@
     if (files.sales && files.sales.buffer) {
       try { out.sales = parseSales(files.sales.buffer); } catch { out.sales = null; }
     }
+    parsedMemo = { sig, b2c: out.b2c, bo: out.bo, sales: out.sales };
     return out;
   }
 
@@ -535,6 +546,7 @@
     parseBackorder,
     parseSales,
     buildModel,
+    summarize,
     trackText,
     loadPushedData,
     fetchState,

@@ -566,6 +566,8 @@
       }
     });
 
+    const q = new URLSearchParams(location.search).get("q");
+    if (q) { state.search = q; $("lxc-search").value = q; }
     $("lxc-search").addEventListener("input", (e) => { state.search = e.target.value; render(); });
     $("lxc-edited").addEventListener("change", (e) => { state.editedOnly = e.target.checked; render(); });
     $("lxc-refresh").addEventListener("click", () => loadAll(true));
