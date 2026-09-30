@@ -29,6 +29,7 @@
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20260930ck1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -125,11 +126,21 @@
       <div class="sr-dash" id="sr-pbi-page">
         <div class="sr-dash-head">
           <div class="sr-dash-head-copy">
-            <p class="sr-eyebrow">Sales Performance</p>
-            <h2 class="sr-title">Sales Dashboard</h2>
-            <p class="sr-sub">Track performance, manage targets, and drive results.</p>
+            <div class="sr-brand" aria-hidden="true">
+              <img class="sr-brand-logo" src="../images/logo/toyota.png" alt="" width="30" height="30" decoding="async" onerror="this.style.display='none'" />
+              <span class="sr-brand-word">TOYOTA</span>
+            </div>
+            <div class="sr-brand-copy">
+              <p class="sr-eyebrow">Sales Performance</p>
+              <h2 class="sr-title">Sales Dashboard</h2>
+              <p class="sr-sub">Track performance, manage targets, and drive results.</p>
+            </div>
           </div>
           <div class="sr-dash-toolbar" role="toolbar" aria-label="Sales dashboard controls">
+            <div class="sr-live-state" title="Data from the latest Admin Push">
+              <span class="sr-live-pill"><i aria-hidden="true"></i>LIVE</span>
+              <span class="sr-updated"><span>Last Updated</span><strong id="sr-last-updated">—</strong></span>
+            </div>
             <div class="sr-day-chip" id="sr-day-chip" title="Working day">
               <button type="button" class="sr-day-nav" id="sr-day-prev" aria-label="Previous day">‹</button>
               <div class="sr-day-chip-body">
@@ -159,10 +170,24 @@
                 </select>
               </label>
             </div>
+            <button type="button" class="btn-ghost sr-clear-sel" id="sr-clear-sel" hidden>Clear selection</button>
+            <button type="button" class="sr-tool-btn" data-sr-sheet="pace" title="Daily target pace">Pace</button>
+            <button type="button" class="sr-tool-btn" data-sr-sheet="schedule" title="Employee sales schedule &amp; targets">Schedule</button>
             <button type="button" class="sr-export-btn" id="sr-csv-btn">
               <span aria-hidden="true">↑</span> Export
             </button>
-            <button type="button" class="btn-ghost sr-clear-sel" id="sr-clear-sel" hidden>Clear selection</button>
+            <button type="button" class="sr-icon-btn" id="sr-refresh-btn" title="Refresh · reload the latest Admin Push" aria-label="Refresh">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
+            </button>
+            <button type="button" class="sr-icon-btn" id="sr-fullscreen-btn" title="Fullscreen" aria-label="Fullscreen" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            </button>
+            <div class="sr-nav">
+              <button type="button" class="sr-icon-btn" id="sr-nav-btn" title="Other dashboards" aria-label="Other dashboards" aria-haspopup="menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </button>
+              <div class="sr-nav-menu" id="sr-nav-menu" role="menu" hidden></div>
+            </div>
           </div>
         </div>
 
@@ -211,6 +236,7 @@
                   <div class="sr-perf-progress-meta">
                     <span>Target <strong id="sr-perf-target-lbl">—</strong></span>
                     <span>Achieved <strong id="sr-perf-achieved-lbl">—</strong></span>
+                    <span class="sr-perf-remain-lbl">Remaining <strong id="sr-perf-remaining-lbl">—</strong></span>
                   </div>
                   <div class="sr-perf-progress-track" aria-hidden="true">
                     <div class="sr-perf-progress-fill" id="sr-perf-progress-fill" style="width:0%"></div>
@@ -316,6 +342,7 @@
               <summary class="sr-fold-summary">
                 <span>Daily Target Pace</span>
                 <span class="sr-fold-chev" aria-hidden="true">▾</span>
+                <button type="button" class="sr-sheet-close" data-sr-sheet-close title="Close (Esc)" aria-label="Close">×</button>
               </summary>
               <div class="sr-fold-body">
                 <div class="sr-pace-board" id="sr-pace-board" aria-live="polite">
@@ -329,6 +356,7 @@
               <summary class="sr-fold-summary">
                 <span>Employee Sales Schedule &amp; Targets</span>
                 <span class="sr-fold-chev" aria-hidden="true">▾</span>
+                <button type="button" class="sr-sheet-close" data-sr-sheet-close title="Close (Esc)" aria-label="Close">×</button>
               </summary>
               <div class="sr-fold-body">
                 <section class="sr-schedule" id="sr-schedule" aria-label="Employee sales schedule">
@@ -487,6 +515,7 @@
               <canvas id="chart-sr-prev"></canvas>
               <canvas id="chart-sr-pace"></canvas>
             </div>
+            <div class="sr-sheet-backdrop" aria-hidden="true"></div>
           </div>
         </div>
       </div>
@@ -5662,12 +5691,15 @@
   function upsertChart(id, type, labels, values, extra) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
-    if (charts[id]) charts[id].destroy();
     const colors = ["#111111", "#eb0a1e", "#0f766e", "#6b7280", "#b45309", "#374151", "#9ca3af", "#c40718"];
     const fontFamily = "'Outfit', 'Segoe UI', sans-serif";
     const figureFont = "'Space Grotesk', 'Outfit', sans-serif";
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
+    const cockpit = !!canvas.closest("#panel-salesreport");
+    const tickColor = cockpit ? "#8d9bb0" : "#6b7280";
+    const gridColor = cockpit ? "rgba(148, 163, 184, 0.10)" : "rgba(17, 17, 17, 0.06)";
+    const strongTick = cockpit ? "#d5deea" : "#111827";
     const empKeys = opts.empKeys || null;
     const labelCount = (labels && labels.length) || 0;
     const showValues = !!opts.showValues;
@@ -5712,8 +5744,8 @@
       beginAtZero: true,
       stacked: !!opts.stacked,
       ...(opts.max != null && !opts.dualValueAxis ? { max: opts.max } : {}),
-      grid: { color: "rgba(17, 17, 17, 0.06)", drawBorder: false },
-      ticks: { precision: 0, color: "#6b7280", font: { size: 11, family: figureFont, weight: "600" } },
+      grid: { color: gridColor, drawBorder: false },
+      ticks: { precision: 0, color: tickColor, font: { size: 11, family: figureFont, weight: "600" } },
       border: { display: false },
     };
     const categoryScale = {
@@ -5722,7 +5754,7 @@
       ticks: {
         maxRotation: horizontal ? 0 : 40,
         autoSkip: false,
-        color: horizontal ? "#374151" : "#111111",
+        color: cockpit ? "#b6c2d3" : (horizontal ? "#374151" : "#111111"),
         font: {
           size: horizontal ? 10 : 12,
           family: fontFamily,
@@ -5772,9 +5804,9 @@
         weight: "700",
       };
       categoryScale.ticks.padding = 8;
-      categoryScale.ticks.color = "#111827";
+      categoryScale.ticks.color = strongTick;
     }
-    charts[id] = new Chart(canvas, {
+    const chartConfig = {
       type,
       data: {
         labels,
@@ -5782,7 +5814,7 @@
           data: values,
           backgroundColor: opts.backgroundColor || (type === "doughnut" ? colors : "rgba(235, 10, 30, 0.88)"),
           borderWidth: type === "doughnut" ? 3 : 0,
-          borderColor: type === "doughnut" ? "#fff" : undefined,
+          borderColor: type === "doughnut" ? (cockpit ? "#0d1420" : "#fff") : undefined,
           borderRadius: type === "bar" ? 4 : 0,
           ...datasetsExtra,
         }]).map((ds) => ({
@@ -5827,7 +5859,7 @@
             display: opts.legend === false
               ? false
               : (opts.legend === true || type === "doughnut" || !!(opts.datasets && opts.datasets.length > 1)),
-            labels: { color: "#64748b", font: { size: 12, family: fontFamily }, boxWidth: 12, padding: 14 },
+            labels: { color: cockpit ? "#c7d2e0" : "#64748b", font: { size: 12, family: fontFamily }, boxWidth: 12, padding: 14 },
           },
           tooltip: {
             backgroundColor: "rgba(30, 41, 59, 0.92)",
@@ -5916,7 +5948,16 @@
               };
             })(),
       },
-    });
+    };
+    const existing = charts[id];
+    if (cockpit && existing && existing.canvas === canvas && existing.config.type === type) {
+      existing.data = chartConfig.data;
+      existing.options = chartConfig.options;
+      existing.update();
+      return;
+    }
+    if (existing) existing.destroy();
+    charts[id] = new Chart(canvas, chartConfig);
   }
 
   function sumNumeric(arr) {
@@ -7471,6 +7512,8 @@
     document.body.classList.toggle("gec-mode", panelId === "gec");
     document.body.classList.toggle("lx-mode", panelId === "lexus");
     document.body.classList.toggle("sc-mode", panelId === "summary");
+    document.body.classList.toggle("sr-mode", panelId === "salesreport");
+    if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
     PANEL_DEFS.forEach((p) => {
       const el = document.getElementById("panel-" + p.id);
@@ -8374,7 +8417,7 @@
 
     el.innerHTML = `
       <div class="sr-cancel-mock-body">
-        <div class="sr-cancel-donut" style="--cancel-deg:${deg}deg" aria-hidden="true">
+        <div class="sr-cancel-donut" style="--cancel-deg:${deg}deg;--cancel-ring:${(deg * 2).toFixed(1)}deg" aria-hidden="true">
           <div class="sr-cancel-donut-hole">
             <strong>${escapeHtml(pctText)}</strong>
             <span>Cancellation Rate</span>
@@ -8415,18 +8458,27 @@
     const bg = labels.map((lab) => colors[lab] || colors.Other);
     const total = values.reduce((a, b) => a + (Number(b) || 0), 0);
     if (legendEl) {
+      const items = types.map((x) => ({
+        ...x,
+        color: colors[x.type] || colors.Other,
+        pct: total > 0 ? Math.round((x.count / total) * 100) : 0,
+      }));
+      const shown = items.filter((x) => x.count > 0);
       legendEl.innerHTML = types.length
-        ? types
-            .map((x) => {
-              const pct = total > 0 ? Math.round((x.count / total) * 100) : 0;
-              return `<div class="pbi-wide-salestype-item">
-                <span class="swatch" style="background:${colors[x.type] || colors.Other}"></span>
+        ? `<div class="sr-st-dist">
+            <div class="sr-st-total"><span>Total</span><strong>${formatNumber(total)}</strong></div>
+            <div class="sr-st-bar" role="img" aria-label="${escapeHtml(items.map((x) => `${x.type} ${x.pct}%`).join(", "))}">
+              ${shown.map((x) => `<span class="sr-st-seg" style="flex-grow:${x.count};background:${x.color}" title="${escapeHtml(x.type)} · ${formatNumber(x.count)} · ${x.pct}%">${x.pct >= 7 ? `${x.pct}%` : ""}</span>`).join("")}
+            </div>
+          </div>
+          <div class="sr-st-legend">
+            ${items.map((x) => `<div class="pbi-wide-salestype-item${x.count ? "" : " is-zero"}">
+                <span class="swatch" style="background:${x.color}"></span>
                 <span class="name">${escapeHtml(x.type)}</span>
                 <span class="count">${formatNumber(x.count)}</span>
-                <span class="pct">${pct}%</span>
-              </div>`;
-            })
-            .join("")
+                <span class="pct">${x.pct}%</span>
+              </div>`).join("")}
+          </div>`
         : `<p class="foot" style="margin:0">No delivered cars in this period.</p>`;
     }
     if (total > 0) {
@@ -8512,6 +8564,7 @@
         nameEl.textContent = "—";
       }
     }
+    renderSrLastUpdated();
     renderNameList(sr);
     renderPaceBoard(sr);
     renderPbiKpis(sr);
@@ -8527,6 +8580,86 @@
         ? "Showing one employee only · click Clear or the name again to show all"
         : "Click a name to filter this page to that person only";
     }
+  }
+
+  // ---------- Sales Dashboard cockpit · presentation helpers (no business logic) ----------
+
+  const SR_AVATAR_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#6366f1"];
+
+  function srInitials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    const a = parts[0][0] || "";
+    const b = parts.length > 1 ? parts[parts.length - 1][0] : (parts[0][1] || "");
+    return (a + b).toUpperCase();
+  }
+
+  function srAvatarColor(name) {
+    let h = 0;
+    const s = String(name || "");
+    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return SR_AVATAR_COLORS[h % SR_AVATAR_COLORS.length];
+  }
+
+  /** Daily Proforma / Delivery series is used by the KPI sparklines and the Prof + Del chart · build once per report + selection. */
+  const srDailySeriesCache = new WeakMap();
+  function srDailySeries(sr, selectedKey) {
+    if (!sr || typeof sr !== "object") return buildDailyProfDelSeries(sr, selectedKey);
+    let byKey = srDailySeriesCache.get(sr);
+    if (!byKey) { byKey = new Map(); srDailySeriesCache.set(sr, byKey); }
+    const k = selectedKey || "";
+    if (!byKey.has(k)) byKey.set(k, buildDailyProfDelSeries(sr, k));
+    return byKey.get(k);
+  }
+
+  function srSparkSvg(values, color) {
+    const nums = (values || []).map((v) => Number(v) || 0);
+    if (nums.length < 2 || !nums.some((v) => v > 0)) {
+      return `<svg class="sr-kpi-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="100" y2="28" stroke="${color}" stroke-opacity=".35" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+    }
+    const max = Math.max(...nums);
+    const step = 100 / (nums.length - 1);
+    const pts = nums.map((v, i) => `${(i * step).toFixed(2)},${(28 - (v / max) * 24).toFixed(2)}`);
+    return `<svg class="sr-kpi-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+      <polygon points="0,30 ${pts.join(" ")} 100,30" fill="${color}" fill-opacity=".14"/>
+      <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  }
+
+  function srMeterHtml(pct, color, markPct) {
+    const w = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+    return `<div class="sr-kpi-meter" aria-hidden="true"><i style="width:${w.toFixed(1)}%;background:${color}"></i>${markPct != null ? `<b style="left:${markPct}%"></b>` : ""}</div>`;
+  }
+
+  const SR_KPI_ICONS = {
+    truck: '<path d="M3 7h11v8H3zM14 10h4l3 3v2h-7"/><circle cx="7" cy="17" r="1.8"/><circle cx="17" cy="17" r="1.8"/>',
+    doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+    layers: '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    pct: '<path d="M6 18L18 6"/><circle cx="7.5" cy="7.5" r="2"/><circle cx="16.5" cy="16.5" r="2"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
+    x: '<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
+    people: '<circle cx="9" cy="9" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="10" r="2.4"/><path d="M15.5 14.5A4.5 4.5 0 0 1 21 19"/>',
+  };
+
+  function setSrSheet(name) {
+    const panel = document.getElementById("panel-salesreport");
+    if (!panel) return;
+    const next = name === "pace" || name === "schedule" ? name : "";
+    if (next) panel.dataset.srSheet = next;
+    else delete panel.dataset.srSheet;
+    const fold = next === "pace" ? $("#sr-pace-fold") : next === "schedule" ? $("#sr-emp-fold") : null;
+    if (fold) fold.open = true;
+    document.querySelectorAll("[data-sr-sheet]").forEach((b) => b.classList.toggle("is-active", b.dataset.srSheet === next));
+  }
+
+  function renderSrLastUpdated() {
+    const el = $("#sr-last-updated");
+    if (!el) return;
+    const at = Number(Store.readDataPushStamp().at) || 0;
+    el.textContent = at
+      ? new Date(at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : "—";
   }
 
   function renderNameList(sr) {
@@ -8546,9 +8679,11 @@
       const active = r._key === srView.selectedKey ? " active" : "";
       const del = Number(r["Delivery (Month)"]) || 0;
       const pro = Number(r["Proforma (Month)"]) || 0;
+      const label = shortEmpLabel(r["Sales Employee"]);
       return `<button type="button" class="pbi-name sr-emp-row${active}" data-emp-key="${escapeHtml(r._key)}" role="option" aria-selected="${active ? "true" : "false"}">
-        <span class="nm">${escapeHtml(shortEmpLabel(r["Sales Employee"]))}</span>
-        <span class="sr-emp-counts">${formatNumber(pro)}-${formatNumber(del)}</span>
+        <span class="sr-emp-av" style="--av:${srAvatarColor(label)}" aria-hidden="true">${escapeHtml(srInitials(label))}</span>
+        <span class="nm">${escapeHtml(label)}</span>
+        <span class="sr-emp-counts" title="Proforma – Delivery">${formatNumber(pro)}-${formatNumber(del)}</span>
         <span class="sr-emp-chev" aria-hidden="true">›</span>
       </button>`;
     }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`;
@@ -8658,7 +8793,7 @@
   }
 
   function renderProfDelDailyChart(sr, rows) {
-    const series = buildDailyProfDelSeries(sr, srView.selectedKey || "");
+    const series = srDailySeries(sr, srView.selectedKey || "");
     const maxY = Math.max(5, ...series.proforma, ...series.delivery);
     upsertChart("chart-sr-profdel", "line", series.labels, null, {
       legend: true,
@@ -8666,34 +8801,33 @@
       max: Math.ceil(maxY * 1.15),
       datasets: [
         {
+          type: "bar",
           label: "Proforma",
           data: series.proforma,
-          borderColor: "#2563eb",
-          backgroundColor: "rgba(37, 99, 235, 0.12)",
-          pointLabelBg: "#2563eb",
-          pointBackgroundColor: "#2563eb",
-          pointBorderColor: "#fff",
-          pointBorderWidth: 1.5,
-          pointRadius: 3.5,
-          pointHoverRadius: 5,
-          borderWidth: 2.5,
-          tension: 0.25,
-          fill: false,
+          backgroundColor: "rgba(109, 124, 255, 0.78)",
+          hoverBackgroundColor: "rgba(129, 142, 255, 0.95)",
+          borderColor: "rgba(109, 124, 255, 1)",
+          pointLabelBg: "#5b5ff0",
+          borderWidth: 0,
+          borderRadius: 4,
+          maxBarThickness: 22,
+          order: 2,
         },
         {
           label: "Delivery",
           data: series.delivery,
-          borderColor: "#eb0a1e",
-          backgroundColor: "rgba(235, 10, 30, 0.10)",
-          pointLabelBg: "#9f1239",
-          pointBackgroundColor: "#eb0a1e",
-          pointBorderColor: "#fff",
+          borderColor: "#ff2d44",
+          backgroundColor: "rgba(255, 45, 68, 0.14)",
+          pointLabelBg: "#c8102e",
+          pointBackgroundColor: "#ff2d44",
+          pointBorderColor: "#0b1220",
           pointBorderWidth: 1.5,
           pointRadius: 3.5,
           pointHoverRadius: 5,
           borderWidth: 2.5,
-          tension: 0.25,
-          fill: false,
+          tension: 0.3,
+          fill: true,
+          order: 1,
         },
       ],
     });
@@ -8778,14 +8912,14 @@
       const target = r._vacation ? null : rowTargetNum(r);
       const delPctVal = target ? (del / target) * 100 : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev) },
-        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev) },
-        { lab: "Prof + Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev) },
-        { lab: "Proforma Except This Month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0), ico: "clock", tone: "sky", trend: null },
-        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null },
-        { lab: "TARGET", val: r._vacation ? "VACATION" : formatNumber(target || 0), ico: "target", tone: "teal", trend: 0 },
-        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null },
-        { lab: "EMPLOYEES", val: "1", ico: "people", tone: "blue", trend: 0 },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery" },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued", spark: "proforma" },
+        { lab: "Prof + Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
+        { lab: "Proforma Except This Month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null, desc: "Delivery ÷ Target", meter: delPctVal },
+        { lab: "TARGET", val: r._vacation ? "VACATION" : formatNumber(target || 0), ico: "target", tone: "teal", trend: 0, desc: "Employee monthly target", meter: target ? ((pro + del) / target) * 100 : null },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, desc: "Cancelled ÷ (Delivery + Cancelled) · limit 30%", meter: ratio == null ? null : ratio * 100, mark: 30 },
+        { lab: "EMPLOYEES", val: "1", ico: "people", tone: "blue", trend: 0, desc: shortEmpLabel(r["Sales Employee"] || "Selected employee") },
       ];
     } else {
       const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0);
@@ -8797,26 +8931,42 @@
       const proPrev = Number(t.proformaPrev) || 0;
       const delPctVal = t.target ? ((t.delPct || 0) * 100) : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev) },
-        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev) },
-        { lab: "Prof + Del", val: formatNumber(t.profPlusDel || (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev) },
-        { lab: "Proforma Except This Month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)), ico: "clock", tone: "sky", trend: null },
-        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null },
-        { lab: "TARGET", val: formatNumber(t.target || 0), ico: "target", tone: "teal", trend: 0 },
-        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, badWhenUp: true },
-        { lab: "EMPLOYEES", val: formatNumber((sr.rows || []).length), ico: "people", tone: "blue", trend: 0 },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars · team", spark: "delivery" },
+        { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued · team", spark: "proforma" },
+        { lab: "Prof + Del", val: formatNumber(t.profPlusDel || (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
+        { lab: "Proforma Except This Month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
+        { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null, desc: "Delivery ÷ Target", meter: delPctVal },
+        { lab: "TARGET", val: formatNumber(t.target || 0), ico: "target", tone: "teal", trend: 0, desc: "Team monthly target", meter: t.target ? ((pro + del) / t.target) * 100 : null },
+        { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, badWhenUp: true, desc: "Cancelled ÷ (Delivery + Cancelled) · limit 30%", meter: ratio == null ? null : ratio * 100, mark: 30 },
+        { lab: "EMPLOYEES", val: formatNumber((sr.rows || []).length), ico: "people", tone: "blue", trend: 0, desc: "Sales employees in the report" },
       ];
     }
-    const icoMap = {
-      truck: "D", doc: "P", layers: "+", clock: "E", pct: "%", target: "T", x: "X", people: "N",
+    const toneColor = { blue: "#4f9dff", violet: "#a78bfa", green: "#34d399", sky: "#38bdf8", red: "#ff4d5e", teal: "#2dd4bf", warn: "#f59e0b" };
+    const needsSeries = cards.some((c) => c.spark);
+    const series = needsSeries ? srDailySeries(sr, srView.selectedKey || "") : null;
+    const visual = (c) => {
+      const color = toneColor[c.tone] || "#4f9dff";
+      if (c.spark && series) {
+        const data = c.spark === "delivery" ? series.delivery
+          : c.spark === "proforma" ? series.proforma
+            : series.proforma.map((v, i) => v + (series.delivery[i] || 0));
+        return srSparkSvg(data, color);
+      }
+      if (c.meter !== undefined) {
+        const meterColor = c.over ? "#ff4d5e" : c.ok ? "#34d399" : color;
+        return srMeterHtml(c.meter == null ? NaN : c.meter, meterColor, c.mark);
+      }
+      return "";
     };
     el.innerHTML = cards.map((c) => `
       <div class="sr-kpi-card tone-${c.tone || "neutral"}${c.over ? " is-over" : c.ok ? " is-ok" : ""}">
         <div class="sr-kpi-top">
-          <span class="sr-kpi-ico" aria-hidden="true">${icoMap[c.ico] || "•"}</span>
+          <span class="sr-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SR_KPI_ICONS[c.ico] || ""}</svg></span>
           <span class="sr-kpi-lab">${c.lab}</span>
         </div>
         <div class="sr-kpi-val">${c.val}</div>
+        ${c.desc ? `<div class="sr-kpi-desc">${escapeHtml(c.desc)}</div>` : ""}
+        <div class="sr-kpi-visual">${visual(c)}</div>
       </div>`).join("");
   }
 
@@ -8972,6 +9122,8 @@
     if (fillEl) fillEl.style.width = fill.toFixed(1) + "%";
     if (tgtLbl) tgtLbl.textContent = formatNumber(targetSum);
     if (achLbl) achLbl.textContent = `${formatNumber(achieved)}${profDelPct == null ? "" : ` (${profDelPct.toFixed(1)}%)`}`;
+    const remLbl = $("#sr-perf-remaining-lbl");
+    if (remLbl) remLbl.textContent = formatNumber(remaining);
     el.innerHTML = `
       <div class="sr-perf-metric is-del">
         <span class="k">DEL %</span>
@@ -21440,6 +21592,8 @@
       }
     });
     window._data = null;
+    document.body.classList.remove("sr-mode");
+    setSrSheet("");
     $("#dashboard").classList.remove("show");
     $("#dashboard").style.display = "none";
     const navDash = $("#nav-dashboard");
@@ -22025,13 +22179,98 @@
   });
   const srNameSearch = $("#sr-name-search");
   if (srNameSearch) {
+    let srSearchTimer = null;
     srNameSearch.addEventListener("input", (e) => {
       srView.search = e.target.value;
       const hiddenSearch = $("#sr-search");
       if (hiddenSearch) hiddenSearch.value = e.target.value;
-      if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+      clearTimeout(srSearchTimer);
+      srSearchTimer = setTimeout(() => {
+        if (window._data && hasSalesReportInputs()) refreshSalesSelection();
+      }, 140);
     });
   }
+
+  (function bindSrCockpit() {
+    const panel = $("#panel-salesreport");
+    if (!panel) return;
+    panel.addEventListener("click", (e) => {
+      const open = e.target.closest("[data-sr-sheet]");
+      if (open) {
+        setSrSheet(panel.dataset.srSheet === open.dataset.srSheet ? "" : open.dataset.srSheet);
+        return;
+      }
+      if (e.target.closest("[data-sr-sheet-close]")) {
+        e.preventDefault();
+        setSrSheet("");
+        return;
+      }
+      if (panel.dataset.srSheet && e.target.closest(".sr-fold-summary")) e.preventDefault();
+      if (panel.dataset.srSheet && e.target.classList.contains("sr-sheet-backdrop")) setSrSheet("");
+    });
+    const schedCharts = $("#sr-sched-charts");
+    if (schedCharts) schedCharts.addEventListener("click", () => setSrSheet(""));
+
+    const refresh = $("#sr-refresh-btn");
+    if (refresh) {
+      refresh.addEventListener("click", () => {
+        refresh.classList.add("is-spinning");
+        Promise.resolve(refreshFromAdmin("Sales refreshed", { force: true }))
+          .catch(() => {})
+          .finally(() => { refresh.classList.remove("is-spinning"); renderSrLastUpdated(); });
+      });
+    }
+
+    const fs = $("#sr-fullscreen-btn");
+    const syncFs = () => {
+      const on = !!document.fullscreenElement;
+      if (fs) { fs.setAttribute("aria-pressed", on ? "true" : "false"); fs.title = on ? "Exit fullscreen" : "Fullscreen"; }
+    };
+    if (fs) {
+      fs.addEventListener("click", () => {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+      });
+      document.addEventListener("fullscreenchange", syncFs);
+    }
+
+    const navBtn = $("#sr-nav-btn");
+    const navMenu = $("#sr-nav-menu");
+    const closeNav = () => {
+      if (!navMenu || navMenu.hidden) return;
+      navMenu.hidden = true;
+      navBtn.setAttribute("aria-expanded", "false");
+    };
+    if (navBtn && navMenu) {
+      navBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!navMenu.hidden) { closeNav(); return; }
+        navMenu.innerHTML = visiblePanels().map((p) =>
+          `<button type="button" role="menuitem" class="sr-nav-item${p.id === activePanel ? " is-active" : ""}" data-nav-panel="${escapeHtml(p.id)}">${escapeHtml(p.label)}</button>`
+        ).join("") + `<div class="sr-nav-sep"></div>
+          <a class="sr-nav-item" role="menuitem" href="admin.html">Admin Push</a>
+          <a class="sr-nav-item" role="menuitem" href="data-uploader.html">Data Uploader</a>`;
+        navMenu.hidden = false;
+        navBtn.setAttribute("aria-expanded", "true");
+      });
+      navMenu.addEventListener("click", (e) => {
+        const item = e.target.closest("[data-nav-panel]");
+        if (!item) return;
+        closeNav();
+        switchPanel(item.dataset.navPanel);
+      });
+      document.addEventListener("click", (e) => { if (!e.target.closest(".sr-nav")) closeNav(); });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !document.body.classList.contains("sr-mode")) return;
+      if (navMenu && !navMenu.hidden) { closeNav(); return; }
+      if (panel.dataset.srSheet && !document.querySelector(".pbi-wide-backdrop:not([hidden])")) {
+        setSrSheet("");
+        e.stopImmediatePropagation();
+      }
+    });
+  })();
   function shiftSrWorkingDay(delta) {
     const base = (window._globalLivePeriod && window._globalLivePeriod.now)
       ? new Date(window._globalLivePeriod.now)
