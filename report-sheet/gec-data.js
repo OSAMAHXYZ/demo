@@ -881,8 +881,9 @@
    */
   const ORDER_KEY_HEADER = /transaction|\btxn\b|\btrx\b|enquiry|inquiry|\blead\b|opportunit|reference|\bref\b|\bcrm\b|quotation|\bquote\b|sales order|\bso\b|order no|order number|order id|back ?order|\bbo\b|document no|document number/;
   const ORDER_KEY_NOT = /date|time|type|status|amount|price|value|qty|quantity|reason|name|flag|count/;
-  const ORDER_RANK = { delivered: 3, proforma: 2, backorder: 1 };
+  const ORDER_RANK = { delivered: 3, proforma: 2, salesNoDate: 1, backorder: 1 };
   const ORDER_SOURCE_LABEL = { sales: "Sales Raw Data", bo: "Back Order" };
+  const ORDER_STATUS_KEYS = ["delivered", "proforma", "backorder", "salesNoDate", "notFound"];
 
   /** Transaction / order number cell → comparable key ("" when too short to match safely). */
   function orderKey(v) {
@@ -896,15 +897,6 @@
     return s.length >= 4 ? s : "";
   }
 
-  /** Free-text status (BO primary status, Sales Raw secondary status) → "delivered" | "proforma" | "". */
-  function orderStatusWord(v) {
-    const s = norm(v);
-    if (!s || /not deliver|undeliver|pending|awaiting/.test(s)) return "";
-    if (/deliver|invoic|تسليم|مسلم/.test(s)) return "delivered";
-    if (/pro ?-?forma|proforma|فاتورة مبدئية/.test(s)) return "proforma";
-    return "";
-  }
-
   const orderHeaders = (rows) => {
     const sample = (rows || []).find((r) => r && typeof r === "object") || {};
     return Object.keys(sample).filter((h) => !h.startsWith("_"));
@@ -913,8 +905,8 @@
 
   /**
    * Sales Raw rows + Back Order rows → lookup index (key → matching rows with their current status).
-   * Sales Raw: delivery / invoice date (Col V) filled → Delivered, else Pro-Forma.
-   * Back Order: status column says delivered / pro-forma, else the car is still a Back Order.
+   * Sales Raw: Col V (delivery / invoice date) filled → Delivered · Col P (pro-forma date) filled and Col V blank → Pro-Forma
+   * · neither → salesNoDate. Back Order: always "backorder"; its own status column is kept as sourceStatus.
    */
   function buildOrderIndex(salesRows, boRows) {
     const map = new Map();
@@ -936,15 +928,9 @@
       const boCol = source === "bo" ? orderColumn(headers, /back ?order (number|no)|\bbo (number|no)\b|order number|order no/, /date/) : null;
       list.forEach((r, i) => {
         if (!r || typeof r !== "object") return;
-        let status;
-        let word = "";
-        if (source === "sales") {
-          word = orderStatusWord(r.secondaryStatus);
-          status = r.deliveryDate || r.invoiceDate || word === "delivered" ? "delivered" : "proforma";
-        } else {
-          word = statusCol ? orderStatusWord(r[statusCol]) : "";
-          status = word || "backorder";
-        }
+        const status = source === "bo" ? "backorder"
+          : r.deliveryDate || r.invoiceDate ? "delivered"
+            : r.proformaDate ? "proforma" : "salesNoDate";
         const base = {
           source, row: i, status,
           proformaDate: source === "sales" && r.proformaDate ? r.proformaDate : null,
@@ -967,6 +953,7 @@
 
   /**
    * GEC record → current order status, looked up by Transaction No. (then the GEC Sales Order number).
+   * Sales Raw Data decides first; the Back Order file is only used when the lead is not in Sales Raw.
    * Returns null when no Sales Raw / Back Order file is loaded.
    */
   function orderStatus(record, index) {
@@ -975,13 +962,13 @@
     if (cached) return cached;
     const lookups = [["Transaction No.", orderKey(record.id)]];
     if (record.salesOrderState === "order") lookups.push(["Sales Order", orderKey(record.salesOrder)]);
-    let best = null;
-    let via = "";
-    lookups.forEach(([label, key]) => {
-      (key ? index.map.get(key) || [] : []).forEach((h) => {
-        if (!best || ORDER_RANK[h.status] > ORDER_RANK[best.status]) { best = h; via = label; }
-      });
-    });
+    const hits = [];
+    lookups.forEach(([label, key]) => (key ? index.map.get(key) || [] : []).forEach((h) => hits.push({ h, label })));
+    const pick = (source) => hits.filter((x) => x.h.source === source)
+      .reduce((a, x) => (!a || ORDER_RANK[x.h.status] > ORDER_RANK[a.h.status] ? x : a), null);
+    const found = pick("sales") || pick("bo");
+    const best = found && found.h;
+    const via = found ? found.label : "";
     const res = best
       ? { status: best.status, source: best.source, sourceLabel: ORDER_SOURCE_LABEL[best.source], via, column: best.column,
         proformaDate: best.proformaDate, deliveryDate: best.deliveryDate, boNumber: best.boNumber, sourceStatus: best.sourceStatus }
@@ -1166,7 +1153,7 @@
   function carTable(rows, orders) {
     const map = new Map();
     rows.forEach((r) => {
-      const e = map.get(r.modelGroup) || { name: r.modelGroup, leads: 0, converted: 0, delivered: 0, proforma: 0, backorder: 0, notFound: 0 };
+      const e = map.get(r.modelGroup) || { name: r.modelGroup, leads: 0, converted: 0, ...Object.fromEntries(ORDER_STATUS_KEYS.map((k) => [k, 0])) };
       e.leads += 1;
       if (r.converted) {
         e.converted += 1;

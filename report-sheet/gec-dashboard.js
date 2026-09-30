@@ -108,7 +108,7 @@
     { key: "visitors", label: "Total Visitors", icon: "users", tone: "violet", spark: "visitors" },
     { key: "total", label: "Registered Leads", icon: "lead", tone: "blue", spark: "leads" },
     { key: "visitorToLead", label: "Visitor → Lead", icon: "trend", tone: "indigo", spark: "v2l", rate: true },
-    { key: "responded", label: "Sales Response", icon: "msg", tone: "cyan", spark: "responded" },
+    { key: "responded", label: "Meet Sales Advisor", icon: "msg", tone: "cyan", spark: "responded" },
     { key: "converted", label: "Converted", icon: "check", tone: "green", spark: "converted" },
     { key: "assignmentErrors", label: "No Promoter Assigned", icon: "alert", tone: "rose", side: true },
     { key: "noProduct", label: "No Product", icon: "car", tone: "rose", side: true },
@@ -120,19 +120,19 @@
     get assignmentErrors() { return `No promoter assigned · customers with Employee Number (column ${empCol()}) blank`; },
     noProduct: "No product · customers with column D or column G blank",
     get invalidPromoter() { return `Invalid Promoter · Employee Number (column ${empCol()}) is not an official promoter number`; },
-    responded: "Leads with a Sales Response",
-    responseRate: "Leads with a Sales Response",
+    responded: "Meet Sales Advisor · leads with a Sales Response",
+    responseRate: "Meet Sales Advisor · leads with a Sales Response",
     salesOrders: "Leads with an actual Sales Order",
     salesOrderRate: "Leads with an actual Sales Order",
     noOrder: "“NO ORDER” leads (not counted as Sales Orders)",
     converted: "Converted leads (GEC CONTROL conversion statuses)",
     conversionRate: "Converted leads (GEC CONTROL conversion statuses)",
     noAdvisor: "Leads without a sales advisor",
-    noResponse: "Leads without a Sales Response",
+    noResponse: "Did not meet a sales advisor · no Sales Response",
     unlisted: "Leads with a status not in GEC CONTROL",
     promoterConsultant: "Leads assigned to a promoter (not a sales advisor)",
   };
-  const METRIC_LABEL = { visitors: "Visitors", leads: "Leads", responded: "Sales Response", salesOrders: "Sales Orders", converted: "Converted" };
+  const METRIC_LABEL = { visitors: "Visitors", leads: "Leads", responded: "Meet Sales Advisor", salesOrders: "Sales Orders", converted: "Converted" };
   const METRIC_PRED = { leads: "total", responded: "responded", salesOrders: "salesOrders", converted: "converted" };
   const STAGE_LABEL = { converted: "Converted", lead: "Lead", visitor: "Registered", unlisted: "Unlisted status" };
 
@@ -623,7 +623,7 @@
       <div class="gcc-flow is-4">
         ${stageHtml({ key: "total", label: "Leads", value: k.total, tone: "blue", meta: "100% of leads" }, k.total)}
         ${stepHtml("", "", "slate")}
-        ${stageHtml({ key: "responded", label: "Sales Response", value: k.responded, tone: "cyan", meta: `<b>${pct(k.responseRate)}</b> of leads` }, k.total)}
+        ${stageHtml({ key: "responded", label: "Meet Sales Advisor", value: k.responded, tone: "cyan", meta: `<b>${pct(k.responseRate)}</b> of leads` }, k.total)}
         ${stepHtml("", "", "slate")}
         ${stageHtml({ key: "salesOrders", label: "Sales Orders", value: k.salesOrders, tone: "amber", meta: `<b>${pct(k.salesOrderRate)}</b> of leads` }, k.total)}
         ${stepHtml("", "", "slate")}
@@ -736,24 +736,27 @@
 
   // ---------- Top cars · converted → Sales Raw / Back Order status ----------
 
+  /** optional → only shown when it has records. color mirrors the .s-<key> rules in gec-control.css. */
   const ORDER_STATES = [
-    { key: "delivered", label: "Delivered" },
-    { key: "proforma", label: "Pro-Forma" },
-    { key: "backorder", label: "Back Order" },
-    { key: "notFound", label: "Not found" },
+    { key: "delivered", label: "Delivered", color: "#059669", rule: "Sales Raw · Col V has a date" },
+    { key: "proforma", label: "Pro-Forma", color: "#2563eb", rule: "Sales Raw · Col P has a date, Col V blank" },
+    { key: "backorder", label: "In BO file", color: "#d97706", rule: "Not in Sales Raw · found in the Back Order file" },
+    { key: "salesNoDate", label: "Sales Raw · no P/V date", color: "#7c3aed", rule: "In Sales Raw but Col P and Col V are both blank", optional: true },
+    { key: "notFound", label: "Not found", color: "#cbd5e1", rule: "In neither Sales Raw nor the Back Order file", optional: true },
   ];
   const ORDER_LABEL = Object.fromEntries(ORDER_STATES.map((s) => [s.key, s.label]));
   const orderOf = (r) => Data().orderStatus(r, state.orders);
   const orderStateOf = (r) => { const o = orderOf(r); return o ? o.status : ""; };
+  const shownStates = (count) => ORDER_STATES.filter((s) => !s.optional || count(s.key));
 
   function carTotals(list) {
-    const t = { leads: 0, converted: 0, delivered: 0, proforma: 0, backorder: 0, notFound: 0 };
+    const t = { leads: 0, converted: 0, ...Object.fromEntries(ORDER_STATES.map((s) => [s.key, 0])) };
     list.forEach((c) => Object.keys(t).forEach((k) => { t[k] += c[k] || 0; }));
     return t;
   }
 
   function carTitle(c, hasOrders) {
-    const split = hasOrders ? ` · ${ORDER_STATES.map((s) => `${s.label} ${n(c[s.key])}`).join(" · ")}` : "";
+    const split = hasOrders ? ` · ${shownStates((k) => c[k]).map((s) => `${s.label} ${n(c[s.key])}`).join(" · ")}` : "";
     return `${c.name} · ${n(c.converted)} converted of ${n(c.leads)} leads${split} · open records`;
   }
 
@@ -765,7 +768,7 @@
     const t = carTotals(list);
     sum.innerHTML = !m.hasOrders
       ? `<span class="gcc-muted">Push <b>Sales Raw Data</b> / <b>Back Order</b> to see Pro-Forma &amp; Delivered</span>`
-      : ORDER_STATES.filter((s) => s.key !== "notFound" || t.notFound).map((s) =>
+      : shownStates((k) => t[k]).map((s) =>
         `<button type="button" class="gcc-car-chip s-${s.key}" data-act="car-state" data-state="${s.key}" title="Converted leads · ${esc(s.label)} · open records"><i></i>${esc(s.label)} <b class="gcc-num">${n(t[s.key])}</b></button>`).join("");
     if (!m.kpis.total) { box.innerHTML = `<div class="gcc-empty-note"><span>No leads in this selection.</span></div>`; return; }
     if (!list.length) { box.innerHTML = `<div class="gcc-empty-note">${icon("car")}<span>No converted leads in this selection.</span></div>`; return; }
@@ -1123,7 +1126,6 @@
       el("m-foot").textContent = o.foot || "";
       return;
     }
-    el("m-search").hidden = false;
     renderModalTable();
     setTimeout(() => el("m-search").focus(), 30);
   }
@@ -1140,11 +1142,13 @@
     const m = state.modal;
     const view = m.views[m.active];
     el("m-tabs").innerHTML = m.views.length > 1 ? m.views.map((v, i) => {
-      const count = v.countOf ? v.countOf(v.rows) : v.rows.length;
-      return `<button type="button" class="${i === m.active ? "is-on" : ""}" data-act="modal-tab" data-tab="${i}">${esc(v.label)} <b class="gcc-num">${n(count)}</b></button>`;
+      const count = v.type === "html" ? null : v.countOf ? v.countOf(v.rows) : v.rows.length;
+      return `<button type="button" class="${i === m.active ? "is-on" : ""}" data-act="modal-tab" data-tab="${i}">${esc(v.label)}${count == null ? "" : ` <b class="gcc-num">${n(count)}</b>`}</button>`;
     }).join("") : "";
     if (!view) { el("m-body").innerHTML = ""; el("m-foot").textContent = ""; return; }
     el("m-allcols-wrap").hidden = view.type !== "leads";
+    el("m-search").hidden = view.type === "html";
+    if (view.type === "html") { el("m-body").innerHTML = view.html; el("m-foot").textContent = view.foot || ""; return; }
     const cols = view.columns || (m.allCols ? rawColumns() : leadColumns(view.rows, view.withProduct));
     const q = m.search.trim().toLowerCase();
     const idx = view.rows.map((r, i) => i).filter((i) => !q || cols.some((c) => String(c.v(view.rows[i]) || "").toLowerCase().includes(q)));
@@ -1176,7 +1180,7 @@
     const conv = c((r) => r.converted);
     return [
       { label: "Leads", value: n(rows.length) },
-      { label: "Sales Response", value: `${n(resp)} · ${pct(ratio(resp, rows.length))}` },
+      { label: "Meet Sales Advisor", value: `${n(resp)} · ${pct(ratio(resp, rows.length))}` },
       { label: "Sales Orders", value: `${n(so)} · ${pct(ratio(so, rows.length))}` },
       { label: "NO ORDER", value: n(c((r) => r.salesOrderState === "noOrder")) },
       { label: "Converted", value: n(conv) },
@@ -1199,6 +1203,7 @@
     if (key === "registered") { openRegistered(); return; }
     if (key === "assignmentErrors" || key === "invalidPromoter" || key === "noProduct") { openAssignment(key); return; }
     if (key === "responded" || key === "responseRate") { openResponse(); return; }
+    if (key === "converted" || key === "conversionRate") { openConverted(); return; }
     const rows = predicateRows(key, m.rows);
     const views = [leadView("Leads", rows)];
     if (key === "total") {
@@ -1207,18 +1212,17 @@
         leadView("Responded", predicateRows("responded", rows)), leadView("Sales Orders", predicateRows("salesOrders", rows)), leadView("Converted", predicateRows("converted", rows)), statusView(rows));
     }
     if (key === "salesOrders" || key === "salesOrderRate") views.push(leadView("NO ORDER (excluded)", predicateRows("noOrder", m.rows)));
-    if (key === "converted" || key === "conversionRate") views.push(statusView(m.rows));
     openModal({ title: DRILL_TITLES[key] || "Leads", sub: filterSubtitle(), stats: leadStats(rows), views });
   }
 
-  /** Sales Response card: every lead, not-responded ones labelled and listed first. */
+  /** Meet Sales Advisor card: every lead, not-responded ones labelled and listed first. */
   function openResponse() {
     const m = state.metrics;
     const yes = predicateRows("responded", m.rows);
     const no = predicateRows("noResponse", m.rows);
     openModal({
-      title: "Sales Response",
-      sub: `${filterSubtitle()} · ${n(yes.length)} responded · ${n(no.length)} not responded`,
+      title: "Meet Sales Advisor",
+      sub: `${filterSubtitle()} · ${n(yes.length)} responded · ${n(no.length)} not responded (Sales Response column)`,
       stats: [
         { label: "Leads", value: n(m.rows.length) },
         { label: "Responded", value: `${n(yes.length)} · ${pct(ratio(yes.length, m.rows.length))}` },
@@ -1306,10 +1310,77 @@
   function orderStats(leads, conv) {
     const stats = [{ label: "Leads", value: n(leads.length) }, { label: "Converted", value: `${n(conv.length)} · ${pct(ratio(conv.length, leads.length))}` }];
     if (!state.metrics.hasOrders) return stats;
-    return stats.concat(ORDER_STATES.map((s) => {
-      const c = conv.filter((r) => orderStateOf(r) === s.key).length;
-      return { label: s.label, value: `${n(c)} · ${pct(ratio(c, conv.length))}`, cls: s.key === "notFound" && c ? "is-warn" : "" };
+    const count = (k) => conv.filter((r) => orderStateOf(r) === k).length;
+    return stats.concat(shownStates(count).map((s) => {
+      const c = count(s.key);
+      return { label: s.label, value: `${n(c)} · ${pct(ratio(c, conv.length))}`, cls: s.optional && c ? "is-warn" : "" };
     }));
+  }
+
+  /** Converted card: where every converted lead is now (Sales Raw first, then the Back Order file). */
+  function openConverted() {
+    const m = state.metrics;
+    const conv = predicateRows("converted", m.rows);
+    if (!m.hasOrders) {
+      openModal({
+        title: DRILL_TITLES.converted, sub: `${filterSubtitle()} · push Sales Raw Data / Back Order to see Delivered, Pro-Forma and In BO file`,
+        stats: leadStats(conv), views: [leadView("Converted", conv), statusView(m.rows)],
+      });
+      return;
+    }
+    const byState = new Map(ORDER_STATES.map((s) => [s.key, []]));
+    conv.forEach((r) => { const k = orderStateOf(r); if (byState.has(k)) byState.get(k).push(r); });
+    const states = shownStates((k) => byState.get(k).length);
+    openModal({
+      title: `Converted · ${n(conv.length)} leads · current status`,
+      sub: `${filterSubtitle()} · each Transaction No. checked in Sales Raw Data first, then the Back Order file`,
+      stats: orderStats(m.rows, conv),
+      views: [
+        { label: "Chart", type: "html", html: convertedChart(conv, byState, states) },
+        leadView("All converted", states.flatMap((s) => byState.get(s.key))),
+        ...states.map((s) => leadView(s.label, byState.get(s.key))),
+        statusView(m.rows),
+      ],
+    });
+  }
+
+  function convertedChart(conv, byState, states) {
+    const total = conv.length;
+    let at = 0;
+    const stops = states.map((s) => {
+      const from = at;
+      at += total ? (byState.get(s.key).length / total) * 100 : 0;
+      return `${s.color} ${from.toFixed(2)}% ${at.toFixed(2)}%`;
+    });
+    const bo = new Map();
+    byState.get("backorder").forEach((r) => { const k = orderOf(r).sourceStatus || "(blank)"; bo.set(k, (bo.get(k) || 0) + 1); });
+    const boRows = [...bo.entries()].sort((a, b) => b[1] - a[1]);
+    const boN = byState.get("backorder").length;
+    return `
+      <div class="gcc-conv-chart">
+        <div class="gcc-donut" style="background:${total ? `conic-gradient(${stops.join(", ")})` : "#e2e8f0"}">
+          <div><b class="gcc-num">${n(total)}</b><small>converted</small></div>
+        </div>
+        <div class="gcc-conv-legend">
+          ${states.map((s) => {
+            const c = byState.get(s.key).length;
+            return `
+            <button type="button" class="gcc-conv-row" data-act="car-state" data-state="${s.key}" title="Open ${esc(s.label)} leads">
+              <i style="background:${s.color}"></i>
+              <span class="gcc-conv-lab"><b>${esc(s.label)}</b><small>${esc(s.rule)}</small></span>
+              <span class="gcc-conv-bar"><span style="width:${w100(ratio(c, total) || 0)};background:${s.color}"></span></span>
+              <b class="gcc-num gcc-conv-n">${n(c)}</b>
+              <b class="gcc-num gcc-conv-pct">${pct(ratio(c, total))}</b>
+            </button>`;
+          }).join("")}
+        </div>
+      </div>
+      ${boN ? `
+      <section class="gcc-conv-bo">
+        <h4>In BO file · Back Order status (${n(boN)})</h4>
+        <table class="gcc-table"><thead><tr><th>Back Order status</th><th class="num">Leads</th><th class="num">% of In BO file</th><th class="num">% of converted</th></tr></thead>
+        <tbody>${boRows.map(([k, c]) => `<tr><td dir="auto">${esc(k)}</td><td class="num">${n(c)}</td><td class="num">${pct(ratio(c, boN))}</td><td class="num">${pct(ratio(c, total))}</td></tr>`).join("")}</tbody></table>
+      </section>` : ""}`;
   }
 
   const orderViews = (conv) => (state.metrics.hasOrders
@@ -1439,7 +1510,7 @@
         withVisitors ? { h: "Visitors", v: (x) => n(x.visitors), num: true } : null,
         { h: "Leads", v: (x) => n(x.leads), num: true },
         withVisitors ? { h: "Visitor → Lead", v: (x) => pct(ratio(x.leads, x.visitors)), num: true } : null,
-        { h: "Sales Response", v: (x) => n(x.responded), num: true },
+        { h: "Meet Sales Advisor", v: (x) => n(x.responded), num: true },
         { h: "Sales Orders", v: (x) => n(x.salesOrders), num: true },
         { h: "Converted", v: (x) => n(x.converted), num: true },
         { h: "Lead → Conversion", v: (x) => pct(ratio(x.converted, x.leads)), num: true },
@@ -1510,7 +1581,7 @@
       sub: `${whenLabel("advisor")} · ${filterSubtitle("consultant")}`,
       stats: [
         { label: "Leads received", value: n(c.leads) },
-        { label: "Sales Response", value: n(c.responded) },
+        { label: "Meet Sales Advisor", value: n(c.responded) },
         { label: "Response %", value: pct(c.responseRate) },
         { label: "Sales Orders", value: n(c.salesOrders) },
         { label: "Converted", value: n(c.converted) },
@@ -1569,7 +1640,7 @@
             { h: "Emp. No.", v: (x) => empOf(x.name), num: true },
             { h: "Visitors", v: (x) => nOrDash(x.visitors), num: true },
             { h: "Leads registered", v: (x) => n(x.leads), num: true },
-            { h: "Sales Response", v: (x) => n(x.responded), num: true },
+            { h: "Meet Sales Advisor", v: (x) => n(x.responded), num: true },
             { h: "Sales Orders", v: (x) => n(x.salesOrders), num: true },
             { h: "Converted", v: (x) => n(x.converted), num: true },
             { h: "Visitor → Lead", v: (x) => pct(x.visitorToLead), num: true },
@@ -1591,7 +1662,7 @@
           { h: "#", v: (x) => String(list.indexOf(x) + 1), num: true },
           { h: "Sales advisor", v: (x) => x.name, dir: true },
           { h: "Leads received", v: (x) => n(x.leads), num: true },
-          { h: "Sales Response", v: (x) => n(x.responded), num: true },
+          { h: "Meet Sales Advisor", v: (x) => n(x.responded), num: true },
           { h: "Response %", v: (x) => pct(x.responseRate), num: true },
           { h: "Sales Orders", v: (x) => n(x.salesOrders), num: true },
           { h: "Converted", v: (x) => n(x.converted), num: true },
@@ -1651,7 +1722,8 @@
       </ul>
       <h4>Order status matching</h4>
       ${state.orders && state.orders.ready
-        ? `<ul>${state.orders.sources.map((s) => `<li><b>${esc(s.label)}</b> — ${n(s.rows)} rows · ${s.fullScan ? "no transaction / order column found, every column scanned for long codes" : `matched on ${s.columns.map((h) => `“${esc(h)}”`).join(", ")}`}</li>`).join("")}</ul>`
+        ? `<ul>${state.orders.sources.map((s) => `<li><b>${esc(s.label)}</b> — ${n(s.rows)} rows · ${s.fullScan ? "no transaction / order column found, every column scanned for long codes" : `matched on ${s.columns.map((h) => `“${esc(h)}”`).join(", ")}`}</li>`).join("")}
+          ${ORDER_STATES.map((s) => `<li><b>${esc(s.label)}</b> — ${esc(s.rule)}</li>`).join("")}</ul>`
         : `<p class="gcc-muted">No Sales Raw Data or Back Order pushed — Top Cars shows converted counts only.</p>`}
       <h4>Official promoter list</h4><div class="gcc-chips">${promoters}</div>`;
     const sheets = ds ? `<h4>Sheets in file</h4><ul>${ds.sheets.map((s) => `<li>${esc(s.name)} — ${n(s.rows)} rows, ${s.fields} recognised columns${s.name === ds.sheetName ? " <b>(leads)</b>" : ""}${vs && vs.ok && s.name === vs.sheetName ? " <b>(visitors)</b>" : ""}</li>`).join("")}</ul>` : "";
