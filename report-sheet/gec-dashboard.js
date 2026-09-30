@@ -1056,7 +1056,9 @@
       { h: "Source", v: (r) => (r.source === "(blank)" ? "" : r.source) },
       { h: "Status", v: (r) => r.status },
       { h: "Stage", v: (r) => STAGE_LABEL[r.stage] || "", html: stagePill },
-      { h: "Sales Response", v: (r) => r.salesResponse, dir: true, html: (r) => (r.responded ? esc(r.salesResponse) : (r.salesResponse ? `<span class="gcc-muted-val">${esc(r.salesResponse)}</span>` : "")) },
+      { h: "Sales Response", v: (r) => (r.responded ? r.salesResponse : "Not responded"), dir: true,
+        html: (r) => (r.responded ? esc(r.salesResponse)
+          : `<span class="gcc-pill st-error">Not responded</span>${r.salesResponse ? ` <span class="gcc-muted-val">${esc(r.salesResponse)}</span>` : ""}`) },
       { h: "Sales Order", v: (r) => r.salesOrder,
         html: (r) => (r.salesOrderState === "order" ? `<span class="gcc-pill st-order">${esc(r.salesOrder)}</span>` : r.salesOrder ? `<span class="gcc-muted-val">${esc(r.salesOrder)}</span>` : "") },
       ...(state.orders && state.orders.ready ? [
@@ -1196,6 +1198,7 @@
     if (key === "visitorToLead") { openV2L(); return; }
     if (key === "registered") { openRegistered(); return; }
     if (key === "assignmentErrors" || key === "invalidPromoter" || key === "noProduct") { openAssignment(key); return; }
+    if (key === "responded" || key === "responseRate") { openResponse(); return; }
     const rows = predicateRows(key, m.rows);
     const views = [leadView("Leads", rows)];
     if (key === "total") {
@@ -1206,6 +1209,27 @@
     if (key === "salesOrders" || key === "salesOrderRate") views.push(leadView("NO ORDER (excluded)", predicateRows("noOrder", m.rows)));
     if (key === "converted" || key === "conversionRate") views.push(statusView(m.rows));
     openModal({ title: DRILL_TITLES[key] || "Leads", sub: filterSubtitle(), stats: leadStats(rows), views });
+  }
+
+  /** Sales Response card: every lead, not-responded ones labelled and listed first. */
+  function openResponse() {
+    const m = state.metrics;
+    const yes = predicateRows("responded", m.rows);
+    const no = predicateRows("noResponse", m.rows);
+    openModal({
+      title: "Sales Response",
+      sub: `${filterSubtitle()} · ${n(yes.length)} responded · ${n(no.length)} not responded`,
+      stats: [
+        { label: "Leads", value: n(m.rows.length) },
+        { label: "Responded", value: `${n(yes.length)} · ${pct(ratio(yes.length, m.rows.length))}` },
+        { label: "Not responded", value: n(no.length) },
+      ],
+      views: [
+        leadView(`All leads (${n(m.rows.length)})`, [...no, ...yes]),
+        leadView(`Responded (${n(yes.length)})`, yes),
+        leadView(`Not responded (${n(no.length)})`, no),
+      ],
+    });
   }
 
   /** Error drills (Employee Number · columns D/G): every customer record in scope (leads + visitor-stage registrations), not just leads. */
