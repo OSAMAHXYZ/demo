@@ -1,5 +1,5 @@
 /**
- * Admin · Lexus Tracker dashboard (GEC Control Center look).
+ * Live report · Lexus Tracker dashboard (GEC Control Center look).
  * Usage: LexusTracker.mount(hostEl) once, then LexusTracker.show() whenever the panel opens.
  */
 (function (global) {

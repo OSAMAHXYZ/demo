@@ -19,6 +19,8 @@
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20260926ptfix"></script>
+  <script src="lexus-control/lexus-core.js?v=20260930lx3"></script>
+  <script src="lexus-control/lexus-tracker.js?v=20260930lx3"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260920st1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
@@ -26,6 +28,7 @@
   <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
+  <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx3" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -110,6 +113,9 @@
 
       <!-- PANEL: GEC Control Center (full-viewport overlay, see gec-dashboard.css) -->
       <div class="panel-section" id="panel-gec" style="display:none"><div id="gec-host"></div></div>
+
+      <!-- PANEL: Lexus Tracker (lexus-control/lexus-tracker.js) -->
+      <div class="panel-section" id="panel-lexus" style="display:none"><div id="lexus-tracker-host"></div></div>
 
       <!-- PANEL: Sales Control Center · Delivered vs Pro-Forma (full-viewport overlay, see sales-control.css) -->
       <div class="panel-section" id="panel-summary" style="display:none"><div id="sales-host"></div></div>
@@ -6762,6 +6768,7 @@
     { id: "summary", label: "Summary · Del vs Prof" },
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "gec", label: "GEC Dashboard" },
+    { id: "lexus", label: "Lexus Tracker" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
@@ -7470,6 +7477,7 @@
       summary: "◫",
       salesreport: "▣",
       gec: "✦",
+      lexus: "L",
       bodashboard: "▤",
       boerrors: "⚠",
       boallocstock: "▦",
@@ -7500,6 +7508,10 @@
     }
     if (panelId === "summary") renderSummaryDashboard();
     if (panelId === "gec") renderGecPanel();
+    if (panelId === "lexus" && window.LexusTracker) {
+      window.LexusTracker.mount($("#lexus-tracker-host"));
+      window.LexusTracker.show();
+    }
     if (panelId === "reservedvehicles") renderReservedVehiclesTracker();
     if (panelId === "allocationaudit") renderAllocationAudit();
     if (panelId === "plantracker") renderPlanTrackerPanel();

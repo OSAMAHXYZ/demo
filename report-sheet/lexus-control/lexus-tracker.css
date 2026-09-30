@@ -1,4 +1,4 @@
-/* Admin · Lexus Tracker · same light executive look as the GEC Control Center (gec-control.css), scoped to #lexus-tracker-host. */
+/* Live report (index.html) · Lexus Tracker · same light executive look as the GEC Control Center (gec-control.css), scoped to #lexus-tracker-host. */
 #lexus-tracker-host .lxd {
   --bg: #f3f5fa;
   --card: #ffffff;
@@ -264,6 +264,20 @@
   #lexus-tracker-host .lxd-source { display: none; }
 }
 @media (max-width: 1000px) {
+  #lexus-tracker-host .lxd-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   #lexus-tracker-host .lxd-row.is-3 { grid-template-columns: 1fr; }
   #lexus-tracker-host .lxd-card-head { flex-wrap: wrap; }
+  #lexus-tracker-host .lxd-tools { flex-wrap: wrap; }
+  #lexus-tracker-host .lxd-tabs { max-width: 100%; overflow-x: auto; }
+}
+@media (max-width: 700px) {
+  #lexus-tracker-host .lxd { padding: 12px; }
+  #lexus-tracker-host .lxd-header { grid-template-columns: 1fr; gap: 12px; }
+  #lexus-tracker-host .lxd-actions { justify-content: flex-start; }
+  #lexus-tracker-host .lxd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #lexus-tracker-host .lxd-donut-wrap,
+  #lexus-tracker-host .lxd-follow-top { grid-template-columns: 1fr; justify-items: center; }
+  #lexus-tracker-host .lxd-legend,
+  #lexus-tracker-host .lxd-follow-stats { width: 100%; }
+  #lexus-tracker-host .lxd input[type="search"] { width: 100%; }
 }

@@ -11,14 +11,10 @@
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
-  <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx2" />
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20260930lx1"></script>
   <script src="gec-data.js?v=20260928gcc1"></script>
   <script src="allocation-plan-data.js"></script>
-  <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="lexus-control/lexus-core.js?v=20260930lx2"></script>
-  <script src="lexus-control/lexus-tracker.js?v=20260930lx2"></script>
   <style>
     .gec-ctl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
     .gec-ctl-col { border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -82,10 +78,6 @@
         <button type="button" class="tab side-nav-item" data-admin-panel="gec" id="tab-gec">
           <span class="side-nav-icon" aria-hidden="true">◎</span>
           <span class="side-nav-label">GEC Control</span>
-        </button>
-        <button type="button" class="tab side-nav-item" data-admin-panel="lexus" id="tab-lexus">
-          <span class="side-nav-icon" aria-hidden="true">L</span>
-          <span class="side-nav-label">Lexus Tracker</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -240,10 +232,6 @@
         </div>
         <div id="gec-found"><p class="foot" style="margin:0">Upload the GEC File in Excel Uploads to list its statuses here.</p></div>
       </div>
-    </section>
-
-    <section class="admin-panel" id="panel-lexus" hidden>
-      <div id="lexus-tracker-host"></div>
     </section>
 
     <footer class="page-foot">Admin only · Push updates all live dashboards · <a href="index.html">Open live report</a></footer>
@@ -662,21 +650,15 @@
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
     const gec = $("#panel-gec");
-    const lexus = $("#panel-lexus");
     uploads.hidden = which !== "uploads";
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
-    if (lexus) lexus.hidden = which !== "lexus";
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.adminPanel === which);
     });
     if (which === "allocation") renderAllocationPanel();
     if (which === "gec") { renderGecControl(); renderGecFound(); }
-    if (which === "lexus" && window.LexusTracker) {
-      window.LexusTracker.mount($("#lexus-tracker-host"));
-      window.LexusTracker.show();
-    }
   }
 
   // ---------- GEC CONTROL (visitor / lead / conversion status rules) ----------
