@@ -151,6 +151,7 @@
               <input type="date" data-f="from" aria-label="From date" /><em>→</em><input type="date" data-f="to" aria-label="To date" />
             </div>
             <label class="gcc-f" data-fwrap="promoter"><span>Promoter</span><select data-f="promoter"></select></label>
+            <label class="gcc-f" data-fwrap="consultant"><span>Sales Advisor</span><select data-f="consultant" dir="auto"></select></label>
             <label class="gcc-f" data-fwrap="model"><span>Model</span><select data-f="model" dir="auto"></select></label>
             <label class="gcc-f" data-fwrap="source"><span>Source</span><select data-f="source"></select></label>
             <label class="gcc-f" data-fwrap="status"><span>Status</span><select data-f="status"></select></label>
@@ -378,7 +379,7 @@
 
   function renderFilterControls() {
     const ds = state.dataset;
-    const opts = ds ? Data().filterOptions(ds) : { promoters: [], models: [], sources: [], statuses: [] };
+    const opts = ds ? Data().filterOptions(ds) : { promoters: [], consultants: [], models: [], sources: [], statuses: [] };
     const fill = (key, list, allLabel) => {
       const sel = state.root.querySelector(`[data-f="${key}"]`);
       const cur = state.filters[key];
@@ -388,6 +389,7 @@
       state.root.querySelector(`[data-fwrap="${key}"]`).classList.toggle("is-active", !!cur);
     };
     fill("promoter", opts.promoters, "All promoters");
+    fill("consultant", opts.consultants || [], "All advisors");
     fill("model", opts.models, "All models");
     fill("source", opts.sources, "All sources");
     fill("status", opts.statuses, "All statuses");
@@ -400,7 +402,6 @@
     state.root.querySelector('[data-fwrap="date"]').classList.toggle("is-active", !!(state.filters.from || state.filters.to));
     const chips = [];
     if (state.filters.purpose) chips.push(["purpose", "Purpose", state.filters.purpose]);
-    if (state.filters.consultant) chips.push(["consultant", "Advisor", state.filters.consultant]);
     el("chips").innerHTML = chips.map(([k, lab, v]) =>
       `<button type="button" class="gcc-fchip" data-act="clear-filter" data-key="${k}" title="Clear ${esc(lab)} filter"><small>${esc(lab)}</small>${esc(v)}<b>×</b></button>`).join("");
     el("reset").hidden = !filteredAny();
