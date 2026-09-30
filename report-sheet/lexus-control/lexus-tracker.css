@@ -367,6 +367,25 @@ body:not(.lx-mode) > #lexus-tracker-host { display: none; }
 #lexus-tracker-host .lxt-trk { display: inline-flex; align-items: center; gap: 7px; color: color-mix(in srgb, var(--c) 75%, #fff); font-weight: 600; }
 #lexus-tracker-host .lxt-trk i { width: 6px; height: 6px; border-radius: 2px; background: var(--c); }
 #lexus-tracker-host .lxt-trk.s-none { color: var(--dim); font-weight: 500; }
+#lexus-tracker-host .lxt .lxt-catbtn {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 2px 8px 2px 4px; margin-left: -4px; border-radius: 8px;
+  border: 1px solid transparent; white-space: nowrap; transition: background 0.18s, border-color 0.18s;
+}
+#lexus-tracker-host .lxt .lxt-catbtn:hover { background: rgba(79, 174, 132, 0.08); border-color: rgba(79, 174, 132, 0.3); }
+#lexus-tracker-host .lxt-lstat {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: ltr;
+  font-size: 11px; font-weight: 600; color: var(--text-2); letter-spacing: 0.01em;
+}
+#lexus-tracker-host .lxt-lstat i { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--c-neutral); }
+#lexus-tracker-host .lxt-lstat.is-ok { color: #7fcfa9; }
+#lexus-tracker-host .lxt-lstat.is-ok i { background: var(--c-delivered); box-shadow: 0 0 6px var(--c-delivered); }
+#lexus-tracker-host .lxt-lstat.is-warn { color: #efc27a; }
+#lexus-tracker-host .lxt-lstat.is-warn i { background: var(--c-due); }
+#lexus-tracker-host .lxt-lstat.is-idle { color: var(--gold); font-weight: 500; }
+#lexus-tracker-host .lxt-lstat.is-none { color: var(--dim); font-weight: 500; }
+#lexus-tracker-host .lxt-lstat.is-lg { font-size: 14px; }
+#lexus-tracker-host .lxt-lstat.is-lg i { width: 7px; height: 7px; }
+#lexus-tracker-host .lxt-detail h4 .lxt-link { margin-left: 10px; letter-spacing: 0.04em; text-transform: none; font-size: 11px; }
 #lexus-tracker-host .lxt-fu { font-weight: 600; }
 #lexus-tracker-host .lxt-fu.is-due { color: var(--c-due); text-shadow: 0 0 12px rgba(220, 163, 71, 0.35); }
 #lexus-tracker-host .lxt-fu.is-ok { color: var(--muted); font-weight: 500; }

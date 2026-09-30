@@ -61,6 +61,7 @@
     prevW: new Map(),
     modal: { stack: [] },
     resizeTimer: null,
+    live: { busy: new Set(), error: "", errorAt: 0 },
   };
 
   // ---------- Icons (inline SVG, stroke = currentColor) ----------
@@ -245,6 +246,7 @@
     } else if (a === "view-all") openList("all", "All orders");
     else if (a === "groups") openGroups(node.dataset.group);
     else if (a === "open") openOrder(node.dataset.key);
+    else if (a === "live") checkLive(node.dataset.key);
     else if (a === "m-close") closeModal();
     else if (a === "m-back") { state.modal.stack.pop(); renderModal(); }
     else if (a === "m-tab") { const top = modalTop(); if (top) { top.tab = node.dataset.tab; renderModal(); } }
@@ -263,6 +265,7 @@
       person: find(/sales\s*(man|person|consultant|advisor|executive|rep)|consultant|advisor|owner|assigned|employee|agent|salesman/),
       date: find(/order\s*date|created|date/),
       city: city >= 0 ? city : find(/branch|showroom|location|region/),
+      vin: Core().vinColumn(headers),
     };
   }
 
@@ -697,6 +700,84 @@
     return `<span class="lxt-trk ${TRACK_TONE[t.kind]}"><i></i>${esc(Core().trackText(t))}</span>`;
   }
 
+  // ---------- Live Sheet delivery status (VIN Finder) ----------
+
+  const VIN_FINDER_URL = "/delivery-transformation/vin-finder.html";
+  const LIVE_RETRY_MS = 60 * 1000;
+
+  const liveOf = (o) => Core().liveStatusOf(o, state.cols.vin);
+
+  function liveBadge(o) {
+    const live = liveOf(o);
+    if (live === undefined) {
+      const text = state.live.busy.has(o.key) ? "Checking Live Sheet…" : state.live.error ? "Live Sheet unavailable" : "Live Sheet status ›";
+      return `<small class="lxt-lstat is-idle">${esc(text)}</small>`;
+    }
+    if (live === null) return `<small class="lxt-lstat is-none">Not on Live Sheet</small>`;
+    const tone = Core().liveTone(live.status);
+    return `<small class="lxt-lstat${tone ? ` is-${tone}` : ""}" title="${esc(`Live Sheet · ${live.status || "no status"}${live.employee ? ` · ${live.employee}` : ""}${live.vin ? ` · VIN ${live.vin}` : ""}`)}"><i></i><bdi>${esc(live.status || "No status")}</bdi>${live.employee ? ` · <bdi>${esc(live.employee)}</bdi>` : ""}</small>`;
+  }
+
+  function categoryCell(o) {
+    const pill = `<span class="lxt-cat ${CAT_TONE[o.category]}"><i></i>${esc(Core().CATEGORY_LABEL[o.category])}</span>`;
+    if (o.category !== "delivered") return pill;
+    return `<button type="button" class="lxt-catbtn" data-act="live" data-key="${esc(o.key)}" title="Show the delivery status on the Live Sheet (VIN Finder)">${pill}${liveBadge(o)}</button>`;
+  }
+
+  /** Loads Live Sheet statuses for the delivered orders given (cached for a minute in lexus-core). */
+  function ensureLive(orders, force) {
+    const C = Core();
+    if (!C.fetchLiveStatus) return;
+    if (!force && state.live.error && Date.now() - state.live.errorAt < LIVE_RETRY_MS) return;
+    const list = orders.filter((o) => o.category === "delivered" && !state.live.busy.has(o.key));
+    if (!list.length) return;
+    list.forEach((o) => state.live.busy.add(o.key));
+    C.fetchLiveStatus(list, state.cols.vin)
+      .then((changed) => {
+        state.live.error = "";
+        list.forEach((o) => state.live.busy.delete(o.key));
+        if (changed || force) refreshLiveViews();
+      })
+      .catch((err) => {
+        state.live.error = err.message || "Live Sheet lookup failed";
+        state.live.errorAt = Date.now();
+        list.forEach((o) => state.live.busy.delete(o.key));
+        refreshLiveViews();
+      });
+  }
+
+  function checkLive(key) {
+    const o = state.model && state.model.orders.find((x) => x.key === key);
+    if (!o) return;
+    ensureLive([o], true);
+    if (liveOf(o) === undefined) refreshLiveViews();
+  }
+
+  function refreshLiveViews() {
+    if (!state.model || !state.model.ready) return;
+    renderPreview(filteredView());
+    if (!el("modal").hidden) renderModal();
+  }
+
+  function liveSection(o) {
+    const live = liveOf(o);
+    const field = (label, value) => `<div class="lxt-field"><span>${esc(label)}</span><b dir="auto">${value}</b></div>`;
+    const link = `<a class="lxt-link" href="${VIN_FINDER_URL}?q=${encodeURIComponent(live && live.vin ? live.vin : o.orderNo)}" target="_blank" rel="noopener">Open in VIN Finder ${icon("external")}</a>`;
+    let body;
+    if (live === undefined) body = `<p class="lxt-dim lxt-pad">${esc(state.live.busy.has(o.key) ? "Checking the Live Sheet…" : state.live.error || "Not checked yet")}</p>`;
+    else if (live === null) body = `<p class="lxt-dim lxt-pad">Order ${esc(o.orderNo)}${state.cols.vin >= 0 && o.cells[state.cols.vin] ? ` / VIN ${esc(o.cells[state.cols.vin])}` : ""} is not on the Delivery Transformation Live Sheet.</p>`;
+    else {
+      const tone = Core().liveTone(live.status);
+      body = `<div class="lxt-fields">
+        ${field("Current status", `<span class="lxt-lstat is-lg${tone ? ` is-${tone}` : ""}"><i></i><bdi>${esc(live.status || "No status")}</bdi></span>`)}
+        ${field("Employee", esc(live.employee || "—"))}
+        ${field("VIN number", esc(live.vin || "—"))}
+        ${field("Order number", esc(live.order || "—"))}
+      </div>`;
+    }
+    return `<section><h4>Delivery · Live Sheet ${link}</h4>${body}</section>`;
+  }
+
   function orderColumns() {
     const c = state.cols;
     const H = state.model.headers;
@@ -707,7 +788,7 @@
       { h: c.model >= 0 ? H[c.model] : "Model", td: cell(c.model) },
       { h: c.city >= 0 ? H[c.city] : "Delivery City", td: cell(c.city) },
       { h: "Status", td: (o) => `<span class="lxt-pill ${CAT_TONE[o.category]}" dir="auto">${esc(o.statusText || "—")}</span>` },
-      { h: "Category", td: (o) => `<span class="lxt-cat ${CAT_TONE[o.category]}"><i></i>${esc(Core().CATEGORY_LABEL[o.category])}</span>` },
+      { h: "Category", td: categoryCell },
       { h: "BO Queue / Sales Raw", td: trackCell },
       { h: "Follow-up", td: followCell },
       { h: "Last Follow-up", td: (o) => (o.lastFollowUpAt ? `${esc(Core().fmtAt(o.lastFollowUpAt))}${o.lastFollowUpBy ? ` <span class="lxt-dim">· ${esc(o.lastFollowUpBy)}</span>` : ""}` : `<span class="lxt-dim">—</span>`) },
@@ -728,6 +809,7 @@
     const fit = scrollMode ? 8 : Math.max(2, Math.floor((wrap.clientHeight - 34) / 34));
     const rows = attentionSort(v.orders);
     const shown = rows.slice(0, fit);
+    if (state.filters.category === "delivered") ensureLive(shown);
     el("orders-sub").textContent = `attention first · ${n(shown.length)} of ${n(rows.length)}${v.active ? " filtered" : ""}`;
     el("preview").innerHTML = tableHtml(shown, orderColumns(), "No orders match the filters.");
   }
@@ -803,6 +885,7 @@
     const q = (top.search || "").trim().toLowerCase();
     const rows = attentionSort(base.filter(tab.fn).filter((o) => !q || `${o.cells.join(" ")} ${o.note} ${Core().trackText(o.track)}`.toLowerCase().includes(q)));
     const limit = 500;
+    ensureLive(rows.slice(0, limit));
     el("m-title").textContent = top.label;
     el("m-sub").textContent = `${n(base.length)} orders${filterNote(v)} · click a row for tracking, follow-up history and all columns`;
     el("m-tabs").innerHTML = LIST_TABS.map((t) => `<button type="button" class="${t.id === tab.id ? "is-on" : ""}${t.id === "due" && counts.due ? " is-due" : ""}" data-act="m-tab" data-tab="${t.id}">${esc(t.label)}<b class="lxt-num">${n(counts[t.id])}</b></button>`).join("");
@@ -856,7 +939,9 @@
       return `<div class="lxt-field${edited ? " is-edited" : ""}"><span>${esc(h)}</span><b dir="auto">${esc(o.cells[i]) || '<em class="lxt-dim">blank</em>'}</b>${edited ? `<small>File: ${esc(o.fileCells[i] || "(blank)")}</small>` : ""}</div>`;
     }).join("");
     const history = o.followUps.slice().reverse().map((f) => `<li><b>${esc(C.fmtAt(f.at))}</b>${f.by ? ` · ${esc(f.by)}` : ""}${f.note ? `<p dir="auto">${esc(f.note)}</p>` : ""}</li>`).join("");
+    if (o.category === "delivered") ensureLive([o]);
     el("m-body").innerHTML = `<div class="lxt-detail">
+      ${o.category === "delivered" ? liveSection(o) : ""}
       <section><h4>Tracking</h4><div class="lxt-fields">${trackRows}</div></section>
       <section><h4>Follow-up</h4><div class="lxt-fields">
         ${field("Status", followCell(o))}

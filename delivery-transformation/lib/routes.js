@@ -716,6 +716,32 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ q: rawQ, total: rows.length, rows });
   });
 
+  /**
+   * Batch VIN Finder — exact order-number or VIN matches only (same Live Sheet fields as /vin-finder).
+   * body: { keys: string[] } → { results: { [normalisedKey]: { vin, order, status, employee } } }
+   */
+  router.post('/vin-finder/lookup', (req, res) => {
+    const raw = Array.isArray(req.body && req.body.keys) ? req.body.keys : [];
+    const wanted = new Set(raw.slice(0, 3000).map(finderKey).filter((k) => k.length >= 4));
+    const results = {};
+    if (wanted.size) {
+      store.allVehicles().forEach((v) => {
+        const row = {
+          vin: v.vin,
+          order: String((v.raw && v.raw.salesOrder) || '').trim(),
+          status: String((v.ops && v.ops.opsStatus) || '').trim(),
+          employee: String((v.ops && v.ops.assignedEmployeeName) || '').trim(),
+        };
+        [finderKey(v.vin), finderKey(row.order)].forEach((k) => {
+          if (!k || !wanted.has(k)) return;
+          const prev = results[k];
+          if (!prev || (!prev.status && row.status)) results[k] = row;
+        });
+      });
+    }
+    return res.json({ total: Object.keys(results).length, results });
+  });
+
   /** Live Sheet — every role can list; edit only admin/employee via PATCH */
   router.get('/live-sheet', auth, (req, res) => {
     const q = String((req.query && req.query.q) || '').trim().toLowerCase();

@@ -529,6 +529,59 @@
     return { stop() { stopped = true; clearInterval(timer); if (ws) try { ws.close(); } catch { /* ignore */ } } };
   }
 
+  // ---------- Live Sheet delivery status (Delivery Transformation · VIN Finder) ----------
+
+  const LIVE_API = "/api/delivery-transformation/vin-finder/lookup";
+  const LIVE_TTL = 60 * 1000;
+  const liveKey = (v) => str(v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const liveCache = new Map();
+
+  /** VIN column of the Details sheet (−1 when the sheet has none). */
+  const vinColumn = (headers) => (headers || []).findIndex((h) => /\bvin\b|chassis|فين|الشاصي|الهيكل/i.test(str(h)));
+
+  function liveKeysOf(o, vinIdx) {
+    const keys = [liveKey(o.orderNo)];
+    if (vinIdx >= 0) keys.push(liveKey(o.cells[vinIdx]));
+    return keys.filter((k) => k.length >= 4);
+  }
+
+  /** undefined = not checked yet · null = not on the Live Sheet · { vin, order, status, employee } */
+  function liveStatusOf(o, vinIdx) {
+    let seen = false;
+    for (const k of liveKeysOf(o, vinIdx)) {
+      const hit = liveCache.get(k);
+      if (!hit) continue;
+      seen = true;
+      if (hit.row) return hit.row;
+    }
+    return seen ? null : undefined;
+  }
+
+  /** Looks up the orders not checked in the last minute; resolves to true when anything new arrived. */
+  async function fetchLiveStatus(orders, vinIdx) {
+    const now = Date.now();
+    const keys = new Set();
+    (orders || []).forEach((o) => liveKeysOf(o, vinIdx).forEach((k) => {
+      const hit = liveCache.get(k);
+      if (!hit || now - hit.at > LIVE_TTL) keys.add(k);
+    }));
+    if (!keys.size) return false;
+    const res = await fetch(LIVE_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys: [...keys] }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Live Sheet lookup failed (${res.status})`);
+    const results = data.results || {};
+    keys.forEach((k) => liveCache.set(k, { at: now, row: results[k] || null }));
+    return true;
+  }
+
+  /** Same colouring rule as the VIN Finder page. */
+  function liveTone(status) {
+    const v = str(status);
+    if (v === "Claimed" || v === "تم التسليم") return "ok";
+    if (v === "جاهز للتسليم" || v === "PSFU") return "warn";
+    return "";
+  }
+
   global.LexusCore = {
     SLOT,
     FOLLOW_UP_MS,
@@ -555,5 +608,9 @@
     getUser,
     setUser,
     startStateSync,
+    vinColumn,
+    liveStatusOf,
+    fetchLiveStatus,
+    liveTone,
   };
 })(typeof window !== "undefined" ? window : globalThis);

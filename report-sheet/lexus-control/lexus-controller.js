@@ -35,6 +35,7 @@
     sel: { key: "", c: 0 },
     editing: null,
     fuDialog: null,
+    live: { busy: new Set(), error: "", errorAt: 0 },
     filter: "all",
     search: "",
     editedOnly: false,
@@ -199,6 +200,55 @@
     return `<span class="lxc-trk k-${t.kind}">${esc(Core.trackText(t))}${extra}</span>`;
   }
 
+  // ---------- Live Sheet delivery status (Delivery Transformation · VIN Finder) ----------
+
+  const LIVE_RETRY_MS = 60 * 1000;
+  const vinIdx = () => (state.model ? Core.vinColumn(state.model.headers) : -1);
+
+  function categoryHtml(o) {
+    const pill = `<span class="lxc-cat c-${o.category}">${esc(Core.CATEGORY_LABEL[o.category])}</span>`;
+    if (o.category !== "delivered") return pill;
+    const live = Core.liveStatusOf(o, vinIdx());
+    let badge;
+    if (live === undefined) {
+      badge = `<span class="lxc-lstat is-idle">${state.live.busy.has(o.key) ? "Checking…" : state.live.error ? "Live Sheet unavailable" : "Live Sheet status ›"}</span>`;
+    } else if (live === null) {
+      badge = `<span class="lxc-lstat is-none">Not on Live Sheet</span>`;
+    } else {
+      const tone = Core.liveTone(live.status);
+      badge = `<span class="lxc-lstat${tone ? ` is-${tone}` : ""}"><bdi>${esc(live.status || "No status")}</bdi>${live.employee ? ` · <bdi>${esc(live.employee)}</bdi>` : ""}</span>`;
+    }
+    const tip = live ? `Live Sheet · ${live.status || "no status"}${live.employee ? ` · ${live.employee}` : ""}${live.vin ? ` · VIN ${live.vin}` : ""}` : "Show the delivery status on the Live Sheet (VIN Finder)";
+    return `<button type="button" class="lxc-catbtn" data-live="${esc(o.key)}" title="${esc(tip)}">${pill}${badge}</button>`;
+  }
+
+  function ensureLive(orders, force) {
+    if (!force && state.live.error && Date.now() - state.live.errorAt < LIVE_RETRY_MS) return;
+    const list = orders.filter((o) => o.category === "delivered" && !state.live.busy.has(o.key));
+    if (!list.length) return;
+    list.forEach((o) => state.live.busy.add(o.key));
+    Core.fetchLiveStatus(list, vinIdx())
+      .then((changed) => {
+        state.live.error = "";
+        list.forEach((o) => state.live.busy.delete(o.key));
+        if (changed || force) render();
+      })
+      .catch((err) => {
+        state.live.error = err.message || "Live Sheet lookup failed";
+        state.live.errorAt = Date.now();
+        list.forEach((o) => state.live.busy.delete(o.key));
+        render();
+        if (force) toast(`Live Sheet: ${state.live.error}`, true);
+      });
+  }
+
+  function checkLive(key) {
+    const o = state.model && state.model.orders.find((x) => x.key === key);
+    if (!o) return;
+    ensureLive([o], true);
+    if (Core.liveStatusOf(o, vinIdx()) === undefined) render();
+  }
+
   function cellHtml(o, col, r, c) {
     const attrs = `data-r="${r}" data-c="${c}"`;
     if (col.kind === "file") {
@@ -214,7 +264,7 @@
       return `<td ${attrs} class="is-note${o.note ? " is-edited" : ""}" title="${esc(o.note || "Double-click to add a note")}">${esc(o.note)}</td>`;
     }
     let inner = "";
-    if (col.id === "category") inner = `<span class="lxc-cat c-${o.category}">${esc(Core.CATEGORY_LABEL[o.category])}</span>`;
+    if (col.id === "category") inner = categoryHtml(o);
     else if (col.id === "track") inner = trackHtml(o);
     else if (col.id === "followup") inner = followUpHtml(o);
     else if (col.id === "last") inner = esc(lastText(o));
@@ -238,6 +288,7 @@
     }
     empty.hidden = true;
     state.rows = visibleOrders();
+    if (state.filter === "delivered") ensureLive(state.rows);
     const cols = state.cols;
     const head1 = `<tr class="lxc-letters"><th class="lxc-corner"></th>${cols.map((c, i) => `<th class="${c.kind === "sys" ? "is-sys" : ""}" data-col="${i}">${c.letter}</th>`).join("")}</tr>`;
     const head2 = `<tr class="lxc-heads"><th class="lxc-corner">#</th>${cols.map((c) => `<th class="${c.kind === "sys" ? "is-sys" : ""}" title="${esc(c.header)}">${esc(c.header)}</th>`).join("")}</tr>`;
@@ -618,6 +669,8 @@
     grid.addEventListener("click", (e) => {
       const fu = e.target.closest("[data-fu]");
       if (fu) { followUp(fu.dataset.fu); return; }
+      const live = e.target.closest("[data-live]");
+      if (live) { checkLive(live.dataset.live); return; }
       const td = e.target.closest("td[data-r]");
       if (!td || td.classList.contains("is-editing")) return;
       const o = state.rows[Number(td.dataset.r)];
