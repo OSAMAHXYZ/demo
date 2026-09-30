@@ -98,6 +98,10 @@
           <span class="side-nav-icon" aria-hidden="true">✎</span>
           <span class="side-nav-label">Lexus Controller</span>
         </a>
+        <a class="side-nav-item side-nav-link" href="toyotaB2C-control/toyota-b2c-controller.html" target="_blank" rel="noopener">
+          <span class="side-nav-icon" aria-hidden="true">✎</span>
+          <span class="side-nav-label">Toyota B2C Controller</span>
+        </a>
         <a class="side-nav-item side-nav-link" href="index.html">
           <span class="side-nav-icon" aria-hidden="true">◉</span>
           <span class="side-nav-label">Live Dashboard</span>
@@ -125,7 +129,7 @@
           <span class="status ok" id="admin-mode-badge">ADMIN</span>
           <a class="btn" href="index.html">Live report</a>
           <button type="button" class="btn" id="clear-files-btn" disabled>Clear files</button>
-          <button type="button" class="btn" id="eom-btn" title="Download every pushed sheet in one Excel, then remove Delivered + Cancelled Lexus orders">End of month</button>
+          <button type="button" class="btn" id="eom-btn" title="Download every pushed sheet in one Excel, then remove Delivered + Cancelled Lexus and Toyota B2C orders">End of month</button>
           <button type="button" class="btn-primary" id="push-btn">Push to live</button>
         </div>
       </header>
@@ -255,7 +259,7 @@
       <h2>End of month</h2>
       <ul>
         <li>Downloads <b>one Excel</b> with every sheet of every pushed file (a copy is also kept on the server).</li>
-        <li>Then removes all <b>Delivered</b> and <b>Cancelled</b> orders from the Lexus Controller · in-progress orders stay.</li>
+        <li>Then removes all <b>Delivered</b> and <b>Cancelled</b> orders from the Lexus Controller and the Toyota B2C Controller · in-progress orders stay.</li>
       </ul>
       <label for="eom-password">PASSWORD</label>
       <input type="password" id="eom-password" autocomplete="off" required />
@@ -293,6 +297,11 @@
     { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Lead Data sheet · Employee Number in Col R · feeds the GEC Dashboard · optional Visitors sheet" },
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Optional · visitor log · Date · Promoter (emp. no. or name) · Visit Purpose · optional Count · no personal info" },
     { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Lexus Controller & Lexus Tracker" },
+    { id: "toyotaB2c", n: 10, title: "Toyota B2C", ar: "تويوتا · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Toyota B2C Controller & B2C Tracker" },
+  ];
+  const B2C_SLOTS = [
+    { id: "lexusB2c", label: "Lexus B2C" },
+    { id: "toyotaB2c", label: "Toyota B2C" },
   ];
 
   const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
@@ -907,11 +916,12 @@
           filesBySlot,
         });
         serverAt = Number(server.at) || serverAt;
-        if (Array.isArray(server.slots) && server.slots.includes("lexusB2c") && (server.lexusB2c || !filesBySlot.lexusB2c)) {
-          const merged = await fetchServerSlot("lexusB2c");
+        for (const { id } of B2C_SLOTS) {
+          if (!Array.isArray(server.slots) || !server.slots.includes(id) || !(server[id] || !filesBySlot[id])) continue;
+          const merged = await fetchServerSlot(id);
           if (merged) {
-            slots.lexusB2c = merged;
-            filesBySlot.lexusB2c = { name: merged.name, buffer: merged.buffer };
+            slots[id] = merged;
+            filesBySlot[id] = { name: merged.name, buffer: merged.buffer };
             renderSlots();
           }
         }
@@ -948,10 +958,13 @@
       const serverNote = server
         ? ""
         : " · server was offline (saved in this browser only)";
-      const lx = server && server.lexusB2c;
-      const lexusNote = !lx ? "" : lx.error
-        ? ` · Lexus B2C: ${lx.error}`
-        : ` · Lexus B2C: ${lx.added} new, ${lx.updated} updated, ${lx.kept} kept${lx.skipped ? `, ${lx.skipped} closed at month end skipped` : ""} (${lx.total} orders)`;
+      const lexusNote = B2C_SLOTS.map(({ id, label }) => {
+        const m = server && server[id];
+        if (!m) return "";
+        return m.error
+          ? ` · ${label}: ${m.error}`
+          : ` · ${label}: ${m.added} new, ${m.updated} updated, ${m.kept} kept${m.skipped ? `, ${m.skipped} closed at month end skipped` : ""} (${m.total} orders)`;
+      }).join("");
       setStatus(
         srOk
           ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}`
@@ -1021,16 +1034,24 @@
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       $("#eom-dialog").close();
 
-      if (info.removed) {
-        const merged = await fetchServerSlot("lexusB2c");
-        if (merged) slots.lexusB2c = merged;
+      const brands = info.brands || { lexusB2c: { label: "Lexus", hasFile: true, removed: info.removed, delivered: info.delivered, cancelled: info.cancelled, kept: info.kept } };
+      const changed = B2C_SLOTS.filter(({ id }) => brands[id] && brands[id].removed);
+      if (changed.length) {
+        for (const { id } of changed) {
+          const merged = await fetchServerSlot(id);
+          if (merged) slots[id] = merged;
+        }
         try { await Store.syncFromServer({ force: true }); } catch { /* next load syncs */ }
         Store.broadcast({ type: "admin-pushed", at: Number(info.at) || Date.now() });
         renderSlots();
       }
+      const brandText = B2C_SLOTS
+        .map(({ id }) => brands[id])
+        .filter((b) => b && (b.hasFile || b.removed))
+        .map((b) => `${b.label}: ${b.removed || 0} removed (${b.delivered || 0} delivered, ${b.cancelled || 0} cancelled) · ${b.kept || 0} in progress kept`)
+        .join(" · ");
       setStatus(
-        `End of month done · ${fileName} downloaded (${info.sheets || 0} sheets from ${info.files || 0} file(s)) · `
-          + `Lexus: ${info.removed || 0} removed (${info.delivered || 0} delivered, ${info.cancelled || 0} cancelled) · ${info.kept || 0} in progress kept`,
+        `End of month done · ${fileName} downloaded (${info.sheets || 0} sheets from ${info.files || 0} file(s))${brandText ? ` · ${brandText}` : ""}`,
         "ok"
       );
     } catch (err) {

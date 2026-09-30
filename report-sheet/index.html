@@ -21,6 +21,8 @@
   <script src="plan-tracker.js?v=20260926ptfix"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
+  <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
+  <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
   <link rel="stylesheet" href="dashboard.css?v=20260920st1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
@@ -29,6 +31,7 @@
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
+  <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20260930ck1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
@@ -117,6 +120,9 @@
 
       <!-- PANEL: Lexus Tracker (lexus-control/lexus-tracker.js) -->
       <div class="panel-section" id="panel-lexus" style="display:none"><div id="lexus-tracker-host"></div></div>
+
+      <!-- PANEL: B2C Tracker · Toyota B2C orders (toyotaB2C-control/toyota-b2c-tracker.js) -->
+      <div class="panel-section" id="panel-b2c" style="display:none"><div id="toyota-b2c-tracker-host"></div></div>
 
       <!-- PANEL: Sales Control Center · Delivered vs Pro-Forma (full-viewport overlay, see sales-control.css) -->
       <div class="panel-section" id="panel-summary" style="display:none"><div id="sales-host"></div></div>
@@ -6810,6 +6816,7 @@
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "gec", label: "GEC Dashboard" },
     { id: "lexus", label: "Lexus Tracker" },
+    { id: "b2c", label: "B2C Tracker" },
     { id: "bodashboard", label: "BO Dashboard" },
     { id: "boerrors", label: "BO Errors" },
     { id: "boallocstock", label: "Allocation" },
@@ -6825,6 +6832,7 @@
   let activePanel = GEC_VIEW ? "gec" : "salesreport";
   let panelBeforeGec = "";
   let panelBeforeLexus = "";
+  let panelBeforeB2c = "";
   let panelBeforeSummary = "";
   /** Date changed inside the Sales Control Center; other panels rebuild when the user leaves it. */
   let globalDateStale = false;
@@ -7507,10 +7515,12 @@
     }
     if (panelId === "gec" && activePanel !== "gec") panelBeforeGec = activePanel;
     if (panelId === "lexus" && activePanel !== "lexus") panelBeforeLexus = activePanel;
+    if (panelId === "b2c" && activePanel !== "b2c") panelBeforeB2c = activePanel;
     if (panelId === "summary" && activePanel !== "summary") panelBeforeSummary = activePanel;
     activePanel = panelId;
     document.body.classList.toggle("gec-mode", panelId === "gec");
     document.body.classList.toggle("lx-mode", panelId === "lexus");
+    document.body.classList.toggle("tb-mode", panelId === "b2c");
     document.body.classList.toggle("sc-mode", panelId === "summary");
     document.body.classList.toggle("sr-mode", panelId === "salesreport");
     if (panelId !== "salesreport") setSrSheet("");
@@ -7524,6 +7534,7 @@
       salesreport: "▣",
       gec: "✦",
       lexus: "L",
+      b2c: "T",
       bodashboard: "▤",
       boerrors: "⚠",
       boallocstock: "▦",
@@ -7562,6 +7573,17 @@
         onExit: () => {
           const others = visiblePanels().filter((p) => p.id !== "lexus").map((p) => p.id);
           switchPanel(others.includes(panelBeforeLexus) ? panelBeforeLexus : (others[0] || "dashboard"));
+        },
+      });
+    }
+    if (panelId === "b2c" && window.ToyotaB2cTracker) {
+      const tbHost = $("#toyota-b2c-tracker-host");
+      if (tbHost.parentNode !== document.body) document.body.appendChild(tbHost);
+      window.ToyotaB2cTracker.mount(tbHost);
+      window.ToyotaB2cTracker.show({
+        onExit: () => {
+          const others = visiblePanels().filter((p) => p.id !== "b2c").map((p) => p.id);
+          switchPanel(others.includes(panelBeforeB2c) ? panelBeforeB2c : (others[0] || "dashboard"));
         },
       });
     }

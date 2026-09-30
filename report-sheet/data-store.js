@@ -23,7 +23,7 @@
   const API_CLEAR = "/api/report-sheet/clear";
   const API_FILE = "/api/report-sheet/file";
 
-  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories", "gec", "gecVisitors", "lexusB2c"];
+  const SLOT_IDS = ["backorder", "rtl", "central", "sales", "cancelled", "accessories", "gec", "gecVisitors", "lexusB2c", "toyotaB2c"];
 
   function openDb() {
     return new Promise((resolve, reject) => {

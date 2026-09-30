@@ -26,7 +26,7 @@ const RTL_DAILY_FILES_DIR = path.join(RTL_DAILY_DIR, 'excel');
 const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
 const LEGACY_RTL_DAILY_DIR = path.join(ROOT, 'report-sheet-data', 'rtl-daily');
 const REPORT_SLOT_IDS = Object.freeze([
-  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors', 'lexusB2c'
+  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors', 'lexusB2c', 'toyotaB2c'
 ]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Timestamped snapshot id: 2026-09-09T14-30-05-123-ab12 (or legacy YYYY-MM-DD). */
@@ -4643,9 +4643,25 @@ app.get('/api/report-sheet/file/:slot', (req, res) => {
 });
 
 /**
- * Lexus B2C workbook (Details sheet · Order No · Status) — same rules as report-sheet/lexus-control/lexus-core.js,
- * so row keys match the per-order data in lexus-tracker-data.json.
+ * B2C workbooks (Lexus B2C · Toyota B2C) — Details sheet · Order No · Status. Same rules as
+ * report-sheet/lexus-control/lexus-core.js and report-sheet/toyotaB2C-control/toyota-b2c-core.js,
+ * so row keys match the per-order data in each brand's tracker file.
  */
+const B2C_SLOTS = Object.freeze({
+  lexusB2c: {
+    label: 'Lexus',
+    file: path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json'),
+    api: '/api/lexus-tracker',
+    ws: 'lexus_tracker_updated',
+  },
+  toyotaB2c: {
+    label: 'Toyota',
+    file: path.join(PERSISTENT_ROOT, 'toyota-b2c-tracker-data.json'),
+    api: '/api/toyota-b2c-tracker',
+    ws: 'toyota_b2c_tracker_updated',
+  },
+});
+const B2C_SLOT_IDS = Object.keys(B2C_SLOTS);
 const lexusStr = (v) => (v == null ? '' : String(v)).trim();
 const lexusNormHeader = (v) => lexusStr(v).toLowerCase().replace(/[_\s]+/g, ' ').replace(/[.:#]+$/g, '').trim();
 const LEXUS_ORDER_HEADER = (n) => /^order\s*(no|number|num|#)$/.test(n) || /^order\s*no\b/.test(n) || /\border\s*(no|number)\b/.test(n);
@@ -4739,9 +4755,9 @@ function writeLexusB2c(parsed, headerRow, lines) {
  * orders in both take the new values, orders only in the old file stay, new orders are added.
  * Orders closed at End of month are not brought back while the new file still shows them delivered / cancelled.
  */
-function mergeLexusB2c(prevBuf, nextBuf, archived) {
+function mergeLexusB2c(prevBuf, nextBuf, archived, label = 'Lexus') {
   const next = readLexusB2c(nextBuf);
-  if (!next) return { error: 'No "Order No" column in the new Lexus B2C file · kept the existing data' };
+  if (!next) return { error: `No "Order No" column in the new ${label} B2C file · kept the existing data` };
   let prev = null;
   try { prev = prevBuf ? readLexusB2c(prevBuf) : null; } catch { prev = null; }
 
@@ -4789,16 +4805,17 @@ function mergeLexusB2c(prevBuf, nextBuf, archived) {
 }
 
 /** @returns {{ buffer: Buffer, name: string, summary: object|null }} */
-function pushLexusB2c(prevBuf, prevName, buf, name) {
+function pushLexusB2c(prevBuf, prevName, buf, name, slot = 'lexusB2c') {
   if (prevBuf && prevBuf.equals(buf)) return { buffer: buf, name, summary: null };
-  const archived = loadLexusTracker().archived;
+  const label = B2C_SLOTS[slot].label;
+  const archived = loadB2cTracker(slot).archived;
   if (!prevBuf && !Object.keys(archived).length) return { buffer: buf, name, summary: null };
   let merged;
   try {
-    merged = mergeLexusB2c(prevBuf, buf, archived);
+    merged = mergeLexusB2c(prevBuf, buf, archived, label);
   } catch (err) {
-    console.error('[report-sheet/push] Lexus merge', err);
-    merged = { error: `Could not read the new Lexus B2C file (${err.message}) · kept the existing data` };
+    console.error(`[report-sheet/push] ${label} B2C merge`, err);
+    merged = { error: `Could not read the new ${label} B2C file (${err.message}) · kept the existing data` };
   }
   if (merged.error) {
     return prevBuf
@@ -4822,11 +4839,18 @@ app.post('/api/report-sheet/push', (req, res) => {
     const prevControl = sanitizeGecControl(prevMeta.gecControl);
     const controlChanged = !!pushedControl && JSON.stringify(pushedControl) !== JSON.stringify(prevControl);
 
-    // Lexus B2C is cumulative: a Push merges into it and never drops it.
-    const prevLexusFp = reportSheetFilePath('lexusB2c');
-    const prevLexus = fs.existsSync(prevLexusFp) ? fs.readFileSync(prevLexusFp) : null;
-    const prevLexusName = (prevMeta.fileNames && prevMeta.fileNames.lexusB2c) || 'lexusB2c.xlsx';
-    let lexusMerge = null;
+    // B2C files (Lexus · Toyota) are cumulative: a Push merges into them and never drops them.
+    const prevB2c = {};
+    const b2cMerge = {};
+    B2C_SLOT_IDS.forEach((id) => {
+      const fp = reportSheetFilePath(id);
+      prevB2c[id] = {
+        fp,
+        buf: fs.existsSync(fp) ? fs.readFileSync(fp) : null,
+        name: (prevMeta.fileNames && prevMeta.fileNames[id]) || `${id}.xlsx`,
+      };
+      b2cMerge[id] = null;
+    });
 
     clearReportSheetFiles();
 
@@ -4838,11 +4862,12 @@ app.post('/api/report-sheet/push', (req, res) => {
       let buf = Buffer.from(String(entry.base64), 'base64');
       if (!buf.length) continue;
       let name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
-      if (id === 'lexusB2c') {
-        const merged = pushLexusB2c(prevLexus, prevLexusName, buf, name);
+      if (B2C_SLOTS[id]) {
+        const prev = prevB2c[id];
+        const merged = pushLexusB2c(prev.buf, prev.name, buf, name, id);
         buf = merged.buffer;
         name = merged.name;
-        lexusMerge = merged.summary;
+        b2cMerge[id] = merged.summary;
       }
       const fp = reportSheetFilePath(id);
       fs.writeFileSync(fp, buf);
@@ -4867,11 +4892,13 @@ app.post('/api/report-sheet/push', (req, res) => {
       }
     }
 
-    if (prevLexus && !slots.includes('lexusB2c')) {
-      fs.writeFileSync(prevLexusFp, prevLexus);
-      fileNames.lexusB2c = prevLexusName;
-      slots.push('lexusB2c');
-    }
+    B2C_SLOT_IDS.forEach((id) => {
+      const prev = prevB2c[id];
+      if (!prev.buf || slots.includes(id)) return;
+      fs.writeFileSync(prev.fp, prev.buf);
+      fileNames[id] = prev.name;
+      slots.push(id);
+    });
 
     const meta = {
       at,
@@ -4898,7 +4925,8 @@ app.post('/api/report-sheet/push', (req, res) => {
       slots,
       hasSales: meta.hasSales,
       hasCancelled: meta.hasCancelled,
-      lexusB2c: lexusMerge,
+      lexusB2c: b2cMerge.lexusB2c,
+      toyotaB2c: b2cMerge.toyotaB2c,
       rtlDaily: rtlSnapshot
         ? {
           id: rtlSnapshot.id,
@@ -4934,16 +4962,16 @@ app.post('/api/report-sheet/clear', (_req, res) => {
 });
 
 /**
- * Lexus Controller · per-order user data (cell edits, note, follow-ups, first seen).
- * Separate file so Admin Push / Clear never overwrite what users entered.
+ * B2C Controllers (Lexus · Toyota) · per-order user data (cell edits, note, follow-ups, first seen).
+ * One file per brand, separate from the pushed files so Admin Push / Clear never overwrite what users entered.
  */
-const LEXUS_TRACKER_FILE = path.join(PERSISTENT_ROOT, 'lexus-tracker-data.json');
 const LEXUS_KEY_RE = /^[A-Z0-9][A-Z0-9\-_/#.]{0,79}$/;
 
-function loadLexusTracker() {
+function loadB2cTracker(slot) {
+  const file = B2C_SLOTS[slot].file;
   try {
-    if (!fs.existsSync(LEXUS_TRACKER_FILE)) return { at: 0, orders: {}, archived: {} };
-    const parsed = JSON.parse(fs.readFileSync(LEXUS_TRACKER_FILE, 'utf8'));
+    if (!fs.existsSync(file)) return { at: 0, orders: {}, archived: {} };
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       at: Number(parsed && parsed.at) || 0,
       orders: parsed && parsed.orders && typeof parsed.orders === 'object' ? parsed.orders : {},
@@ -4954,15 +4982,16 @@ function loadLexusTracker() {
   }
 }
 
-function saveLexusTracker(data) {
-  fs.mkdirSync(path.dirname(LEXUS_TRACKER_FILE), { recursive: true });
-  const tmp = `${LEXUS_TRACKER_FILE}.${process.pid}.tmp`;
+function saveB2cTracker(slot, data) {
+  const file = B2C_SLOTS[slot].file;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
-  fs.renameSync(tmp, LEXUS_TRACKER_FILE);
+  fs.renameSync(tmp, file);
 }
 
-function broadcastLexusTracker(at, keys) {
-  const payload = JSON.stringify({ type: 'lexus_tracker_updated', at, keys });
+function broadcastB2cTracker(slot, at, keys) {
+  const payload = JSON.stringify({ type: B2C_SLOTS[slot].ws, at, keys });
   for (const client of wsClients) {
     if (client.readyState === 1) {
       try {
@@ -4976,17 +5005,20 @@ function broadcastLexusTracker(at, keys) {
 
 const lexusText = (v, max) => String(v == null ? '' : v).slice(0, max);
 
-app.get('/api/lexus-tracker/state', (_req, res) => {
+B2C_SLOT_IDS.forEach((slot) => {
+const { api } = B2C_SLOTS[slot];
+
+app.get(`${api}/state`, (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const { at, orders } = loadLexusTracker();
+  const { at, orders } = loadB2cTracker(slot);
   res.json({ at, orders });
 });
 
 /** Orders shown for the first time start their 24 h follow-up clock now (existing ones keep theirs). */
-app.post('/api/lexus-tracker/seen', (req, res) => {
+app.post(`${api}/seen`, (req, res) => {
   try {
     const keys = Array.isArray(req.body && req.body.keys) ? req.body.keys : [];
-    const data = loadLexusTracker();
+    const data = loadB2cTracker(slot);
     const at = Date.now();
     const added = [];
     for (const raw of keys.slice(0, 20000)) {
@@ -5000,12 +5032,12 @@ app.post('/api/lexus-tracker/seen', (req, res) => {
     }
     if (added.length) {
       data.at = at;
-      saveLexusTracker(data);
-      broadcastLexusTracker(at, added.slice(0, 50));
+      saveB2cTracker(slot, data);
+      broadcastB2cTracker(slot, at, added.slice(0, 50));
     }
     return res.json({ ok: true, at: data.at, added: added.length });
   } catch (err) {
-    console.error('[lexus-tracker/seen]', err);
+    console.error(`[${api}/seen]`, err);
     return res.status(500).json({ error: err.message || 'Save failed' });
   }
 });
@@ -5014,13 +5046,13 @@ app.post('/api/lexus-tracker/seen', (req, res) => {
  * body: { key, by, edits?: { [header]: string|null }, note?: string, followUp?: true }
  * A follow-up must come with an updated note (non-empty and different from the saved one).
  */
-app.post('/api/lexus-tracker/order', (req, res) => {
+app.post(`${api}/order`, (req, res) => {
   try {
     const body = req.body || {};
     const key = String(body.key || '').trim().toUpperCase();
     if (!LEXUS_KEY_RE.test(key)) return res.status(400).json({ error: 'Invalid order key' });
     const by = lexusText(body.by, 60).trim();
-    const data = loadLexusTracker();
+    const data = loadB2cTracker(slot);
     const existing = data.orders[key] || {};
     if (body.followUp === true) {
       const next = body.note === undefined ? '' : lexusText(body.note, 4000).trim();
@@ -5052,13 +5084,14 @@ app.post('/api/lexus-tracker/order', (req, res) => {
     entry.updatedAt = at;
     entry.updatedBy = by;
     data.at = at;
-    saveLexusTracker(data);
-    broadcastLexusTracker(at, [key]);
+    saveB2cTracker(slot, data);
+    broadcastB2cTracker(slot, at, [key]);
     return res.json({ ok: true, at, key, order: entry });
   } catch (err) {
-    console.error('[lexus-tracker/order]', err);
+    console.error(`[${api}/order]`, err);
     return res.status(500).json({ error: err.message || 'Save failed' });
   }
+});
 });
 
 /**
@@ -5077,6 +5110,7 @@ const REPORT_SLOT_LABELS = Object.freeze({
   gec: 'GEC',
   gecVisitors: 'GEC Visitors',
   lexusB2c: 'Lexus B2C',
+  toyotaB2c: 'Toyota B2C',
 });
 
 function riyadhStamp(ms) {
@@ -5092,7 +5126,6 @@ app.post('/api/report-sheet/end-of-month', (req, res) => {
     ensureReportSheetDirs();
     const at = Date.now();
     const meta = loadReportSheetMeta();
-    const tracker = loadLexusTracker();
     const fileNames = meta.fileNames || {};
 
     const out = XLSX.utils.book_new();
@@ -5120,35 +5153,41 @@ app.post('/api/report-sheet/end-of-month', (req, res) => {
     }
     if (!sources.length) return res.status(400).json({ error: 'No pushed files on the server · nothing to export' });
 
-    // Lexus: split into orders that stay (in progress) and orders that close (delivered / cancelled).
-    const lexusFp = reportSheetFilePath('lexusB2c');
-    let lexus = null;
-    const closed = { delivered: [], cancelled: [] };
-    const keepLines = [];
-    if (fs.existsSync(lexusFp)) {
-      try { lexus = readLexusB2c(fs.readFileSync(lexusFp)); } catch { lexus = null; }
-    }
-    if (lexus) {
-      const statusHeader = lexus.statusCol >= 0 ? lexus.headers[lexus.statusCol] : '';
-      lexus.rows.forEach((row) => {
-        const edits = (tracker.orders[row.key] && tracker.orders[row.key].edits) || {};
-        const status = statusHeader && Object.prototype.hasOwnProperty.call(edits, statusHeader)
-          ? edits[statusHeader]
-          : (lexus.statusCol >= 0 ? row.line[lexus.statusCol] : '');
-        const cat = lexusCategory(status);
-        if (cat === 'progress') keepLines.push(row.line);
-        else closed[cat].push(row.key);
-      });
-    }
-    const closedKeys = [...closed.delivered, ...closed.cancelled];
+    // Each B2C brand: split into orders that stay (in progress) and orders that close (delivered / cancelled).
+    const brands = B2C_SLOT_IDS.map((slot) => {
+      const fp = reportSheetFilePath(slot);
+      const tracker = loadB2cTracker(slot);
+      let book = null;
+      const closed = { delivered: [], cancelled: [] };
+      const keepLines = [];
+      if (fs.existsSync(fp)) {
+        try { book = readLexusB2c(fs.readFileSync(fp)); } catch { book = null; }
+      }
+      if (book) {
+        const statusHeader = book.statusCol >= 0 ? book.headers[book.statusCol] : '';
+        book.rows.forEach((row) => {
+          const edits = (tracker.orders[row.key] && tracker.orders[row.key].edits) || {};
+          const status = statusHeader && Object.prototype.hasOwnProperty.call(edits, statusHeader)
+            ? edits[statusHeader]
+            : (book.statusCol >= 0 ? row.line[book.statusCol] : '');
+          const cat = lexusCategory(status);
+          if (cat === 'progress') keepLines.push(row.line);
+          else closed[cat].push(row.key);
+        });
+      }
+      const closedKeys = [...closed.delivered, ...closed.cancelled];
+      return { slot, label: B2C_SLOTS[slot].label, fp, tracker, book, closed, closedKeys, keepLines };
+    });
 
     const summary = [
       ['End of month', riyadhStamp(at).replace('_', ' ')],
-      [],
-      ['Lexus orders removed', closedKeys.length],
-      ['· Delivered', closed.delivered.length],
-      ['· Cancelled', closed.cancelled.length],
-      ['Lexus orders kept (in progress)', keepLines.length],
+      ...brands.flatMap((b) => [
+        [],
+        [`${b.label} orders removed`, b.closedKeys.length],
+        ['· Delivered', b.closed.delivered.length],
+        ['· Cancelled', b.closed.cancelled.length],
+        [`${b.label} orders kept (in progress)`, b.keepLines.length],
+      ]),
       [],
       ['Slot', 'File', 'Sheets'],
       ...files,
@@ -5159,54 +5198,72 @@ app.post('/api/report-sheet/end-of-month', (req, res) => {
     });
 
     const fmt = (ms) => (ms ? riyadhStamp(Number(ms)).replace('_', ' ').replace(/-(\d\d)$/, ':$1') : '');
-    const closedSet = new Set(closedKeys);
-    const notes = [['Order', 'Closed now', 'Note', 'Follow-ups', 'Last follow-up', 'Last by', 'Follow-up history', 'Edited cells', 'First seen', 'Updated by', 'Updated']];
-    Object.entries(tracker.orders).forEach(([key, o]) => {
-      const followUps = Array.isArray(o.followUps) ? o.followUps : [];
-      const edits = o.edits && typeof o.edits === 'object' ? Object.entries(o.edits) : [];
-      if (!o.note && !followUps.length && !edits.length) return;
-      const last = followUps[followUps.length - 1] || {};
-      notes.push([
-        key,
-        closedSet.has(key) ? (closed.delivered.includes(key) ? 'Delivered' : 'Cancelled') : '',
-        o.note || '',
-        followUps.length,
-        fmt(last.at),
-        last.by || '',
-        followUps.map((f) => `${fmt(f.at)} ${f.by || ''}${f.note ? ` · ${f.note}` : ''}`).join('\n').slice(0, 32000),
-        edits.map(([h, v]) => `${h}: ${v}`).join('\n').slice(0, 32000),
-        fmt(o.firstSeenAt),
-        o.updatedBy || '',
-        fmt(o.updatedAt),
-      ]);
+    brands.forEach(({ label, tracker, closed, closedKeys }) => {
+      const closedSet = new Set(closedKeys);
+      const notes = [['Order', 'Closed now', 'Note', 'Follow-ups', 'Last follow-up', 'Last by', 'Follow-up history', 'Edited cells', 'First seen', 'Updated by', 'Updated']];
+      Object.entries(tracker.orders).forEach(([key, o]) => {
+        const followUps = Array.isArray(o.followUps) ? o.followUps : [];
+        const edits = o.edits && typeof o.edits === 'object' ? Object.entries(o.edits) : [];
+        if (!o.note && !followUps.length && !edits.length) return;
+        const last = followUps[followUps.length - 1] || {};
+        notes.push([
+          key,
+          closedSet.has(key) ? (closed.delivered.includes(key) ? 'Delivered' : 'Cancelled') : '',
+          o.note || '',
+          followUps.length,
+          fmt(last.at),
+          last.by || '',
+          followUps.map((f) => `${fmt(f.at)} ${f.by || ''}${f.note ? ` · ${f.note}` : ''}`).join('\n').slice(0, 32000),
+          edits.map(([h, v]) => `${h}: ${v}`).join('\n').slice(0, 32000),
+          fmt(o.firstSeenAt),
+          o.updatedBy || '',
+          fmt(o.updatedAt),
+        ]);
+      });
+      if (notes.length > 1) addSheet(XLSX.utils.aoa_to_sheet(notes), `${label} notes & follow-ups`);
     });
-    if (notes.length > 1) addSheet(XLSX.utils.aoa_to_sheet(notes), 'Lexus notes & follow-ups');
 
     const archive = XLSX.write(out, { type: 'buffer', bookType: 'xlsx', compression: true });
     const fileName = `End-of-month_${riyadhStamp(at)}.xlsx`;
     fs.mkdirSync(END_OF_MONTH_DIR, { recursive: true });
     fs.writeFileSync(path.join(END_OF_MONTH_DIR, fileName), archive);
 
-    if (lexus && closedKeys.length) {
-      fs.writeFileSync(lexusFp, writeLexusB2c(lexus, lexus.headerRow, keepLines));
+    const changed = brands.filter((b) => b.book && b.closedKeys.length);
+    changed.forEach(({ slot, fp, tracker, book, closedKeys, keepLines }) => {
+      fs.writeFileSync(fp, writeLexusB2c(book, book.headerRow, keepLines));
       closedKeys.forEach((key) => {
         delete tracker.orders[key];
         tracker.archived[key] = at;
       });
       tracker.at = at;
-      saveLexusTracker(tracker);
+      saveB2cTracker(slot, tracker);
+    });
+    if (changed.length) {
       meta.at = at;
       saveReportSheetMeta(meta);
       broadcastReportSheetUpdate(at);
-      broadcastLexusTracker(at, closedKeys.slice(0, 50));
+      changed.forEach(({ slot, closedKeys }) => broadcastB2cTracker(slot, at, closedKeys.slice(0, 50)));
     }
 
+    const brandInfo = {};
+    brands.forEach((b) => {
+      brandInfo[b.slot] = {
+        label: b.label,
+        hasFile: !!b.book,
+        removed: b.closedKeys.length,
+        delivered: b.closed.delivered.length,
+        cancelled: b.closed.cancelled.length,
+        kept: b.keepLines.length,
+      };
+    });
+    const lexusInfo = brandInfo.lexusB2c;
     const info = {
       at,
-      removed: closedKeys.length,
-      delivered: closed.delivered.length,
-      cancelled: closed.cancelled.length,
-      kept: keepLines.length,
+      removed: lexusInfo.removed,
+      delivered: lexusInfo.delivered,
+      cancelled: lexusInfo.cancelled,
+      kept: lexusInfo.kept,
+      brands: brandInfo,
       sheets: out.SheetNames.length,
       files: sources.length,
     };
