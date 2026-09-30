@@ -34,6 +34,7 @@
     rows: [],
     sel: { key: "", c: 0 },
     editing: null,
+    fuDialog: null,
     filter: "all",
     search: "",
     editedOnly: false,
@@ -154,7 +155,7 @@
     if (!due) { el.hidden = true; return; }
     el.hidden = false;
     el.innerHTML = `<span>⚠</span><span><b class="num">${n(due)}</b> order${due === 1 ? "" : "s"} need${due === 1 ? "s" : ""} a follow-up — no follow-up recorded in the last 24 hours.
-      After you contact the customer, click <b>Yes</b> in the Follow-up column.</span>
+      After you contact the customer, click <b>Yes</b> in the Follow-up column and update the notes.</span>
       <button type="button" data-filter="due">Show only these</button>`;
   }
 
@@ -381,7 +382,7 @@
       Object.entries(patch.edits).forEach(([h, v]) => { if (v === null) delete entry.edits[h]; else entry.edits[h] = v; });
     }
     if (patch.note !== undefined) entry.note = patch.note;
-    if (patch.followUp) entry.followUps = (entry.followUps || []).concat([{ at, by: Core.getUser() }]);
+    if (patch.followUp) entry.followUps = (entry.followUps || []).concat([{ at, by: Core.getUser(), note: entry.note || "" }]);
     entry.updatedAt = at;
     entry.updatedBy = Core.getUser();
   }
@@ -400,11 +401,51 @@
     }
   }
 
+  // A follow-up is only recorded together with an updated note.
   function followUp(key) {
     const o = state.model && state.model.orders.find((x) => x.key === key);
     if (!o) return;
-    saveEdit(key, { followUp: true });
-    toast(`Follow-up recorded for order ${o.orderNo} · next one due in 24 h`);
+    if (state.editing) commitEdit(0, 0);
+    $("lxc-menu").hidden = true;
+    const prev = o.note || "";
+    const note = $("lxc-fu-note");
+    note.value = prev;
+    $("lxc-fu-sub").textContent = `Order ${o.orderNo} · ${followUpText(o)}`;
+    state.fuDialog = { key, prev: prev.trim() };
+    syncFollowUpDialog();
+    $("lxc-fu-dialog").hidden = false;
+    note.focus();
+    note.setSelectionRange(note.value.length, note.value.length);
+  }
+
+  function syncFollowUpDialog() {
+    const d = state.fuDialog;
+    if (!d) return;
+    const v = $("lxc-fu-note").value.trim();
+    const ok = !!v && v !== d.prev;
+    $("lxc-fu-save").disabled = !ok;
+    const hint = $("lxc-fu-hint");
+    hint.textContent = !v ? "Write a note about this follow-up to continue."
+      : v === d.prev ? "Update the notes — they must change with every follow-up."
+      : "Ctrl + Enter to save";
+    hint.classList.toggle("is-warn", !ok);
+  }
+
+  function closeFollowUpDialog() {
+    state.fuDialog = null;
+    $("lxc-fu-dialog").hidden = true;
+    $("lxc-scroll").focus({ preventScroll: true });
+  }
+
+  function submitFollowUp() {
+    const d = state.fuDialog;
+    if (!d) return;
+    const note = $("lxc-fu-note").value.trim();
+    if (!note || note === d.prev) { syncFollowUpDialog(); $("lxc-fu-note").focus(); return; }
+    const o = state.model && state.model.orders.find((x) => x.key === d.key);
+    closeFollowUpDialog();
+    saveEdit(d.key, { followUp: true, note });
+    if (o) toast(`Follow-up and notes saved for order ${o.orderNo} · next one due in 24 h`);
   }
 
   // ---------- Loading ----------
@@ -630,6 +671,16 @@
       }
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("lxc-menu").hidden = true; });
+
+    const fuNote = $("lxc-fu-note");
+    fuNote.addEventListener("input", syncFollowUpDialog);
+    fuNote.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitFollowUp(); }
+    });
+    $("lxc-fu-form").addEventListener("submit", (e) => { e.preventDefault(); submitFollowUp(); });
+    $("lxc-fu-cancel").addEventListener("click", closeFollowUpDialog);
+    $("lxc-fu-dialog").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); closeFollowUpDialog(); } });
+    $("lxc-fu-dialog").addEventListener("mousedown", (e) => { if (e.target === e.currentTarget) closeFollowUpDialog(); });
   }
 
   // ---------- Start ----------

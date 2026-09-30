@@ -228,6 +228,33 @@ button, input { font: inherit; color: inherit; }
 }
 .lxc-toast.is-err { background: #b91c1c; }
 
+/* ---------- Follow-up dialog ---------- */
+.lxc-dialog { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 16px; background: rgba(11, 11, 13, 0.55); backdrop-filter: blur(2px); }
+.lxc-dialog[hidden] { display: none; }
+.lxc-dialog-card {
+  width: min(520px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 20px; border-radius: 16px;
+  background: #fff; border-top: 3px solid var(--gold); box-shadow: 0 28px 60px -24px rgba(0, 0, 0, 0.55); font-family: "Outfit", sans-serif;
+}
+.lxc-dialog-card header { display: flex; flex-direction: column; gap: 3px; }
+.lxc-dialog-card header strong { font-size: 17px; color: var(--ink); }
+.lxc-dialog-card header span { font-size: 12.5px; color: var(--muted); }
+.lxc-dialog-field { display: flex; flex-direction: column; gap: 6px; }
+.lxc-dialog-field > span { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #334155; }
+.lxc-dialog-field em { font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--due); margin-left: 6px; }
+.lxc-dialog-field textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 110px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid #cbd5e1; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); outline: none;
+}
+.lxc-dialog-field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(185, 154, 91, 0.2); }
+.lxc-dialog-hint { margin: -6px 0 0; font-size: 12px; color: var(--muted); min-height: 16px; }
+.lxc-dialog-hint.is-warn { color: var(--due); font-weight: 600; }
+.lxc-dialog-card footer { display: flex; justify-content: flex-end; gap: 8px; }
+.lxc-dialog-btn { height: 36px; padding: 0 16px; border-radius: 9px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.lxc-dialog-btn:hover:not(:disabled) { background: #f8fafc; }
+.lxc-dialog-btn.is-primary { background: #16a34a; border-color: #16a34a; color: #fff; }
+.lxc-dialog-btn.is-primary:hover:not(:disabled) { background: #15803d; }
+.lxc-dialog-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 @media (max-width: 1400px) {
   .lxc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .lxc-legend { display: none; }

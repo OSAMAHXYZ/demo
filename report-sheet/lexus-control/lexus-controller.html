@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="lexus-controller.css?v=20260930lx2" />
+  <link rel="stylesheet" href="lexus-controller.css?v=20260930lx5" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="../data-store.js?v=20260930lx1"></script>
   <script src="../lib/bo-order-lookup.js?v=20260915rv3"></script>
@@ -67,9 +67,26 @@
       <div class="lxc-empty" id="lxc-empty" hidden></div>
     </section>
 
+    <div class="lxc-dialog" id="lxc-fu-dialog" hidden>
+      <form class="lxc-dialog-card" id="lxc-fu-form" role="dialog" aria-modal="true" aria-labelledby="lxc-fu-title" novalidate>
+        <header>
+          <strong id="lxc-fu-title">Record follow-up</strong>
+          <span id="lxc-fu-sub"></span>
+        </header>
+        <label class="lxc-dialog-field">
+          <span>Notes <em>required · update before saving</em></span>
+          <textarea id="lxc-fu-note" rows="5" maxlength="4000" dir="auto" placeholder="What did the customer say? What is the next step?"></textarea>
+        </label>
+        <p class="lxc-dialog-hint" id="lxc-fu-hint"></p>
+        <footer>
+          <button type="button" class="lxc-dialog-btn" id="lxc-fu-cancel">Cancel</button>
+          <button type="submit" class="lxc-dialog-btn is-primary" id="lxc-fu-save" disabled>Save follow-up</button>
+        </footer>
+      </form>
+    </div>
     <div class="lxc-menu" id="lxc-menu" hidden></div>
     <div class="lxc-toast" id="lxc-toast" hidden></div>
   </div>
-  <script src="lexus-controller.js?v=20260930lx4"></script>
+  <script src="lexus-controller.js?v=20260930lx5"></script>
 </body>
 </html>

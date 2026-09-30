@@ -428,6 +428,7 @@ body:not(.lx-mode) > #lexus-tracker-host { display: none; }
 #lexus-tracker-host .lxt-edited-tag { color: var(--c-due); letter-spacing: 0.08em; }
 #lexus-tracker-host .lxt-history { margin: 10px 0 0; padding-left: 20px; color: var(--text-2); font-size: 12.5px; line-height: 1.8; }
 #lexus-tracker-host .lxt-history b { font-weight: 600; color: var(--text); }
+#lexus-tracker-host .lxt-history p { margin: 0 0 6px; padding: 5px 10px; border-left: 2px solid rgba(200, 169, 107, 0.45); background: rgba(255, 255, 255, 0.025); border-radius: 0 6px 6px 0; color: var(--muted); line-height: 1.45; white-space: pre-wrap; }
 #lexus-tracker-host .lxt-pad { margin: 10px 0 0; font-size: 12.5px; }
 
 /* ---------- Tighten, never scroll ---------- */

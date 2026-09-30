@@ -4823,7 +4823,10 @@ app.post('/api/lexus-tracker/seen', (req, res) => {
   }
 });
 
-/** body: { key, by, edits?: { [header]: string|null }, note?: string, followUp?: true } */
+/**
+ * body: { key, by, edits?: { [header]: string|null }, note?: string, followUp?: true }
+ * A follow-up must come with an updated note (non-empty and different from the saved one).
+ */
 app.post('/api/lexus-tracker/order', (req, res) => {
   try {
     const body = req.body || {};
@@ -4831,6 +4834,14 @@ app.post('/api/lexus-tracker/order', (req, res) => {
     if (!LEXUS_KEY_RE.test(key)) return res.status(400).json({ error: 'Invalid order key' });
     const by = lexusText(body.by, 60).trim();
     const data = loadLexusTracker();
+    const existing = data.orders[key] || {};
+    if (body.followUp === true) {
+      const next = body.note === undefined ? '' : lexusText(body.note, 4000).trim();
+      if (!next) return res.status(400).json({ error: 'Update the notes before recording a follow-up' });
+      if (next === lexusText(existing.note, 4000).trim()) {
+        return res.status(400).json({ error: 'The notes were not changed — update them before recording a follow-up' });
+      }
+    }
     const at = Date.now();
     const entry = data.orders[key] || (data.orders[key] = {});
     if (!entry.firstSeenAt) entry.firstSeenAt = at;
@@ -4848,7 +4859,7 @@ app.post('/api/lexus-tracker/order', (req, res) => {
     if (body.note !== undefined) entry.note = lexusText(body.note, 4000);
     if (body.followUp === true) {
       const list = Array.isArray(entry.followUps) ? entry.followUps : [];
-      list.push({ at, by });
+      list.push({ at, by, note: entry.note || '' });
       entry.followUps = list.slice(-200);
     }
     entry.updatedAt = at;

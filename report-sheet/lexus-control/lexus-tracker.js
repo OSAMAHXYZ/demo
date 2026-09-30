@@ -855,7 +855,7 @@
       const edited = Object.prototype.hasOwnProperty.call(o.edits, h);
       return `<div class="lxt-field${edited ? " is-edited" : ""}"><span>${esc(h)}</span><b dir="auto">${esc(o.cells[i]) || '<em class="lxt-dim">blank</em>'}</b>${edited ? `<small>File: ${esc(o.fileCells[i] || "(blank)")}</small>` : ""}</div>`;
     }).join("");
-    const history = o.followUps.slice().reverse().map((f) => `<li><b>${esc(C.fmtAt(f.at))}</b>${f.by ? ` · ${esc(f.by)}` : ""}</li>`).join("");
+    const history = o.followUps.slice().reverse().map((f) => `<li><b>${esc(C.fmtAt(f.at))}</b>${f.by ? ` · ${esc(f.by)}` : ""}${f.note ? `<p dir="auto">${esc(f.note)}</p>` : ""}</li>`).join("");
     el("m-body").innerHTML = `<div class="lxt-detail">
       <section><h4>Tracking</h4><div class="lxt-fields">${trackRows}</div></section>
       <section><h4>Follow-up</h4><div class="lxt-fields">
