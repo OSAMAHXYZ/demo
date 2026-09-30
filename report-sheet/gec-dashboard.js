@@ -517,7 +517,7 @@
     const m = state.metrics;
     const k = m.kpis;
     const days = Math.max(1, daysBetween(m.range.from, m.range.to));
-    const link = (drillKey, text) => `<span class="gcc-sublink" role="button" tabindex="0" data-drill="kpi" data-key="${drillKey}" title="${esc(DRILL_TITLES[drillKey] || "")}">${text}</span>`;
+    const link = (drillKey, text, extra) => `<span class="gcc-sublink${extra ? ` ${extra}` : ""}" role="button" tabindex="0" data-drill="kpi" data-key="${drillKey}" title="${esc(DRILL_TITLES[drillKey] || "")}">${text}</span>`;
     switch (key) {
       case "visitors":
         return m.hasVisitors
@@ -530,7 +530,7 @@
         if (k.visitorToLead == null) return { na: true, sub: m.purposeFilter ? "n/a · purpose applies to visitors only" : "n/a · model/source/status filter" };
         return { value: k.visitorToLead, fmt: (v) => pct(v), sub: `<b>${n(k.total)}</b> leads ÷ ${n(k.visitors)} visitors` };
       case "responded":
-        return { value: k.responded, fmt: n, sub: `${link("noResponse", `<b>${n(k.noResponse)}</b> not responded`)} · ${pct(k.responseRate)} of ${n(k.total)} leads` };
+        return { value: k.responded, fmt: n, sub: `${k.noResponse ? link("noResponse", `<b>${n(k.noResponse)}</b> not responded ↗`, "is-alert") : "<b>0</b> not responded"} · ${pct(k.responseRate)} of ${n(k.total)} leads` };
       case "salesOrders":
         return { value: k.salesOrders, fmt: n, sub: `<b>${pct(k.salesOrderRate)}</b> · ${link("noOrder", `${n(k.noOrder)} NO ORDER`)} excluded` };
       case "converted":

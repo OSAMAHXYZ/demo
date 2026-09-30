@@ -162,6 +162,9 @@
 .gcc-badge b { font-size: 14px; font-weight: 700; }
 .gcc-sublink { cursor: pointer; border-bottom: 1px dashed transparent; transition: color 0.15s, border-color 0.15s; }
 .gcc-sublink:hover { color: #2563eb; border-bottom-color: currentColor; }
+.gcc-sublink.is-alert { color: #e11d48; border-bottom-color: currentColor; font-weight: 600; }
+.gcc-sublink.is-alert b { color: inherit; }
+.gcc-sublink.is-alert:hover { color: #be123c; border-bottom-style: solid; }
 
 /* ---------- KPI strip ---------- */
 .gcc-kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--gap); }
