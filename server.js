@@ -4642,6 +4642,172 @@ app.get('/api/report-sheet/file/:slot', (req, res) => {
   return res.sendFile(fp);
 });
 
+/**
+ * Lexus B2C workbook (Details sheet · Order No · Status) — same rules as report-sheet/lexus-control/lexus-core.js,
+ * so row keys match the per-order data in lexus-tracker-data.json.
+ */
+const lexusStr = (v) => (v == null ? '' : String(v)).trim();
+const lexusNormHeader = (v) => lexusStr(v).toLowerCase().replace(/[_\s]+/g, ' ').replace(/[.:#]+$/g, '').trim();
+const LEXUS_ORDER_HEADER = (n) => /^order\s*(no|number|num|#)$/.test(n) || /^order\s*no\b/.test(n) || /\border\s*(no|number)\b/.test(n);
+
+function lexusOrderKey(v) {
+  if (v == null || v === '' || v instanceof Date) return '';
+  let s;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v % 1) return '';
+    s = String(v);
+  } else {
+    s = lexusStr(v).replace(/^'/, '').replace(/\.0+$/, '').replace(/\s+/g, '').toUpperCase();
+  }
+  if (/^\d+$/.test(s)) s = s.replace(/^0+/, '') || '0';
+  return s;
+}
+
+function lexusCategory(text) {
+  const s = lexusStr(text).toLowerCase();
+  if (!s) return 'progress';
+  if (/cancel/.test(s)) return 'cancelled';
+  if (/\b(not|un|non)[\s-]*deliver/.test(s)) return 'progress';
+  if (/deliver/.test(s)) return 'delivered';
+  return 'progress';
+}
+
+function readLexusB2c(buf) {
+  const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+  const names = wb.SheetNames || [];
+  const sheetName = names.find((n) => /^\s*details\s*$/i.test(n)) || names.find((n) => /details/i.test(n)) || names[1] || names[0];
+  const ws = sheetName && wb.Sheets[sheetName];
+  if (!ws || !ws['!ref']) return null;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  range.s.c = 0;
+  const lines = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false, raw: true, range })
+    .filter((l) => Array.isArray(l) && l.some((c) => lexusStr(c) !== ''));
+
+  let headerIdx = -1;
+  let orderCol = -1;
+  for (let i = 0; i < Math.min(lines.length, 40) && headerIdx < 0; i += 1) {
+    const idx = lines[i].findIndex((c) => LEXUS_ORDER_HEADER(lexusNormHeader(c)));
+    if (idx >= 0) { headerIdx = i; orderCol = idx; }
+  }
+  if (headerIdx < 0) return null;
+
+  const headerLine = lines[headerIdx];
+  let width = 0;
+  for (let i = headerIdx; i < lines.length; i += 1) width = Math.max(width, lines[i].length);
+  while (width > 0 && lines.slice(headerIdx).every((l) => lexusStr(l[width - 1]) === '')) width -= 1;
+  const seen = {};
+  const headers = Array.from({ length: width }, (_, c) => {
+    const h = lexusStr(headerLine[c]) || `Column ${XLSX.utils.encode_col(c)}`;
+    seen[h] = (seen[h] || 0) + 1;
+    return seen[h] > 1 ? `${h} (${seen[h]})` : h;
+  });
+  const hkeys = headers.map(lexusNormHeader);
+  let statusCol = hkeys.findIndex((n) => n === 'status' || n === 'order status');
+  if (statusCol < 0) statusCol = hkeys.findIndex((n) => /status/.test(n) && !/date|time/.test(n));
+
+  const rows = [];
+  const dup = {};
+  for (let i = headerIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    const base = lexusOrderKey(line[orderCol]);
+    if (!base || lexusNormHeader(line[orderCol]) === hkeys[orderCol]) continue;
+    dup[base] = (dup[base] || 0) + 1;
+    rows.push({
+      key: dup[base] > 1 ? `${base}#${dup[base]}` : base,
+      line: Array.from({ length: width }, (_, c) => (line[c] == null ? '' : line[c])),
+    });
+  }
+  return {
+    wb,
+    sheetName,
+    pre: lines.slice(0, headerIdx),
+    headerRow: Array.from({ length: width }, (_, c) => (headerLine[c] == null ? '' : headerLine[c])),
+    headers,
+    hkeys,
+    statusCol,
+    rows,
+  };
+}
+
+function writeLexusB2c(parsed, headerRow, lines) {
+  parsed.wb.Sheets[parsed.sheetName] = XLSX.utils.aoa_to_sheet([...parsed.pre, headerRow, ...lines]);
+  return XLSX.write(parsed.wb, { type: 'buffer', bookType: 'xlsx', compression: true });
+}
+
+/**
+ * New Lexus B2C file + the one already on the server → one file:
+ * orders in both take the new values, orders only in the old file stay, new orders are added.
+ * Orders closed at End of month are not brought back while the new file still shows them delivered / cancelled.
+ */
+function mergeLexusB2c(prevBuf, nextBuf, archived) {
+  const next = readLexusB2c(nextBuf);
+  if (!next) return { error: 'No "Order No" column in the new Lexus B2C file · kept the existing data' };
+  let prev = null;
+  try { prev = prevBuf ? readLexusB2c(prevBuf) : null; } catch { prev = null; }
+
+  const colIndex = new Map(next.hkeys.map((k, c) => [k, c]));
+  const headerRow = next.headerRow.slice();
+  if (prev) {
+    prev.hkeys.forEach((k, c) => {
+      if (colIndex.has(k)) return;
+      colIndex.set(k, headerRow.length);
+      headerRow.push(prev.headers[c]);
+    });
+  }
+  const width = headerRow.length;
+  const prevByKey = new Map(prev ? prev.rows.map((r) => [r.key, r]) : []);
+  const fillFromPrev = (row, line) => prev.hkeys.forEach((k, c) => { line[colIndex.get(k)] = row.line[c]; });
+
+  const out = [];
+  const used = new Set();
+  const summary = { added: 0, updated: 0, kept: 0, skipped: 0, total: 0 };
+  next.rows.forEach((row) => {
+    const old = prevByKey.get(row.key);
+    const status = next.statusCol >= 0 ? row.line[next.statusCol] : '';
+    if (!old && archived && archived[row.key] && lexusCategory(status) !== 'progress') {
+      summary.skipped += 1;
+      return;
+    }
+    const line = new Array(width).fill('');
+    if (old) fillFromPrev(old, line);
+    row.line.forEach((v, c) => { line[c] = v; });
+    out.push(line);
+    used.add(row.key);
+    summary[old ? 'updated' : 'added'] += 1;
+  });
+  if (prev) {
+    prev.rows.forEach((row) => {
+      if (used.has(row.key)) return;
+      const line = new Array(width).fill('');
+      fillFromPrev(row, line);
+      out.push(line);
+      summary.kept += 1;
+    });
+  }
+  summary.total = out.length;
+  return { buffer: writeLexusB2c(next, headerRow, out), summary };
+}
+
+/** @returns {{ buffer: Buffer, name: string, summary: object|null }} */
+function pushLexusB2c(prevBuf, prevName, buf, name) {
+  if (prevBuf && prevBuf.equals(buf)) return { buffer: buf, name, summary: null };
+  const archived = loadLexusTracker().archived;
+  if (!prevBuf && !Object.keys(archived).length) return { buffer: buf, name, summary: null };
+  let merged;
+  try {
+    merged = mergeLexusB2c(prevBuf, buf, archived);
+  } catch (err) {
+    console.error('[report-sheet/push] Lexus merge', err);
+    merged = { error: `Could not read the new Lexus B2C file (${err.message}) · kept the existing data` };
+  }
+  if (merged.error) {
+    return prevBuf
+      ? { buffer: prevBuf, name: prevName, summary: { error: merged.error } }
+      : { buffer: buf, name, summary: { error: merged.error } };
+  }
+  return { buffer: merged.buffer, name: name.replace(/\.(csv|xls|xlsx|xlsm)$/i, '') + '.xlsx', summary: merged.summary };
+}
+
 app.post('/api/report-sheet/push', (req, res) => {
   try {
     ensureReportSheetDirs();
@@ -4656,6 +4822,12 @@ app.post('/api/report-sheet/push', (req, res) => {
     const prevControl = sanitizeGecControl(prevMeta.gecControl);
     const controlChanged = !!pushedControl && JSON.stringify(pushedControl) !== JSON.stringify(prevControl);
 
+    // Lexus B2C is cumulative: a Push merges into it and never drops it.
+    const prevLexusFp = reportSheetFilePath('lexusB2c');
+    const prevLexus = fs.existsSync(prevLexusFp) ? fs.readFileSync(prevLexusFp) : null;
+    const prevLexusName = (prevMeta.fileNames && prevMeta.fileNames.lexusB2c) || 'lexusB2c.xlsx';
+    let lexusMerge = null;
+
     clearReportSheetFiles();
 
     let rtlSnapshot = null;
@@ -4663,11 +4835,17 @@ app.post('/api/report-sheet/push', (req, res) => {
     for (const id of REPORT_SLOT_IDS) {
       const entry = filesIn[id];
       if (!entry || !entry.base64) continue;
-      const buf = Buffer.from(String(entry.base64), 'base64');
+      let buf = Buffer.from(String(entry.base64), 'base64');
       if (!buf.length) continue;
+      let name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
+      if (id === 'lexusB2c') {
+        const merged = pushLexusB2c(prevLexus, prevLexusName, buf, name);
+        buf = merged.buffer;
+        name = merged.name;
+        lexusMerge = merged.summary;
+      }
       const fp = reportSheetFilePath(id);
       fs.writeFileSync(fp, buf);
-      const name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
       fileNames[id] = name;
       slots.push(id);
 
@@ -4687,6 +4865,12 @@ app.post('/api/report-sheet/push', (req, res) => {
           console.error('[report-sheet/push] RTL snapshot', snapErr);
         }
       }
+    }
+
+    if (prevLexus && !slots.includes('lexusB2c')) {
+      fs.writeFileSync(prevLexusFp, prevLexus);
+      fileNames.lexusB2c = prevLexusName;
+      slots.push('lexusB2c');
     }
 
     const meta = {
@@ -4714,6 +4898,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       slots,
       hasSales: meta.hasSales,
       hasCancelled: meta.hasCancelled,
+      lexusB2c: lexusMerge,
       rtlDaily: rtlSnapshot
         ? {
           id: rtlSnapshot.id,
@@ -4757,14 +4942,15 @@ const LEXUS_KEY_RE = /^[A-Z0-9][A-Z0-9\-_/#.]{0,79}$/;
 
 function loadLexusTracker() {
   try {
-    if (!fs.existsSync(LEXUS_TRACKER_FILE)) return { at: 0, orders: {} };
+    if (!fs.existsSync(LEXUS_TRACKER_FILE)) return { at: 0, orders: {}, archived: {} };
     const parsed = JSON.parse(fs.readFileSync(LEXUS_TRACKER_FILE, 'utf8'));
     return {
       at: Number(parsed && parsed.at) || 0,
-      orders: parsed && parsed.orders && typeof parsed.orders === 'object' ? parsed.orders : {}
+      orders: parsed && parsed.orders && typeof parsed.orders === 'object' ? parsed.orders : {},
+      archived: parsed && parsed.archived && typeof parsed.archived === 'object' ? parsed.archived : {}
     };
   } catch {
-    return { at: 0, orders: {} };
+    return { at: 0, orders: {}, archived: {} };
   }
 }
 
@@ -4792,7 +4978,8 @@ const lexusText = (v, max) => String(v == null ? '' : v).slice(0, max);
 
 app.get('/api/lexus-tracker/state', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json(loadLexusTracker());
+  const { at, orders } = loadLexusTracker();
+  res.json({ at, orders });
 });
 
 /** Orders shown for the first time start their 24 h follow-up clock now (existing ones keep theirs). */
@@ -4871,6 +5058,167 @@ app.post('/api/lexus-tracker/order', (req, res) => {
   } catch (err) {
     console.error('[lexus-tracker/order]', err);
     return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
+/**
+ * Admin → End of month: one workbook with every sheet of every pushed file (+ Lexus notes / follow-ups),
+ * saved on the server and returned for download, then Delivered + Cancelled orders leave the Lexus B2C data.
+ */
+const END_OF_MONTH_PASSWORD = process.env.END_OF_MONTH_PASSWORD || '1234';
+const END_OF_MONTH_DIR = path.join(REPORT_SHEET_DIR, 'end-of-month');
+const REPORT_SLOT_LABELS = Object.freeze({
+  backorder: 'Back Order',
+  rtl: 'RTL Stock',
+  central: 'E-Sales Stock',
+  sales: 'Sales Raw',
+  cancelled: 'Cancelled BOs',
+  accessories: 'Accessories',
+  gec: 'GEC',
+  gecVisitors: 'GEC Visitors',
+  lexusB2c: 'Lexus B2C',
+});
+
+function riyadhStamp(ms) {
+  const d = new Date(ms + 3 * 3600000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}_${p(d.getUTCHours())}-${p(d.getUTCMinutes())}`;
+}
+
+app.post('/api/report-sheet/end-of-month', (req, res) => {
+  try {
+    const body = req.body || {};
+    if (String(body.password || '') !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
+    ensureReportSheetDirs();
+    const at = Date.now();
+    const meta = loadReportSheetMeta();
+    const tracker = loadLexusTracker();
+    const fileNames = meta.fileNames || {};
+
+    const out = XLSX.utils.book_new();
+    const usedNames = new Set();
+    const addSheet = (ws, wanted) => {
+      const base = String(wanted).replace(/[\\/?*[\]:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'Sheet';
+      let name = base;
+      for (let i = 2; usedNames.has(name.toLowerCase()); i += 1) name = `${base.slice(0, 31 - String(i).length - 1)}~${i}`;
+      usedNames.add(name.toLowerCase());
+      XLSX.utils.book_append_sheet(out, ws, name);
+    };
+
+    const files = [];
+    const sources = [];
+    for (const id of REPORT_SLOT_IDS) {
+      const fp = reportSheetFilePath(id);
+      if (!fs.existsSync(fp)) continue;
+      try {
+        const wb = XLSX.read(fs.readFileSync(fp), { type: 'buffer', cellNF: true });
+        sources.push({ id, wb });
+        files.push([REPORT_SLOT_LABELS[id] || id, fileNames[id] || `${id}.xlsx`, (wb.SheetNames || []).join(', ')]);
+      } catch (err) {
+        files.push([REPORT_SLOT_LABELS[id] || id, fileNames[id] || `${id}.xlsx`, `Could not read: ${err.message}`]);
+      }
+    }
+    if (!sources.length) return res.status(400).json({ error: 'No pushed files on the server · nothing to export' });
+
+    // Lexus: split into orders that stay (in progress) and orders that close (delivered / cancelled).
+    const lexusFp = reportSheetFilePath('lexusB2c');
+    let lexus = null;
+    const closed = { delivered: [], cancelled: [] };
+    const keepLines = [];
+    if (fs.existsSync(lexusFp)) {
+      try { lexus = readLexusB2c(fs.readFileSync(lexusFp)); } catch { lexus = null; }
+    }
+    if (lexus) {
+      const statusHeader = lexus.statusCol >= 0 ? lexus.headers[lexus.statusCol] : '';
+      lexus.rows.forEach((row) => {
+        const edits = (tracker.orders[row.key] && tracker.orders[row.key].edits) || {};
+        const status = statusHeader && Object.prototype.hasOwnProperty.call(edits, statusHeader)
+          ? edits[statusHeader]
+          : (lexus.statusCol >= 0 ? row.line[lexus.statusCol] : '');
+        const cat = lexusCategory(status);
+        if (cat === 'progress') keepLines.push(row.line);
+        else closed[cat].push(row.key);
+      });
+    }
+    const closedKeys = [...closed.delivered, ...closed.cancelled];
+
+    const summary = [
+      ['End of month', riyadhStamp(at).replace('_', ' ')],
+      [],
+      ['Lexus orders removed', closedKeys.length],
+      ['· Delivered', closed.delivered.length],
+      ['· Cancelled', closed.cancelled.length],
+      ['Lexus orders kept (in progress)', keepLines.length],
+      [],
+      ['Slot', 'File', 'Sheets'],
+      ...files,
+    ];
+    addSheet(XLSX.utils.aoa_to_sheet(summary), 'Summary');
+    sources.forEach(({ id, wb }) => {
+      (wb.SheetNames || []).forEach((sn) => addSheet(wb.Sheets[sn], `${REPORT_SLOT_LABELS[id] || id} - ${sn}`));
+    });
+
+    const fmt = (ms) => (ms ? riyadhStamp(Number(ms)).replace('_', ' ').replace(/-(\d\d)$/, ':$1') : '');
+    const closedSet = new Set(closedKeys);
+    const notes = [['Order', 'Closed now', 'Note', 'Follow-ups', 'Last follow-up', 'Last by', 'Follow-up history', 'Edited cells', 'First seen', 'Updated by', 'Updated']];
+    Object.entries(tracker.orders).forEach(([key, o]) => {
+      const followUps = Array.isArray(o.followUps) ? o.followUps : [];
+      const edits = o.edits && typeof o.edits === 'object' ? Object.entries(o.edits) : [];
+      if (!o.note && !followUps.length && !edits.length) return;
+      const last = followUps[followUps.length - 1] || {};
+      notes.push([
+        key,
+        closedSet.has(key) ? (closed.delivered.includes(key) ? 'Delivered' : 'Cancelled') : '',
+        o.note || '',
+        followUps.length,
+        fmt(last.at),
+        last.by || '',
+        followUps.map((f) => `${fmt(f.at)} ${f.by || ''}${f.note ? ` · ${f.note}` : ''}`).join('\n').slice(0, 32000),
+        edits.map(([h, v]) => `${h}: ${v}`).join('\n').slice(0, 32000),
+        fmt(o.firstSeenAt),
+        o.updatedBy || '',
+        fmt(o.updatedAt),
+      ]);
+    });
+    if (notes.length > 1) addSheet(XLSX.utils.aoa_to_sheet(notes), 'Lexus notes & follow-ups');
+
+    const archive = XLSX.write(out, { type: 'buffer', bookType: 'xlsx', compression: true });
+    const fileName = `End-of-month_${riyadhStamp(at)}.xlsx`;
+    fs.mkdirSync(END_OF_MONTH_DIR, { recursive: true });
+    fs.writeFileSync(path.join(END_OF_MONTH_DIR, fileName), archive);
+
+    if (lexus && closedKeys.length) {
+      fs.writeFileSync(lexusFp, writeLexusB2c(lexus, lexus.headerRow, keepLines));
+      closedKeys.forEach((key) => {
+        delete tracker.orders[key];
+        tracker.archived[key] = at;
+      });
+      tracker.at = at;
+      saveLexusTracker(tracker);
+      meta.at = at;
+      saveReportSheetMeta(meta);
+      broadcastReportSheetUpdate(at);
+      broadcastLexusTracker(at, closedKeys.slice(0, 50));
+    }
+
+    const info = {
+      at,
+      removed: closedKeys.length,
+      delivered: closed.delivered.length,
+      cancelled: closed.cancelled.length,
+      kept: keepLines.length,
+      sheets: out.SheetNames.length,
+      files: sources.length,
+    };
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('X-File-Name', encodeURIComponent(fileName));
+    res.setHeader('X-End-Of-Month', encodeURIComponent(JSON.stringify(info)));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(archive);
+  } catch (err) {
+    console.error('[report-sheet/end-of-month]', err);
+    return res.status(500).json({ error: err.message || 'End of month failed' });
   }
 });
 

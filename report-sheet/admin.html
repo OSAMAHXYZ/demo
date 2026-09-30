@@ -46,6 +46,15 @@
     .gec-found-table .stage.s-unlisted { background: #fff4e2; color: #b45309; }
     .gec-found-table button { margin-right: 4px; padding: 3px 9px; font-size: 12px; }
     @media (max-width: 1100px) { .gec-ctl-grid { grid-template-columns: 1fr; } }
+    .eom-dialog { border: 0; border-radius: 16px; padding: 0; width: min(440px, 92vw); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35); }
+    .eom-dialog::backdrop { background: rgba(15, 23, 42, 0.45); }
+    .eom-dialog form { padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+    .eom-dialog h2 { margin: 0; font-size: 18px; }
+    .eom-dialog ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+    .eom-dialog label { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+    .eom-dialog input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; }
+    .eom-dialog .eom-err { color: #e11d48; font-size: 13px; min-height: 18px; }
+    .eom-dialog .eom-actions { display: flex; justify-content: flex-end; gap: 8px; }
   </style>
 </head>
 <body class="live-app admin-page toyota-theme">
@@ -116,6 +125,7 @@
           <span class="status ok" id="admin-mode-badge">ADMIN</span>
           <a class="btn" href="index.html">Live report</a>
           <button type="button" class="btn" id="clear-files-btn" disabled>Clear files</button>
+          <button type="button" class="btn" id="eom-btn" title="Download every pushed sheet in one Excel, then remove Delivered + Cancelled Lexus orders">End of month</button>
           <button type="button" class="btn-primary" id="push-btn">Push to live</button>
         </div>
       </header>
@@ -240,6 +250,23 @@
     </div>
   </div>
 
+  <dialog class="eom-dialog" id="eom-dialog">
+    <form method="dialog" id="eom-form">
+      <h2>End of month</h2>
+      <ul>
+        <li>Downloads <b>one Excel</b> with every sheet of every pushed file (a copy is also kept on the server).</li>
+        <li>Then removes all <b>Delivered</b> and <b>Cancelled</b> orders from the Lexus Controller · in-progress orders stay.</li>
+      </ul>
+      <label for="eom-password">PASSWORD</label>
+      <input type="password" id="eom-password" autocomplete="off" required />
+      <div class="eom-err" id="eom-err"></div>
+      <div class="eom-actions">
+        <button type="button" class="btn" id="eom-cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="eom-run">Run end of month</button>
+      </div>
+    </form>
+  </dialog>
+
 <script>
 (function () {
   const Store = window.ReportSheetStore;
@@ -265,7 +292,7 @@
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
     { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Lead Data sheet · Employee Number in Col R · feeds the GEC Dashboard · optional Visitors sheet" },
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Optional · visitor log · Date · Promoter (emp. no. or name) · Visit Purpose · optional Count · no personal info" },
-    { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · feeds the Lexus Controller & Lexus Tracker" },
+    { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Lexus Controller & Lexus Tracker" },
   ];
 
   const EMPLOYEE_ROSTER = window.EmployeeRoster.EMPLOYEES;
@@ -880,6 +907,14 @@
           filesBySlot,
         });
         serverAt = Number(server.at) || serverAt;
+        if (Array.isArray(server.slots) && server.slots.includes("lexusB2c") && (server.lexusB2c || !filesBySlot.lexusB2c)) {
+          const merged = await fetchServerSlot("lexusB2c");
+          if (merged) {
+            slots.lexusB2c = merged;
+            filesBySlot.lexusB2c = { name: merged.name, buffer: merged.buffer };
+            renderSlots();
+          }
+        }
       } catch (err) {
         showError(`Server sync failed: ${err.message || err}. Saved on this browser only.`);
       }
@@ -913,10 +948,14 @@
       const serverNote = server
         ? ""
         : " · server was offline (saved in this browser only)";
+      const lx = server && server.lexusB2c;
+      const lexusNote = !lx ? "" : lx.error
+        ? ` · Lexus B2C: ${lx.error}`
+        : ` · Lexus B2C: ${lx.added} new, ${lx.updated} updated, ${lx.kept} kept${lx.skipped ? `, ${lx.skipped} closed at month end skipped` : ""} (${lx.total} orders)`;
       setStatus(
         srOk
-          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${serverNote}`
-          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${serverNote}`,
+          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}`
+          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}`,
         server ? "ok" : "busy"
       );
       // Open / focus the live dashboard so Push visibly loads the panels
@@ -926,6 +965,79 @@
       } catch { /* popup blocked — user can open Live Dashboard manually */ }
     } catch (err) {
       showError(err.message || String(err));
+    }
+  }
+
+  async function fetchServerSlot(id) {
+    try {
+      const res = await fetch(`/api/report-sheet/file/${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const buffer = await res.arrayBuffer();
+      let name = `${id}.xlsx`;
+      try { name = decodeURIComponent(res.headers.get("X-Report-Sheet-Name") || name); } catch { /* keep */ }
+      return { name, buffer, size: buffer.byteLength };
+    } catch {
+      return null;
+    }
+  }
+
+  function openEndOfMonth() {
+    $("#eom-password").value = "";
+    $("#eom-err").textContent = "";
+    $("#eom-run").disabled = false;
+    $("#eom-dialog").showModal();
+    $("#eom-password").focus();
+  }
+
+  async function runEndOfMonth(e) {
+    e.preventDefault();
+    const password = $("#eom-password").value;
+    if (!password) return;
+    $("#eom-run").disabled = true;
+    $("#eom-err").textContent = "Building the Excel…";
+    setStatus("End of month…", "busy");
+    try {
+      const res = await fetch("/api/report-sheet/end-of-month", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `End of month failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      let fileName = "End-of-month.xlsx";
+      let info = {};
+      try { fileName = decodeURIComponent(res.headers.get("X-File-Name") || fileName); } catch { /* keep */ }
+      try { info = JSON.parse(decodeURIComponent(res.headers.get("X-End-Of-Month") || "%7B%7D")); } catch { /* keep */ }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      $("#eom-dialog").close();
+
+      if (info.removed) {
+        const merged = await fetchServerSlot("lexusB2c");
+        if (merged) slots.lexusB2c = merged;
+        try { await Store.syncFromServer({ force: true }); } catch { /* next load syncs */ }
+        Store.broadcast({ type: "admin-pushed", at: Number(info.at) || Date.now() });
+        renderSlots();
+      }
+      setStatus(
+        `End of month done · ${fileName} downloaded (${info.sheets || 0} sheets from ${info.files || 0} file(s)) · `
+          + `Lexus: ${info.removed || 0} removed (${info.delivered || 0} delivered, ${info.cancelled || 0} cancelled) · ${info.kept || 0} in progress kept`,
+        "ok"
+      );
+    } catch (err) {
+      $("#eom-err").textContent = err.message || String(err);
+      $("#eom-run").disabled = false;
+      $("#eom-password").select();
+      setStatus("End of month not run", "err");
     }
   }
 
@@ -971,6 +1083,9 @@
   $("#push-btn-2").addEventListener("click", pushToLive);
   $("#push-btn-3").addEventListener("click", pushToLive);
   $("#clear-files-btn").addEventListener("click", clearFiles);
+  $("#eom-btn").addEventListener("click", openEndOfMonth);
+  $("#eom-form").addEventListener("submit", runEndOfMonth);
+  $("#eom-cancel").addEventListener("click", () => $("#eom-dialog").close());
   $("#allocation-plan-wrap").addEventListener("input", (e) => {
     const input = e.target.closest("[data-alloc-id]");
     if (!input) return;
