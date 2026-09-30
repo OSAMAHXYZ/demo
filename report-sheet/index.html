@@ -12,7 +12,7 @@
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20260928gcc1"></script>
 <script src="gec-data.js?v=20260929conv1"></script>
-<script src="gec-dashboard.js?v=20260929conv1"></script>
+<script src="gec-dashboard.js?v=20260929view1"></script>
   <script src="sales-control.js?v=20260928sc1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
-  <link rel="stylesheet" href="gec-dashboard.css?v=20260928sc1" />
+  <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -4476,6 +4476,7 @@
       for (const d of SLOT_DEFS) {
         const f = payload.files[d.id];
         if (!f || !f.buffer) continue;
+        if (GEC_VIEW && !GEC_VIEW_SLOTS.has(d.id)) continue;
         if (d.id === "gec") {
           const gecDataset = window.GecData ? window.GecData.parseBuffer(f.buffer, { fileName: f.name }) : null;
           slots.gec = {
@@ -6770,7 +6771,10 @@
     { id: "reservedvehicles", label: "Reserved Vehicles Tracker" },
     { id: "dashboard", label: "Stock & BO Dashboard" },
   ];
-  let activePanel = "salesreport";
+  /** gecdashboardview.html → index.html?view=gec: GEC Control Center only, view-only, reloads on every Admin Push. */
+  const GEC_VIEW = new URLSearchParams(location.search).get("view") === "gec";
+  const GEC_VIEW_SLOTS = new Set(["gec", "gecVisitors", "sales", "backorder"]);
+  let activePanel = GEC_VIEW ? "gec" : "salesreport";
   let panelBeforeGec = "";
   let panelBeforeSummary = "";
   /** Date changed inside the Sales Control Center; other panels rebuild when the user leaves it. */
@@ -7435,7 +7439,7 @@
       control: Store.readGecControl(),
       lastUpdated: Number(Store.readDataPushStamp().at) || 0,
       onRefresh: () => refreshFromAdmin("Refreshed", { force: true }),
-      onExit: () => {
+      onExit: GEC_VIEW ? null : () => {
         const others = visiblePanels().filter((p) => p.id !== "gec").map((p) => p.id);
         switchPanel(others.includes(panelBeforeGec) ? panelBeforeGec : (others[0] || "dashboard"));
       },
@@ -21297,6 +21301,7 @@
     refreshTargetsFromAdmin();
     if (!hasAnyPushedFiles()) {
       setStatus("Waiting for Admin Push");
+      if (GEC_VIEW) switchPanel("gec");
       return;
     }
     invalidateRtlActiveMonthCache();
@@ -21421,6 +21426,7 @@
     renderSlots();
     switchNav("dashboard");
     setStatus("View cleared · Push again from Admin to reload");
+    if (GEC_VIEW) switchPanel("gec");
   }
 
   let lastPushAt = 0;
@@ -21447,7 +21453,7 @@
     try {
       // Fast path: paint from IndexedDB first unless forcing a full re-download.
       let painted = false;
-      if (!forceSync) {
+      if (!forceSync && !(opts && opts.skipLocal)) {
         const localPayload = await Store.loadWorkbookFiles();
         if (localPayload && localPayload.files && Object.keys(localPayload.files).length) {
           const okLocal = await applyWorkbookPayload(localPayload);
@@ -22606,6 +22612,12 @@
 
   renderSlots();
   switchNav("dashboard");
+  if (GEC_VIEW) {
+    document.title = "GEC Dashboard — Abdul Latif Jameel MOTORS";
+    document.body.classList.add("gec-view");
+    switchPanel("gec");
+    liveSync = Store.startLiveSync(() => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }), { initialAt: lastDataPushAt });
+  }
   refreshFromAdmin();
 })();
 </script>

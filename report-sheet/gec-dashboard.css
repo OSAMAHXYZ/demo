@@ -4,6 +4,7 @@
  */
 body.gec-mode, body.sc-mode { overflow: hidden !important; }
 body:not(.gec-mode) > #gec-host { display: none; }
+body.gec-view > .app-frame { display: none; }
 body:not(.sc-mode) > #sales-host { display: none; }
 
 .gec-root {

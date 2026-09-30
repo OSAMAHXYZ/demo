@@ -1815,6 +1815,8 @@
       build(host);
     }
     state.ctx = ctx || {};
+    const exitBtn = state.root.querySelector('[data-act="exit"]');
+    if (exitBtn) exitBtn.style.display = typeof state.ctx.onExit === "function" ? "" : "none";
     Data().setControl(state.ctx.control || null);
     state.dataset = dataset && dataset.records ? dataset : null;
     const extVisitors = state.ctx.visitors && state.ctx.visitors.ok ? state.ctx.visitors : null;
