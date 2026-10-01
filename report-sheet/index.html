@@ -6453,6 +6453,7 @@
         if (wideCanvas) delete wideCanvas.dataset.fitRowPx;
       }
       renderWideNumbers(snap);
+      if (sr) renderWideAccessoriesSummary(sr);
       const extra = { ...(snap.extra || {}) };
       upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
       if (horizontal && snap.type === "bar" && n > 1) {
@@ -6695,7 +6696,7 @@
         type: "doughnut",
         labels: types.map((x) => x.type),
         values: types.map((x) => x.count),
-        extra: { cutout: "58%", legend: true },
+        extra: { cutout: "58%", legend: false },
       };
     }
     if (!snap) {
