@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261001wv2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261001lx1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -4887,7 +4887,7 @@
 
   function buildEmployeeDailyProforma(live, prevMonthKey) {
     const byKey = new Map();
-    (slots.sales.rows || []).forEach((r) => {
+    salesDashboardRows().forEach((r) => {
       // Col P proforma date in selected month (includes delivered rows)
       if (!salesIsProformaInPeriod(r, live, "month", prevMonthKey)) return;
       const pd = r.proformaDate;
@@ -4999,11 +4999,30 @@
     };
   }
 
+  /** Sales Dashboard counts Toyota only; Lexus rows are split out and shown as a separate count. */
+  let srRowsSplit = null;
+  function splitSalesDashboardRows() {
+    const src = slots.sales.rows || [];
+    if (!srRowsSplit || srRowsSplit.src !== src || srRowsSplit.len !== src.length) {
+      const rows = [];
+      const lexus = [];
+      src.forEach((r) => (isLexusSaleRow(r) ? lexus : rows).push(r));
+      srRowsSplit = { src, len: src.length, rows, lexus };
+    }
+    return srRowsSplit;
+  }
+
+  function salesDashboardRows() {
+    return splitSalesDashboardRows().rows;
+  }
+
   function buildSalesReport(bos, sales, cancelled) {
     const CANCEL_TARGET = 0.30;
     const calendarLive = todayKeys();
-    const salesRows = slots.sales.rows || [];
-    const live = resolveGlobalDatePeriod(salesRows, globalDateFilter);
+    srRowsSplit = null;
+    const split = splitSalesDashboardRows();
+    const salesRows = split.rows;
+    const live = resolveGlobalDatePeriod(slots.sales.rows || [], globalDateFilter);
     window._globalLivePeriod = live;
     const prevDate = new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1);
     const prevMonthKey = toYyyymm(prevDate);
@@ -5012,6 +5031,16 @@
     const byPerson = new Map();
     const deliveryBySalesType = Object.create(null);
     let proformaExceptMonth = 0;
+    let lexusDeliveryMonth = 0;
+    const lexusDeliveryByKey = Object.create(null);
+    split.lexus.forEach((r) => {
+      if (!salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) return;
+      lexusDeliveryMonth += 1;
+      const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      const display = name ? resolveDisplayName(name) : "";
+      const key = display ? nameKey(display) : "";
+      if (key) lexusDeliveryByKey[key] = (lexusDeliveryByKey[key] || 0) + 1;
+    });
 
     const bumpSalesType = (type) => {
       const t = String(type || "Other").trim() || "Other";
@@ -5467,6 +5496,7 @@
       diag,
       accessories,
       dailyTarget,
+      lexusDeliveryByKey,
       totals: {
         proformaDay: totProformaDay,
         proformaMonth: totProformaMonth,
@@ -5476,6 +5506,7 @@
         deliveryDay: totDeliveryDay,
         deliveryMonth: totDeliveryMonth,
         deliveryPrev: totDeliveryPrev,
+        lexusDeliveryMonth,
         proforma: totProformaMonth,
         delivery: totDeliveryMonth,
         target: totTarget,
@@ -6491,7 +6522,7 @@
     const order = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
     const counts = Object.create(null);
     order.forEach((t) => { counts[t] = 0; });
-    (slots.sales.rows || []).forEach((r) => {
+    salesDashboardRows().forEach((r) => {
       if (!salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) return;
       const display = rosterSalesmanName(r._salesmanRaw || r.salesman);
       if (!display) return;
@@ -8397,7 +8428,7 @@
     $("#emp-drawer-name").textContent = row["Sales Employee"] || row.Salesman;
     $("#emp-drawer-sub").textContent = `${row.Plant || ""} · Code ${row.Salesman || "—"} · ${live.label} · Excel rows from Sales Raw`;
 
-    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
+    const rawRows = salesDashboardRows().filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
     const records = row._records || [];
     const proformaMonth = records.filter((r) => r.flags?.proformaMonth);
     const deliveryMonth = records.filter((r) => r.flags?.deliveryMonth);
@@ -8919,7 +8950,7 @@
     for (let d = 1; d <= days; d += 1) labels.push(String(d));
 
     const keyFilter = selectedKey ? String(selectedKey) : "";
-    (slots.sales.rows || []).forEach((r) => {
+    salesDashboardRows().forEach((r) => {
       if (keyFilter) {
         const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
         if (nameKey(name) !== keyFilter) return;
@@ -9064,7 +9095,7 @@
       const target = r._vacation ? null : rowTargetNum(r);
       const delPctVal = target ? (del / target) * 100 : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery" },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery", lexus: (sr.lexusDeliveryByKey && sr.lexusDeliveryByKey[srView.selectedKey]) || 0 },
         { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued", spark: "proforma" },
         { lab: "Prof + Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
         { lab: "Proforma Except This Month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
@@ -9083,7 +9114,7 @@
       const proPrev = Number(t.proformaPrev) || 0;
       const delPctVal = t.target ? ((t.delPct || 0) * 100) : null;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars · team", spark: "delivery" },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars · team", spark: "delivery", lexus: Number(t.lexusDeliveryMonth) || 0 },
         { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued · team", spark: "proforma" },
         { lab: "Prof + Del", val: formatNumber(t.profPlusDel || (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
         { lab: "Proforma Except This Month", val: formatNumber(t.proformaExceptMonth != null ? t.proformaExceptMonth : (t.proformaPrev || 0)), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
@@ -9115,6 +9146,7 @@
         <div class="sr-kpi-top">
           <span class="sr-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${SR_KPI_ICONS[c.ico] || ""}</svg></span>
           <span class="sr-kpi-lab">${c.lab}</span>
+          ${c.lexus != null ? `<span class="sr-kpi-lexus" title="Lexus delivered in this period · not counted in the Sales Dashboard">Lexus <b>${formatNumber(c.lexus)}</b></span>` : ""}
         </div>
         <div class="sr-kpi-val">${c.val}</div>
         ${c.desc ? `<div class="sr-kpi-desc">${escapeHtml(c.desc)}</div>` : ""}
@@ -9140,7 +9172,7 @@
     const live = sr.live || todayKeys();
     const day = row.day || {};
     const month = row.month || row;
-    const rawRows = (slots.sales.rows || []).filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
+    const rawRows = salesDashboardRows().filter((r) => nameKey(r._salesmanRaw || r.salesman) === key);
     const cancelRawRows = cancelledRawRowsForSalesman(key);
     const accRawRows = accessoriesRawRowsForSalesman(key, live, sr.prevMonthKey);
     const records = row._records || [];
