@@ -5,6 +5,18 @@
  */
 
 body.sr-mode { overflow: hidden !important; }
+/* A transform on any ancestor turns position:fixed into "fixed to that ancestor" — the cockpit would open
+   boxed inside the app shell (cut off on the right) until the entrance animation finishes. */
+body.sr-mode #dashboard,
+body.sr-mode #dashboard.show,
+body.gec-mode #dashboard.show,
+body.lx-mode #dashboard.show,
+body.tb-mode #dashboard.show,
+body.sc-mode #dashboard.show {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+}
 body.sr-mode .emp-drawer { z-index: 2300; }
 body.sr-mode .emp-backdrop { z-index: 2290; }
 
@@ -87,10 +99,10 @@ body.sr-mode #panel-salesreport {
 /* ---------- Header ---------- */
 #panel-salesreport .sr-dash-head {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px 16px;
   padding: clamp(8px, 1vh, 12px) clamp(12px, 1vw, 18px);
   min-width: 0;
 }
@@ -115,7 +127,8 @@ body.sr-mode #panel-salesreport {
 }
 
 #panel-salesreport .sr-dash-toolbar {
-  display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; min-width: 0;
+  flex: 1 1 0;
 }
 #panel-salesreport .sr-live-state { display: flex; align-items: center; gap: 10px; flex: none; }
 #panel-salesreport .sr-live-pill {
@@ -713,8 +726,6 @@ body.sr-mode #panel-salesreport {
   #panel-salesreport .sr-updated { display: none; }
   #panel-salesreport .sr-dash-toolbar { gap: 5px; }
   #panel-salesreport .sr-range-pill { padding: 0 7px; }
-  #panel-salesreport .sr-date-range-field input[type="date"] { width: 116px; }
-  #panel-salesreport .sr-date-range-field input[type="date"]::-webkit-calendar-picker-indicator { margin-left: 0; }
   #panel-salesreport .sr-tool-btn,
   #panel-salesreport .sr-clear-sel { padding: 0 8px; }
   #panel-salesreport .sr-filter-select { max-width: 112px; }
