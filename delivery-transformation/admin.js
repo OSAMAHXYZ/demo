@@ -1499,6 +1499,14 @@
 
   window.getDaysToSalesData = getDaysToSalesData;
 
+  const CARRIER_STATUS_LABEL = {
+    waiting: 'Waiting',
+    printed: 'Printed',
+    display: 'صالة عرض',
+    internal: 'داخلي',
+    changed_out: 'Changed away',
+  };
+
   function renderCarrierPanel() {
     const host = $('vsnd-region-body');
     if (!host) return;
@@ -1506,28 +1514,83 @@
       host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading…</p>';
       return;
     }
-    const pivot = dash.carrierPivot || { rows: [], total: 0, cities: [] };
-    const rows = pivot.rows || [];
-    const total = pivot.total || 0;
-    const max = Math.max(1, ...rows.map((r) => r.total || 0));
+    const stats = dash.carrierStats || [];
+    const sum = (k) => stats.reduce((n, c) => n + (Number(c[k]) || 0), 0);
+    const max = Math.max(1, ...stats.map((c) => c.total || 0));
+    const seg = (c, k) => (c[k] ? `<i class="cs-seg cs-seg--${k}" style="width:${(c[k] / max) * 100}%" title="${esc(CARRIER_STATUS_LABEL[k])}: ${esc(c[k])}"></i>` : '');
     host.innerHTML = `
-      <div class="inv-totals">
-        <div class="inv-total in"><span>VINs</span><strong>${esc(total)}</strong></div>
-        <div class="inv-total out"><span>Companies</span><strong>${esc(rows.length)}</strong></div>
+      <div class="inv-totals cs-totals">
+        <div class="inv-total in"><span>VINs</span><strong>${esc(sum('total'))}</strong></div>
+        <div class="inv-total out"><span>Companies</span><strong>${esc(stats.filter((c) => c.total).length)}</strong></div>
+        <div class="inv-total"><span>Changed</span><strong>${esc(sum('changedIn'))}</strong></div>
         <button type="button" class="btn inv-more" id="carrier-show-schedule">Display schedule</button>
       </div>
-      <div class="vsnd-hbars fleet-bars">
-        ${rows.slice(0, 8).map((r) => `
-          <button type="button" class="vsnd-hbar fleet-row" data-carrier-co="${esc(r.company)}" title="${esc(r.company)} · ${r.total} VIN(s)">
-            <span class="vsnd-hbar-lbl">${esc(r.company)}</span>
-            <span class="vsnd-hbar-track"><i style="width:${((r.total || 0) / max) * 100}%;background:#1769a8"></i></span>
-            <b>${esc(r.total || 0)}</b>
-          </button>`).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator prints yet</p>'}
+      <div class="cs-legend">
+        ${['waiting', 'printed', 'display', 'internal'].map((k) => `<span><i class="cs-seg--${k}"></i>${esc(CARRIER_STATUS_LABEL[k])} <b>${esc(sum(k))}</b></span>`).join('')}
+      </div>
+      <div class="vsnd-hbars fleet-bars cs-bars">
+        ${stats.filter((c) => c.total || c.changedOut).map((c) => `
+          <button type="button" class="vsnd-hbar fleet-row cs-row" data-carrier-co="${esc(c.company)}"
+            title="${esc(c.company)} · ${esc(c.total)} VIN(s) · waiting ${esc(c.waiting)} · printed ${esc(c.printed)} · display ${esc(c.display)} · internal ${esc(c.internal)} · changed in ${esc(c.changedIn)} · changed out ${esc(c.changedOut)}">
+            <span class="vsnd-hbar-lbl">${esc(c.company)}${c.changedIn ? `<em class="cs-chg cs-chg--in">+${esc(c.changedIn)}</em>` : ''}${c.changedOut ? `<em class="cs-chg cs-chg--out">−${esc(c.changedOut)}</em>` : ''}</span>
+            <span class="vsnd-hbar-track cs-track">${seg(c, 'waiting')}${seg(c, 'printed')}${seg(c, 'display')}${seg(c, 'internal')}</span>
+            <b>${esc(c.total || 0)}</b>
+          </button>`).join('') || '<p class="chart-empty" style="margin:0;font-size:.75rem">No carrier assignments yet</p>'}
       </div>`;
     const btn = $('carrier-show-schedule');
     if (btn) btn.onclick = () => openCarrierSchedule();
     host.querySelectorAll('[data-carrier-co]').forEach((el) => {
-      el.addEventListener('click', () => openCarrierSchedule(el.dataset.carrierCo));
+      el.addEventListener('click', () => openCarrierCompany(el.dataset.carrierCo));
+    });
+  }
+
+  /** Everything captured for one الناقل: assigned VINs, prints, display / internal, coordinator changes. */
+  function openCarrierCompany(company, filter = '') {
+    const c = (dash && dash.carrierStats || []).find((x) => x.company === company);
+    if (!c) return;
+    const { na } = window.DTX;
+    const list = (c.vins || []).filter((v) => !filter || (filter === 'changed' ? (v.changedFrom || v.status === 'changed_out') : v.status === filter));
+    const chip = (key, label, n) => `<button type="button" class="cs-chip${filter === key ? ' is-on' : ''}" data-cs-filter="${esc(key)}">${esc(label)} <b>${esc(n)}</b></button>`;
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>🚚 ${esc(c.company)}</h2>
+          <p class="sub">${esc(c.total)} VIN(s) · everything captured from employee.html (Hanouf / Rasha) + coordinator.html</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="cs-chips">
+        ${chip('', 'All', (c.vins || []).length)}
+        ${chip('waiting', CARRIER_STATUS_LABEL.waiting, c.waiting)}
+        ${chip('printed', CARRIER_STATUS_LABEL.printed, c.printed)}
+        ${chip('display', CARRIER_STATUS_LABEL.display, c.display)}
+        ${chip('internal', CARRIER_STATUS_LABEL.internal, c.internal)}
+        ${chip('changed', 'Changed (in / out)', (c.changedIn || 0) + (c.changedOut || 0))}
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap">
+        <table class="data vsnd-live-table">
+          <thead>
+            <tr><th>#</th><th>VIN</th><th>Status</th><th>Product</th><th>Customer</th><th>City</th><th>الناقل</th><th>Changed</th><th>Memo</th><th>Printed</th><th>By</th></tr>
+          </thead>
+          <tbody>${list.map((v, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td><b>${esc(v.vin)}</b></td>
+              <td><span class="cs-status cs-status--${esc(v.status)}">${esc(CARRIER_STATUS_LABEL[v.status] || v.status)}</span></td>
+              <td>${esc(na(v.product))}</td>
+              <td>${esc(na(v.customer))}</td>
+              <td>${esc(na(v.city))}</td>
+              <td>${esc(na(v.carrier))}</td>
+              <td>${v.changedFrom ? `<span class="cs-chg-note" title="${esc([v.changedBy, fmtWhen(v.changedAt)].filter(Boolean).join(' · '))}">${esc(v.changedFrom)} ← ${esc(v.carrier || c.company)}</span>` : '—'}</td>
+              <td>${esc(na(v.invoice))}</td>
+              <td>${v.printedAt ? esc(fmtWhen(v.printedAt)) : '—'}</td>
+              <td>${esc(na(v.printedBy))}</td>
+            </tr>`).join('') || '<tr><td colspan="11">No VINs</td></tr>'}
+          </tbody>
+        </table>
+      </div>`, { wide: true });
+    $('detail-drawer').querySelectorAll('[data-cs-filter]').forEach((b) => {
+      b.addEventListener('click', () => openCarrierCompany(company, b.dataset.csFilter || ''));
     });
   }
 

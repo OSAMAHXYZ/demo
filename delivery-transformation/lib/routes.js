@@ -11,6 +11,7 @@ const {
   TRANSFER_CITIES,
   USERS,
   PIC_ALIASES,
+  OPS_FIELDS,
   emptyOps,
   emptyRaw,
 } = require('./constants');
@@ -155,17 +156,36 @@ function isCoordinatorPrinted(v) {
   return !!(v && v.ops && String(v.ops.coordinatorPrintedAt || '').trim());
 }
 
-function publicVehicle(v, viewer) {
+/** Read-only Live Sheet columns the coordinator may view (no inventory / history internals). */
+const COORDINATOR_SHEET_OPS = [
+  ...OPS_FIELDS,
+  'assignedEmployeeName',
+  'carrierChangedFrom',
+  'coordinatorPrintedAt',
+  'coordinatorPrintLabel',
+  'updatedAt',
+  'updatedBy',
+];
+
+function publicVehicle(v, viewer, opts = {}) {
   if (!v) return null;
   const role = viewer && viewer.role;
   const raw = { ...(v.raw || {}) };
-  // Coordinator sees VIN details + transfer city (print branch) + assigned الناقل (memo company). No other employee ops.
-  const ops = role === 'coordinator'
-    ? {
-      transferCity: String((v.ops && v.ops.transferCity) || '').trim(),
-      carrier: String((v.ops && v.ops.carrier) || '').trim(),
-    }
-    : { ...(v.ops || {}) };
+  const src = v.ops || {};
+  let ops;
+  if (role === 'coordinator' && opts.sheet) {
+    ops = {};
+    COORDINATOR_SHEET_OPS.forEach((k) => { ops[k] = src[k] == null ? '' : src[k]; });
+  } else if (role === 'coordinator') {
+    // Coordinator workspace: VIN details + transfer city (print branch) + assigned الناقل (memo company).
+    ops = {
+      transferCity: String(src.transferCity || '').trim(),
+      carrier: String(src.carrier || '').trim(),
+      carrierChangedFrom: String(src.carrierChangedFrom || '').trim(),
+    };
+  } else {
+    ops = { ...src };
+  }
   return {
     vin: v.vin,
     raw,
@@ -186,6 +206,40 @@ function createDeliveryTransformationRouter(opts = {}) {
   function peekMemoInvoice() {
     const n = Number(store.data.meta && store.data.meta.memoInvoiceNext);
     return Number.isFinite(n) && n >= 1000 ? Math.floor(n) : 1000;
+  }
+
+  /**
+   * Coordinator chose a company other than the الناقل Hanouf / Rasha set on the VIN.
+   * carrierChangedFrom keeps the original assignment so the Live Sheet shows "from → to";
+   * switching back to the original clears the mark. VINs with no الناقل yet are left alone.
+   */
+  function applyCoordinatorCarrier(v, company, userName, now) {
+    const next = String(company || '').trim();
+    if (!v || !next) return false;
+    if (!v.ops) v.ops = emptyOps();
+    const current = String(v.ops.carrier || '').trim();
+    if (!current || current === next) return false;
+    const original = String(v.ops.carrierChangedFrom || '').trim() || current;
+    v.ops.carrier = next;
+    if (original === next) {
+      v.ops.carrierChangedFrom = '';
+      v.ops.carrierChangedBy = '';
+      v.ops.carrierChangedAt = '';
+    } else {
+      v.ops.carrierChangedFrom = original;
+      v.ops.carrierChangedBy = userName;
+      v.ops.carrierChangedAt = now;
+    }
+    v.ops.updatedAt = now;
+    v.ops.updatedBy = userName;
+    store.pushAudit({
+      vin: v.vin,
+      user: userName,
+      action: 'coordinator_carrier_change',
+      oldValue: current,
+      newValue: next,
+    });
+    return true;
   }
 
   function consumeMemoInvoice() {
@@ -589,25 +643,21 @@ function createDeliveryTransformationRouter(opts = {}) {
     const printCity = String((req.body && req.body.city) || '').trim();
     const attendanceId = String((req.body && req.body.attendanceId) || '').trim();
     const invoiceNumber = String((req.body && req.body.invoiceNumber) || '').trim();
-    if (kind !== 'warehouse') {
-      const clash = raw.map((item) => store.getVehicle(item)).find((v) => {
-        const assigned = String((v && v.ops && v.ops.carrier) || '').trim();
-        return assigned && assigned !== printCompany;
-      });
-      if (clash) {
-        return res.status(400).json({
-          error: `${clash.vin}: الناقل المعيّن ${clash.ops.carrier} — يجب أن تكون شركة المذكرة نفس الناقل`,
-        });
-      }
+    const rawLabel = String((req.body && req.body.label) || '').trim();
+    const label = kind === 'display' ? (rawLabel === 'داخلي' ? 'داخلي' : rawLabel === 'عرض' ? 'عرض' : '') : '';
+    if (kind === 'display' && !label) {
+      return res.status(400).json({ error: 'اختر المرفق: داخلي أو صالة عرض' });
     }
     const marked = [];
     raw.forEach((item) => {
       const v = store.getVehicle(item);
       if (!v) return;
       if (!v.ops) v.ops = emptyOps();
+      if (kind !== 'warehouse') applyCoordinatorCarrier(v, printCompany, req.dtUser.name, now);
       v.ops.coordinatorPrintedAt = now;
       v.ops.coordinatorPrintedBy = req.dtUser.name;
       v.ops.coordinatorPrintKind = kind;
+      v.ops.coordinatorPrintLabel = label;
       if (kind === 'warehouse') {
         v.ops.coordinatorPrintCompany = '';
         v.ops.coordinatorPrintCity = '';
@@ -642,18 +692,25 @@ function createDeliveryTransformationRouter(opts = {}) {
       }
     }
     if (!Array.isArray(store.data.prints)) store.data.prints = [];
-    if (marked.length) {
+    // Display / internal VINs are typed by hand and may not be on the Live Sheet — log them anyway.
+    const snapshotCars = (req.body && req.body.snapshot && Array.isArray(req.body.snapshot.cars)) ? req.body.snapshot.cars : [];
+    const printVins = kind === 'display'
+      ? [...new Set(raw.map((item) => normVin(item)).filter(Boolean))]
+      : marked;
+    if (printVins.length) {
       store.data.prints.unshift({
         id: `prn_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
         at: now,
         kind,
+        label,
         company: kind === 'warehouse' ? '' : printCompany,
         city: kind === 'warehouse' ? '' : printCity,
-        vins: marked.map((vin) => {
+        vins: printVins.map((vin) => {
           const v = store.getVehicle(vin);
+          const typed = snapshotCars.find((c) => normVin(c && c.chassis) === vin);
           return {
             vin,
-            product: (v && v.raw && v.raw.product) || '',
+            product: (v && v.raw && v.raw.product) || (typed && String(typed.model || '').trim()) || '',
             customer: (v && v.raw && v.raw.userName) || '',
           };
         }),
@@ -666,8 +723,30 @@ function createDeliveryTransformationRouter(opts = {}) {
       });
       if (store.data.prints.length > 2000) store.data.prints.length = 2000;
     }
-    if (marked.length || attendanceId) store.save();
+    if (printVins.length || attendanceId) store.save();
     return res.json({ ok: true, vins: marked });
+  });
+
+  /** Coordinator picked another company for VINs that Hanouf / Rasha already gave a الناقل — update the Live Sheet now. */
+  router.post('/coordinator/carrier', auth, (req, res) => {
+    if (!canCoordinate(req.dtUser)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const company = String((req.body && req.body.company) || '').trim();
+    if (!company) return res.status(400).json({ error: 'اختر الشركة' });
+    const vins = Array.isArray(req.body && req.body.vins) ? req.body.vins : [];
+    const now = new Date().toISOString();
+    const changed = [];
+    vins.forEach((item) => {
+      const v = store.getVehicle(item);
+      if (!v) return;
+      const from = String((v.ops && v.ops.carrier) || '').trim();
+      if (applyCoordinatorCarrier(v, company, req.dtUser.name, now)) {
+        changed.push({ vin: v.vin, from, to: company, original: v.ops.carrierChangedFrom || '' });
+      }
+    });
+    if (changed.length) store.save();
+    return res.json({ ok: true, changed });
   });
 
   /** Coordinator "If VIN not assigned": Sales Raw VINs (Proforma filled · not invoiced) not on the Live Sheet yet. */
@@ -795,8 +874,10 @@ function createDeliveryTransformationRouter(opts = {}) {
   router.get('/live-sheet', auth, (req, res) => {
     const q = String((req.query && req.query.q) || '').trim().toLowerCase();
     const isCoordinator = req.dtUser.role === 'coordinator';
+    // view=sheet: coordinator's read-only copy of the full Live Sheet (printed VINs included)
+    const sheetView = isCoordinator && String((req.query && req.query.view) || '') === 'sheet';
     let list = store.allVehicles();
-    if (isCoordinator) {
+    if (isCoordinator && !sheetView) {
       list = list.filter((v) => !isCoordinatorPrinted(v));
     }
     if (q) {
@@ -864,7 +945,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       bySalesType,
       readOnly: isCoordinator,
       imports: store.data.meta.imports || {},
-      rows: list.map((v) => publicVehicle(v, req.dtUser)),
+      rows: list.map((v) => publicVehicle(v, req.dtUser, { sheet: sheetView })),
     });
   });
 
@@ -1604,6 +1685,88 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
     carrierPivot.cityTotals = cityTotals;
 
+    // Everything captured per الناقل: waiting on the Live Sheet, printed memos, coordinator changes, display / internal memos.
+    const NO_COMPANY = '(بدون شركة)';
+    const statMap = new Map();
+    const stat = (company) => {
+      const key = String(company || '').trim() || NO_COMPANY;
+      if (!statMap.has(key)) {
+        statMap.set(key, {
+          company: key, total: 0, waiting: 0, printed: 0, changedIn: 0, changedOut: 0, display: 0, internal: 0, vins: [],
+        });
+      }
+      return statMap.get(key);
+    };
+    allCarriers().forEach((c) => stat(c));
+    const vinRow = (v, status) => {
+      const ops = v.ops || {};
+      return {
+        vin: v.vin,
+        status,
+        product: (v.raw && v.raw.product) || '',
+        customer: (v.raw && v.raw.userName) || '',
+        city: String(ops.coordinatorPrintCity || ops.transferCity || '').trim(),
+        carrier: String(ops.carrier || '').trim(),
+        changedFrom: String(ops.carrierChangedFrom || '').trim(),
+        changedBy: ops.carrierChangedBy || '',
+        changedAt: ops.carrierChangedAt || '',
+        printedAt: ops.coordinatorPrintedAt || '',
+        printedBy: ops.coordinatorPrintedBy || '',
+        invoice: ops.coordinatorPrintInvoice || '',
+        label: ops.coordinatorPrintLabel || '',
+      };
+    };
+    vehicles.forEach((v) => {
+      const ops = v.ops || {};
+      const kind = String(ops.coordinatorPrintKind || '');
+      const isPrinted = isCoordinatorPrinted(v);
+      if (isPrinted && (kind === 'warehouse' || kind === 'display')) return;
+      const carrier = String(ops.carrier || '').trim();
+      const from = String(ops.carrierChangedFrom || '').trim();
+      if (isPrinted) {
+        const s = stat(ops.coordinatorPrintCompany || carrier);
+        s.printed += 1;
+        if (from) s.changedIn += 1;
+        s.vins.push(vinRow(v, 'printed'));
+      } else if (carrier) {
+        const s = stat(carrier);
+        s.waiting += 1;
+        if (from) s.changedIn += 1;
+        s.vins.push(vinRow(v, 'waiting'));
+      }
+      if (from) {
+        const out = stat(from);
+        out.changedOut += 1;
+        out.vins.push(vinRow(v, 'changed_out'));
+      }
+    });
+    (store.data.prints || []).forEach((p) => {
+      if (!p || p.kind !== 'display') return;
+      const s = stat(p.company);
+      const internal = p.label === 'داخلي';
+      (p.vins || []).forEach((x) => {
+        if (internal) s.internal += 1;
+        else s.display += 1;
+        s.vins.push({
+          vin: x.vin,
+          status: internal ? 'internal' : 'display',
+          product: x.product || '',
+          customer: x.customer || '',
+          city: p.city || '',
+          carrier: p.company || '',
+          changedFrom: '',
+          printedAt: p.at || '',
+          printedBy: p.printedBy || '',
+          invoice: p.invoiceNumber || '',
+          label: p.label || '',
+        });
+      });
+    });
+    const carrierStats = [...statMap.values()]
+      .map((s) => ({ ...s, total: s.waiting + s.printed + s.display + s.internal }))
+      .filter((s) => s.total > 0 || s.changedOut > 0)
+      .sort((a, b) => (b.total - a.total) || a.company.localeCompare(b.company, 'ar'));
+
     return res.json({
       at: new Date().toISOString(),
       present: companies.reduce((n, c) => n + c.present, 0),
@@ -1616,6 +1779,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       coordinators,
       companyCities,
       carrierPivot,
+      carrierStats,
       prints: (store.data.prints || []).slice(0, 300),
       carriers: allCarriers(),
       cities: allCities(),
@@ -1780,7 +1944,15 @@ function createDeliveryTransformationRouter(opts = {}) {
     ]) {
       if (Object.prototype.hasOwnProperty.call(body, f)) setOps(f, body[f]);
     }
-    if (nextCarrier !== null) setOps('carrier', nextCarrier);
+    if (nextCarrier !== null) {
+      const before = changes.length;
+      setOps('carrier', nextCarrier);
+      if (changes.length > before) {
+        v.ops.carrierChangedFrom = '';
+        v.ops.carrierChangedBy = '';
+        v.ops.carrierChangedAt = '';
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'guestCenter')) {
       const s = String(body.guestCenter || '').trim();
       if (s && !YES_NO.includes(s)) {

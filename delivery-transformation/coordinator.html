@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../delivery-hub/delivery-user-ui.css?v=20260906a" />
-  <link rel="stylesheet" href="coordinator.css?v=20260930cl1" />
+  <link rel="stylesheet" href="coordinator.css?v=20261001cc1" />
 </head>
 <body class="user-ui">
   <div id="gateLogin">
@@ -37,13 +37,12 @@
           <img src="../images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'" />
           <div>
             <h1>لوحة الترحيل <span class="live-pill" id="livePill" title="Live">● Live</span></h1>
-            <p>Live Sheet · انقر الشاسيه لطباعة مذكرة الترحيل</p>
+            <p>السيارات المعيّنة للناقل · انقر الشاسيه لطباعة مذكرة الترحيل</p>
           </div>
         </div>
         <div class="ws-user-pill">
           <a href="index.html" class="btn-ghost">المركز</a>
           <a href="inventory-managment.html" class="btn-ghost">المخزون</a>
-          <button type="button" class="btn-warehouse" id="btnWarehouse">التسليم في المستودع</button>
           <strong id="loggedAs">مرحباً</strong>
           <button type="button" class="btn-ghost" id="btnLogout">خروج</button>
         </div>
@@ -51,7 +50,22 @@
 
       <div class="ws-stats" id="wsStats"></div>
 
-      <section class="ws-section co-perf-section" id="coPerfSection">
+      <section class="co-actions" aria-label="إجراءات المنسق">
+        <button type="button" class="co-action co-action--warehouse" id="btnWarehouse">
+          <span class="co-action-ico" aria-hidden="true">🏬</span>
+          <span class="co-action-text"><b>التسليم في المستودع</b><small>ابحث الشاسيه واطبع قائمة الفحص</small></span>
+        </button>
+        <button type="button" class="co-action co-action--missing" id="btnMissingVin">
+          <span class="co-action-ico" aria-hidden="true">🔎</span>
+          <span class="co-action-text"><b>في حال عدم وجود السيارة</b><small>اختر من كل شاسيهات Live Sheet</small></span>
+        </button>
+        <button type="button" class="co-action co-action--display" id="btnDisplayInternal">
+          <span class="co-action-ico" aria-hidden="true">🏷</span>
+          <span class="co-action-text"><b>Display &amp; Internal</b><small>صالة عرض أو داخلي</small></span>
+        </button>
+      </section>
+
+      <section class="ws-section co-perf-section hidden" id="coPerfSection">
         <div class="ws-section-head">
           <h2>Company performance</h2>
           <span class="hint">Assignment → Hanouf Sales Raw · unique VIN · avg days uses completed only</span>
@@ -97,38 +111,48 @@
         </div>
       </section>
 
-      <section class="ws-section">
+      <nav class="co-view-tabs" role="tablist" aria-label="العرض">
+        <button type="button" class="co-view-tab is-active" id="tabFleet" role="tab" aria-selected="true">
+          السيارات المعيّنة <span class="co-view-count" id="tabFleetCount">0</span>
+        </button>
+        <button type="button" class="co-view-tab" id="tabLiveSheet" role="tab" aria-selected="false">
+          Live Sheet <span class="co-view-ro">عرض فقط</span> <span class="co-view-count" id="tabLiveCount">0</span>
+        </button>
+      </nav>
+
+      <section class="ws-section co-fleet-section" id="coFleetSection">
         <div class="ws-section-head">
-          <h2>حسب نوع البيع — كل VINs Live Sheet</h2>
-          <span class="hint">انقر نوع البيع للطي أو الفتح · البحث يفتح النتائج المطابقة</span>
+          <h2>السيارات المعيّنة حسب الناقل</h2>
+          <span class="hint">تعيين هنوف / رشا يظهر هنا فوراً · انقر الشاسيه لطباعة المذكرة</span>
         </div>
         <div class="fleet-search-wrap">
           <input type="search" id="availableVinSearch" class="fleet-search"
-            placeholder="ابحث برقم الشاسيه أو جزء منه… مثال 7022 أو JTNB"
+            placeholder="ابحث برقم الشاسيه أو الشركة أو المنتج… مثال 7022 أو JTNB"
             autocomplete="off" spellcheck="false" inputmode="search" />
           <span class="fleet-search-count" id="availableVinSearchCount"></span>
           <button type="button" class="fleet-expand-btn" id="fleet-fold-all">طي الكل</button>
           <button type="button" class="fleet-expand-btn" id="fleet-open-all">فتح الكل</button>
-          <button type="button" class="btn-missing-vin" id="btnMissingVin">
-            في حال عدم وجود السيارة في البحث اضغط هنا
-          </button>
-          <button type="button" class="btn-unassigned-vin" id="btnUnassignedVin" title="اختر الشاسيه من بيانات Sales Raw">
-            If VIN not assigned · إذا لم يتم تعيين الشاسيه
-          </button>
         </div>
         <div class="fleet-companies" id="availableFleet"></div>
         <p class="ws-empty fleet-search-empty hidden" id="availableVinSearchEmpty">
           لا توجد نتائج مطابقة للبحث
           <button type="button" class="btn-missing-vin btn-missing-vin--empty" id="btnMissingVinEmpty">
-            في حال عدم وجود السيارة في البحث اضغط هنا
+            في حال عدم وجود السيارة اضغط هنا
           </button>
         </p>
       </section>
 
-      <section class="ws-section">
+      <section class="ws-section co-live-section hidden" id="coLiveSheetSection">
         <div class="ws-section-head">
-          <h2>Live Sheet — كل الشاسيه</h2>
-          <span class="hint" id="liveSheetHint">نفس قائمة الموظف · انقر الشاسيه للطباعة</span>
+          <h2>Live Sheet <span class="co-ro-badge">عرض فقط</span></h2>
+          <span class="hint" id="liveSheetHint">يتحدّث تلقائياً</span>
+        </div>
+        <div class="fleet-search-wrap">
+          <input type="search" id="liveSheetSearch" class="fleet-search"
+            placeholder="ابحث في Live Sheet… شاسيه، عميل، موظف، ناقل، مدينة"
+            autocomplete="off" spellcheck="false" inputmode="search" />
+          <span class="fleet-search-count" id="liveSheetSearchCount"></span>
+          <span class="co-live-pulse" id="liveSheetPulse" title="تحديث مباشر"><i></i> مباشر</span>
         </div>
         <div class="coord-sheet-wrap">
           <table class="coord-sheet" id="coordLiveTable"></table>
@@ -230,6 +254,16 @@
                     <span>تسليم</span>
                   </label>
                 </div>
+                <div id="attachmentsDisplay" class="attach-choices hidden">
+                  <label class="attach-opt">
+                    <input type="radio" name="display_opt" value="داخلي" />
+                    <span>داخلي</span>
+                  </label>
+                  <label class="attach-opt">
+                    <input type="radio" name="display_opt" value="صالة عرض" />
+                    <span>صالة عرض</span>
+                  </label>
+                </div>
               </div>
             </div>
           </section>
@@ -323,6 +357,9 @@
       <div class="vin-modal-body">
         <div class="vin-grid" id="vinModalGrid"></div>
       </div>
+      <div class="vin-modal-foot hidden" id="vinModalFoot">
+        <button type="button" class="btn-missing-vin" id="vinModalManual">السيارة غير موجودة في القائمة؟ اكتب الشاسيه يدوياً</button>
+      </div>
     </div>
   </div>
 
@@ -377,6 +414,6 @@
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js"></script>
-  <script src="coordinator.js?v=20260930cl1"></script>
+  <script src="coordinator.js?v=20261001cc1"></script>
 </body>
 </html>

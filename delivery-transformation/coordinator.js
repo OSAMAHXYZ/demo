@@ -6,8 +6,15 @@
   const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];
   const AR_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
+  const POLL_MS = 3000;
   let rows = [];
-  let expandedTypes = new Set();
+  let collapsedCarriers = new Set();
+  let viewTab = 'fleet';
+  let sheetRows = [];
+  let fleetFp = '';
+  let sheetFp = '';
+  let wsBusy = false;
+  let sheetBusy = false;
   let poll = null;
   let overlayReady = false;
   let printMode = 'sheet';
@@ -45,7 +52,14 @@
 
   function startPoll() {
     stopPoll();
-    poll = setInterval(() => loadWorkspace({ silent: true }).catch(() => {}), 5000);
+    poll = setInterval(() => {
+      if (!document.hidden) refreshWorkspace();
+    }, POLL_MS);
+  }
+
+  function refreshWorkspace() {
+    loadWorkspace({ silent: true }).catch(() => { $('livePill').classList.add('off'); });
+    if (viewTab === 'live') loadLiveSheetView().catch(() => { $('livePill').classList.add('off'); });
   }
 
   function logout() {
@@ -81,7 +95,41 @@
     if ($('adminLink')) $('adminLink').hidden = true;
     if ($('empLink')) $('empLink').hidden = true;
     showView('workspace');
+    let savedTab = 'fleet';
+    try { savedTab = sessionStorage.getItem('dt_co_view') || 'fleet'; } catch (_) { /* ignore */ }
+    setViewTab(savedTab);
     loadWorkspace().catch((e) => alert(e.message));
+  }
+
+  function setViewTab(tab) {
+    viewTab = tab === 'live' ? 'live' : 'fleet';
+    const live = viewTab === 'live';
+    [['tabFleet', !live], ['tabLiveSheet', live]].forEach(([id, on]) => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.toggle('is-active', on);
+      el.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $('coFleetSection').classList.toggle('hidden', live);
+    $('coLiveSheetSection').classList.toggle('hidden', !live);
+    try { sessionStorage.setItem('dt_co_view', viewTab); } catch (_) { /* ignore */ }
+    if (live) {
+      loadLiveSheetView().catch((e) => {
+        const hint = $('liveSheetHint');
+        if (hint) hint.textContent = e.message || 'تعذر تحميل Live Sheet';
+      });
+    }
+  }
+
+  function carrierOf(r) {
+    return String((r && r.ops && r.ops.carrier) || '').trim();
+  }
+
+  function carrierChangeBadge(ops) {
+    const from = String((ops && ops.carrierChangedFrom) || '').trim();
+    const to = String((ops && ops.carrier) || '').trim();
+    if (!from || from === to) return '';
+    return `<span class="co-changed" title="غيّره المنسق">تغيّر من ${esc(from)} ← ${esc(to)}</span>`;
   }
 
   function fleetCard(r) {
@@ -89,24 +137,50 @@
     const type = r.raw.salesType || '';
     const loc = r.raw.vehicleLocation || r.raw.gtLocation || '';
     const city = (r.ops && r.ops.transferCity) || '';
-    return `<button type="button" class="fleet-card fleet-card--actionable" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(type)}" data-order="${esc(r.raw.salesOrder || '')}" data-customer="${esc(r.raw.userName || '')}" data-phone="${esc(r.raw.phone || '')}" data-city="${esc(city)}">
+    const changed = carrierChangeBadge(r.ops);
+    return `<button type="button" class="fleet-card fleet-card--actionable${changed ? ' fleet-card--changed' : ''}" data-vin="${esc(r.vin)}" data-product="${esc(product)}" data-company="${esc(carrierOf(r))}" data-type="${esc(type)}" data-order="${esc(r.raw.salesOrder || '')}" data-customer="${esc(r.raw.userName || '')}" data-phone="${esc(r.raw.phone || '')}" data-city="${esc(city)}">
       <div class="fc-body">
         <div class="fc-vin">${esc(r.vin)}</div>
         <div class="fc-product">${esc(product)}</div>
-        <div class="fc-meta">${[r.raw.salesOrder ? `طلب ${r.raw.salesOrder}` : '', city || loc].filter(Boolean).join(' · ') || '—'}</div>
-        <span class="fc-badge">${esc(type || 'متاح')}</span>
+        <div class="fc-meta">${[r.raw.salesOrder ? `طلب ${r.raw.salesOrder}` : '', city ? `📍 ${city}` : loc].filter(Boolean).map(esc).join(' · ') || '—'}</div>
+        ${changed}
+        ${type ? `<span class="fc-badge">${esc(type)}</span>` : ''}
       </div>
     </button>`;
   }
 
-  function groupBySalesType(list) {
+  /** Only VINs Hanouf / Rasha already gave a الناقل — grouped by that company, biggest first. */
+  function groupByCarrier(list) {
     const groups = new Map();
     list.forEach((r) => {
-      const key = String((r.raw && r.raw.salesType) || '').trim() || 'بدون نوع بيع';
+      const key = carrierOf(r);
+      if (!key) return;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r);
     });
-    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ar'));
+    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ar'));
+  }
+
+  function renderFleet(groups) {
+    const availEl = $('availableFleet');
+    if (!groups.length) {
+      availEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات معيّنة لناقل بعد</strong>عند تعيين هنوف / رشا للناقل تظهر السيارة هنا فوراً</div>';
+      return;
+    }
+    availEl.innerHTML = groups.map(([company, items]) => {
+      const open = !collapsedCarriers.has(company);
+      const changed = items.filter((r) => carrierChangeBadge(r.ops)).length;
+      return `<div class="fleet-company-group co-carrier-group${open ? ' is-expanded' : ''}" data-type="${esc(company)}">
+        <button type="button" class="fleet-company-head" data-fold-type="${esc(company)}" aria-expanded="${open ? 'true' : 'false'}">
+          <span class="fleet-company-name"><span class="co-carrier-ico" aria-hidden="true">🚚</span>${esc(company)}${changed ? `<span class="co-carrier-changed">${changed} تغيّر</span>` : ''}</span>
+          <span class="fleet-fold-meta">
+            <span class="fleet-company-count">${items.length} سيارة</span>
+            <span class="fleet-chevron" aria-hidden="true"></span>
+          </span>
+        </button>
+        <div class="fleet-grid">${items.map(fleetCard).join('')}</div>
+      </div>`;
+    }).join('');
   }
 
   function filterFleet() {
@@ -119,7 +193,7 @@
     const cards = [...availEl.querySelectorAll('.fleet-card')];
     let visible = 0;
     cards.forEach((card) => {
-      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company, card.dataset.order, card.dataset.customer, card.dataset.phone, card.dataset.city]
+      const hay = [card.dataset.vin, card.dataset.product, card.dataset.company, card.dataset.type, card.dataset.order, card.dataset.customer, card.dataset.phone, card.dataset.city]
         .join(' ').toUpperCase().replace(/\s+/g, '');
       const match = !q || hay.includes(q);
       card.classList.toggle('fleet-card--hidden', !match);
@@ -130,7 +204,7 @@
       const vis = [...group.querySelectorAll('.fleet-card')].filter((c) => !c.classList.contains('fleet-card--hidden'));
       group.classList.toggle('fleet-company-group--hidden', !vis.length);
       const type = group.dataset.type || '';
-      const open = Boolean(q) || expandedTypes.has(type);
+      const open = Boolean(q) || !collapsedCarriers.has(type);
       group.classList.toggle('is-expanded', open);
       const head = group.querySelector('.fleet-company-head');
       if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -142,63 +216,72 @@
     emptyEl.classList.toggle('hidden', visible > 0 || !q);
     const missingBtn = $('btnMissingVin');
     if (missingBtn) missingBtn.classList.toggle('is-highlight', Boolean(q) && visible === 0);
-    const table = $('coordLiveTable');
-    if (table) {
-      table.querySelectorAll('tbody tr[data-vin]').forEach((tr) => {
-        const card = availEl.querySelector(`.fleet-card[data-vin="${CSS.escape(tr.dataset.vin)}"]`);
-        tr.style.display = card && card.classList.contains('fleet-card--hidden') ? 'none' : '';
-      });
-    }
   }
 
-  async function loadWorkspace({ silent = false } = {}) {
-    const live = await api('/live-sheet');
-    rows = live.rows || [];
-    const withPhone = rows.filter((r) => r.raw.phone).length;
-    const types = new Set(rows.map((r) => (r.raw.salesType || '').trim()).filter(Boolean));
-    $('wsStats').innerHTML = `
-      <div class="ws-stat ws-stat--avail"><span>شاسيه</span><b>${live.total || 0}</b></div>
-      <div class="ws-stat ws-stat--stock"><span>أنواع البيع</span><b>${types.size}</b></div>
-      <div class="ws-stat ws-stat--ready"><span>بهاتف</span><b>${withPhone}</b></div>
-      <div class="ws-stat"><span>آخر مزامنة</span><b style="font-size:.85rem">${new Date(live.at || Date.now()).toLocaleTimeString()}</b></div>`;
-    $('livePill').classList.toggle('off', silent);
+  function syncTime(at) {
+    return new Date(at || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
 
-    const availEl = $('availableFleet');
-    if (!rows.length) {
-      availEl.innerHTML = '<div class="ws-empty"><strong>لا توجد سيارات</strong>انتظر رفع Sales Raw أو VINs</div>';
-    } else {
-      availEl.innerHTML = groupBySalesType(rows).map(([type, items]) => {
-        const open = expandedTypes.has(type);
-        return `<div class="fleet-company-group${open ? ' is-expanded' : ''}" data-type="${esc(type)}">
-          <button type="button" class="fleet-company-head" data-fold-type="${esc(type)}" aria-expanded="${open ? 'true' : 'false'}">
-            <span class="fleet-company-name">${esc(type)}<span class="fleet-company-badge">نوع البيع</span></span>
-            <span class="fleet-fold-meta">
-              <span class="fleet-company-count">${items.length} سيارة</span>
-              <span class="fleet-chevron" aria-hidden="true"></span>
-            </span>
-          </button>
-          <div class="fleet-grid">${items.map(fleetCard).join('')}</div>
-        </div>`;
-      }).join('');
-      availEl.querySelectorAll('.fleet-card').forEach((card) => {
-        card.addEventListener('click', () => openDetail(card.dataset.vin));
-      });
-      availEl.querySelectorAll('[data-fold-type]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (String(($('availableVinSearch') && $('availableVinSearch').value) || '').trim()) return;
-          const type = btn.dataset.foldType;
-          if (expandedTypes.has(type)) expandedTypes.delete(type);
-          else expandedTypes.add(type);
-          const group = btn.closest('.fleet-company-group');
-          const open = expandedTypes.has(type);
-          if (group) group.classList.toggle('is-expanded', open);
-          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        });
-      });
+  async function loadWorkspace() {
+    if (wsBusy) return;
+    wsBusy = true;
+    let live;
+    try {
+      live = await api('/live-sheet');
+    } finally {
+      wsBusy = false;
     }
-    renderLiveTable(rows);
+    rows = live.rows || [];
+    $('livePill').classList.remove('off');
+    const assigned = rows.filter((r) => carrierOf(r));
+    const groups = groupByCarrier(assigned);
+    const changed = assigned.filter((r) => carrierChangeBadge(r.ops)).length;
+    $('wsStats').innerHTML = `
+      <div class="ws-stat ws-stat--avail"><span>سيارات معيّنة</span><b>${assigned.length}</b></div>
+      <div class="ws-stat ws-stat--stock"><span>شركات النقل</span><b>${groups.length}</b></div>
+      <div class="ws-stat ws-stat--warn"><span>غيّرها المنسق</span><b>${changed}</b></div>
+      <div class="ws-stat ws-stat--muted"><span>بدون ناقل</span><b>${rows.length - assigned.length}</b></div>
+      <div class="ws-stat"><span>آخر مزامنة</span><b class="ws-stat-time">${esc(syncTime(live.at))}</b></div>`;
+    if ($('tabFleetCount')) $('tabFleetCount').textContent = String(assigned.length);
+    const fp = JSON.stringify(assigned.map((r) => [
+      r.vin, carrierOf(r), r.ops.carrierChangedFrom || '', r.ops.transferCity || '',
+      r.raw.product || '', r.raw.salesType || '', r.raw.salesOrder || '', r.raw.userName || '',
+      r.raw.phone || '', r.raw.vehicleLocation || '', r.raw.gtLocation || '',
+    ]));
+    if (fp !== fleetFp) {
+      fleetFp = fp;
+      renderFleet(groups);
+    }
     filterFleet();
-    loadCompanyPerformance({ silent: true }).catch(() => {});
+  }
+
+  /** Read-only copy of the full Live Sheet (same rows the employees see) — re-rendered only when something changed. */
+  async function loadLiveSheetView() {
+    if (sheetBusy) return;
+    sheetBusy = true;
+    let data;
+    try {
+      data = await api('/live-sheet?view=sheet');
+    } finally {
+      sheetBusy = false;
+    }
+    sheetRows = data.rows || [];
+    $('livePill').classList.remove('off');
+    if ($('tabLiveCount')) $('tabLiveCount').textContent = String(sheetRows.length);
+    const fp = JSON.stringify(sheetRows.map((r) => [r.vin, r.raw, r.ops]));
+    if (fp !== sheetFp) {
+      const first = !sheetFp;
+      sheetFp = fp;
+      renderLiveTable(sheetRows);
+      const pulse = $('liveSheetPulse');
+      if (pulse && !first) {
+        pulse.classList.remove('is-flash');
+        void pulse.offsetWidth;
+        pulse.classList.add('is-flash');
+      }
+    }
+    const hint = $('liveSheetHint');
+    if (hint) hint.textContent = `${sheetRows.length} شاسيه · يتحدّث تلقائياً · آخر تحديث ${syncTime(data.at)}`;
   }
 
   function monthRange(d = new Date()) {
@@ -439,34 +522,59 @@ Average: ${avg == null ? '—' : avg + ' days'}">
   window.getCompanyPerformance = () => companyPerf;
   window.getDaysToSalesData = getDaysToSalesData;
 
+  function printedCell(ops) {
+    if (!ops || !ops.coordinatorPrintedAt) return '—';
+    const label = String(ops.coordinatorPrintLabel || '').trim();
+    return `<span class="co-printed">✓ طُبع</span>${label ? ` <span class="co-label co-label--${label === 'داخلي' ? 'internal' : 'display'}">${esc(label)}</span>` : ''}`;
+  }
+
+  /** Coordinator Live Sheet — view only (no edit controls, no print on click). */
   function renderLiveTable(list) {
     const table = $('coordLiveTable');
-    const hint = $('liveSheetHint');
-    if (hint) hint.textContent = `${list.length} شاسيه · انقر للطباعة`;
+    const o = (r) => r.ops || {};
     const cols = [
       ['#', (_r, i) => i + 1],
-      ['VIN', (r) => `<button type="button" class="vin-ltr coord-vin" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
+      ['Employee', (r) => `<b>${esc(na(o(r).assignedEmployeeName))}</b>`],
+      ['Status', (r) => (o(r).opsStatus ? `<span class="co-status">${esc(o(r).opsStatus)}</span>` : '—')],
+      ['VIN', (r) => `<span class="vin-ltr coord-vin">${esc(r.vin)}</span>`],
       ['Proforma', (r) => esc(na(r.raw.proformaDate))],
       ['Order', (r) => esc(na(r.raw.salesOrder))],
       ['Product', (r) => esc(na(r.raw.product))],
       ['Sales Type', (r) => esc(na(r.raw.salesType))],
       ['Customer', (r) => esc(na(r.raw.userName))],
-      ['Invoice Owner', (r) => esc(na(r.raw.invoiceOwner))],
       ['Phone', (r) => (r.raw.phone ? `<a class="phone-link" href="tel:${esc(r.raw.phone)}">${esc(r.raw.phone)}</a>` : '—')],
       ['S/A', (r) => esc(na(r.raw.salesAdvisor))],
       ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
       ['Veh Loc', (r) => esc(na(r.raw.vehicleLocation))],
-      ['مدينة الترحيل', (r) => esc(na(r.ops && r.ops.transferCity))],
+      ['مدينة الترحيل', (r) => esc(na(o(r).transferCity))],
+      ['الناقل', (r) => `${carrierOf(r) ? `<b>${esc(carrierOf(r))}</b>` : '—'}${carrierChangeBadge(o(r))}`],
+      ['المنسق', (r) => printedCell(o(r))],
+      ['ملاحظات', (r) => esc(na(o(r).notes))],
+      ['Updated', (r) => esc(String(o(r).updatedAt || '').replace('T', ' ').slice(0, 16) || '—')],
+      ['By', (r) => esc(na(o(r).updatedBy))],
     ];
+    const hay = (r) => [
+      r.vin, r.raw.product, r.raw.salesOrder, r.raw.userName, r.raw.phone, r.raw.salesType, r.raw.salesAdvisor,
+      o(r).assignedEmployeeName, o(r).opsStatus, o(r).transferCity, o(r).carrier, o(r).carrierChangedFrom, o(r).coordinatorPrintLabel,
+    ].join(' ').toUpperCase().replace(/\s+/g, '');
     table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join('')}</tr></thead>
-      <tbody>${list.map((r, i) => `<tr data-vin="${esc(r.vin)}">${cols.map((c) => `<td>${c[1](r, i)}</td>`).join('')}</tr>`).join('')
+      <tbody>${list.map((r, i) => `<tr data-vin="${esc(r.vin)}" data-hay="${esc(hay(r))}"${o(r).coordinatorPrintedAt ? ' class="is-printed"' : ''}>${cols.map((c) => `<td>${c[1](r, i)}</td>`).join('')}</tr>`).join('')
         || `<tr><td colspan="${cols.length}">لا توجد شاسيهات على Live Sheet</td></tr>`}</tbody>`;
-    table.querySelectorAll('tr[data-vin], .coord-vin').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openDetail(el.dataset.vin);
-      });
+    filterLiveSheet();
+  }
+
+  function filterLiveSheet() {
+    const input = $('liveSheetSearch');
+    const countEl = $('liveSheetSearchCount');
+    const q = String((input && input.value) || '').trim().toUpperCase().replace(/\s+/g, '');
+    const trs = [...$('coordLiveTable').querySelectorAll('tbody tr[data-vin]')];
+    let visible = 0;
+    trs.forEach((tr) => {
+      const match = !q || String(tr.dataset.hay || '').includes(q);
+      tr.style.display = match ? '' : 'none';
+      if (match) visible += 1;
     });
+    if (countEl) countEl.textContent = q ? `${visible} نتيجة` : `${trs.length} شاسيه`;
   }
 
   function fill(id, val) {
@@ -544,7 +652,8 @@ Average: ${avg == null ? '—' : avg + ' days'}">
 
   function selectedAttendanceName() {
     const sel = $('customer_name');
-    const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+    if (!sel || !sel.value) return '';
+    const opt = sel.selectedOptions && sel.selectedOptions[0];
     return (opt && (opt.dataset.name || opt.textContent) || '').trim();
   }
 
@@ -565,8 +674,8 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     return String((r && r.ops && r.ops.carrier) || '').trim();
   }
 
-  function lockedCompany(exceptRow) {
-    if (isWarehouse()) return '';
+  function assignedCarrier(exceptRow) {
+    if (isWarehouse() || printMode === 'display') return '';
     const vins = getSelectedVins(exceptRow);
     for (let i = 0; i < vins.length; i += 1) {
       const c = carrierOfVin(vins[i]);
@@ -575,48 +684,100 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     return '';
   }
 
-  function renderCompanyLockHint(lock, available) {
+  /** First Live Sheet الناقل (before any coordinator change) among the memo VINs. */
+  function originalCarrierOfMemo() {
+    const vins = getSelectedVins();
+    for (let i = 0; i < vins.length; i += 1) {
+      const r = findLiveRow(vins[i]);
+      const from = String((r && r.ops && r.ops.carrierChangedFrom) || '').trim();
+      if (from) return from;
+    }
+    return '';
+  }
+
+  function renderCompanyLockHint() {
     const hint = $('companyLockHint');
     if (!hint) return;
-    if (!lock) {
+    const assigned = isWarehouse() ? '' : assignedCarrier();
+    if (!assigned) {
       hint.classList.add('hidden');
       hint.textContent = '';
       return;
     }
+    const chosen = String($('company_rep').value || '').trim();
+    const available = attendanceCompanies.some((g) => g.company === assigned);
+    const original = originalCarrierOfMemo();
     hint.classList.remove('hidden');
-    hint.classList.toggle('is-missing', !available);
-    hint.textContent = available
-      ? `🔒 الناقل المعيّن على Live Sheet: ${lock} — لا يمكن تغييره`
-      : `🔒 الناقل المعيّن ${lock} غير متوفر في الحضور الآن — انتظر تسجيل حضور مندوب ${lock}`;
+    hint.classList.toggle('is-missing', !available && !chosen);
+    hint.classList.toggle('is-changed', Boolean(original && original !== assigned));
+    if (original && original !== assigned) {
+      hint.textContent = `✓ تم تغيير الناقل في Live Sheet: ${original} ← ${assigned}`;
+    } else if (chosen && chosen !== assigned) {
+      hint.textContent = `سيتم تغيير الناقل في Live Sheet: ${assigned} ← ${chosen}`;
+    } else if (available) {
+      hint.textContent = `الناقل المعيّن على Live Sheet: ${assigned} — تم اختياره تلقائياً · يمكنك اختيار شركة أخرى`;
+    } else {
+      hint.textContent = `الناقل المعيّن ${assigned} غير متوفر في الحضور الآن — اختر شركة أخرى وسيتم تحديث Live Sheet فوراً`;
+    }
   }
 
   function renderAttendanceSelects(keepNameId) {
     const companyEl = $('company_rep');
     const currentCompany = companyEl.value;
-    const lock = lockedCompany();
-    const list = lock ? attendanceCompanies.filter((g) => g.company === lock) : attendanceCompanies;
-    if (lock) {
-      companyEl.innerHTML = list.length
-        ? list.map((g) => `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`).join('')
-        : `<option value="">${esc(lock)} — غير متوفر في الحضور</option>`;
-      companyEl.value = list.length ? lock : '';
-    } else {
-      companyEl.innerHTML = '<option value="">— اختر من الحضور —</option>'
-        + list.map((g) =>
-          `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`
-        ).join('');
-      companyEl.value = currentCompany && list.some((g) => g.company === currentCompany) ? currentCompany : '';
-    }
-    companyEl.disabled = !!lock;
-    companyEl.classList.toggle('is-locked', !!lock);
-    renderCompanyLockHint(lock, list.length > 0);
+    const assigned = assignedCarrier();
+    const has = (c) => Boolean(c) && attendanceCompanies.some((g) => g.company === c);
+    companyEl.innerHTML = `<option value="">${printMode === 'display' ? '— بدون شركة (اختياري) —' : '— اختر من الحضور —'}</option>`
+      + attendanceCompanies.map((g) =>
+        `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}${g.company === assigned ? ' · المعيّن' : ''}</option>`
+      ).join('');
+    if (has(currentCompany)) companyEl.value = currentCompany;
+    else if (has(assigned)) companyEl.value = assigned;
+    else companyEl.value = '';
+    companyEl.disabled = false;
+    companyEl.classList.remove('is-locked');
+    renderCompanyLockHint();
     renderAttendanceNames(keepNameId);
+  }
+
+  /** Coordinator picked another company than the Live Sheet الناقل → change it on the Live Sheet now (keeps "from → to"). */
+  async function captureCarrierChange() {
+    if (isWarehouse()) return;
+    const company = String($('company_rep').value || '').trim();
+    if (!company) {
+      renderCompanyLockHint();
+      return;
+    }
+    const vins = getSelectedVins().filter((vin) => {
+      const c = carrierOfVin(vin);
+      return c && c !== company;
+    });
+    if (!vins.length) {
+      renderCompanyLockHint();
+      return;
+    }
+    const data = await api('/coordinator/carrier', { method: 'POST', json: { vins, company } });
+    const changed = data.changed || [];
+    changed.forEach((c) => {
+      vinCarrier[normVin(c.vin)] = c.to;
+      const r = findLiveRow(c.vin);
+      if (r && r.ops) {
+        r.ops.carrier = c.to;
+        r.ops.carrierChangedFrom = c.original || '';
+      }
+    });
+    lastLock = assignedCarrier();
+    fleetFp = '';
+    sheetFp = '';
+    renderCompanyLockHint();
+    if (changed.length) {
+      setPrintStatus(`تم تحديث الناقل في Live Sheet: ${changed.map((c) => `${c.from} ← ${c.to}`).filter((s, i, a) => a.indexOf(s) === i).join(' · ')}`, 'ok');
+    }
   }
 
   /** Re-query attendance when the memo's assigned carrier changes. */
   function syncCompanyLock() {
     if (isWarehouse()) return;
-    const lock = lockedCompany();
+    const lock = assignedCarrier();
     if (lock === lastLock) return;
     (async () => {
       if (claimedAttendanceId) await releaseAttendanceHold();
@@ -647,7 +808,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
   async function loadAttendanceOptions(keepNameId) {
     if (isWarehouse()) return;
     lastAttendanceCity = attendanceCity();
-    lastLock = lockedCompany();
+    lastLock = assignedCarrier();
     const qs = new URLSearchParams();
     if (lastAttendanceCity) qs.set('city', lastAttendanceCity);
     if (lastLock) qs.set('company', lastLock);
@@ -662,7 +823,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     if (!id) return;
     const data = await api('/attendance/hold', {
       method: 'POST',
-      json: { id, city: attendanceCity(), company: lockedCompany() },
+      json: { id, city: attendanceCity(), company: assignedCarrier() },
     });
     claimedAttendanceId = data.entry && data.entry.id || id;
     attendanceCompanies = data.companies || attendanceCompanies;
@@ -676,7 +837,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     try {
       const data = await api('/attendance/release', {
         method: 'POST',
-        json: { city: attendanceCity(), company: lockedCompany() },
+        json: { city: attendanceCity(), company: assignedCarrier() },
       });
       attendanceCompanies = data.companies || attendanceCompanies;
     } catch (_) { /* ignore */ }
@@ -725,7 +886,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       el.addEventListener('click', () => {
         const row = parseInt(el.dataset.row, 10);
         if (Number.isNaN(row)) return;
-        if (printMode === 'manual') return;
+        if (isTypedMode()) return;
         openAddVinPicker(row, memoSource);
       });
     });
@@ -755,6 +916,11 @@ Average: ${avg == null ? '—' : avg + ' days'}">
 
   function isWarehouse() {
     return printMode === 'warehouse';
+  }
+
+  /** Manual + Display & Internal: chassis / model typed by hand, branch editable. */
+  function isTypedMode() {
+    return printMode === 'manual' || printMode === 'display';
   }
 
   function overlayPositionStyle(tag, x, y, w, h) {
@@ -965,10 +1131,11 @@ Average: ${avg == null ? '—' : avg + ' days'}">
 
   function validatePrintFields() {
     if (!countFilledChassis()) {
-      setPrintStatus(isWarehouse() || printMode === 'manual' ? 'أدخل رقم الشاسيه قبل الطباعة' : 'لا يوجد رقم شاسيه للطباعة', 'err');
+      setPrintStatus(isWarehouse() || isTypedMode() ? 'أدخل رقم الشاسيه قبل الطباعة' : 'لا يوجد رقم شاسيه للطباعة', 'err');
       return false;
     }
     if (isWarehouse()) return true;
+    const display = printMode === 'display';
     const company = String($('company_rep').value || '').trim();
     const branch = String($('branch_to').value || '').trim();
     const invoice = String($('invoice_number').value || '').trim();
@@ -978,22 +1145,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       $('invoice_number').focus();
       return false;
     }
-    const carriers = [...new Set(getSelectedVins().map(carrierOfVin).filter(Boolean))];
-    if (carriers.length > 1) {
-      setPrintStatus(`الشاسيهات في المذكرة لها نواقل مختلفة (${carriers.join(' / ')}) — اطبع كل ناقل في مذكرة منفصلة`, 'err');
-      return false;
-    }
-    const lock = carriers[0] || '';
-    if (lock && company !== lock) {
-      setPrintStatus(`الناقل المعيّن ${lock} غير متوفر في الحضور — لا يمكن الطباعة بشركة أخرى`, 'err');
-      return false;
-    }
-    if (!company) {
+    if (!company && !display) {
       setPrintStatus('اختر الشركة من الحضور قبل الطباعة', 'err');
       $('company_rep').focus();
       return false;
     }
-    if (!selectedAttendanceName()) {
+    if (company && !selectedAttendanceName()) {
       setPrintStatus('اختر الاسم من الحضور قبل الطباعة', 'err');
       $('customer_name').focus();
       return false;
@@ -1011,7 +1168,16 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       setPrintStatus('اختر المرفق: صالة عرض أو تسليم', 'err');
       return false;
     }
+    if (display && attach !== 'داخلي' && attach !== 'صالة عرض') {
+      setPrintStatus('اختر المرفق: داخلي أو صالة عرض', 'err');
+      return false;
+    }
     return true;
+  }
+
+  function printKind() {
+    if (isWarehouse()) return 'warehouse';
+    return printMode === 'display' ? 'display' : 'memo';
   }
 
   async function doPrintA4() {
@@ -1030,12 +1196,14 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     }
     const snapshot = collectPayload();
     if (invoiceNumber) snapshot.invoice_number = invoiceNumber;
+    const kind = printKind();
     try {
       await api('/print-complete', {
         method: 'POST',
         json: {
           vins: printedVins,
-          kind: isWarehouse() ? 'warehouse' : 'memo',
+          kind,
+          label: kind === 'display' ? (String(snapshot.attachments || '').trim() === 'داخلي' ? 'داخلي' : 'عرض') : '',
           attendanceId: isWarehouse() ? '' : claimedAttendanceId,
           company: isWarehouse() ? '' : String($('company_rep').value || '').trim(),
           city: isWarehouse() ? '' : attendanceCity(),
@@ -1075,7 +1243,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       const search = $('availableVinSearch');
       if (search) search.value = '';
       showView('workspace');
-      loadWorkspace().catch(() => {});
+      refreshWorkspace();
     };
     const waitImages = Promise.all([...copiesContainer.querySelectorAll('img')].map((img) => (
       img.complete ? Promise.resolve() : new Promise((done) => {
@@ -1098,40 +1266,48 @@ Average: ${avg == null ? '—' : avg + ' days'}">
 
   function syncAttachmentChoice() {
     const picked = document.querySelector('input[name="attach_opt"]:checked');
+    const pickedDisplay = document.querySelector('input[name="display_opt"]:checked');
     if (printMode === 'manual') fill('attachments', picked ? picked.value : '');
+    if (printMode === 'display') fill('attachments', pickedDisplay ? pickedDisplay.value : '');
     updatePreview();
   }
 
   function setPrintMode(mode) {
-    printMode = mode === 'manual' || mode === 'warehouse' ? mode : 'sheet';
+    printMode = ['manual', 'warehouse', 'display'].includes(mode) ? mode : 'sheet';
     const manual = printMode === 'manual';
     const warehouse = printMode === 'warehouse';
+    const display = printMode === 'display';
+    const typed = manual || display;
     const branch = $('branch_to');
     const attach = $('attachments');
-    const chassis0 = document.querySelector('[name="car_chassis_0"]');
     document.body.classList.toggle('warehouse-form-mode', warehouse);
     document.body.classList.toggle('manual-form-mode', manual);
+    document.body.classList.toggle('display-form-mode', display);
     $('warehouseTopFields').classList.toggle('hidden', !warehouse);
-    branch.readOnly = !manual;
-    if (manual) branch.removeAttribute('readonly');
+    branch.readOnly = !typed;
+    if (typed) branch.removeAttribute('readonly');
     else branch.setAttribute('readonly', '');
-    $('branchReq').classList.toggle('hidden', !manual);
-    $('attachReq').classList.toggle('hidden', !manual);
-    attach.classList.toggle('hidden', manual);
+    $('branchReq').classList.toggle('hidden', !typed);
+    $('attachReq').classList.toggle('hidden', !typed);
+    attach.classList.toggle('hidden', typed);
     $('attachmentsManual').classList.toggle('hidden', !manual);
+    $('attachmentsDisplay').classList.toggle('hidden', !display);
     document.querySelectorAll('#carsBody [data-field="chassis"]').forEach((el) => {
-      const row = parseInt(el.dataset.row, 10);
-      el.readOnly = !manual;
-      el.placeholder = manual ? 'اكتب رقم الشاسية' : 'انقر للاختيار';
+      el.readOnly = !typed;
+      el.placeholder = typed ? 'اكتب رقم الشاسية' : 'انقر للاختيار';
     });
-    $('navTitle').textContent = warehouse ? 'التسليم في المستودع' : 'مذكرة ترحيل السيارات';
-    $('printHeroTitle').textContent = warehouse ? 'قائمة فحص السيارات وقت التسليم' : 'مذكرة ترحيل السيارات';
+    $('navTitle').textContent = warehouse ? 'التسليم في المستودع' : display ? 'Display & Internal' : 'مذكرة ترحيل السيارات';
+    $('printHeroTitle').textContent = warehouse
+      ? 'قائمة فحص السيارات وقت التسليم'
+      : display ? 'مذكرة ترحيل — داخلي / صالة عرض' : 'مذكرة ترحيل السيارات';
     $('printHeroHint').textContent = warehouse
       ? 'نموذج المستودع · ابحث الشاسيه ثم راجع البيانات واطبع'
-      : manual
-        ? 'السيارة غير موجودة في البحث · اكتب الشركة والفرع يدوياً · المرفق صالة عرض أو تسليم'
-        : 'اكتب اسم الشركة · الفرع من مدينة الترحيل على Live Sheet · رقم المذكرة تلقائي من 1000';
-    $('carsHint').textContent = manual
+      : display
+        ? 'اكتب السيارة (الموديل والشاسيه) والمدينة · المرفق داخلي أو صالة عرض · الشركة اختيارية'
+        : manual
+          ? 'السيارة غير موجودة في البحث · اكتب الشركة والفرع يدوياً · المرفق صالة عرض أو تسليم'
+          : 'الشركة = الناقل المعيّن على Live Sheet (يمكن تغييرها) · الفرع من مدينة الترحيل · رقم المذكرة تلقائي';
+    $('carsHint').textContent = typed
       ? 'اكتب الموديل ورقم الشاسية يدوياً — بدون اختيار من Live Sheet'
       : 'انقر أي صف شاسيه لاختيار سيارة من Live Sheet';
     $('previewTitle').textContent = warehouse ? 'معاينة قائمة فحص التسليم' : 'معاينة مذكرة الترحيل';
@@ -1144,6 +1320,9 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     $('btnPrint2').textContent = warehouse ? '🖨 طباعة قائمة الفحص' : '🖨 طباعة A4';
     if (!manual) {
       document.querySelectorAll('input[name="attach_opt"]').forEach((el) => { el.checked = false; });
+    }
+    if (!display) {
+      document.querySelectorAll('input[name="display_opt"]').forEach((el) => { el.checked = false; });
     }
     overlayReady = false;
     buildOverlay();
@@ -1158,7 +1337,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     memoSource = 'live';
     $('company_rep').disabled = false;
     $('company_rep').classList.remove('is-locked');
-    renderCompanyLockHint('', true);
+    renderCompanyLockHint();
   }
 
   async function peekInvoice() {
@@ -1200,6 +1379,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     $('vinModal').classList.remove('open');
     activeVinRow = null;
     setVinModalNote('');
+    $('vinModalFoot').classList.add('hidden');
   }
 
   function setVinModalNote(msg) {
@@ -1302,37 +1482,40 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       ].join(' ').toUpperCase().replace(/\s+/g, '');
       return hay.includes(q);
     });
+    const countNote = vinPickerMode === 'add-row'
+      ? `${list.length} شاسيه${q ? ' مطابق' : ' على Live Sheet'}`
+      : '';
     if (!list.length) {
       grid.innerHTML = `<p class="vin-empty">${salesMode ? 'لا توجد شاسيهات في Sales Raw مطابقة' : 'لا توجد شاسيهات من Live Sheet مطابقة'}</p>`;
+      if (countNote) setVinModalNote(countNote);
       return;
     }
-    const lock = vinPickerMode === 'add-row' ? lockedCompany(activeVinRow) : '';
-    const shown = list.slice(0, 300);
-    grid.innerHTML = shown.map((r) => {
+    if (countNote) setVinModalNote(countNote);
+    grid.innerHTML = list.map((r) => {
       const carrier = String((r.ops && r.ops.carrier) || '').trim();
-      const clash = lock && carrier && carrier !== lock;
       const badge = salesMode
         ? `<span class="vin-src-badge vin-src-badge--${r.src}">${r.src === 'live' ? 'على Live Sheet' : 'Sales Raw · غير معيّن'}</span>`
         : '';
       return `
-      <button type="button" class="vin-card${clash ? ' vin-card--clash' : ''}" data-vin="${esc(r.vin)}"${clash ? ` title="الناقل ${esc(carrier)} يختلف عن ناقل المذكرة ${esc(lock)}"` : ''}>
+      <button type="button" class="vin-card" data-vin="${esc(r.vin)}">
         ${badge}
         <div class="vin-no">${esc(r.vin)}</div>
         <div class="vin-product">${esc((r.raw && r.raw.product) || '—')}</div>
         <div class="vin-meta">${esc([r.raw && r.raw.salesOrder, r.raw && r.raw.userName, r.ops && r.ops.transferCity].filter(Boolean).join(' · ') || '—')}</div>
-        ${carrier ? `<div class="vin-carrier">الناقل: ${esc(carrier)}</div>` : ''}
+        ${carrier ? `<div class="vin-carrier">🚚 ${esc(carrier)}</div>` : '<div class="vin-carrier vin-carrier--none">بدون ناقل</div>'}
       </button>`;
-    }).join('') + (list.length > shown.length ? `<p class="vin-empty">+${list.length - shown.length} — اكتب للبحث لتضييق النتائج</p>` : '');
-    grid.querySelectorAll('.vin-card').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (vinPickerMode === 'add-row') {
-          applyPickedVin(btn.dataset.vin);
-          return;
-        }
-        closeVinModal();
-        openWarehouseDetail(btn.dataset.vin).catch((e) => alert(e.message));
-      });
-    });
+    }).join('');
+  }
+
+  function onVinCardClick(e) {
+    const btn = e.target.closest('.vin-card');
+    if (!btn) return;
+    if (vinPickerMode === 'add-row') {
+      applyPickedVin(btn.dataset.vin);
+      return;
+    }
+    closeVinModal();
+    openWarehouseDetail(btn.dataset.vin).catch((err) => alert(err.message));
   }
 
   function cityFromSalesRaw(raw) {
@@ -1366,11 +1549,6 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       return;
     }
     const carrier = live ? String((live.ops && live.ops.carrier) || '').trim() : '';
-    const lock = lockedCompany(activeVinRow);
-    if (lock && carrier && carrier !== lock) {
-      setVinModalNote(`${row.vin}: الناقل المعيّن ${carrier} — هذه المذكرة لناقل ${lock}. اطبعه في مذكرة منفصلة.`);
-      return;
-    }
     vinCarrier[normVin(row.vin)] = carrier;
     const form = $('deliveryForm');
     const chassis = form.querySelector(`[name="car_chassis_${activeVinRow}"]`);
@@ -1403,6 +1581,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     activeVinRow = rowIndex;
     $('vinModalSearch').value = '';
     $('vinSrcTabs').classList.remove('hidden');
+    $('vinModalFoot').classList.toggle('hidden', getSelectedVins(rowIndex).length > 0);
     $('vinModal').classList.add('open');
     setVinSource(source || 'live');
     setTimeout(() => $('vinModalSearch').focus(), 40);
@@ -1421,11 +1600,16 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     setTimeout(() => $('vinModalSearch').focus(), 40);
   }
 
-  /** "If VIN not assigned": blank memo, then pick row 1 from Sales Raw. */
-  async function openUnassignedDetail() {
+  /** "في حال عدم وجود السيارة": blank memo, then pick row 1 from every Live Sheet VIN (search). */
+  function openMissingDetail() {
+    return openBlankMemo('live');
+  }
+
+  /** Blank memo, then pick row 1 from the Live Sheet ('live') or unassigned Sales Raw ('sales'). */
+  async function openBlankMemo(source) {
     resetPrintForm();
     setPrintMode('sheet');
-    memoSource = 'sales';
+    memoSource = source === 'sales' ? 'sales' : 'live';
     fill('doc_date', fillTodayTimes());
     fill('company_rep', '');
     fill('customer_name', '');
@@ -1439,7 +1623,28 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     updatePreview();
     showView('detail');
     window.scrollTo(0, 0);
-    openAddVinPicker(0, 'sales');
+    openAddVinPicker(0, memoSource);
+  }
+
+  /** Display & Internal: type the vehicle + city, المرفق داخلي / صالة عرض, saved with that label. */
+  async function openDisplayDetail() {
+    resetPrintForm();
+    setPrintMode('display');
+    fill('doc_date', fillTodayTimes());
+    fill('company_rep', '');
+    fill('customer_name', '');
+    fill('branch_to', '');
+    fill('attachments', '');
+    claimedAttendanceId = '';
+    await loadAttendanceOptions();
+    await peekInvoice();
+    syncCarCount();
+    if (!overlayReady) buildOverlay();
+    updatePreview();
+    showView('detail');
+    window.scrollTo(0, 0);
+    const model0 = document.querySelector('[name="car_model_0"]');
+    if (model0) model0.focus();
   }
 
   async function openWarehouseDetail(vin) {
@@ -1519,7 +1724,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       if (!$('transfer_date').value) $('transfer_date').value = $('doc_date').value;
       syncDayFromTransferDate();
     });
-    document.querySelectorAll('input[name="attach_opt"]').forEach((el) => {
+    document.querySelectorAll('input[name="attach_opt"], input[name="display_opt"]').forEach((el) => {
       el.addEventListener('change', syncAttachmentChoice);
     });
     $('branch_to').addEventListener('change', onCityForAttendanceChanged);
@@ -1528,6 +1733,11 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       if (claimedAttendanceId) await releaseAttendanceHold();
       renderAttendanceNames('');
       updatePreview();
+      try {
+        await captureCarrierChange();
+      } catch (err) {
+        setPrintStatus(err.message || 'تعذر تحديث الناقل في Live Sheet', 'err');
+      }
     });
     $('customer_name').addEventListener('change', async () => {
       const id = $('customer_name').value;
@@ -1567,7 +1777,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       releaseAttendanceHold().finally(() => {
         setPrintMode('sheet');
         showView('workspace');
-        loadWorkspace().catch(() => {});
+        refreshWorkspace();
       });
     });
     $('brandHome').addEventListener('click', (e) => {
@@ -1575,31 +1785,55 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       releaseAttendanceHold().finally(() => {
         setPrintMode('sheet');
         showView('workspace');
+        refreshWorkspace();
       });
     });
     $('availableVinSearch').addEventListener('input', filterFleet);
-    if ($('fleet-fold-all')) {
-      $('fleet-fold-all').addEventListener('click', () => {
-        expandedTypes.clear();
+    $('availableFleet').addEventListener('click', (e) => {
+      const fold = e.target.closest('[data-fold-type]');
+      if (fold) {
+        if (String($('availableVinSearch').value || '').trim()) return;
+        const company = fold.dataset.foldType;
+        if (collapsedCarriers.has(company)) collapsedCarriers.delete(company);
+        else collapsedCarriers.add(company);
         filterFleet();
+        return;
+      }
+      const card = e.target.closest('.fleet-card');
+      if (card) openDetail(card.dataset.vin).catch((err) => alert(err.message));
+    });
+    $('fleet-fold-all').addEventListener('click', () => {
+      $('availableFleet').querySelectorAll('.fleet-company-group').forEach((g) => {
+        if (g.dataset.type) collapsedCarriers.add(g.dataset.type);
       });
-    }
-    if ($('fleet-open-all')) {
-      $('fleet-open-all').addEventListener('click', () => {
-        $('availableFleet').querySelectorAll('.fleet-company-group').forEach((g) => {
-          if (g.dataset.type) expandedTypes.add(g.dataset.type);
-        });
-        filterFleet();
-      });
-    }
-    $('btnMissingVin').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
-    if ($('btnUnassignedVin')) {
-      $('btnUnassignedVin').addEventListener('click', () => openUnassignedDetail().catch((e) => alert(e.message)));
-    }
+      filterFleet();
+    });
+    $('fleet-open-all').addEventListener('click', () => {
+      collapsedCarriers.clear();
+      filterFleet();
+    });
+    $('tabFleet').addEventListener('click', () => setViewTab('fleet'));
+    $('tabLiveSheet').addEventListener('click', () => setViewTab('live'));
+    $('liveSheetSearch').addEventListener('input', filterLiveSheet);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && poll) refreshWorkspace();
+    });
+    const missing = () => {
+      const go = () => openMissingDetail().catch((e) => alert(e.message));
+      if (!rows.length) loadWorkspace().then(go).catch((e) => alert(e.message));
+      else go();
+    };
+    $('btnMissingVin').addEventListener('click', missing);
+    $('btnMissingVinEmpty').addEventListener('click', missing);
+    $('btnDisplayInternal').addEventListener('click', () => openDisplayDetail().catch((e) => alert(e.message)));
+    $('vinModalManual').addEventListener('click', () => {
+      closeVinModal();
+      openManualDetail().catch((e) => alert(e.message));
+    });
     document.querySelectorAll('#vinSrcTabs [data-vin-src]').forEach((b) => {
       b.addEventListener('click', () => setVinSource(b.dataset.vinSrc));
     });
-    $('btnMissingVinEmpty').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
+    $('vinModalGrid').addEventListener('click', onVinCardClick);
     $('btnWarehouse').addEventListener('click', () => {
       if (!rows.length) loadWorkspace().then(openWarehouseSearch).catch((e) => alert(e.message));
       else openWarehouseSearch();

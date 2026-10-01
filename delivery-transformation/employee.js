@@ -236,6 +236,17 @@
     return esc(v || '—');
   }
 
+  /** Coordinator printed with another company than the الناقل Hanouf / Rasha set — "from ← to" under the cell. */
+  function carrierChangeNote(ops) {
+    const from = String((ops && ops.carrierChangedFrom) || '').trim();
+    if (!from) return '';
+    const to = String((ops && ops.carrier) || '').trim();
+    const by = String((ops && ops.carrierChangedBy) || '').trim();
+    const at = String((ops && ops.carrierChangedAt) || '').replace('T', ' ').slice(0, 16);
+    const tip = ['غيّره المنسق', by, at].filter(Boolean).join(' · ');
+    return `<div class="carrier-changed" dir="rtl" title="${esc(tip)}">تغيّر من ${esc(from)} ← ${esc(to || '—')}</div>`;
+  }
+
   function readOnlyValue(type, value) {
     if (type === 'status') return `<span class="cell-status">${statusBadge(value)}</span>`;
     if (type === 'yn') return ynBadge(value);
@@ -1243,7 +1254,7 @@
       { key: 'ins', label: 'Insurance', html: (r) => cell(r, 'insuranceOps', 'yn') },
       { key: 'reg', label: 'إصدار الاستمارة', html: (r) => cell(r, 'registrationIssueDate', 'date') },
       { key: 'city', label: 'مدينة الترحيل', html: (r) => cell(r, 'transferCity', 'city') },
-      { key: 'carrier', label: 'الناقل', html: (r) => cell(r, 'carrier', 'carrier') },
+      { key: 'carrier', label: 'الناقل', html: (r) => cell(r, 'carrier', 'carrier') + carrierChangeNote(r.ops) },
       { key: 'notes', label: 'ملاحظات', html: (r) => cell(r, 'notes', 'notes') },
       { key: 'updated', label: 'Updated', html: (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—') },
       { key: 'by', label: 'By', html: (r) => esc(na(r.ops.updatedBy)) },
@@ -1700,7 +1711,7 @@
       ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
       ['الناقل', (r) => (canAssignCarrier()
         ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)
-        : readOnlyValue('carrier', r.ops.carrier))],
+        : readOnlyValue('carrier', r.ops.carrier)) + carrierChangeNote(r.ops)],
       ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
       ['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`],
     ];
@@ -1917,6 +1928,7 @@
           ${canAssignCarrier()
             ? sel('carrier', 'الناقل', (state.meta && state.meta.carriers) || [], v.ops.carrier, '— الناقل —')
             : ro('الناقل', v.ops.carrier)}
+          ${carrierChangeNote(v.ops)}
           ${readOnly
             ? `<div class="field"><label>ملاحظات</label><textarea readonly>${esc(v.ops.notes || '')}</textarea></div>`
             : `<div class="field"><label>ملاحظات</label><textarea data-ops="notes" rows="3">${esc(v.ops.notes || '')}</textarea></div>`}

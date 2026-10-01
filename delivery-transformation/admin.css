@@ -1822,3 +1822,37 @@ body.vsnd-screen .vsnd-total-btn {
 }
 .inv-hbar-nums .in { color: #15803d; }
 .inv-hbar-nums .out { color: #dc2626; }
+
+/* الناقل panel · everything captured per company */
+.cs-totals .inv-total:nth-child(3) strong { color: #c2410c; }
+.cs-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 8px; font-size: .62rem; font-weight: 700; color: #64748b; }
+.cs-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.cs-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.cs-legend b { color: #0b2a44; font-variant-numeric: tabular-nums; }
+.cs-track { display: flex; gap: 1px; }
+.cs-track .cs-seg { border-radius: 0; }
+.cs-track .cs-seg:first-child { border-radius: 999px 0 0 999px; }
+.cs-track .cs-seg:last-child { border-radius: 0 999px 999px 0; }
+.cs-track .cs-seg:only-child { border-radius: 999px; }
+.cs-seg--waiting { background: #60a5fa; }
+.cs-seg--printed { background: #16a34a; }
+.cs-seg--display { background: #a855f7; }
+.cs-seg--internal { background: #64748b; }
+.cs-row .vsnd-hbar-lbl { display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; }
+.cs-chg { font-style: normal; font-size: .56rem; font-weight: 800; padding: 0 5px; border-radius: 999px; }
+.cs-chg--in { background: #ffedd5; color: #c2410c; }
+.cs-chg--out { background: #f1f5f9; color: #64748b; }
+.cs-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.cs-chip {
+  border: 1px solid #dbe3ee; background: #fff; color: #334155; border-radius: 999px;
+  padding: 5px 12px; font: inherit; font-size: .74rem; font-weight: 700; cursor: pointer;
+}
+.cs-chip b { font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
+.cs-chip.is-on { background: #0b2a44; border-color: #0b2a44; color: #fff; }
+.cs-status { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .68rem; font-weight: 800; }
+.cs-status--waiting { background: #dbeafe; color: #1d4ed8; }
+.cs-status--printed { background: #dcfce7; color: #15803d; }
+.cs-status--display { background: #f3e8ff; color: #7e22ce; }
+.cs-status--internal { background: #e2e8f0; color: #334155; }
+.cs-status--changed_out { background: #ffedd5; color: #c2410c; }
+.cs-chg-note { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; font-size: .68rem; font-weight: 800; white-space: nowrap; }
