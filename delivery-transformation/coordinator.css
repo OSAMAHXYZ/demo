@@ -224,6 +224,49 @@ body.warehouse-form-mode .hero h1 { color: #1d4ed8; }
   color: #fecdd3;
 }
 .btn-missing-vin--empty { margin-top: 12px; }
+.btn-unassigned-vin {
+  width: 100%;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.14);
+  color: #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.btn-unassigned-vin:hover { background: rgba(37, 99, 235, 0.26); border-color: #60a5fa; color: #fff; }
+.vin-src-tabs {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px 18px 0;
+}
+.vin-src-tab {
+  border: 1px solid rgba(255,255,255,.16); background: #0f172a; color: #cbd5e1;
+  border-radius: 999px; padding: 6px 14px; font: inherit; font-size: .78rem; font-weight: 800; cursor: pointer;
+}
+.vin-src-tab.is-active { background: #2563eb; border-color: #60a5fa; color: #fff; }
+.vin-src-meta { font-size: .72rem; color: #94a3b8; margin-inline-start: auto; }
+.vin-modal-note {
+  margin: 10px 18px 0; padding: 8px 12px; border-radius: 10px;
+  background: rgba(235, 10, 30, 0.16); border: 1px solid rgba(251, 113, 133, 0.6);
+  color: #fecdd3; font-size: .8rem; font-weight: 700;
+}
+.vin-card .vin-src-badge {
+  display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 999px;
+  font-size: .64rem; font-weight: 800;
+}
+.vin-src-badge--live { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+.vin-src-badge--sales { background: rgba(251, 191, 36, 0.16); color: #fde68a; }
+.vin-card .vin-carrier { font-size: .7rem; font-weight: 800; color: #93c5fd; margin-top: 4px; }
+.vin-card--clash { opacity: .5; border-color: rgba(251, 113, 133, 0.5); }
+.company-lock-hint {
+  margin: 6px 0 0; padding: 6px 10px; border-radius: 8px;
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a;
+  font-size: .78rem; font-weight: 700;
+}
+.company-lock-hint.is-missing { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+#company_rep.is-locked { background: #f1f5f9; color: #0f172a; font-weight: 800; cursor: not-allowed; opacity: 1; }
 .attach-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .attach-opt {
   display: flex; align-items: center; justify-content: center; gap: 8px;

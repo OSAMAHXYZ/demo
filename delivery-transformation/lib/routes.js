@@ -82,6 +82,14 @@ function canInventory(sessionUser) {
   return !!(rec && rec.canInventory);
 }
 
+/** Only Hanouf and Rasha assign الناقل (carrier company) on the Live Sheet. */
+const CARRIER_ASSIGNERS = new Set(['hanouf', 'rasha']);
+
+function canAssignCarrier(sessionUser) {
+  if (!sessionUser) return false;
+  return CARRIER_ASSIGNERS.has(String(sessionUser.userId || sessionUser.id || '').trim().toLowerCase());
+}
+
 function publicUserFlags(sessionUser) {
   return {
     canUploadSalesRaw: canUploadSalesRaw(sessionUser),
@@ -89,6 +97,7 @@ function publicUserFlags(sessionUser) {
     canManageAppointments: canManageAppointments(sessionUser),
     canCoordinate: canCoordinate(sessionUser),
     canInventory: canInventory(sessionUser),
+    canAssignCarrier: canAssignCarrier(sessionUser),
   };
 }
 
@@ -150,9 +159,12 @@ function publicVehicle(v, viewer) {
   if (!v) return null;
   const role = viewer && viewer.role;
   const raw = { ...(v.raw || {}) };
-  // Coordinator sees VIN details + transfer city (for print branch). No other employee ops.
+  // Coordinator sees VIN details + transfer city (print branch) + assigned الناقل (memo company). No other employee ops.
   const ops = role === 'coordinator'
-    ? { transferCity: String((v.ops && v.ops.transferCity) || '').trim() }
+    ? {
+      transferCity: String((v.ops && v.ops.transferCity) || '').trim(),
+      carrier: String((v.ops && v.ops.carrier) || '').trim(),
+    }
     : { ...(v.ops || {}) };
   return {
     vin: v.vin,
@@ -303,6 +315,10 @@ function createDeliveryTransformationRouter(opts = {}) {
     return String((req.query && req.query.city) || (req.body && req.body.city) || '').trim();
   }
 
+  function requestAssignedCompany(req) {
+    return String((req.query && req.query.company) || (req.body && req.body.company) || '').trim();
+  }
+
   function printedCarsByCompanyForCity(city) {
     const want = normalizeCityKey(city);
     const counts = new Map();
@@ -319,7 +335,8 @@ function createDeliveryTransformationRouter(opts = {}) {
     return counts;
   }
 
-  function attendanceAvailablePayload(viewerId, city) {
+  /** assignedCompany: الناقل set by Hanouf / Rasha on the VIN — always offered, even outside the city rotation. */
+  function attendanceAvailablePayload(viewerId, city, assignedCompany = '') {
     const groups = new Map();
     attendanceRows().forEach((entry) => {
       if (!attendanceOpen(entry, viewerId)) return;
@@ -350,6 +367,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         });
         list = list.filter((g) => {
           if (g.people.some((p) => p.held)) return true;
+          if (assignedCompany && g.company === assignedCompany) return g.available > 0;
           return g.available > 0 && (counts.get(g.company) || 0) === min;
         });
       }
@@ -370,7 +388,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     if (!canCoordinate(req.dtUser)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    res.json({ companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
+    res.json({ companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req), requestAssignedCompany(req)) });
   });
 
   router.post('/attendance/hold', auth, (req, res) => {
@@ -395,7 +413,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({
       ok: true,
       entry: { id: entry.id, name: entry.name, company: entry.company, phone: entry.phone },
-      companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)),
+      companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req), requestAssignedCompany(req)),
     });
   });
 
@@ -405,7 +423,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     }
     releaseHoldsFor(req.dtUser.userId, '');
     store.save();
-    return res.json({ ok: true, companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req)) });
+    return res.json({ ok: true, companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req), requestAssignedCompany(req)) });
   });
 
   router.get('/meta', (req, res) => {
@@ -571,6 +589,17 @@ function createDeliveryTransformationRouter(opts = {}) {
     const printCity = String((req.body && req.body.city) || '').trim();
     const attendanceId = String((req.body && req.body.attendanceId) || '').trim();
     const invoiceNumber = String((req.body && req.body.invoiceNumber) || '').trim();
+    if (kind !== 'warehouse') {
+      const clash = raw.map((item) => store.getVehicle(item)).find((v) => {
+        const assigned = String((v && v.ops && v.ops.carrier) || '').trim();
+        return assigned && assigned !== printCompany;
+      });
+      if (clash) {
+        return res.status(400).json({
+          error: `${clash.vin}: الناقل المعيّن ${clash.ops.carrier} — يجب أن تكون شركة المذكرة نفس الناقل`,
+        });
+      }
+    }
     const marked = [];
     raw.forEach((item) => {
       const v = store.getVehicle(item);
@@ -639,6 +668,26 @@ function createDeliveryTransformationRouter(opts = {}) {
     }
     if (marked.length || attendanceId) store.save();
     return res.json({ ok: true, vins: marked });
+  });
+
+  /** Coordinator "If VIN not assigned": Sales Raw VINs (Proforma filled · not invoiced) not on the Live Sheet yet. */
+  router.get('/sales-raw-vins', auth, (req, res) => {
+    if (!canCoordinate(req.dtUser)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const rows = Object.values(pendingMap())
+      .filter((p) => p && p.vin && !store.getVehicle(p.vin))
+      .map((p) => ({ vin: p.vin, raw: { ...emptyRaw(), ...(p.raw || {}), vin: p.vin }, uploadedAt: p.uploadedAt || '' }))
+      .sort((a, b) => String(b.raw.proformaDate || '').localeCompare(String(a.raw.proformaDate || ''))
+        || a.vin.localeCompare(b.vin));
+    const last = (store.data.meta.imports || {}).lastSalesRaw || null;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      at: new Date().toISOString(),
+      total: rows.length,
+      lastSalesRaw: last ? { at: last.at, by: last.by, filename: last.filename } : null,
+      rows,
+    });
   });
 
   router.get('/inventory', auth, (req, res) => {
@@ -1693,6 +1742,16 @@ function createDeliveryTransformationRouter(opts = {}) {
 
     const body = req.body || {};
     const changes = [];
+    let nextCarrier = null;
+    if (Object.prototype.hasOwnProperty.call(body, 'carrier')) {
+      if (!canAssignCarrier(req.dtUser)) {
+        return res.status(403).json({ error: 'Only Hanouf and Rasha can assign الناقل' });
+      }
+      nextCarrier = String(body.carrier || '').trim();
+      if (nextCarrier && !allCarriers().includes(nextCarrier)) {
+        return res.status(400).json({ error: `Unknown الناقل: ${nextCarrier}` });
+      }
+    }
 
     const setOps = (field, next) => {
       const oldVal = v.ops[field] == null ? '' : String(v.ops[field]);
@@ -1721,6 +1780,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     ]) {
       if (Object.prototype.hasOwnProperty.call(body, f)) setOps(f, body[f]);
     }
+    if (nextCarrier !== null) setOps('carrier', nextCarrier);
     if (Object.prototype.hasOwnProperty.call(body, 'guestCenter')) {
       const s = String(body.guestCenter || '').trim();
       if (s && !YES_NO.includes(s)) {

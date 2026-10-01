@@ -19,6 +19,11 @@
     selInfo: {},
     rowIndex: {},
     liveOnlySelected: false,
+    liveCols: [],
+    liveColFilters: {},
+    liveSel: null,
+    liveCopyFlash: false,
+    liveCopyTimer: null,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -44,6 +49,11 @@
 
   function canEditAnyVin() {
     return isManager() || !!(state.user && state.user.canEditAnyVin);
+  }
+
+  /** Hanouf + Rasha only: assign الناقل (carrier company). */
+  function canAssignCarrier() {
+    return !!(state.user && state.user.canAssignCarrier);
   }
 
   function isRuba() {
@@ -1180,7 +1190,7 @@
     const meta = $('#live-meta-text');
     if (meta) {
       const monthNote = f.month ? ` · ${f.month}` : ' · all months';
-      meta.textContent = `${data.total || 0} VINs${monthNote} · live · last sync ${new Date(data.at || Date.now()).toLocaleTimeString()}${changed && silent ? ' · updated' : ''}`;
+      meta.textContent = `${data.total || 0} VINs${monthNote} · live · last sync ${new Date(data.at || Date.now()).toLocaleTimeString()}${changed && silent ? ' · updated' : ''}${state.liveCfNote || ''}`;
     }
     const dot = $('#live-dot');
     if (dot) {
@@ -1196,7 +1206,7 @@
     if (silent && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) return;
 
     ensureDatalists();
-    const cell = (r, field, type) => (r.canEdit && field !== 'carrier'
+    const cell = (r, field, type) => (r.canEdit && (field !== 'carrier' || canAssignCarrier())
       ? editableControl(r.vin, field, type, r.ops[field])
       : readOnlyValue(type, r.ops[field]));
 
@@ -1240,30 +1250,422 @@
     ];
 
     const shown = state.liveOnlySelected ? rows.filter((r) => state.selected.has(r.vin)) : rows;
-    table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr></thead>
+    const keepCf = active && active.classList && active.classList.contains('live-cf') && table.contains(active)
+      ? { key: active.dataset.cf, start: active.selectionStart, end: active.selectionEnd }
+      : null;
+    state.liveCols = cols;
+    const cf = state.liveColFilters;
+    const cfOn = activeLiveColRules().length;
+    const frow = `<tr class="live-frow">${cols.map((c) => (c.key === 'num'
+      ? `<th class="col-num">${cfOn ? '<button type="button" class="live-cf-x" data-cf-clear title="Clear column filters">✕</button>' : ''}</th>`
+      : `<th class="col-${c.key}${cf[c.key] ? ' is-on' : ''}"><input type="search" class="live-cf" data-cf="${esc(c.key)}" value="${esc(cf[c.key] || '')}" list="live-cf-list" placeholder="Filter…" autocomplete="off" spellcheck="false" title="${esc(`${colPlainLabel(c)}: ${LIVE_CF_HINT}`)}" aria-label="Filter ${esc(colPlainLabel(c))}" /></th>`)).join('')}</tr>`;
+    table.innerHTML = `<thead><tr class="live-hrow">${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr>${frow}</thead>
       <tbody>${shown.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${isGuestYes(r) ? ' row-guest-exp' : ''}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
         `<td class="col-${c.key}">${c.html(r, i)}</td>`).join('')}</tr>`).join('')
         || `<tr><td colspan="${cols.length}">${state.liveOnlySelected ? 'None of the selected VINs match these filters.' : 'No VINs on the Live Sheet yet.'}</td></tr>`}</tbody>`;
     $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
     bindEditableCells(table);
     bindSelChecks(table, shown);
+    afterLiveRender(keepCf);
+  }
+
+  // ——— Live Sheet · column filters (every user) ———
+  const LIVE_CF_HINT = 'text = contains · =text exact · !text excludes · empty / !empty';
+
+  function colPlainLabel(c) {
+    return c.key === 'num' ? '#' : c.label;
+  }
+
+  function liveCfStoreKey() {
+    return `dt_live_colfilters_${state.user ? state.user.id : 'anon'}`;
+  }
+
+  function loadLiveColFilters() {
+    try {
+      state.liveColFilters = JSON.parse(localStorage.getItem(liveCfStoreKey()) || '{}') || {};
+    } catch {
+      state.liveColFilters = {};
+    }
+  }
+
+  function saveLiveColFilters() {
+    const clean = {};
+    Object.entries(state.liveColFilters).forEach(([k, v]) => { if (String(v || '').trim()) clean[k] = v; });
+    state.liveColFilters = clean;
+    try {
+      if (Object.keys(clean).length) localStorage.setItem(liveCfStoreKey(), JSON.stringify(clean));
+      else localStorage.removeItem(liveCfStoreKey());
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  function activeLiveColRules() {
+    return Object.entries(state.liveColFilters || {})
+      .map(([key, v]) => ({ key, rule: String(v || '').trim().toLowerCase() }))
+      .filter((x) => x.rule);
+  }
+
+  function liveCellText(td) {
+    if (!td) return '';
+    const ctl = td.querySelector('select.cell-edit, input.cell-edit, textarea.cell-edit');
+    let s;
+    if (ctl) s = ctl.value;
+    else if (td.classList.contains('col-num')) s = (td.querySelector('.sel-cell span') || td).textContent;
+    else s = td.textContent;
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s === 'N/A' || s === '—' || s === '-' ? '' : s;
+  }
+
+  function matchLiveRule(text, rule) {
+    const t = String(text || '').toLowerCase();
+    if (rule === 'empty' || rule === 'فارغ') return !t;
+    if (rule === '!empty' || rule === '!فارغ') return !!t;
+    if (rule.startsWith('=')) return t === rule.slice(1).trim();
+    if (rule.startsWith('!')) {
+      const x = rule.slice(1).trim();
+      return !x || !t.includes(x);
+    }
+    return t.includes(rule);
+  }
+
+  function liveDataRows() {
+    const table = $('#live-table');
+    const body = table && table.tBodies[0];
+    return body ? [...body.rows].filter((tr) => tr.dataset.vin) : [];
+  }
+
+  function liveVisibleRows() {
+    return liveDataRows().filter((tr) => tr.style.display !== 'none');
+  }
+
+  function liveColIndex(key) {
+    return (state.liveCols || []).findIndex((c) => c.key === key);
+  }
+
+  function applyLiveColFilters() {
+    const rules = activeLiveColRules()
+      .map((r) => ({ ...r, idx: liveColIndex(r.key) }))
+      .filter((r) => r.idx >= 0);
+    let visible = 0;
+    const all = liveDataRows();
+    all.forEach((tr) => {
+      const ok = rules.every((r) => matchLiveRule(liveCellText(tr.cells[r.idx]), r.rule));
+      tr.style.display = ok ? '' : 'none';
+      if (ok) visible += 1;
+    });
+    const table = $('#live-table');
+    if (table) {
+      $$('thead tr.live-frow th', table).forEach((th, i) => {
+        const col = state.liveCols && state.liveCols[i];
+        if (col && col.key !== 'num') th.classList.toggle('is-on', !!String(state.liveColFilters[col.key] || '').trim());
+      });
+      const corner = $('thead tr.live-frow th.col-num', table);
+      if (corner) {
+        corner.innerHTML = rules.length
+          ? '<button type="button" class="live-cf-x" data-cf-clear title="Clear column filters">✕</button>'
+          : '';
+      }
+    }
+    const clearBtn = $('#live-cf-clear');
+    if (clearBtn) {
+      clearBtn.hidden = !rules.length;
+      clearBtn.textContent = rules.length ? `Clear column filters (${rules.length})` : 'Clear column filters';
+    }
+    state.liveCfNote = rules.length ? ` · ${visible} shown by column filters` : '';
+    const meta = $('#live-meta-text');
+    if (meta) meta.textContent = meta.textContent.replace(/ · \d+ shown by column filters$/, '') + state.liveCfNote;
+    const sa = table && $('.sel-all', table);
+    if (sa) {
+      const vis = liveVisibleRows();
+      sa.checked = vis.length > 0 && vis.every((tr) => state.selected.has(tr.dataset.vin));
+    }
+  }
+
+  function clearLiveColFilters() {
+    state.liveColFilters = {};
+    saveLiveColFilters();
+    $$('#live-table .live-cf').forEach((el) => { el.value = ''; });
+    applyLiveColFilters();
+    paintLiveSel();
+  }
+
+  function fillLiveCfList(key) {
+    const list = $('#live-cf-list');
+    const idx = liveColIndex(key);
+    if (!list || idx < 0) return;
+    const seen = new Map();
+    liveDataRows().forEach((tr) => {
+      const t = liveCellText(tr.cells[idx]);
+      if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+    });
+    list.innerHTML = [...seen.values()].sort((a, b) => a.localeCompare(b)).slice(0, 200)
+      .map((v) => `<option value="${esc(v)}"></option>`).join('');
+  }
+
+  // ——— Live Sheet · cell selection + copy as table (every user) ———
+  function liveSelBounds() {
+    const s = state.liveSel;
+    if (!s) return null;
+    const rows = liveVisibleRows();
+    const r1 = rows.findIndex((tr) => tr.dataset.vin === s.anchor.vin);
+    const r2 = rows.findIndex((tr) => tr.dataset.vin === s.focus.vin);
+    const c1 = liveColIndex(s.anchor.key);
+    const c2 = liveColIndex(s.focus.key);
+    if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) return null;
+    return {
+      rows: rows.slice(Math.min(r1, r2), Math.max(r1, r2) + 1),
+      c1: Math.min(c1, c2),
+      c2: Math.max(c1, c2),
+      focusTr: rows[r2],
+      focusC: c2,
+    };
+  }
+
+  function paintLiveSel() {
+    const table = $('#live-table');
+    if (!table) return;
+    $$('td.is-range, td.is-sel', table).forEach((td) => td.classList.remove('is-range', 'is-sel'));
+    $$('thead th.is-colsel', table).forEach((th) => th.classList.remove('is-colsel'));
+    const b = liveSelBounds();
+    const info = $('#live-copy-info');
+    const copyBtn = $('#live-copy-btn');
+    const valBtn = $('#live-copy-values');
+    if (!b) {
+      if (info && !state.liveCopyFlash) info.textContent = 'Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers';
+      if (copyBtn) copyBtn.disabled = true;
+      if (valBtn) valBtn.disabled = true;
+      return;
+    }
+    const multi = b.rows.length > 1 || b.c1 !== b.c2;
+    b.rows.forEach((tr) => {
+      for (let c = b.c1; c <= b.c2; c += 1) {
+        const td = tr.cells[c];
+        if (td && multi) td.classList.add('is-range');
+      }
+    });
+    const ftd = b.focusTr.cells[b.focusC];
+    if (ftd) ftd.classList.add('is-sel');
+    const head = table.tHead && table.tHead.rows[0];
+    if (head) for (let c = b.c1; c <= b.c2; c += 1) if (head.cells[c]) head.cells[c].classList.add('is-colsel');
+    const n = b.rows.length * (b.c2 - b.c1 + 1);
+    if (info && !state.liveCopyFlash) {
+      info.textContent = multi
+        ? `${b.rows.length} row(s) × ${b.c2 - b.c1 + 1} column(s) · ${n} cells · Ctrl+C copies as a table with headers`
+        : `${colPlainLabel(state.liveCols[b.focusC])}: ${liveCellText(ftd) || '(empty)'} · Ctrl+C to copy`;
+    }
+    if (copyBtn) {
+      copyBtn.disabled = false;
+      copyBtn.textContent = multi ? `Copy ${n} cells` : 'Copy';
+    }
+    if (valBtn) valBtn.disabled = !multi;
+  }
+
+  function setLiveSel(td, extend) {
+    const tr = td && td.parentElement;
+    const col = state.liveCols && state.liveCols[td.cellIndex];
+    if (!tr || !tr.dataset.vin || !col) return;
+    const point = { vin: tr.dataset.vin, key: col.key };
+    if (extend && state.liveSel) state.liveSel = { anchor: state.liveSel.anchor, focus: point };
+    else state.liveSel = { anchor: point, focus: point };
+    paintLiveSel();
+  }
+
+  function selectLiveColumn(idx, extend) {
+    const rows = liveVisibleRows();
+    const col = state.liveCols && state.liveCols[idx];
+    if (!rows.length || !col) return;
+    const startKey = extend && state.liveSel ? state.liveSel.anchor.key : col.key;
+    state.liveSel = {
+      anchor: { vin: rows[0].dataset.vin, key: startKey },
+      focus: { vin: rows[rows.length - 1].dataset.vin, key: col.key },
+    };
+    paintLiveSel();
+  }
+
+  function buildLiveCopy(withHeaders) {
+    const b = liveSelBounds();
+    if (!b) return null;
+    const cols = state.liveCols.slice(b.c1, b.c2 + 1);
+    const grid = b.rows.map((tr) => cols.map((_c, i) => liveCellText(tr.cells[b.c1 + i])));
+    const single = grid.length === 1 && cols.length === 1;
+    const heads = withHeaders && !single ? cols.map(colPlainLabel) : null;
+    const tsvRows = heads ? [heads, ...grid] : grid;
+    const text = tsvRows.map((r) => r.map((v) => String(v).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n');
+    const asText = (v) => (/^0\d|^\d{11,}$/.test(v) ? ' style="mso-number-format:\'\\@\';border:1px solid #cbd5e1;padding:4px 8px"' : ' style="border:1px solid #cbd5e1;padding:4px 8px"');
+    const thStyle = 'background:#1e3a5f;color:#ffffff;font-weight:bold;border:1px solid #94a3b8;padding:5px 8px;text-align:left';
+    const html = `<table border="1" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt">${
+      heads ? `<thead><tr>${heads.map((h) => `<th style="${thStyle}">${esc(h)}</th>`).join('')}</tr></thead>` : ''
+    }<tbody>${grid.map((r) => `<tr>${r.map((v) => `<td dir="auto"${asText(v)}>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    return { text, html, cells: grid.length * cols.length, rows: grid.length, cols: cols.length, single };
+  }
+
+  let livePendingCopy = null;
+  document.addEventListener('copy', (e) => {
+    if (!livePendingCopy) return;
+    e.clipboardData.setData('text/plain', livePendingCopy.text);
+    if (!livePendingCopy.single) e.clipboardData.setData('text/html', livePendingCopy.html);
+    e.preventDefault();
+  });
+
+  function copyLiveSelection(withHeaders = true) {
+    const payload = buildLiveCopy(withHeaders);
+    if (!payload) return false;
+    livePendingCopy = payload;
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    livePendingCopy = null;
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload.text).catch(() => {});
+      ok = true;
+    }
+    const info = $('#live-copy-info');
+    if (info) {
+      state.liveCopyFlash = true;
+      info.textContent = payload.single
+        ? 'Copied ✓'
+        : `Copied ✓ ${payload.rows} row(s) × ${payload.cols} column(s)${withHeaders ? ' as a table with headers' : ' · values only'} — paste into Excel, email or WhatsApp Web`;
+      info.classList.add('is-flash');
+      clearTimeout(state.liveCopyTimer);
+      state.liveCopyTimer = setTimeout(() => {
+        state.liveCopyFlash = false;
+        info.classList.remove('is-flash');
+        paintLiveSel();
+      }, 2600);
+    }
+    return ok;
+  }
+
+  function afterLiveRender(keepCf) {
+    const table = $('#live-table');
+    if (!table) return;
+    const head = table.tHead && table.tHead.rows[0];
+    if (head) table.style.setProperty('--live-ftop', `${head.offsetHeight || 30}px`);
+    applyLiveColFilters();
+    paintLiveSel();
+    if (keepCf) {
+      const el = $(`.live-cf[data-cf="${CSS.escape(keepCf.key)}"]`, table);
+      if (el) {
+        el.focus({ preventScroll: true });
+        try { el.setSelectionRange(keepCf.start, keepCf.end); } catch { /* search inputs */ }
+      }
+    }
+  }
+
+  function isTypingTarget(el) {
+    if (!el) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'select' || tag === 'textarea' || el.isContentEditable;
+  }
+
+  function bindLiveSheetGrid() {
+    const table = $('#live-table');
+    if (!table || table.dataset.gridBound) return;
+    table.dataset.gridBound = '1';
+    let dragging = false;
+    let dragMoved = false;
+    let cfTimer = null;
+
+    table.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      const th = e.target.closest('thead tr.live-hrow th');
+      if (th && !e.target.closest('input, label')) {
+        e.preventDefault();
+        selectLiveColumn(th.cellIndex, e.shiftKey);
+        return;
+      }
+      const td = e.target.closest('tbody td');
+      if (!td || !td.parentElement.dataset.vin) return;
+      if (e.target.closest('input, select, textarea, label')) return;
+      const isLink = !!e.target.closest('a, button');
+      if (!isLink) {
+        e.preventDefault();
+        if (isTypingTarget(document.activeElement)) document.activeElement.blur();
+      }
+      setLiveSel(td, e.shiftKey);
+      dragging = true;
+      dragMoved = false;
+    });
+    table.addEventListener('mouseover', (e) => {
+      if (!dragging) return;
+      const td = e.target.closest('tbody td');
+      if (!td || !td.parentElement.dataset.vin) return;
+      const col = state.liveCols && state.liveCols[td.cellIndex];
+      const s = state.liveSel;
+      if (!col || !s) return;
+      if (s.focus.vin === td.parentElement.dataset.vin && s.focus.key === col.key) return;
+      dragMoved = true;
+      setLiveSel(td, true);
+    });
+    document.addEventListener('mouseup', () => { dragging = false; });
+    table.addEventListener('click', (e) => {
+      if (dragMoved && e.target.closest('a, button')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      dragMoved = false;
+      const clr = e.target.closest('[data-cf-clear]');
+      if (clr) clearLiveColFilters();
+    }, true);
+
+    table.addEventListener('input', (e) => {
+      const el = e.target.closest('.live-cf');
+      if (!el) return;
+      state.liveColFilters[el.dataset.cf] = el.value;
+      saveLiveColFilters();
+      clearTimeout(cfTimer);
+      cfTimer = setTimeout(() => { applyLiveColFilters(); paintLiveSel(); }, 160);
+    });
+    table.addEventListener('focusin', (e) => {
+      const el = e.target.closest('.live-cf');
+      if (el) fillLiveCfList(el.dataset.cf);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (state.view !== 'live' || !state.liveSel) return;
+      const active = document.activeElement;
+      if (isTypingTarget(active)) return;
+      if (document.querySelector('#vin-drawer-back.open')) return;
+      const k = String(e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'c') {
+        e.preventDefault();
+        copyLiveSelection(true);
+      } else if (k === 'escape') {
+        state.liveSel = null;
+        paintLiveSel();
+      }
+    });
+
+    const copyBtn = $('#live-copy-btn');
+    if (copyBtn) copyBtn.addEventListener('click', () => copyLiveSelection(true));
+    const valBtn = $('#live-copy-values');
+    if (valBtn) valBtn.addEventListener('click', () => copyLiveSelection(false));
+    const clearBtn = $('#live-cf-clear');
+    if (clearBtn) clearBtn.addEventListener('click', clearLiveColFilters);
   }
 
   function bindSelChecks(table, rows) {
     $$('.sel-check', table).forEach((cb) => cb.addEventListener('change', () => setSelected(cb.dataset.vin, cb.checked)));
     const all = $('.sel-all', table);
     if (!all) return;
+    const visibleRows = () => rows.filter((r) => {
+      const tr = table.querySelector(`tbody tr[data-vin="${CSS.escape(r.vin)}"]`);
+      return !tr || tr.style.display !== 'none';
+    });
     all.checked = rows.length > 0 && rows.every((r) => state.selected.has(r.vin));
     all.addEventListener('change', () => {
-      rows.forEach((r) => {
+      const vis = visibleRows();
+      vis.forEach((r) => {
         if (all.checked) state.selected.add(r.vin);
         else state.selected.delete(r.vin);
       });
       rememberSelInfo(rows);
       saveSelection();
       $$('.sel-check', table).forEach((cb) => {
+        const tr = cb.closest('tr');
+        if (tr && tr.style.display === 'none') return;
         cb.checked = all.checked;
-        cb.closest('tr').classList.toggle('selected', all.checked);
+        tr.classList.toggle('selected', all.checked);
       });
       renderSelBars();
     });
@@ -1296,7 +1698,9 @@
       ['Insurance', (r) => editableControl(r.vin, 'insuranceOps', 'yn', r.ops.insuranceOps)],
       ['إصدار الاستمارة', (r) => editableControl(r.vin, 'registrationIssueDate', 'date', r.ops.registrationIssueDate)],
       ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
-      ['الناقل', (r) => readOnlyValue('carrier', r.ops.carrier)],
+      ['الناقل', (r) => (canAssignCarrier()
+        ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)
+        : readOnlyValue('carrier', r.ops.carrier))],
       ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
       ['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`],
     ];
@@ -1510,7 +1914,9 @@
             <input list="city-list" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="Search city…" />
             <datalist id="city-list">${cities.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
           </div>`}
-          ${ro('الناقل', v.ops.carrier)}
+          ${canAssignCarrier()
+            ? sel('carrier', 'الناقل', (state.meta && state.meta.carriers) || [], v.ops.carrier, '— الناقل —')
+            : ro('الناقل', v.ops.carrier)}
           ${readOnly
             ? `<div class="field"><label>ملاحظات</label><textarea readonly>${esc(v.ops.notes || '')}</textarea></div>`
             : `<div class="field"><label>ملاحظات</label><textarea data-ops="notes" rows="3">${esc(v.ops.notes || '')}</textarea></div>`}
@@ -1642,6 +2048,8 @@
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     loadSelection();
+    loadLiveColFilters();
+    bindLiveSheetGrid();
     loadDrafts();
     startGuestTick();
     if (canEditAnyVin()) {

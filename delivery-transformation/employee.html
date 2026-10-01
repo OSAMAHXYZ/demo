@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20260925month1" />
+  <link rel="stylesheet" href="employee.css?v=20260930cf1" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -149,6 +149,13 @@
             <p class="hint" id="live-edit-hint">You can edit your own VINs directly on this sheet · every change is saved automatically and kept after refresh or logout.</p>
             <p class="hint live-save-toast" id="live-save-toast" hidden></p>
             <div class="sel-bar" id="live-sel-bar"></div>
+            <div class="live-copy-bar" id="live-copy-bar">
+              <span class="live-copy-info" id="live-copy-info">Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers</span>
+              <button type="button" class="btn live-copy-btn" id="live-copy-btn" disabled>Copy</button>
+              <button type="button" class="btn live-copy-btn" id="live-copy-values" disabled title="Values only, no header row">Copy values</button>
+              <button type="button" class="btn live-copy-btn" id="live-cf-clear" hidden>Clear column filters</button>
+            </div>
+            <datalist id="live-cf-list"></datalist>
             <div class="table-wrap live-sheet-wrap">
               <table class="data live-sheet" id="live-table"></table>
             </div>
@@ -244,7 +251,7 @@
               Upload the <b>Delivery sheet</b> Excel. Only VINs whose <b>Proforma Date</b> is in
               <b id="upload-month">this month</b> are added or updated; every other row is skipped.
               <b>PIC</b> assigns the employee. Existing employee entries (status, dates…) are never overwritten.
-              الناقل is filled only after the coordinator prints the memo.
+              الناقل is assigned on the Live Sheet by Hanouf or Rasha only — the coordinator's memo uses that company.
             </p>
             <div class="raw-status-card">
               <div class="lbl">Last VIN upload</div>
@@ -302,6 +309,6 @@
   </div>
 
   <script src="shared.js?v=20260924scope1"></script>
-  <script src="employee.js?v=20260925month1"></script>
+  <script src="employee.js?v=20260930cf1"></script>
 </body>
 </html>

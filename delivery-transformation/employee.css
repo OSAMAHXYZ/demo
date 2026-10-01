@@ -2352,3 +2352,96 @@ table.live-sheet tr.row-guest-exp td.col-vin {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Live Sheet — copy bar, column filters, cell range selection */
+.live-copy-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 12px 0;
+  padding: 5px 10px;
+  border: 1px dashed #c7d2e0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+.live-copy-info {
+  flex: 1 1 260px;
+  font-size: 0.7rem;
+  color: #475569;
+  min-width: 0;
+}
+.live-copy-info.is-flash {
+  color: #15803d;
+  font-weight: 700;
+}
+.live-copy-btn {
+  padding: 4px 10px !important;
+  font-size: 0.7rem !important;
+}
+.live-copy-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+table.live-sheet thead tr.live-hrow th {
+  cursor: s-resize;
+  user-select: none;
+}
+table.live-sheet thead tr.live-hrow th.is-colsel {
+  background: #2563eb;
+}
+table.live-sheet thead tr.live-frow th {
+  top: var(--live-ftop, 30px);
+  padding: 3px 4px;
+  background: #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
+  z-index: 3;
+}
+table.live-sheet thead tr.live-frow th.col-num,
+table.live-sheet thead tr.live-frow th.col-employee,
+table.live-sheet thead tr.live-frow th.col-status,
+table.live-sheet thead tr.live-frow th.col-vin {
+  background: #d7dfea;
+  z-index: 6;
+}
+table.live-sheet thead tr.live-frow th.is-on {
+  background: #fde68a;
+}
+.live-cf {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 0.66rem;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+}
+.live-cf:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+  border-color: #2563eb;
+}
+.live-cf::placeholder { color: #94a3b8; }
+.live-cf-x {
+  border: 0;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 5px;
+  width: 22px;
+  height: 20px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  line-height: 1;
+}
+table.live-sheet tbody td {
+  cursor: cell;
+}
+table.live-sheet tbody td.is-range {
+  background-image: linear-gradient(rgba(37, 99, 235, 0.16), rgba(37, 99, 235, 0.16)) !important;
+}
+table.live-sheet tbody td.is-sel {
+  box-shadow: inset 0 0 0 2px #2563eb !important;
+}

@@ -21,6 +21,12 @@
   let companyPerf = null;
   let companyPerfDebug = [];
   let dtsCoState = { company: '', bucket: '', status: 'ALL', q: '' };
+  let vinSource = 'live';
+  let memoSource = 'live';
+  let salesRawRows = null;
+  let salesRawLoading = false;
+  let vinCarrier = {};
+  let lastLock = '';
   const fieldEls = {};
 
   function showView(name) {
@@ -546,20 +552,76 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     return `${company} — هناك ${available} متوفر`;
   }
 
+  function normVin(vin) {
+    return String(vin || '').trim().toUpperCase();
+  }
+
+  /** الناقل assigned on the Live Sheet (Hanouf / Rasha) for a VIN in the memo. */
+  function carrierOfVin(vin) {
+    const key = normVin(vin);
+    if (!key) return '';
+    if (Object.prototype.hasOwnProperty.call(vinCarrier, key)) return vinCarrier[key];
+    const r = rows.find((x) => normVin(x.vin) === key);
+    return String((r && r.ops && r.ops.carrier) || '').trim();
+  }
+
+  function lockedCompany(exceptRow) {
+    if (isWarehouse()) return '';
+    const vins = getSelectedVins(exceptRow);
+    for (let i = 0; i < vins.length; i += 1) {
+      const c = carrierOfVin(vins[i]);
+      if (c) return c;
+    }
+    return '';
+  }
+
+  function renderCompanyLockHint(lock, available) {
+    const hint = $('companyLockHint');
+    if (!hint) return;
+    if (!lock) {
+      hint.classList.add('hidden');
+      hint.textContent = '';
+      return;
+    }
+    hint.classList.remove('hidden');
+    hint.classList.toggle('is-missing', !available);
+    hint.textContent = available
+      ? `🔒 الناقل المعيّن على Live Sheet: ${lock} — لا يمكن تغييره`
+      : `🔒 الناقل المعيّن ${lock} غير متوفر في الحضور الآن — انتظر تسجيل حضور مندوب ${lock}`;
+  }
+
   function renderAttendanceSelects(keepNameId) {
     const companyEl = $('company_rep');
-    const nameEl = $('customer_name');
     const currentCompany = companyEl.value;
-    companyEl.innerHTML = '<option value="">— اختر من الحضور —</option>'
-      + attendanceCompanies.map((g) =>
-        `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`
-      ).join('');
-    if (currentCompany && attendanceCompanies.some((g) => g.company === currentCompany)) {
-      companyEl.value = currentCompany;
+    const lock = lockedCompany();
+    const list = lock ? attendanceCompanies.filter((g) => g.company === lock) : attendanceCompanies;
+    if (lock) {
+      companyEl.innerHTML = list.length
+        ? list.map((g) => `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`).join('')
+        : `<option value="">${esc(lock)} — غير متوفر في الحضور</option>`;
+      companyEl.value = list.length ? lock : '';
     } else {
-      companyEl.value = '';
+      companyEl.innerHTML = '<option value="">— اختر من الحضور —</option>'
+        + list.map((g) =>
+          `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}</option>`
+        ).join('');
+      companyEl.value = currentCompany && list.some((g) => g.company === currentCompany) ? currentCompany : '';
     }
+    companyEl.disabled = !!lock;
+    companyEl.classList.toggle('is-locked', !!lock);
+    renderCompanyLockHint(lock, list.length > 0);
     renderAttendanceNames(keepNameId);
+  }
+
+  /** Re-query attendance when the memo's assigned carrier changes. */
+  function syncCompanyLock() {
+    if (isWarehouse()) return;
+    const lock = lockedCompany();
+    if (lock === lastLock) return;
+    (async () => {
+      if (claimedAttendanceId) await releaseAttendanceHold();
+      await loadAttendanceOptions();
+    })().catch(() => {});
   }
 
   function renderAttendanceNames(keepNameId) {
@@ -585,7 +647,11 @@ Average: ${avg == null ? '—' : avg + ' days'}">
   async function loadAttendanceOptions(keepNameId) {
     if (isWarehouse()) return;
     lastAttendanceCity = attendanceCity();
-    const q = lastAttendanceCity ? `?city=${encodeURIComponent(lastAttendanceCity)}` : '';
+    lastLock = lockedCompany();
+    const qs = new URLSearchParams();
+    if (lastAttendanceCity) qs.set('city', lastAttendanceCity);
+    if (lastLock) qs.set('company', lastLock);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
     const data = await api(`/attendance/available${q}`);
     attendanceCompanies = data.companies || [];
     renderAttendanceSelects(keepNameId || claimedAttendanceId);
@@ -596,7 +662,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     if (!id) return;
     const data = await api('/attendance/hold', {
       method: 'POST',
-      json: { id, city: attendanceCity() },
+      json: { id, city: attendanceCity(), company: lockedCompany() },
     });
     claimedAttendanceId = data.entry && data.entry.id || id;
     attendanceCompanies = data.companies || attendanceCompanies;
@@ -610,7 +676,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     try {
       const data = await api('/attendance/release', {
         method: 'POST',
-        json: { city: attendanceCity() },
+        json: { city: attendanceCity(), company: lockedCompany() },
       });
       attendanceCompanies = data.companies || attendanceCompanies;
     } catch (_) { /* ignore */ }
@@ -644,10 +710,15 @@ Average: ${avg == null ? '—' : avg + ' days'}">
         <td><input name="car_remarks_${i}" data-field="remarks" data-row="${i}" aria-label="Remarks row ${i + 1}"></td>
       </tr>
     `).join('');
+    let lockTimer = null;
     body.querySelectorAll('input').forEach((el) => {
       el.addEventListener('input', () => {
         syncCarCount();
         updatePreview();
+        if (el.dataset.field === 'chassis') {
+          clearTimeout(lockTimer);
+          lockTimer = setTimeout(syncCompanyLock, 300);
+        }
       });
     });
     body.querySelectorAll('.chassis-pick').forEach((el) => {
@@ -655,7 +726,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
         const row = parseInt(el.dataset.row, 10);
         if (Number.isNaN(row)) return;
         if (printMode === 'manual') return;
-        openAddVinPicker(row);
+        openAddVinPicker(row, memoSource);
       });
     });
   }
@@ -737,7 +808,7 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       dep_hour: fd.get('dep_hour')?.trim(),
       dep_minute: fd.get('dep_minute')?.trim(),
       customer_name: selectedAttendanceName() || fd.get('customer_name')?.trim(),
-      company_rep: fd.get('company_rep')?.trim() || '',
+      company_rep: String($('company_rep').value || '').trim(),
       attendanceId: claimedAttendanceId,
       transfer_date: fd.get('transfer_date') || fd.get('doc_date'),
       corresponding_date: fd.get('corresponding_date') || fd.get('transfer_date') || fd.get('doc_date'),
@@ -907,6 +978,16 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       $('invoice_number').focus();
       return false;
     }
+    const carriers = [...new Set(getSelectedVins().map(carrierOfVin).filter(Boolean))];
+    if (carriers.length > 1) {
+      setPrintStatus(`الشاسيهات في المذكرة لها نواقل مختلفة (${carriers.join(' / ')}) — اطبع كل ناقل في مذكرة منفصلة`, 'err');
+      return false;
+    }
+    const lock = carriers[0] || '';
+    if (lock && company !== lock) {
+      setPrintStatus(`الناقل المعيّن ${lock} غير متوفر في الحضور — لا يمكن الطباعة بشركة أخرى`, 'err');
+      return false;
+    }
     if (!company) {
       setPrintStatus('اختر الشركة من الحضور قبل الطباعة', 'err');
       $('company_rep').focus();
@@ -918,11 +999,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       return false;
     }
     if (!branch) {
+      const editable = !$('branch_to').readOnly;
       setPrintStatus(
-        printMode === 'manual' ? 'اختر الفرع / المدينة قبل الطباعة' : 'لا توجد مدينة ترحيل على Live Sheet لهذا الشاسيه',
+        editable ? 'اختر الفرع / المدينة قبل الطباعة' : 'لا توجد مدينة ترحيل على Live Sheet لهذا الشاسيه',
         'err'
       );
-      if (printMode === 'manual') $('branch_to').focus();
+      if (editable) $('branch_to').focus();
       return false;
     }
     if (printMode === 'manual' && attach !== 'صالة عرض' && attach !== 'تسليم') {
@@ -1071,6 +1153,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     $('deliveryForm').reset();
     buildCarRows();
     setPrintStatus('');
+    vinCarrier = {};
+    lastLock = '';
+    memoSource = 'live';
+    $('company_rep').disabled = false;
+    $('company_rep').classList.remove('is-locked');
+    renderCompanyLockHint('', true);
   }
 
   async function peekInvoice() {
@@ -1111,13 +1199,97 @@ Average: ${avg == null ? '—' : avg + ' days'}">
   function closeVinModal() {
     $('vinModal').classList.remove('open');
     activeVinRow = null;
+    setVinModalNote('');
+  }
+
+  function setVinModalNote(msg) {
+    const note = $('vinModalNote');
+    if (!note) return;
+    note.textContent = msg || '';
+    note.classList.toggle('hidden', !msg);
+  }
+
+  function findLiveRow(vin) {
+    const key = normVin(vin);
+    return rows.find((r) => normVin(r.vin) === key) || null;
+  }
+
+  function findSalesRawRow(vin) {
+    const key = normVin(vin);
+    return (salesRawRows || []).find((r) => normVin(r.vin) === key) || null;
+  }
+
+  async function loadSalesRawVins() {
+    if (salesRawLoading) return;
+    salesRawLoading = true;
+    try {
+      const data = await api('/sales-raw-vins');
+      salesRawRows = data.rows || [];
+      const meta = $('vinSrcMeta');
+      if (meta) {
+        const last = data.lastSalesRaw;
+        meta.textContent = `${salesRawRows.length} غير معيّن${last && last.at ? ` · Sales Raw ${new Date(last.at).toLocaleString()}` : ''}`;
+      }
+    } finally {
+      salesRawLoading = false;
+    }
+  }
+
+  function setVinSource(src) {
+    vinSource = src === 'sales' ? 'sales' : 'live';
+    document.querySelectorAll('#vinSrcTabs [data-vin-src]').forEach((b) => {
+      b.classList.toggle('is-active', b.dataset.vinSrc === vinSource);
+    });
+    $('vinModalTitle').textContent = vinSource === 'sales'
+      ? 'إذا لم يتم تعيين الشاسيه — ابحث في Sales Raw'
+      : 'أضف سيارة من Live Sheet';
+    setVinModalNote('');
+    if (vinSource === 'sales') {
+      salesRawRows = null;
+      renderVinModal($('vinModalSearch').value);
+      loadSalesRawVins()
+        .then(() => renderVinModal($('vinModalSearch').value))
+        .catch((e) => {
+          salesRawRows = [];
+          setVinModalNote(e.message || 'تعذر تحميل Sales Raw');
+          renderVinModal($('vinModalSearch').value);
+        });
+      return;
+    }
+    renderVinModal($('vinModalSearch').value);
+  }
+
+  /** Sales Raw picker list: VINs on the Live Sheet first (with their city / الناقل), then Sales Raw VINs not assigned yet. */
+  function salesPickList() {
+    const seen = new Set();
+    const out = [];
+    rows.forEach((r) => {
+      const key = normVin(r.vin);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push({ vin: r.vin, raw: r.raw || {}, ops: r.ops || {}, src: 'live' });
+    });
+    (salesRawRows || []).forEach((r) => {
+      const key = normVin(r.vin);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push({ vin: r.vin, raw: r.raw || {}, ops: {}, src: 'sales' });
+    });
+    return out;
   }
 
   function renderVinModal(query) {
     const q = String(query || '').trim().toUpperCase().replace(/\s+/g, '');
     const exclude = new Set(vinPickerMode === 'add-row' ? getSelectedVins(activeVinRow) : []);
-    const list = rows.filter((r) => {
-      const vin = String(r.vin || '').toUpperCase();
+    const salesMode = vinPickerMode === 'add-row' && vinSource === 'sales';
+    const grid = $('vinModalGrid');
+    if (salesMode && salesRawRows === null) {
+      grid.innerHTML = '<p class="vin-empty">جاري تحميل Sales Raw…</p>';
+      return;
+    }
+    const source = salesMode ? salesPickList() : rows.map((r) => ({ ...r, src: 'live' }));
+    const list = source.filter((r) => {
+      const vin = normVin(r.vin);
       if (exclude.has(vin)) return false;
       if (!q) return true;
       const hay = [
@@ -1126,21 +1298,31 @@ Average: ${avg == null ? '—' : avg + ' days'}">
         r.raw && r.raw.salesOrder,
         r.raw && r.raw.userName,
         r.raw && r.raw.phone,
+        r.raw && r.raw.salesType,
       ].join(' ').toUpperCase().replace(/\s+/g, '');
       return hay.includes(q);
     });
-    const grid = $('vinModalGrid');
     if (!list.length) {
-      grid.innerHTML = '<p class="vin-empty">لا توجد شاسيهات من Live Sheet مطابقة</p>';
+      grid.innerHTML = `<p class="vin-empty">${salesMode ? 'لا توجد شاسيهات في Sales Raw مطابقة' : 'لا توجد شاسيهات من Live Sheet مطابقة'}</p>`;
       return;
     }
-    grid.innerHTML = list.map((r) => `
-      <button type="button" class="vin-card" data-vin="${esc(r.vin)}">
+    const lock = vinPickerMode === 'add-row' ? lockedCompany(activeVinRow) : '';
+    const shown = list.slice(0, 300);
+    grid.innerHTML = shown.map((r) => {
+      const carrier = String((r.ops && r.ops.carrier) || '').trim();
+      const clash = lock && carrier && carrier !== lock;
+      const badge = salesMode
+        ? `<span class="vin-src-badge vin-src-badge--${r.src}">${r.src === 'live' ? 'على Live Sheet' : 'Sales Raw · غير معيّن'}</span>`
+        : '';
+      return `
+      <button type="button" class="vin-card${clash ? ' vin-card--clash' : ''}" data-vin="${esc(r.vin)}"${clash ? ` title="الناقل ${esc(carrier)} يختلف عن ناقل المذكرة ${esc(lock)}"` : ''}>
+        ${badge}
         <div class="vin-no">${esc(r.vin)}</div>
-        <div class="vin-product">${esc(r.raw.product || '—')}</div>
-        <div class="vin-meta">${esc([r.raw.salesOrder, r.raw.userName, r.ops && r.ops.transferCity].filter(Boolean).join(' · ') || '—')}</div>
-      </button>
-    `).join('');
+        <div class="vin-product">${esc((r.raw && r.raw.product) || '—')}</div>
+        <div class="vin-meta">${esc([r.raw && r.raw.salesOrder, r.raw && r.raw.userName, r.ops && r.ops.transferCity].filter(Boolean).join(' · ') || '—')}</div>
+        ${carrier ? `<div class="vin-carrier">الناقل: ${esc(carrier)}</div>` : ''}
+      </button>`;
+    }).join('') + (list.length > shown.length ? `<p class="vin-empty">+${list.length - shown.length} — اكتب للبحث لتضييق النتائج</p>` : '');
     grid.querySelectorAll('.vin-card').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (vinPickerMode === 'add-row') {
@@ -1153,44 +1335,111 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     });
   }
 
+  function cityFromSalesRaw(raw) {
+    const cands = [raw && raw.gtLocation, raw && raw.vehicleLocation].map((s) => String(s || '').trim()).filter(Boolean);
+    for (let i = 0; i < cands.length; i += 1) {
+      const hit = transferCities.find((c) => c === cands[i] || cands[i].includes(c));
+      if (hit) return hit;
+    }
+    return '';
+  }
+
+  function setBranchEditable(editable) {
+    const branch = $('branch_to');
+    branch.readOnly = !editable;
+    if (editable) branch.removeAttribute('readonly');
+    else branch.setAttribute('readonly', '');
+    $('branchReq').classList.toggle('hidden', !editable);
+  }
+
+  /** Put the picked VIN into the clicked memo row — Live Sheet data first, else Sales Raw. */
   function applyPickedVin(vin) {
-    const row = rows.find((r) => String(r.vin || '').toUpperCase() === String(vin || '').toUpperCase());
-    if (!row || activeVinRow == null) {
+    if (activeVinRow == null) {
       closeVinModal();
       return;
     }
+    const live = findLiveRow(vin);
+    const sales = live ? null : findSalesRawRow(vin);
+    const row = live || sales;
+    if (!row) {
+      closeVinModal();
+      return;
+    }
+    const carrier = live ? String((live.ops && live.ops.carrier) || '').trim() : '';
+    const lock = lockedCompany(activeVinRow);
+    if (lock && carrier && carrier !== lock) {
+      setVinModalNote(`${row.vin}: الناقل المعيّن ${carrier} — هذه المذكرة لناقل ${lock}. اطبعه في مذكرة منفصلة.`);
+      return;
+    }
+    vinCarrier[normVin(row.vin)] = carrier;
     const form = $('deliveryForm');
     const chassis = form.querySelector(`[name="car_chassis_${activeVinRow}"]`);
     const model = form.querySelector(`[name="car_model_${activeVinRow}"]`);
     if (chassis) chassis.value = row.vin;
     if (model) model.value = (row.raw && row.raw.product) || '';
-    if (activeVinRow === 0 && printMode === 'sheet') {
-      fill('branch_to', (row.ops && row.ops.transferCity) || '');
-      loadAttendanceOptions().catch(() => {});
+    const isFirst = activeVinRow === 0;
+    if (isFirst && printMode === 'sheet') {
+      const city = live ? String((live.ops && live.ops.transferCity) || '').trim() : cityFromSalesRaw(row.raw);
+      fill('branch_to', city);
+      setBranchEditable(!live || !city);
+      const d = toIsoDate(row.raw && row.raw.proformaDate);
+      if (d) fill('doc_date', d);
     }
     closeVinModal();
     syncCarCount();
     updatePreview();
+    if (isFirst && printMode === 'sheet') {
+      (async () => {
+        if (claimedAttendanceId) await releaseAttendanceHold();
+        await loadAttendanceOptions();
+      })().catch(() => {});
+    } else {
+      syncCompanyLock();
+    }
   }
 
-  function openAddVinPicker(rowIndex) {
+  function openAddVinPicker(rowIndex, source) {
     vinPickerMode = 'add-row';
     activeVinRow = rowIndex;
-    $('vinModalTitle').textContent = 'أضف سيارة من Live Sheet';
     $('vinModalSearch').value = '';
-    renderVinModal('');
+    $('vinSrcTabs').classList.remove('hidden');
     $('vinModal').classList.add('open');
+    setVinSource(source || 'live');
     setTimeout(() => $('vinModalSearch').focus(), 40);
   }
 
   function openWarehouseSearch() {
     vinPickerMode = 'open-warehouse';
     activeVinRow = null;
+    vinSource = 'live';
+    $('vinSrcTabs').classList.add('hidden');
+    setVinModalNote('');
     $('vinModalTitle').textContent = 'التسليم في المستودع — ابحث عن الشاسيه';
     $('vinModalSearch').value = '';
     renderVinModal('');
     $('vinModal').classList.add('open');
     setTimeout(() => $('vinModalSearch').focus(), 40);
+  }
+
+  /** "If VIN not assigned": blank memo, then pick row 1 from Sales Raw. */
+  async function openUnassignedDetail() {
+    resetPrintForm();
+    setPrintMode('sheet');
+    memoSource = 'sales';
+    fill('doc_date', fillTodayTimes());
+    fill('company_rep', '');
+    fill('customer_name', '');
+    fill('branch_to', '');
+    setBranchEditable(true);
+    claimedAttendanceId = '';
+    await loadAttendanceOptions();
+    await peekInvoice();
+    syncCarCount();
+    if (!overlayReady) buildOverlay();
+    updatePreview();
+    showView('detail');
+    window.scrollTo(0, 0);
+    openAddVinPicker(0, 'sales');
   }
 
   async function openWarehouseDetail(vin) {
@@ -1241,13 +1490,16 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     fill('doc_date', docDate);
     fill('company_rep', '');
     fill('customer_name', '');
-    fill('branch_to', (v.ops && v.ops.transferCity) || '');
+    const city = String((v.ops && v.ops.transferCity) || '').trim();
+    fill('branch_to', city);
+    setBranchEditable(!city);
     claimedAttendanceId = '';
-    await loadAttendanceOptions();
+    vinCarrier[normVin(v.vin)] = String((v.ops && v.ops.carrier) || '').trim();
     const form = $('deliveryForm');
     form.querySelector('[name="car_model_0"]').value = v.raw.product || '';
     form.querySelector('[name="car_chassis_0"]').value = v.vin || '';
     form.querySelector('[name="car_chassis_0"]').readOnly = true;
+    await loadAttendanceOptions();
     await peekInvoice();
     syncCarCount();
     if (!overlayReady) buildOverlay();
@@ -1341,6 +1593,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       });
     }
     $('btnMissingVin').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
+    if ($('btnUnassignedVin')) {
+      $('btnUnassignedVin').addEventListener('click', () => openUnassignedDetail().catch((e) => alert(e.message)));
+    }
+    document.querySelectorAll('#vinSrcTabs [data-vin-src]').forEach((b) => {
+      b.addEventListener('click', () => setVinSource(b.dataset.vinSrc));
+    });
     $('btnMissingVinEmpty').addEventListener('click', () => openManualDetail().catch((e) => alert(e.message)));
     $('btnWarehouse').addEventListener('click', () => {
       if (!rows.length) loadWorkspace().then(openWarehouseSearch).catch((e) => alert(e.message));
