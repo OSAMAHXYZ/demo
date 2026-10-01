@@ -5049,27 +5049,47 @@
       return byPerson.get(key);
     };
 
+    const recordSkipKeys = new Set([
+      "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
+    ]);
+    // Prefer common fields first in display order
+    const recordPreferredOrder = ["product", "model", "year", "model year", "exterior", "interior", "suffix", "customer", "amount", "status", "location"];
+    const recordSkipCache = new Map();
+    const recordOrderCache = new Map();
+    const isRecordSkipKey = (k) => {
+      let v = recordSkipCache.get(k);
+      if (v === undefined) {
+        v = recordSkipKeys.has(normHeader(k).replace(/\s+/g, ""));
+        recordSkipCache.set(k, v);
+      }
+      return v;
+    };
+    const recordOrderOf = (k) => {
+      let v = recordOrderCache.get(k);
+      if (v === undefined) {
+        const h = normHeader(k);
+        v = recordPreferredOrder.findIndex((p) => h.includes(p));
+        recordOrderCache.set(k, v);
+      }
+      return v;
+    };
+
     function buildSalesRecord(r, flags) {
       const vin = extractVinValue(r.vin) || extractVinValue(
         Object.values(r).find((v) => extractVinValue(v))
       );
-      const skipKeys = new Set([
-        "salesman", "plant", "salesmancode", "proformadate", "deliverydate", "vin", "_sheet",
-      ]);
       const extra = [];
       Object.keys(r).forEach((k) => {
         if (String(k).startsWith("_")) return;
-        if (skipKeys.has(normHeader(k).replace(/\s+/g, ""))) return;
+        if (isRecordSkipKey(k)) return;
         const val = cellToString(r[k]).trim();
         if (!val) return;
         // Skip duplicate of known date/vin columns by value only if header is Column N
         extra.push({ key: k, value: val });
       });
-      // Prefer common fields first in display order
-      const preferredOrder = ["product", "model", "year", "model year", "exterior", "interior", "suffix", "customer", "amount", "status", "location"];
       extra.sort((a, b) => {
-        const ia = preferredOrder.findIndex((p) => normHeader(a.key).includes(p));
-        const ib = preferredOrder.findIndex((p) => normHeader(b.key).includes(p));
+        const ia = recordOrderOf(a.key);
+        const ib = recordOrderOf(b.key);
         if (ia < 0 && ib < 0) return String(a.key).localeCompare(String(b.key));
         if (ia < 0) return 1;
         if (ib < 0) return -1;
