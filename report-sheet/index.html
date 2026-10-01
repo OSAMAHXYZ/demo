@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20260930ck1" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261001dr1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -157,9 +157,21 @@
             </div>
             <div class="sr-range-pills" role="group" aria-label="Date range">
               <button type="button" class="sr-range-pill is-active" data-sr-range="today">Today</button>
-              <button type="button" class="sr-range-pill" data-sr-range="mtd">MTD</button>
-              <button type="button" class="sr-range-pill" data-sr-range="last">Last</button>
+              <button type="button" class="sr-range-pill" data-sr-range="this_month">MTD</button>
+              <button type="button" class="sr-range-pill" data-sr-range="last_month">Last</button>
               <button type="button" class="sr-range-pill" data-sr-range="all">All</button>
+            </div>
+            <div class="sr-date-range" id="sr-date-range" role="group" aria-label="Date range · from date to date" title="Pick a From and To date — the whole dashboard follows this range">
+              <label class="sr-date-range-field">
+                <span>From</span>
+                <input type="date" id="sr-date-from" aria-label="From date" title="From date" />
+              </label>
+              <span class="sr-date-range-sep" aria-hidden="true">→</span>
+              <label class="sr-date-range-field">
+                <span>To</span>
+                <input type="date" id="sr-date-to" aria-label="To date" title="To date" />
+              </label>
+              <button type="button" class="sr-date-range-apply" id="sr-date-apply">Apply</button>
             </div>
             <div class="sr-toolbar-filters">
               <label class="sr-filter-chip" for="sr-filter">
@@ -201,14 +213,11 @@
           <input type="search" id="sr-search" value="" tabindex="-1" />
           <select id="sr-date-preset" tabindex="-1">
             <option value="today" selected>Today</option>
-            <option value="mtd">Month to date</option>
-            <option value="last">Last month</option>
+            <option value="this_month">Month to date</option>
+            <option value="last_month">Last month</option>
             <option value="all">All dates</option>
             <option value="custom">Custom range</option>
           </select>
-          <input type="date" id="sr-date-from" tabindex="-1" />
-          <input type="date" id="sr-date-to" tabindex="-1" />
-          <button type="button" id="sr-date-apply" tabindex="-1">Apply</button>
           <button type="button" id="sr-date-reset" tabindex="-1">Reset</button>
           <button type="button" id="sr-filter-clear" tabindex="-1">Clear</button>
         </div>
@@ -7670,10 +7679,31 @@
       el.value = globalDateFilter.to || "";
       el.disabled = !custom;
     });
-    const applySr = $("#sr-date-apply");
     const applyBas = $("#bas-date-apply");
-    if (applySr) applySr.disabled = !custom;
     if (applyBas) applyBas.disabled = !custom;
+
+    // Sales Dashboard From → To is always editable and shows the range in effect.
+    const srFrom = $("#sr-date-from");
+    const srTo = $("#sr-date-to");
+    if (srFrom && srTo) {
+      srFrom.disabled = false;
+      srTo.disabled = false;
+      if (!custom && live) {
+        const shownFrom = preset === "today" ? live.now : live.rangeFrom;
+        const shownTo = preset === "today" ? live.now : live.rangeTo;
+        const isoFrom = toIsoDateInput(shownFrom);
+        const isoTo = toIsoDateInput(shownTo);
+        if (isoFrom) srFrom.value = isoFrom;
+        if (isoTo) srTo.value = isoTo;
+      }
+    }
+    const applySr = $("#sr-date-apply");
+    if (applySr) {
+      applySr.disabled = false;
+      applySr.classList.remove("is-dirty");
+    }
+    const srRange = $("#sr-date-range");
+    if (srRange) srRange.classList.toggle("is-active", custom);
 
     const bounds = salesDateBounds(slots.sales.rows || []);
     ["#sr-date-from", "#sr-date-to", "#bas-date-from", "#bas-date-to"].forEach((sel) => {
@@ -8544,7 +8574,19 @@
   }
 
   function applySrDateFilter() {
-    applyGlobalDateFilter("Sales report updated for selected dates");
+    const sel = $("#sr-date-preset");
+    if (sel) sel.value = "custom";
+    const fromEl = $("#sr-date-from");
+    const toEl = $("#sr-date-to");
+    const bas = { from: $("#bas-date-from"), to: $("#bas-date-to") };
+    if (bas.from && fromEl) bas.from.value = fromEl.value;
+    if (bas.to && toEl) bas.to.value = toEl.value;
+    const from = fromEl ? fromEl.value : "";
+    const to = toEl ? toEl.value : "";
+    const label = from && to
+      ? (from === to ? `Sales Dashboard · ${from}` : `Sales Dashboard · ${from} → ${to}`)
+      : "Sales report updated for selected dates";
+    applyGlobalDateFilter(label);
   }
 
   function resetSrDateFilter() {
@@ -22197,6 +22239,33 @@
       const sel = $("#sr-date-preset");
       if (sel) sel.value = preset;
       onDatePresetChange(preset);
+    });
+  });
+  let srRangeTimer = null;
+  ["#sr-date-from", "#sr-date-to"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      const apply = $("#sr-date-apply");
+      if (apply) apply.classList.add("is-dirty");
+      clearTimeout(srRangeTimer);
+      srRangeTimer = setTimeout(() => {
+        const from = parseIsoDateInput(($("#sr-date-from") || {}).value || "");
+        const to = parseIsoDateInput(($("#sr-date-to") || {}).value || "");
+        if (!from || !to || from.getFullYear() < 2000 || to.getFullYear() < 2000) return;
+        if (startOfDay(from).getTime() > startOfDay(to).getTime()) {
+          setStatus("From date must be on or before To date", "err");
+          return;
+        }
+        applySrDateFilter();
+      }, 700);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(srRangeTimer);
+        applySrDateFilter();
+      }
     });
   });
   const srNameSearch = $("#sr-name-search");

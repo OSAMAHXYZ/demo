@@ -167,6 +167,37 @@ body.sr-mode #panel-salesreport {
 #panel-salesreport .sr-range-pill:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
 #panel-salesreport .sr-range-pill.is-active { background: var(--sr-blue); color: #fff; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35); }
 
+#panel-salesreport .sr-date-range {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  height: 34px; padding: 0 3px 0 8px; border-radius: 10px;
+  border: 1px solid var(--sr-line-2); background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#panel-salesreport .sr-date-range.is-active {
+  border-color: rgba(79, 157, 255, 0.65);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 4px 14px rgba(59, 130, 246, 0.2);
+}
+#panel-salesreport .sr-date-range-field { display: inline-flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }
+#panel-salesreport .sr-date-range-field span {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+#panel-salesreport .sr-date-range-field input[type="date"] {
+  height: 26px; width: 120px; padding: 0 2px; margin: 0;
+  border: 0 !important; border-radius: 6px; outline: none;
+  background: transparent !important; color: var(--sr-text) !important;
+  font: 700 12px var(--sr-font); font-variant-numeric: tabular-nums; color-scheme: dark; cursor: pointer;
+}
+#panel-salesreport .sr-date-range-field input[type="date"]:focus { background: rgba(255, 255, 255, 0.06) !important; }
+#panel-salesreport .sr-date-range-field input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.7; cursor: pointer; }
+#panel-salesreport .sr-date-range-sep { color: var(--sr-muted); font-size: 12px; }
+#panel-salesreport .sr-date-range-apply {
+  display: none;
+  height: 26px; padding: 0 10px; border: 0; border-radius: 7px;
+  background: var(--sr-blue); color: #fff;
+  font: 700 12px var(--sr-font); cursor: pointer;
+}
+#panel-salesreport .sr-date-range-apply.is-dirty { display: inline-block; }
+
 #panel-salesreport .sr-toolbar-filters { display: inline-flex; gap: 8px; flex: none; }
 #panel-salesreport .sr-filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; }
 #panel-salesreport .sr-filter-chip-ico { color: var(--sr-blue-2); opacity: 1; font-size: 12px; }
@@ -661,7 +692,7 @@ body.sr-mode #panel-salesreport {
 }
 
 /* ---------- Width steps (1920 → 1600 → 1440 → 1366) ---------- */
-@media (max-width: 1700px) {
+@media (max-width: 2100px) {
   #panel-salesreport .sr-sub { display: none; }
 }
 @media (max-width: 1500px) {
@@ -682,6 +713,8 @@ body.sr-mode #panel-salesreport {
   #panel-salesreport .sr-updated { display: none; }
   #panel-salesreport .sr-dash-toolbar { gap: 5px; }
   #panel-salesreport .sr-range-pill { padding: 0 7px; }
+  #panel-salesreport .sr-date-range-field input[type="date"] { width: 116px; }
+  #panel-salesreport .sr-date-range-field input[type="date"]::-webkit-calendar-picker-indicator { margin-left: 0; }
   #panel-salesreport .sr-tool-btn,
   #panel-salesreport .sr-clear-sel { padding: 0 8px; }
   #panel-salesreport .sr-filter-select { max-width: 112px; }
