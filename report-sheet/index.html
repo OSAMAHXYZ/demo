@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261001st1" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261001wv1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -5642,7 +5642,8 @@
       const fitCompact = horizontal && fitRow > 0 && fitRow < 30;
       ctx.save();
       ctx.font = `700 ${fitCompact ? 9 : 12}px ${cfg.figureFont || "'Space Grotesk', 'Outfit', sans-serif"}`;
-      ctx.fillStyle = "#111111";
+      const labelColor = cfg.color || "#111111";
+      ctx.fillStyle = labelColor;
       ctx.textBaseline = "middle";
       chart.data.datasets.forEach((ds, di) => {
         if (ds.hidden) return;
@@ -5664,7 +5665,7 @@
             // Outside bar on the right; if clipped, draw inside the bar in white
             if (x + pad + tw <= maxX) {
               ctx.textAlign = "left";
-              ctx.fillStyle = "#111111";
+              ctx.fillStyle = labelColor;
               ctx.fillText(text, x + pad, y);
             } else {
               ctx.textAlign = "right";
@@ -5673,7 +5674,7 @@
             }
           } else {
             ctx.textAlign = "center";
-            ctx.fillStyle = "#111111";
+            ctx.fillStyle = labelColor;
             ctx.fillText(text, x, y - 10);
           }
         });
@@ -5758,7 +5759,8 @@
     const figureFont = "'Space Grotesk', 'Outfit', sans-serif";
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
-    const cockpit = !!canvas.closest("#panel-salesreport");
+    const cockpit = !!canvas.closest("#panel-salesreport")
+      || (document.body.classList.contains("sr-mode") && !!canvas.closest(".pbi-wide-modal"));
     const tickColor = cockpit ? "#8d9bb0" : "#6b7280";
     const gridColor = cockpit ? "rgba(148, 163, 184, 0.10)" : "rgba(17, 17, 17, 0.06)";
     const strongTick = cockpit ? "#d5deea" : "#111827";
@@ -5946,6 +5948,7 @@
           barEndLabels: {
             display: showValues && type === "bar",
             suffix: valueSuffix,
+            color: cockpit ? "#e8eef7" : "#111111",
             fontFamily,
             figureFont,
           },
@@ -6043,7 +6046,7 @@
     const n = nums.length;
     const sum = nums.reduce((a, b) => a + b, 0);
     if (looksLikePercentLabel(label) && n > 0) {
-      return { lab: `Avg ${label}`, val: formatWideTotal(sum / n) };
+      return { lab: `Avg ${label}`, val: formatWideTotal(sum / n) + (/%/.test(String(label)) ? "%" : "") };
     }
     return { lab: `Total ${label}`, val: formatWideTotal(sum) };
   }
@@ -6261,6 +6264,8 @@
     }
     const body = $("#pbi-wide-body");
     if (body) body.hidden = false;
+    const wideBox = $("#pbi-wide-box");
+    if (wideBox) wideBox.classList.remove("pbi-wide-box--empty");
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal) {
       modal.classList.remove("pbi-wide-modal--table");
@@ -6684,6 +6689,15 @@
     let snap = String(sourceId).startsWith("chart-bo-")
       ? (buildBoWideSnapshot(sourceId) || chartSnapshots[sourceId])
       : chartSnapshots[sourceId];
+    if (!snap && sourceId === "chart-sr-salestype" && window._data && window._data.salesReport) {
+      const types = deliverySalesTypeBreakdown(window._data.salesReport);
+      snap = {
+        type: "doughnut",
+        labels: types.map((x) => x.type),
+        values: types.map((x) => x.count),
+        extra: { cutout: "58%", legend: true },
+      };
+    }
     if (!snap) {
       console.warn("[wide] no snapshot for", sourceId);
       return;
@@ -6778,6 +6792,10 @@
     renderWideNumbers(snap);
     const extra = { ...(snap.extra || {}) };
     upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
+    box.classList.toggle(
+      "pbi-wide-box--empty",
+      snap.type === "doughnut" && !(Array.isArray(snap.values) && snap.values.some((v) => Number(v) > 0))
+    );
     if (horizontal && snap.type === "bar" && n > 1) {
       const seriesN = (snap.extra && snap.extra.datasets && snap.extra.datasets.length) || 1;
       if (!(isBo && n > 10)) {
