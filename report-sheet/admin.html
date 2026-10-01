@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20260930lx1"></script>
+  <script src="data-store.js?v=20261001dr1"></script>
   <script src="gec-data.js?v=20260928gcc1"></script>
   <script src="allocation-plan-data.js"></script>
   <style>
@@ -36,6 +36,8 @@
     .gec-ctl-add { display: flex; gap: 6px; }
     .gec-ctl-add input { flex: 1; min-width: 0; }
     .gec-ctl-dirty { color: #d97706; font-weight: 700; }
+    #discard-draft-btn[hidden] { display: none; }
+    .pill.slot-draft { background: #fff4e2; color: #b45309; border: 1px solid #f5c98a; }
     .gec-found-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     .gec-found-table th, .gec-found-table td { padding: 7px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.25); text-align: left; }
     .gec-found-table td.num, .gec-found-table th.num { text-align: right; }
@@ -128,7 +130,8 @@
           <span class="status" id="status">Ready</span>
           <span class="status ok" id="admin-mode-badge">ADMIN</span>
           <a class="btn" href="index.html">Live report</a>
-          <button type="button" class="btn" id="clear-files-btn" disabled>Clear files</button>
+          <button type="button" class="btn" id="discard-draft-btn" hidden title="Throw away uploads / changes that were not pushed and show the live files again">Discard draft</button>
+          <button type="button" class="btn" id="clear-files-btn" disabled title="Empties the slots here · live files are only cleared when you click Push to live">Clear files</button>
           <button type="button" class="btn" id="eom-btn" title="Download every pushed sheet in one Excel, then remove Delivered + Cancelled Lexus and Toyota B2C orders">End of month</button>
           <button type="button" class="btn-primary" id="push-btn">Push to live</button>
         </div>
@@ -223,7 +226,7 @@
       <div class="xl-toolbar admin-toolbar">
         <button type="button" class="btn-primary" id="gec-control-save">Save GEC Control</button>
         <button type="button" class="btn" id="gec-control-reset">Reset to defaults</button>
-        <span class="hint" id="gec-control-hint">Saving applies the rules to every live GEC dashboard immediately · pushed files stay as they are</span>
+        <span class="hint" id="gec-control-hint">Save keeps the rules as a draft · they reach the live GEC dashboards only when you click Push to live</span>
       </div>
 
       <div class="card admin-section-card">
@@ -310,6 +313,10 @@
   const DEFAULT_EMPLOYEES = DEFAULT_EMPLOYEE_NAMES.map((name, i) => ({ id: i + 1, name, target: 0 }));
 
   const slots = Object.fromEntries(SLOT_DEFS.map((s) => [s.id, { name: "", buffer: null, size: 0 }]));
+  /* Draft (not live): uploads, Clear files and GEC Control stay here until Push to live. */
+  const draftSlots = new Set();
+  let draftCleared = false;
+  let gecStaged = null;
   let targetSearch = "";
   let employeeTargets = loadEmployeeTargets();
 
@@ -654,7 +661,8 @@
     $("#slots").innerHTML = SLOT_DEFS.map((d) => {
       const s = slots[d.id];
       const loaded = s.buffer ? " loaded" : "";
-      const required = d.id === "sales" ? ' <span class="pill slot-required">Required</span>' : "";
+      const required = (d.id === "sales" ? ' <span class="pill slot-required">Required</span>' : "")
+        + (draftSlots.has(d.id) ? ' <span class="pill slot-draft" title="Uploaded here only · live files unchanged until Push to live">Draft · not live</span>' : "");
       const meta = s.buffer
         ? `<span class="meta"><b>${escapeHtml(s.name)}</b><br>${formatBytes(s.size)}</span>`
         : `<span class="meta">Drop or click · .xlsx / .xls / .csv</span>`;
@@ -676,9 +684,40 @@
     else if (hasSales) foot = "Sales Raw ready · Push to live for Sales Report (Previous BO optional).";
     else if (hasCancelled) foot = "Add Sales Raw Data to generate Sales Report.";
     else foot = "Upload Sales Raw for Sales Report · other files optional.";
+    const pending = draftPendingText();
+    $("#discard-draft-btn").hidden = !pending;
+    if (pending) foot = `${pending} · live files stay unchanged until Push to live. ${foot}`;
     $("#files-foot").textContent = foot;
-    if (any) setStatus(hasSales ? "Ready to push" : "Files loaded · add Sales Raw for Sales Report", "ok");
+    if (pending) setStatus(`${pending} — click Push to live`, "busy");
+    else if (any) setStatus(hasSales ? "Ready to push" : "Files loaded · add Sales Raw for Sales Report", "ok");
     renderAdminKpis();
+  }
+
+  function draftPendingText() {
+    const parts = [];
+    if (draftCleared) parts.push("Clear files");
+    if (draftSlots.size) parts.push(`${draftSlots.size} new file(s)`);
+    if (gecStaged) parts.push("GEC Control");
+    return parts.length ? `Draft: ${parts.join(" + ")}` : "";
+  }
+
+  async function persistDraft() {
+    const files = {};
+    draftSlots.forEach((id) => {
+      const s = slots[id];
+      if (s && s.buffer) files[id] = { name: s.name, buffer: s.buffer, size: s.size };
+    });
+    try {
+      if (!draftCleared && !gecStaged && !Object.keys(files).length) await Store.clearAdminDraft();
+      else await Store.saveAdminDraft({ at: Date.now(), cleared: draftCleared, files, gecControl: gecStaged });
+    } catch { /* draft stays in this tab only */ }
+  }
+
+  async function discardDraft() {
+    draftSlots.clear();
+    draftCleared = false;
+    gecStaged = null;
+    try { await Store.clearAdminDraft(); } catch { /* ignore */ }
   }
 
   function showAdminPanel(which) {
@@ -730,7 +769,8 @@
         <form class="gec-ctl-add" data-gec-add="${g.id}"><input type="text" placeholder="Add status…" maxlength="80" aria-label="Add ${g.title.toLowerCase()}" /><button type="submit" class="btn">Add</button></form>
       </div>`;
     }).join("");
-    if (gecDirty()) setGecHint('<span class="gec-ctl-dirty">Unsaved changes</span> — click <b>Save GEC Control</b> to apply them to every live dashboard');
+    if (gecDirty()) setGecHint('<span class="gec-ctl-dirty">Unsaved changes</span> — click <b>Save GEC Control</b>, then <b>Push to live</b> to apply them to every live dashboard');
+    else if (gecStaged) setGecHint('<span class="gec-ctl-dirty">Saved as draft · not live</span> — click <b>Push to live</b> to apply it to every live GEC dashboard');
   }
 
   function addGecStatus(group, name) {
@@ -802,23 +842,14 @@
   async function saveGecControl() {
     const control = Gec.normalizeControl(gecDraft);
     gecDraft = control;
-    setGecHint("Saving…", "busy");
-    let at = Date.now();
-    let serverOk = true;
-    try {
-      const res = await Store.saveGecControlToServer(control);
-      at = Number(res.at) || at;
-    } catch (err) {
-      serverOk = false;
-      showError(`GEC Control saved on this browser only — server: ${err.message || err}`);
-    }
-    Store.writeGecControl(control, at);
-    Store.notifyGecControl();
+    const liveControl = JSON.stringify(Gec.normalizeControl(Store.readGecControl()));
+    gecStaged = JSON.stringify(control) === liveControl ? null : control;
     gecSaved = JSON.stringify(control);
+    await persistDraft();
     renderGecControl();
     renderGecFound();
-    setGecHint(serverOk ? `Saved · applied to every live GEC dashboard (${new Date(at).toLocaleTimeString()})` : "Saved on this browser only", serverOk ? "ok" : "err");
-    setStatus(serverOk ? "GEC Control saved" : "GEC Control saved locally", serverOk ? "ok" : "err");
+    if (!gecStaged) setGecHint("Same as live · nothing to push", "ok");
+    renderSlots();
   }
 
   async function onFileChosen(slotId, file) {
@@ -834,8 +865,9 @@
     try {
       const buffer = await file.arrayBuffer();
       slots[slotId] = { name: file.name, buffer, size: buffer.byteLength };
+      draftSlots.add(slotId);
+      await persistDraft();
       renderSlots();
-      setStatus("File ready — click Push to live", "busy");
     } catch (err) {
       showError(err.message || String(err));
     } finally {
@@ -857,16 +889,35 @@
     } catch {
       /* use local cache */
     }
-    try {
-      const payload = await Store.loadWorkbookFiles();
-      if (!payload || !payload.files) return;
-      Object.keys(payload.files).forEach((id) => {
-        const f = payload.files[id];
-        if (!f || !f.buffer) return;
+    let draft = null;
+    try { draft = await Store.loadAdminDraft(); } catch { /* no draft */ }
+    if (draft && draft.cleared) draftCleared = true;
+    if (!draftCleared) {
+      try {
+        const payload = await Store.loadWorkbookFiles();
+        if (payload && payload.files) {
+          Object.keys(payload.files).forEach((id) => {
+            const f = payload.files[id];
+            if (!f || !f.buffer || draftSlots.has(id) || !slots[id]) return;
+            slots[id] = { name: f.name, buffer: f.buffer, size: f.size || f.buffer.byteLength };
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (draft && draft.files) {
+      Object.keys(draft.files).forEach((id) => {
+        const f = draft.files[id];
+        if (!f || !f.buffer || draftSlots.has(id) || !slots[id]) return;
         slots[id] = { name: f.name, buffer: f.buffer, size: f.size || f.buffer.byteLength };
+        draftSlots.add(id);
       });
-    } catch {
-      /* ignore */
+    }
+    if (draft && draft.gecControl && !gecDirty()) {
+      gecStaged = Gec.normalizeControl(draft.gecControl);
+      gecDraft = Gec.normalizeControl(gecStaged);
+      gecSaved = JSON.stringify(gecDraft);
     }
   }
 
@@ -906,13 +957,17 @@
 
       let serverAt = Date.now();
       let server = null;
+      const pushedGec = gecStaged ? Gec.normalizeControl(gecStaged) : undefined;
+      const pushedClear = draftCleared;
       try {
+        if (pushedClear) await Store.clearOnServer();
         server = await Store.pushToServer({
           targets: employeeTargets,
           accessoriesSettled: settledAmount,
           workingDays,
           allocationValues,
           gecSlaMinutes,
+          gecControl: pushedGec,
           filesBySlot,
         });
         serverAt = Number(server.at) || serverAt;
@@ -930,6 +985,16 @@
       }
 
       const dataStamp = await Store.saveWorkbookFiles(filesBySlot, { at: serverAt });
+      if (server) {
+        if (pushedGec) {
+          Store.writeGecControl(pushedGec, serverAt);
+          Store.notifyGecControl();
+        }
+        await discardDraft();
+        renderSlots();
+        renderGecControl();
+        if (!gecDirty()) setGecHint(`Live · pushed ${new Date(serverAt).toLocaleTimeString()}`, "ok");
+      }
 
       Store.broadcast({
         type: "admin-pushed",
@@ -948,7 +1013,8 @@
       renderAllocationPanel();
       const slotCount = Object.keys(filesBySlot).length;
       if (!slotCount) {
-        setStatus("Pushed settings only — upload at least one Excel file, then Push again.", "err");
+        if (pushedClear && server) setStatus("Live files cleared · settings pushed", "ok");
+        else setStatus("Pushed settings only — upload at least one Excel file, then Push again.", "err");
         return;
       }
       const srOk = dataStamp.hasSales;
@@ -1064,11 +1130,23 @@
 
   async function clearFiles() {
     SLOT_DEFS.forEach((d) => { slots[d.id] = { name: "", buffer: null, size: 0 }; });
-    try { await Store.clearWorkbookFiles(); } catch { /* ignore */ }
-    try { await Store.clearOnServer(); } catch { /* ignore */ }
-    Store.broadcast({ type: "admin-cleared", at: Date.now() });
+    draftSlots.clear();
+    draftCleared = true;
+    await persistDraft();
     renderSlots();
-    setStatus("Files cleared on server", "ok");
+  }
+
+  async function discardDraftAndReload() {
+    if (!confirm("Discard the draft and reload the files currently live?")) return;
+    await discardDraft();
+    SLOT_DEFS.forEach((d) => { slots[d.id] = { name: "", buffer: null, size: 0 }; });
+    gecDraft = Gec.normalizeControl(Store.readGecControl());
+    gecSaved = JSON.stringify(gecDraft);
+    await hydrateFromStore();
+    renderSlots();
+    renderGecControl();
+    renderGecFound();
+    setStatus("Draft discarded · showing live files", "ok");
   }
 
   document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
@@ -1104,6 +1182,7 @@
   $("#push-btn-2").addEventListener("click", pushToLive);
   $("#push-btn-3").addEventListener("click", pushToLive);
   $("#clear-files-btn").addEventListener("click", clearFiles);
+  $("#discard-draft-btn").addEventListener("click", discardDraftAndReload);
   $("#eom-btn").addEventListener("click", openEndOfMonth);
   $("#eom-form").addEventListener("submit", runEndOfMonth);
   $("#eom-cancel").addEventListener("click", () => $("#eom-dialog").close());

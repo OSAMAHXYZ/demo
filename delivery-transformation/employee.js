@@ -939,11 +939,13 @@
           <div><strong>${s.rows}</strong><span>Rows read</span></div>
           <div><strong>${s.created}</strong><span>New VINs</span></div>
           <div><strong>${s.updated}</strong><span>VINs updated</span></div>
+          <div><strong>${s.updatedOtherMonth || 0}</strong><span>Existing VINs refreshed · other month</span></div>
           <div><strong>${s.assigned}</strong><span>Assigned from PIC</span></div>
           <div><strong>${s.skippedVacation || 0}</strong><span>Not assigned · PIC on vacation</span></div>
-          <div><strong>${s.skippedOtherMonth}</strong><span>Skipped · other month</span></div>
-          <div><strong>${s.skippedNoDate}</strong><span>Skipped · no proforma date</span></div>
-        </div>`;
+          <div><strong>${s.skippedOtherMonth}</strong><span>New VINs skipped · other month</span></div>
+          <div><strong>${s.skippedNoDate}</strong><span>New VINs skipped · no proforma date</span></div>
+        </div>
+        <p class="hint" style="margin-top:8px">Upload only adds new VINs and fills in existing ones · nothing on the Live Sheet is removed or cleared.</p>`;
       await loadImportPanels();
     } catch (err) {
       box.innerHTML = `<p style="color:var(--red)">${esc(err.message)}</p>`;

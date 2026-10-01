@@ -4,6 +4,8 @@
   const DB_VERSION = 1;
   const STORE = "kv";
   const WORKBOOK_KEY = "workbook_files_v1";
+  /** Admin-only staging area · live dashboards never read it; only Push to live publishes it. */
+  const ADMIN_DRAFT_KEY = "admin_draft_v1";
   const DATA_PUSH_KEY = "toyota_admin_workbook_push_v1";
   const TARGETS_KEY = "toyota_admin_employee_targets_v1";
   const TARGETS_PUSH_KEY = "toyota_admin_employee_targets_push_v1";
@@ -205,6 +207,18 @@
   async function clearWorkbookFiles() {
     await idbDelete(WORKBOOK_KEY);
     localStorage.removeItem(DATA_PUSH_KEY);
+  }
+
+  async function saveAdminDraft(draft) {
+    await idbSet(ADMIN_DRAFT_KEY, draft);
+  }
+
+  async function loadAdminDraft() {
+    return (await idbGet(ADMIN_DRAFT_KEY)) || null;
+  }
+
+  async function clearAdminDraft() {
+    await idbDelete(ADMIN_DRAFT_KEY);
   }
 
   function readDataPushStamp() {
@@ -467,6 +481,9 @@
     saveWorkbookFiles,
     loadWorkbookFiles,
     clearWorkbookFiles,
+    saveAdminDraft,
+    loadAdminDraft,
+    clearAdminDraft,
     readDataPushStamp,
     broadcast,
     fetchServerMeta,

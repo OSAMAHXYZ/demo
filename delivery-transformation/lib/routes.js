@@ -1397,6 +1397,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         skippedVacation: 0,
         skippedOtherMonth: 0,
         skippedNoDate: 0,
+        updatedOtherMonth: 0,
         duplicates: 0,
       };
 
@@ -1407,6 +1408,24 @@ function createDeliveryTransformationRouter(opts = {}) {
         }
         seen.add(item.vin);
         const proforma = item.raw.proformaDate || item.raw.date || '';
+        let v = store.getVehicle(item.vin);
+        if (v && (!proforma || proforma.slice(0, 7) !== month)) {
+          // Already on the Live Sheet: refresh its details from non-blank cells, never clear or reassign.
+          if (!v.raw) v.raw = emptyRaw();
+          let changed = false;
+          Object.entries(item.raw).forEach(([k, val]) => {
+            if (!val || String(v.raw[k] ?? '') === String(val)) return;
+            v.raw[k] = val;
+            changed = true;
+          });
+          if (changed) {
+            v.rawUpdatedAt = now;
+            store.upsertVehicle(item.vin, v);
+            summary.updated += 1;
+            summary.updatedOtherMonth += 1;
+          }
+          return;
+        }
         if (!proforma) {
           summary.skippedNoDate += 1;
           return;
@@ -1416,10 +1435,10 @@ function createDeliveryTransformationRouter(opts = {}) {
           return;
         }
 
-        let v = store.getVehicle(item.vin);
         const isNew = !v;
         if (isNew) {
-          v = { vin: item.vin, raw: { ...emptyRaw(), vin: item.vin }, ops: { ...emptyOps() } };
+          const p = pendingMap()[item.vin];
+          v = { vin: item.vin, raw: { ...emptyRaw(), ...((p && p.raw) || {}), vin: item.vin }, ops: { ...emptyOps() } };
           copyPendingInventory(v.ops, item.vin);
         }
         Object.entries(item.raw).forEach(([k, val]) => {
@@ -1519,11 +1538,18 @@ function createDeliveryTransformationRouter(opts = {}) {
             summary.assignable += 1;
             if (isToday) summary.todayNew += 1;
             const prev = pending[item.vin] || {};
+            const raw = { ...emptyRaw(), ...(prev.raw || {}) };
+            Object.entries(item.raw).forEach(([k, val]) => {
+              if (val !== '' && val != null) raw[k] = val;
+            });
+            raw.vin = item.vin;
             pending[item.vin] = {
+              ...prev,
               vin: item.vin,
-              raw: { ...emptyRaw(), ...(prev.raw || {}), ...item.raw, vin: item.vin },
+              raw,
               uploadedBy: req.dtUser.name,
               uploadedAt: now,
+              firstUploadedAt: prev.firstUploadedAt || prev.uploadedAt || now,
               filename,
               inventoryOwnerId: prev.inventoryOwnerId || '',
               inventoryOwnerName: prev.inventoryOwnerName || '',
