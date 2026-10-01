@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2406,7 +2406,7 @@
       updated = true;
     }
     if (hasSummaryInputs()) renderSummaryDashboard();
-    if (window._data) renderBoAllocStockDashboard(window._data);
+    if (window._data && activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
     if (updated) setStatus(reason || "Targets updated live", "ok");
     return updated;
   }
@@ -2542,9 +2542,10 @@
   function upperTrim(v) {
     return String(v ?? "").trim().toUpperCase();
   }
+  const NUMBER_FORMAT = new Intl.NumberFormat();
   function formatNumber(n) {
     if (!Number.isFinite(n)) return "—";
-    return new Intl.NumberFormat().format(n);
+    return NUMBER_FORMAT.format(n);
   }
   function pct1(n) {
     return (Number(n) * 100).toFixed(1) + "%";
@@ -7526,6 +7527,10 @@
     if (panelId === "lexus" && activePanel !== "lexus") panelBeforeLexus = activePanel;
     if (panelId === "b2c" && activePanel !== "b2c") panelBeforeB2c = activePanel;
     if (panelId === "summary" && activePanel !== "summary") panelBeforeSummary = activePanel;
+    if (activePanel === "boerrors" && panelId !== "boerrors") {
+      const boeWrap = document.getElementById("boe-table-wrap");
+      if (boeWrap) boeWrap.textContent = "";
+    }
     activePanel = panelId;
     document.body.classList.toggle("gec-mode", panelId === "gec");
     document.body.classList.toggle("lx-mode", panelId === "lexus");
@@ -7604,6 +7609,24 @@
       renderBoAllocStockDashboard(window._data);
     }
     if (panelId === "bodashboard" && window._data) renderBoDashboard(window._data);
+    if (panelId === "dashboard") ensureMainDashboard();
+    if (panelId === "stockdashboard" && window._data && stockDashRenderedFor !== window._data) {
+      stockDashRenderedFor = window._data;
+      renderStockDashboard();
+    }
+  }
+
+  var mainDashRenderedFor = null;
+  var stockDashRenderedFor = null;
+  function renderMainDashboard(d) {
+    mainDashRenderedFor = d;
+    renderKpis(d);
+    renderCharts(d);
+    renderTabs();
+    renderTable(d);
+  }
+  function ensureMainDashboard() {
+    if (window._data && mainDashRenderedFor !== window._data) renderMainDashboard(window._data);
   }
 
   const GLOBAL_DATE_FILTER_KEY = "toyota_global_date_filter_v2";
@@ -7784,7 +7807,7 @@
       }
       invalidateIccCache();
       if (hasSummaryInputs()) renderSummaryDashboard();
-      renderBoAllocStockDashboard(window._data);
+      if (activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
     }
     syncGlobalDateControls(window._globalLivePeriod);
   }
@@ -7796,7 +7819,7 @@
       if (hasSalesReportInputs()) rebuildSalesReport();
       invalidateIccCache();
       if (hasSummaryInputs()) renderSummaryDashboard();
-      renderBoAllocStockDashboard(window._data);
+      if (activePanel === "boallocstock") renderBoAllocStockDashboard(window._data);
     }
     syncGlobalDateControls(window._globalLivePeriod);
     setStatus("Date filter reset to Today", "ok");
@@ -21569,18 +21592,15 @@
         renderSalesReportKpis(d.salesReport);
         syncSrDateControls(d.salesReport);
         refreshSalesSelection();
-      } else if (activePanel === "bodashboard") renderBoDashboard(d);
-      else if (activePanel === "boerrors") renderBoErrorsDashboard(d);
-      else if (activePanel === "boallocstock") renderBoAllocStockDashboard(d);
-      else if (activePanel === "stockdashboard") renderStockDashboard();
+      } else if (activePanel === "bodashboard" || activePanel === "boerrors" || activePanel === "boallocstock") {
+        // already rendered by switchPanel(activePanel) above
+      }
+      else if (activePanel === "stockdashboard") {
+        if (stockDashRenderedFor !== d) { stockDashRenderedFor = d; renderStockDashboard(); }
+      }
       else if (activePanel === "reservedvehicles") renderReservedVehiclesTracker();
       else if (activePanel === "allocationaudit") renderAllocationAudit();
-      else {
-        renderKpis(d);
-        renderCharts(d);
-        renderTabs();
-        renderTable(d);
-      }
+      else ensureMainDashboard();
       if (activePanel !== "salesreport") {
         if (hasSalesReportInputs()) {
           window._srRowsByKey = Object.fromEntries((d.salesReport.rows || []).map((r) => [r._key, r]));
@@ -21599,14 +21619,9 @@
       );
     };
 
+    // Hidden panels (BO, BO Errors, Allocation, Stock, Reserved, Audit, Stock & BO) are built by switchPanel when opened.
     const paintRest = () => {
-      if (activePanel !== "bodashboard") renderBoDashboard(d);
-      if (activePanel !== "boerrors") renderBoErrorsDashboard(d);
-      if (activePanel !== "boallocstock") renderBoAllocStockDashboard(d);
-      if (activePanel !== "stockdashboard") renderStockDashboard();
-      if (activePanel !== "reservedvehicles") renderReservedVehiclesTracker();
       aaLastSeenCache.loaded = false;
-      if (activePanel !== "allocationaudit") renderAllocationAudit();
       ensureAaRtlLastSeen().then(() => {
         if (activePanel === "allocationaudit") renderAllocationAudit();
       });
@@ -21619,12 +21634,6 @@
           syncSrDateControls(d.salesReport);
           refreshSalesSelection();
         }
-      }
-      if (activePanel !== "dashboard") {
-        renderKpis(d);
-        renderCharts(d);
-        renderTabs();
-        renderTable(d);
       }
       if (activePanel !== "summary" && hasSalesRaw() && window.SalesControl) {
         window.SalesControl.prepare(salesControlSource());
