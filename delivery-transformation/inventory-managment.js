@@ -265,6 +265,16 @@
     const data = await api('/inventory/claim', { method: 'POST', json: body });
     vins.forEach((vin) => state.selected.delete(vin));
     applyPayload(data);
+    noteGuestExp(data);
+  }
+
+  /** Ruba → Delivery sets Guest Exp = Yes on the Live Sheet (server side); confirm it. */
+  function noteGuestExp(data) {
+    const vins = (data && data.guestExp) || [];
+    if (!vins.length) return;
+    window.DTX.toast(vins.length === 1
+      ? `${vins[0]} · Live Sheet → Guest Exp = Yes`
+      : `${vins.length} VINs · Live Sheet → Guest Exp = Yes`);
   }
 
   async function claimSelectedWith(label) {
@@ -303,6 +313,7 @@
     if (!vins.length) return;
     const data = await api('/inventory/label', { method: 'POST', json: { vins, label } });
     applyPayload(data);
+    noteGuestExp(data);
   }
 
   function bind() {

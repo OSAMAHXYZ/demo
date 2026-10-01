@@ -1030,6 +1030,47 @@ function createDeliveryTransformationRouter(opts = {}) {
     ops.inventoryOwnerName = p.inventoryOwnerName || '';
     ops.inventoryClaimedAt = p.inventoryClaimedAt || '';
     ops.inventoryLabel = p.inventoryLabel || '';
+    if (p.inventoryOwnerId === 'ruba' && ops.inventoryLabel === 'delivery' && !ops.guestCenter) {
+      ops.guestCenter = 'Yes';
+      ops.guestCenterAuto = 'ruba';
+    }
+  }
+
+  function isRubaUser(user) {
+    return !!user && (user.userId === 'ruba' || user.id === 'ruba');
+  }
+
+  /**
+   * Ruba labels a Live Sheet VIN as Delivery → Guest Exp = Yes on the Live Sheet.
+   * Switching to Display undoes it only when Guest Exp was set this way (never a manual value).
+   */
+  function syncGuestExpFromInventory(v, user, now, label) {
+    if (!v || !v.ops || !isRubaUser(user)) return false;
+    const ops = v.ops;
+    const current = String(ops.guestCenter || '').trim();
+    let next = current;
+    if (label === 'delivery' && current !== 'Yes') {
+      next = 'Yes';
+      ops.guestCenterAuto = 'ruba';
+    } else if (label === 'display' && ops.guestCenterAuto === 'ruba' && current === 'Yes') {
+      next = '';
+      ops.guestCenterAuto = '';
+      ops.guestCollectAt = '';
+      ops.guestCollectNote = '';
+      ops.guestCollected = '';
+    }
+    if (next === current) return label === 'delivery' && current === 'Yes';
+    ops.guestCenter = next;
+    ops.updatedAt = now;
+    ops.updatedBy = user.name;
+    store.pushAudit({
+      vin: v.vin,
+      user: user.name,
+      action: 'guest_exp_from_inventory',
+      oldValue: current,
+      newValue: next,
+    });
+    return next === 'Yes';
   }
 
   function inventoryLabelOf(rec) {
@@ -1144,9 +1185,10 @@ function createDeliveryTransformationRouter(opts = {}) {
     const claimed = [];
     const missing = [];
     const blocked = [];
+    const guestExp = [];
     const tag = release ? '' : normalizeInventoryLabel(label, user);
     if (!release && (user.userId === 'ruba' || user.id === 'ruba') && !tag) {
-      return { claimed, missing, blocked, error: 'Choose Display or Delivery' };
+      return { claimed, missing, blocked, guestExp, error: 'Choose Display or Delivery' };
     }
     vins.forEach((vin) => {
       const v = store.getVehicle(vin);
@@ -1162,6 +1204,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         }
         const prevLabel = inventoryLabelOf(v);
         setInventoryOwner(v, release ? null : user, now, { label: tag });
+        if (!release && syncGuestExpFromInventory(v, user, now, inventoryLabelOf(v))) guestExp.push(vin);
         store.upsertVehicle(vin, v);
         claimed.push(vin);
         store.pushAudit({
@@ -1193,7 +1236,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         newValue: release ? '' : `${user.name}${tag ? ` · ${tag}` : ''}`,
       });
     });
-    return { claimed, missing, blocked };
+    return { claimed, missing, blocked, guestExp };
   }
 
   function applyInventoryLabel(vins, user, now, label) {
@@ -1207,6 +1250,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     const updated = [];
     const missing = [];
     const blocked = [];
+    const guestExp = [];
     vins.forEach((vin) => {
       const v = store.getVehicle(vin);
       if (v) {
@@ -1223,6 +1267,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         v.ops.inventoryLabel = tag;
         v.ops.updatedAt = now;
         v.ops.updatedBy = user.name;
+        if (syncGuestExpFromInventory(v, user, now, tag)) guestExp.push(vin);
         store.upsertVehicle(vin, v);
         updated.push(vin);
         store.pushAudit({
@@ -1254,7 +1299,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         newValue: tag,
       });
     });
-    return { updated, missing, blocked };
+    return { updated, missing, blocked, guestExp };
   }
 
   /** meta.vacations: { employeeId: { until: 'YYYY-MM-DD' | '', by, at } } — empty until = until turned off. */
@@ -1992,6 +2037,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         return res.status(400).json({ error: 'Guest Exp must be Yes/No' });
       }
       setOps('guestCenter', s);
+      v.ops.guestCenterAuto = '';
       if (s !== 'Yes') {
         setOps('guestCollectAt', '');
         setOps('guestCollectNote', '');
