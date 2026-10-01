@@ -4407,16 +4407,42 @@
     return set;
   }
 
+  // Same result as scoring every free stock row with matchScore(); keys are normalised once per row.
   function bestMatches(bos, stock) {
-    const free = stock.filter((s) => s.vin).slice();
+    const free = stock.filter((s) => s.vin).map((s) => ({
+      s,
+      product: upperTrim(s.product),
+      year: String(s.year),
+      suffix: upperTrim(s.suffix),
+      ext: colorKey(s.ext),
+      int: colorKey(s.int),
+    }));
     const used = new Set();
     return bos.map((bo) => {
+      const product = upperTrim(bo.product);
+      const year = String(bo.year || "");
+      const suffix = upperTrim(bo.suffix);
+      const ext = colorKey(bo.ext);
+      const int = colorKey(bo.int);
+      const applicable = ["product", "year", "suffix", "ext", "int"]
+        .filter((k) => bo[k] && String(bo[k]).trim()).length || 5;
+      const possible = (product ? 1 : 0) + (year ? 1 : 0) + (suffix ? 1 : 0) + (ext ? 1 : 0) + (int ? 1 : 0);
+      const maxScore = Math.round((possible / applicable) * 100);
       let best = null;
-      free.forEach((s) => {
-        if (used.has(s.id)) return;
-        const score = matchScore(bo, s);
-        if (!best || score > best.score) best = { stock: s, score };
-      });
+      for (let i = 0; i < free.length; i++) {
+        const f = free[i];
+        if (used.has(f.s.id)) continue;
+        const hits = (product && product === f.product ? 1 : 0)
+          + (year && year === f.year ? 1 : 0)
+          + (suffix && suffix === f.suffix ? 1 : 0)
+          + (ext && ext === f.ext ? 1 : 0)
+          + (int && int === f.int ? 1 : 0);
+        const score = Math.round((hits / applicable) * 100);
+        if (!best || score > best.score) {
+          best = { stock: f.s, score };
+          if (score >= maxScore) break;
+        }
+      }
       if (best && best.score >= 60) {
         used.add(best.stock.id);
         return { ...bo, matchVin: best.stock.vin, matchScore: best.score, matchSource: best.stock.source };
