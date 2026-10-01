@@ -268,6 +268,39 @@ function createDeliveryTransformationRouter(opts = {}) {
     return next();
   }
 
+  /** Live push: any save (employee.html edit, import, coordinator print) → "change" event to open pages. */
+  const liveClients = new Set();
+  let liveTimer = null;
+  store.onChange((at) => {
+    if (!liveClients.size || liveTimer) return;
+    liveTimer = setTimeout(() => {
+      liveTimer = null;
+      const msg = `event: change\ndata: ${JSON.stringify({ at: at || new Date().toISOString() })}\n\n`;
+      liveClients.forEach((res) => {
+        try { res.write(msg); } catch (_) { liveClients.delete(res); }
+      });
+    }, 150);
+  });
+
+  router.get('/live-events', auth, (req, res) => {
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    res.write('retry: 3000\n\n');
+    liveClients.add(res);
+    const ping = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch (_) { /* closed */ }
+    }, 20000);
+    req.on('close', () => {
+      clearInterval(ping);
+      liveClients.delete(res);
+    });
+  });
+
   function customList(key) {
     const arr = store.data.meta && store.data.meta[key];
     return Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : [];

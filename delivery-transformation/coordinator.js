@@ -7,6 +7,11 @@
   const AR_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
   const POLL_MS = 3000;
+  const POLL_PUSH_MS = 15000;
+  let liveEvents = null;
+  let pushOn = false;
+  let wsAgain = false;
+  let sheetAgain = false;
   let rows = [];
   let collapsedCarriers = new Set();
   let viewTab = 'fleet';
@@ -42,19 +47,63 @@
     $('mainApp').classList.toggle('hidden', name !== 'detail');
     document.body.classList.toggle('workspace-mode', name === 'workspace');
     document.body.classList.toggle('app-mode', name === 'detail');
-    if (name === 'workspace') startPoll();
-    else stopPoll();
+    if (name === 'workspace') {
+      startPoll();
+      startLiveEvents();
+    } else {
+      stopPoll();
+      stopLiveEvents();
+    }
   }
 
   function stopPoll() {
     if (poll) { clearInterval(poll); poll = null; }
   }
 
+  /** Push connected → polling is only a safety net; otherwise poll fast. */
   function startPoll() {
     stopPoll();
     poll = setInterval(() => {
       if (!document.hidden) refreshWorkspace();
-    }, POLL_MS);
+    }, pushOn ? POLL_PUSH_MS : POLL_MS);
+  }
+
+  function setPushOn(on) {
+    if (pushOn === on) return;
+    pushOn = on;
+    const pill = $('livePill');
+    if (pill) {
+      pill.classList.toggle('is-push', on);
+      pill.title = on ? 'تحديث فوري — أي تعديل في employee.html يظهر هنا مباشرة' : 'Live';
+    }
+    if (poll) startPoll();
+  }
+
+  /** Server pushes "change" on every save (employee.html edit, import, print) → refresh right away. */
+  function startLiveEvents() {
+    if (liveEvents || typeof EventSource === 'undefined') return;
+    const token = getToken();
+    if (!token) return;
+    liveEvents = new EventSource(`${window.DTX.API}/live-events?token=${encodeURIComponent(token)}`);
+    liveEvents.addEventListener('open', () => {
+      setPushOn(true);
+      refreshWorkspace();
+    });
+    liveEvents.addEventListener('change', () => {
+      if (!document.hidden) refreshWorkspace();
+    });
+    liveEvents.addEventListener('error', () => {
+      setPushOn(false);
+      if (liveEvents && liveEvents.readyState === EventSource.CLOSED) liveEvents = null;
+    });
+  }
+
+  function stopLiveEvents() {
+    if (liveEvents) {
+      liveEvents.close();
+      liveEvents = null;
+    }
+    setPushOn(false);
   }
 
   function refreshWorkspace() {
@@ -223,13 +272,20 @@
   }
 
   async function loadWorkspace() {
-    if (wsBusy) return;
+    if (wsBusy) {
+      wsAgain = true;
+      return;
+    }
     wsBusy = true;
     let live;
     try {
       live = await api('/live-sheet');
     } finally {
       wsBusy = false;
+      if (wsAgain) {
+        wsAgain = false;
+        setTimeout(() => loadWorkspace().catch(() => {}), 0);
+      }
     }
     rows = live.rows || [];
     $('livePill').classList.remove('off');
@@ -257,13 +313,22 @@
 
   /** Read-only copy of the full Live Sheet (same rows the employees see) — re-rendered only when something changed. */
   async function loadLiveSheetView() {
-    if (sheetBusy) return;
+    if (sheetBusy) {
+      sheetAgain = true;
+      return;
+    }
     sheetBusy = true;
     let data;
     try {
       data = await api('/live-sheet?view=sheet');
     } finally {
       sheetBusy = false;
+      if (sheetAgain) {
+        sheetAgain = false;
+        setTimeout(() => {
+          if (viewTab === 'live') loadLiveSheetView().catch(() => {});
+        }, 0);
+      }
     }
     sheetRows = data.rows || [];
     $('livePill').classList.remove('off');
@@ -281,7 +346,7 @@
       }
     }
     const hint = $('liveSheetHint');
-    if (hint) hint.textContent = `${sheetRows.length} شاسيه · يتحدّث تلقائياً · آخر تحديث ${syncTime(data.at)}`;
+    if (hint) hint.textContent = `${sheetRows.length} شاسيه · ${pushOn ? 'تحديث فوري مع employee.html' : 'يتحدّث تلقائياً'} · آخر تحديث ${syncTime(data.at)}`;
   }
 
   function monthRange(d = new Date()) {

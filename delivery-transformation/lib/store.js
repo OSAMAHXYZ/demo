@@ -28,6 +28,7 @@ const BACKUP_SCAN_MS = 60 * 1000;
 function createStore(filePath) {
   let data = emptyStore();
   const sessions = new Map();
+  const changeListeners = new Set();
   let backupTimer = null;
 
   function backupPath() {
@@ -75,6 +76,15 @@ function createStore(filePath) {
       console.error('[delivery-transformation] save failed:', err.message);
       throw err;
     }
+    changeListeners.forEach((fn) => {
+      try { fn(data.meta.updatedAt); } catch (_) { /* listener errors never break a save */ }
+    });
+  }
+
+  /** Called after every successful save (employee edit, import, coordinator print…). Returns an unsubscribe fn. */
+  function onChange(fn) {
+    changeListeners.add(fn);
+    return () => changeListeners.delete(fn);
   }
 
   function seedDemoIfEmpty() {
@@ -337,6 +347,7 @@ function createStore(filePath) {
   return {
     load,
     save,
+    onChange,
     get data() { return data; },
     getUserByLogin,
     createSession,
