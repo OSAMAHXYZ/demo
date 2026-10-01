@@ -513,6 +513,41 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ok: true, companies: attendanceAvailablePayload(req.dtUser.userId, requestCity(req), requestAssignedCompany(req)) });
   });
 
+  /**
+   * Coordinator memo company list — every الناقل company (not limited to attendance check-ins)
+   * with how many cars each took (memo + display prints). Attendance names only feed suggestions.
+   */
+  router.get('/coordinator/companies', auth, (req, res) => {
+    if (!canCoordinate(req.dtUser)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const today = todayKey();
+    const map = new Map();
+    const row = (company) => {
+      const key = String(company || '').trim();
+      if (!key) return null;
+      if (!map.has(key)) map.set(key, { company: key, total: 0, today: 0, people: [] });
+      return map.get(key);
+    };
+    allCarriers().forEach(row);
+    (store.data.prints || []).forEach((p) => {
+      if (!p || p.kind === 'warehouse') return;
+      const r = row(p.company);
+      if (!r) return;
+      const n = Array.isArray(p.vins) ? p.vins.length : 0;
+      r.total += n;
+      const riyadhDay = new Date((Date.parse(p.at) || 0) + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      if (riyadhDay === today) r.today += n;
+    });
+    attendanceRows().forEach((entry) => {
+      if (!attendanceOpen(entry, req.dtUser.userId)) return;
+      const r = row(entry.company);
+      if (r) r.people.push({ id: entry.id, name: entry.name, phone: entry.phone || '' });
+    });
+    const companies = [...map.values()].sort((a, b) => (b.total - a.total) || a.company.localeCompare(b.company, 'ar'));
+    return res.json({ at: new Date().toISOString(), companies });
+  });
+
   router.get('/meta', (req, res) => {
     // Optional auth for month-close banner when token present
     const token = String(

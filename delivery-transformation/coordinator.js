@@ -28,8 +28,6 @@
   let activeVinRow = null;
   let attendanceCompanies = [];
   let claimedAttendanceId = '';
-  let lastAttendanceCity = '';
-  let cityReloadTimer = null;
   let companyPerf = null;
   let companyPerfDebug = [];
   let dtsCoState = { company: '', bucket: '', status: 'ALL', q: '' };
@@ -49,6 +47,9 @@
     document.body.classList.toggle('app-mode', name === 'detail');
     if (name === 'workspace') {
       startPoll();
+      startLiveEvents();
+    } else if (name === 'detail') {
+      stopPoll();
       startLiveEvents();
     } else {
       stopPoll();
@@ -87,10 +88,12 @@
     liveEvents = new EventSource(`${window.DTX.API}/live-events?token=${encodeURIComponent(token)}`);
     liveEvents.addEventListener('open', () => {
       setPushOn(true);
-      refreshWorkspace();
+      if ($('mainApp').classList.contains('hidden')) refreshWorkspace();
     });
     liveEvents.addEventListener('change', () => {
-      if (!document.hidden) refreshWorkspace();
+      if (document.hidden) return;
+      if ($('mainApp').classList.contains('hidden')) refreshWorkspace();
+      else refreshCompanyCounts();
     });
     liveEvents.addEventListener('error', () => {
       setPushOn(false);
@@ -716,14 +719,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
   }
 
   function selectedAttendanceName() {
-    const sel = $('customer_name');
-    if (!sel || !sel.value) return '';
-    const opt = sel.selectedOptions && sel.selectedOptions[0];
-    return (opt && (opt.dataset.name || opt.textContent) || '').trim();
+    const el = $('customer_name');
+    return String((el && el.value) || '').trim();
   }
 
-  function companyLabel(company, available) {
-    return `${company} — هناك ${available} متوفر`;
+  function companyLabel(g) {
+    return `${g.company} — الإجمالي ${g.total || 0} · اليوم ${g.today || 0}`;
   }
 
   function normVin(vin) {
@@ -770,38 +771,37 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       return;
     }
     const chosen = String($('company_rep').value || '').trim();
-    const available = attendanceCompanies.some((g) => g.company === assigned);
     const original = originalCarrierOfMemo();
     hint.classList.remove('hidden');
-    hint.classList.toggle('is-missing', !available && !chosen);
+    hint.classList.remove('is-missing');
     hint.classList.toggle('is-changed', Boolean(original && original !== assigned));
     if (original && original !== assigned) {
       hint.textContent = `✓ تم تغيير الناقل في Live Sheet: ${original} ← ${assigned}`;
     } else if (chosen && chosen !== assigned) {
       hint.textContent = `سيتم تغيير الناقل في Live Sheet: ${assigned} ← ${chosen}`;
-    } else if (available) {
-      hint.textContent = `الناقل المعيّن على Live Sheet: ${assigned} — تم اختياره تلقائياً · يمكنك اختيار شركة أخرى`;
     } else {
-      hint.textContent = `الناقل المعيّن ${assigned} غير متوفر في الحضور الآن — اختر شركة أخرى وسيتم تحديث Live Sheet فوراً`;
+      hint.textContent = `الناقل المعيّن على Live Sheet: ${assigned} — تم اختياره تلقائياً · يمكنك اختيار شركة أخرى`;
     }
   }
 
-  function renderAttendanceSelects(keepNameId) {
+  function renderAttendanceSelects() {
     const companyEl = $('company_rep');
     const currentCompany = companyEl.value;
     const assigned = assignedCarrier();
-    const has = (c) => Boolean(c) && attendanceCompanies.some((g) => g.company === c);
-    companyEl.innerHTML = `<option value="">${printMode === 'display' ? '— بدون شركة (اختياري) —' : '— اختر من الحضور —'}</option>`
-      + attendanceCompanies.map((g) =>
-        `<option value="${esc(g.company)}">${esc(companyLabel(g.company, g.available))}${g.company === assigned ? ' · المعيّن' : ''}</option>`
+    const list = attendanceCompanies.slice();
+    if (assigned && !list.some((g) => g.company === assigned)) list.unshift({ company: assigned, total: 0, today: 0, people: [] });
+    if (currentCompany && !list.some((g) => g.company === currentCompany)) list.unshift({ company: currentCompany, total: 0, today: 0, people: [] });
+    companyEl.innerHTML = `<option value="">${printMode === 'display' ? '— بدون شركة (اختياري) —' : '— اختر الشركة —'}</option>`
+      + list.map((g) =>
+        `<option value="${esc(g.company)}">${esc(companyLabel(g))}${g.company === assigned ? ' · المعيّن' : ''}</option>`
       ).join('');
-    if (has(currentCompany)) companyEl.value = currentCompany;
-    else if (has(assigned)) companyEl.value = assigned;
+    if (currentCompany) companyEl.value = currentCompany;
+    else if (assigned) companyEl.value = assigned;
     else companyEl.value = '';
     companyEl.disabled = false;
     companyEl.classList.remove('is-locked');
     renderCompanyLockHint();
-    renderAttendanceNames(keepNameId);
+    renderAttendanceNames();
   }
 
   /** Coordinator picked another company than the Live Sheet الناقل → change it on the Live Sheet now (keeps "from → to"). */
@@ -839,83 +839,73 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     }
   }
 
-  /** Re-query attendance when the memo's assigned carrier changes. */
+  /** Memo's assigned الناقل changed (VIN picked / typed) → re-select the company. */
   function syncCompanyLock() {
     if (isWarehouse()) return;
     const lock = assignedCarrier();
     if (lock === lastLock) return;
-    (async () => {
-      if (claimedAttendanceId) await releaseAttendanceHold();
-      await loadAttendanceOptions();
-    })().catch(() => {});
+    lastLock = lock;
+    renderAttendanceSelects();
   }
 
-  function renderAttendanceNames(keepNameId) {
-    const nameEl = $('customer_name');
+  /** Representative name is typed; anyone checked in for that company is offered as a suggestion. */
+  function renderAttendanceNames() {
+    const list = $('rep-list');
+    if (!list) return;
     const company = $('company_rep').value;
     const group = attendanceCompanies.find((g) => g.company === company);
     const people = (group && group.people) || [];
-    const counts = {};
-    people.forEach((p) => { counts[p.name] = (counts[p.name] || 0) + 1; });
-    nameEl.innerHTML = '<option value="">— اختر الاسم من الحضور —</option>'
-      + people.map((p) => {
-        const extra = counts[p.name] > 1 && p.phone ? ` · ${p.phone}` : '';
-        return `<option value="${esc(p.id)}" data-name="${esc(p.name)}">${esc(p.name)}${esc(extra)}</option>`;
-      }).join('');
-    if (keepNameId && people.some((p) => p.id === keepNameId)) nameEl.value = keepNameId;
-    else nameEl.value = '';
+    list.innerHTML = people.map((p) => `<option value="${esc(p.name)}">${esc(p.phone || '')}</option>`).join('');
   }
 
   function attendanceCity() {
     return String($('branch_to').value || '').trim();
   }
 
-  async function loadAttendanceOptions(keepNameId) {
+  /** Every company with how many cars it took — independent of attendance.html check-ins. */
+  async function loadAttendanceOptions() {
     if (isWarehouse()) return;
-    lastAttendanceCity = attendanceCity();
     lastLock = assignedCarrier();
-    const qs = new URLSearchParams();
-    if (lastAttendanceCity) qs.set('city', lastAttendanceCity);
-    if (lastLock) qs.set('company', lastLock);
-    const q = qs.toString() ? `?${qs.toString()}` : '';
-    const data = await api(`/attendance/available${q}`);
+    const data = await api('/coordinator/companies');
     attendanceCompanies = data.companies || [];
-    renderAttendanceSelects(keepNameId || claimedAttendanceId);
+    renderAttendanceSelects();
     updatePreview();
   }
 
-  async function holdAttendance(id) {
-    if (!id) return;
-    const data = await api('/attendance/hold', {
-      method: 'POST',
-      json: { id, city: attendanceCity(), company: assignedCarrier() },
-    });
-    claimedAttendanceId = data.entry && data.entry.id || id;
-    attendanceCompanies = data.companies || attendanceCompanies;
-    renderAttendanceSelects(claimedAttendanceId);
-    updatePreview();
+  /** Live refresh of the "took N" counts while the memo is open (keeps the current choice). */
+  function refreshCompanyCounts() {
+    if (isWarehouse() || $('mainApp').classList.contains('hidden')) return;
+    api('/coordinator/companies').then((data) => {
+      attendanceCompanies = data.companies || attendanceCompanies;
+      if (document.activeElement !== $('company_rep')) renderAttendanceSelects();
+    }).catch(() => {});
+  }
+
+  /** Typed name matches someone checked in for that company → hold that attendance entry (marked used on print). */
+  async function syncRepAttendance() {
+    const name = selectedAttendanceName();
+    const company = String($('company_rep').value || '').trim();
+    const group = attendanceCompanies.find((g) => g.company === company);
+    const person = name && group ? (group.people || []).find((p) => p.name === name) : null;
+    if (!person) {
+      await releaseAttendanceHold();
+      return;
+    }
+    if (person.id === claimedAttendanceId) return;
+    try {
+      await api('/attendance/hold', { method: 'POST', json: { id: person.id, company } });
+      claimedAttendanceId = person.id;
+    } catch (_) {
+      claimedAttendanceId = '';
+    }
   }
 
   async function releaseAttendanceHold() {
     if (!claimedAttendanceId) return;
     claimedAttendanceId = '';
     try {
-      const data = await api('/attendance/release', {
-        method: 'POST',
-        json: { city: attendanceCity(), company: assignedCarrier() },
-      });
-      attendanceCompanies = data.companies || attendanceCompanies;
+      await api('/attendance/release', { method: 'POST', json: {} });
     } catch (_) { /* ignore */ }
-  }
-
-  function onCityForAttendanceChanged() {
-    if (isWarehouse()) return;
-    clearTimeout(cityReloadTimer);
-    cityReloadTimer = setTimeout(async () => {
-      if (attendanceCity() === lastAttendanceCity) return;
-      if (claimedAttendanceId) await releaseAttendanceHold();
-      await loadAttendanceOptions();
-    }, 250);
   }
 
   function setPrintStatus(msg, type) {
@@ -1211,12 +1201,12 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       return false;
     }
     if (!company && !display) {
-      setPrintStatus('اختر الشركة من الحضور قبل الطباعة', 'err');
+      setPrintStatus('اختر الشركة قبل الطباعة', 'err');
       $('company_rep').focus();
       return false;
     }
     if (company && !selectedAttendanceName()) {
-      setPrintStatus('اختر الاسم من الحضور قبل الطباعة', 'err');
+      setPrintStatus('اكتب اسم مندوب الشركة قبل الطباعة', 'err');
       $('customer_name').focus();
       return false;
     }
@@ -1792,11 +1782,10 @@ Average: ${avg == null ? '—' : avg + ' days'}">
     document.querySelectorAll('input[name="attach_opt"], input[name="display_opt"]').forEach((el) => {
       el.addEventListener('change', syncAttachmentChoice);
     });
-    $('branch_to').addEventListener('change', onCityForAttendanceChanged);
-    $('branch_to').addEventListener('input', onCityForAttendanceChanged);
     $('company_rep').addEventListener('change', async () => {
       if (claimedAttendanceId) await releaseAttendanceHold();
-      renderAttendanceNames('');
+      fill('customer_name', '');
+      renderAttendanceNames();
       updatePreview();
       try {
         await captureCarrierChange();
@@ -1805,18 +1794,8 @@ Average: ${avg == null ? '—' : avg + ' days'}">
       }
     });
     $('customer_name').addEventListener('change', async () => {
-      const id = $('customer_name').value;
-      if (!id) {
-        await releaseAttendanceHold();
-        await loadAttendanceOptions();
-        return;
-      }
-      try {
-        await holdAttendance(id);
-      } catch (err) {
-        setPrintStatus(err.message || 'تعذر اختيار الاسم', 'err');
-        await loadAttendanceOptions();
-      }
+      await syncRepAttendance();
+      updatePreview();
     });
     $('btnPrint').addEventListener('click', doPrintA4);
     $('btnPrint2').addEventListener('click', doPrintA4);
