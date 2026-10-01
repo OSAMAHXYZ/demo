@@ -1099,19 +1099,23 @@ body.sr-mode .pbi-wide-backdrop .pbi-wide-table-wrap--with-chart { max-height: n
 body.sr-mode .pbi-wide-backdrop .acc-remain-table-wrap--wide {
   max-height: min(48vh, 460px);
   overflow: auto;
-  background: var(--wv-card);
+  background: var(--wv-card) !important;
   border: 1px solid var(--wv-line);
   border-radius: 14px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
 }
-body.sr-mode .pbi-wide-backdrop .acc-remain-table { color: var(--wv-text); font-size: 0.82rem; }
+body.sr-mode .pbi-wide-backdrop .acc-remain-table { color: var(--wv-text); font-size: 0.82rem; background: transparent !important; }
 body.sr-mode .pbi-wide-backdrop .acc-remain-table th {
-  background: var(--wv-card-2);
-  color: var(--wv-muted);
-  border-bottom: 1px solid var(--wv-line-2);
+  background: var(--wv-card-2) !important;
+  color: var(--wv-muted) !important;
+  border-bottom: 1px solid var(--wv-line-2) !important;
 }
-body.sr-mode .pbi-wide-backdrop .acc-remain-table td { border-bottom: 1px solid var(--wv-line); }
+body.sr-mode .pbi-wide-backdrop .acc-remain-table td {
+  color: var(--wv-text) !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--wv-line) !important;
+}
 body.sr-mode .pbi-wide-backdrop .acc-remain-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 body.sr-mode .pbi-wide-backdrop .acc-remain-table tr.is-done { background: rgba(52, 211, 153, 0.07); }
 body.sr-mode .pbi-wide-backdrop .acc-remain-name { color: #fff; }
