@@ -30,7 +30,7 @@
   <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
   <link rel="stylesheet" href="gec-control.css?v=20260929conv1" />
-  <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20260930lx6" />
+  <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261002lxview" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261001lx1" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -4554,6 +4554,7 @@
         const f = payload.files[d.id];
         if (!f || !f.buffer) continue;
         if (GEC_VIEW && !GEC_VIEW_SLOTS.has(d.id)) continue;
+        if (LEXUS_VIEW) continue;
         if (d.id === "gec") {
           const gecDataset = window.GecData ? window.GecData.parseBuffer(f.buffer, { fileName: f.name }) : null;
           slots.gec = {
@@ -6935,7 +6936,9 @@
   /** gecdashboardview.html → index.html?view=gec: GEC Control Center only, view-only, reloads on every Admin Push. */
   const GEC_VIEW = new URLSearchParams(location.search).get("view") === "gec";
   const GEC_VIEW_SLOTS = new Set(["gec", "gecVisitors", "sales", "backorder"]);
-  let activePanel = GEC_VIEW ? "gec" : "salesreport";
+  /** lexusb2ctracker.html → index.html?view=lexus: Lexus Tracker only. The tracker loads its own files and reloads on every Admin Push. */
+  const LEXUS_VIEW = new URLSearchParams(location.search).get("view") === "lexus";
+  let activePanel = GEC_VIEW ? "gec" : LEXUS_VIEW ? "lexus" : "salesreport";
   let panelBeforeGec = "";
   let panelBeforeLexus = "";
   let panelBeforeB2c = "";
@@ -7680,7 +7683,7 @@
       if (lxHost.parentNode !== document.body) document.body.appendChild(lxHost);
       window.LexusTracker.mount(lxHost);
       window.LexusTracker.show({
-        onExit: () => {
+        onExit: LEXUS_VIEW ? null : () => {
           const others = visiblePanels().filter((p) => p.id !== "lexus").map((p) => p.id);
           switchPanel(others.includes(panelBeforeLexus) ? panelBeforeLexus : (others[0] || "dashboard"));
         },
@@ -21657,6 +21660,10 @@
     const progressive = options.progressive !== false;
     showError("");
     refreshTargetsFromAdmin();
+    if (LEXUS_VIEW) {
+      switchPanel("lexus");
+      return;
+    }
     if (!hasAnyPushedFiles()) {
       setStatus("Waiting for Admin Push");
       if (GEC_VIEW) switchPanel("gec");
@@ -21773,6 +21780,7 @@
     switchNav("dashboard");
     setStatus("View cleared · Push again from Admin to reload");
     if (GEC_VIEW) switchPanel("gec");
+    if (LEXUS_VIEW) switchPanel("lexus");
   }
 
   let lastPushAt = 0;
@@ -23076,7 +23084,13 @@
     switchPanel("gec");
     liveSync = Store.startLiveSync(() => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }), { initialAt: lastDataPushAt });
   }
-  refreshFromAdmin();
+  if (LEXUS_VIEW) {
+    document.title = "Lexus B2C Tracker — Abdul Latif Jameel MOTORS";
+    document.body.classList.add("lexus-view");
+    switchPanel("lexus");
+  } else {
+    refreshFromAdmin();
+  }
 })();
 </script>
 </body>

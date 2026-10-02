@@ -5,6 +5,8 @@
  */
 body.lx-mode { overflow: hidden !important; }
 body:not(.lx-mode) > #lexus-tracker-host { display: none; }
+body.lexus-view > .app-frame { display: none; }
+body.lexus-view { background: #0a0a0b; }
 
 #lexus-tracker-host .lxt {
   --bg: #0a0a0b;
