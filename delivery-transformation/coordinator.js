@@ -1,6 +1,8 @@
 /* Delivery Transformation coordinator — Live Sheet + Delivery_pdf print */
 (() => {
-  const { api, esc, na, getToken, getUser, setSession, clearSession } = window.DTX;
+  const { api, esc, na, getToken, getUser, setSession, clearSession, useSessionScope, migrateLegacySession } = window.DTX;
+  useSessionScope('coordinator');
+  migrateLegacySession((u) => u.role === 'coordinator' || u.canCoordinate);
 
   const $ = (id) => document.getElementById(id);
   const AR_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'];

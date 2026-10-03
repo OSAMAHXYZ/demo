@@ -1,6 +1,8 @@
 /* Delivery Transformation — employee app (same layout & flow as deliveryteam) */
 (() => {
-  const { api, esc, getToken, getUser, setSession, clearSession, downloadFile } = window.DTX;
+  const { api, esc, getToken, getUser, setSession, clearSession, downloadFile, useSessionScope, migrateLegacySession } = window.DTX;
+  useSessionScope('employee');
+  migrateLegacySession((u) => u.role === 'hanouf' || u.role === 'employee');
 
   const state = {
     user: null,

@@ -1,12 +1,14 @@
 /* Inventory Management — Ruba / الفاضل / البراء */
 (() => {
-  const { api, esc, getToken, getUser, setSession, clearSession } = window.DTX;
+  const { api, esc, getToken, getUser, setSession, clearSession, useSessionScope, migrateLegacySession } = window.DTX;
+  useSessionScope('inventory');
 
   const ALLOWED = [
     { id: 'ruba', name: 'Ruba' },
     { id: 'alfadel', name: 'الفاضل' },
     { id: 'albara', name: 'البراء' },
   ];
+  migrateLegacySession((u) => !!(u && (u.canInventory || ALLOWED.some((a) => a.id === u.id))));
 
   const $ = (id) => document.getElementById(id);
   const state = {

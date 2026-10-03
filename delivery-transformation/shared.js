@@ -4,6 +4,9 @@
   const SCOPES = {
     default: { token: 'dt_xform_token', user: 'dt_xform_user' },
     collector: { token: 'dt_xform_collector_token', user: 'dt_xform_collector_user' },
+    employee: { token: 'dt_xform_employee_token', user: 'dt_xform_employee_user' },
+    coordinator: { token: 'dt_xform_coordinator_token', user: 'dt_xform_coordinator_user' },
+    inventory: { token: 'dt_xform_inventory_token', user: 'dt_xform_inventory_user' },
   };
   let activeScope = 'default';
 
@@ -49,6 +52,24 @@
   function clearSession() {
     localStorage.removeItem(scopeKeys().token);
     localStorage.removeItem(scopeKeys().user);
+  }
+
+  /**
+   * Copy the old shared login into this page's own scope once.
+   * Employee and coordinator used to share one token, so a coordinator sign-in
+   * replaced Hanouf's token and her Live Sheet saves were rejected.
+   */
+  function migrateLegacySession(accept) {
+    if (activeScope === 'default' || activeScope === 'collector') return;
+    if (getToken()) return;
+    try {
+      const legacyUser = JSON.parse(localStorage.getItem(SCOPES.default.user) || 'null');
+      const legacyToken = localStorage.getItem(SCOPES.default.token) || '';
+      if (!legacyToken || !legacyUser || typeof accept !== 'function' || !accept(legacyUser)) return;
+      setSession(legacyToken, legacyUser);
+    } catch {
+      /* ignore */
+    }
   }
 
   /** One-time: copy legacy shared collector session into the isolated collector scope. */
@@ -157,6 +178,7 @@
     setSession,
     clearSession,
     useSessionScope,
+    migrateLegacySession,
     migrateCollectorSession,
     statusBadge,
     toast,
