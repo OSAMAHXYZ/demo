@@ -7,7 +7,7 @@
  * Prototype only. This is not production storage or production security.
  */
 (function (global) {
-  const KEY = "tdr_crm_store_v1";
+  const KEY = "tdr_crm_store_v2";
   const listeners = new Set();
   let memory = null;
   let readyResolve;
@@ -180,17 +180,41 @@
       };
     };
 
+    const roster = [
+      ["CA48448", "Aljawharah Saad Alsuhaim", "48448", "call-agent"],
+      ["CA49157", "Muhannad Hamid AL Youbi", "49157", "call-agent"],
+      ["CA50724", "Raghdah Khalid Shalabi", "50724", "call-agent"],
+      ["CA49786", "Ziyad Faisal Kabli", "49786", "call-agent"],
+      ["CA49601", "Haneen Talal Aqeel Al Madani", "49601", "call-agent"],
+      ["CA49638", "Abdullah Saleh Althagafi", "49638", "call-agent"],
+      ["CA32834", "Tawdod Atiah Al Sharef", "32834", "call-agent"],
+      ["SA46659", "Ghina Assad Salem Alameer", "46659", "sales-advisor"],
+      ["SA48714", "Maryam Salah Altabakh", "48714", "sales-advisor"],
+      ["SA31629", "Moath Khalel Mohmmad Al Hjoouj", "31629", "sales-advisor"],
+      ["SA48461", "Mohsen Zuhair Alattas", "48461", "sales-advisor"],
+      ["SA45646", "Essa Meraizeeq Saadi Almutairy", "45646", "sales-advisor"],
+      ["SA45615", "Fatmah Mohammed Alasseri", "45615", "sales-advisor"],
+      ["SA46662", "Khulood Abdulmajeed Ghulam Albaloushi", "46662", "sales-advisor"],
+      ["SA24870", "Mohammed Al Khateeb", "24870", "sales-advisor"],
+      ["SA46643", "Raom Fahad Abbas Samkari", "46643", "sales-advisor"],
+      ["SA46661", "Magbol Omar Magbol Ashor", "46661", "sales-advisor"],
+      ["SA49602", "Alawiyyah Rafi Saad Al Shehri", "49602", "sales-advisor"],
+      ["SA13251", "Mohammed Abker Najeri", "13251", "sales-advisor"],
+      ["SA49597", "Amjad Ahmed Alwafi", "49597", "sales-advisor"],
+      ["SA50863", "Muhannad Abdullah Minyaw", "50863", "sales-advisor"],
+    ];
     const users = await Promise.all([
-      people({ id: "USR001", name: "Layla Alharbi", employeeId: "ADM-1001", role: "admin", username: "admin", password: "admin123", team: "Digital Retail", email: "layla.alharbi@example.com" }),
-      people({ id: "USR002", name: "Ahmed Alharbi", employeeId: "CA-2101", role: "call-agent", username: "a.alharbi", password: "123456", team: "Inbound", email: "ahmed.alharbi@example.com", phone: "0551002101" }),
-      people({ id: "USR003", name: "Mohammed Saleh", employeeId: "CA-2102", role: "call-agent", username: "m.saleh", password: "123456", team: "Inbound", email: "mohammed.saleh@example.com", phone: "0551002102" }),
-      people({ id: "USR004", name: "Ali Hassan", employeeId: "CA-2103", role: "call-agent", username: "ali", password: "123456", team: "Outbound", email: "ali.hassan@example.com", phone: "0551002103" }),
-      people({ id: "USR005", name: "Sara Qureshi", employeeId: "CA-2104", role: "call-agent", username: "sara", password: "123456", team: "Outbound", email: "sara.qureshi@example.com", phone: "0551002104" }),
-      people({ id: "USR006", name: "Abdullah Omar", employeeId: "SA-3301", role: "sales-advisor", username: "abdullah", password: "123456", branch: "Riyadh Olaya", email: "abdullah.omar@example.com", phone: "0552003301" }),
-      people({ id: "USR007", name: "Khalid Fahad", employeeId: "SA-3302", role: "sales-advisor", username: "khalid", password: "123456", branch: "Jeddah Tahlia", email: "khalid.fahad@example.com", phone: "0552003302" }),
-      people({ id: "USR008", name: "Faisal Ibrahim", employeeId: "SA-3303", role: "sales-advisor", username: "faisal", password: "123456", branch: "Dammam Corniche", email: "faisal.ibrahim@example.com", phone: "0552003303" }),
-      people({ id: "USR009", name: "Mohammed Alotaibi", employeeId: "SA-3304", role: "sales-advisor", username: "m.alotaibi", password: "123456", branch: "Riyadh Exit 5", email: "mohammed.alotaibi@example.com", phone: "0552003304" }),
-      people({ id: "USR010", name: "Nasser Yousef", employeeId: "SA-3305", role: "sales-advisor", username: "nasser", password: "123456", branch: "Khobar", email: "nasser.yousef@example.com", phone: "0552003305" }),
+      people({ id: "USR001", name: "Layla Alharbi", employeeId: "ADM-1001", role: "admin", username: "admin", password: "admin123", team: "Digital Retail" }),
+      ...roster.map(([id, name, number, role]) => people({
+        id,
+        name,
+        employeeId: number,
+        role,
+        username: number,
+        password: number,
+        team: role === "call-agent" ? "Call Center" : "",
+        branch: role === "sales-advisor" ? "Showroom" : "",
+      })),
     ]);
 
     const carSeed = [
@@ -238,33 +262,19 @@
       active: true,
     }));
 
-    const connections = [
-      ["CN001", "USR002", "USR006"],
-      ["CN002", "USR002", "USR007"],
-      ["CN003", "USR003", "USR008"],
-      ["CN004", "USR004", "USR009"],
-      ["CN005", "USR004", "USR010"],
-      ["CN006", "USR005", "USR006"],
-      ["CN007", "USR005", "USR008"],
-    ].map(([id, callAgentId, salesAdvisorId]) => ({
-      id,
+    const agentIds = roster.filter((row) => row[3] === "call-agent").map((row) => row[0]);
+    const advisorIds = roster.filter((row) => row[3] === "sales-advisor").map((row) => row[0]);
+    const connections = agentIds.flatMap((callAgentId, index) => [0, 1].map((offset) => ({
+      id: `CN${String(index * 2 + offset + 1).padStart(3, "0")}`,
       callAgentId,
-      salesAdvisorId,
+      salesAdvisorId: advisorIds[(index * 2 + offset) % advisorIds.length],
       connectedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 12).toISOString(),
       status: "active",
-    }));
+    })));
 
     const first = ["Omar", "Hassan", "Layla", "Nora", "Yousef", "Salem", "Huda", "Tariq", "Maha", "Bandar", "Reem", "Sami", "Lina", "Fahad", "Amal", "Waleed", "Dina", "Rakan", "Mona", "Adel", "Hanan", "Saud"];
     const last = ["Alqahtani", "Alshehri", "Aldossari", "Almutairi", "Alghamdi", "Alzahrani", "Alharbi", "Alotaibi"];
-    const pairs = [
-      ["USR002", "USR006"],
-      ["USR002", "USR007"],
-      ["USR003", "USR008"],
-      ["USR004", "USR009"],
-      ["USR004", "USR010"],
-      ["USR005", "USR006"],
-      ["USR005", "USR008"],
-    ];
+    const pairs = connections.map((row) => [row.callAgentId, row.salesAdvisorId]);
     const leads = [];
     for (let n = 0; n < 22; n += 1) {
       const num = 101 + n;
@@ -486,7 +496,7 @@
     if (state.users.some((u) => u.username.toLowerCase() === username)) throw new Error("That username is already in use.");
     if (state.users.some((u) => u.employeeId.toLowerCase() === employeeId.toLowerCase())) throw new Error("That employee ID is already in use.");
     const password = String(input.password || "");
-    if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+    if (password.length < 5) throw new Error("Password must be at least 5 characters.");
     if (input.confirm != null && password !== input.confirm) throw new Error("Passwords do not match.");
     const secret = await hashPassword(password);
     const user = {
@@ -531,7 +541,7 @@
     if (input.team != null) user.team = String(input.team).trim();
     if (input.status) user.status = input.status === "disabled" ? "disabled" : "active";
     if (input.password) {
-      if (String(input.password).length < 6) throw new Error("Password must be at least 6 characters.");
+      if (String(input.password).length < 5) throw new Error("Password must be at least 5 characters.");
       if (input.confirm != null && input.password !== input.confirm) throw new Error("Passwords do not match.");
       const secret = await hashPassword(input.password);
       user.salt = secret.salt;

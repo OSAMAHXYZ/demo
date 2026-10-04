@@ -179,6 +179,7 @@
   TDR.ready.then(async () => {
     me = await Auth.requireRole("call-agent");
     if (!me) return;
+    document.getElementById("hello").textContent = `Hi, ${me.name}`;
     document.getElementById("side-user").innerHTML = `<b>${TDR.esc(me.name)}</b><span>Call Agent</span>`;
     TDR.subscribe(() => { if (ui.found) ui.found = TDR.leads().find((lead) => lead.id === ui.found.id) || ui.found; paint(); });
     paint();

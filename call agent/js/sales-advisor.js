@@ -14,7 +14,7 @@
     const rows = mine();
     const stats = TDR.kpis(rows);
     const agents = TDR.agentsForAdvisor(me.id);
-    document.getElementById("hello").textContent = `Welcome, ${me.name}`;
+    document.getElementById("hello").textContent = `Hi, ${me.name}`;
     document.getElementById("content").innerHTML = `
       <section class="kpi-grid">
         ${[["Assigned", stats.assigned], ["Contacted", stats.contacted], ["Confirmed", stats.confirmed], ["Other car", stats.otherCar], ["Follow up", stats.followUp], ["Completed", stats.completed]].map(([l, n]) => `<article class="kpi"><span>${l}</span><b>${n}</b></article>`).join("")}

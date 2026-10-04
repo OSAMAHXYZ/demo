@@ -679,6 +679,7 @@
   TDR.ready.then(async () => {
     me = await Auth.requireRole("admin");
     if (!me) return;
+    document.getElementById("hello").textContent = `Hi, ${me.name}`;
     document.getElementById("side-user").innerHTML = `<b>${esc(me.name)}</b><span>${esc(me.roleLabel)}</span>`;
     let last = (TDR.activity()[0] || {}).id;
     TDR.subscribe(() => {

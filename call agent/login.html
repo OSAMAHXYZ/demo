@@ -28,15 +28,17 @@
     <section class="login-panel">
       <form class="login-card" id="login-form">
         <h2>Sign in</h2>
-        <p class="sub">Use the account created by your administrator.</p>
+        <p class="sub">Choose your name, then enter your employee number.</p>
         <div class="field">
-          <label for="username">Username</label>
-          <input id="username" name="username" autocomplete="username" required />
+          <label for="person">Your name</label>
+          <select id="person" required>
+            <option value="">Choose your name</option>
+          </select>
         </div>
         <div class="field">
-          <label for="password">Password</label>
+          <label for="password">Employee number</label>
           <div class="pass-row">
-            <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <input id="password" name="password" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Username and password" required />
             <button type="button" class="btn btn-ghost" id="toggle-pass">Show</button>
           </div>
         </div>
@@ -48,7 +50,7 @@
         </div>
         <p class="error-text" id="login-error"></p>
         <button class="btn btn-primary" type="submit" id="login-btn" style="width:100%">Login</button>
-        <div class="demo-chip">Prototype sign-in · Admin <b>admin</b> / <b>admin123</b>. Passwords are hashed in this browser and are not production security.</div>
+        <div class="demo-chip">Your employee number is the username and the password. Administrator: <b>admin</b> / <b>admin123</b>. This browser hash is not production security.</div>
       </form>
     </section>
   </div>
@@ -75,15 +77,38 @@
       });
       document.getElementById("close-forgot").onclick = () => TDR.closeModal();
     });
+    function fillPeople() {
+      const select = document.getElementById("person");
+      [["call-agent", "Call Agent"], ["sales-advisor", "Sales Advisor"]].forEach(([role, label]) => {
+        const group = document.createElement("optgroup");
+        group.label = label;
+        TDR.users(role).forEach((user) => {
+          const option = document.createElement("option");
+          option.value = user.username;
+          option.textContent = user.name;
+          group.appendChild(option);
+        });
+        select.appendChild(group);
+      });
+      const admin = document.createElement("option");
+      admin.value = "admin";
+      admin.textContent = "Administrator";
+      select.appendChild(admin);
+    }
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       error.textContent = "";
       const btn = document.getElementById("login-btn");
+      const person = document.getElementById("person").value;
+      if (!person) {
+        error.textContent = "Choose your name.";
+        return;
+      }
       btn.disabled = true;
       btn.textContent = "Signing in…";
       try {
         const user = await Auth.login(
-          document.getElementById("username").value,
+          person,
           document.getElementById("password").value,
           document.getElementById("remember").checked
         );
@@ -96,7 +121,11 @@
     });
     TDR.ready.then(() => {
       const user = Auth.current();
-      if (user) location.replace(Auth.homeFor(user));
+      if (user) {
+        location.replace(Auth.homeFor(user));
+        return;
+      }
+      fillPeople();
     });
   </script>
 </body>
