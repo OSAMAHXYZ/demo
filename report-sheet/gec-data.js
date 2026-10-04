@@ -2,7 +2,7 @@
  * GEC data layer · Guest Experience Center.
  * Two independent datasets:
  *   • Leads    — one lead = one unique Transaction No. (Lead Data sheet)
- *   • Visitors — every person entering the center (Date · Promoter · Visit Purpose), lead or not
+ *   • Visitors — every transaction in that file whose column J date is in the selected period
  * Business rules live in this file only; the dashboard is presentation.
  */
 (function (global) {
@@ -711,6 +711,7 @@
         }
         return t;
       };
+      const visitDate = parseAnyDate(line[colIndex("J")]);
       const promoter = promoterFromEmployee(cell(line, "employeeNumber"));
       const status = str(cell(line, "status"));
       const soCell = cell(line, "salesOrder");
@@ -730,6 +731,8 @@
         rowCount: g.rows.length,
         leadDate,
         day: dayKey(leadDate),
+        visitDate,
+        visitDay: dayKey(visitDate),
         employeeNumber: promoter.key,
         promoter: promoter.name,
         promoterKnown: promoter.known,
@@ -777,6 +780,8 @@
     });
     if (quality.knownPromoter + quality.blankEmployee + quality.unmappedEmployee !== records.length) warnings.push("Employee Number assignment (promoter + blank + invalid) does not add up to unique transactions.");
     if (quality.undated) warnings.push(`${quality.undated} transaction(s) have no readable Created Date — counted in totals, not in daily views.`);
+    const missingVisitDate = records.filter((x) => !x.visitDay).length;
+    if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column J — left out of Visitors when a date is selected.`);
 
     const days = records.map((x) => x.day).filter(Boolean).sort();
     return applyControl({
@@ -1201,18 +1206,33 @@
     return res;
   }
 
-  function computeFresh(dataset, f, options, vds) {
+  function computeFresh(dataset, f, options, _vds) {
     const all = (dataset && dataset.records) || [];
-    const hasVisitors = !!(vds && vds.ok);
-    /** Visitors have no model/source/status/consultant — a Visitor→Lead rate under those filters would compare different populations. */
+    /** Visitors are the GEC rows themselves. The date is column J, not the separate visitor file. */
+    const hasVisitors = !!(dataset && dataset.ok && all.length);
+    /** A model/source/status/consultant filter changes the lead population only, so Visitor→Lead is not comparable. */
     const leadOnlyFilter = !!(f.model || f.source || f.status || f.consultant);
     /** Leads carry no visit purpose — Visitor→Lead under a purpose filter would compare different populations too. */
     const purposeFilter = !!f.purpose;
     const scoped = applyFilters(all, f);
     const rows = scoped.filter((r) => r.isLead);
     const registered = scoped.filter((r) => !r.isLead);
-    const visitorRows = hasVisitors ? applyVisitorFilters(vds.records, f) : [];
-    const purposeRows = hasVisitors && purposeFilter ? applyVisitorFilters(vds.records, f, true) : visitorRows;
+    const visitorSource = all.filter((r) => {
+      if (f.from && (!r.visitDay || r.visitDay < f.from)) return false;
+      if (f.to && (!r.visitDay || r.visitDay > f.to)) return false;
+      if (f.promoter && r.promoter !== f.promoter) return false;
+      return true;
+    });
+    const visitorRows = visitorSource.map((r) => ({
+      rowNo: r.rowNo,
+      date: r.visitDate || null,
+      day: r.visitDay || "",
+      promoter: r.promoter,
+      promoterKnown: r.promoterKnown,
+      purpose: r.statusLabel || "(blank)",
+      count: 1,
+    }));
+    const purposeRows = visitorRows;
     const total = rows.length;
     const converted = sumBy(rows, (r) => r.converted);
     const responded = sumBy(rows, (r) => r.responded);
