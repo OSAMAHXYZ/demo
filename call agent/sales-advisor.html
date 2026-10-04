@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Advisor · Toyota Digital Retail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-lockup">
+        <img src="assets/mark.svg?v=2" alt="" width="42" height="42" />
+        <div><strong>TOYOTA</strong><span>Digital Retail</span></div>
+      </div>
+      <nav class="side-nav">
+        <button type="button" class="is-on">My leads</button>
+      </nav>
+      <div class="side-user" id="side-user"></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">☰</button>
+        <div><h1 id="hello">My assigned leads</h1><p>Only leads assigned to you appear here</p></div>
+        <div class="top-actions"><button type="button" class="btn btn-ghost" id="logout">Log out</button></div>
+      </header>
+      <main class="content" id="content"><div class="empty">Loading assigned leads…</div></main>
+    </div>
+  </div>
+  <div id="modal-root" hidden></div>
+  <div id="dialog-root" hidden></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/sales-advisor.js"></script>
+</body>
+</html>

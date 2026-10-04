@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · Toyota Digital Retail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="login-split">
+    <section class="login-brand">
+      <div class="brand-lockup">
+        <img src="assets/mark.svg?v=2" alt="" />
+        <div>
+          <strong>TOYOTA</strong>
+          <span>Digital Retail</span>
+        </div>
+      </div>
+      <div>
+        <h1>Call Agent CRM</h1>
+        <p>Assign guest leads, connect showroom advisors, and keep every Toyota enquiry on one desk.</p>
+      </div>
+      <div>Abdul Latif Jameel Motors · Internal</div>
+    </section>
+    <section class="login-panel">
+      <form class="login-card" id="login-form">
+        <h2>Sign in</h2>
+        <p class="sub">Use the account created by your administrator.</p>
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="pass-row">
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <button type="button" class="btn btn-ghost" id="toggle-pass">Show</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <label class="lbl" style="text-transform:none;letter-spacing:0;font-size:0.92rem;display:flex;gap:8px;align-items:center;">
+            <input id="remember" type="checkbox" style="width:auto" /> Remember me
+          </label>
+          <button type="button" class="btn btn-ghost" id="forgot" style="margin-left:auto">Forgot password?</button>
+        </div>
+        <p class="error-text" id="login-error"></p>
+        <button class="btn btn-primary" type="submit" id="login-btn" style="width:100%">Login</button>
+        <div class="demo-chip">Prototype sign-in · Admin <b>admin</b> / <b>admin123</b>. Passwords are hashed in this browser and are not production security.</div>
+      </form>
+    </section>
+  </div>
+  <div id="modal-root" hidden></div>
+  <div id="dialog-root" hidden></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const form = document.getElementById("login-form");
+    const error = document.getElementById("login-error");
+    document.getElementById("toggle-pass").addEventListener("click", () => {
+      const input = document.getElementById("password");
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      document.getElementById("toggle-pass").textContent = show ? "Hide" : "Show";
+    });
+    document.getElementById("forgot").addEventListener("click", async () => {
+      await TDR.ready;
+      TDR.openModal({
+        title: "Forgot password?",
+        html: `<p>Ask an administrator to reset your password from User Accounts. This demo does not send email.</p>
+          <div class="form-actions"><button type="button" class="btn btn-primary" id="close-forgot">Close</button></div>`,
+      });
+      document.getElementById("close-forgot").onclick = () => TDR.closeModal();
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.textContent = "";
+      const btn = document.getElementById("login-btn");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      try {
+        const user = await Auth.login(
+          document.getElementById("username").value,
+          document.getElementById("password").value,
+          document.getElementById("remember").checked
+        );
+        location.replace(Auth.homeFor(user));
+      } catch (err) {
+        error.textContent = err.message || "Sign in failed.";
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
+    });
+    TDR.ready.then(() => {
+      const user = Auth.current();
+      if (user) location.replace(Auth.homeFor(user));
+    });
+  </script>
+</body>
+</html>

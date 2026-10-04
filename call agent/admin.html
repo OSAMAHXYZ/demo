@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin · Toyota Call Agent CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-lockup">
+        <img src="assets/mark.svg?v=2" alt="" width="42" height="42" />
+        <div><strong>TOYOTA</strong><span>Digital Retail</span></div>
+      </div>
+      <nav class="side-nav" id="side-nav">
+        <button type="button" data-view="dashboard">Dashboard</button>
+        <button type="button" data-view="leads">CRM Leads</button>
+        <button type="button" data-view="users">User Accounts</button>
+        <button type="button" data-view="agents">Call Agents</button>
+        <button type="button" data-view="advisors">Sales Advisors</button>
+        <button type="button" data-view="connections">Team Connections</button>
+        <button type="button" data-view="cars">Car Models</button>
+        <button type="button" data-view="statuses">Status Management</button>
+        <button type="button" data-view="monitor">Assignment Monitor</button>
+        <button type="button" data-view="activity">Activity Log</button>
+        <button type="button" data-view="settings">Settings</button>
+      </nav>
+      <div class="side-user" id="side-user"></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">☰</button>
+        <div><h1 id="page-title">Dashboard</h1><p id="page-sub">Call Agent CRM</p></div>
+        <div class="top-actions"><button type="button" class="btn btn-ghost" id="logout">Log out</button></div>
+      </header>
+      <main class="content" id="content"><div class="empty">Loading workspace…</div></main>
+    </div>
+  </div>
+  <div id="modal-root" hidden></div>
+  <div id="dialog-root" hidden></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
