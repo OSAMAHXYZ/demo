@@ -2,7 +2,7 @@
  * GEC data layer · Guest Experience Center.
  * Two independent datasets:
  *   • Leads    — one lead = one unique Transaction No. (Lead Data sheet)
- *   • Visitors — every transaction in that file whose column J date is in the selected period
+ *   • Visitors — every transaction whose Created Date (or column O) is in the selected period
  * Business rules live in this file only; the dashboard is presentation.
  */
 (function (global) {
@@ -664,6 +664,10 @@
     const productCols = config.PRODUCT_COLUMNS.map((letter) => ({ letter, index: colIndex(letter), header: headers[colIndex(letter)] || "" }));
     productCols.filter((p) => p.index >= headers.length)
       .forEach((p) => warnings.push(`The lead sheet has no column ${p.letter} — every customer will read as ${NO_PRODUCT}.`));
+    if (colMap.createdDate == null) {
+      colMap.createdDate = colIndex("O");
+      warnings.push("Created Date was not found by name — the date filter and Visitors use column O.");
+    }
     LEAD_FIELDS.filter((f) => f.required && colMap[f.key] == null)
       .forEach((f) => warnings.push(`Column “${f.label}” not found — related KPIs will read as zero.`));
     if (colMap.consultant == null) warnings.push("No consultant column found (e.g. “Assigned To”) — Consultant Performance and Unassigned are unavailable.");
@@ -700,6 +704,7 @@
         const dated = g.rows.map((e) => leadDateOf(cell(e.line, "createdDate"), cell(e.line, "createdTime"))).filter(Boolean);
         leadDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
+      if (!leadDate) leadDate = parseAnyDate(line[colIndex("O")]);
       const textLine = text[latest.r] || [];
       const shown = (key) => {
         const rawV = cell(line, key);
@@ -711,7 +716,7 @@
         }
         return t;
       };
-      const visitDate = parseAnyDate(line[colIndex("J")]);
+      const visitDate = leadDate;
       const promoter = promoterFromEmployee(cell(line, "employeeNumber"));
       const status = str(cell(line, "status"));
       const soCell = cell(line, "salesOrder");
@@ -781,7 +786,7 @@
     if (quality.knownPromoter + quality.blankEmployee + quality.unmappedEmployee !== records.length) warnings.push("Employee Number assignment (promoter + blank + invalid) does not add up to unique transactions.");
     if (quality.undated) warnings.push(`${quality.undated} transaction(s) have no readable Created Date — counted in totals, not in daily views.`);
     const missingVisitDate = records.filter((x) => !x.visitDay).length;
-    if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column J — left out of Visitors when a date is selected.`);
+    if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable Created Date or column O date — left out of Visitors when a date is selected.`);
 
     const days = records.map((x) => x.day).filter(Boolean).sort();
     return applyControl({
@@ -1208,7 +1213,7 @@
 
   function computeFresh(dataset, f, options, _vds) {
     const all = (dataset && dataset.records) || [];
-    /** Visitors are the GEC rows themselves. The date is column J, not the separate visitor file. */
+    /** Visitors are the GEC rows themselves. The date is Created Date, or column O when that header is missing. */
     const hasVisitors = !!(dataset && dataset.ok && all.length);
     /** A model/source/status/consultant filter changes the lead population only, so Visitor→Lead is not comparable. */
     const leadOnlyFilter = !!(f.model || f.source || f.status || f.consultant);
