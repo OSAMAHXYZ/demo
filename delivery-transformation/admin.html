@@ -50,6 +50,8 @@
     <div class="top-right">
       <button type="button" class="btn" id="xls-live">Extract Live Sheet</button>
       <button type="button" class="btn" id="xls-admin">Extract admin Excel</button>
+      <button type="button" class="btn" id="xls-all">Extract all data</button>
+      <button type="button" class="btn" id="xls-all-upload">Upload all data</button>
       <span class="live-clock" id="live-clock">—</span>
       <span id="who" class="badge">—</span>
       <button type="button" class="btn-ghost" id="logout-btn">Logout</button>
@@ -169,6 +171,22 @@
           <button type="button" class="btn" id="backup-save">Save snapshot now</button>
           <button type="button" class="btn-primary" id="backup-restore">Restore last data</button>
           <span class="hint" id="backup-hint"></span>
+        </div>
+      </div>
+
+      <div class="card" id="full-excel-card" style="margin-bottom:14px">
+        <h2>Excel — all data</h2>
+        <p class="hint">
+          Extract every Live Sheet VIN (vehicle fields and employee entries), pending assignment,
+          attendance, delivery-note print, audit row, target, vacation, SLA, KPI weight, company, and city.
+          Upload that same file to make employee.html and coordinator.html match it.
+          The other Excel buttons are reports and cannot be uploaded back.
+        </p>
+        <div class="toolbar" style="margin-top:10px">
+          <button type="button" class="btn-primary" id="xls-all-card">Extract all data</button>
+          <button type="button" class="btn" id="xls-all-pick">Upload Excel</button>
+          <input type="file" id="xls-all-file" accept=".xlsx,.xls" hidden />
+          <span class="hint" id="xls-all-hint"></span>
         </div>
       </div>
 
@@ -417,6 +435,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20261003scope2"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20261001cs1"></script>
+  <script src="admin.js?v=20261004full1"></script>
 </body>
 </html>

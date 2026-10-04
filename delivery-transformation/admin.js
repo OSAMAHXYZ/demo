@@ -2522,6 +2522,48 @@
       runExport(`/export/admin${qs}`, 'DT-Admin.xlsx');
     });
   }
+  async function uploadFullExcel(file) {
+    const hint = $('xls-all-hint');
+    if (!file) return;
+    if (!confirm('Replace all Delivery Transformation data with this Excel? Live Sheet, attendance, prints, targets, SLA, and KPI settings will match the file.')) return;
+    if (hint) hint.textContent = `Uploading ${file.name}…`;
+    try {
+      const res = await fetch(`${window.DTX.API}/import/full`, {
+        method: 'POST',
+        headers: {
+          'X-Delivery-Transform-Token': getToken(),
+          'X-Filename': encodeURIComponent(file.name),
+          'Content-Type': 'application/octet-stream',
+        },
+        body: await file.arrayBuffer(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
+      const c = data.counts || {};
+      const msg = `Matched the file · ${c.Vehicles || 0} VINs · ${data.pending || 0} pending · ${c.Attendance || 0} attendance · ${c.Prints || 0} prints · ${c.Audit || 0} audit · ${c.Meta || 0} settings`;
+      if (hint) hint.textContent = msg;
+      toast('All data matched');
+      if (typeof loadDash === 'function') loadDash().catch(() => {});
+    } catch (err) {
+      if (hint) hint.textContent = err.message || 'Upload failed';
+      alert(err.message || 'Could not match the Excel');
+    }
+  }
+  function pickFullExcel() {
+    const input = $('xls-all-file');
+    if (input) input.click();
+  }
+  if ($('xls-all')) $('xls-all').addEventListener('click', () => runExport('/export/full', 'DT-All-Data.xlsx'));
+  if ($('xls-all-card')) $('xls-all-card').addEventListener('click', () => runExport('/export/full', 'DT-All-Data.xlsx'));
+  if ($('xls-all-upload')) $('xls-all-upload').addEventListener('click', pickFullExcel);
+  if ($('xls-all-pick')) $('xls-all-pick').addEventListener('click', pickFullExcel);
+  if ($('xls-all-file')) {
+    $('xls-all-file').addEventListener('change', () => {
+      const file = $('xls-all-file').files && $('xls-all-file').files[0];
+      $('xls-all-file').value = '';
+      uploadFullExcel(file).catch((err) => alert(err.message || 'Could not match the Excel'));
+    });
+  }
   if ($('backup-save')) {
     $('backup-save').addEventListener('click', async () => {
       $('backup-hint').textContent = 'Saving…';

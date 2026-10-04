@@ -19,6 +19,7 @@ const { createStore } = require('./store');
 const { parseDeliverySheet, parseSalesRaw } = require('./importer');
 const kpiEngine = require('./kpi');
 const exportExcel = require('./export-excel');
+const fullExcel = require('./full-excel');
 const scheduleEngine = require('./schedule');
 const monthClose = require('./month-close');
 const companyPerformance = require('./company-performance');
@@ -2540,6 +2541,55 @@ function createDeliveryTransformationRouter(opts = {}) {
     const wb = exportExcel.buildLiveSheetWorkbook(list);
     return sendXlsx(res, wb, `DT-Live-Sheet-${exportExcel.stamp()}.xlsx`);
   });
+
+  router.get('/export/full', auth, requireRole('admin'), (req, res) => {
+    let wb;
+    try {
+      wb = fullExcel.buildFullWorkbook(store.data);
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not extract all data' });
+    }
+    return sendXlsx(res, wb, `DT-All-Data-${exportExcel.stamp()}.xlsx`);
+  });
+
+  router.post(
+    '/import/full',
+    express.raw({ limit: RAW_UPLOAD_LIMIT, type: '*/*' }),
+    auth,
+    requireRole('admin'),
+    (req, res) => {
+      const { buf, filename } = uploadedFile(req);
+      let parsed;
+      try {
+        parsed = fullExcel.parseFullWorkbook(buf);
+      } catch (err) {
+        return res.status(400).json({ error: err.message || 'Could not read the Excel file' });
+      }
+      const live = store.data;
+      live.vehicles = parsed.vehicles;
+      live.attendance = parsed.attendance;
+      live.prints = parsed.prints;
+      live.audit = parsed.audit;
+      live.meta = parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
+      if (!Array.isArray(live.meta.customCarriers)) live.meta.customCarriers = [];
+      if (!Array.isArray(live.meta.customCities)) live.meta.customCities = [];
+      store.pushAudit({
+        vin: '',
+        user: req.dtUser.name,
+        action: 'import_full_excel',
+        oldValue: filename,
+        newValue: `vehicles ${parsed.counts.Vehicles} · attendance ${parsed.counts.Attendance} · prints ${parsed.counts.Prints} · audit ${parsed.counts.Audit} · meta ${parsed.counts.Meta}`,
+      });
+      store.save();
+      return res.json({
+        ok: true,
+        filename,
+        counts: parsed.counts,
+        vehicles: Object.keys(live.vehicles).length,
+        pending: Object.keys((live.meta && live.meta.pendingAssignments) || {}).length,
+      });
+    }
+  );
 
   router.get('/export/admin', auth, requireRole('admin'), (req, res) => {
     const month = monthParam(req.query.month);
