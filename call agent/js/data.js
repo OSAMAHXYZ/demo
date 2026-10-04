@@ -742,7 +742,6 @@
     const state = requireState();
     const customerName = String(input.customerName || "").trim();
     const phone = String(input.phone || "").trim();
-    if (!customerName || !phone) throw new Error("Customer name and phone are required.");
     const requestedCar = applyCar(state, input.requestedCar || (carByName(state, "Camry") || state.cars.find((c) => c.status === "active") || {}).name);
     const status = state.statuses.find((s) => s.id === (input.statusId || state.settings.defaultStatusId) && s.active) || state.statuses.find((s) => s.active);
     const lead = {
@@ -800,6 +799,52 @@
     return clone(lead);
   }
 
+  function assignNewLead(input, actor) {
+    const state = requireState();
+    const leadNumber = String(input.leadNumber || "").trim();
+    if (!leadNumber) throw new Error("Enter a lead number.");
+    if (state.leads.some((lead) => lead.leadNumber.toLowerCase() === leadNumber.toLowerCase())) {
+      throw new Error("That lead number is already in use.");
+    }
+    const agent = userById(state, input.callAgentId || (actor && actor.id));
+    const advisor = userById(state, input.salesAdvisorId);
+    if (!agent || agent.role !== "call-agent") throw new Error("Call agent is missing.");
+    if (!advisor || advisor.role !== "sales-advisor" || advisor.status !== "active") throw new Error("Choose a sales advisor.");
+    const linked = state.connections.some((row) => row.status === "active" && row.callAgentId === agent.id && row.salesAdvisorId === advisor.id);
+    if (!linked) throw new Error(`${advisor.name} is not connected to you.`);
+    const carName = applyCar(state, input.car);
+    const status = state.statuses.find((row) => row.id === input.statusId && row.active);
+    if (!status) throw new Error("Choose a status.");
+    const now = nowIso();
+    const details = `${agent.name} assigned ${leadNumber} to ${advisor.name} · ${carName} · ${status.name}`;
+    const lead = {
+      id: uid("LEAD"),
+      leadNumber,
+      customerName: "",
+      phone: "",
+      requestedCar: carName,
+      selectedCar: carName,
+      callAgentId: agent.id,
+      callAgentName: agent.name,
+      salesAdvisorId: advisor.id,
+      salesAdvisorName: advisor.name,
+      statusId: status.id,
+      statusName: status.name,
+      vehicleDecision: "",
+      financeType: "",
+      note: "",
+      advisorConfirmed: false,
+      createdAt: now,
+      assignedAt: now,
+      updatedAt: now,
+      history: [{ at: now, userId: agent.id, userName: agent.name, action: "Lead Assignment", details }],
+    };
+    state.leads.unshift(lead);
+    pushActivity(state, { ...actorFrom(actor), action: "Lead Assignment", target: lead.leadNumber, details });
+    save(state);
+    return clone(lead);
+  }
+
   function assignLead(leadId, input, actor) {
     const state = requireState();
     const lead = state.leads.find((l) => l.id === leadId || l.leadNumber.toLowerCase() === String(leadId).toLowerCase());
@@ -836,6 +881,25 @@
     const lead = state.leads.find((l) => l.id === leadId);
     if (!lead) throw new Error("Lead not found.");
     if (!actor || lead.salesAdvisorId !== actor.id) throw new Error("This lead is not assigned to you.");
+    if (input.confirmed) {
+      if (!input.statusId) throw new Error("Choose a status.");
+      const who = actorFrom(actor);
+      if (input.statusId !== lead.statusId) {
+        const previous = applyStatus(state, lead, input.statusId);
+        pushActivity(state, { ...who, action: "Lead Status Change", target: lead.leadNumber, details: `${previous} → ${lead.statusName}` });
+      }
+      const note = String(input.note || "").trim();
+      lead.note = note;
+      lead.advisorConfirmed = true;
+      lead.vehicleDecision = "Confirmed Requested Car";
+      lead.selectedCar = lead.requestedCar;
+      lead.updatedAt = nowIso();
+      const details = `${lead.requestedCar} · ${lead.statusName}${note ? ` · ${note}` : ""}`;
+      lead.history.push({ at: lead.updatedAt, userId: who.userId, userName: who.userName, action: "Advisor Sent", details });
+      pushActivity(state, { ...who, action: "Advisor Sent", target: lead.leadNumber, details });
+      save(state);
+      return clone(lead);
+    }
     const decision = input.vehicleDecision;
     if (decision !== "Confirmed Requested Car" && decision !== "Choose Other Car") throw new Error("Choose a vehicle decision.");
     const finance = input.financeType;
@@ -1033,6 +1097,7 @@
     deleteStatus,
     createLead,
     updateLead,
+    assignNewLead,
     assignLead,
     advisorUpdate,
     deleteLead,

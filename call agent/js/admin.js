@@ -485,8 +485,8 @@
     TDR.openModal({
       title: lead ? "Edit lead" : "Create lead",
       html: `<form id="lead-form" class="form-grid">
-        <div class="field"><span class="lbl">Customer</span><input name="customerName" value="${esc(lead ? lead.customerName : "")}" required /></div>
-        <div class="field"><span class="lbl">Phone</span><input name="phone" value="${esc(lead ? lead.phone : "")}" required /></div>
+        <div class="field"><span class="lbl">Customer</span><input name="customerName" value="${esc(lead ? lead.customerName : "")}" /></div>
+        <div class="field"><span class="lbl">Phone</span><input name="phone" value="${esc(lead ? lead.phone : "")}" placeholder="Optional" /></div>
         <div class="field"><span class="lbl">Requested car</span><select name="requestedCar">${cars.map((car) => `<option ${lead && lead.requestedCar === car.name ? "selected" : ""}>${esc(car.name)}</option>`).join("")}</select></div>
         <div class="field"><span class="lbl">Status</span><select name="statusId">${statuses.map((row) => `<option value="${esc(row.id)}"${lead && lead.statusId === row.id ? " selected" : ""}>${esc(row.name)}</option>`).join("")}</select></div>
         <div class="form-actions full"><button class="btn btn-primary" type="submit">Save lead</button></div>
