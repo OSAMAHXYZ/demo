@@ -3,382 +3,345 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Employee Shift Scheduler</title>
+<title>Workforce Control Center</title>
 <style>
   :root {
-    --bg: #f3f5f8;
+    --bg: #f3f5f7;
     --card: #ffffff;
-    --ink: #172033;
-    --muted: #5d6b7c;
-    --line: #e4e9f0;
-    --navy: #14233b;
-    --green: #0e7a45;
-    --green-bg: #e8f6ee;
-    --red: #a32020;
-    --off-bg: #f1f2f4;
-    --blue: #1a4f8b;
-    --blue-bg: #e7f1fb;
-    --amber: #9a6700;
-    --shadow: 0 10px 28px rgba(20, 35, 59, 0.06);
+    --ink: #14181f;
+    --muted: #667085;
+    --line: #e6ebf1;
+    --green: #0f6e56;
+    --green-soft: #e8f6f1;
+    --off: #667085;
+    --off-soft: #f2f4f7;
+    --vac: #3d4c9e;
+    --vac-soft: #eef0fa;
+    --warn: #b54708;
+    --warn-soft: #fff6ed;
+    --shadow: 0 10px 30px rgba(16, 24, 40, .06);
     --radius: 16px;
+    --nav: 68px;
   }
   * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
+  html, body { margin: 0; padding: 0; }
   body {
-    margin: 0;
-    background: var(--bg);
+    font-family: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
     color: var(--ink);
-    font: 14px/1.45 "Segoe UI", Tahoma, sans-serif;
+    background:
+      radial-gradient(1200px 400px at 10% -10%, rgba(15, 110, 86, .08), transparent 50%),
+      radial-gradient(900px 360px at 100% 0%, rgba(61, 76, 158, .06), transparent 46%),
+      var(--bg);
+    min-height: 100vh;
   }
-  button, input, select { font: inherit; color: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
-  .wrap { max-width: 1480px; margin: 0 auto; padding: 22px 20px 48px; }
-  .top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 18px;
-    margin-bottom: 18px;
+  .topnav {
+    position: sticky; top: 0; z-index: 30;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "brand links tools";
+    align-items: center; gap: 14px;
+    min-height: var(--nav); padding: 10px 22px;
+    background: rgba(255, 255, 255, .92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--line);
   }
-  h1 { margin: 0; font-size: 1.65rem; letter-spacing: 0.03em; color: var(--navy); }
-  h2 { margin: 0 0 8px; font-size: 1.05rem; color: var(--navy); }
-  .lede { margin: 4px 0 0; color: var(--muted); }
-  .top-actions, .export-bar, .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .btn {
-    border: 1px solid var(--line);
-    background: #fff;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+  .brand { grid-area: brand; display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; text-align: left; }
+  .mark {
+    width: 38px; height: 38px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: linear-gradient(160deg, #1a4f45, #102820);
+    color: white; flex: 0 0 auto;
   }
-  .btn:hover { border-color: #b7c3d3; background: #f8fafc; }
-  .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
-  .btn.primary:hover { background: #0c6840; }
-  .btn.navy { background: var(--navy); border-color: var(--navy); color: #fff; }
-  .btn.navy:hover { background: #0e1b30; }
-  .btn.small { padding: 6px 10px; font-size: 12px; }
-  .kpis, .man-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .man-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .card, .panel {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+  .brand strong { display: block; font-size: 13px; letter-spacing: .14em; }
+  .brand em { display: block; font-style: normal; font-size: 11px; letter-spacing: .16em; color: var(--muted); }
+  .nav-links { grid-area: links; display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links button {
+    border: 0; background: transparent; color: #3f4854;
+    padding: 8px 12px; border-radius: 999px; white-space: nowrap;
+    transition: background .18s, color .18s;
   }
-  .card { padding: 14px 16px; }
-  .card .lbl { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
-  .card .val { margin-top: 4px; font-size: 1.55rem; font-weight: 800; color: var(--navy); }
-  .card .hint { color: var(--muted); font-size: 12px; min-height: 1.2em; }
-  .panel { padding: 16px; margin-bottom: 14px; }
-  .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
-  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
-  select, input[type="text"], input[type="time"] {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 8px 10px;
-    background: #fff;
-    min-width: 0;
+  .nav-links button:hover { background: #f2f4f7; }
+  .nav-links button.on { background: #14181f; color: white; }
+  .nav-right { grid-area: tools; display: flex; align-items: center; gap: 8px; }
+  .today-chip { color: var(--muted); font-size: 13px; padding-right: 6px; white-space: nowrap; }
+  .icon-btn, .btn, .btn-primary, .btn-ghost {
+    border-radius: 999px; border: 1px solid var(--line); background: white;
+    padding: 8px 14px; transition: transform .18s, box-shadow .18s, background .18s;
   }
-  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .legend span, .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    padding: 3px 8px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+  .icon-btn { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; position: relative; }
+  .icon-btn:hover, .btn:hover, .btn-ghost:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn-primary {
+    border: 0; color: white; padding: 10px 16px;
+    background: linear-gradient(180deg, #1c564b, #123f37);
   }
-  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-  .work-swatch { background: var(--green-bg); border: 1px solid #b7e4c7; }
-  .off-swatch { background: var(--off-bg); border: 1px solid #d5d8de; }
-  .split-swatch { background: var(--blue-bg); border: 1px solid #c5daf3; }
-  .gen-swatch { background: #f59e0b; }
-  .table-scroll { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 12px; }
-  table.sheet { border-collapse: separate; border-spacing: 0; min-width: 1100px; width: 100%; }
-  .sheet th, .sheet td { border-bottom: 1px solid var(--line); border-right: 1px solid #eef2f6; padding: 8px 10px; vertical-align: top; background: #fff; }
-  .sheet th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: #f8fafc;
-    text-align: left;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    color: var(--muted);
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(18, 63, 55, .25); }
+  .btn-primary.small { padding: 6px 10px; font-size: 13px; }
+  .btn-ghost { background: transparent; }
+  .btn.small, .btn-ghost.small { padding: 6px 10px; font-size: 13px; }
+  .badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
+    background: #b54708; color: white; font-size: 11px; display: grid; place-items: center;
   }
-  .sheet th.who, .sheet td.who { position: sticky; left: 0; z-index: 1; min-width: 220px; }
-  .sheet th.who { z-index: 3; }
-  .sheet tr:hover td.who { background: #f4f7fb; }
-  .who strong { display: block; }
-  .who .sub { display: block; color: var(--muted); font-size: 12px; }
-  .cell .shift { font-weight: 800; font-size: 12px; line-height: 1.35; }
-  .cell.work { background: var(--green-bg); color: var(--green); }
-  .cell.split { background: var(--blue-bg); color: var(--blue); }
-  .cell.off { background: var(--off-bg); color: var(--red); }
-  .cell .off-label { font-weight: 900; letter-spacing: 0.04em; }
-  .tag { background: rgba(255,255,255,.72); color: var(--ink); border: 1px solid rgba(23,32,51,.08); margin-top: 4px; }
-  .cell.generated .tag { color: var(--amber); }
-  .empty { padding: 28px 10px; color: var(--muted); text-align: center; }
-  .heat { width: 100%; border-collapse: collapse; min-width: 640px; }
-  .heat th, .heat td { border: 1px solid var(--line); padding: 10px; text-align: center; }
-  .heat th { background: #f8fafc; color: var(--muted); font-size: 12px; }
-  .heat td.day, .heat th.day { text-align: left; font-weight: 800; color: var(--navy); background: #fff; }
-  .heat td.closed { background: #f3f4f6; color: var(--muted); font-weight: 800; }
-  .days { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-  .day-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; }
-  .day-card h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.06em; }
-  .day-card.closed { background: #f7f7f8; }
-  .block { padding: 8px 0; border-top: 1px solid var(--line); }
-  .block h4 { margin: 0 0 4px; font-size: 12px; color: var(--navy); }
-  .block ul { list-style: none; margin: 0; padding: 0; }
-  .block li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
-  .block li.total { font-weight: 900; margin-top: 4px; }
-  .status-line { min-height: 1.2em; color: var(--muted); font-size: 13px; }
-  .valid-box { border-radius: 12px; padding: 12px 14px; }
-  .valid-box.ok { background: var(--green-bg); color: var(--green); }
-  .valid-box.bad { background: #fff6e8; color: #8a4b08; }
-  .valid-box button {
-    background: transparent;
-    border: 0;
-    padding: 0;
-    font-weight: 900;
-    color: inherit;
-    font-size: 1rem;
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 72px; }
+  .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 22px; flex-wrap: wrap; }
+  .kicker { margin: 0 0 6px; color: var(--muted); letter-spacing: .12em; font-size: 12px; text-transform: uppercase; }
+  h1 { margin: 0; font-size: 32px; letter-spacing: -.03em; font-weight: 650; }
+  .sub { margin: 6px 0 0; color: var(--muted); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid-5, .grid-4, .grid-2 { display: grid; gap: 14px; }
+  .grid-5 { grid-template-columns: repeat(5, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-2 { grid-template-columns: 1.4fr .8fr; }
+  .card {
+    background: var(--card); border: 1px solid rgba(255,255,255,.8);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px;
   }
-  .valid-box ul { margin: 8px 0 0; padding-left: 18px; }
-  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
-  .rule {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 12px;
-    background: #fff;
+  .kpi .lbl, .stat .lbl { color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+  .kpi .val, .stat .val { font-size: 34px; letter-spacing: -.04em; margin-top: 8px; font-weight: 650; }
+  .kpi .hint { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .section-title { margin: 26px 0 12px; font-size: 13px; letter-spacing: .12em; color: #3f4854; }
+  .stat { min-height: 118px; }
+  .band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .chart-card { margin-top: 14px; }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 14px; }
+  .seg button { border: 1px solid var(--line); background: #f8fafb; border-radius: 999px; padding: 7px 12px; }
+  .seg button.on { background: #14181f; color: white; border-color: #14181f; }
+  .legend { display: flex; gap: 14px; color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 99px; display: inline-block; margin-right: 6px; }
+  canvas#man-chart { width: 100%; height: 280px; display: block; }
+  .tip {
+    position: absolute; pointer-events: none; background: #14181f; color: white;
+    padding: 8px 10px; border-radius: 10px; font-size: 12px; opacity: 0; transition: opacity .15s;
   }
-  .rule strong { display: block; }
-  .rule p { margin: 4px 0; }
-  .mode-fixed { color: var(--green); font-weight: 800; }
-  .mode-gen { color: var(--amber); font-weight: 800; }
-  .editor-layout { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; }
-  .emp-list { display: flex; flex-direction: column; gap: 8px; max-height: 640px; overflow: auto; }
-  .emp-item { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-  .emp-item b { display: block; }
-  .emp-item span { color: var(--muted); font-size: 12px; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .form-grid label, .check-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
-  .form-grid .wide { grid-column: 1 / -1; }
-  .checks { display: flex; flex-wrap: wrap; gap: 8px 12px; }
-  .checks label { flex-direction: row; align-items: center; font-weight: 650; color: var(--ink); }
-  .form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .banner { background: #fff6e8; color: #8a4b08; border-radius: 10px; padding: 8px 10px; font-weight: 700; }
-  .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .chart-wrap { position: relative; }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filters input, .filters select, .field input, .field select, .field textarea {
+    border: 1px solid var(--line); background: white; border-radius: 12px; padding: 10px 12px; outline: none;
+  }
+  .filters input { min-width: 220px; flex: 1; }
+  .filters input:focus, .field input:focus, .field select:focus, .field textarea:focus { border-color: #9aa8b8; box-shadow: 0 0 0 4px rgba(20, 24, 31, .05); }
+  .emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .emp-card { padding: 18px; display: flex; flex-direction: column; gap: 8px; transition: transform .18s, box-shadow .18s; }
+  .emp-card:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(16, 24, 40, .08); }
+  .emp-top { display: flex; gap: 12px; align-items: center; }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+    font-weight: 650; color: #143d36; background: #e7f3ef; flex: 0 0 auto;
+  }
+  .avatar.sm { width: 36px; height: 36px; border-radius: 12px; font-size: 12px; }
+  .emp-top b { display: block; }
+  .muted, .emp-top small, .who small { color: var(--muted); }
+  .meta { font-size: 13px; color: #3f4854; line-height: 1.45; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border-radius: 999px; padding: 4px 8px; background: var(--green-soft); color: var(--green); }
+  .pill.off { background: var(--off-soft); color: var(--off); }
+  .pill.vac { background: var(--vac-soft); color: var(--vac); }
+  .emp-card .actions { margin-top: auto; padding-top: 8px; }
+  .board-scroll { overflow: auto; max-height: calc(100vh - 230px); border-radius: 18px; border: 1px solid var(--line); background: white; box-shadow: var(--shadow); }
+  table.sheet { border-collapse: separate; border-spacing: 0; min-width: 980px; width: 100%; }
+  .sheet th, .sheet td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; background: white; }
+  .sheet thead th { position: sticky; top: 0; z-index: 2; font-size: 12px; letter-spacing: .06em; color: var(--muted); text-align: left; background: #fbfcfd; }
+  .sheet .who { position: sticky; left: 0; z-index: 1; min-width: 240px; max-width: 280px; }
+  .sheet thead .who { z-index: 3; }
+  .who-box { display: flex; gap: 10px; align-items: center; }
+  .who-box > span { min-width: 0; }
+  .who-box b, .who small { display: block; line-height: 1.3; }
+  .cell-card { border-radius: 12px; padding: 10px 8px; min-height: 78px; text-align: center; }
+  .cell-card b { display: block; font-size: 11px; letter-spacing: .08em; margin-bottom: 4px; }
+  .cell-card span { display: block; font-size: 12px; }
+  .cell-card.work { background: var(--green-soft); color: #0b5c48; }
+  .cell-card.off { background: var(--off-soft); color: #526071; }
+  .cell-card.vacation { background: var(--vac-soft); color: var(--vac); }
+  .health { display: flex; gap: 16px; align-items: center; }
+  .ring { width: 92px; height: 92px; }
+  .ring-bg { fill: none; stroke: #e7ebf0; stroke-width: 8; }
+  .ring-fg { fill: none; stroke: var(--green); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 44px 44px; }
+  .ring text { font-size: 16px; font-weight: 650; fill: var(--ink); transform: none; }
+  .warn {
+    background: var(--warn-soft); border: 1px solid #f5d7bd; color: #8a3b0c;
+    border-radius: 14px; padding: 14px 16px; margin: 12px 0;
+  }
+  .warn b { letter-spacing: .06em; }
+  .heat { width: 100%; border-collapse: separate; border-spacing: 8px; }
+  .heat th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .heat-cell, .heat-closed {
+    width: 100%; min-height: 74px; border-radius: 14px; border: 0;
+    font-size: 22px; font-weight: 650; transition: transform .18s;
+  }
+  .heat-cell:hover { transform: translateY(-2px); }
+  .heat-closed { background: #eef1f4; color: #98a2b3; font-size: 16px; }
+  .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .cal-dow { text-align: center; color: var(--muted); font-size: 12px; letter-spacing: .06em; }
+  .cal-day { min-height: 108px; border-radius: 14px; background: white; border: 1px solid var(--line); padding: 8px; text-align: left; cursor: pointer; font: inherit; }
+  .cal-day.out { opacity: .45; }
+  .cal-day.today { outline: 2px solid #143d36; }
+  .cal-day .n { font-size: 12px; color: var(--muted); }
+  .chip {
+    display: block; width: 100%; text-align: left; margin-top: 4px; border: 0; border-radius: 8px;
+    padding: 4px 6px; font-size: 11px; background: var(--vac-soft); color: var(--vac);
+  }
+  .chip.t-annual { background: #eef0fa; color: #3d4c9e; }
+  .chip.t-emergency { background: #fff4e8; color: #9a5410; }
+  .chip.t-sick { background: #fdecec; color: #8d3a3a; }
+  .chip.t-personal { background: #e8f6f1; color: #0f6e56; }
+  .chip.t-training { background: #eef3f8; color: #3d5270; }
+  .chip.t-other { background: #f2f4f7; color: #526071; }
+  table.list { width: 100%; border-collapse: collapse; }
+  table.list th, table.list td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  table.list th { color: var(--muted); font-size: 12px; letter-spacing: .06em; }
+  .empty {
+    text-align: center; padding: 48px 16px; color: var(--muted);
+  }
+  .empty svg { margin-bottom: 8px; }
+  .empty h3 { margin: 8px 0; color: var(--ink); letter-spacing: .08em; }
+  .rule { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .rule + .rule { margin-top: 12px; }
+  .scrim {
+    position: fixed; inset: 0; z-index: 40; background: rgba(16, 20, 24, .35);
+    display: grid; place-items: center; padding: 22px;
+    animation: fade .18s ease;
+  }
+  .dialog, .drawer {
+    background: white; border-radius: 20px; box-shadow: 0 24px 60px rgba(16, 24, 40, .18);
+    width: min(560px, 100%); max-height: min(86vh, 820px); overflow: auto; padding: 22px;
+    animation: rise .22s ease;
+  }
+  .drawer { width: min(420px, 100%); margin-left: auto; height: 100%; max-height: none; border-radius: 20px 0 0 20px; }
+  .scrim.drawer-scrim { place-items: stretch end; padding: 0; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .field.row { flex-direction: row; gap: 10px; }
+  .field.row > div { flex: 1; }
+  .days { display: flex; flex-wrap: wrap; gap: 8px; }
+  .days label { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+  .step { padding: 8px 0; color: var(--muted); }
+  .step.on { color: var(--ink); font-weight: 650; }
+  .step.done { color: var(--green); }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: #14181f; color: white; padding: 10px 14px; border-radius: 999px;
+    z-index: 50; font-size: 13px;
+  }
+  .menu { position: relative; }
+  .menu summary { list-style: none; }
+  .menu summary::-webkit-details-marker { display: none; }
+  .menu-pop {
+    position: absolute; right: 0; top: calc(100% + 6px); background: white;
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+    min-width: 180px; padding: 6px; z-index: 5;
+  }
+  .menu-pop button { width: 100%; text-align: left; border: 0; background: transparent; border-radius: 10px; padding: 8px 10px; }
+  .menu-pop button:hover { background: #f4f6f8; }
+  .check { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 1100px) {
+    .topnav {
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "brand tools" "links links";
+      row-gap: 6px;
+    }
+  }
   @media (max-width: 980px) {
-    .kpis, .man-kpis, .editor-layout { grid-template-columns: 1fr 1fr; }
-    .top { flex-direction: column; align-items: stretch; }
+    .grid-5, .grid-4, .band, .grid-2 { grid-template-columns: 1fr 1fr; }
+    h1 { font-size: 26px; }
   }
-  @media (max-width: 640px) {
-    .kpis, .man-kpis, .editor-layout, .form-grid { grid-template-columns: 1fr; }
+  @media (max-width: 720px) {
+    .topnav { padding: 10px; }
+    .grid-5, .grid-4, .band, .grid-2 { grid-template-columns: 1fr; }
+    .brand { min-width: 0; }
+    .today-chip { display: none; }
+    .cal-day { min-height: 78px; }
+    .wrap { padding: 18px 12px 48px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
   @media print {
-    body { background: #fff; }
-    .no-print { display: none !important; }
-    .wrap { max-width: none; padding: 0; }
-    .panel, .card { box-shadow: none; }
-    .table-scroll { overflow: visible; max-height: none; }
-    .sheet th, .sheet td.who { position: static; }
-    .cell.work, .cell.split, .cell.off, .heat td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .topnav, .actions, .filters, .scrim, .toast { display: none !important; }
+    body { background: white; }
+    .board-scroll { max-height: none; overflow: visible; box-shadow: none; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <div>
-      <h1>EMPLOYEE SHIFT SCHEDULER</h1>
-      <p class="lede">Weekly Workforce Planning &amp; Manpower Control</p>
-      <p class="status-line" id="gen-meta">No schedule yet. Click GENERATE SCHEDULE.</p>
-    </div>
-    <div class="top-actions no-print">
-      <button type="button" class="btn primary" id="btn-generate">GENERATE SCHEDULE</button>
-      <button type="button" class="btn navy" id="btn-regenerate">REGENERATE</button>
-      <button type="button" class="btn" id="btn-validate">VALIDATE</button>
-    </div>
-  </header>
-
-  <section class="kpis" id="roster-kpis"></section>
-  <section class="man-kpis" id="man-kpis"></section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Manpower heatmap</h2>
-        <p class="note">Color shows coverage from 9:00 AM to 9:00 PM. A person counts in a block when their shift overlaps that block. Friday is closed.</p>
-      </div>
-    </div>
-    <div class="table-scroll" id="heat-wrap"></div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Weekly schedule</h2>
-        <p class="status-line" id="filter-meta"></p>
-      </div>
-      <div class="export-bar no-print">
-        <button type="button" class="btn small" id="btn-excel">EXPORT TO EXCEL</button>
-        <button type="button" class="btn small" id="btn-print">PRINT SCHEDULE</button>
-        <button type="button" class="btn small" id="btn-pdf" title="Opens the print dialog. Choose Save as PDF.">EXPORT PDF</button>
-      </div>
-    </div>
-    <div class="filters no-print">
-      <label>Department
-        <select id="filter-dept"><option value="">All</option></select>
-      </label>
-      <label>Position
-        <select id="filter-pos"><option value="">All</option></select>
-      </label>
-      <label>Employee
-        <select id="filter-emp"><option value="">All</option></select>
-      </label>
-      <label>Day
-        <select id="filter-day"><option value="">All</option></select>
-      </label>
-    </div>
-    <div class="legend">
-      <span><i class="swatch work-swatch"></i> Work</span>
-      <span><i class="swatch split-swatch"></i> Split shift</span>
-      <span><i class="swatch off-swatch"></i> Off</span>
-      <span><i class="swatch gen-swatch"></i> Generated off day</span>
-    </div>
-    <p class="banner" id="stale-banner" hidden>Employee rules changed. Generate the schedule again to apply them.</p>
-    <div class="table-scroll" id="schedule-wrap"></div>
-    <p class="note no-print">Export PDF opens the print dialog. Choose Save as PDF.</p>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Daily manpower</h2>
-        <p class="note">Counted from the generated shifts. Friday is off for the whole team.</p>
-      </div>
-    </div>
-    <div class="days" id="day-cards"></div>
-  </section>
-
-  <section class="panel no-print">
-    <h2>Schedule check</h2>
-    <div id="valid-box" class="valid-box" hidden>
-      <button type="button" id="valid-toggle"></button>
-      <ul id="valid-list" hidden></ul>
-    </div>
-    <p class="status-line" id="valid-empty">Generate a schedule, then validate it.</p>
-  </section>
-
-  <section class="panel" id="rules-panel">
-    <h2>EMPLOYEE RULES</h2>
-    <p class="note">The generator reads these rules. It does not use a saved week.</p>
-    <div class="rules" id="rules"></div>
-  </section>
-
-  <section class="panel no-print">
-    <div class="panel-head">
-      <div>
-        <h2>EDIT EMPLOYEES</h2>
-        <p class="note">Add, remove, or change a person, shift, second shift, off day, department, or position. Then generate again.</p>
-      </div>
-      <button type="button" class="btn small" id="btn-reset">RESET MASTER DATA</button>
-    </div>
-    <div class="editor-layout">
-      <div class="emp-list" id="emp-list"></div>
-      <form id="emp-form">
-        <div class="form-grid">
-          <label class="wide">Name
-            <input type="text" id="f-name" required />
-          </label>
-          <label>ID
-            <input type="text" id="f-id" required />
-          </label>
-          <label>Department
-            <input type="text" id="f-dept" list="dept-list" required />
-          </label>
-          <label>Position
-            <input type="text" id="f-pos" list="pos-list" required />
-          </label>
-          <label>Off-day rule
-            <select id="f-mode">
-              <option value="friday-only">Friday only</option>
-              <option value="fixed">Fixed off days</option>
-              <option value="advisor-pool">Thursday / Saturday pool</option>
-              <option value="flexible">One generated weekday off</option>
-            </select>
-          </label>
-          <label>Shift 1 start
-            <input type="time" id="f-s1" value="12:00" required />
-          </label>
-          <label>Shift 1 end
-            <input type="time" id="f-e1" value="21:00" required />
-          </label>
-          <label class="wide check-row"><span><input type="checkbox" id="f-second" /> Add second shift</span></label>
-          <label id="f-s2-wrap">Shift 2 start
-            <input type="time" id="f-s2" value="17:00" />
-          </label>
-          <label id="f-e2-wrap">Shift 2 end
-            <input type="time" id="f-e2" value="21:00" />
-          </label>
-          <div class="wide" id="fixed-days">
-            <div class="checks" id="day-checks"></div>
-          </div>
-        </div>
-        <p class="note" id="form-preview"></p>
-        <div class="form-actions">
-          <button type="submit" class="btn primary" id="f-save">ADD EMPLOYEE</button>
-          <button type="button" class="btn" id="f-cancel">CLEAR</button>
-        </div>
-        <p class="status-line" id="form-msg"></p>
-      </form>
-    </div>
-    <datalist id="dept-list">
-      <option value="Delivery"></option>
-      <option value="SA Showroom"></option>
-      <option value="Toyota Sales"></option>
-      <option value="Showroom"></option>
-    </datalist>
-    <datalist id="pos-list">
-      <option value="Sales Coordinator"></option>
-      <option value="Sales Advisor"></option>
-      <option value="Promoters"></option>
-      <option value="Test Drive"></option>
-    </datalist>
-  </section>
-</div>
+<header class="topnav">
+  <button class="brand" type="button" data-go="dashboard">
+    <span class="mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+        <path d="M3 10h18M8 3v4M16 3v4"></path>
+      </svg>
+    </span>
+    <span><strong>WORKFORCE</strong><em>CONTROL CENTER</em></span>
+  </button>
+  <nav class="nav-links" aria-label="Primary">
+    <button type="button" data-go="dashboard">Dashboard</button>
+    <button type="button" data-go="employees">Employees</button>
+    <button type="button" data-go="schedule">Schedule</button>
+    <button type="button" data-go="manpower">Manpower</button>
+    <button type="button" data-go="vacations">Vacations</button>
+    <button type="button" data-go="rules">Rules</button>
+  </nav>
+  <div class="nav-right">
+    <span class="today-chip" id="today-label"></span>
+    <button class="icon-btn" type="button" data-act="notes" aria-label="Notifications">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+      <span class="badge" id="note-badge" hidden>0</span>
+    </button>
+    <button class="icon-btn" type="button" data-act="settings" aria-label="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path></svg>
+    </button>
+  </div>
+</header>
+<main id="main"></main>
+<div id="overlay"></div>
+<div id="toast" hidden></div>
+<input id="import-file" type="file" accept="application/json,.json" hidden />
 
 <script>
 (() => {
   const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const WEEKDAYS = DAYS.filter((d) => d !== 'Friday');
+  const WEEKDAYS = DAYS.slice(0, 6);
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const BLOCKS = [
-    { id: 'am', label: '9:00 AM - 12:00 PM', short: '9-12', start: 9 * 60, end: 12 * 60 },
-    { id: 'mid', label: '12:00 PM - 5:00 PM', short: '12-5', start: 12 * 60, end: 17 * 60 },
-    { id: 'pm', label: '5:00 PM - 9:00 PM', short: '5-9', start: 17 * 60, end: 21 * 60 },
+    { id: 'am', label: '9 AM – 12 PM', short: '9–12', start: 9 * 60, end: 12 * 60 },
+    { id: 'mid', label: '12 PM – 5 PM', short: '12–5', start: 12 * 60, end: 17 * 60 },
+    { id: 'pm', label: '5 PM – 9 PM', short: '5–9', start: 17 * 60, end: 21 * 60 },
   ];
-  const ROLE_ORDER = [
+  const ROLES = [
     ['advisor', 'Sales Advisors'],
     ['promoter', 'Promoters'],
     ['testdrive', 'Test Drive'],
-    ['coordinator', 'Sales Coordinator'],
-    ['other', 'Other'],
+    ['coordinator', 'Coordinator'],
   ];
-  const STORE_KEY = 'employee-shift-scheduler-v1';
+  const VACATION_TYPES = ['Annual Vacation', 'Emergency Vacation', 'Sick Leave', 'Personal Leave', 'Training', 'Other'];
+  const VIEWS = ['dashboard', 'employees', 'schedule', 'manpower', 'vacations', 'rules'];
+  const KEY = 'wcc-store-v1';
+  const LEGACY_KEY = 'employee-shift-scheduler-v1';
+  const CHECKS = [
+    ['friday', 'Friday OFF for everyone'],
+    ['vacation', 'Vacation respected'],
+    ['fixed', 'Fixed off days respected'],
+    ['shifts', 'Correct shifts'],
+    ['split', 'Split shifts respected'],
+    ['conflict', 'No conflicting shifts'],
+    ['workvac', 'No employee scheduled while on vacation'],
+    ['pool', 'Thursday/Saturday advisor distribution'],
+    ['coverage', 'Required employee coverage'],
+    ['duplicate', 'No duplicate assignment'],
+  ];
 
   const $ = (sel, root = document) => root.querySelector(sel);
-  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function defaultEmployees() {
     const row = (id, name, department, position, offMode, shifts, fixedOffDays) => ({
-      id, name, department, position, offMode, shifts, fixedOffDays: fixedOffDays || ['Friday'],
+      id, name, department, position, offMode, shifts, fixedOffDays: fixedOffDays || ['Friday'], notes: '',
     });
     const noon = [{ start: '12:00', end: '21:00' }];
     const day = [{ start: '09:00', end: '18:00' }];
@@ -402,39 +365,77 @@
     ];
   }
 
+  const now = new Date();
   const state = {
+    view: 'dashboard',
     employees: [],
+    vacations: [],
+    settings: { minManpower: 8, strategy: 'balanced' },
     schedule: null,
     generation: 0,
     lastSig: '',
     sameArrangement: false,
     stale: false,
-    editingId: '',
     validation: null,
+    warnings: [],
+    filters: { q: '', dept: '', pos: '', status: '', vacation: '', offday: '' },
+    chartRole: 'total',
+    heatRole: 'total',
+    cal: { y: now.getFullYear(), m: now.getMonth() },
+    soft: false,
+    busy: false,
+    editingId: '',
   };
 
   function toMin(hhmm) {
     const [h, m] = String(hhmm || '0:0').split(':').map((n) => parseInt(n, 10) || 0);
     return h * 60 + m;
   }
-
-  function formatTime(mins) {
-    const h24 = Math.floor(mins / 60);
-    const m = mins % 60;
-    const ap = h24 >= 12 ? 'PM' : 'AM';
-    let h = h24 % 12;
-    if (h === 0) h = 12;
-    return `${h}:${String(m).padStart(2, '0')} ${ap}`;
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function clock(mins) { return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`; }
+  function span(s) { return `${clock(s.start)} – ${clock(s.end)}`; }
+  function iso(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  function parseISO(s) {
+    const [y, m, d] = String(s || '').split('-').map((n) => parseInt(n, 10));
+    return new Date(y, (m || 1) - 1, d || 1);
   }
+  function addDays(date, n) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+  function fmtShort(key) {
+    const d = parseISO(key);
+    return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  }
+  function fmtLong(value) {
+    const d = value instanceof Date ? value : parseISO(value);
+    return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  function inclusiveDays(a, b) {
+    return Math.round((parseISO(b) - parseISO(a)) / 86400000) + 1;
+  }
+  function weekStartSaturday(date) {
+    const d = parseISO(iso(date));
+    d.setDate(d.getDate() - ((d.getDay() + 1) % 7));
+    return d;
+  }
+  function weekFrom(startValue) {
+    const start = weekStartSaturday(parseISO(startValue || iso(new Date())));
+    return DAYS.map((name, i) => {
+      const date = addDays(start, i);
+      return { name, key: iso(date) };
+    });
+  }
+  function currentWeek() { return weekFrom(iso(new Date())); }
 
   function normalizeShifts(emp) {
     return (emp.shifts || []).map((s) => {
       const start = toMin(s.start);
       const end = toMin(s.end);
-      return { start, end, label: `${formatTime(start)} - ${formatTime(end)}` };
+      return { start, end, label: span({ start, end }) };
     });
   }
-
   function shiftsOverlap(shifts) {
     for (let i = 0; i < shifts.length; i += 1) {
       for (let j = i + 1; j < shifts.length; j += 1) {
@@ -443,7 +444,7 @@
     }
     return false;
   }
-
+  function overlaps(s, block) { return s.start < block.end && s.end > block.start; }
   function roleKey(position) {
     const p = String(position || '').toLowerCase();
     if (p.includes('coordinator')) return 'coordinator';
@@ -451,6 +452,36 @@
     if (p.includes('promot')) return 'promoter';
     if (p.includes('test')) return 'testdrive';
     return 'other';
+  }
+  function roleLabel(key) {
+    return (ROLES.find(([id]) => id === key) || ['other', 'Other'])[1];
+  }
+  function initials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    return ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  }
+  function empById(id) { return state.employees.find((e) => e.id === id) || null; }
+  function vacationOn(empId, dateKey, list = state.vacations) {
+    return list.find((v) => v.employeeId === empId && v.startDate <= dateKey && v.endDate >= dateKey) || null;
+  }
+  function vacationsFor(empId) {
+    return state.vacations.filter((v) => v.employeeId === empId).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }
+  function vacStatus(v, today = iso(new Date())) {
+    if (v.endDate < today) return 'Past';
+    if (v.startDate > today) return 'Upcoming';
+    return 'Active';
+  }
+  function typeClass(type) {
+    const map = {
+      'Annual Vacation': 't-annual',
+      'Emergency Vacation': 't-emergency',
+      'Sick Leave': 't-sick',
+      'Personal Leave': 't-personal',
+      Training: 't-training',
+      Other: 't-other',
+    };
+    return map[type] || 't-other';
   }
 
   function mulberry32(seed) {
@@ -463,7 +494,6 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-
   function shuffle(list, rng) {
     const a = list.slice();
     for (let i = a.length - 1; i > 0; i -= 1) {
@@ -472,7 +502,6 @@
     }
     return a;
   }
-
   function splitPool(list, rng) {
     const shuffled = shuffle(list, rng);
     const n = shuffled.length;
@@ -482,20 +511,62 @@
     else thuN = rng() < 0.5 ? Math.ceil(n / 2) : Math.floor(n / 2);
     return { thursday: shuffled.slice(0, thuN), saturday: shuffled.slice(thuN) };
   }
-
-  function dayLoad(day, offMap, employees) {
+  function weekKey(week, day) {
+    const col = week.find((d) => d.name === day);
+    return col ? col.key : '';
+  }
+  function dayLoad(day, offMap, employees, week, vacations) {
     let score = 0;
+    const key = weekKey(week, day);
     employees.forEach((emp) => {
-      if (offMap[emp.id].has(day)) return;
+      if (offMap[emp.id].has(day) || vacationOn(emp.id, key, vacations)) return;
       const shifts = normalizeShifts(emp);
       BLOCKS.forEach((block) => {
-        if (shifts.some((s) => s.start < block.end && s.end > block.start)) score += 1;
+        if (shifts.some((s) => overlaps(s, block))) score += 1;
       });
     });
     return score;
   }
+  function minOpenBlock(offMap, employees, week, vacations, extraId, extraDay) {
+    let min = Infinity;
+    WEEKDAYS.forEach((day) => {
+      BLOCKS.forEach((block) => {
+        let total = 0;
+        const key = weekKey(week, day);
+        employees.forEach((emp) => {
+          if (offMap[emp.id].has(day) || (emp.id === extraId && day === extraDay)) return;
+          if (vacationOn(emp.id, key, vacations)) return;
+          if (normalizeShifts(emp).some((s) => overlaps(s, block))) total += 1;
+        });
+        if (total < min) min = total;
+      });
+    });
+    return min === Infinity ? 0 : min;
+  }
+  function costScore(emp, day, offMap, employees, week, vacations, minManpower) {
+    const shifts = normalizeShifts(emp);
+    const key = weekKey(week, day);
+    let covered = 0;
+    let breaks = 0;
+    BLOCKS.forEach((block) => {
+      if (!shifts.some((s) => overlaps(s, block))) return;
+      covered += 1;
+      let others = 0;
+      employees.forEach((other) => {
+        if (other.id === emp.id || offMap[other.id].has(day) || vacationOn(other.id, key, vacations)) return;
+        if (normalizeShifts(other).some((s) => overlaps(s, block))) others += 1;
+      });
+      if (others < minManpower) breaks += 1;
+    });
+    return covered * 10 - breaks * 1000;
+  }
+  function scoreOffChoice(day, emp, offMap, employees, week, vacations, strategy, minManpower) {
+    if (strategy === 'maximum') return minOpenBlock(offMap, employees, week, vacations, emp.id, day);
+    if (strategy === 'minimum') return costScore(emp, day, offMap, employees, week, vacations, minManpower);
+    return dayLoad(day, offMap, employees, week, vacations);
+  }
 
-  function generateSchedule(employees, seed) {
+  function generateSchedule(employees, seed, week, vacations, strategy, minManpower) {
     const rng = mulberry32(seed);
     const offMap = {};
     employees.forEach((emp) => {
@@ -503,576 +574,819 @@
       if (emp.offMode === 'fixed') (emp.fixedOffDays || []).forEach((d) => { if (DAYS.includes(d)) set.add(d); });
       offMap[emp.id] = set;
     });
-
     const pool = employees.filter((e) => e.offMode === 'advisor-pool');
     const split = splitPool(pool, rng);
     split.thursday.forEach((e) => offMap[e.id].add('Thursday'));
     split.saturday.forEach((e) => offMap[e.id].add('Saturday'));
-
     shuffle(employees.filter((e) => e.offMode === 'flexible'), rng).forEach((emp) => {
-      const choices = WEEKDAYS.filter((d) => !offMap[emp.id].has(d));
-      let best = -1;
+      const choices = WEEKDAYS.filter((d) => !offMap[emp.id].has(d) && !vacationOn(emp.id, weekKey(week, d), vacations));
+      if (!choices.length) return;
+      let best = null;
       let ties = [];
       choices.forEach((day) => {
-        const score = dayLoad(day, offMap, employees);
-        if (score > best) {
+        const score = scoreOffChoice(day, emp, offMap, employees, week, vacations, strategy, minManpower);
+        if (best === null || score > best) {
           best = score;
           ties = [day];
         } else if (score === best) ties.push(day);
       });
-      if (ties.length) offMap[emp.id].add(ties[Math.floor(rng() * ties.length)]);
+      offMap[emp.id].add(ties[Math.floor(rng() * ties.length)]);
     });
 
     const rows = [];
     employees.forEach((emp) => {
       const shifts = normalizeShifts(emp);
       const kind = shifts.length > 1 ? 'split' : 'standard';
-      DAYS.forEach((day) => {
-        const isOff = offMap[emp.id].has(day);
+      week.forEach((col) => {
+        const vac = vacationOn(emp.id, col.key, vacations);
+        const isOff = offMap[emp.id].has(col.name);
         let offReason = '';
         if (isOff) {
-          if (day === 'Friday') offReason = 'friday';
-          else if (emp.offMode === 'fixed') offReason = 'fixed';
+          if (col.name === 'Friday') offReason = 'friday';
+          else if (emp.offMode === 'fixed' && (emp.fixedOffDays || []).includes(col.name)) offReason = 'fixed';
           else offReason = 'generated';
         }
+        let status = 'work';
+        if (vac) status = 'vacation';
+        else if (isOff) status = 'off';
         rows.push({
           employeeId: emp.id,
-          day,
-          status: isOff ? 'off' : 'work',
-          shifts: isOff ? [] : shifts.map((s) => ({ ...s })),
+          day: col.name,
+          date: col.key,
+          status,
+          shifts: status === 'work' ? shifts.map((s) => ({ ...s })) : [],
+          plannedShifts: shifts.map((s) => ({ ...s })),
           offReason,
           kind,
+          vacation: vac ? { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate } : null,
         });
       });
     });
-    return { seed, rows };
+    return { seed, rows, strategy, week, start: week[0].key, end: week[6].key };
   }
 
   function signature(rows) {
-    return rows
-      .filter((r) => r.status === 'off' && r.offReason !== 'friday')
-      .map((r) => `${r.employeeId}:${r.day}`)
-      .sort()
-      .join('|');
+    return rows.filter((r) => r.offReason === 'generated').map((r) => `${r.employeeId}:${r.day}`).sort().join('|');
   }
-
   function rowFor(empId, day) {
     if (!state.schedule) return null;
     return state.schedule.rows.find((r) => r.employeeId === empId && r.day === day) || null;
   }
-
-  function expectedOff(emp) {
-    if (emp.offMode === 'fixed') {
-      const set = new Set(emp.fixedOffDays || []);
-      set.add('Friday');
-      return set;
+  function applyVacations() {
+    if (!state.schedule) {
+      state.warnings = [];
+      state.validation = null;
+      return;
     }
-    return null;
+    state.schedule.rows.forEach((row) => {
+      const emp = empById(row.employeeId);
+      if (!emp) return;
+      const planned = (row.plannedShifts && row.plannedShifts.length) ? row.plannedShifts : normalizeShifts(emp);
+      row.plannedShifts = planned.map((s) => ({ ...s }));
+      row.kind = planned.length > 1 ? 'split' : 'standard';
+      const vac = vacationOn(emp.id, row.date);
+      if (vac) {
+        row.status = 'vacation';
+        row.shifts = [];
+        row.vacation = { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate };
+      } else if (row.offReason) {
+        row.status = 'off';
+        row.shifts = [];
+        row.vacation = null;
+      } else {
+        row.status = 'work';
+        row.shifts = planned.map((s) => ({ ...s }));
+        row.vacation = null;
+      }
+    });
+    state.warnings = buildWarnings();
+    state.validation = validateSchedule();
   }
 
   function validateSchedule() {
     const issues = [];
-    if (!state.schedule) return { ok: false, issues: [{ message: 'Generate a schedule first.' }] };
-    const employees = state.employees;
-    employees.forEach((emp) => {
+    if (!state.schedule) return { ok: false, issues: [{ code: 'complete', message: 'Generate a schedule first.' }], checks: {} };
+    const seen = new Set();
+    state.schedule.rows.forEach((row) => {
+      const key = `${row.employeeId}:${row.day}`;
+      if (seen.has(key)) issues.push({ code: 'duplicate', message: `Duplicate assignment for ${row.employeeId} on ${row.day}.` });
+      seen.add(key);
+    });
+    state.employees.forEach((emp) => {
       const defined = normalizeShifts(emp);
       if (!defined.length || defined.some((s) => s.end <= s.start)) {
-        issues.push({ message: `${emp.name} has an invalid shift time.` });
+        issues.push({ code: 'shifts', message: `${emp.name} has an invalid shift time.` });
       }
       if (shiftsOverlap(defined)) {
-        issues.push({ message: `${emp.name} has two conflicting shifts: ${defined.map((s) => s.label).join(' and ')}.` });
+        issues.push({ code: 'conflict', message: `${emp.name} has two conflicting shifts.` });
       }
-      const offs = [];
+      const generated = [];
       DAYS.forEach((day) => {
         const row = rowFor(emp.id, day);
         if (!row) {
-          issues.push({ message: `${emp.name} is missing ${day}.` });
+          issues.push({ code: 'duplicate', message: `${emp.name} is missing ${day}.` });
           return;
         }
-        if (day === 'Friday' && row.status !== 'off') {
-          issues.push({ message: `${emp.name} is scheduled to work on Friday.` });
+        const vac = vacationOn(emp.id, row.date);
+        if (day === 'Friday' && row.status === 'work') {
+          issues.push({ code: 'friday', message: `${emp.name} is scheduled to work on Friday.` });
         }
-        if (row.status === 'off') offs.push(day);
+        if (vac && row.status !== 'vacation') {
+          issues.push({ code: 'vacation', message: `${emp.name} is on vacation on ${day} but is still scheduled.` });
+        }
+        if (row.status === 'vacation' && row.shifts.length) {
+          issues.push({ code: 'workvac', message: `${emp.name} has a shift on ${day} while on vacation.` });
+        }
+        if (row.status === 'work' && vac) {
+          issues.push({ code: 'workvac', message: `${emp.name} is scheduled on ${day} during vacation.` });
+        }
+        if (row.offReason === 'generated') generated.push(day);
         if (row.status === 'work') {
           const got = row.shifts.map((s) => `${s.start}-${s.end}`).sort().join(',');
           const want = defined.map((s) => `${s.start}-${s.end}`).sort().join(',');
-          if (got !== want) {
-            issues.push({ message: `${emp.name} has the wrong shift on ${day}. Expected ${defined.map((s) => s.label).join(' / ') || 'a shift'}.` });
-          }
+          if (got !== want) issues.push({ code: 'shifts', message: `${emp.name} has the wrong shift on ${day}.` });
+          if (defined.length > 1 && row.shifts.length < 2) issues.push({ code: 'split', message: `${emp.name} is missing a split shift on ${day}.` });
         } else if (row.shifts.length) {
-          issues.push({ message: `${emp.name} is off on ${day} but still has a shift.` });
+          issues.push({ code: 'shifts', message: `${emp.name} is ${row.status} on ${day} but still has a shift.` });
         }
       });
-      const offSet = new Set(offs);
-      if (emp.offMode === 'friday-only' && offs.join('|') !== 'Friday' && !(offs.length === 1 && offs[0] === 'Friday')) {
-        const extra = offs.filter((d) => d !== 'Friday');
-        if (extra.length || !offSet.has('Friday')) {
-          issues.push({ message: `${emp.name} must be off Friday only, and working every other day.` });
+      const offDays = DAYS.filter((day) => {
+        const row = rowFor(emp.id, day);
+        return row && row.status === 'off';
+      });
+      if (emp.offMode === 'friday-only') {
+        const extra = offDays.filter((d) => d !== 'Friday');
+        const friday = rowFor(emp.id, 'Friday');
+        if (extra.length || !friday || friday.status === 'work') {
+          issues.push({ code: 'fixed', message: `${emp.name} must be off Friday only, and working every other day they are not on vacation.` });
         }
       }
       if (emp.offMode === 'fixed') {
-        const want = expectedOff(emp);
+        const want = new Set(emp.fixedOffDays || []);
+        want.add('Friday');
         DAYS.forEach((day) => {
-          const should = want.has(day);
-          const is = offSet.has(day);
-          if (should !== is) {
-            issues.push({ message: should
-              ? `${emp.name} must be off on ${day}.`
-              : `${emp.name} is off on ${day}, which is not a fixed off day.` });
-          }
+          const row = rowFor(emp.id, day);
+          if (!row) return;
+          if (want.has(day) && row.status === 'work') issues.push({ code: 'fixed', message: `${emp.name} must be off on ${day}.` });
+          if (!want.has(day) && row.status === 'off') issues.push({ code: 'fixed', message: `${emp.name} is off on ${day}, which is not a fixed off day.` });
         });
       }
       if (emp.offMode === 'flexible') {
-        const extra = offs.filter((d) => d !== 'Friday');
-        if (!offSet.has('Friday') || extra.length !== 1) {
-          issues.push({ message: `${emp.name} must be off Friday plus exactly one generated weekday.` });
+        const friday = rowFor(emp.id, 'Friday');
+        const choices = WEEKDAYS.filter((d) => !vacationOn(emp.id, weekKey(state.schedule.week, d)));
+        if (!friday || friday.status === 'work' || (choices.length && generated.length !== 1)) {
+          issues.push({ code: 'fixed', message: `${emp.name} must be off Friday plus exactly one generated weekday.` });
         }
       }
       if (emp.offMode === 'advisor-pool') {
-        const extra = offs.filter((d) => d !== 'Friday');
-        const ok = extra.length === 1 && (extra[0] === 'Thursday' || extra[0] === 'Saturday');
-        if (!offSet.has('Friday') || !ok) {
-          issues.push({ message: `${emp.name} must be off Friday and exactly one of Thursday or Saturday.` });
+        const friday = rowFor(emp.id, 'Friday');
+        const ok = generated.length === 1 && (generated[0] === 'Thursday' || generated[0] === 'Saturday');
+        if (!friday || friday.status === 'work' || !ok) {
+          issues.push({ code: 'pool', message: `${emp.name} must be off Friday and exactly one of Thursday or Saturday.` });
         }
       }
     });
-
-    const pool = employees.filter((e) => e.offMode === 'advisor-pool');
-    const thu = pool.filter((e) => {
-      const row = rowFor(e.id, 'Thursday');
-      const sat = rowFor(e.id, 'Saturday');
-      return row && row.status === 'off' && sat && sat.status === 'work';
-    });
-    const sat = pool.filter((e) => {
-      const row = rowFor(e.id, 'Saturday');
-      const thuRow = rowFor(e.id, 'Thursday');
-      return row && row.status === 'off' && thuRow && thuRow.status === 'work';
-    });
+    const pool = state.employees.filter((e) => e.offMode === 'advisor-pool');
+    const thu = pool.filter((e) => { const row = rowFor(e.id, 'Thursday'); return row && row.offReason === 'generated'; });
+    const sat = pool.filter((e) => { const row = rowFor(e.id, 'Saturday'); return row && row.offReason === 'generated'; });
     if (pool.length !== 6 || thu.length !== 3 || sat.length !== 3) {
-      const names = pool.map((e) => e.name).join(', ') || 'none';
       issues.push({
-        message: `Thursday/Saturday pool is ${thu.length} Thursday OFF and ${sat.length} Saturday OFF. A 3-and-3 split needs 6 people in the pool. Currently ${pool.length}: ${names}.`,
+        code: 'pool',
+        message: `Thursday/Saturday pool is ${thu.length} Thursday OFF and ${sat.length} Saturday OFF. A 3-and-3 split needs 6 people. Currently ${pool.length}: ${pool.map((e) => e.name).join(', ') || 'none'}.`,
       });
     }
-    return { ok: issues.length === 0, issues };
+    state.warnings.forEach((w) => {
+      issues.push({ code: 'coverage', message: `${w.day} ${w.label} is short ${w.shortage}. ${w.people.length} on vacation would have worked this block.` });
+    });
+    const checks = {};
+    CHECKS.forEach(([code]) => { checks[code] = !issues.some((issue) => issue.code === code); });
+    const passed = Object.values(checks).filter(Boolean).length;
+    return { ok: issues.length === 0, issues, checks, health: Math.round((passed / CHECKS.length) * 100) };
   }
 
   function buildCoverage() {
     if (!state.schedule) return [];
-    return DAYS.map((day) => {
-      if (day === 'Friday') return { day, closed: true, blocks: [] };
+    return state.schedule.week.map((col) => {
+      if (col.name === 'Friday') {
+        return { ...col, day: col.name, closed: true, blocks: BLOCKS.map((block) => ({ ...block, counts: { advisor: 0, promoter: 0, testdrive: 0, coordinator: 0, other: 0 }, total: 0, working: [], vacationImpact: [] })) };
+      }
       const blocks = BLOCKS.map((block) => {
         const counts = { advisor: 0, promoter: 0, testdrive: 0, coordinator: 0, other: 0 };
+        const working = [];
+        const vacationImpact = [];
         state.employees.forEach((emp) => {
-          const row = rowFor(emp.id, day);
-          if (!row || row.status !== 'work') return;
-          if (!row.shifts.some((s) => s.start < block.end && s.end > block.start)) return;
+          const row = rowFor(emp.id, col.name);
+          if (!row) return;
+          const planned = row.plannedShifts || [];
+          const hits = planned.some((s) => overlaps(s, block));
           const key = roleKey(emp.position);
-          counts[key] += 1;
+          if (row.status === 'work' && hits) {
+            counts[key] += 1;
+            working.push({ id: emp.id, name: emp.name, position: emp.position, role: key });
+          }
+          if (row.status === 'vacation' && !row.offReason && hits) {
+            vacationImpact.push({ id: emp.id, name: emp.name, type: row.vacation ? row.vacation.type : 'Vacation' });
+          }
         });
-        const total = ROLE_ORDER.reduce((sum, [key]) => sum + counts[key], 0);
-        return { ...block, counts, total };
+        const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+        return { ...block, counts, total, working, vacationImpact };
       });
-      return { day, closed: false, blocks };
+      return { ...col, day: col.name, closed: false, blocks };
     });
   }
-
-  function manpowerStats(coverage) {
-    const cells = [];
-    coverage.forEach((day) => {
+  function buildWarnings() {
+    const min = Number(state.settings.minManpower) || 0;
+    const warnings = [];
+    buildCoverage().forEach((day) => {
       if (day.closed) return;
-      day.blocks.forEach((block) => cells.push({ day: day.day, label: block.label, short: block.short, total: block.total }));
-    });
-    if (!cells.length) return { min: null, max: null, avg: null, lowest: [] };
-    const min = Math.min(...cells.map((c) => c.total));
-    const max = Math.max(...cells.map((c) => c.total));
-    const avg = cells.reduce((s, c) => s + c.total, 0) / cells.length;
-    return { min, max, avg, lowest: cells.filter((c) => c.total === min) };
-  }
-
-  function visibleEmployees() {
-    const dept = $('#filter-dept').value;
-    const pos = $('#filter-pos').value;
-    const emp = $('#filter-emp').value;
-    return state.employees.filter((e) => (
-      (!dept || e.department === dept)
-      && (!pos || e.position === pos)
-      && (!emp || e.id === emp)
-    ));
-  }
-
-  function visibleDays() {
-    const day = $('#filter-day').value;
-    return day ? DAYS.filter((d) => d === day) : DAYS.slice();
-  }
-
-  function loadEmployees() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (!Array.isArray(data) || !data.length) return null;
-      const ok = data.every((e) => e && e.id && e.name && e.department && e.position && e.offMode && Array.isArray(e.shifts) && e.shifts.length);
-      return ok ? data : null;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function saveEmployees() {
-    localStorage.setItem(STORE_KEY, JSON.stringify(state.employees));
-  }
-
-  function markStale() {
-    if (state.schedule) {
-      state.stale = true;
-      state.schedule = null;
-      state.validation = null;
-      state.lastSig = '';
-    }
-  }
-
-  function renderRoster() {
-    const list = state.employees;
-    const count = (pred) => list.filter(pred).length;
-    const cards = [
-      ['TOTAL EMPLOYEES', list.length, 'On the roster'],
-      ['SALES ADVISORS', count((e) => roleKey(e.position) === 'advisor'), 'Sales Advisor'],
-      ['PROMOTERS', count((e) => roleKey(e.position) === 'promoter'), 'Promoters'],
-      ['TEST DRIVE', count((e) => roleKey(e.position) === 'testdrive'), 'Test Drive'],
-      ['SALES COORDINATOR', count((e) => roleKey(e.position) === 'coordinator'), 'Sales Coordinator'],
-    ];
-    $('#roster-kpis').innerHTML = cards.map(([lbl, val, hint]) =>
-      `<article class="card"><div class="lbl">${esc(lbl)}</div><div class="val">${esc(val)}</div><div class="hint">${esc(hint)}</div></article>`
-    ).join('');
-  }
-
-  function renderManKpis(stats) {
-    const fmt = (n, digits) => (n == null ? '—' : digits ? n.toFixed(digits) : String(n));
-    const low = stats.lowest.length
-      ? stats.lowest.slice(0, 2).map((c) => `${c.day} ${c.short}`).join(', ') + (stats.lowest.length > 2 ? ` +${stats.lowest.length - 2}` : '')
-      : '—';
-    const cards = [
-      ['MINIMUM MANPOWER', fmt(stats.min), 'Lowest block, Friday excluded'],
-      ['MAXIMUM MANPOWER', fmt(stats.max), 'Highest block, Friday excluded'],
-      ['AVERAGE MANPOWER', fmt(stats.avg, 1), 'Across 18 open blocks'],
-      ['LOWEST COVERAGE PERIOD', low, stats.lowest.length ? `${stats.min} people` : 'Generate a schedule'],
-    ];
-    $('#man-kpis').innerHTML = cards.map(([lbl, val, hint]) =>
-      `<article class="card"><div class="lbl">${esc(lbl)}</div><div class="val">${esc(val)}</div><div class="hint">${esc(hint)}</div></article>`
-    ).join('');
-  }
-
-  function heatColor(value, min, max) {
-    if (max === min) return 'hsl(140 45% 88%)';
-    const t = (value - min) / (max - min);
-    return `hsl(${8 + t * 132} 62% ${90 - t * 36}%)`;
-  }
-
-  function renderHeat(coverage, stats) {
-    const wrap = $('#heat-wrap');
-    if (!coverage.length) {
-      wrap.innerHTML = '<p class="empty">Generate a schedule to see the heatmap.</p>';
-      return;
-    }
-    const head = BLOCKS.map((b) => `<th>${esc(b.short)}<br>${esc(b.label)}</th>`).join('');
-    const body = coverage.map((day) => {
-      if (day.closed) {
-        return `<tr><td class="day">${esc(day.day)}</td><td class="closed" colspan="3">OFF / CLOSED</td></tr>`;
-      }
-      const cells = day.blocks.map((block) => {
-        const tip = ROLE_ORDER.filter(([key]) => block.counts[key]).map(([key, label]) => `${label}: ${block.counts[key]}`).join(' · ');
-        return `<td style="background:${heatColor(block.total, stats.min, stats.max)}" title="${esc(tip)}"><b>${block.total}</b></td>`;
-      }).join('');
-      return `<tr><td class="day">${esc(day.day)}</td>${cells}</tr>`;
-    }).join('');
-    wrap.innerHTML = `<table class="heat"><thead><tr><th class="day">Day</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
-  }
-
-  function renderDayCards(coverage) {
-    const host = $('#day-cards');
-    if (!coverage.length) {
-      host.innerHTML = '<p class="empty">Manpower is calculated after the schedule is generated.</p>';
-      return;
-    }
-    host.innerHTML = coverage.map((day) => {
-      if (day.closed) {
-        return `<article class="day-card closed"><h3>FRIDAY</h3><p><b>OFF / CLOSED</b></p><p>Total manpower = 0</p></article>`;
-      }
-      const blocks = day.blocks.map((block) => {
-        const lines = ROLE_ORDER.filter(([key]) => key !== 'other' || block.counts.other)
-          .map(([key, label]) => `<li><span>${esc(label)}</span><span>${block.counts[key]}</span></li>`)
-          .join('');
-        return `<div class="block"><h4>${esc(block.label)}</h4><ul>${lines}<li class="total"><span>TOTAL</span><span>${block.total}</span></li></ul></div>`;
-      }).join('');
-      return `<article class="day-card"><h3>${esc(day.day.toUpperCase())}</h3>${blocks}</article>`;
-    }).join('');
-  }
-
-  function cellHtml(row, emp) {
-    if (!row) return '<td class="cell"></td>';
-    if (row.status === 'off') {
-      const tag = row.offReason === 'friday' ? 'Mandatory' : row.offReason === 'fixed' ? 'Fixed' : 'Generated';
-      const cls = row.offReason === 'generated' ? 'off generated' : 'off';
-      return `<td class="cell ${cls}"><div class="off-label">OFF</div><span class="tag">${tag}</span></td>`;
-    }
-    const cls = row.kind === 'split' ? 'work split' : 'work';
-    const tags = [];
-    if (row.kind === 'split') tags.push('Split');
-    if (emp && (emp.offMode === 'friday-only' || emp.offMode === 'fixed')) tags.push('Fixed');
-    const shifts = row.shifts.map((s) => `<div class="shift">${esc(s.label)}</div>`).join('');
-    const tagHtml = tags.map((tag) => `<span class="tag">${tag}</span>`).join('');
-    return `<td class="cell ${cls}">${shifts}${tagHtml}</td>`;
-  }
-
-  function renderTable() {
-    const wrap = $('#schedule-wrap');
-    const people = visibleEmployees();
-    const days = visibleDays();
-    $('#filter-meta').textContent = state.schedule
-      ? `Showing ${people.length} of ${state.employees.length} employees`
-      : '';
-    if (!state.schedule) {
-      wrap.innerHTML = '<p class="empty">No schedule yet. Click GENERATE SCHEDULE.</p>';
-      return;
-    }
-    if (!people.length) {
-      wrap.innerHTML = '<p class="empty">No employees match these filters.</p>';
-      return;
-    }
-    const head = days.map((d) => `<th>${esc(d)}</th>`).join('');
-    const body = people.map((emp) => {
-      const tds = days.map((day) => cellHtml(rowFor(emp.id, day), emp)).join('');
-      return `<tr>
-        <td class="who"><strong>${esc(emp.name)}</strong></td>
-        <td>${esc(emp.id)}</td>
-        <td>${esc(emp.department)}</td>
-        <td>${esc(emp.position)}</td>
-        ${tds}
-      </tr>`;
-    }).join('');
-    wrap.innerHTML = `<table class="sheet"><thead><tr>
-      <th class="who">Employee</th><th>ID</th><th>Department</th><th>Position</th>${head}
-    </tr></thead><tbody>${body}</tbody></table>`;
-  }
-
-  function ruleText(emp) {
-    const hours = normalizeShifts(emp).map((s) => s.label).join(' and ') || 'No shift';
-    let offs = 'Friday OFF';
-    let mode = 'Fixed';
-    if (emp.offMode === 'fixed') {
-      const days = DAYS.filter((d) => (emp.fixedOffDays || []).includes(d) || d === 'Friday');
-      offs = `${days.join(' + ')} OFF`;
-    } else if (emp.offMode === 'advisor-pool') {
-      offs = 'Friday OFF · Thursday or Saturday OFF, split across the pool';
-      mode = 'Generated';
-    } else if (emp.offMode === 'flexible') {
-      offs = 'Friday OFF · one additional weekday OFF';
-      mode = 'Generated';
-    }
-    let week = '';
-    if (state.schedule && !state.stale) {
-      const extra = WEEKDAYS.filter((d) => {
-        const row = rowFor(emp.id, d);
-        return row && row.status === 'off';
+      day.blocks.forEach((block) => {
+        const before = block.total + block.vacationImpact.length;
+        if (block.vacationImpact.length && block.total < min && before >= min) {
+          warnings.push({
+            day: day.day,
+            date: day.key,
+            label: block.label,
+            short: block.short,
+            blockId: block.id,
+            required: min,
+            available: block.total,
+            shortage: min - block.total,
+            people: block.vacationImpact,
+          });
+        }
       });
-      week = extra.length ? `This week: ${extra.join(', ')} OFF` : 'This week: Friday is the only off day';
-    }
-    return { hours, offs, mode, week };
+    });
+    return warnings;
+  }
+  function displayedCount(block, role) {
+    if (role === 'total') return block.total;
+    return block.counts[role] || 0;
   }
 
-  function renderRules() {
-    $('#rules').innerHTML = state.employees.map((emp) => {
-      const rule = ruleText(emp);
-      return `<article class="rule">
-        <strong>${esc(emp.name)}</strong>
-        <p>${esc(emp.position)} · ${esc(emp.department)} · ${esc(emp.id)}</p>
-        <p>${esc(rule.hours)}</p>
-        <p>${esc(rule.offs)}</p>
-        <p class="${rule.mode === 'Fixed' ? 'mode-fixed' : 'mode-gen'}">${esc(rule.mode)}</p>
-        ${rule.week ? `<p>${esc(rule.week)}</p>` : ''}
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify({
+      employees: state.employees,
+      vacations: state.vacations,
+      settings: state.settings,
+      schedule: state.schedule,
+      generation: state.generation,
+      lastSig: state.lastSig,
+    }));
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data && Array.isArray(data.employees) && data.employees.length) {
+          state.employees = data.employees.map((e) => ({ notes: '', ...e }));
+          state.vacations = Array.isArray(data.vacations) ? data.vacations : [];
+          state.settings = { minManpower: 8, strategy: 'balanced', ...(data.settings || {}) };
+          state.schedule = data.schedule || null;
+          state.generation = data.generation || 0;
+          state.lastSig = data.lastSig || '';
+          return;
+        }
+      }
+    } catch (err) { /* keep defaults */ }
+    try {
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+      if (Array.isArray(legacy) && legacy.length && legacy.every((e) => e && e.id && e.name)) {
+        state.employees = legacy.map((e) => ({ notes: '', ...e }));
+        return;
+      }
+    } catch (err) { /* keep defaults */ }
+    state.employees = defaultEmployees();
+  }
+  function clearSchedule() {
+    state.schedule = null;
+    state.validation = null;
+    state.warnings = [];
+    state.lastSig = '';
+    state.stale = true;
+  }
+
+  function upcomingList() {
+    const today = iso(new Date());
+    return state.vacations
+      .filter((v) => v.endDate >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }
+  function monthVacationDays(year, month) {
+    const start = iso(new Date(year, month, 1));
+    const end = iso(new Date(year, month + 1, 0));
+    let count = 0;
+    state.vacations.forEach((v) => {
+      const from = v.startDate > start ? v.startDate : start;
+      const to = v.endDate < end ? v.endDate : end;
+      if (from <= to) count += inclusiveDays(from, to);
+    });
+    return count;
+  }
+  function onVacationToday() {
+    const today = iso(new Date());
+    return state.employees.filter((e) => vacationOn(e.id, today)).length;
+  }
+  function notifications() {
+    const items = [];
+    state.warnings.forEach((w) => items.push({ kind: 'warn', text: `${w.day} ${w.label}: short ${w.shortage}` }));
+    upcomingList().slice(0, 6).forEach((v) => {
+      const emp = empById(v.employeeId);
+      items.push({ kind: 'vac', text: `${emp ? emp.name : v.employeeId} · ${v.type} · ${fmtShort(v.startDate)}` });
+    });
+    return items;
+  }
+  function todayStats() {
+    const today = iso(new Date());
+    const vac = onVacationToday();
+    if (!state.schedule || !state.schedule.rows.some((r) => r.date === today)) {
+      return { work: null, off: null, vac, total: null, outside: !!state.schedule };
+    }
+    let work = 0;
+    let off = 0;
+    state.employees.forEach((emp) => {
+      const row = state.schedule.rows.find((r) => r.employeeId === emp.id && r.date === today);
+      if (!row) return;
+      if (row.status === 'work') work += 1;
+      else if (row.status === 'off') off += 1;
+    });
+    return { work, off, vac, total: work, outside: false };
+  }
+  function chartSeries() {
+    const coverage = buildCoverage();
+    const role = state.chartRole;
+    const series = [
+      { name: 'Morning', color: '#0f6e56', values: [] },
+      { name: 'Afternoon', color: '#3d4f7c', values: [] },
+      { name: 'Evening', color: '#8aa0b8', values: [] },
+    ];
+    DAYS.forEach((day) => {
+      const col = coverage.find((d) => d.day === day);
+      if (!col || col.closed) {
+        series.forEach((s) => s.values.push(0));
+        return;
+      }
+      series[0].values.push(displayedCount(col.blocks[0], role));
+      series[1].values.push(displayedCount(col.blocks[1], role));
+      series[2].values.push(displayedCount(col.blocks[2], role));
+    });
+    return series;
+  }
+  function heatColor(value, max) {
+    if (!value) return '#eef2f4';
+    const t = Math.max(0, Math.min(1, value / (max || 1)));
+    const r = Math.round(232 - t * 214);
+    const g = Math.round(242 - t * 132);
+    const b = Math.round(236 - t * 150);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  function offLabel(row) {
+    if (row.offReason === 'friday') return 'Friday Off';
+    if (row.offReason === 'fixed') return 'Fixed Off';
+    return 'Weekly Off';
+  }
+  function ruleSummary(emp) {
+    const hours = normalizeShifts(emp).map((s) => s.label).join(' / ') || 'No shift';
+    let offs = 'Friday OFF';
+    let mode = 'Friday only';
+    if (emp.offMode === 'fixed') {
+      offs = DAYS.filter((d) => (emp.fixedOffDays || []).includes(d) || d === 'Friday').join(' + ') + ' OFF';
+      mode = 'Fixed off days';
+    } else if (emp.offMode === 'advisor-pool') {
+      offs = 'Friday OFF · Thursday or Saturday OFF';
+      mode = 'Advisor pool';
+    } else if (emp.offMode === 'flexible') {
+      offs = 'Friday OFF · one extra weekday OFF';
+      mode = 'Flexible';
+    }
+    return { hours, offs, mode };
+  }
+  function statusOf(emp) {
+    const today = iso(new Date());
+    if (vacationOn(emp.id, today)) return { cls: 'vac', text: 'On vacation' };
+    const row = state.schedule && state.schedule.rows.find((r) => r.employeeId === emp.id && r.date === today);
+    if (row && row.status === 'off') return { cls: 'off', text: 'Off today' };
+    return { cls: '', text: 'Active' };
+  }
+  function matchesFilters(emp) {
+    const f = state.filters;
+    const q = f.q.trim().toLowerCase();
+    if (q && !`${emp.name} ${emp.id} ${emp.position} ${emp.department}`.toLowerCase().includes(q)) return false;
+    if (f.dept && emp.department !== f.dept) return false;
+    if (f.pos && emp.position !== f.pos) return false;
+    const status = statusOf(emp).text;
+    if (f.status === 'active' && status !== 'Active') return false;
+    if (f.status === 'off' && status !== 'Off today') return false;
+    if (f.status === 'vacation' && status !== 'On vacation') return false;
+    const mine = vacationsFor(emp.id);
+    const today = iso(new Date());
+    const hasUpcoming = mine.some((v) => v.startDate > today);
+    const onVac = mine.some((v) => v.startDate <= today && v.endDate >= today);
+    if (f.vacation === 'none' && mine.length) return false;
+    if (f.vacation === 'upcoming' && !hasUpcoming) return false;
+    if (f.vacation === 'active' && !onVac) return false;
+    if (f.offday === 'friday' && emp.offMode !== 'friday-only') return false;
+    if (f.offday === 'flexible' && emp.offMode !== 'flexible') return false;
+    if (f.offday === 'thursday' || f.offday === 'saturday') {
+      const day = f.offday === 'thursday' ? 'Thursday' : 'Saturday';
+      const fixed = emp.offMode === 'fixed' && (emp.fixedOffDays || []).includes(day);
+      const row = rowFor(emp.id, day);
+      if (!fixed && !(row && row.offReason === 'generated')) return false;
+    }
+    return true;
+  }
+  function vacationLine(emp) {
+    const today = iso(new Date());
+    const active = vacationsFor(emp.id).find((v) => v.startDate <= today && v.endDate >= today);
+    if (active) return active.type;
+    const next = vacationsFor(emp.id).find((v) => v.startDate > today);
+    if (next) return `Upcoming ${fmtShort(next.startDate)}`;
+    return 'None';
+  }
+
+  function ring(pct) {
+    const r = 36;
+    const c = 2 * Math.PI * r;
+    const dash = (Math.max(0, Math.min(100, pct)) / 100) * c;
+    return `<svg class="ring" viewBox="0 0 88 88" aria-hidden="true"><circle class="ring-bg" cx="44" cy="44" r="${r}"></circle><circle class="ring-fg" cx="44" cy="44" r="${r}" stroke-dasharray="${dash} ${c - dash}"></circle><text x="44" y="49" text-anchor="middle">${pct}%</text></svg>`;
+  }
+  function emptyBlock(title, text, button) {
+    return `<div class="card empty"><svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#98a2b3" stroke-width="1.6"><rect x="8" y="12" width="48" height="42" rx="8"></rect><path d="M8 24h48M20 8v8M44 8v8"></path></svg><h3>${title}</h3><p>${text}</p>${button || ''}</div>`;
+  }
+  function pageHead(title, sub, actions) {
+    return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub" id="page-sub">${sub}</p>` : ''}</div><div class="actions">${actions || ''}</div></div>`;
+  }
+  function exportMenu() {
+    return `<details class="menu"><summary class="btn">Export</summary><div class="menu-pop"><button type="button" data-act="excel">Excel workbook</button><button type="button" data-act="print">Print / PDF</button><button type="button" data-act="json">JSON backup</button></div></details>`;
+  }
+  function warnHtml() {
+    if (!state.warnings.length) return '';
+    return state.warnings.slice(0, 4).map((w) => `<article class="warn"><b>MANPOWER WARNING</b><p>${esc(w.day)} · ${esc(w.label)}</p><p>Required ${w.required} · Available ${w.available} · Shortage ${w.shortage}</p><p>Reason: ${w.people.length} employee${w.people.length === 1 ? '' : 's'} on vacation would have covered this block.</p><button class="btn small" type="button" data-act="affected" data-day="${esc(w.day)}" data-block="${esc(w.blockId)}">View affected employees</button></article>`).join('');
+  }
+  function healthCard() {
+    if (!state.schedule || !state.validation) {
+      return `<article class="card health"><div><b>SCHEDULE HEALTH</b><p class="muted">Generate a week to validate it.</p></div></article>`;
+    }
+    const health = state.validation.health;
+    const n = state.validation.issues.length;
+    const label = health === 100 ? '100% VALID' : `${n} ISSUE${n === 1 ? '' : 'S'}`;
+    return `<article class="card health">${ring(health)}<div><b>SCHEDULE HEALTH</b><p>${label}</p>${n ? '<button class="btn small" type="button" data-act="issues">View issues</button>' : '<p class="muted">Every check passed.</p>'}</div></article>`;
+  }
+
+  function dashboardView() {
+    const list = state.employees;
+    const count = (key) => list.filter((e) => roleKey(e.position) === key).length;
+    const kpis = [
+      ['TOTAL EMPLOYEES', list.length, 'On the roster'],
+      ['SALES ADVISORS', count('advisor'), 'Sales Advisor'],
+      ['PROMOTERS', count('promoter'), 'Promoters'],
+      ['TEST DRIVE', count('testdrive'), 'Test Drive'],
+      ['COORDINATOR', count('coordinator'), 'Sales Coordinator'],
+    ];
+    const today = todayStats();
+    const num = (n) => (n == null ? '—' : `<span data-count="${n}">0</span>`);
+    const stats = [
+      ['WORKING TODAY', num(today.work)],
+      ['ON VACATION', num(today.vac)],
+      ['OFF TODAY', num(today.off)],
+      ['TOTAL MANPOWER', num(today.total)],
+    ];
+    const chart = state.schedule
+      ? `<div class="chart-wrap"><canvas id="man-chart"></canvas><div class="tip" id="chart-tip"></div></div><div class="legend"><span><i class="dot" style="background:#0f6e56"></i>Morning</span><span><i class="dot" style="background:#3d4f7c"></i>Afternoon</span><span><i class="dot" style="background:#8aa0b8"></i>Evening</span></div>`
+      : emptyBlock('NO SCHEDULE GENERATED', 'Generate a week to see manpower by day and block.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>');
+    const roles = [['total', 'Total Manpower'], ['advisor', 'Sales Advisors'], ['promoter', 'Promoters'], ['testdrive', 'Test Drive'], ['coordinator', 'Coordinator']];
+    return `<div class="wrap">
+      <p class="kicker">Smart Employee Scheduling &amp; Manpower Planning</p>
+      ${pageHead('Dashboard', fmtLong(new Date()))}
+      <div class="grid-5">${kpis.map(([lbl, val, hint]) => `<article class="card kpi"><div class="lbl">${lbl}</div><div class="val" data-count="${val}">0</div><div class="hint">${hint}</div></article>`).join('')}</div>
+      <h2 class="section-title">This week</h2>
+      <div class="band">${stats.map(([lbl, val]) => `<article class="card stat"><div class="lbl">${lbl}</div><div class="val">${val}</div></article>`).join('')}</div>
+      ${today.outside ? '<p class="muted">Today sits outside the generated week. Open Schedule to review that week.</p>' : ''}
+      <h2 class="section-title">Manpower overview</h2>
+      <article class="card chart-card">
+        <div class="seg">${roles.map(([id, label]) => `<button type="button" class="${state.chartRole === id ? 'on' : ''}" data-act="chart" data-role="${id}">${label}</button>`).join('')}</div>
+        ${chart}
+      </article>
+      ${warnHtml()}
+      <div class="grid-2" style="margin-top:14px">${healthCard()}<article class="card"><b>NEXT VACATION</b>${nextVacationHtml()}</article></div>
+    </div>`;
+  }
+  function nextVacationHtml() {
+    const today = iso(new Date());
+    const next = state.vacations.filter((v) => v.startDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
+      || upcomingList()[0];
+    if (!next) return '<p class="muted">No vacation is scheduled.</p>';
+    const emp = empById(next.employeeId);
+    return `<p style="font-size:22px;margin:10px 0 0">${esc(emp ? emp.name : next.employeeId)}</p><p class="muted">${esc(next.type)} · ${fmtShort(next.startDate)} – ${fmtShort(next.endDate)}</p>`;
+  }
+
+  function employeeCards() {
+    const people = state.employees.filter(matchesFilters);
+    if (!people.length) return '<div class="card empty"><h3>NO MATCHING EMPLOYEES</h3><p>Try another search or filter.</p></div>';
+    return people.map((emp) => {
+      const shifts = normalizeShifts(emp);
+      const status = statusOf(emp);
+      const rule = ruleSummary(emp);
+      return `<article class="card emp-card">
+        <div class="emp-top"><span class="avatar">${esc(initials(emp.name))}</span><div><b>${esc(emp.name)}</b><small>ID ${esc(emp.id)} · ${esc(emp.department)}</small></div></div>
+        <div class="meta">${esc(emp.position)}</div>
+        <div><span class="pill ${status.cls}">● ${esc(status.text)}</span></div>
+        <div class="meta"><b>${shifts.length > 1 ? 'Split Shift' : 'Shift'}</b><br>${shifts.map((s) => esc(s.label)).join('<br>')}</div>
+        <div class="meta">Off day<br>${esc(rule.offs)}</div>
+        <div class="meta">Vacation: ${esc(vacationLine(emp))}</div>
+        <div class="actions"><button class="btn small" type="button" data-act="profile" data-id="${esc(emp.id)}">Manage</button><button class="btn-primary small" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Manage vacation</button></div>
       </article>`;
     }).join('');
   }
-
-  function fillSelect(id, values) {
-    const sel = $(id);
-    const current = sel.value;
-    const opts = ['<option value="">All</option>'].concat(values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`));
-    sel.innerHTML = opts.join('');
-    sel.value = values.includes(current) ? current : '';
-  }
-
-  function renderFilters() {
-    fillSelect('#filter-dept', [...new Set(state.employees.map((e) => e.department))]);
-    fillSelect('#filter-pos', [...new Set(state.employees.map((e) => e.position))]);
-    const empSel = $('#filter-emp');
-    const current = empSel.value;
-    empSel.innerHTML = '<option value="">All</option>' + state.employees.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-    empSel.value = state.employees.some((e) => e.id === current) ? current : '';
-    const daySel = $('#filter-day');
-    if (daySel.options.length <= 1) {
-      daySel.innerHTML = '<option value="">All</option>' + DAYS.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
-    }
-  }
-
-  function renderEditor() {
-    $('#emp-list').innerHTML = state.employees.map((emp, index) => `<article class="emp-item">
-      <div><b>${esc(emp.name)}</b><span>${esc(emp.id)} · ${esc(emp.position)}</span></div>
-      <div>
-        <button type="button" class="btn small" data-act="up" data-i="${index}" ${index === 0 ? 'disabled' : ''}>Up</button>
-        <button type="button" class="btn small" data-act="down" data-i="${index}" ${index === state.employees.length - 1 ? 'disabled' : ''}>Down</button>
-        <button type="button" class="btn small" data-act="edit" data-i="${index}">Edit</button>
-        <button type="button" class="btn small" data-act="delete" data-i="${index}">Delete</button>
+  function employeesView() {
+    const depts = [...new Set(state.employees.map((e) => e.department))];
+    const poss = [...new Set(state.employees.map((e) => e.position))];
+    const opt = (values, current) => values.map((v) => `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(v)}</option>`).join('');
+    const shown = state.employees.filter(matchesFilters).length;
+    return `<div class="wrap">
+      ${pageHead('Employees', `${shown} of ${state.employees.length} people`, '<button class="btn-primary" type="button" data-act="add-employee">+ Add employee</button>')}
+      <div class="filters">
+        <input id="emp-search" type="search" placeholder="Search employee..." value="${esc(state.filters.q)}" />
+        <select id="f-dept"><option value="">Department</option>${opt(depts, state.filters.dept)}</select>
+        <select id="f-pos"><option value="">Position</option>${opt(poss, state.filters.pos)}</select>
+        <select id="f-status"><option value="">Status</option><option value="active" ${state.filters.status === 'active' ? 'selected' : ''}>Active</option><option value="off" ${state.filters.status === 'off' ? 'selected' : ''}>Off today</option><option value="vacation" ${state.filters.status === 'vacation' ? 'selected' : ''}>On vacation</option></select>
+        <select id="f-vac"><option value="">Vacation</option><option value="none" ${state.filters.vacation === 'none' ? 'selected' : ''}>None</option><option value="upcoming" ${state.filters.vacation === 'upcoming' ? 'selected' : ''}>Upcoming</option><option value="active" ${state.filters.vacation === 'active' ? 'selected' : ''}>On vacation</option></select>
+        <select id="f-off"><option value="">Off day</option><option value="friday" ${state.filters.offday === 'friday' ? 'selected' : ''}>Friday only</option><option value="thursday" ${state.filters.offday === 'thursday' ? 'selected' : ''}>Thursday</option><option value="saturday" ${state.filters.offday === 'saturday' ? 'selected' : ''}>Saturday</option><option value="flexible" ${state.filters.offday === 'flexible' ? 'selected' : ''}>Flexible</option></select>
       </div>
-    </article>`).join('');
+      <div class="emp-grid" id="emp-grid">${employeeCards()}</div>
+    </div>`;
   }
 
-  function renderFixedDays() {
-    const host = $('#day-checks');
-    host.innerHTML = DAYS.map((day) => {
-      const locked = day === 'Friday';
-      return `<label><input type="checkbox" value="${esc(day)}" ${locked ? 'checked disabled' : ''} /> ${esc(day)}</label>`;
-    }).join('');
+  function cellCard(row) {
+    if (!row) return '<div class="cell-card off"><b>OFF</b><span>—</span></div>';
+    if (row.status === 'vacation') return `<div class="cell-card vacation"><b>VACATION</b><span>${esc(row.vacation ? row.vacation.type : 'Vacation')}</span></div>`;
+    if (row.status === 'off') return `<div class="cell-card off"><b>OFF</b><span>${esc(offLabel(row))}</span></div>`;
+    if (row.kind === 'split') return `<div class="cell-card work"><b>SPLIT SHIFT</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
+    return `<div class="cell-card work"><b>WORK</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
+  }
+  function scheduleView() {
+    const period = state.schedule ? `${fmtShort(state.schedule.start)} – ${fmtLong(state.schedule.end)}` : 'No week generated';
+    const same = state.sameArrangement ? ' Flexible off days stayed in the same places.' : '';
+    const meta = state.schedule ? `Arrangement #${state.generation}. Strategy: ${state.schedule.strategy || 'balanced'}.${same}` : (state.stale ? 'Rules changed. Generate the week again.' : '');
+    const board = !state.schedule
+      ? emptyBlock('NO SCHEDULE GENERATED', 'Choose a week and the generator will apply every rule, off day, and vacation.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')
+      : `<div class="board-scroll"><table class="sheet"><thead><tr><th class="who">Employee</th>${DAYS.map((d, i) => `<th>${d}<br><span style="font-weight:500">${state.schedule.week[i] ? fmtShort(state.schedule.week[i].key) : ''}</span></th>`).join('')}</tr></thead><tbody>${
+        state.employees.map((emp) => `<tr><td class="who"><div class="who-box"><span class="avatar sm">${esc(initials(emp.name))}</span><span><b>${esc(emp.name)}</b><small>${esc(emp.position)}</small></span></div></td>${DAYS.map((day) => `<td>${cellCard(rowFor(emp.id, day))}</td>`).join('')}</tr>`).join('')
+      }</tbody></table></div>`;
+    return `<div class="wrap">
+      ${pageHead('Schedule', period, `<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button><button class="btn" type="button" data-act="regen">Regenerate</button><button class="btn" type="button" data-act="validate">Validate</button>${exportMenu()}`)}
+      <p class="muted">${esc(meta)}</p>
+      <div class="legend" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span></div>
+      ${healthCard()}
+      ${warnHtml()}
+      <div style="margin-top:14px">${board}</div>
+    </div>`;
   }
 
-  function syncFixedVisibility() {
-    const mode = $('#f-mode').value;
-    $('#fixed-days').hidden = mode !== 'fixed';
-    const second = $('#f-second').checked;
-    $('#f-s2-wrap').hidden = !second;
-    $('#f-e2-wrap').hidden = !second;
-    const fake = readForm(false);
-    if (fake) {
-      const rule = ruleText(fake);
-      $('#form-preview').textContent = `${rule.hours}. ${rule.offs}. ${rule.mode}.`;
-    }
-  }
-
-  function readForm(strict) {
-    const name = $('#f-name').value.trim();
-    const id = $('#f-id').value.trim();
-    const department = $('#f-dept').value.trim();
-    const position = $('#f-pos').value.trim();
-    const offMode = $('#f-mode').value;
-    const shifts = [{ start: $('#f-s1').value, end: $('#f-e1').value }];
-    if ($('#f-second').checked) shifts.push({ start: $('#f-s2').value, end: $('#f-e2').value });
-    const fixedOffDays = ['Friday'];
-    if (offMode === 'fixed') {
-      $('#day-checks').querySelectorAll('input').forEach((box) => {
-        if (box.checked && box.value !== 'Friday') fixedOffDays.push(box.value);
-      });
-    }
-    const emp = { id, name, department, position, offMode, shifts, fixedOffDays };
-    if (!strict) return emp;
-    if (!name || !id || !department || !position) return { error: 'Name, ID, department, and position are required.' };
-    if (state.employees.some((e) => e.id === id && e.id !== state.editingId)) return { error: 'That ID is already used.' };
-    const parsed = normalizeShifts(emp);
-    if (parsed.some((s) => !s.start && s.start !== 0 || s.end <= s.start)) return { error: 'Each shift needs an end time after the start time.' };
-    if (shiftsOverlap(parsed)) return { error: 'The two shifts overlap. Change the times.' };
-    return emp;
-  }
-
-  function fillForm(emp) {
-    state.editingId = emp ? emp.id : '';
-    $('#f-name').value = emp ? emp.name : '';
-    $('#f-id').value = emp ? emp.id : '';
-    $('#f-dept').value = emp ? emp.department : 'SA Showroom';
-    $('#f-pos').value = emp ? emp.position : 'Sales Advisor';
-    $('#f-mode').value = emp ? emp.offMode : 'advisor-pool';
-    const shifts = emp ? emp.shifts : [{ start: '12:00', end: '21:00' }];
-    $('#f-s1').value = shifts[0] ? shifts[0].start : '12:00';
-    $('#f-e1').value = shifts[0] ? shifts[0].end : '21:00';
-    $('#f-second').checked = shifts.length > 1;
-    $('#f-s2').value = shifts[1] ? shifts[1].start : '17:00';
-    $('#f-e2').value = shifts[1] ? shifts[1].end : '21:00';
-    $('#day-checks').querySelectorAll('input').forEach((box) => {
-      if (box.value === 'Friday') box.checked = true;
-      else box.checked = !!(emp && (emp.fixedOffDays || []).includes(box.value));
-    });
-    $('#f-save').textContent = emp ? 'SAVE EMPLOYEE' : 'ADD EMPLOYEE';
-    $('#form-msg').textContent = '';
-    syncFixedVisibility();
-  }
-
-  function suggestFromPosition() {
-    const pos = $('#f-pos').value.trim().toLowerCase();
-    if (!state.editingId && pos) {
-      if (pos.includes('coordinator')) {
-        $('#f-mode').value = 'friday-only';
-        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
-      } else if (pos.includes('test')) {
-        $('#f-mode').value = 'fixed';
-        $('#f-s1').value = '09:00'; $('#f-e1').value = '18:00'; $('#f-second').checked = false;
-        $('#day-checks').querySelectorAll('input').forEach((box) => { box.checked = box.value === 'Friday' || box.value === 'Saturday'; });
-      } else if (pos.includes('promot')) {
-        $('#f-mode').value = 'flexible';
-        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
-      } else if (pos.includes('advisor')) {
-        $('#f-mode').value = 'advisor-pool';
-        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
-      }
-    }
-    syncFixedVisibility();
-  }
-
-  function renderValidation() {
-    const box = $('#valid-box');
-    const empty = $('#valid-empty');
-    const result = state.validation;
-    if (!result) {
-      box.hidden = true;
-      empty.hidden = false;
-      return;
-    }
-    empty.hidden = true;
-    box.hidden = false;
-    box.className = `valid-box ${result.ok ? 'ok' : 'bad'}`;
-    $('#valid-toggle').textContent = result.ok ? '✓ Schedule Valid' : `⚠ ${result.issues.length} Issue${result.issues.length === 1 ? '' : 's'} Found`;
-    const list = $('#valid-list');
-    list.innerHTML = result.issues.map((issue) => `<li>${esc(issue.message)}</li>`).join('');
-    list.hidden = result.ok;
-  }
-
-  function renderGenerated() {
+  function manpowerView() {
     const coverage = buildCoverage();
-    const stats = manpowerStats(coverage);
-    renderManKpis(stats);
-    renderHeat(coverage, stats);
-    renderDayCards(coverage);
-    renderTable();
-    renderRules();
-    renderValidation();
-    $('#stale-banner').hidden = !state.stale;
-    if (!state.schedule) {
-      $('#gen-meta').textContent = state.stale
-        ? 'Rules changed. The previous week was cleared.'
-        : 'No schedule yet. Click GENERATE SCHEDULE.';
-      return;
+    if (!coverage.length) {
+      return `<div class="wrap">${pageHead('Manpower', 'Control tower')}${emptyBlock('NO SCHEDULE GENERATED', 'Manpower is counted from the generated week.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')}</div>`;
     }
-    const same = state.sameArrangement ? ' Flexible off days did not move, so this week matches the previous one.' : '';
-    $('#gen-meta').textContent = `Arrangement #${state.generation}. Friday is off for every employee.${same}`;
+    const roles = [['total', 'Total'], ...ROLES];
+    let max = 1;
+    coverage.forEach((day) => day.blocks.forEach((block) => { max = Math.max(max, displayedCount(block, state.heatRole)); }));
+    const head = BLOCKS.map((b) => `<th>${esc(b.short)}<br>${esc(b.label)}</th>`).join('');
+    const body = coverage.map((day) => {
+      const cells = day.blocks.map((block) => {
+        const n = displayedCount(block, state.heatRole);
+        if (day.closed) return `<td><button class="heat-closed" type="button" data-act="who" data-day="${esc(day.day)}" data-block="${esc(block.id)}">0</button></td>`;
+        const color = heatColor(n, max);
+        const ink = n > max * 0.62 ? '#fff' : '#143d36';
+        return `<td><button class="heat-cell" type="button" style="background:${color};color:${ink}" data-act="who" data-day="${esc(day.day)}" data-block="${esc(block.id)}">${n}</button></td>`;
+      }).join('');
+      return `<tr><th>${esc(day.day)}</th>${cells}</tr>`;
+    }).join('');
+    return `<div class="wrap">
+      ${pageHead('Manpower', state.schedule ? `${fmtShort(state.schedule.start)} – ${fmtLong(state.schedule.end)}` : '', exportMenu())}
+      <div class="seg">${roles.map(([id, label]) => `<button type="button" class="${state.heatRole === id ? 'on' : ''}" data-act="heat" data-role="${id}">${label}</button>`).join('')}</div>
+      <article class="card" style="overflow:auto"><table class="heat"><thead><tr><th>Day</th>${head}</tr></thead><tbody>${body}</tbody></table><p class="muted">Friday stays closed. Select a cell to see who is working.</p></article>
+      ${warnHtml()}
+    </div>`;
   }
 
-  function renderAll() {
-    renderRoster();
-    renderFilters();
-    renderEditor();
-    renderFixedDays();
-    fillForm(null);
-    renderGenerated();
+  function calendarCells() {
+    const { y, m } = state.cal;
+    const first = new Date(y, m, 1);
+    const start = addDays(first, -((first.getDay() + 1) % 7));
+    let html = '';
+    for (let i = 0; i < 42; i += 1) {
+      const date = addDays(start, i);
+      const key = iso(date);
+      const outside = date.getMonth() !== m;
+      const today = key === iso(new Date());
+      const items = state.vacations.filter((v) => v.startDate <= key && v.endDate >= key);
+      const chips = items.slice(0, 2).map((v) => {
+        const emp = empById(v.employeeId);
+        return `<button class="chip ${typeClass(v.type)}" type="button" data-act="vac-open" data-id="${esc(v.id)}">${esc(emp ? emp.name.split(' ')[0] : 'Leave')}<br>${esc(v.type)}</button>`;
+      }).join('');
+      const more = items.length > 2 ? `<span class="muted">+${items.length - 2}</span>` : '';
+      html += `<div class="cal-day ${outside ? 'out' : ''} ${today ? 'today' : ''}" data-act="cal-day" data-date="${key}"><span class="n">${date.getDate()}</span>${chips}${more}</div>`;
+    }
+    return html;
+  }
+  function vacationsView() {
+    const today = iso(new Date());
+    const upcoming = state.vacations.filter((v) => v.startDate > today);
+    const next = state.vacations.filter((v) => v.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+    const nextEmp = next ? empById(next.employeeId) : null;
+    const kpis = [
+      ['EMPLOYEES ON VACATION', onVacationToday()],
+      ['UPCOMING VACATIONS', upcoming.length],
+      ['VACATION DAYS THIS MONTH', monthVacationDays(state.cal.y, state.cal.m)],
+      ['NEXT VACATION', next ? esc(nextEmp ? nextEmp.name : next.employeeId) : '—'],
+    ];
+    const list = upcomingList();
+    const table = list.length
+      ? `<table class="list"><thead><tr><th>Employee</th><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Status</th></tr></thead><tbody>${list.map((v) => {
+        const emp = empById(v.employeeId);
+        return `<tr><td><button class="btn-ghost small" type="button" data-act="vac-open" data-id="${esc(v.id)}">${esc(emp ? emp.name : v.employeeId)}</button></td><td>${esc(v.type)}</td><td>${fmtShort(v.startDate)}</td><td>${fmtShort(v.endDate)}</td><td>${inclusiveDays(v.startDate, v.endDate)}</td><td>${vacStatus(v)}</td></tr>`;
+      }).join('')}</tbody></table>`
+      : '';
+    const body = state.vacations.length
+      ? `<article class="card"><div class="cal-head"><button class="btn small" type="button" data-act="cal-prev">Previous</button><b>${MONTHS[state.cal.m].toUpperCase()} ${state.cal.y}</b><button class="btn small" type="button" data-act="cal-next">Next</button></div><div class="cal-grid">${DAYS.map((d) => `<div class="cal-dow">${d.slice(0, 3).toUpperCase()}</div>`).join('')}${calendarCells()}</div></article><h2 class="section-title">Upcoming vacations</h2><article class="card">${table || '<p class="muted">Nothing upcoming.</p>'}</article>`
+      : emptyBlock('NO VACATIONS SCHEDULED', 'Add a leave period for any employee. The next generated week will keep them off those dates.', '<button class="btn-primary" type="button" data-act="vac-add">+ Add vacation</button>');
+    return `<div class="wrap">
+      ${pageHead('Vacations', 'Leave calendar', '<button class="btn-primary" type="button" data-act="vac-add">+ Add vacation</button>')}
+      <div class="grid-4">${kpis.map(([lbl, val], i) => `<article class="card kpi"><div class="lbl">${lbl}</div><div class="${i === 3 ? 'meta' : 'val'}" ${i < 3 ? `data-count="${val}"` : ''} style="${i === 3 ? 'font-size:18px;margin-top:10px' : ''}">${i === 3 ? val : '0'}</div>${i === 3 && next ? `<div class="hint">${fmtShort(next.startDate)}</div>` : ''}</article>`).join('')}</div>
+      <div style="margin-top:14px">${body}</div>
+    </div>`;
   }
 
-  function runGenerate() {
-    if (!state.employees.length) {
-      $('#gen-meta').textContent = 'Add at least one employee before generating.';
+  function rulesView() {
+    const cards = state.employees.map((emp) => {
+      const rule = ruleSummary(emp);
+      const extra = state.schedule ? DAYS.filter((d) => { const row = rowFor(emp.id, d); return row && row.offReason === 'generated'; }) : [];
+      return `<article class="card rule"><div><b>${esc(emp.name)}</b><p class="muted">${esc(emp.position)} · ${esc(emp.id)}</p><p>Shift: ${esc(rule.hours)}</p><p>Friday: OFF</p><p>Additional off: ${esc(rule.offs)}</p><p>Vacation: Allowed${vacationsFor(emp.id).length ? ` · ${vacationsFor(emp.id).length} period${vacationsFor(emp.id).length === 1 ? '' : 's'}` : ''}</p>${extra.length ? `<p>This week: ${esc(extra.join(', '))} OFF</p>` : ''}${emp.notes ? `<p>${esc(emp.notes)}</p>` : ''}</div><button class="btn small" type="button" data-act="edit" data-id="${esc(emp.id)}">Edit</button></article>`;
+    }).join('');
+    return `<div class="wrap">${pageHead('Rules', 'Mandatory rules win over balancing.', '<button class="btn-primary" type="button" data-act="add-employee">+ Add employee</button>')}<div class="emp-grid" style="grid-template-columns:1fr">${cards}</div></div>`;
+  }
+
+  const views = { dashboard: dashboardView, employees: employeesView, schedule: scheduleView, manpower: manpowerView, vacations: vacationsView, rules: rulesView };
+
+  function renderChrome() {
+    document.querySelectorAll('[data-go]').forEach((btn) => btn.classList.toggle('on', btn.dataset.go === state.view));
+    $('#today-label').textContent = fmtLong(new Date());
+    const n = notifications().length;
+    const badge = $('#note-badge');
+    badge.hidden = !n;
+    badge.textContent = n > 9 ? '9+' : String(n);
+  }
+  function animateNumbers() {
+    document.querySelectorAll('[data-count]').forEach((el) => {
+      const target = Number(el.dataset.count);
+      if (!Number.isFinite(target)) return;
+      const t0 = performance.now();
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / 480);
+        el.textContent = String(Math.round(target * (1 - (1 - p) ** 3)));
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  function render() {
+    const main = $('#main');
+    renderChrome();
+    if (state.soft && state.view === 'employees' && main.dataset.view === 'employees' && $('#emp-grid')) {
+      $('#emp-grid').innerHTML = employeeCards();
+      const shown = state.employees.filter(matchesFilters).length;
+      const meta = $('#page-sub');
+      if (meta) meta.textContent = `${shown} of ${state.employees.length} people`;
+      state.soft = false;
       return;
     }
+    state.soft = false;
+    main.dataset.view = state.view;
+    main.innerHTML = views[state.view]();
+    if (state.view === 'dashboard') requestAnimationFrame(drawChart);
+    requestAnimationFrame(animateNumbers);
+  }
+  function go(view) {
+    if (!VIEWS.includes(view)) return;
+    state.view = view;
+    history.replaceState(null, '', `#${view}`);
+    window.scrollTo(0, 0);
+    render();
+  }
+  function toast(text) {
+    const el = $('#toast');
+    el.hidden = false;
+    el.textContent = text;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 2400);
+  }
+  function closeOverlay() { $('#overlay').innerHTML = ''; }
+  function openOverlay(html, drawer) {
+    $('#overlay').innerHTML = `<div class="scrim ${drawer ? 'drawer-scrim' : ''}"><div class="${drawer ? 'drawer' : 'dialog'}" role="dialog">${html}</div></div>`;
+  }
+
+  function drawChart() {
+    const canvas = $('#man-chart');
+    if (!canvas || !state.schedule) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 640;
+    const h = canvas.clientHeight || 280;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const series = chartSeries();
+    const max = Math.max(1, ...series.flatMap((s) => s.values));
+    const pad = { l: 32, r: 8, t: 12, b: 28 };
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = '12px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = '#e7ebf0';
+    ctx.fillStyle = '#98a2b3';
+    for (let i = 0; i <= 4; i += 1) {
+      const y = pad.t + (h - pad.t - pad.b) * (1 - i / 4);
+      ctx.beginPath();
+      ctx.moveTo(pad.l, y);
+      ctx.lineTo(w - pad.r, y);
+      ctx.stroke();
+      ctx.fillText(String(Math.round(max * i / 4)), 0, y + 4);
+    }
+    const group = (w - pad.l - pad.r) / 7;
+    const barW = Math.min(16, (group - 20) / 3);
+      DAYS.forEach((label, i) => {
+      series.forEach((item, s) => {
+        const bh = Math.max(0, (item.values[i] / max) * (h - pad.t - pad.b));
+        const x = pad.l + i * group + (group - (barW * 3 + 8)) / 2 + s * (barW + 4);
+        const y = pad.t + (h - pad.t - pad.b) - bh;
+        ctx.fillStyle = item.color;
+        ctx.beginPath();
+        const radius = Math.min(4, bh / 2, barW / 2);
+        if (bh > 0 && ctx.roundRect) ctx.roundRect(x, y, barW, bh, radius);
+        else ctx.rect(x, y, barW, bh);
+        ctx.fill();
+      });
+      ctx.fillStyle = '#667085';
+      ctx.textAlign = 'center';
+      ctx.fillText(label.slice(0, 3), pad.l + i * group + group / 2, h - 8);
+    });
+    canvas._layout = { pad, group, series, w, h };
+  }
+
+  function openGenerate() {
+    const week = state.schedule ? state.schedule.week : currentWeek();
+    const strategy = state.settings.strategy || 'balanced';
+    openOverlay(`<h2 style="margin-top:0">Generate schedule</h2><p class="muted">One Saturday–Friday week. Vacations, fixed offs, and Friday closure are applied before balancing.</p>
+      <div class="field row"><div class="field"><label>Start date</label><input id="g-start" type="date" value="${week[0].key}" /></div><div class="field"><label>End date</label><input id="g-end" type="date" value="${week[6].key}" /></div></div>
+      <p class="muted" id="g-week">Week: ${fmtShort(week[0].key)} – ${fmtLong(week[6].key)}</p>
+      <div class="field"><label>Scheduling strategy</label>
+        <label><input type="radio" name="strategy" value="balanced" ${strategy === 'balanced' ? 'checked' : ''} /> Balanced</label><br>
+        <label><input type="radio" name="strategy" value="maximum" ${strategy === 'maximum' ? 'checked' : ''} /> Maximum coverage</label><br>
+        <label><input type="radio" name="strategy" value="minimum" ${strategy === 'minimum' ? 'checked' : ''} /> Minimum staff cost</label>
+      </div>
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="do-generate">Generate schedule</button></div>`);
+  }
+  function playGenerate(week, strategy) {
+    if (state.busy) return;
+    state.busy = true;
+    const steps = ['ANALYZING EMPLOYEES...', 'CHECKING VACATIONS...', 'APPLYING SHIFT RULES...', 'BALANCING MANPOWER...', 'VALIDATING SCHEDULE...'];
+    let index = 0;
+    const paint = (done) => {
+      openOverlay(`<h2 style="margin-top:0">${done ? 'SCHEDULE GENERATED' : 'Generating'}</h2>${steps.map((text, i) => `<div class="step ${done || i < index ? 'done' : ''} ${!done && i === index ? 'on' : ''}">${done || i < index ? '✓' : '○'} ${text}</div>`).join('')}${done ? '<p>✓ The week is ready.</p>' : ''}`);
+    };
+    const finish = (ok) => {
+      state.busy = false;
+      if (!ok) {
+        closeOverlay();
+        toast('The schedule could not be generated.');
+        return;
+      }
+      paint(true);
+      setTimeout(() => { closeOverlay(); state.view = 'schedule'; render(); toast('Schedule generated'); }, 700);
+    };
+    paint(false);
+    const tick = () => {
+      index += 1;
+      if (index < steps.length) {
+        paint(false);
+        setTimeout(tick, 420);
+        return;
+      }
+      try {
+        runGenerate(week, strategy);
+        finish(true);
+      } catch (err) {
+        finish(false);
+      }
+    };
+    setTimeout(tick, 420);
+  }
+  function runGenerate(week, strategy) {
     const had = state.generation > 0 && !!state.lastSig;
     const base = (Date.now() ^ (state.generation * 10007)) >>> 0;
     let best = null;
     for (let i = 0; i < 12; i += 1) {
-      const result = generateSchedule(state.employees, (base + i * 9973) >>> 0);
+      const result = generateSchedule(state.employees, (base + i * 9973) >>> 0, week, state.vacations, strategy, Number(state.settings.minManpower) || 8);
       result.sig = signature(result.rows);
       best = result;
       if (result.sig !== state.lastSig) break;
@@ -1082,137 +1396,426 @@
     state.schedule = best;
     state.generation += 1;
     state.stale = false;
-    state.validation = validateSchedule();
-    renderGenerated();
+    state.settings.strategy = strategy;
+    applyVacations();
+    save();
+  }
+
+  function employeeForm(emp) {
+    state.editingId = emp ? emp.id : '';
+    const shifts = emp ? emp.shifts : [{ start: '12:00', end: '21:00' }];
+    const mode = emp ? emp.offMode : 'advisor-pool';
+    const depts = [...new Set(defaultEmployees().concat(state.employees).map((e) => e.department))];
+    const poss = [...new Set(defaultEmployees().concat(state.employees).map((e) => e.position))];
+    const days = DAYS.map((day) => {
+      const checked = day === 'Friday' || (emp && (emp.fixedOffDays || []).includes(day));
+      return `<label><input type="checkbox" value="${day}" ${checked ? 'checked' : ''} ${day === 'Friday' ? 'disabled' : ''} /> ${day}</label>`;
+    }).join('');
+    openOverlay(`<h2 style="margin-top:0">${emp ? 'Edit employee' : 'Add employee'}</h2>
+      <div class="field"><label>Name</label><input id="e-name" value="${esc(emp ? emp.name : '')}" /></div>
+      <div class="field"><label>Employee ID</label><input id="e-id" value="${esc(emp ? emp.id : '')}" /></div>
+      <div class="field"><label>Department</label><input id="e-dept" list="dept-list" value="${esc(emp ? emp.department : '')}" /><datalist id="dept-list">${depts.map((d) => `<option value="${esc(d)}"></option>`).join('')}</datalist></div>
+      <div class="field"><label>Position</label><input id="e-pos" list="pos-list" value="${esc(emp ? emp.position : '')}" /><datalist id="pos-list">${poss.map((d) => `<option value="${esc(d)}"></option>`).join('')}</datalist></div>
+      <div class="field row"><div class="field"><label>Default shift start</label><input id="e-s1" type="time" value="${shifts[0] ? shifts[0].start : '12:00'}" /></div><div class="field"><label>End</label><input id="e-e1" type="time" value="${shifts[0] ? shifts[0].end : '21:00'}" /></div></div>
+      <label><input id="e-split" type="checkbox" ${shifts.length > 1 ? 'checked' : ''} /> Split shift</label>
+      <div class="field row" id="split-times" ${shifts.length > 1 ? '' : 'hidden'}><div class="field"><label>Second start</label><input id="e-s2" type="time" value="${shifts[1] ? shifts[1].start : '17:00'}" /></div><div class="field"><label>End</label><input id="e-e2" type="time" value="${shifts[1] ? shifts[1].end : '21:00'}" /></div></div>
+      <div class="field"><label>Additional rules</label><select id="e-mode">
+        <option value="friday-only" ${mode === 'friday-only' ? 'selected' : ''}>Friday only</option>
+        <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>Fixed off days</option>
+        <option value="advisor-pool" ${mode === 'advisor-pool' ? 'selected' : ''}>Advisor pool (Thursday / Saturday)</option>
+        <option value="flexible" ${mode === 'flexible' ? 'selected' : ''}>Flexible extra off day</option>
+      </select></div>
+      <div class="field" id="fixed-wrap" ${mode === 'fixed' ? '' : 'hidden'}><label>Fixed off day</label><div class="days" id="e-days">${days}</div></div>
+      <div class="field"><label>Notes</label><textarea id="e-notes" rows="2">${esc(emp ? emp.notes || '' : '')}</textarea></div>
+      <p class="muted" id="e-msg"></p>
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button>${emp ? `<button class="btn-ghost" type="button" data-act="delete-employee" data-id="${esc(emp.id)}">Delete</button>` : ''}<button class="btn-primary" type="button" data-act="save-employee">${emp ? 'Save employee' : 'Add employee'}</button></div>`);
+  }
+  function readEmployee() {
+    const name = $('#e-name').value.trim();
+    const id = $('#e-id').value.trim();
+    const department = $('#e-dept').value.trim();
+    const position = $('#e-pos').value.trim();
+    const offMode = $('#e-mode').value;
+    const shifts = [{ start: $('#e-s1').value, end: $('#e-e1').value }];
+    if ($('#e-split').checked) shifts.push({ start: $('#e-s2').value, end: $('#e-e2').value });
+    const fixedOffDays = ['Friday'];
+    if (offMode === 'fixed') {
+      $('#e-days').querySelectorAll('input').forEach((box) => { if (box.checked && box.value !== 'Friday') fixedOffDays.push(box.value); });
+    }
+    if (!name || !id || !department || !position) return { error: 'Name, ID, department, and position are required.' };
+    if (state.employees.some((e) => e.id === id && e.id !== state.editingId)) return { error: 'That employee ID is already used.' };
+    const emp = { id, name, department, position, offMode, shifts, fixedOffDays, notes: $('#e-notes').value.trim() };
+    const parsed = normalizeShifts(emp);
+    if (parsed.some((s) => s.end <= s.start)) return { error: 'Each shift needs an end time after the start.' };
+    if (shiftsOverlap(parsed)) return { error: 'The two shifts overlap.' };
+    return emp;
+  }
+
+  function vacationForm(empId, existing) {
+    const emp = empId ? empById(empId) : (existing ? empById(existing.employeeId) : null);
+    const options = state.employees.map((e) => `<option value="${esc(e.id)}" ${(emp && e.id === emp.id) ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
+    const start = existing ? existing.startDate : iso(new Date());
+    const end = existing ? existing.endDate : start;
+    openOverlay(`<h2 style="margin-top:0">Manage vacation</h2>
+      <div class="field"><label>Employee</label>${emp && !existing ? `<input type="hidden" id="v-emp" value="${esc(emp.id)}" /><b>${esc(emp.name)}</b><div class="muted">ID ${esc(emp.id)}</div>` : `<select id="v-emp">${options}</select>`}</div>
+      <input type="hidden" id="v-id" value="${esc(existing ? existing.id : '')}" />
+      <div class="field"><label>Vacation type</label><select id="v-type">${VACATION_TYPES.map((t) => `<option ${existing && existing.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+      <div class="field row"><div class="field"><label>Start date</label><input id="v-start" type="date" value="${start}" /></div><div class="field"><label>End date</label><input id="v-end" type="date" value="${end}" /></div></div>
+      <p>Number of days: <b id="v-days">${inclusiveDays(start, end)}</b></p>
+      <div class="field"><label>Notes</label><textarea id="v-notes" rows="3">${esc(existing ? existing.notes || '' : '')}</textarea></div>
+      <p class="muted" id="v-msg"></p>
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="save-vac">Save vacation</button></div>`);
+  }
+  function saveVacationFromForm() {
+    const employeeId = $('#v-emp').value;
+    const startDate = $('#v-start').value;
+    const endDate = $('#v-end').value;
+    const id = $('#v-id').value;
+    if (!employeeId || !startDate || !endDate) { $('#v-msg').textContent = 'Choose an employee and both dates.'; return; }
+    if (endDate < startDate) { $('#v-msg').textContent = 'The end date has to be on or after the start date.'; return; }
+    const clash = state.vacations.some((v) => v.id !== id && v.employeeId === employeeId && !(endDate < v.startDate || startDate > v.endDate));
+    if (clash) { $('#v-msg').textContent = 'This overlaps another vacation for the same employee.'; return; }
+    const record = { id: id || `vac-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, employeeId, type: $('#v-type').value, startDate, endDate, notes: $('#v-notes').value.trim() };
+    const index = state.vacations.findIndex((v) => v.id === record.id);
+    if (index >= 0) state.vacations[index] = record;
+    else state.vacations.push(record);
+    applyVacations();
+    save();
+    closeOverlay();
+    render();
+    toast(state.schedule ? 'Vacation saved. Those dates are now off the schedule.' : 'Vacation saved. It will apply when you generate.');
+  }
+
+  function profileModal(id) {
+    const emp = empById(id);
+    if (!emp) return;
+    const rule = ruleSummary(emp);
+    const shifts = normalizeShifts(emp);
+    const history = vacationsFor(id);
+    const upcoming = history.filter((v) => v.endDate >= iso(new Date())).length;
+    const week = DAYS.map((day) => {
+      const row = rowFor(id, day);
+      const label = !row ? '—' : row.status === 'work' ? 'WORK' : row.status === 'vacation' ? 'VACATION' : 'OFF';
+      return `<div class="check"><span>${day}</span><b>${label}</b></div>`;
+    }).join('');
+    const past = history.map((v) => `<div class="check"><span>${esc(v.type)}<br><small class="muted">${fmtShort(v.startDate)} → ${fmtShort(v.endDate)}</small></span><span>${vacStatus(v)}</span></div>`).join('') || '<p class="muted">No vacation history.</p>';
+    openOverlay(`<div class="emp-top"><span class="avatar">${esc(initials(emp.name))}</span><div><h2 style="margin:0">${esc(emp.name)}</h2><div class="muted">${esc(emp.id)} · ${esc(emp.position)}</div></div></div>
+      <div class="check"><span>Department</span><b>${esc(emp.department)}</b></div>
+      <div class="check"><span>Normal shift</span><b>${shifts.map((s) => esc(s.label)).join('<br>')}</b></div>
+      <div class="check"><span>Weekly off</span><b>${esc(rule.offs)}</b></div>
+      <div class="check"><span>Vacation</span><b>${upcoming} upcoming</b></div>
+      <h3>This week</h3>${state.schedule ? week : '<p class="muted">Generate a schedule to see this week.</p>'}
+      <h3 id="vac-history">Vacation history</h3>${past}
+      <div class="actions"><button class="btn" type="button" data-act="edit" data-id="${esc(emp.id)}">Edit employee</button><button class="btn-primary" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Manage vacation</button><button class="btn-ghost" type="button" data-act="scroll-history">View history</button></div>`);
+  }
+  function vacationDetail(id) {
+    const vac = state.vacations.find((v) => v.id === id);
+    if (!vac) return;
+    const emp = empById(vac.employeeId);
+    openOverlay(`<h2 style="margin-top:0">${esc(emp ? emp.name : vac.employeeId)}</h2>
+      <div class="check"><span>Type</span><b>${esc(vac.type)}</b></div>
+      <div class="check"><span>Start</span><b>${fmtLong(vac.startDate)}</b></div>
+      <div class="check"><span>End</span><b>${fmtLong(vac.endDate)}</b></div>
+      <div class="check"><span>Days</span><b>${inclusiveDays(vac.startDate, vac.endDate)}</b></div>
+      <div class="check"><span>Status</span><b>${vacStatus(vac)}</b></div>
+      <p>${esc(vac.notes || 'No notes.')}</p>
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Close</button><button class="btn" type="button" data-act="vac-edit" data-id="${esc(vac.id)}">Edit</button><button class="btn" type="button" data-act="vac-delete" data-id="${esc(vac.id)}">Delete</button></div>`);
+  }
+  function whoModal(day, blockId) {
+    const coverage = buildCoverage();
+    const col = coverage.find((d) => d.day === day);
+    const block = col && col.blocks.find((b) => b.id === blockId);
+    if (!col || !block) return;
+    if (col.closed) {
+      openOverlay(`<h2 style="margin-top:0">${esc(day)}</h2><p>Friday is closed. Manpower is 0.</p><button class="btn" type="button" data-act="close">Close</button>`);
+      return;
+    }
+    const groups = ROLES.map(([key, label]) => {
+      const names = block.working.filter((p) => p.role === key).map((p) => `<div>${esc(p.name)}</div>`).join('') || '<div class="muted">None</div>';
+      return `<h3 style="margin-bottom:4px">${label}</h3>${names}`;
+    }).join('');
+    const others = block.working.filter((p) => p.role === 'other');
+    openOverlay(`<h2 style="margin-top:0">${esc(day)}</h2><p class="muted">${esc(block.label)} · ${block.total} working</p>${groups}${others.length ? `<h3>Other</h3>${others.map((p) => `<div>${esc(p.name)}</div>`).join('')}` : ''}<div class="actions"><button class="btn" type="button" data-act="close">Close</button></div>`);
+  }
+  function affectedModal(day, blockId) {
+    const warning = state.warnings.find((w) => w.day === day && w.blockId === blockId);
+    if (!warning) return;
+    openOverlay(`<h2 style="margin-top:0">Manpower warning</h2><p>${esc(warning.day)} · ${esc(warning.label)}</p><p>Required ${warning.required}<br>Available ${warning.available}<br>Shortage ${warning.shortage}</p><p>Reason: ${warning.people.length} employee${warning.people.length === 1 ? ' is' : 's are'} on vacation.</p>${warning.people.map((p) => `<div class="check"><span>${esc(p.name)}</span><b>${esc(p.type)}</b></div>`).join('')}<button class="btn" type="button" data-act="close">Close</button>`);
+  }
+  function issuesModal() {
+    if (!state.validation) return;
+    const passed = CHECKS.filter(([code]) => state.validation.checks[code]).map(([, label]) => `<div class="check"><span>✓ ${label}</span></div>`).join('');
+    const failed = state.validation.issues.map((issue) => `<li>${esc(issue.message)}</li>`).join('');
+    openOverlay(`<h2 style="margin-top:0">Schedule health ${state.validation.health}%</h2>${failed ? `<ul>${failed}</ul>` : '<p>100% valid.</p>'}<h3>Passed</h3>${passed}<button class="btn" type="button" data-act="close">Close</button>`);
   }
 
   function exportExcel() {
-    if (!state.schedule) {
-      $('#gen-meta').textContent = 'Generate a schedule before exporting.';
-      return;
-    }
-    const days = DAYS;
-    const head = ['Employee', 'ID', 'Department', 'Position', ...days];
-    const scheduleRows = state.employees.map((emp) => {
-      const cells = days.map((day) => {
+    if (!state.schedule) { toast('Generate a schedule before exporting.'); return; }
+    const head = ['Employee', 'ID', 'Department', 'Position', ...DAYS];
+    const rows = state.employees.map((emp) => {
+      const cells = DAYS.map((day) => {
         const row = rowFor(emp.id, day);
-        if (!row || row.status === 'off') return 'OFF';
+        if (!row) return '';
+        if (row.status === 'vacation') return `VACATION - ${row.vacation ? row.vacation.type : ''}`.trim();
+        if (row.status === 'off') return 'OFF';
         return row.shifts.map((s) => s.label).join(' | ');
       });
       return [emp.name, emp.id, emp.department, emp.position, ...cells];
     });
-    const manRows = [['Day', 'Block', 'Sales Advisors', 'Promoters', 'Test Drive', 'Sales Coordinator', 'Other', 'Total']];
+    const man = [['Day', 'Block', 'Sales Advisors', 'Promoters', 'Test Drive', 'Coordinator', 'Other', 'Total']];
     buildCoverage().forEach((day) => {
-      if (day.closed) {
-        manRows.push([day.day, 'OFF / CLOSED', 0, 0, 0, 0, 0, 0]);
-        return;
-      }
       day.blocks.forEach((block) => {
-        manRows.push([day.day, block.label, block.counts.advisor, block.counts.promoter, block.counts.testdrive, block.counts.coordinator, block.counts.other, block.total]);
+        man.push([day.day, day.closed ? 'OFF / CLOSED' : block.label, block.counts.advisor, block.counts.promoter, block.counts.testdrive, block.counts.coordinator, block.counts.other, block.total]);
       });
     });
-    const table = (title, headers, rows) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
-      rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')
-    }</tbody></table>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table('Weekly schedule', head, scheduleRows)}${table('Manpower', manRows[0], manRows.slice(1))}</body></html>`;
+    const table = (title, headers, body) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table('Weekly schedule', head, rows)}${table('Manpower', man[0], man.slice(1))}</body></html>`;
     const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'employee-shift-schedule.xls';
+    a.download = 'workforce-schedule.xls';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }
+  function exportJson() {
+    const blob = new Blob([JSON.stringify({
+      employees: state.employees,
+      vacations: state.vacations,
+      settings: state.settings,
+      schedule: state.schedule,
+      generation: state.generation,
+      lastSig: state.lastSig,
+    }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'workforce-control-center.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1500);
   }
 
-  function bind() {
-    $('#btn-generate').addEventListener('click', runGenerate);
-    $('#btn-regenerate').addEventListener('click', runGenerate);
-    $('#btn-validate').addEventListener('click', () => {
-      state.validation = validateSchedule();
-      renderValidation();
-      if (state.validation.issues.length) $('#valid-list').hidden = false;
-    });
-    $('#valid-toggle').addEventListener('click', () => {
-      if (!state.validation || state.validation.ok) return;
-      $('#valid-list').hidden = !$('#valid-list').hidden;
-    });
-    ['#filter-dept', '#filter-pos', '#filter-emp', '#filter-day'].forEach((id) => {
-      $(id).addEventListener('change', renderTable);
-    });
-    $('#btn-excel').addEventListener('click', exportExcel);
-    $('#btn-print').addEventListener('click', () => window.print());
-    $('#btn-pdf').addEventListener('click', () => window.print());
-    $('#btn-reset').addEventListener('click', () => {
-      if (!confirm('Reset every employee to the original master list? Saved edits on this browser will be replaced.')) return;
+  function onClick(event) {
+    if (event.target.classList && event.target.classList.contains('scrim')) { closeOverlay(); return; }
+    const btn = event.target.closest('[data-go], [data-act]');
+    if (!btn) return;
+    if (btn.dataset.go) { go(btn.dataset.go); return; }
+    const act = btn.dataset.act;
+    if (act === 'close') closeOverlay();
+    if (act === 'open-generate') openGenerate();
+    if (act === 'do-generate') {
+      if (!state.employees.length) { toast('Add an employee first.'); return; }
+      const week = weekFrom($('#g-start').value);
+      const strategy = ($('#overlay input[name=strategy]:checked') || {}).value || 'balanced';
+      playGenerate(week, strategy);
+    }
+    if (act === 'regen') {
+      if (!state.employees.length) return;
+      const week = state.schedule ? state.schedule.week : currentWeek();
+      playGenerate(week, state.settings.strategy || 'balanced');
+    }
+    if (act === 'validate') {
+      if (!state.schedule) { toast('Generate a schedule first.'); return; }
+      applyVacations();
+      save();
+      render();
+      if (state.validation.issues.length) issuesModal();
+      else toast('100% valid');
+    }
+    if (act === 'issues') issuesModal();
+    if (act === 'chart') { state.chartRole = btn.dataset.role; render(); }
+    if (act === 'heat') { state.heatRole = btn.dataset.role; render(); }
+    if (act === 'profile') profileModal(btn.dataset.id);
+    if (act === 'edit') employeeForm(empById(btn.dataset.id));
+    if (act === 'add-employee') employeeForm(null);
+    if (act === 'save-employee') {
+      const emp = readEmployee();
+      if (emp.error) { $('#e-msg').textContent = emp.error; return; }
+      if (state.editingId) {
+        const index = state.employees.findIndex((e) => e.id === state.editingId);
+        if (state.editingId !== emp.id) state.vacations.forEach((v) => { if (v.employeeId === state.editingId) v.employeeId = emp.id; });
+        if (index >= 0) state.employees[index] = emp;
+      } else state.employees.push(emp);
+      clearSchedule();
+      save();
+      closeOverlay();
+      render();
+      toast('Employee saved. Generate the schedule again.');
+    }
+    if (act === 'delete-employee') {
+      const emp = empById(btn.dataset.id);
+      if (!emp || !confirm(`Delete ${emp.name}?`)) return;
+      state.employees = state.employees.filter((e) => e.id !== emp.id);
+      state.vacations = state.vacations.filter((v) => v.employeeId !== emp.id);
+      clearSchedule();
+      save();
+      closeOverlay();
+      render();
+    }
+    if (act === 'vac-add') vacationForm(btn.dataset.id || '', null);
+    if (act === 'vac-edit') {
+      const vac = state.vacations.find((v) => v.id === btn.dataset.id);
+      if (vac) vacationForm(vac.employeeId, vac);
+    }
+    if (act === 'vac-open') { event.stopPropagation(); vacationDetail(btn.dataset.id); }
+    if (act === 'vac-delete') {
+      const vac = state.vacations.find((v) => v.id === btn.dataset.id);
+      if (!vac || !confirm('Delete this vacation?')) return;
+      state.vacations = state.vacations.filter((v) => v.id !== vac.id);
+      applyVacations();
+      save();
+      closeOverlay();
+      render();
+      toast('Vacation deleted');
+    }
+    if (act === 'save-vac') saveVacationFromForm();
+    if (act === 'cal-prev') {
+      state.cal.m -= 1;
+      if (state.cal.m < 0) { state.cal.m = 11; state.cal.y -= 1; }
+      render();
+    }
+    if (act === 'cal-next') {
+      state.cal.m += 1;
+      if (state.cal.m > 11) { state.cal.m = 0; state.cal.y += 1; }
+      render();
+    }
+    if (act === 'cal-day' && !event.target.closest('[data-act="vac-open"]')) vacationForm('', { employeeId: state.employees[0] ? state.employees[0].id : '', startDate: btn.dataset.date, endDate: btn.dataset.date, type: VACATION_TYPES[0], notes: '', id: '' });
+    if (act === 'who') whoModal(btn.dataset.day, btn.dataset.block);
+    if (act === 'affected') affectedModal(btn.dataset.day, btn.dataset.block);
+    if (act === 'scroll-history') { const node = $('#vac-history'); if (node) node.scrollIntoView({ behavior: 'smooth' }); }
+    if (act === 'notes') {
+      const items = notifications();
+      openOverlay(`<h2 style="margin-top:0">Notifications</h2>${items.length ? items.map((item) => `<div class="check"><span>${esc(item.text)}</span></div>`).join('') : '<p class="muted">You are caught up.</p>'}<button class="btn" type="button" data-act="close">Close</button>`, true);
+    }
+    if (act === 'settings') {
+      openOverlay(`<h2 style="margin-top:0">Settings</h2>
+        <div class="field"><label>Minimum manpower before a vacation warning</label><input id="set-min" type="number" min="1" max="40" value="${esc(state.settings.minManpower)}" /></div>
+        <p class="muted">A warning appears when vacation pushes a block under this number.</p>
+        <div class="actions"><button class="btn" type="button" data-act="json">Export data</button><button class="btn" type="button" data-act="import">Import data</button></div>
+        <div class="actions" style="margin-top:10px"><button class="btn-ghost" type="button" data-act="reset">Reset master data</button><button class="btn-primary" type="button" data-act="save-settings">Save</button></div>`, true);
+    }
+    if (act === 'save-settings') {
+      state.settings.minManpower = Math.max(1, Number($('#set-min').value) || 8);
+      applyVacations();
+      save();
+      closeOverlay();
+      render();
+      toast('Settings saved');
+    }
+    if (act === 'excel') exportExcel();
+    if (act === 'print') window.print();
+    if (act === 'json') exportJson();
+    if (act === 'import') $('#import-file').click();
+    if (act === 'reset') {
+      if (!confirm('Reset employees to the original roster? Vacations and the generated week on this browser will be cleared.')) return;
       state.employees = defaultEmployees();
-      saveEmployees();
+      state.vacations = [];
       state.schedule = null;
       state.validation = null;
+      state.warnings = [];
       state.generation = 0;
       state.lastSig = '';
       state.stale = false;
-      renderAll();
-    });
-    $('#emp-list').addEventListener('click', (event) => {
-      const btn = event.target.closest('button');
-      if (!btn) return;
-      const index = Number(btn.dataset.i);
-      const emp = state.employees[index];
-      if (!emp) return;
-      if (btn.dataset.act === 'edit') fillForm(emp);
-      if (btn.dataset.act === 'delete') {
-        if (!confirm(`Delete ${emp.name}?`)) return;
-        state.employees.splice(index, 1);
-        saveEmployees();
-        markStale();
-        renderRoster();
-        renderFilters();
-        renderEditor();
-        renderGenerated();
-      }
-      if (btn.dataset.act === 'up' || btn.dataset.act === 'down') {
-        const next = index + (btn.dataset.act === 'up' ? -1 : 1);
-        if (next < 0 || next >= state.employees.length) return;
-        const [item] = state.employees.splice(index, 1);
-        state.employees.splice(next, 0, item);
-        saveEmployees();
-        renderEditor();
-        renderTable();
-        renderRules();
-      }
-    });
-    $('#emp-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const emp = readForm(true);
-      if (emp.error) {
-        $('#form-msg').textContent = emp.error;
-        return;
-      }
-      if (state.editingId) {
-        const index = state.employees.findIndex((e) => e.id === state.editingId);
-        if (index >= 0) state.employees[index] = emp;
-      } else state.employees.push(emp);
-      saveEmployees();
-      markStale();
-      renderRoster();
-      renderFilters();
-      renderEditor();
-      fillForm(null);
-      renderGenerated();
-      $('#form-msg').textContent = 'Saved. Generate the schedule to use this roster.';
-    });
-    $('#f-cancel').addEventListener('click', () => fillForm(null));
-    $('#f-mode').addEventListener('change', syncFixedVisibility);
-    $('#f-second').addEventListener('change', syncFixedVisibility);
-    ['#f-s1', '#f-e1', '#f-s2', '#f-e2', '#f-name'].forEach((id) => $(id).addEventListener('input', syncFixedVisibility));
-    $('#day-checks').addEventListener('change', syncFixedVisibility);
-    $('#f-pos').addEventListener('change', suggestFromPosition);
+      save();
+      closeOverlay();
+      render();
+    }
   }
 
-  state.employees = loadEmployees() || defaultEmployees();
-  bind();
-  renderAll();
+  document.body.addEventListener('click', onClick);
+  document.body.addEventListener('input', (event) => {
+    if (event.target.id === 'v-start' || event.target.id === 'v-end') {
+      const start = $('#v-start').value;
+      const end = $('#v-end').value;
+      $('#v-days').textContent = start && end && end >= start ? String(inclusiveDays(start, end)) : '—';
+    }
+    if (event.target.id === 'g-start' || event.target.id === 'g-end') {
+      const source = event.target.id === 'g-end' ? event.target.value : $('#g-start').value;
+      const week = weekFrom(source);
+      if ($('#g-start')) $('#g-start').value = week[0].key;
+      if ($('#g-end')) $('#g-end').value = week[6].key;
+      if ($('#g-week')) $('#g-week').textContent = `Week: ${fmtShort(week[0].key)} – ${fmtLong(week[6].key)}`;
+    }
+    if (event.target.id === 'emp-search') {
+      state.filters.q = event.target.value;
+      state.soft = true;
+      render();
+    }
+  });
+  document.body.addEventListener('change', (event) => {
+    const map = { 'f-dept': 'dept', 'f-pos': 'pos', 'f-status': 'status', 'f-vac': 'vacation', 'f-off': 'offday' };
+    if (map[event.target.id]) {
+      state.filters[map[event.target.id]] = event.target.value;
+      state.soft = true;
+      render();
+    }
+    if (event.target.id === 'e-mode') $('#fixed-wrap').hidden = event.target.value !== 'fixed';
+    if (event.target.id === 'e-split') $('#split-times').hidden = !event.target.checked;
+    if (event.target.id === 'e-pos' && !state.editingId) {
+      const pos = event.target.value.toLowerCase();
+      if (pos.includes('coordinator')) { $('#e-mode').value = 'friday-only'; $('#e-s1').value = '12:00'; $('#e-e1').value = '21:00'; $('#e-split').checked = false; }
+      else if (pos.includes('test')) { $('#e-mode').value = 'fixed'; $('#e-s1').value = '09:00'; $('#e-e1').value = '18:00'; $('#e-split').checked = false; }
+      else if (pos.includes('promot')) { $('#e-mode').value = 'flexible'; $('#e-s1').value = '12:00'; $('#e-e1').value = '21:00'; $('#e-split').checked = false; }
+      else if (pos.includes('advisor')) { $('#e-mode').value = 'advisor-pool'; $('#e-s1').value = '12:00'; $('#e-e1').value = '21:00'; $('#e-split').checked = false; }
+      $('#fixed-wrap').hidden = $('#e-mode').value !== 'fixed';
+      $('#split-times').hidden = !$('#e-split').checked;
+    }
+    if (event.target.id === 'import-file' && event.target.files[0]) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(String(reader.result || ''));
+          if (!data || !Array.isArray(data.employees) || !data.employees.length) throw new Error('missing employees');
+          state.employees = data.employees;
+          state.vacations = Array.isArray(data.vacations) ? data.vacations : [];
+          state.settings = { minManpower: 8, strategy: 'balanced', ...(data.settings || {}) };
+          state.schedule = data.schedule || null;
+          state.generation = data.generation || 0;
+          state.lastSig = data.lastSig || '';
+          applyVacations();
+          save();
+          closeOverlay();
+          render();
+          toast('Backup restored');
+        } catch (err) {
+          toast('That file is not a workforce backup.');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+  });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeOverlay(); });
+  window.addEventListener('resize', () => { if (state.view === 'dashboard') drawChart(); });
+  window.addEventListener('hashchange', () => {
+    const next = location.hash.replace('#', '');
+    if (VIEWS.includes(next) && next !== state.view) go(next);
+  });
+  const chartMove = (event) => {
+    const canvas = $('#man-chart');
+    const tip = $('#chart-tip');
+    if (!canvas || !tip || !canvas._layout) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const { pad, group, series } = canvas._layout;
+    const i = Math.floor((x - pad.l) / group);
+    if (i < 0 || i > 6) { tip.style.opacity = 0; return; }
+    tip.style.opacity = 1;
+    tip.style.left = `${Math.min(rect.width - 140, Math.max(8, x + 12))}px`;
+    tip.style.top = '12px';
+    tip.innerHTML = `<b>${DAYS[i]}</b><br>${series.map((s) => `${esc(s.name)}: ${s.values[i]}`).join('<br>')}`;
+  };
+  document.body.addEventListener('mousemove', (event) => { if (event.target.id === 'man-chart') chartMove(event); });
+  document.body.addEventListener('mouseleave', (event) => { if (event.target.id === 'man-chart') { const tip = $('#chart-tip'); if (tip) tip.style.opacity = 0; } }, true);
+
+  load();
+  applyVacations();
+  const hash = location.hash.replace('#', '');
+  state.view = VIEWS.includes(hash) ? hash : 'dashboard';
+  render();
 })();
 </script>
 </body>

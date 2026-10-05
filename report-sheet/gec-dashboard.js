@@ -522,7 +522,7 @@
     switch (key) {
       case "visitors":
         return m.hasVisitors
-          ? { value: k.visitors, fmt: n, sub: `<b>${(k.visitors / days).toFixed(1)}</b> per day · Created Date` }
+          ? { value: k.visitors, fmt: n, sub: `<b>${(k.visitors / days).toFixed(1)}</b> per day · first column` }
           : { na: true, sub: "No GEC file uploaded" };
       case "total":
         return { value: k.total, fmt: n, sub: `${link("knownPromoter", `<b>${n(k.knownPromoter)}</b>`)} assigned to an official promoter` };
@@ -606,7 +606,7 @@
         <span class="gcc-badge t-violet" title="Converted ÷ visitors">Visitor → Conversion <b class="gcc-num">${pct(k.visitorToConversion)}</b></span>
       </div>
       <div class="gcc-flow is-3">
-        ${stageHtml({ key: "visitors", label: "Visitors", value: k.visitors, tone: "violet", na: !hv, meta: hv ? "Created Date · selected dates" : "no GEC file", title: "Open visitor records" }, vBase)}
+        ${stageHtml({ key: "visitors", label: "Visitors", value: k.visitors, tone: "violet", na: !hv, meta: hv ? "First column · selected dates" : "no GEC file", title: "Open visitor records" }, vBase)}
         ${stepHtml(pct(k.visitorToLead), "Visitor → Lead", "indigo")}
         ${stageHtml({ key: "total", label: "Registered Leads", value: k.total, tone: "blue", meta: hv && k.visitorToLead != null ? `${pct(k.visitorToLead)} of visitors` : "unique Transaction No." }, vBase)}
         ${stepHtml(pct(k.conversionRate), "Lead → Conversion", "green")}
@@ -614,7 +614,7 @@
       </div>
       <div class="gcc-journey-foot">${reg
         ? `<button type="button" class="gcc-note-btn" data-act="registered" title="Records whose status is a GEC CONTROL visitor status">${icon("info")}<b class="gcc-num">${n(reg)}</b> registered (${esc(Data().enabledStatuses("visitor").join(" · ") || "visitor statuses")}) · not yet leads</button>`
-        : `<span class="gcc-muted">${hv ? "Visitors are every transaction whose Created Date (or column O) is in the selected period" : "Upload the GEC file in Admin Push to track visitors"}</span>`}</div>`;
+        : `<span class="gcc-muted">${hv ? "Visitors are every transaction whose first-column date is in the selected period" : "Upload the GEC file in Admin Push to track visitors"}</span>`}</div>`;
 
     el("lj").innerHTML = `
       <div class="gcc-card-head">
@@ -1471,7 +1471,7 @@
     const m = state.metrics;
     if (!m.hasVisitors) {
       openModal({ title: "Visitors", sub: "No GEC file", html: `<div class="gcc-rules"><h4>No GEC file uploaded</h4>
-        <p>Visitors are every transaction in the GEC file. The date is the <b>Created Date</b> column, or <b>column O</b> when that header is missing, compared with the selected dates.</p></div>` });
+        <p>Visitors are every transaction in the GEC file. The date is the <b>first column</b> of the uploaded sheet, compared with the selected dates.</p></div>` });
       return;
     }
     const rows = visitorRows || m.visitorRows;
@@ -1481,7 +1481,7 @@
     const byPurpose = [...purposes.entries()].sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count }));
     openModal({
       title: title || "Visitors",
-      sub: `${filterSubtitle()} · Created Date or column O · ${m.leadOnlyFilter ? "model, source, status and advisor filters apply to leads only" : "every transaction in the selected dates"}`,
+      sub: `${filterSubtitle()} · first column · ${m.leadOnlyFilter ? "model, source, status and advisor filters apply to leads only" : "every transaction in the selected dates"}`,
       stats: [
         { label: "Visitors", value: n(total) },
         { label: "Registered leads", value: n(m.kpis.total) },
@@ -1698,7 +1698,7 @@
         <div class="${q.unmappedEmployee ? "warn" : ""}"><span>Invalid Promoter · Employee Number not official (unique transactions)</span><b>${n(q.unmappedEmployee)}</b></div>
         <div><span>NO ORDER (all records)</span><b>${n(q.noOrder)}</b><em>${n(q.orderPlaceholders)} other placeholders · ${n(q.actualOrders)} actual orders</em></div>
         <div class="${q.undated ? "warn" : ""}"><span>No readable Created Date</span><b>${n(q.undated)}</b></div>
-        <div><span>Visitors · Created Date</span><b>${ds ? n(ds.records.filter((r) => r.visitDay).length) : "—"}</b><em>unique transactions with a Created Date, or column O when that header is missing · the card applies the selected dates</em></div>
+        <div><span>Visitors · first column</span><b>${ds ? n(ds.records.filter((r) => r.visitDay).length) : "—"}</b><em>unique transactions with a date in the first column of the uploaded sheet · the card applies the selected dates</em></div>
       </div>` : "";
     const list = (g) => ctl[g].map((x) => `<span class="gcc-chip${x.enabled ? "" : " is-off"}">${x.enabled ? "✓" : "✕"} ${esc(x.name)}</span>`).join("") || `<span class="gcc-muted">none</span>`;
     const promoters = Object.entries(c.PROMOTER_MAP).map(([k, v]) => `<span class="gcc-chip">${esc(k)} → ${esc(v)}</span>`).join("");
@@ -1715,7 +1715,7 @@
         <li><b>Converted</b> — enabled conversion statuses only (“Won” alone is not converted unless enabled). A converted record is still a lead.</li>
         <li><b>Promoter</b> — ${col("employeeNumber")} is the only source (never Employee Responsible, Sales Employee, Sales Response or Status). Official number → that promoter. Blank → <b>${esc(c.ASSIGNMENT_ERROR)}</b> (unassigned customer). Any other value → <b>${esc(c.INVALID_PROMOTER)}</b>. The two are counted separately and neither is in any promoter's performance.</li>
         <li><b>Sales Response</b> — ${col("salesResponse")} has a real value. <b>Sales Order</b> — ${col("salesOrder")} is an actual order number; <b>“NO ORDER”</b> and placeholders never count.</li>
-        <li><b>Visitors</b> — every unique transaction whose <b>Created Date</b> is inside the selected dates (column <b>O</b> when that header is missing; all of them when no date is selected). <b>Visitor → Lead</b> = registered leads ÷ visitors. <b>Lead → Conversion</b> = converted ÷ leads.</li>
+        <li><b>Visitors</b> — every unique transaction whose <b>first-column date</b> is inside the selected dates (all of them when no date is selected). <b>Visitor → Lead</b> = registered leads ÷ visitors. <b>Lead → Conversion</b> = converted ÷ leads.</li>
         <li><b>Sales advisors</b> — ${col("consultant")} on lead records, excluding the official promoters. Conversion % = converted ÷ leads received.</li>
         <li><b>Response time / SLA</b> — not shown (timing data not validated).</li>
         <li><b>Top cars</b> — converted leads per ${col("model")}. Each converted Transaction No. (then its Sales Order number) is looked up in <b>Sales Raw Data</b> and <b>Back Order</b>: Sales Raw with a delivery / invoice date (Col V) → <b>Delivered</b>, without → <b>Pro-Forma</b>; only in Back Order → <b>Back Order</b> (unless its status says delivered / pro-forma); in neither → <b>Not found</b>.</li>
