@@ -87,6 +87,22 @@
     background: #b54708; color: white; font-size: 11px; display: grid; place-items: center;
   }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 72px; }
+  .wrap.wide { max-width: none; }
+  .month-sheet { overflow-x: auto; background: white; border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+  .month-sheet table { border-collapse: collapse; width: 100%; font-size: 11px; }
+  .month-sheet th, .month-sheet td { border: 1px solid var(--line); padding: 5px 3px; text-align: center; min-width: 52px; vertical-align: middle; line-height: 1.25; }
+  .month-sheet td { white-space: nowrap; }
+  .month-sheet thead th { background: #f8fafb; font-size: 11px; }
+  .month-sheet th span { display: block; font-weight: 500; color: var(--muted); font-size: 10px; }
+  .month-sheet .who { text-align: left; min-width: 148px; position: sticky; left: 0; background: white; z-index: 1; padding: 6px 8px; }
+  .month-sheet thead .who { background: #f8fafb; z-index: 2; }
+  .month-sheet .who b, .month-sheet .who small { display: block; }
+  .month-sheet .who small { color: var(--muted); font-size: 10px; }
+  .month-sheet .st-work { background: var(--green-soft); color: var(--green); font-weight: 650; }
+  .month-sheet .st-off { background: var(--off-soft); color: var(--off); }
+  .month-sheet .st-vac { background: var(--vac-soft); color: var(--vac); font-weight: 650; }
+  .month-sheet .st-empty { color: var(--muted); }
+  .month-sheet .fri { box-shadow: inset 0 -2px 0 #d0d5dd; }
   .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 22px; flex-wrap: wrap; }
   .kicker { margin: 0 0 6px; color: var(--muted); letter-spacing: .12em; font-size: 12px; text-transform: uppercase; }
   h1 { margin: 0; font-size: 32px; letter-spacing: -.03em; font-weight: 650; }
@@ -215,6 +231,12 @@
   .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .field.row { flex-direction: row; gap: 10px; }
   .field.row > div { flex: 1; }
+  .vac-range {
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px 10px; align-items: end;
+    padding: 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 14px; background: #f8fafb;
+  }
+  .vac-range .field { margin: 0; }
+  .vac-range .vac-type { grid-column: 1 / 3; }
   .days { display: flex; flex-wrap: wrap; gap: 8px; }
   .days label { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: 13px; }
   .step { padding: 8px 0; color: var(--muted); }
@@ -261,10 +283,19 @@
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
   @media print {
-    .topnav, .actions, .filters, .scrim, .toast { display: none !important; }
+    .topnav, .actions, .filters, .scrim, .toast, .legend, .card, .warn, .screen-only, .menu { display: none !important; }
     body { background: white; }
-    .board-scroll { max-height: none; overflow: visible; box-shadow: none; }
+    .wrap { max-width: none; padding: 0; }
+    .page-head { margin-bottom: 8px; }
+    h1 { font-size: 18px; }
+    .month-sheet { overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
+    .month-sheet table { width: 100%; table-layout: fixed; font-size: 7px; }
+    .month-sheet th, .month-sheet td { min-width: 0; padding: 2px 1px; white-space: normal; overflow: hidden; }
+    .month-sheet thead .who, .month-sheet td.who { width: 15%; }
+    .month-sheet .who { min-width: 0; position: static; font-size: 7px; }
+    .month-sheet th span, .month-sheet .who small { font-size: 6px; }
   }
+  @page { size: A4 landscape; margin: 8mm; }
 </style>
 </head>
 <body>
@@ -394,6 +425,19 @@
   function pad(n) { return String(n).padStart(2, '0'); }
   function clock(mins) { return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`; }
   function span(s) { return `${clock(s.start)} – ${clock(s.end)}`; }
+  function shortClock(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m ? `${h}:${pad(m)}` : String(h);
+  }
+  function shortSpan(s) { return `${shortClock(s.start)}–${shortClock(s.end)}`; }
+  function compactShifts(shifts) {
+    if (!shifts.length) return '';
+    const ordered = [...shifts].sort((a, b) => a.start - b.start);
+    const continuous = ordered.every((s, i) => i === 0 || s.start <= ordered[i - 1].end);
+    if (ordered.length === 1 || continuous) return `${shortClock(ordered[0].start)}–${shortClock(ordered[ordered.length - 1].end)}`;
+    return ordered.map(shortSpan).join(' · ');
+  }
   function iso(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   function parseISO(s) {
     const [y, m, d] = String(s || '').split('-').map((n) => parseInt(n, 10));
@@ -428,6 +472,46 @@
     });
   }
   function currentWeek() { return weekFrom(iso(new Date())); }
+  function weeksTouchingMonth(year, month) {
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const weeks = [];
+    let cursor = weekStartSaturday(first);
+    const end = weekStartSaturday(last);
+    while (cursor <= end) {
+      weeks.push(weekFrom(iso(cursor)));
+      cursor = addDays(cursor, 7);
+    }
+    return weeks;
+  }
+  function monthDates(year, month) {
+    const count = new Date(year, month + 1, 0).getDate();
+    const dates = [];
+    for (let day = 1; day <= count; day += 1) {
+      const date = new Date(year, month, day);
+      const name = DAYS[(date.getDay() + 1) % 7];
+      dates.push({ key: iso(date), name, day, dow: name.slice(0, 3) });
+    }
+    return dates;
+  }
+  function scheduleWeeks() {
+    if (!state.schedule) return [];
+    if (Array.isArray(state.schedule.weeks) && state.schedule.weeks.length) return state.schedule.weeks;
+    if (state.schedule.week && state.schedule.rows) return [state.schedule];
+    return [];
+  }
+  function focusWeek() {
+    const weeks = scheduleWeeks();
+    const today = iso(new Date());
+    return weeks.find((w) => w.start <= today && w.end >= today) || weeks[0] || null;
+  }
+  function allRows() { return scheduleWeeks().flatMap((w) => w.rows || []); }
+  function scheduleMonth() {
+    if (!state.schedule) return null;
+    if (state.schedule.year != null && state.schedule.month != null) return { year: state.schedule.year, month: state.schedule.month };
+    const d = parseISO(state.schedule.start);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  }
 
   function normalizeShifts(emp) {
     return (emp.shifts || []).map((s) => {
@@ -628,17 +712,22 @@
   function signature(rows) {
     return rows.filter((r) => r.offReason === 'generated').map((r) => `${r.employeeId}:${r.day}`).sort().join('|');
   }
-  function rowFor(empId, day) {
-    if (!state.schedule) return null;
-    return state.schedule.rows.find((r) => r.employeeId === empId && r.day === day) || null;
+  function rowFor(empId, day, week) {
+    const source = week || focusWeek();
+    if (!source) return null;
+    return (source.rows || []).find((r) => r.employeeId === empId && r.day === day) || null;
+  }
+  function rowOnDate(empId, date) {
+    return allRows().find((r) => r.employeeId === empId && r.date === date) || null;
   }
   function applyVacations() {
-    if (!state.schedule) {
+    const weeks = scheduleWeeks();
+    if (!weeks.length) {
       state.warnings = [];
       state.validation = null;
       return;
     }
-    state.schedule.rows.forEach((row) => {
+    weeks.forEach((week) => week.rows.forEach((row) => {
       const emp = empById(row.employeeId);
       if (!emp) return;
       const planned = (row.plannedShifts && row.plannedShifts.length) ? row.plannedShifts : normalizeShifts(emp);
@@ -658,18 +747,21 @@
         row.shifts = planned.map((s) => ({ ...s }));
         row.vacation = null;
       }
-    });
+    }));
     state.warnings = buildWarnings();
     state.validation = validateSchedule();
   }
 
   function validateSchedule() {
     const issues = [];
-    if (!state.schedule) return { ok: false, issues: [{ code: 'complete', message: 'Generate a schedule first.' }], checks: {} };
+    const weeks = scheduleWeeks();
+    if (!weeks.length) return { ok: false, issues: [{ code: 'complete', message: 'Generate a schedule first.' }], checks: {} };
+    weeks.forEach((week) => {
     const seen = new Set();
-    state.schedule.rows.forEach((row) => {
-      const key = `${row.employeeId}:${row.day}`;
-      if (seen.has(key)) issues.push({ code: 'duplicate', message: `Duplicate assignment for ${row.employeeId} on ${row.day}.` });
+    const at = (empId, day) => (week.rows || []).find((r) => r.employeeId === empId && r.day === day) || null;
+    week.rows.forEach((row) => {
+      const key = `${row.employeeId}:${row.date}`;
+      if (seen.has(key)) issues.push({ code: 'duplicate', message: `Duplicate assignment for ${row.employeeId} on ${row.date}.` });
       seen.add(key);
     });
     state.employees.forEach((emp) => {
@@ -682,7 +774,7 @@
       }
       const generated = [];
       DAYS.forEach((day) => {
-        const row = rowFor(emp.id, day);
+        const row = at(emp.id, day);
         if (!row) {
           issues.push({ code: 'duplicate', message: `${emp.name} is missing ${day}.` });
           return;
@@ -711,12 +803,12 @@
         }
       });
       const offDays = DAYS.filter((day) => {
-        const row = rowFor(emp.id, day);
+        const row = at(emp.id, day);
         return row && row.status === 'off';
       });
       if (emp.offMode === 'friday-only') {
         const extra = offDays.filter((d) => d !== 'Friday');
-        const friday = rowFor(emp.id, 'Friday');
+        const friday = at(emp.id, 'Friday');
         if (extra.length || !friday || friday.status === 'work') {
           issues.push({ code: 'fixed', message: `${emp.name} must be off Friday only, and working every other day they are not on vacation.` });
         }
@@ -725,34 +817,40 @@
         const want = new Set(emp.fixedOffDays || []);
         want.add('Friday');
         DAYS.forEach((day) => {
-          const row = rowFor(emp.id, day);
+          const row = at(emp.id, day);
           if (!row) return;
           if (want.has(day) && row.status === 'work') issues.push({ code: 'fixed', message: `${emp.name} must be off on ${day}.` });
           if (!want.has(day) && row.status === 'off') issues.push({ code: 'fixed', message: `${emp.name} is off on ${day}, which is not a fixed off day.` });
         });
       }
       if (emp.offMode === 'flexible') {
-        const friday = rowFor(emp.id, 'Friday');
-        const choices = WEEKDAYS.filter((d) => !vacationOn(emp.id, weekKey(state.schedule.week, d)));
+        const friday = at(emp.id, 'Friday');
+        const choices = WEEKDAYS.filter((d) => !vacationOn(emp.id, weekKey(week.week, d)));
         if (!friday || friday.status === 'work' || (choices.length && generated.length !== 1)) {
           issues.push({ code: 'fixed', message: `${emp.name} must be off Friday plus exactly one generated weekday.` });
         }
       }
       if (emp.offMode === 'advisor-pool') {
-        const friday = rowFor(emp.id, 'Friday');
+        const friday = at(emp.id, 'Friday');
         const ok = generated.length === 1 && (generated[0] === 'Thursday' || generated[0] === 'Saturday');
         if (!friday || friday.status === 'work' || !ok) {
           issues.push({ code: 'pool', message: `${emp.name} must be off Friday and exactly one of Thursday or Saturday.` });
         }
       }
     });
+    });
     const pool = state.employees.filter((e) => e.offMode === 'advisor-pool');
-    const thu = pool.filter((e) => { const row = rowFor(e.id, 'Thursday'); return row && row.offReason === 'generated'; });
-    const sat = pool.filter((e) => { const row = rowFor(e.id, 'Saturday'); return row && row.offReason === 'generated'; });
-    if (pool.length !== 6 || thu.length !== 3 || sat.length !== 3) {
+    const poolNotes = weeks.map((week) => {
+      const at = (empId, day) => (week.rows || []).find((r) => r.employeeId === empId && r.day === day) || null;
+      const thu = pool.filter((e) => { const row = at(e.id, 'Thursday'); return row && row.offReason === 'generated'; });
+      const sat = pool.filter((e) => { const row = at(e.id, 'Saturday'); return row && row.offReason === 'generated'; });
+      return { week, thu: thu.length, sat: sat.length };
+    }).filter((note) => pool.length !== 6 || note.thu !== 3 || note.sat !== 3);
+    if (poolNotes.length) {
+      const sample = poolNotes[0];
       issues.push({
         code: 'pool',
-        message: `Thursday/Saturday pool is ${thu.length} Thursday OFF and ${sat.length} Saturday OFF. A 3-and-3 split needs 6 people. Currently ${pool.length}: ${pool.map((e) => e.name).join(', ') || 'none'}.`,
+        message: `Thursday/Saturday pool is ${sample.thu} Thursday OFF and ${sample.sat} Saturday OFF. A 3-and-3 split needs 6 people. Currently ${pool.length}: ${pool.map((e) => e.name).join(', ') || 'none'}.`,
       });
     }
     state.warnings.forEach((w) => {
@@ -765,8 +863,9 @@
   }
 
   function buildCoverage() {
-    if (!state.schedule) return [];
-    return state.schedule.week.map((col) => {
+    const week = focusWeek();
+    if (!week) return [];
+    return week.week.map((col) => {
       if (col.name === 'Friday') {
         return { ...col, day: col.name, closed: true, blocks: BLOCKS.map((block) => ({ ...block, counts: { advisor: 0, promoter: 0, testdrive: 0, coordinator: 0, other: 0 }, total: 0, working: [], vacationImpact: [] })) };
       }
@@ -899,13 +998,13 @@
   function todayStats() {
     const today = iso(new Date());
     const vac = onVacationToday();
-    if (!state.schedule || !state.schedule.rows.some((r) => r.date === today)) {
+    if (!allRows().some((r) => r.date === today)) {
       return { work: null, off: null, vac, total: null, outside: !!state.schedule };
     }
     let work = 0;
     let off = 0;
     state.employees.forEach((emp) => {
-      const row = state.schedule.rows.find((r) => r.employeeId === emp.id && r.date === today);
+      const row = rowOnDate(emp.id, today);
       if (!row) return;
       if (row.status === 'work') work += 1;
       else if (row.status === 'off') off += 1;
@@ -964,7 +1063,7 @@
   function statusOf(emp) {
     const today = iso(new Date());
     if (vacationOn(emp.id, today)) return { cls: 'vac', text: 'On vacation' };
-    const row = state.schedule && state.schedule.rows.find((r) => r.employeeId === emp.id && r.date === today);
+    const row = rowOnDate(emp.id, today);
     if (row && row.status === 'off') return { cls: 'off', text: 'Off today' };
     return { cls: '', text: 'Active' };
   }
@@ -996,12 +1095,15 @@
     return true;
   }
   function vacationLine(emp) {
+    const mine = vacationsFor(emp.id);
+    if (!mine.length) return 'None';
     const today = iso(new Date());
-    const active = vacationsFor(emp.id).find((v) => v.startDate <= today && v.endDate >= today);
-    if (active) return active.type;
-    const next = vacationsFor(emp.id).find((v) => v.startDate > today);
-    if (next) return `Upcoming ${fmtShort(next.startDate)}`;
-    return 'None';
+    const count = mine.length > 1 ? ` · ${mine.length} periods` : '';
+    const active = mine.find((v) => v.startDate <= today && v.endDate >= today);
+    if (active) return `${active.type}${count}`;
+    const next = mine.find((v) => v.startDate > today);
+    if (next) return `Upcoming ${fmtShort(next.startDate)}${count}`;
+    return `${mine.length} period${mine.length === 1 ? '' : 's'}`;
   }
 
   function ring(pct) {
@@ -1025,7 +1127,7 @@
   }
   function healthCard() {
     if (!state.schedule || !state.validation) {
-      return `<article class="card health"><div><b>SCHEDULE HEALTH</b><p class="muted">Generate a week to validate it.</p></div></article>`;
+      return `<article class="card health"><div><b>SCHEDULE HEALTH</b><p class="muted">Generate a month to validate it.</p></div></article>`;
     }
     const health = state.validation.health;
     const n = state.validation.issues.length;
@@ -1061,7 +1163,7 @@
       <div class="grid-5">${kpis.map(([lbl, val, hint]) => `<article class="card kpi"><div class="lbl">${lbl}</div><div class="val" data-count="${val}">0</div><div class="hint">${hint}</div></article>`).join('')}</div>
       <h2 class="section-title">This week</h2>
       <div class="band">${stats.map(([lbl, val]) => `<article class="card stat"><div class="lbl">${lbl}</div><div class="val">${val}</div></article>`).join('')}</div>
-      ${today.outside ? '<p class="muted">Today sits outside the generated week. Open Schedule to review that week.</p>' : ''}
+      ${today.outside ? '<p class="muted">Today sits outside the generated month. Open Schedule to review that month.</p>' : ''}
       <h2 class="section-title">Manpower overview</h2>
       <article class="card chart-card">
         <div class="seg">${roles.map(([id, label]) => `<button type="button" class="${state.chartRole === id ? 'on' : ''}" data-act="chart" data-role="${id}">${label}</button>`).join('')}</div>
@@ -1094,7 +1196,7 @@
         <div class="meta"><b>${shifts.length > 1 ? 'Split Shift' : 'Shift'}</b><br>${shifts.map((s) => esc(s.label)).join('<br>')}</div>
         <div class="meta">Off day<br>${esc(rule.offs)}</div>
         <div class="meta">Vacation: ${esc(vacationLine(emp))}</div>
-        <div class="actions"><button class="btn small" type="button" data-act="profile" data-id="${esc(emp.id)}">Manage</button><button class="btn-primary small" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Manage vacation</button></div>
+        <div class="actions"><button class="btn small" type="button" data-act="profile" data-id="${esc(emp.id)}">Manage</button><button class="btn-primary small" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Vacation dates</button></div>
       </article>`;
     }).join('');
   }
@@ -1124,29 +1226,41 @@
     if (row.kind === 'split') return `<div class="cell-card work"><b>SPLIT SHIFT</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
     return `<div class="cell-card work"><b>WORK</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
   }
+  function monthCell(empId, date) {
+    const row = rowOnDate(empId, date.key);
+    const fri = date.name === 'Friday' ? ' fri' : '';
+    if (!row) return `<td class="st-empty${fri}">—</td>`;
+    if (row.status === 'vacation') return `<td class="st-vac${fri}">VAC</td>`;
+    if (row.status === 'off') return `<td class="st-off${fri}">OFF</td>`;
+    const hours = esc(compactShifts(row.shifts || [])) || 'WORK';
+    return `<td class="st-work${fri}">${hours}</td>`;
+  }
+  function monthBoard() {
+    const when = scheduleMonth();
+    if (!when) return emptyBlock('NO SCHEDULE GENERATED', 'Choose a month and the generator will apply every rule, off day, and vacation.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>');
+    const dates = monthDates(when.year, when.month);
+    const head = dates.map((d) => `<th class="${d.name === 'Friday' ? 'fri' : ''}">${d.day}<br><span>${d.dow}</span></th>`).join('');
+    const body = state.employees.map((emp) => `<tr><td class="who"><b>${esc(emp.name)}</b><small>${esc(emp.position)}</small></td>${dates.map((d) => monthCell(emp.id, d)).join('')}</tr>`).join('');
+    return `<div class="month-sheet"><table><thead><tr><th class="who">${MONTHS[when.month]} ${when.year}</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
   function scheduleView() {
-    const period = state.schedule ? `${fmtShort(state.schedule.start)} – ${fmtLong(state.schedule.end)}` : 'No week generated';
+    const when = scheduleMonth();
+    const period = when ? `${fmtLong(iso(new Date(when.year, when.month, 1)))} – ${fmtLong(iso(new Date(when.year, when.month + 1, 0)))}` : 'No month generated';
     const same = state.sameArrangement ? ' Flexible off days stayed in the same places.' : '';
-    const meta = state.schedule ? `Arrangement #${state.generation}. Strategy: ${state.schedule.strategy || 'balanced'}.${same}` : (state.stale ? 'Rules changed. Generate the week again.' : '');
-    const board = !state.schedule
-      ? emptyBlock('NO SCHEDULE GENERATED', 'Choose a week and the generator will apply every rule, off day, and vacation.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')
-      : `<div class="board-scroll"><table class="sheet"><thead><tr><th class="who">Employee</th>${DAYS.map((d, i) => `<th>${d}<br><span style="font-weight:500">${state.schedule.week[i] ? fmtShort(state.schedule.week[i].key) : ''}</span></th>`).join('')}</tr></thead><tbody>${
-        state.employees.map((emp) => `<tr><td class="who"><div class="who-box"><span class="avatar sm">${esc(initials(emp.name))}</span><span><b>${esc(emp.name)}</b><small>${esc(emp.position)}</small></span></div></td>${DAYS.map((day) => `<td>${cellCard(rowFor(emp.id, day))}</td>`).join('')}</tr>`).join('')
-      }</tbody></table></div>`;
-    return `<div class="wrap">
+    const meta = state.schedule ? `Arrangement #${state.generation}. Strategy: ${state.schedule.strategy || 'balanced'}. ${scheduleWeeks().length} week${scheduleWeeks().length === 1 ? '' : 's'}.${same}` : (state.stale ? 'Rules changed. Generate the month again.' : '');
+    return `<div class="wrap wide">
       ${pageHead('Schedule', period, `<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button><button class="btn" type="button" data-act="regen">Regenerate</button><button class="btn" type="button" data-act="validate">Validate</button>${exportMenu()}`)}
-      <p class="muted">${esc(meta)}</p>
-      <div class="legend" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span></div>
-      ${healthCard()}
-      ${warnHtml()}
-      <div style="margin-top:14px">${board}</div>
+      <p class="muted screen-only">${esc(meta)}</p>
+      <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span></div>
+      <div class="screen-only">${healthCard()}${warnHtml()}</div>
+      <div style="margin-top:14px">${monthBoard()}</div>
     </div>`;
   }
 
   function manpowerView() {
     const coverage = buildCoverage();
     if (!coverage.length) {
-      return `<div class="wrap">${pageHead('Manpower', 'Control tower')}${emptyBlock('NO SCHEDULE GENERATED', 'Manpower is counted from the generated week.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')}</div>`;
+      return `<div class="wrap">${pageHead('Manpower', 'Control tower')}${emptyBlock('NO SCHEDULE GENERATED', 'Manpower is counted from the week that contains today.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')}</div>`;
     }
     const roles = [['total', 'Total'], ...ROLES];
     let max = 1;
@@ -1163,7 +1277,7 @@
       return `<tr><th>${esc(day.day)}</th>${cells}</tr>`;
     }).join('');
     return `<div class="wrap">
-      ${pageHead('Manpower', state.schedule ? `${fmtShort(state.schedule.start)} – ${fmtLong(state.schedule.end)}` : '', exportMenu())}
+      ${pageHead('Manpower', focusWeek() ? `${fmtShort(focusWeek().start)} – ${fmtLong(focusWeek().end)}` : '', exportMenu())}
       <div class="seg">${roles.map(([id, label]) => `<button type="button" class="${state.heatRole === id ? 'on' : ''}" data-act="heat" data-role="${id}">${label}</button>`).join('')}</div>
       <article class="card" style="overflow:auto"><table class="heat"><thead><tr><th>Day</th>${head}</tr></thead><tbody>${body}</tbody></table><p class="muted">Friday stays closed. Select a cell to see who is working.</p></article>
       ${warnHtml()}
@@ -1210,9 +1324,9 @@
       : '';
     const body = state.vacations.length
       ? `<article class="card"><div class="cal-head"><button class="btn small" type="button" data-act="cal-prev">Previous</button><b>${MONTHS[state.cal.m].toUpperCase()} ${state.cal.y}</b><button class="btn small" type="button" data-act="cal-next">Next</button></div><div class="cal-grid">${DAYS.map((d) => `<div class="cal-dow">${d.slice(0, 3).toUpperCase()}</div>`).join('')}${calendarCells()}</div></article><h2 class="section-title">Upcoming vacations</h2><article class="card">${table || '<p class="muted">Nothing upcoming.</p>'}</article>`
-      : emptyBlock('NO VACATIONS SCHEDULED', 'Add a leave period for any employee. The next generated week will keep them off those dates.', '<button class="btn-primary" type="button" data-act="vac-add">+ Add vacation</button>');
+      : emptyBlock('NO VACATIONS SCHEDULED', 'Submit one or more from–until periods for an employee. The next generated month will keep them off those dates.', '<button class="btn-primary" type="button" data-act="vac-add">+ Vacation dates</button>');
     return `<div class="wrap">
-      ${pageHead('Vacations', 'Leave calendar', '<button class="btn-primary" type="button" data-act="vac-add">+ Add vacation</button>')}
+      ${pageHead('Vacations', 'Leave calendar', '<button class="btn-primary" type="button" data-act="vac-add">+ Vacation dates</button>')}
       <div class="grid-4">${kpis.map(([lbl, val], i) => `<article class="card kpi"><div class="lbl">${lbl}</div><div class="${i === 3 ? 'meta' : 'val'}" ${i < 3 ? `data-count="${val}"` : ''} style="${i === 3 ? 'font-size:18px;margin-top:10px' : ''}">${i === 3 ? val : '0'}</div>${i === 3 && next ? `<div class="hint">${fmtShort(next.startDate)}</div>` : ''}</article>`).join('')}</div>
       <div style="margin-top:14px">${body}</div>
     </div>`;
@@ -1334,11 +1448,14 @@
   }
 
   function openGenerate() {
-    const week = state.schedule ? state.schedule.week : currentWeek();
+    const when = scheduleMonth();
+    const now = new Date();
+    const year = when ? when.year : now.getFullYear();
+    const month = when ? when.month : now.getMonth();
     const strategy = state.settings.strategy || 'balanced';
-    openOverlay(`<h2 style="margin-top:0">Generate schedule</h2><p class="muted">One Saturday–Friday week. Vacations, fixed offs, and Friday closure are applied before balancing.</p>
-      <div class="field row"><div class="field"><label>Start date</label><input id="g-start" type="date" value="${week[0].key}" /></div><div class="field"><label>End date</label><input id="g-end" type="date" value="${week[6].key}" /></div></div>
-      <p class="muted" id="g-week">Week: ${fmtShort(week[0].key)} – ${fmtLong(week[6].key)}</p>
+    openOverlay(`<h2 style="margin-top:0">Generate schedule</h2><p class="muted">The whole month. Each Saturday–Friday week keeps vacations, fixed offs, and Friday closure, then balances manpower.</p>
+      <div class="field"><label>Month</label><input id="g-month" type="month" value="${year}-${pad(month + 1)}" /></div>
+      <p class="muted" id="g-week">Every day in ${MONTHS[month]} ${year}.</p>
       <div class="field"><label>Scheduling strategy</label>
         <label><input type="radio" name="strategy" value="balanced" ${strategy === 'balanced' ? 'checked' : ''} /> Balanced</label><br>
         <label><input type="radio" name="strategy" value="maximum" ${strategy === 'maximum' ? 'checked' : ''} /> Maximum coverage</label><br>
@@ -1346,13 +1463,13 @@
       </div>
       <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="do-generate">Generate schedule</button></div>`);
   }
-  function playGenerate(week, strategy) {
+  function playGenerate(year, month, strategy) {
     if (state.busy) return;
     state.busy = true;
     const steps = ['ANALYZING EMPLOYEES...', 'CHECKING VACATIONS...', 'APPLYING SHIFT RULES...', 'BALANCING MANPOWER...', 'VALIDATING SCHEDULE...'];
     let index = 0;
     const paint = (done) => {
-      openOverlay(`<h2 style="margin-top:0">${done ? 'SCHEDULE GENERATED' : 'Generating'}</h2>${steps.map((text, i) => `<div class="step ${done || i < index ? 'done' : ''} ${!done && i === index ? 'on' : ''}">${done || i < index ? '✓' : '○'} ${text}</div>`).join('')}${done ? '<p>✓ The week is ready.</p>' : ''}`);
+      openOverlay(`<h2 style="margin-top:0">${done ? 'SCHEDULE GENERATED' : 'Generating'}</h2>${steps.map((text, i) => `<div class="step ${done || i < index ? 'done' : ''} ${!done && i === index ? 'on' : ''}">${done || i < index ? '✓' : '○'} ${text}</div>`).join('')}${done ? '<p>✓ The month is ready.</p>' : ''}`);
     };
     const finish = (ok) => {
       state.busy = false;
@@ -1373,7 +1490,7 @@
         return;
       }
       try {
-        runGenerate(week, strategy);
+        runGenerate(year, month, strategy);
         finish(true);
       } catch (err) {
         finish(false);
@@ -1381,19 +1498,25 @@
     };
     setTimeout(tick, 420);
   }
-  function runGenerate(week, strategy) {
+  function runGenerate(year, month, strategy) {
     const had = state.generation > 0 && !!state.lastSig;
     const base = (Date.now() ^ (state.generation * 10007)) >>> 0;
-    let best = null;
-    for (let i = 0; i < 12; i += 1) {
-      const result = generateSchedule(state.employees, (base + i * 9973) >>> 0, week, state.vacations, strategy, Number(state.settings.minManpower) || 8);
-      result.sig = signature(result.rows);
-      best = result;
-      if (result.sig !== state.lastSig) break;
-    }
-    state.sameArrangement = had && best.sig === state.lastSig;
-    state.lastSig = best.sig;
-    state.schedule = best;
+    const minManpower = Number(state.settings.minManpower) || 8;
+    const previous = new Set(String(state.lastSig || '').split('||'));
+    const built = weeksTouchingMonth(year, month).map((week, index) => {
+      let best = null;
+      for (let i = 0; i < 8; i += 1) {
+        const result = generateSchedule(state.employees, (base + index * 100003 + i * 9973) >>> 0, week, state.vacations, strategy, minManpower);
+        result.sig = signature(result.rows);
+        best = result;
+        if (!previous.has(result.sig)) break;
+      }
+      return best;
+    });
+    const sig = built.map((w) => w.sig).join('||');
+    state.sameArrangement = had && sig === state.lastSig;
+    state.lastSig = sig;
+    state.schedule = { year, month, strategy, start: iso(new Date(year, month, 1)), end: iso(new Date(year, month + 1, 0)), weeks: built };
     state.generation += 1;
     state.stale = false;
     state.settings.strategy = strategy;
@@ -1451,39 +1574,108 @@
     return emp;
   }
 
-  function vacationForm(empId, existing) {
-    const emp = empId ? empById(empId) : (existing ? empById(existing.employeeId) : null);
-    const options = state.employees.map((e) => `<option value="${esc(e.id)}" ${(emp && e.id === emp.id) ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
-    const start = existing ? existing.startDate : iso(new Date());
-    const end = existing ? existing.endDate : start;
-    openOverlay(`<h2 style="margin-top:0">Manage vacation</h2>
-      <div class="field"><label>Employee</label>${emp && !existing ? `<input type="hidden" id="v-emp" value="${esc(emp.id)}" /><b>${esc(emp.name)}</b><div class="muted">ID ${esc(emp.id)}</div>` : `<select id="v-emp">${options}</select>`}</div>
-      <input type="hidden" id="v-id" value="${esc(existing ? existing.id : '')}" />
-      <div class="field"><label>Vacation type</label><select id="v-type">${VACATION_TYPES.map((t) => `<option ${existing && existing.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
-      <div class="field row"><div class="field"><label>Start date</label><input id="v-start" type="date" value="${start}" /></div><div class="field"><label>End date</label><input id="v-end" type="date" value="${end}" /></div></div>
-      <p>Number of days: <b id="v-days">${inclusiveDays(start, end)}</b></p>
-      <div class="field"><label>Notes</label><textarea id="v-notes" rows="3">${esc(existing ? existing.notes || '' : '')}</textarea></div>
+  function newVacId() {
+    return `vac-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  }
+  function rangesForEmployee(empId) {
+    const list = empId ? vacationsFor(empId).map((v) => ({ ...v })) : [];
+    const seed = state.vacSeed;
+    if (seed && seed.startDate && !list.some((v) => v.startDate <= seed.startDate && v.endDate >= (seed.endDate || seed.startDate))) {
+      list.push({ id: '', type: seed.type || VACATION_TYPES[0], startDate: seed.startDate, endDate: seed.endDate || seed.startDate, notes: '' });
+    }
+    if (!list.length) list.push({ id: '', type: VACATION_TYPES[0], startDate: '', endDate: '', notes: '' });
+    return list;
+  }
+  function rangeMarkup(range) {
+    const type = VACATION_TYPES.map((t) => `<option ${range.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('');
+    return `<div class="vac-range" data-id="${esc(range.id || '')}">
+      <div class="field"><label>From</label><input class="v-from" type="date" value="${esc(range.startDate || '')}" /></div>
+      <div class="field"><label>Until</label><input class="v-until" type="date" value="${esc(range.endDate || '')}" /></div>
+      <button class="btn-ghost small" type="button" data-act="vac-remove-range">Remove</button>
+      <div class="field vac-type"><label>Type</label><select class="v-type">${type}</select></div>
+      <input class="v-notes" type="hidden" value="${esc(range.notes || '')}" />
+    </div>`;
+  }
+  function paintVacationRanges(empId) {
+    const host = $('#vac-ranges');
+    if (!host) return;
+    host.innerHTML = rangesForEmployee(empId).map(rangeMarkup).join('');
+    updateVacationDays();
+  }
+  function updateVacationDays() {
+    const node = $('#v-days');
+    if (!node) return;
+    let days = 0;
+    let count = 0;
+    document.querySelectorAll('.vac-range').forEach((row) => {
+      const start = row.querySelector('.v-from').value;
+      const end = row.querySelector('.v-until').value;
+      if (start && end && end >= start) {
+        days += inclusiveDays(start, end);
+        count += 1;
+      }
+    });
+    node.textContent = count ? `${count} period${count === 1 ? '' : 's'} · ${days} day${days === 1 ? '' : 's'}` : 'No dates yet';
+  }
+  function vacationForm(empId, seed) {
+    state.vacSeed = seed && seed.startDate ? { startDate: seed.startDate, endDate: seed.endDate || seed.startDate, type: seed.type || VACATION_TYPES[0] } : null;
+    const locked = empId && !seed;
+    const emp = empId ? empById(empId) : (state.employees[0] || null);
+    const options = state.employees.map((e) => `<option value="${esc(e.id)}" ${emp && e.id === emp.id ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
+    const picker = locked
+      ? `<input type="hidden" id="v-emp" value="${esc(emp.id)}" /><b>${esc(emp.name)}</b><div class="muted">ID ${esc(emp.id)}</div>`
+      : `<select id="v-emp">${options}</select>`;
+    openOverlay(`<h2 style="margin-top:0">Vacation dates</h2>
+      <p class="muted">Add every from–until period for this employee, then submit. You can add as many as they need.</p>
+      <div class="field"><label>Employee</label>${picker}</div>
+      <div id="vac-ranges"></div>
+      <button class="btn small" type="button" data-act="vac-add-range">+ Add another period</button>
+      <p style="margin-top:12px">Total: <b id="v-days">No dates yet</b></p>
       <p class="muted" id="v-msg"></p>
-      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="save-vac">Save vacation</button></div>`);
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="save-vac">Submit dates</button></div>`);
+    paintVacationRanges(emp ? emp.id : '');
   }
   function saveVacationFromForm() {
     const employeeId = $('#v-emp').value;
-    const startDate = $('#v-start').value;
-    const endDate = $('#v-end').value;
-    const id = $('#v-id').value;
-    if (!employeeId || !startDate || !endDate) { $('#v-msg').textContent = 'Choose an employee and both dates.'; return; }
-    if (endDate < startDate) { $('#v-msg').textContent = 'The end date has to be on or after the start date.'; return; }
-    const clash = state.vacations.some((v) => v.id !== id && v.employeeId === employeeId && !(endDate < v.startDate || startDate > v.endDate));
-    if (clash) { $('#v-msg').textContent = 'This overlaps another vacation for the same employee.'; return; }
-    const record = { id: id || `vac-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, employeeId, type: $('#v-type').value, startDate, endDate, notes: $('#v-notes').value.trim() };
-    const index = state.vacations.findIndex((v) => v.id === record.id);
-    if (index >= 0) state.vacations[index] = record;
-    else state.vacations.push(record);
+    const emp = empById(employeeId);
+    if (!emp) { $('#v-msg').textContent = 'Choose an employee.'; return; }
+    const records = [];
+    const rows = [...document.querySelectorAll('.vac-range')];
+    for (let i = 0; i < rows.length; i += 1) {
+      const startDate = rows[i].querySelector('.v-from').value;
+      const endDate = rows[i].querySelector('.v-until').value;
+      if (!startDate && !endDate) continue;
+      if (!startDate || !endDate) { $('#v-msg').textContent = `Period ${i + 1} needs both a from date and an until date.`; return; }
+      if (endDate < startDate) { $('#v-msg').textContent = `Period ${i + 1}: until has to be on or after from.`; return; }
+      records.push({
+        id: rows[i].dataset.id || newVacId(),
+        employeeId,
+        type: rows[i].querySelector('.v-type').value,
+        startDate,
+        endDate,
+        notes: rows[i].querySelector('.v-notes').value.trim(),
+      });
+    }
+    records.sort((a, b) => a.startDate.localeCompare(b.startDate));
+    for (let i = 1; i < records.length; i += 1) {
+      if (records[i].startDate <= records[i - 1].endDate) {
+        $('#v-msg').textContent = 'Two periods overlap. Adjust the dates so they do not cover the same days.';
+        return;
+      }
+    }
+    const previous = vacationsFor(employeeId);
+    if (!records.length && previous.length && !confirm(`Remove every vacation period for ${emp.name}?`)) return;
+    if (!records.length && !previous.length) { $('#v-msg').textContent = 'Add at least one from and until.'; return; }
+    state.vacations = state.vacations.filter((v) => v.employeeId !== employeeId).concat(records);
+    state.vacSeed = null;
     applyVacations();
     save();
     closeOverlay();
     render();
-    toast(state.schedule ? 'Vacation saved. Those dates are now off the schedule.' : 'Vacation saved. It will apply when you generate.');
+    const label = records.length === 1 ? '1 period' : `${records.length} periods`;
+    toast(records.length
+      ? (state.schedule ? `${label} saved. Those dates are now vacation on the schedule.` : `${label} saved. They apply when you generate.`)
+      : 'Vacation dates cleared.');
   }
 
   function profileModal(id) {
@@ -1506,7 +1698,7 @@
       <div class="check"><span>Vacation</span><b>${upcoming} upcoming</b></div>
       <h3>This week</h3>${state.schedule ? week : '<p class="muted">Generate a schedule to see this week.</p>'}
       <h3 id="vac-history">Vacation history</h3>${past}
-      <div class="actions"><button class="btn" type="button" data-act="edit" data-id="${esc(emp.id)}">Edit employee</button><button class="btn-primary" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Manage vacation</button><button class="btn-ghost" type="button" data-act="scroll-history">View history</button></div>`);
+      <div class="actions"><button class="btn" type="button" data-act="edit" data-id="${esc(emp.id)}">Edit employee</button><button class="btn-primary" type="button" data-act="vac-add" data-id="${esc(emp.id)}">Vacation dates</button><button class="btn-ghost" type="button" data-act="scroll-history">View history</button></div>`);
   }
   function vacationDetail(id) {
     const vac = state.vacations.find((v) => v.id === id);
@@ -1519,7 +1711,7 @@
       <div class="check"><span>Days</span><b>${inclusiveDays(vac.startDate, vac.endDate)}</b></div>
       <div class="check"><span>Status</span><b>${vacStatus(vac)}</b></div>
       <p>${esc(vac.notes || 'No notes.')}</p>
-      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Close</button><button class="btn" type="button" data-act="vac-edit" data-id="${esc(vac.id)}">Edit</button><button class="btn" type="button" data-act="vac-delete" data-id="${esc(vac.id)}">Delete</button></div>`);
+      <div class="actions"><button class="btn-ghost" type="button" data-act="close">Close</button><button class="btn" type="button" data-act="vac-edit" data-id="${esc(vac.id)}">Edit dates</button><button class="btn" type="button" data-act="vac-delete" data-id="${esc(vac.id)}">Delete</button></div>`);
   }
   function whoModal(day, blockId) {
     const coverage = buildCoverage();
@@ -1550,11 +1742,13 @@
   }
 
   function exportExcel() {
-    if (!state.schedule) { toast('Generate a schedule before exporting.'); return; }
-    const head = ['Employee', 'ID', 'Department', 'Position', ...DAYS];
+    const when = scheduleMonth();
+    if (!when) { toast('Generate a schedule before exporting.'); return; }
+    const dates = monthDates(when.year, when.month);
+    const head = ['Employee', 'ID', 'Department', 'Position', ...dates.map((d) => `${d.day} ${d.dow}`)];
     const rows = state.employees.map((emp) => {
-      const cells = DAYS.map((day) => {
-        const row = rowFor(emp.id, day);
+      const cells = dates.map((d) => {
+        const row = rowOnDate(emp.id, d.key);
         if (!row) return '';
         if (row.status === 'vacation') return `VACATION - ${row.vacation ? row.vacation.type : ''}`.trim();
         if (row.status === 'off') return 'OFF';
@@ -1569,7 +1763,7 @@
       });
     });
     const table = (title, headers, body) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table('Weekly schedule', head, rows)}${table('Manpower', man[0], man.slice(1))}</body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table(`${MONTHS[when.month]} ${when.year} schedule`, head, rows)}${table('Manpower', man[0], man.slice(1))}</body></html>`;
     const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1607,14 +1801,17 @@
     if (act === 'open-generate') openGenerate();
     if (act === 'do-generate') {
       if (!state.employees.length) { toast('Add an employee first.'); return; }
-      const week = weekFrom($('#g-start').value);
+      const parts = String(($('#g-month') || {}).value || '').split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      if (!year || month < 0) { toast('Choose a month.'); return; }
       const strategy = ($('#overlay input[name=strategy]:checked') || {}).value || 'balanced';
-      playGenerate(week, strategy);
+      playGenerate(year, month, strategy);
     }
     if (act === 'regen') {
       if (!state.employees.length) return;
-      const week = state.schedule ? state.schedule.week : currentWeek();
-      playGenerate(week, state.settings.strategy || 'balanced');
+      const when = scheduleMonth() || { year: new Date().getFullYear(), month: new Date().getMonth() };
+      playGenerate(when.year, when.month, state.settings.strategy || 'balanced');
     }
     if (act === 'validate') {
       if (!state.schedule) { toast('Generate a schedule first.'); return; }
@@ -1655,9 +1852,24 @@
       render();
     }
     if (act === 'vac-add') vacationForm(btn.dataset.id || '', null);
+    if (act === 'vac-add-range') {
+      const host = $('#vac-ranges');
+      if (host) host.insertAdjacentHTML('beforeend', rangeMarkup({ id: '', type: VACATION_TYPES[0], startDate: '', endDate: '', notes: '' }));
+    }
+    if (act === 'vac-remove-range') {
+      const row = btn.closest('.vac-range');
+      if (!row) return;
+      if (document.querySelectorAll('.vac-range').length === 1) {
+        row.dataset.id = '';
+        row.querySelector('.v-from').value = '';
+        row.querySelector('.v-until').value = '';
+        row.querySelector('.v-notes').value = '';
+      } else row.remove();
+      updateVacationDays();
+    }
     if (act === 'vac-edit') {
       const vac = state.vacations.find((v) => v.id === btn.dataset.id);
-      if (vac) vacationForm(vac.employeeId, vac);
+      if (vac) vacationForm(vac.employeeId, null);
     }
     if (act === 'vac-open') { event.stopPropagation(); vacationDetail(btn.dataset.id); }
     if (act === 'vac-delete') {
@@ -1705,11 +1917,19 @@
       toast('Settings saved');
     }
     if (act === 'excel') exportExcel();
-    if (act === 'print') window.print();
+    if (act === 'print') {
+      if (!state.schedule) { toast('Generate a schedule first.'); return; }
+      if (state.view !== 'schedule') {
+        go('schedule');
+        setTimeout(() => window.print(), 80);
+        return;
+      }
+      window.print();
+    }
     if (act === 'json') exportJson();
     if (act === 'import') $('#import-file').click();
     if (act === 'reset') {
-      if (!confirm('Reset employees to the original roster? Vacations and the generated week on this browser will be cleared.')) return;
+      if (!confirm('Reset employees to the original roster? Vacations and the generated month on this browser will be cleared.')) return;
       state.employees = defaultEmployees();
       state.vacations = [];
       state.schedule = null;
@@ -1726,17 +1946,12 @@
 
   document.body.addEventListener('click', onClick);
   document.body.addEventListener('input', (event) => {
-    if (event.target.id === 'v-start' || event.target.id === 'v-end') {
-      const start = $('#v-start').value;
-      const end = $('#v-end').value;
-      $('#v-days').textContent = start && end && end >= start ? String(inclusiveDays(start, end)) : '—';
-    }
-    if (event.target.id === 'g-start' || event.target.id === 'g-end') {
-      const source = event.target.id === 'g-end' ? event.target.value : $('#g-start').value;
-      const week = weekFrom(source);
-      if ($('#g-start')) $('#g-start').value = week[0].key;
-      if ($('#g-end')) $('#g-end').value = week[6].key;
-      if ($('#g-week')) $('#g-week').textContent = `Week: ${fmtShort(week[0].key)} – ${fmtLong(week[6].key)}`;
+    if (event.target.classList && (event.target.classList.contains('v-from') || event.target.classList.contains('v-until'))) updateVacationDays();
+    if (event.target.id === 'g-month') {
+      const parts = String(event.target.value || '').split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      if ($('#g-week') && year && month >= 0) $('#g-week').textContent = `Every day in ${MONTHS[month]} ${year}.`;
     }
     if (event.target.id === 'emp-search') {
       state.filters.q = event.target.value;
@@ -1751,6 +1966,8 @@
       state.soft = true;
       render();
     }
+    if (event.target.id === 'v-emp') paintVacationRanges(event.target.value);
+    if (event.target.classList && (event.target.classList.contains('v-from') || event.target.classList.contains('v-until'))) updateVacationDays();
     if (event.target.id === 'e-mode') $('#fixed-wrap').hidden = event.target.value !== 'fixed';
     if (event.target.id === 'e-split') $('#split-times').hidden = !event.target.checked;
     if (event.target.id === 'e-pos' && !state.editingId) {
