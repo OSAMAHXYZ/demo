@@ -91,7 +91,11 @@
   .month-sheet { overflow-x: auto; background: white; border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
   .month-sheet table { border-collapse: collapse; width: 100%; font-size: 11px; }
   .month-sheet th, .month-sheet td { border: 1px solid var(--line); padding: 5px 3px; text-align: center; min-width: 52px; vertical-align: middle; line-height: 1.25; }
-  .month-sheet td { white-space: nowrap; }
+  .month-sheet td { white-space: normal; }
+  .month-sheet .st-leave { background: #fff6ed; color: #9a5410; font-weight: 650; }
+  .sched-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin: 4px 0 8px; }
+  .sched-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+  .sched-controls select, .sched-controls input { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: white; text-transform: none; letter-spacing: 0; color: var(--ink); }
   .month-sheet thead th { background: #f8fafb; font-size: 11px; }
   .month-sheet th span { display: block; font-weight: 500; color: var(--muted); font-size: 10px; }
   .month-sheet .who { text-align: left; min-width: 148px; position: sticky; left: 0; background: white; z-index: 1; padding: 6px 8px; }
@@ -315,7 +319,7 @@
     <button type="button" data-go="schedule">Schedule</button>
     <button type="button" data-go="manpower">Manpower</button>
     <button type="button" data-go="vacations">Vacations</button>
-    <button type="button" data-go="rules">Rules</button>
+    <button type="button" data-go="rules">Rotation</button>
   </nav>
   <div class="nav-right">
     <span class="today-chip" id="today-label"></span>
@@ -354,16 +358,29 @@
   const VIEWS = ['dashboard', 'employees', 'schedule', 'manpower', 'vacations', 'rules'];
   const KEY = 'wcc-store-v1';
   const LEGACY_KEY = 'employee-shift-scheduler-v1';
+  const THU_A = ['48476', '49973', '50338', '47674'];
+  const SAT_A = ['50345', '50093', '50822'];
+  const ADVISORS = [
+    { id: '48476', ar: 'علي الحربي', short: 'Ali' },
+    { id: '50345', ar: 'متعب الشهري', short: 'Muteb' },
+    { id: '49973', ar: 'غدير الطياري', short: 'Ghadeer' },
+    { id: '50093', ar: 'لجين بازهير', short: 'Lujen' },
+    { id: '50338', ar: 'احمد فتني', short: 'Ahmed Yousef' },
+    { id: '50822', ar: 'احمد بن محفوظ', short: 'Ahmed Saleh' },
+    { id: '47674', ar: 'منصور القحطاني', short: 'Mansour' },
+  ];
+  const ADVISOR_IDS = ADVISORS.map((a) => a.id);
   const CHECKS = [
-    ['friday', 'Friday OFF for everyone'],
-    ['vacation', 'Vacation respected'],
-    ['fixed', 'Fixed off days respected'],
+    ['friday', 'Friday OFF'],
+    ['rotation', 'Thursday/Saturday rotation'],
     ['shifts', 'Correct shifts'],
-    ['split', 'Split shifts respected'],
+    ['split', 'Ali split shift'],
+    ['ahmed', 'Ahmed Yousef 9:00am – 6:00pm'],
+    ['noon', 'Sales advisors 12:00pm – 9:00pm'],
+    ['vacation', 'Vacation respected'],
+    ['timeoff', 'Time off respected'],
+    ['workvac', 'No employee scheduled during leave'],
     ['conflict', 'No conflicting shifts'],
-    ['workvac', 'No employee scheduled while on vacation'],
-    ['pool', 'Thursday/Saturday advisor distribution'],
-    ['coverage', 'Required employee coverage'],
     ['duplicate', 'No duplicate assignment'],
   ];
 
@@ -377,16 +394,16 @@
     const noon = [{ start: '12:00', end: '21:00' }];
     const day = [{ start: '09:00', end: '18:00' }];
     const omar = [{ start: '08:50', end: '12:45' }, { start: '17:00', end: '21:00' }];
-    const ali = [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }];
+    const ali = [{ start: '08:50', end: '12:45' }, { start: '17:00', end: '21:00' }];
     return [
       row('49099', 'Ruba Hamed Albarakati', 'Delivery', 'Sales Coordinator', 'friday-only', noon),
-      row('49973', 'Ghadeer Abdulhadi Attia Altayyari', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
-      row('50093', 'Lujen Sami Saeed Bazhair', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
-      row('47674', 'Mansour Alqahtani', 'Toyota Sales', 'Sales Advisor', 'advisor-pool', noon),
-      row('48476', 'Ali Muharraq A. Alharbi', 'SA Showroom', 'Sales Advisor', 'flexible', ali),
-      row('50345', 'Muteb Abdullah Nasser AlShehri', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
-      row('50822', 'Ahmed Saleh Binmahfoodh', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
-      row('50338', 'Ahmed Yousef Alftini', 'SA Showroom', 'Sales Advisor', 'flexible', day),
+      row('49973', 'Ghadeer Abdulhadi Attia Altayyari', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
+      row('50093', 'Lujen Sami Saeed Bazhair', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
+      row('47674', 'Mansour Alqahtani', 'Toyota Sales', 'Sales Advisor', 'rotation', noon),
+      row('48476', 'Ali Muharraq A. Alharbi', 'SA Showroom', 'Sales Advisor', 'rotation', ali),
+      row('50345', 'Muteb Abdullah Nasser AlShehri', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
+      row('50822', 'Ahmed Saleh Binmahfoodh', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
+      row('50338', 'Ahmed Yousef Alftini', 'SA Showroom', 'Sales Advisor', 'rotation', day),
       row('50648', 'Omar Mohammad Mahlawi', 'Showroom', 'Promoters', 'friday-only', omar),
       row('50649', 'Shuruq Abdulagani Alansari', 'Showroom', 'Promoters', 'friday-only', omar.map((s) => ({ ...s }))),
       row('50650', 'Fahad Ali Alshahrani', 'Showroom', 'Promoters', 'fixed', noon, ['Thursday', 'Friday']),
@@ -431,6 +448,63 @@
     return m ? `${h}:${pad(m)}` : String(h);
   }
   function shortSpan(s) { return `${shortClock(s.start)}–${shortClock(s.end)}`; }
+  function clock12(mins) {
+    let h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const ap = h >= 12 ? 'pm' : 'am';
+    h %= 12;
+    if (h === 0) h = 12;
+    return `${h}:${pad(m)}${ap}`;
+  }
+  function prettySpan(s) { return `${clock12(s.start)} - ${clock12(s.end)}`; }
+  function isAdvisor(id) { return ADVISOR_IDS.includes(String(id)); }
+  function rotationAnchorThursday(startKey) {
+    const d = parseISO(startKey || iso(new Date()));
+    return addDays(d, -((d.getDay() + 7 - 4) % 7));
+  }
+  function rotationStartKey() {
+    return (state.settings && state.settings.rotationStart) || (state.schedule && state.schedule.rotationStart) || iso(new Date());
+  }
+  function rotationIndexFor(dateKey) {
+    const a = rotationAnchorThursday(rotationStartKey());
+    const b = rotationAnchorThursday(dateKey);
+    const weeks = Math.round((b.getTime() - a.getTime()) / 86400000 / 7);
+    return ((weeks % 2) + 2) % 2;
+  }
+  function rotationName(index) { return index === 0 ? 'Week A' : 'Week B'; }
+  function groupFor(weekIndex, day) {
+    if (day === 'Thursday') return weekIndex === 0 ? THU_A : SAT_A;
+    if (day === 'Saturday') return weekIndex === 0 ? SAT_A : THU_A;
+    return [];
+  }
+  function absenceOf(vac) {
+    if (!vac) return '';
+    if (vac.absence === 'timeoff' || String(vac.type || '').toLowerCase() === 'time off') return 'timeoff';
+    return 'vacation';
+  }
+  function syncAdvisorRoster() {
+    const canon = {};
+    defaultEmployees().forEach((e) => { if (isAdvisor(e.id)) canon[e.id] = e; });
+    let changed = false;
+    ADVISOR_IDS.forEach((id) => {
+      const src = canon[id];
+      let emp = state.employees.find((e) => e.id === id);
+      if (!emp) {
+        state.employees.push({ ...src, shifts: src.shifts.map((s) => ({ ...s })), fixedOffDays: ['Friday'] });
+        changed = true;
+        return;
+      }
+      const same = JSON.stringify(emp.shifts || []) === JSON.stringify(src.shifts) && emp.offMode === 'rotation';
+      if (!same) {
+        emp.shifts = src.shifts.map((s) => ({ ...s }));
+        emp.offMode = 'rotation';
+        emp.fixedOffDays = ['Friday'];
+        changed = true;
+      }
+    });
+    if (!state.settings.rotationStart) state.settings.rotationStart = '2026-10-01';
+    return changed;
+  }
   function compactShifts(shifts) {
     if (!shifts.length) return '';
     const ordered = [...shifts].sort((a, b) => a.start - b.start);
@@ -650,49 +724,24 @@
     return dayLoad(day, offMap, employees, week, vacations);
   }
 
-  function generateSchedule(employees, seed, week, vacations, strategy, minManpower) {
-    const rng = mulberry32(seed);
-    const offMap = {};
-    employees.forEach((emp) => {
-      const set = new Set(['Friday']);
-      if (emp.offMode === 'fixed') (emp.fixedOffDays || []).forEach((d) => { if (DAYS.includes(d)) set.add(d); });
-      offMap[emp.id] = set;
-    });
-    const pool = employees.filter((e) => e.offMode === 'advisor-pool');
-    const split = splitPool(pool, rng);
-    split.thursday.forEach((e) => offMap[e.id].add('Thursday'));
-    split.saturday.forEach((e) => offMap[e.id].add('Saturday'));
-    shuffle(employees.filter((e) => e.offMode === 'flexible'), rng).forEach((emp) => {
-      const choices = WEEKDAYS.filter((d) => !offMap[emp.id].has(d) && !vacationOn(emp.id, weekKey(week, d), vacations));
-      if (!choices.length) return;
-      let best = null;
-      let ties = [];
-      choices.forEach((day) => {
-        const score = scoreOffChoice(day, emp, offMap, employees, week, vacations, strategy, minManpower);
-        if (best === null || score > best) {
-          best = score;
-          ties = [day];
-        } else if (score === best) ties.push(day);
-      });
-      offMap[emp.id].add(ties[Math.floor(rng() * ties.length)]);
-    });
-
+  function generateSchedule(employees, seed, week, vacations) {
     const rows = [];
     employees.forEach((emp) => {
       const shifts = normalizeShifts(emp);
       const kind = shifts.length > 1 ? 'split' : 'standard';
+      const fixed = new Set(!isAdvisor(emp.id) && emp.offMode === 'fixed' ? (emp.fixedOffDays || []) : []);
       week.forEach((col) => {
         const vac = vacationOn(emp.id, col.key, vacations);
-        const isOff = offMap[emp.id].has(col.name);
+        const rot = isAdvisor(emp.id) ? rotationIndexFor(col.key) : null;
         let offReason = '';
-        if (isOff) {
-          if (col.name === 'Friday') offReason = 'friday';
-          else if (emp.offMode === 'fixed' && (emp.fixedOffDays || []).includes(col.name)) offReason = 'fixed';
-          else offReason = 'generated';
-        }
+        if (col.name === 'Friday') offReason = 'friday';
+        else if (isAdvisor(emp.id) && groupFor(rot, col.name).includes(emp.id)) offReason = col.name === 'Thursday' ? 'thursday' : 'saturday';
+        else if (fixed.has(col.name)) offReason = 'fixed';
+        const leave = vac ? absenceOf(vac) : '';
         let status = 'work';
-        if (vac) status = 'vacation';
-        else if (isOff) status = 'off';
+        if (leave === 'timeoff') status = 'timeoff';
+        else if (leave) status = 'vacation';
+        else if (offReason) status = 'off';
         rows.push({
           employeeId: emp.id,
           day: col.name,
@@ -701,12 +750,13 @@
           shifts: status === 'work' ? shifts.map((s) => ({ ...s })) : [],
           plannedShifts: shifts.map((s) => ({ ...s })),
           offReason,
+          rotation: rot,
           kind,
-          vacation: vac ? { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate } : null,
+          vacation: vac ? { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate, absence: leave } : null,
         });
       });
     });
-    return { seed, rows, strategy, week, start: week[0].key, end: week[6].key };
+    return { seed, rows, strategy: 'rotation', week, start: week[0].key, end: week[6].key };
   }
 
   function signature(rows) {
@@ -735,9 +785,10 @@
       row.kind = planned.length > 1 ? 'split' : 'standard';
       const vac = vacationOn(emp.id, row.date);
       if (vac) {
-        row.status = 'vacation';
+        const leave = absenceOf(vac);
+        row.status = leave === 'timeoff' ? 'timeoff' : 'vacation';
         row.shifts = [];
-        row.vacation = { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate };
+        row.vacation = { id: vac.id, type: vac.type, notes: vac.notes || '', startDate: vac.startDate, endDate: vac.endDate, absence: leave };
       } else if (row.offReason) {
         row.status = 'off';
         row.shifts = [];
@@ -752,109 +803,48 @@
     state.validation = validateSchedule();
   }
 
+  function pushIssue(issues, code, message) {
+    if (issues.filter((issue) => issue.code === code).length >= 6) return;
+    issues.push({ code, message });
+  }
+  function shiftKey(shifts) {
+    return (shifts || []).map((s) => `${s.start}-${s.end}`).sort().join(',');
+  }
   function validateSchedule() {
     const issues = [];
-    const weeks = scheduleWeeks();
-    if (!weeks.length) return { ok: false, issues: [{ code: 'complete', message: 'Generate a schedule first.' }], checks: {} };
-    weeks.forEach((week) => {
+    const rows = allRows();
+    if (!rows.length) return { ok: false, issues: [{ code: 'complete', message: 'Generate a schedule first.' }], checks: {} };
     const seen = new Set();
-    const at = (empId, day) => (week.rows || []).find((r) => r.employeeId === empId && r.day === day) || null;
-    week.rows.forEach((row) => {
+    rows.forEach((row) => {
       const key = `${row.employeeId}:${row.date}`;
-      if (seen.has(key)) issues.push({ code: 'duplicate', message: `Duplicate assignment for ${row.employeeId} on ${row.date}.` });
+      if (seen.has(key)) pushIssue(issues, 'duplicate', `Duplicate assignment for ${row.employeeId} on ${row.date}.`);
       seen.add(key);
-    });
-    state.employees.forEach((emp) => {
+      const emp = empById(row.employeeId);
+      if (!emp) return;
       const defined = normalizeShifts(emp);
-      if (!defined.length || defined.some((s) => s.end <= s.start)) {
-        issues.push({ code: 'shifts', message: `${emp.name} has an invalid shift time.` });
+      if (shiftsOverlap(defined)) pushIssue(issues, 'conflict', `${emp.name} has two conflicting shifts.`);
+      const leave = row.vacation ? absenceOf(row.vacation) : '';
+      if (row.day === 'Friday' && row.status === 'work') pushIssue(issues, 'friday', `${emp.name} is scheduled to work on ${row.date}.`);
+      if (leave === 'vacation' && row.status !== 'vacation') pushIssue(issues, 'vacation', `${emp.name} should be VACATION on ${row.date}.`);
+      if (leave === 'timeoff' && row.status !== 'timeoff') pushIssue(issues, 'timeoff', `${emp.name} should be TIME OFF on ${row.date}, not OFF.`);
+      if ((leave || row.status !== 'work') && row.shifts.length) pushIssue(issues, 'workvac', `${emp.name} still has a shift on ${row.date} while ${row.status}.`);
+      if (row.status === 'work' && leave) pushIssue(issues, 'workvac', `${emp.name} is scheduled during leave on ${row.date}.`);
+      if (!isAdvisor(emp.id)) return;
+      const rot = rotationIndexFor(row.date);
+      const expectThu = groupFor(rot, 'Thursday').includes(emp.id);
+      const expectSat = groupFor(rot, 'Saturday').includes(emp.id);
+      if (row.day === 'Thursday' && ((row.offReason === 'thursday') !== expectThu)) {
+        pushIssue(issues, 'rotation', `${emp.name} ${row.date} does not follow ${rotationName(rot)} Thursday.`);
       }
-      if (shiftsOverlap(defined)) {
-        issues.push({ code: 'conflict', message: `${emp.name} has two conflicting shifts.` });
+      if (row.day === 'Saturday' && ((row.offReason === 'saturday') !== expectSat)) {
+        pushIssue(issues, 'rotation', `${emp.name} ${row.date} does not follow ${rotationName(rot)} Saturday.`);
       }
-      const generated = [];
-      DAYS.forEach((day) => {
-        const row = at(emp.id, day);
-        if (!row) {
-          issues.push({ code: 'duplicate', message: `${emp.name} is missing ${day}.` });
-          return;
-        }
-        const vac = vacationOn(emp.id, row.date);
-        if (day === 'Friday' && row.status === 'work') {
-          issues.push({ code: 'friday', message: `${emp.name} is scheduled to work on Friday.` });
-        }
-        if (vac && row.status !== 'vacation') {
-          issues.push({ code: 'vacation', message: `${emp.name} is on vacation on ${day} but is still scheduled.` });
-        }
-        if (row.status === 'vacation' && row.shifts.length) {
-          issues.push({ code: 'workvac', message: `${emp.name} has a shift on ${day} while on vacation.` });
-        }
-        if (row.status === 'work' && vac) {
-          issues.push({ code: 'workvac', message: `${emp.name} is scheduled on ${day} during vacation.` });
-        }
-        if (row.offReason === 'generated') generated.push(day);
-        if (row.status === 'work') {
-          const got = row.shifts.map((s) => `${s.start}-${s.end}`).sort().join(',');
-          const want = defined.map((s) => `${s.start}-${s.end}`).sort().join(',');
-          if (got !== want) issues.push({ code: 'shifts', message: `${emp.name} has the wrong shift on ${day}.` });
-          if (defined.length > 1 && row.shifts.length < 2) issues.push({ code: 'split', message: `${emp.name} is missing a split shift on ${day}.` });
-        } else if (row.shifts.length) {
-          issues.push({ code: 'shifts', message: `${emp.name} is ${row.status} on ${day} but still has a shift.` });
-        }
-      });
-      const offDays = DAYS.filter((day) => {
-        const row = at(emp.id, day);
-        return row && row.status === 'off';
-      });
-      if (emp.offMode === 'friday-only') {
-        const extra = offDays.filter((d) => d !== 'Friday');
-        const friday = at(emp.id, 'Friday');
-        if (extra.length || !friday || friday.status === 'work') {
-          issues.push({ code: 'fixed', message: `${emp.name} must be off Friday only, and working every other day they are not on vacation.` });
-        }
+      if (!leave && row.offReason && row.status !== 'off') pushIssue(issues, 'rotation', `${emp.name} should be OFF on ${row.date}.`);
+      if (!leave && !row.offReason && row.status !== 'work') pushIssue(issues, 'rotation', `${emp.name} should be working on ${row.date}.`);
+      if (row.status === 'work' && shiftKey(row.shifts) !== shiftKey(defined)) {
+        const code = emp.id === '48476' ? 'split' : emp.id === '50338' ? 'ahmed' : 'noon';
+        pushIssue(issues, code, `${emp.name} has the wrong shift on ${row.date}.`);
       }
-      if (emp.offMode === 'fixed') {
-        const want = new Set(emp.fixedOffDays || []);
-        want.add('Friday');
-        DAYS.forEach((day) => {
-          const row = at(emp.id, day);
-          if (!row) return;
-          if (want.has(day) && row.status === 'work') issues.push({ code: 'fixed', message: `${emp.name} must be off on ${day}.` });
-          if (!want.has(day) && row.status === 'off') issues.push({ code: 'fixed', message: `${emp.name} is off on ${day}, which is not a fixed off day.` });
-        });
-      }
-      if (emp.offMode === 'flexible') {
-        const friday = at(emp.id, 'Friday');
-        const choices = WEEKDAYS.filter((d) => !vacationOn(emp.id, weekKey(week.week, d)));
-        if (!friday || friday.status === 'work' || (choices.length && generated.length !== 1)) {
-          issues.push({ code: 'fixed', message: `${emp.name} must be off Friday plus exactly one generated weekday.` });
-        }
-      }
-      if (emp.offMode === 'advisor-pool') {
-        const friday = at(emp.id, 'Friday');
-        const ok = generated.length === 1 && (generated[0] === 'Thursday' || generated[0] === 'Saturday');
-        if (!friday || friday.status === 'work' || !ok) {
-          issues.push({ code: 'pool', message: `${emp.name} must be off Friday and exactly one of Thursday or Saturday.` });
-        }
-      }
-    });
-    });
-    const pool = state.employees.filter((e) => e.offMode === 'advisor-pool');
-    const poolNotes = weeks.map((week) => {
-      const at = (empId, day) => (week.rows || []).find((r) => r.employeeId === empId && r.day === day) || null;
-      const thu = pool.filter((e) => { const row = at(e.id, 'Thursday'); return row && row.offReason === 'generated'; });
-      const sat = pool.filter((e) => { const row = at(e.id, 'Saturday'); return row && row.offReason === 'generated'; });
-      return { week, thu: thu.length, sat: sat.length };
-    }).filter((note) => pool.length !== 6 || note.thu !== 3 || note.sat !== 3);
-    if (poolNotes.length) {
-      const sample = poolNotes[0];
-      issues.push({
-        code: 'pool',
-        message: `Thursday/Saturday pool is ${sample.thu} Thursday OFF and ${sample.sat} Saturday OFF. A 3-and-3 split needs 6 people. Currently ${pool.length}: ${pool.map((e) => e.name).join(', ') || 'none'}.`,
-      });
-    }
-    state.warnings.forEach((w) => {
-      issues.push({ code: 'coverage', message: `${w.day} ${w.label} is short ${w.shortage}. ${w.people.length} on vacation would have worked this block.` });
     });
     const checks = {};
     CHECKS.forEach(([code]) => { checks[code] = !issues.some((issue) => issue.code === code); });
@@ -1054,6 +1044,9 @@
     } else if (emp.offMode === 'advisor-pool') {
       offs = 'Friday OFF · Thursday or Saturday OFF';
       mode = 'Advisor pool';
+    } else if (emp.offMode === 'rotation') {
+      offs = 'Friday OFF · Week A / Week B Thursday or Saturday';
+      mode = 'Sales advisor rotation';
     } else if (emp.offMode === 'flexible') {
       offs = 'Friday OFF · one extra weekday OFF';
       mode = 'Flexible';
@@ -1062,7 +1055,9 @@
   }
   function statusOf(emp) {
     const today = iso(new Date());
-    if (vacationOn(emp.id, today)) return { cls: 'vac', text: 'On vacation' };
+    const leave = vacationOn(emp.id, today);
+    if (leave && absenceOf(leave) === 'timeoff') return { cls: 'off', text: 'Time off' };
+    if (leave) return { cls: 'vac', text: 'On vacation' };
     const row = rowOnDate(emp.id, today);
     if (row && row.status === 'off') return { cls: 'off', text: 'Off today' };
     return { cls: '', text: 'Active' };
@@ -1131,8 +1126,8 @@
     }
     const health = state.validation.health;
     const n = state.validation.issues.length;
-    const label = health === 100 ? '100% VALID' : `${n} ISSUE${n === 1 ? '' : 'S'}`;
-    return `<article class="card health">${ring(health)}<div><b>SCHEDULE HEALTH</b><p>${label}</p>${n ? '<button class="btn small" type="button" data-act="issues">View issues</button>' : '<p class="muted">Every check passed.</p>'}</div></article>`;
+    const label = n ? `${n} SCHEDULE ISSUE${n === 1 ? '' : 'S'} FOUND` : 'SCHEDULE VALID';
+    return `<article class="card health">${ring(health)}<div><b>SCHEDULE HEALTH</b><p>${label}</p>${n ? '<button class="btn small" type="button" data-act="issues">View issues</button>' : '<p class="muted">Friday, rotation, shifts, and leave all match.</p>'}</div></article>`;
   }
 
   function dashboardView() {
@@ -1226,61 +1221,107 @@
     if (row.kind === 'split') return `<div class="cell-card work"><b>SPLIT SHIFT</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
     return `<div class="cell-card work"><b>WORK</b>${row.shifts.map((s) => `<span>${esc(s.label)}</span>`).join('')}</div>`;
   }
-  function monthCell(empId, date) {
-    const row = rowOnDate(empId, date.key);
-    const fri = date.name === 'Friday' ? ' fri' : '';
-    if (!row) return `<td class="st-empty${fri}">—</td>`;
-    if (row.status === 'vacation') return `<td class="st-vac${fri}">VAC</td>`;
-    if (row.status === 'off') return `<td class="st-off${fri}">OFF</td>`;
-    const hours = esc(compactShifts(row.shifts || [])) || 'WORK';
-    return `<td class="st-work${fri}">${hours}</td>`;
+  function cellPlain(row) {
+    if (!row) return '';
+    if (row.status === 'timeoff') return 'TIME OFF';
+    if (row.status === 'vacation') return 'VACATION';
+    if (row.status === 'off') return 'OFF';
+    return (row.shifts || []).map((s) => prettySpan(s)).join('\n');
+  }
+  function cellHtml(row) {
+    const text = cellPlain(row);
+    if (!text) return '—';
+    return esc(text).replace(/\n/g, '<br>');
+  }
+  function cellClass(row) {
+    if (!row) return 'st-empty';
+    if (row.status === 'timeoff') return 'st-leave';
+    if (row.status === 'vacation') return 'st-vac';
+    if (row.status === 'off') return 'st-off';
+    return 'st-work';
+  }
+  function scheduleControls() {
+    const when = scheduleMonth();
+    const year = state.pickYear || (when ? when.year : new Date().getFullYear());
+    const month = state.pickMonth != null ? state.pickMonth : (when ? when.month : new Date().getMonth());
+    const start = state.settings.rotationStart || iso(new Date(year, month, 1));
+    const years = [];
+    for (let y = 2026; y <= 2029; y += 1) years.push(y);
+    if (!years.includes(year)) years.unshift(year);
+    return `<div class="sched-controls">
+      <label>Month<select id="sched-month">${MONTHS.map((name, i) => `<option value="${i}" ${i === month ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
+      <label>Year<select id="sched-year">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+      <label>Schedule start<input id="sched-start" type="date" value="${esc(start)}" /></label>
+      <button class="btn-primary" type="button" data-act="do-generate">Generate schedule</button>
+      <button class="btn" type="button" data-act="regen">Regenerate</button>
+      <button class="btn" type="button" data-act="validate">Validate</button>
+      ${exportMenu()}
+    </div>`;
   }
   function monthBoard() {
     const when = scheduleMonth();
-    if (!when) return emptyBlock('NO SCHEDULE GENERATED', 'Choose a month and the generator will apply every rule, off day, and vacation.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>');
+    if (!when) return emptyBlock('NO SCHEDULE GENERATED', 'Choose a month and year. The rotation fills every date from the schedule start.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>');
     const dates = monthDates(when.year, when.month);
-    const head = dates.map((d) => `<th class="${d.name === 'Friday' ? 'fri' : ''}">${d.day}<br><span>${d.dow}</span></th>`).join('');
-    const body = state.employees.map((emp) => `<tr><td class="who"><b>${esc(emp.name)}</b><small>${esc(emp.position)}</small></td>${dates.map((d) => monthCell(emp.id, d)).join('')}</tr>`).join('');
-    return `<div class="month-sheet"><table><thead><tr><th class="who">${MONTHS[when.month]} ${when.year}</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    const head = ADVISORS.map((a) => `<th>${a.ar}<br><span>${esc(a.short)}</span></th>`).join('');
+    const body = dates.map((d) => {
+      const cells = ADVISORS.map((a) => {
+        const row = rowOnDate(a.id, d.key);
+        return `<td class="${cellClass(row)}">${cellHtml(row)}</td>`;
+      }).join('');
+      const fri = d.name === 'Friday' ? ' fri' : '';
+      return `<tr class="${fri}"><td class="who"><b>${d.key}</b><small>${d.day} ${MONTHS_SHORT[when.month]}</small></td><td>${esc(d.name)}<br><span>${rotationName(rotationIndexFor(d.key))}</span></td>${cells}</tr>`;
+    }).join('');
+    return `<div class="month-sheet"><table><thead><tr><th class="who">التاريخ</th><th>اليوم</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
   function scheduleView() {
     const when = scheduleMonth();
     const period = when ? `${fmtLong(iso(new Date(when.year, when.month, 1)))} – ${fmtLong(iso(new Date(when.year, when.month + 1, 0)))}` : 'No month generated';
-    const same = state.sameArrangement ? ' Flexible off days stayed in the same places.' : '';
-    const meta = state.schedule ? `Arrangement #${state.generation}. Strategy: ${state.schedule.strategy || 'balanced'}. ${scheduleWeeks().length} week${scheduleWeeks().length === 1 ? '' : 's'}.${same}` : (state.stale ? 'Rules changed. Generate the month again.' : '');
+    const anchor = rotationStartKey();
+    const meta = state.schedule ? `Rotation from ${fmtLong(anchor)}. Week A, then Week B, repeating. ${scheduleWeeks().length} weeks in view.` : (state.stale ? 'Generate the month again.' : '');
     return `<div class="wrap wide">
-      ${pageHead('Schedule', period, `<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button><button class="btn" type="button" data-act="regen">Regenerate</button><button class="btn" type="button" data-act="validate">Validate</button>${exportMenu()}`)}
-      <p class="muted screen-only">${esc(meta)}</p>
-      <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span></div>
-      <div class="screen-only">${healthCard()}${warnHtml()}</div>
+      ${pageHead('Schedule', period)}
+      ${scheduleControls()}
+      <p class="muted screen-only">${esc(meta)} Week A starts on the Thursday of the schedule start date. Vacation and time off cover that day only.</p>
+      <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span><span><i class="dot" style="background:#b54708"></i>Time off</span></div>
+      <div class="screen-only">${healthCard()}</div>
       <div style="margin-top:14px">${monthBoard()}</div>
     </div>`;
   }
 
+  function advisorManpower() {
+    const when = scheduleMonth();
+    if (!when) return [];
+    return monthDates(when.year, when.month).map((date) => {
+      const names = BLOCKS.map(() => []);
+      if (date.name !== 'Friday') {
+        ADVISORS.forEach((advisor) => {
+          const row = rowOnDate(advisor.id, date.key);
+          if (!row || row.status !== 'work') return;
+          BLOCKS.forEach((block, index) => {
+            const minutes = (row.shifts || []).reduce((sum, shift) => {
+              const start = Math.max(shift.start, block.start);
+              const end = Math.min(shift.end, block.end);
+              return sum + Math.max(0, end - start);
+            }, 0);
+            if (minutes >= 60) names[index].push(advisor.short);
+          });
+        });
+      }
+      const unique = new Set(names.flat());
+      return { ...date, names, counts: names.map((list) => list.length), total: date.name === 'Friday' ? 0 : unique.size };
+    });
+  }
   function manpowerView() {
-    const coverage = buildCoverage();
-    if (!coverage.length) {
-      return `<div class="wrap">${pageHead('Manpower', 'Control tower')}${emptyBlock('NO SCHEDULE GENERATED', 'Manpower is counted from the week that contains today.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')}</div>`;
+    const rows = advisorManpower();
+    if (!rows.length) {
+      return `<div class="wrap">${pageHead('Manpower', 'Sales advisor manpower')}${emptyBlock('NO SCHEDULE GENERATED', 'Generate a month to count morning, afternoon, and evening coverage.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>')}</div>`;
     }
-    const roles = [['total', 'Total'], ...ROLES];
-    let max = 1;
-    coverage.forEach((day) => day.blocks.forEach((block) => { max = Math.max(max, displayedCount(block, state.heatRole)); }));
-    const head = BLOCKS.map((b) => `<th>${esc(b.short)}<br>${esc(b.label)}</th>`).join('');
-    const body = coverage.map((day) => {
-      const cells = day.blocks.map((block) => {
-        const n = displayedCount(block, state.heatRole);
-        if (day.closed) return `<td><button class="heat-closed" type="button" data-act="who" data-day="${esc(day.day)}" data-block="${esc(block.id)}">0</button></td>`;
-        const color = heatColor(n, max);
-        const ink = n > max * 0.62 ? '#fff' : '#143d36';
-        return `<td><button class="heat-cell" type="button" style="background:${color};color:${ink}" data-act="who" data-day="${esc(day.day)}" data-block="${esc(block.id)}">${n}</button></td>`;
-      }).join('');
-      return `<tr><th>${esc(day.day)}</th>${cells}</tr>`;
-    }).join('');
-    return `<div class="wrap">
-      ${pageHead('Manpower', focusWeek() ? `${fmtShort(focusWeek().start)} – ${fmtLong(focusWeek().end)}` : '', exportMenu())}
-      <div class="seg">${roles.map(([id, label]) => `<button type="button" class="${state.heatRole === id ? 'on' : ''}" data-act="heat" data-role="${id}">${label}</button>`).join('')}</div>
-      <article class="card" style="overflow:auto"><table class="heat"><thead><tr><th>Day</th>${head}</tr></thead><tbody>${body}</tbody></table><p class="muted">Friday stays closed. Select a cell to see who is working.</p></article>
-      ${warnHtml()}
+    const when = scheduleMonth();
+    const body = rows.map((row) => `<tr class="${row.name === 'Friday' ? 'fri' : ''}"><td>${row.key}</td><td>${esc(row.name)}</td>${row.counts.map((n, i) => `<td><b>${n}</b><br><span class="muted">${esc(row.names[i].join(', ') || '—')}</span></td>`).join('')}<td><b>${row.total}</b></td></tr>`).join('');
+    return `<div class="wrap wide">
+      ${pageHead('Manpower', `${MONTHS[when.month]} ${when.year}`, exportMenu())}
+      <h2 class="section-title">Sales advisor manpower</h2>
+      <article class="card" style="overflow:auto"><table class="list"><thead><tr><th>Date</th><th>Day</th><th>9–12<br>Morning</th><th>12–5<br>Afternoon</th><th>5–9<br>Evening</th><th>Total</th></tr></thead><tbody>${body}</tbody></table><p class="muted">Friday is 0. Vacation and time off are left out. The rotation itself does not change.</p></article>
     </div>`;
   }
 
@@ -1332,13 +1373,23 @@
     </div>`;
   }
 
-  function rulesView() {
-    const cards = state.employees.map((emp) => {
-      const rule = ruleSummary(emp);
-      const extra = state.schedule ? DAYS.filter((d) => { const row = rowFor(emp.id, d); return row && row.offReason === 'generated'; }) : [];
-      return `<article class="card rule"><div><b>${esc(emp.name)}</b><p class="muted">${esc(emp.position)} · ${esc(emp.id)}</p><p>Shift: ${esc(rule.hours)}</p><p>Friday: OFF</p><p>Additional off: ${esc(rule.offs)}</p><p>Vacation: Allowed${vacationsFor(emp.id).length ? ` · ${vacationsFor(emp.id).length} period${vacationsFor(emp.id).length === 1 ? '' : 's'}` : ''}</p>${extra.length ? `<p>This week: ${esc(extra.join(', '))} OFF</p>` : ''}${emp.notes ? `<p>${esc(emp.notes)}</p>` : ''}</div><button class="btn small" type="button" data-act="edit" data-id="${esc(emp.id)}">Edit</button></article>`;
+  function rotationList(ids) {
+    return ids.map((id) => {
+      const known = ADVISORS.find((a) => a.id === id);
+      const emp = empById(id);
+      return `<div class="check"><span>${esc(emp ? emp.name : id)}</span><b>${esc(known ? known.ar : '')}</b></div>`;
     }).join('');
-    return `<div class="wrap">${pageHead('Rules', 'Mandatory rules win over balancing.', '<button class="btn-primary" type="button" data-act="add-employee">+ Add employee</button>')}<div class="emp-grid" style="grid-template-columns:1fr">${cards}</div></div>`;
+  }
+  function rulesView() {
+    const anchor = fmtLong(rotationStartKey());
+    return `<div class="wrap">
+      ${pageHead('Rotation', `Week A starts ${anchor}, then Week B, Week A, Week B.`)}
+      <div class="grid-2">
+        <article class="card"><h2 style="margin-top:0">Week A</h2><p class="muted">Thursday OFF</p>${rotationList(THU_A)}<p class="muted" style="margin-top:12px">Saturday OFF</p>${rotationList(SAT_A)}<p>Friday is OFF for every sales advisor.</p></article>
+        <article class="card"><h2 style="margin-top:0">Week B</h2><p class="muted">Thursday OFF</p>${rotationList(SAT_A)}<p class="muted" style="margin-top:12px">Saturday OFF</p>${rotationList(THU_A)}<p>Friday is OFF for every sales advisor.</p></article>
+      </div>
+      <article class="card" style="margin-top:14px"><b>WEEK A → WEEK B → WEEK A → WEEK B</b><p class="muted">Ali works 8:50am – 12:45pm and 5:00pm – 9:00pm. Ahmed Yousef works 9:00am – 6:00pm. The other advisors work 12:00pm – 9:00pm. Vacation and time off replace that day’s cell only. The next week stays on the rotation.</p></article>
+    </div>`;
   }
 
   const views = { dashboard: dashboardView, employees: employeesView, schedule: scheduleView, manpower: manpowerView, vacations: vacationsView, rules: rulesView };
@@ -1450,23 +1501,19 @@
   function openGenerate() {
     const when = scheduleMonth();
     const now = new Date();
-    const year = when ? when.year : now.getFullYear();
-    const month = when ? when.month : now.getMonth();
-    const strategy = state.settings.strategy || 'balanced';
-    openOverlay(`<h2 style="margin-top:0">Generate schedule</h2><p class="muted">The whole month. Each Saturday–Friday week keeps vacations, fixed offs, and Friday closure, then balances manpower.</p>
+    const year = state.pickYear || (when ? when.year : now.getFullYear());
+    const month = state.pickMonth != null ? state.pickMonth : (when ? when.month : now.getMonth());
+    const start = state.settings.rotationStart || iso(new Date(year, month, 1));
+    openOverlay(`<h2 style="margin-top:0">Generate schedule</h2><p class="muted">Every date in the month follows Week A, then Week B. Vacation does not move the rotation.</p>
       <div class="field"><label>Month</label><input id="g-month" type="month" value="${year}-${pad(month + 1)}" /></div>
-      <p class="muted" id="g-week">Every day in ${MONTHS[month]} ${year}.</p>
-      <div class="field"><label>Scheduling strategy</label>
-        <label><input type="radio" name="strategy" value="balanced" ${strategy === 'balanced' ? 'checked' : ''} /> Balanced</label><br>
-        <label><input type="radio" name="strategy" value="maximum" ${strategy === 'maximum' ? 'checked' : ''} /> Maximum coverage</label><br>
-        <label><input type="radio" name="strategy" value="minimum" ${strategy === 'minimum' ? 'checked' : ''} /> Minimum staff cost</label>
-      </div>
+      <div class="field"><label>Schedule start date</label><input id="g-start" type="date" value="${esc(start)}" /></div>
+      <p class="muted" id="g-week">Week A is the Thursday week of this date. Then Week B, Week A, Week B.</p>
       <div class="actions"><button class="btn-ghost" type="button" data-act="close">Cancel</button><button class="btn-primary" type="button" data-act="do-generate">Generate schedule</button></div>`);
   }
-  function playGenerate(year, month, strategy) {
+  function playGenerate(year, month) {
     if (state.busy) return;
     state.busy = true;
-    const steps = ['ANALYZING EMPLOYEES...', 'CHECKING VACATIONS...', 'APPLYING SHIFT RULES...', 'BALANCING MANPOWER...', 'VALIDATING SCHEDULE...'];
+    const steps = ['READING THE ROTATION...', 'CHECKING VACATIONS...', 'APPLYING WEEK A AND WEEK B...', 'COUNTING MANPOWER...', 'VALIDATING SCHEDULE...'];
     let index = 0;
     const paint = (done) => {
       openOverlay(`<h2 style="margin-top:0">${done ? 'SCHEDULE GENERATED' : 'Generating'}</h2>${steps.map((text, i) => `<div class="step ${done || i < index ? 'done' : ''} ${!done && i === index ? 'on' : ''}">${done || i < index ? '✓' : '○'} ${text}</div>`).join('')}${done ? '<p>✓ The month is ready.</p>' : ''}`);
@@ -1490,7 +1537,7 @@
         return;
       }
       try {
-        runGenerate(year, month, strategy);
+        runGenerate(year, month);
         finish(true);
       } catch (err) {
         finish(false);
@@ -1498,28 +1545,27 @@
     };
     setTimeout(tick, 420);
   }
-  function runGenerate(year, month, strategy) {
-    const had = state.generation > 0 && !!state.lastSig;
-    const base = (Date.now() ^ (state.generation * 10007)) >>> 0;
-    const minManpower = Number(state.settings.minManpower) || 8;
-    const previous = new Set(String(state.lastSig || '').split('||'));
-    const built = weeksTouchingMonth(year, month).map((week, index) => {
-      let best = null;
-      for (let i = 0; i < 8; i += 1) {
-        const result = generateSchedule(state.employees, (base + index * 100003 + i * 9973) >>> 0, week, state.vacations, strategy, minManpower);
-        result.sig = signature(result.rows);
-        best = result;
-        if (!previous.has(result.sig)) break;
-      }
-      return best;
+  function runGenerate(year, month) {
+    syncAdvisorRoster();
+    if (!state.settings.rotationStart) state.settings.rotationStart = iso(new Date(year, month, 1));
+    const built = weeksTouchingMonth(year, month).map((week) => {
+      const result = generateSchedule(state.employees, 1, week, state.vacations);
+      result.sig = signature(result.rows);
+      return result;
     });
-    const sig = built.map((w) => w.sig).join('||');
-    state.sameArrangement = had && sig === state.lastSig;
-    state.lastSig = sig;
-    state.schedule = { year, month, strategy, start: iso(new Date(year, month, 1)), end: iso(new Date(year, month + 1, 0)), weeks: built };
+    state.sameArrangement = false;
+    state.lastSig = built.map((w) => w.sig).join('||');
+    state.schedule = {
+      year,
+      month,
+      strategy: 'rotation',
+      rotationStart: state.settings.rotationStart,
+      start: iso(new Date(year, month, 1)),
+      end: iso(new Date(year, month + 1, 0)),
+      weeks: built,
+    };
     state.generation += 1;
     state.stale = false;
-    state.settings.strategy = strategy;
     applyVacations();
     save();
   }
@@ -1545,6 +1591,7 @@
       <div class="field"><label>Additional rules</label><select id="e-mode">
         <option value="friday-only" ${mode === 'friday-only' ? 'selected' : ''}>Friday only</option>
         <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>Fixed off days</option>
+        <option value="rotation" ${mode === 'rotation' ? 'selected' : ''}>Sales advisor rotation</option>
         <option value="advisor-pool" ${mode === 'advisor-pool' ? 'selected' : ''}>Advisor pool (Thursday / Saturday)</option>
         <option value="flexible" ${mode === 'flexible' ? 'selected' : ''}>Flexible extra off day</option>
       </select></div>
@@ -1593,6 +1640,7 @@
       <div class="field"><label>Until</label><input class="v-until" type="date" value="${esc(range.endDate || '')}" /></div>
       <button class="btn-ghost small" type="button" data-act="vac-remove-range">Remove</button>
       <div class="field vac-type"><label>Type</label><select class="v-type">${type}</select></div>
+      <div class="field vac-type"><label>Shown as</label><select class="v-absence"><option value="vacation" ${range.absence === 'timeoff' ? '' : 'selected'}>Vacation</option><option value="timeoff" ${range.absence === 'timeoff' ? 'selected' : ''}>Time off</option></select></div>
       <input class="v-notes" type="hidden" value="${esc(range.notes || '')}" />
     </div>`;
   }
@@ -1651,6 +1699,7 @@
         id: rows[i].dataset.id || newVacId(),
         employeeId,
         type: rows[i].querySelector('.v-type').value,
+        absence: rows[i].querySelector('.v-absence').value === 'timeoff' ? 'timeoff' : 'vacation',
         startDate,
         endDate,
         notes: rows[i].querySelector('.v-notes').value.trim(),
@@ -1738,30 +1787,18 @@
     if (!state.validation) return;
     const passed = CHECKS.filter(([code]) => state.validation.checks[code]).map(([, label]) => `<div class="check"><span>✓ ${label}</span></div>`).join('');
     const failed = state.validation.issues.map((issue) => `<li>${esc(issue.message)}</li>`).join('');
-    openOverlay(`<h2 style="margin-top:0">Schedule health ${state.validation.health}%</h2>${failed ? `<ul>${failed}</ul>` : '<p>100% valid.</p>'}<h3>Passed</h3>${passed}<button class="btn" type="button" data-act="close">Close</button>`);
+    const title = state.validation.issues.length ? `${state.validation.issues.length} SCHEDULE ISSUES FOUND` : 'SCHEDULE VALID';
+    openOverlay(`<h2 style="margin-top:0">${title}</h2>${failed ? `<ul>${failed}</ul>` : '<p>Friday, rotation, shifts, and leave all match.</p>'}<h3>Passed</h3>${passed}<button class="btn" type="button" data-act="close">Close</button>`);
   }
 
   function exportExcel() {
     const when = scheduleMonth();
     if (!when) { toast('Generate a schedule before exporting.'); return; }
     const dates = monthDates(when.year, when.month);
-    const head = ['Employee', 'ID', 'Department', 'Position', ...dates.map((d) => `${d.day} ${d.dow}`)];
-    const rows = state.employees.map((emp) => {
-      const cells = dates.map((d) => {
-        const row = rowOnDate(emp.id, d.key);
-        if (!row) return '';
-        if (row.status === 'vacation') return `VACATION - ${row.vacation ? row.vacation.type : ''}`.trim();
-        if (row.status === 'off') return 'OFF';
-        return row.shifts.map((s) => s.label).join(' | ');
-      });
-      return [emp.name, emp.id, emp.department, emp.position, ...cells];
-    });
-    const man = [['Day', 'Block', 'Sales Advisors', 'Promoters', 'Test Drive', 'Coordinator', 'Other', 'Total']];
-    buildCoverage().forEach((day) => {
-      day.blocks.forEach((block) => {
-        man.push([day.day, day.closed ? 'OFF / CLOSED' : block.label, block.counts.advisor, block.counts.promoter, block.counts.testdrive, block.counts.coordinator, block.counts.other, block.total]);
-      });
-    });
+    const head = ['Date', 'Day', 'Rotation', ...ADVISORS.map((a) => a.short)];
+    const rows = dates.map((d) => [d.key, d.name, rotationName(rotationIndexFor(d.key)), ...ADVISORS.map((a) => cellPlain(rowOnDate(a.id, d.key)))]);
+    const man = [['Date', 'Day', '9-12', '12-5', '5-9', 'Total']];
+    advisorManpower().forEach((row) => man.push([row.key, row.name, row.counts[0], row.counts[1], row.counts[2], row.total]));
     const table = (title, headers, body) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table(`${MONTHS[when.month]} ${when.year} schedule`, head, rows)}${table('Manpower', man[0], man.slice(1))}</body></html>`;
     const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
@@ -1801,17 +1838,30 @@
     if (act === 'open-generate') openGenerate();
     if (act === 'do-generate') {
       if (!state.employees.length) { toast('Add an employee first.'); return; }
-      const parts = String(($('#g-month') || {}).value || '').split('-');
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      if (!year || month < 0) { toast('Choose a month.'); return; }
-      const strategy = ($('#overlay input[name=strategy]:checked') || {}).value || 'balanced';
-      playGenerate(year, month, strategy);
+      let year;
+      let month;
+      let start = '';
+      if ($('#sched-month') && $('#sched-year')) {
+        month = parseInt($('#sched-month').value, 10);
+        year = parseInt($('#sched-year').value, 10);
+        start = $('#sched-start') ? $('#sched-start').value : '';
+      } else {
+        const parts = String(($('#g-month') || {}).value || '').split('-');
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10) - 1;
+        start = $('#g-start') ? $('#g-start').value : '';
+      }
+      if (!year || month < 0 || month > 11) { toast('Choose a month.'); return; }
+      state.pickYear = year;
+      state.pickMonth = month;
+      state.settings.rotationStart = start || iso(new Date(year, month, 1));
+      playGenerate(year, month);
     }
     if (act === 'regen') {
       if (!state.employees.length) return;
-      const when = scheduleMonth() || { year: new Date().getFullYear(), month: new Date().getMonth() };
-      playGenerate(when.year, when.month, state.settings.strategy || 'balanced');
+      const when = scheduleMonth() || { year: state.pickYear || new Date().getFullYear(), month: state.pickMonth != null ? state.pickMonth : new Date().getMonth() };
+      if (!state.settings.rotationStart) state.settings.rotationStart = iso(new Date(when.year, when.month, 1));
+      playGenerate(when.year, when.month);
     }
     if (act === 'validate') {
       if (!state.schedule) { toast('Generate a schedule first.'); return; }
@@ -1819,7 +1869,7 @@
       save();
       render();
       if (state.validation.issues.length) issuesModal();
-      else toast('100% valid');
+      else toast('SCHEDULE VALID');
     }
     if (act === 'issues') issuesModal();
     if (act === 'chart') { state.chartRole = btn.dataset.role; render(); }
@@ -1967,6 +2017,9 @@
       render();
     }
     if (event.target.id === 'v-emp') paintVacationRanges(event.target.value);
+    if (event.target.id === 'sched-month') state.pickMonth = parseInt(event.target.value, 10);
+    if (event.target.id === 'sched-year') state.pickYear = parseInt(event.target.value, 10);
+    if (event.target.id === 'sched-start' || event.target.id === 'g-start') state.settings.rotationStart = event.target.value;
     if (event.target.classList && (event.target.classList.contains('v-from') || event.target.classList.contains('v-until'))) updateVacationDays();
     if (event.target.id === 'e-mode') $('#fixed-wrap').hidden = event.target.value !== 'fixed';
     if (event.target.id === 'e-split') $('#split-times').hidden = !event.target.checked;
@@ -2029,6 +2082,10 @@
   document.body.addEventListener('mouseleave', (event) => { if (event.target.id === 'man-chart') { const tip = $('#chart-tip'); if (tip) tip.style.opacity = 0; } }, true);
 
   load();
+  if (syncAdvisorRoster()) {
+    clearSchedule();
+    save();
+  }
   applyVacations();
   const hash = location.hash.replace('#', '');
   state.view = VIEWS.includes(hash) ? hash : 'dashboard';
