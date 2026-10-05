@@ -110,10 +110,17 @@
 .gcc-f-date { flex-direction: column; }
 .gcc-f-date > span { display: block; }
 .gcc-f-date em { font-style: normal; color: var(--dim); margin: 0 6px; }
-#gec-host .gcc .gcc-f-date input[type="date"] { font-size: 13px; font-weight: 600; height: 19px; width: 128px; padding: 0 !important; color-scheme: light; cursor: pointer; }
-#gec-host .gcc .gcc-f-date input:disabled { opacity: 0.5; }
-.gcc-f-date { display: inline-grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; column-gap: 0; }
-.gcc-f-date > span { grid-column: 1 / -1; }
+#gec-host .gcc .gcc-f.gcc-f-date { height: auto; min-height: 58px; min-width: 340px; flex: none; overflow: visible; padding-top: 5px; padding-bottom: 5px; }
+#gec-host .gcc .gcc-f-date input[type="date"] {
+  font-size: 13px !important; font-weight: 700 !important; height: 28px !important; width: 148px !important;
+  padding: 0 4px !important; margin: 0; border: 0 !important; background: transparent !important;
+  color: #0f172a !important; box-shadow: none !important; color-scheme: light; cursor: pointer;
+}
+#gec-host .gcc .gcc-f-date input[type="date"]::-webkit-calendar-picker-indicator { display: block; opacity: 1; cursor: pointer; }
+#gec-host .gcc .gcc-f-date input:disabled { opacity: 0.55; }
+.gcc-f-date { display: inline-grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto auto; column-gap: 0; align-items: center; }
+.gcc-f-date > span, .gcc-date-range { grid-column: 1 / -1; }
+.gcc-date-range { font-size: 11px; font-weight: 700; color: #0f172a; line-height: 1.2; white-space: nowrap; }
 .gcc-f.is-active { border-color: rgba(37, 99, 235, 0.45); background: #f3f7ff; }
 .gcc-f.is-active > span { color: #2563eb; }
 .gcc-fchips { display: inline-flex; gap: 6px; }

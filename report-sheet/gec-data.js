@@ -206,14 +206,25 @@
   }
   const isActualSalesOrder = (v) => salesOrderState(v) === "order";
 
-  /** Sales Response has a real value. */
+  /**
+   * Meet Sales Advisor: the Sales Response cell counts only when it contains both a date and a time.
+   * A date with no time, a time with no date, a blank, or any other text does not count.
+   */
   function hasSalesResponse(v) {
-    if (v == null) return false;
-    if (typeof v === "number") return Number.isFinite(v);
-    const s = norm(v);
+    if (v == null || v === "") return false;
+    if (v instanceof Date) {
+      return !isNaN(v) && v.getFullYear() >= 1990 && !!(v.getHours() || v.getMinutes() || v.getSeconds() || v.getMilliseconds());
+    }
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) return false;
+      const day = Math.floor(v);
+      return day > 30000 && day < 80000 && (v - day) > 1e-6;
+    }
+    const s = normalizeDateText(v);
     if (!s) return false;
-    if (!noResponseSet) noResponseSet = new Set(config.NO_RESPONSE_VALUES.map(norm));
-    return !noResponseSet.has(s);
+    if (/^\d+(\.\d+)?$/.test(s)) return hasSalesResponse(Number(s));
+    if (!parseAnyDate(s)) return false;
+    return /(\d{1,2}):(\d{2})/.test(s);
   }
 
   /** Employee Number cell → normalised string key ("" when blank). */
@@ -307,11 +318,25 @@
     return isNaN(dt) || dt.getFullYear() < 1990 || dt.getMonth() !== mo ? null : dt;
   }
 
+  function normalizeDateText(v) {
+    return str(v)
+      .replace(/[\u202a-\u202e\u2066-\u2069]/g, "")
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/\u00a0/g, " ")
+      .trim();
+  }
+
   function parseAnyDate(v) {
     if (v == null || v === "") return null;
     if (v instanceof Date) return isNaN(v) || v.getFullYear() < 1990 ? null : v;
-    if (typeof v === "number") return isSerial(v) ? serialToDate(v) : null;
-    const s = str(v);
+    if (typeof v === "number") {
+      if (isSerial(v)) return serialToDate(v);
+      if (Number.isInteger(v) && v >= 19900101 && v <= 21001231) return parseAnyDate(String(v));
+      return null;
+    }
+    const s = normalizeDateText(v);
     if (!s) return null;
     let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(am|pm|ص|م)?)?/i);
     if (m) return buildDate(+m[1], +m[2] - 1, +m[3], m[4], m[5], m[6], m[7]);
@@ -328,7 +353,13 @@
       const y = +m[3] < 100 ? 2000 + +m[3] : +m[3];
       return buildDate(y, MONTHS[m[2].toLowerCase()], +m[1], m[4], m[5], m[6], m[7]);
     }
+    if (/^\d{8}$/.test(s)) {
+      const ymd = buildDate(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
+      if (ymd && ymd.getFullYear() <= 2100) return ymd;
+    }
     if (/^\d+(\.\d+)?$/.test(s)) return parseAnyDate(Number(s));
+    const embedded = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/) || s.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+    if (embedded && embedded.index > 0) return parseAnyDate(embedded[0]);
     const t = Date.parse(s);
     return Number.isFinite(t) && new Date(t).getFullYear() >= 1990 ? new Date(t) : null;
   }
@@ -351,9 +382,37 @@
   const hasTime = (d) => d && (d.getHours() || d.getMinutes() || d.getSeconds());
   const atMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-  /** Date filter source: column J of the uploaded sheet. */
-  function columnJDate(line) {
-    return parseAnyDate(line && line[colIndex("J")]);
+  /** Date filter source: column J of the uploaded sheet (raw value, then the date Excel displays). */
+  function dateFromWorksheetCell(cell) {
+    if (!cell) return null;
+    const direct = parseAnyDate(cell.v);
+    if (direct) return direct;
+    const shown = parseAnyDate(cell.w);
+    if (shown) return shown;
+    if (cell.z && global.XLSX && global.XLSX.SSF && cell.v != null && cell.v !== "") {
+      try { return parseAnyDate(global.XLSX.SSF.format(cell.z, cell.v)); } catch { return null; }
+    }
+    return null;
+  }
+
+  function columnJCell(ws, rowIndex) {
+    if (!ws || rowIndex == null || rowIndex < 0) return null;
+    return ws[colLetter(colIndex("J")) + (rowIndex + 1)] || null;
+  }
+
+  function columnJDate(line, textLine, ws, rowIndex) {
+    const idx = colIndex("J");
+    return dateFromWorksheetCell(columnJCell(ws, rowIndex))
+      || parseAnyDate(line && line[idx])
+      || parseAnyDate(textLine && textLine[idx]);
+  }
+
+  function columnJLabel(line, textLine, ws, rowIndex) {
+    const idx = colIndex("J");
+    const cell = columnJCell(ws, rowIndex);
+    const hit = [cell && cell.w, cell && cell.v, textLine && textLine[idx], line && line[idx]]
+      .find((v) => v != null && String(v).trim() !== "");
+    return hit == null ? "" : String(hit).replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
   function leadDateOf(createdCell, timeCell) {
@@ -698,25 +757,30 @@
     }
 
     const records = [];
+    const columnJSample = [];
     groups.forEach((g) => {
       let latest = g.rows[g.rows.length - 1];
       if (colMap.modifiedDate != null) {
         g.rows.forEach((e) => { if (e.modified && (!latest.modified || e.modified >= latest.modified)) latest = e; });
       }
       const line = latest.line;
+      const textLine = text[latest.r] || [];
       let leadDate = leadDateOf(cell(line, "createdDate"), cell(line, "createdTime"));
       if (!leadDate) {
         const dated = g.rows.map((e) => leadDateOf(cell(e.line, "createdDate"), cell(e.line, "createdTime"))).filter(Boolean);
         leadDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
       if (!leadDate) leadDate = parseAnyDate(line[colIndex("O")]);
-      let sheetDate = columnJDate(line);
+      let sheetDate = columnJDate(line, textLine, best.ws, latest.r);
       if (!sheetDate) {
-        const dated = g.rows.map((e) => columnJDate(e.line)).filter(Boolean);
+        const dated = g.rows.map((e) => columnJDate(e.line, text[e.r] || [], best.ws, e.r)).filter(Boolean);
         sheetDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
       const filterDate = sheetDate;
-      const textLine = text[latest.r] || [];
+      if (!filterDate && columnJSample.length < 3) {
+        const label = columnJLabel(line, textLine, best.ws, latest.r);
+        if (label && !columnJSample.includes(label)) columnJSample.push(label);
+      }
       const shown = (key) => {
         const rawV = cell(line, key);
         const t = str(colMap[key] != null && textLine[colMap[key]] !== "" && textLine[colMap[key]] != null ? textLine[colMap[key]] : rawV);
@@ -799,6 +863,7 @@
     if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column J — left out when a date is selected.`);
 
     const days = records.map((x) => x.day).filter(Boolean).sort();
+    const dateHint = days.length ? "" : (columnJSample.length ? `Column J: ${columnJSample.join(" · ")}` : "Column J is blank");
     return applyControl({
       ok: records.length > 0,
       fileName: options.fileName || "",
@@ -817,6 +882,7 @@
       hasConsultant: colMap.consultant != null,
       productColumns: productCols.map((p) => ({ letter: p.letter, header: p.header })),
       range: { from: days[0] || "", to: days[days.length - 1] || "" },
+      dateHint,
       sheets,
       visitors,
       _source: { matrix, headerIdx: best.headerIdx, colMap },
@@ -1506,7 +1572,7 @@
     add("No promoter assigned (leads only)", blankRLeads, k.assignmentErrorLeads);
     add("Invalid Promoter (leads only)", invalidRLeads, k.invalidPromoterLeads);
     add("Assigned + No promoter assigned + Invalid = Total leads", k.total, k.knownPromoter + k.assignmentErrorLeads + k.invalidPromoterLeads);
-    add("Sales Response (field not empty)", resp, k.responded);
+    add("Sales Response with a date and a time", resp, k.responded);
     add("Actual Sales Orders (NO ORDER excluded)", orders, k.salesOrders);
     add("NO ORDER rows (unique)", noOrd, k.noOrder);
     add("Converted = isConverted(Status)", conv, k.converted, enabledStatuses("conversion").join(" · "));
