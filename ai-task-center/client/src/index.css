@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  background: #f4f6fb;
+  color: #0f172a;
+}
+.dark body { background: #0b1020; color: #e8edf7; }
+
+button, input, select, textarea { font: inherit; }
