@@ -370,9 +370,12 @@
     { id: '47674', ar: 'منصور القحطاني', short: 'Mansour' },
   ];
   const ADVISOR_IDS = ADVISORS.map((a) => a.id);
+  const PROMOTER_ROT = ['50651', '50648', '50649'];
+  const MIDWEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday'];
   const CHECKS = [
     ['friday', 'Friday OFF'],
     ['rotation', 'Thursday/Saturday rotation'],
+    ['promoter', 'Sunday–Wednesday promoter rotation'],
     ['shifts', 'Correct shifts'],
     ['split', 'Ali split shift'],
     ['ahmed', 'Ahmed Yousef 9:00am – 6:00pm'],
@@ -404,10 +407,10 @@
       row('50345', 'Muteb Abdullah Nasser AlShehri', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
       row('50822', 'Ahmed Saleh Binmahfoodh', 'SA Showroom', 'Sales Advisor', 'rotation', noon),
       row('50338', 'Ahmed Yousef Alftini', 'SA Showroom', 'Sales Advisor', 'rotation', day),
-      row('50648', 'Omar Mohammad Mahlawi', 'Showroom', 'Promoters', 'friday-only', omar),
-      row('50649', 'Shuruq Abdulagani Alansari', 'Showroom', 'Promoters', 'friday-only', omar.map((s) => ({ ...s }))),
+      row('50648', 'Omar Mohammad Mahlawi', 'Showroom', 'Promoters', 'midweek', omar),
+      row('50649', 'Shuruq Abdulagani Alansari', 'Showroom', 'Promoters', 'midweek', omar.map((s) => ({ ...s }))),
       row('50650', 'Fahad Ali Alshahrani', 'Showroom', 'Promoters', 'fixed', noon, ['Thursday', 'Friday']),
-      row('50651', 'Haifa Ibrahim Alhasani', 'Showroom', 'Promoters', 'friday-only', noon),
+      row('50651', 'Haifa Ibrahim Alhasani', 'Showroom', 'Promoters', 'midweek', noon),
       row('50652', 'Shahad Mastour Almutairi', 'Showroom', 'Promoters', 'flexible', noon),
       row('50623', 'Saleh Abdullah Alsubaie', 'Showroom', 'Test Drive', 'fixed', day, ['Saturday', 'Friday']),
     ];
@@ -458,6 +461,18 @@
   }
   function prettySpan(s) { return `${clock12(s.start)} - ${clock12(s.end)}`; }
   function isAdvisor(id) { return ADVISOR_IDS.includes(String(id)); }
+  function isPromoterRot(id) { return PROMOTER_ROT.includes(String(id)); }
+  function promoterOffId(dateKey) {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const end = parseISO(dateKey);
+    const origin = parseISO(rotationStartKey());
+    if (end < origin || !MIDWEEK.includes(names[end.getDay()])) return '';
+    let count = 0;
+    for (let d = origin; d <= end; d = addDays(d, 1)) {
+      if (MIDWEEK.includes(names[d.getDay()])) count += 1;
+    }
+    return PROMOTER_ROT[(count - 1) % PROMOTER_ROT.length];
+  }
   function rotationAnchorThursday(startKey) {
     const d = parseISO(startKey || iso(new Date()));
     return addDays(d, -((d.getDay() + 7 - 4) % 7));
@@ -510,6 +525,14 @@
         fixedOffDays: [...(src.fixedOffDays || ['Friday'])],
       });
       changed = true;
+    });
+    PROMOTER_ROT.forEach((id) => {
+      const emp = state.employees.find((person) => person.id === id);
+      if (emp && emp.offMode !== 'midweek') {
+        emp.offMode = 'midweek';
+        emp.fixedOffDays = ['Friday'];
+        changed = true;
+      }
     });
     if (!state.settings.rotationStart) state.settings.rotationStart = '2026-10-01';
     return changed;
@@ -747,13 +770,14 @@
     employees.forEach((emp) => {
       const shifts = normalizeShifts(emp);
       const kind = shifts.length > 1 ? 'split' : 'standard';
-      const fixed = new Set(!isAdvisor(emp.id) && emp.offMode === 'fixed' ? (emp.fixedOffDays || []) : []);
+      const fixed = new Set(!isAdvisor(emp.id) && !isPromoterRot(emp.id) && emp.offMode === 'fixed' ? (emp.fixedOffDays || []) : []);
       week.forEach((col) => {
         const vac = vacationOn(emp.id, col.key, vacations);
         const rot = isAdvisor(emp.id) ? rotationIndexFor(col.key) : null;
         let offReason = '';
         if (col.name === 'Friday') offReason = 'friday';
         else if (isAdvisor(emp.id) && groupFor(rot, col.name).includes(emp.id)) offReason = col.name === 'Thursday' ? 'thursday' : 'saturday';
+        else if (isPromoterRot(emp.id) && MIDWEEK.includes(col.name) && promoterOffId(col.key) === String(emp.id)) offReason = 'midweek';
         else if (fixed.has(col.name)) offReason = 'fixed';
         const leave = vac ? absenceOf(vac) : '';
         let status = 'work';
@@ -847,6 +871,16 @@
       if (leave === 'timeoff' && row.status !== 'timeoff') pushIssue(issues, 'timeoff', `${emp.name} should be TIME OFF on ${row.date}, not OFF.`);
       if ((leave || row.status !== 'work') && row.shifts.length) pushIssue(issues, 'workvac', `${emp.name} still has a shift on ${row.date} while ${row.status}.`);
       if (row.status === 'work' && leave) pushIssue(issues, 'workvac', `${emp.name} is scheduled during leave on ${row.date}.`);
+      if (isPromoterRot(emp.id)) {
+        const expectOff = MIDWEEK.includes(row.day) && promoterOffId(row.date) === String(emp.id);
+        if (!leave && row.day !== 'Friday' && ((row.offReason === 'midweek') !== expectOff)) {
+          pushIssue(issues, 'promoter', `${emp.name} ${row.date} does not follow the Sunday–Wednesday rotation.`);
+        }
+        if (!leave && row.day !== 'Friday' && expectOff && row.status !== 'off') pushIssue(issues, 'promoter', `${emp.name} should be OFF on ${row.date}.`);
+        if (!leave && row.day !== 'Friday' && !expectOff && row.status !== 'work') pushIssue(issues, 'promoter', `${emp.name} should be working on ${row.date}.`);
+        if (row.status === 'work' && shiftKey(row.shifts) !== shiftKey(defined)) pushIssue(issues, 'shifts', `${emp.name} has the wrong shift on ${row.date}.`);
+        return;
+      }
       if (!isAdvisor(emp.id)) return;
       const rot = rotationIndexFor(row.date);
       const expectThu = groupFor(rot, 'Thursday').includes(emp.id);
@@ -1049,6 +1083,7 @@
   }
   function offLabel(row) {
     if (row.offReason === 'friday') return 'Friday Off';
+    if (row.offReason === 'midweek') return 'Rotation Off';
     if (row.offReason === 'fixed') return 'Fixed Off';
     return 'Weekly Off';
   }
@@ -1065,6 +1100,9 @@
     } else if (emp.offMode === 'rotation') {
       offs = 'Friday OFF · Week A / Week B Thursday or Saturday';
       mode = 'Sales advisor rotation';
+    } else if (emp.offMode === 'midweek') {
+      offs = 'Friday OFF · Sunday to Wednesday rotation';
+      mode = 'Haifa, Omar, Shuruq';
     } else if (emp.offMode === 'flexible') {
       offs = 'Friday OFF · one extra weekday OFF';
       mode = 'Flexible';
@@ -1300,7 +1338,7 @@
     return `<div class="wrap wide">
       ${pageHead('Schedule', period)}
       ${scheduleControls()}
-      <p class="muted screen-only">${esc(meta)} Every employee is on the month sheet. Sales advisors follow Week A and Week B. Vacation and time off cover that day only.</p>
+      <p class="muted screen-only">${esc(meta)} Every employee is on the month sheet. Sales advisors follow Week A and Week B. Haifa, Omar, and Shuruq rotate Sunday to Wednesday. Vacation and time off cover that day only.</p>
       <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span><span><i class="dot" style="background:#b54708"></i>Time off</span></div>
       <div class="screen-only">${healthCard()}</div>
       <div style="margin-top:14px">${monthBoard()}</div>
@@ -1399,6 +1437,22 @@
       return `<div class="check"><span>${esc(emp ? emp.name : id)}</span><b>${esc(known ? known.ar : '')}</b></div>`;
     }).join('');
   }
+  function midweekSample() {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const lines = [];
+    let date = parseISO(rotationStartKey());
+    let guard = 0;
+    while (lines.length < 8 && guard < 40) {
+      if (MIDWEEK.includes(names[date.getDay()])) {
+        const id = promoterOffId(iso(date));
+        const emp = empById(id);
+        lines.push(`<div class="check"><span>${fmtLong(iso(date))} · ${names[date.getDay()]}</span><b>${esc(emp ? emp.name : id)} OFF</b></div>`);
+      }
+      date = addDays(date, 1);
+      guard += 1;
+    }
+    return lines.join('');
+  }
   function rulesView() {
     const anchor = fmtLong(rotationStartKey());
     return `<div class="wrap">
@@ -1408,6 +1462,7 @@
         <article class="card"><h2 style="margin-top:0">Week B</h2><p class="muted">Thursday OFF</p>${rotationList(SAT_A)}<p class="muted" style="margin-top:12px">Saturday OFF</p>${rotationList(THU_A)}<p>Friday is OFF for every sales advisor.</p></article>
       </div>
       <article class="card" style="margin-top:14px"><b>WEEK A → WEEK B → WEEK A → WEEK B</b><p class="muted">Ali works 8:50am – 12:45pm and 5:00pm – 9:00pm. Ahmed Yousef works 9:00am – 6:00pm. The other advisors work 12:00pm – 9:00pm. Vacation and time off replace that day’s cell only. The next week stays on the rotation.</p></article>
+      <article class="card" style="margin-top:14px"><h2 style="margin-top:0">Haifa, Omar, and Shuruq</h2><p class="muted">One of them is OFF each Sunday, Monday, Tuesday, and Wednesday, in that order: Haifa, then Omar, then Shuruq, then Haifa again. Thursday and Saturday they all work. Friday is OFF. Leave replaces that day only.</p>${midweekSample()}</article>
     </div>`;
   }
 
@@ -1612,6 +1667,7 @@
         <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>Fixed off days</option>
         <option value="rotation" ${mode === 'rotation' ? 'selected' : ''}>Sales advisor rotation</option>
         <option value="advisor-pool" ${mode === 'advisor-pool' ? 'selected' : ''}>Advisor pool (Thursday / Saturday)</option>
+        <option value="midweek" ${mode === 'midweek' ? 'selected' : ''}>Sunday–Wednesday rotation</option>
         <option value="flexible" ${mode === 'flexible' ? 'selected' : ''}>Flexible extra off day</option>
       </select></div>
       <div class="field" id="fixed-wrap" ${mode === 'fixed' ? '' : 'hidden'}><label>Fixed off day</label><div class="days" id="e-days">${days}</div></div>
