@@ -1455,6 +1455,8 @@ select.cell-edit { cursor: pointer; }
 .sel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--navy); }
 .sel-head strong { font-size: 0.95rem; }
 .sel-only { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; cursor: pointer; }
+.sel-assign-box { display: contents; }
+.sel-assign-box[hidden] { display: none; }
 .sel-head .sel-clear { margin-left: auto; }
 .sel-chips {
   display: flex;
@@ -1509,10 +1511,39 @@ table.live-sheet tr.selected td.col-num { box-shadow: inset 4px 0 0 var(--red) !
 
 /* ——— Assignment ——— */
 .asg-vin-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
   padding: 4px 0 8px;
+}
+.asg-vin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #fff;
+}
+.asg-vin-row.selected { border-color: var(--red); background: var(--red-soft); }
+.asg-fixed-name {
+  font-weight: 800;
+  color: var(--navy);
+  min-width: 8rem;
+}
+.asg-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.asg-emp {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
 }
 .asg-vin {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;

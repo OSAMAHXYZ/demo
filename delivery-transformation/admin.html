@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20261001cs1" />
+  <link rel="stylesheet" href="admin.css?v=20261005alerts" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -120,26 +120,19 @@
         <div class="vsnd-scroll">
           <div id="sla-chart" class="vsnd-grid-host" aria-label="VSND Schedule"></div>
         </div>
-        <div class="vsnd-alerts" id="vsnd-schedule-alerts">
-          <div class="vsnd-alerts-head">
-            <h3>Schedule alerts</h3>
-            <span class="hint" id="vsnd-alerts-meta">Live from VSND schedule · SLA conditions</span>
-          </div>
-          <div class="vsnd-alerts-body" id="vsnd-alerts-body">
-            <p class="chart-empty">No schedule alerts</p>
-          </div>
-        </div>
       </div>
 
       <div class="vsnd-bottom-row">
         <div class="vsnd-panel" id="vsnd-fleet">
-          <h3>Free / Left <span class="hint" style="font-weight:600">· live attendance</span></h3>
-          <div class="vsnd-panel-body" id="vsnd-top5-body"></div>
+          <h3>Schedule alerts <span class="hint" id="vsnd-alerts-meta" style="font-weight:600">· live from VSND</span></h3>
+          <div class="vsnd-panel-body vsnd-alerts-panel" id="vsnd-alerts-body">
+            <p class="chart-empty">No schedule alerts</p>
+          </div>
         </div>
         <div class="vsnd-panel" id="vsnd-days-sales">
           <h3>
-            Days to Sales <span class="hint" style="font-weight:600">· assignment → Hanouf</span>
-            <button type="button" class="btn vsnd-wide-btn" id="vsnd-dts-more" title="VIN-level details">More Details</button>
+            Printed cities <span class="hint" style="font-weight:600">· coordinator prints</span>
+            <button type="button" class="btn vsnd-wide-btn" id="vsnd-dts-more" title="Printed VINs by city">More Details</button>
           </h3>
           <div class="vsnd-panel-body" id="vsnd-aging-dist-body"></div>
         </div>
@@ -435,6 +428,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20261003scope2"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20261004full1"></script>
+  <script src="admin.js?v=20261005alerts"></script>
 </body>
 </html>

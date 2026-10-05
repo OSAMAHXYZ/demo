@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Employee Shift Scheduler</title>
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --card: #ffffff;
+    --ink: #172033;
+    --muted: #5d6b7c;
+    --line: #e4e9f0;
+    --navy: #14233b;
+    --green: #0e7a45;
+    --green-bg: #e8f6ee;
+    --red: #a32020;
+    --off-bg: #f1f2f4;
+    --blue: #1a4f8b;
+    --blue-bg: #e7f1fb;
+    --amber: #9a6700;
+    --shadow: 0 10px 28px rgba(20, 35, 59, 0.06);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.45 "Segoe UI", Tahoma, sans-serif;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 22px 20px 48px; }
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  h1 { margin: 0; font-size: 1.65rem; letter-spacing: 0.03em; color: var(--navy); }
+  h2 { margin: 0 0 8px; font-size: 1.05rem; color: var(--navy); }
+  .lede { margin: 4px 0 0; color: var(--muted); }
+  .top-actions, .export-bar, .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .btn:hover { border-color: #b7c3d3; background: #f8fafc; }
+  .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.primary:hover { background: #0c6840; }
+  .btn.navy { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .btn.navy:hover { background: #0e1b30; }
+  .btn.small { padding: 6px 10px; font-size: 12px; }
+  .kpis, .man-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .man-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card, .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .card { padding: 14px 16px; }
+  .card .lbl { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
+  .card .val { margin-top: 4px; font-size: 1.55rem; font-weight: 800; color: var(--navy); }
+  .card .hint { color: var(--muted); font-size: 12px; min-height: 1.2em; }
+  .panel { padding: 16px; margin-bottom: 14px; }
+  .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  select, input[type="text"], input[type="time"] {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    min-width: 0;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .legend span, .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .work-swatch { background: var(--green-bg); border: 1px solid #b7e4c7; }
+  .off-swatch { background: var(--off-bg); border: 1px solid #d5d8de; }
+  .split-swatch { background: var(--blue-bg); border: 1px solid #c5daf3; }
+  .gen-swatch { background: #f59e0b; }
+  .table-scroll { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 12px; }
+  table.sheet { border-collapse: separate; border-spacing: 0; min-width: 1100px; width: 100%; }
+  .sheet th, .sheet td { border-bottom: 1px solid var(--line); border-right: 1px solid #eef2f6; padding: 8px 10px; vertical-align: top; background: #fff; }
+  .sheet th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .sheet th.who, .sheet td.who { position: sticky; left: 0; z-index: 1; min-width: 220px; }
+  .sheet th.who { z-index: 3; }
+  .sheet tr:hover td.who { background: #f4f7fb; }
+  .who strong { display: block; }
+  .who .sub { display: block; color: var(--muted); font-size: 12px; }
+  .cell .shift { font-weight: 800; font-size: 12px; line-height: 1.35; }
+  .cell.work { background: var(--green-bg); color: var(--green); }
+  .cell.split { background: var(--blue-bg); color: var(--blue); }
+  .cell.off { background: var(--off-bg); color: var(--red); }
+  .cell .off-label { font-weight: 900; letter-spacing: 0.04em; }
+  .tag { background: rgba(255,255,255,.72); color: var(--ink); border: 1px solid rgba(23,32,51,.08); margin-top: 4px; }
+  .cell.generated .tag { color: var(--amber); }
+  .empty { padding: 28px 10px; color: var(--muted); text-align: center; }
+  .heat { width: 100%; border-collapse: collapse; min-width: 640px; }
+  .heat th, .heat td { border: 1px solid var(--line); padding: 10px; text-align: center; }
+  .heat th { background: #f8fafc; color: var(--muted); font-size: 12px; }
+  .heat td.day, .heat th.day { text-align: left; font-weight: 800; color: var(--navy); background: #fff; }
+  .heat td.closed { background: #f3f4f6; color: var(--muted); font-weight: 800; }
+  .days { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .day-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; }
+  .day-card h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.06em; }
+  .day-card.closed { background: #f7f7f8; }
+  .block { padding: 8px 0; border-top: 1px solid var(--line); }
+  .block h4 { margin: 0 0 4px; font-size: 12px; color: var(--navy); }
+  .block ul { list-style: none; margin: 0; padding: 0; }
+  .block li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .block li.total { font-weight: 900; margin-top: 4px; }
+  .status-line { min-height: 1.2em; color: var(--muted); font-size: 13px; }
+  .valid-box { border-radius: 12px; padding: 12px 14px; }
+  .valid-box.ok { background: var(--green-bg); color: var(--green); }
+  .valid-box.bad { background: #fff6e8; color: #8a4b08; }
+  .valid-box button {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-weight: 900;
+    color: inherit;
+    font-size: 1rem;
+  }
+  .valid-box ul { margin: 8px 0 0; padding-left: 18px; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .rule {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    background: #fff;
+  }
+  .rule strong { display: block; }
+  .rule p { margin: 4px 0; }
+  .mode-fixed { color: var(--green); font-weight: 800; }
+  .mode-gen { color: var(--amber); font-weight: 800; }
+  .editor-layout { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; }
+  .emp-list { display: flex; flex-direction: column; gap: 8px; max-height: 640px; overflow: auto; }
+  .emp-item { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .emp-item b { display: block; }
+  .emp-item span { color: var(--muted); font-size: 12px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-grid label, .check-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .form-grid .wide { grid-column: 1 / -1; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+  .checks label { flex-direction: row; align-items: center; font-weight: 650; color: var(--ink); }
+  .form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .banner { background: #fff6e8; color: #8a4b08; border-radius: 10px; padding: 8px 10px; font-weight: 700; }
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  @media (max-width: 980px) {
+    .kpis, .man-kpis, .editor-layout { grid-template-columns: 1fr 1fr; }
+    .top { flex-direction: column; align-items: stretch; }
+  }
+  @media (max-width: 640px) {
+    .kpis, .man-kpis, .editor-layout, .form-grid { grid-template-columns: 1fr; }
+  }
+  @media print {
+    body { background: #fff; }
+    .no-print { display: none !important; }
+    .wrap { max-width: none; padding: 0; }
+    .panel, .card { box-shadow: none; }
+    .table-scroll { overflow: visible; max-height: none; }
+    .sheet th, .sheet td.who { position: static; }
+    .cell.work, .cell.split, .cell.off, .heat td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>EMPLOYEE SHIFT SCHEDULER</h1>
+      <p class="lede">Weekly Workforce Planning &amp; Manpower Control</p>
+      <p class="status-line" id="gen-meta">No schedule yet. Click GENERATE SCHEDULE.</p>
+    </div>
+    <div class="top-actions no-print">
+      <button type="button" class="btn primary" id="btn-generate">GENERATE SCHEDULE</button>
+      <button type="button" class="btn navy" id="btn-regenerate">REGENERATE</button>
+      <button type="button" class="btn" id="btn-validate">VALIDATE</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="roster-kpis"></section>
+  <section class="man-kpis" id="man-kpis"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Manpower heatmap</h2>
+        <p class="note">Color shows coverage from 9:00 AM to 9:00 PM. A person counts in a block when their shift overlaps that block. Friday is closed.</p>
+      </div>
+    </div>
+    <div class="table-scroll" id="heat-wrap"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Weekly schedule</h2>
+        <p class="status-line" id="filter-meta"></p>
+      </div>
+      <div class="export-bar no-print">
+        <button type="button" class="btn small" id="btn-excel">EXPORT TO EXCEL</button>
+        <button type="button" class="btn small" id="btn-print">PRINT SCHEDULE</button>
+        <button type="button" class="btn small" id="btn-pdf" title="Opens the print dialog. Choose Save as PDF.">EXPORT PDF</button>
+      </div>
+    </div>
+    <div class="filters no-print">
+      <label>Department
+        <select id="filter-dept"><option value="">All</option></select>
+      </label>
+      <label>Position
+        <select id="filter-pos"><option value="">All</option></select>
+      </label>
+      <label>Employee
+        <select id="filter-emp"><option value="">All</option></select>
+      </label>
+      <label>Day
+        <select id="filter-day"><option value="">All</option></select>
+      </label>
+    </div>
+    <div class="legend">
+      <span><i class="swatch work-swatch"></i> Work</span>
+      <span><i class="swatch split-swatch"></i> Split shift</span>
+      <span><i class="swatch off-swatch"></i> Off</span>
+      <span><i class="swatch gen-swatch"></i> Generated off day</span>
+    </div>
+    <p class="banner" id="stale-banner" hidden>Employee rules changed. Generate the schedule again to apply them.</p>
+    <div class="table-scroll" id="schedule-wrap"></div>
+    <p class="note no-print">Export PDF opens the print dialog. Choose Save as PDF.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Daily manpower</h2>
+        <p class="note">Counted from the generated shifts. Friday is off for the whole team.</p>
+      </div>
+    </div>
+    <div class="days" id="day-cards"></div>
+  </section>
+
+  <section class="panel no-print">
+    <h2>Schedule check</h2>
+    <div id="valid-box" class="valid-box" hidden>
+      <button type="button" id="valid-toggle"></button>
+      <ul id="valid-list" hidden></ul>
+    </div>
+    <p class="status-line" id="valid-empty">Generate a schedule, then validate it.</p>
+  </section>
+
+  <section class="panel" id="rules-panel">
+    <h2>EMPLOYEE RULES</h2>
+    <p class="note">The generator reads these rules. It does not use a saved week.</p>
+    <div class="rules" id="rules"></div>
+  </section>
+
+  <section class="panel no-print">
+    <div class="panel-head">
+      <div>
+        <h2>EDIT EMPLOYEES</h2>
+        <p class="note">Add, remove, or change a person, shift, second shift, off day, department, or position. Then generate again.</p>
+      </div>
+      <button type="button" class="btn small" id="btn-reset">RESET MASTER DATA</button>
+    </div>
+    <div class="editor-layout">
+      <div class="emp-list" id="emp-list"></div>
+      <form id="emp-form">
+        <div class="form-grid">
+          <label class="wide">Name
+            <input type="text" id="f-name" required />
+          </label>
+          <label>ID
+            <input type="text" id="f-id" required />
+          </label>
+          <label>Department
+            <input type="text" id="f-dept" list="dept-list" required />
+          </label>
+          <label>Position
+            <input type="text" id="f-pos" list="pos-list" required />
+          </label>
+          <label>Off-day rule
+            <select id="f-mode">
+              <option value="friday-only">Friday only</option>
+              <option value="fixed">Fixed off days</option>
+              <option value="advisor-pool">Thursday / Saturday pool</option>
+              <option value="flexible">One generated weekday off</option>
+            </select>
+          </label>
+          <label>Shift 1 start
+            <input type="time" id="f-s1" value="12:00" required />
+          </label>
+          <label>Shift 1 end
+            <input type="time" id="f-e1" value="21:00" required />
+          </label>
+          <label class="wide check-row"><span><input type="checkbox" id="f-second" /> Add second shift</span></label>
+          <label id="f-s2-wrap">Shift 2 start
+            <input type="time" id="f-s2" value="17:00" />
+          </label>
+          <label id="f-e2-wrap">Shift 2 end
+            <input type="time" id="f-e2" value="21:00" />
+          </label>
+          <div class="wide" id="fixed-days">
+            <div class="checks" id="day-checks"></div>
+          </div>
+        </div>
+        <p class="note" id="form-preview"></p>
+        <div class="form-actions">
+          <button type="submit" class="btn primary" id="f-save">ADD EMPLOYEE</button>
+          <button type="button" class="btn" id="f-cancel">CLEAR</button>
+        </div>
+        <p class="status-line" id="form-msg"></p>
+      </form>
+    </div>
+    <datalist id="dept-list">
+      <option value="Delivery"></option>
+      <option value="SA Showroom"></option>
+      <option value="Toyota Sales"></option>
+      <option value="Showroom"></option>
+    </datalist>
+    <datalist id="pos-list">
+      <option value="Sales Coordinator"></option>
+      <option value="Sales Advisor"></option>
+      <option value="Promoters"></option>
+      <option value="Test Drive"></option>
+    </datalist>
+  </section>
+</div>
+
+<script>
+(() => {
+  const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const WEEKDAYS = DAYS.filter((d) => d !== 'Friday');
+  const BLOCKS = [
+    { id: 'am', label: '9:00 AM - 12:00 PM', short: '9-12', start: 9 * 60, end: 12 * 60 },
+    { id: 'mid', label: '12:00 PM - 5:00 PM', short: '12-5', start: 12 * 60, end: 17 * 60 },
+    { id: 'pm', label: '5:00 PM - 9:00 PM', short: '5-9', start: 17 * 60, end: 21 * 60 },
+  ];
+  const ROLE_ORDER = [
+    ['advisor', 'Sales Advisors'],
+    ['promoter', 'Promoters'],
+    ['testdrive', 'Test Drive'],
+    ['coordinator', 'Sales Coordinator'],
+    ['other', 'Other'],
+  ];
+  const STORE_KEY = 'employee-shift-scheduler-v1';
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+  function defaultEmployees() {
+    const row = (id, name, department, position, offMode, shifts, fixedOffDays) => ({
+      id, name, department, position, offMode, shifts, fixedOffDays: fixedOffDays || ['Friday'],
+    });
+    const noon = [{ start: '12:00', end: '21:00' }];
+    const day = [{ start: '09:00', end: '18:00' }];
+    const omar = [{ start: '08:50', end: '12:45' }, { start: '17:00', end: '21:00' }];
+    const ali = [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }];
+    return [
+      row('49099', 'Ruba Hamed Albarakati', 'Delivery', 'Sales Coordinator', 'friday-only', noon),
+      row('49973', 'Ghadeer Abdulhadi Attia Altayyari', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
+      row('50093', 'Lujen Sami Saeed Bazhair', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
+      row('47674', 'Mansour Alqahtani', 'Toyota Sales', 'Sales Advisor', 'advisor-pool', noon),
+      row('48476', 'Ali Muharraq A. Alharbi', 'SA Showroom', 'Sales Advisor', 'flexible', ali),
+      row('50345', 'Muteb Abdullah Nasser AlShehri', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
+      row('50822', 'Ahmed Saleh Binmahfoodh', 'SA Showroom', 'Sales Advisor', 'advisor-pool', noon),
+      row('50338', 'Ahmed Yousef Alftini', 'SA Showroom', 'Sales Advisor', 'flexible', day),
+      row('50648', 'Omar Mohammad Mahlawi', 'Showroom', 'Promoters', 'friday-only', omar),
+      row('50649', 'Shuruq Abdulagani Alansari', 'Showroom', 'Promoters', 'friday-only', omar.map((s) => ({ ...s }))),
+      row('50650', 'Fahad Ali Alshahrani', 'Showroom', 'Promoters', 'fixed', noon, ['Thursday', 'Friday']),
+      row('50651', 'Haifa Ibrahim Alhasani', 'Showroom', 'Promoters', 'friday-only', noon),
+      row('50652', 'Shahad Mastour Almutairi', 'Showroom', 'Promoters', 'flexible', noon),
+      row('50623', 'Saleh Abdullah Alsubaie', 'Showroom', 'Test Drive', 'fixed', day, ['Saturday', 'Friday']),
+    ];
+  }
+
+  const state = {
+    employees: [],
+    schedule: null,
+    generation: 0,
+    lastSig: '',
+    sameArrangement: false,
+    stale: false,
+    editingId: '',
+    validation: null,
+  };
+
+  function toMin(hhmm) {
+    const [h, m] = String(hhmm || '0:0').split(':').map((n) => parseInt(n, 10) || 0);
+    return h * 60 + m;
+  }
+
+  function formatTime(mins) {
+    const h24 = Math.floor(mins / 60);
+    const m = mins % 60;
+    const ap = h24 >= 12 ? 'PM' : 'AM';
+    let h = h24 % 12;
+    if (h === 0) h = 12;
+    return `${h}:${String(m).padStart(2, '0')} ${ap}`;
+  }
+
+  function normalizeShifts(emp) {
+    return (emp.shifts || []).map((s) => {
+      const start = toMin(s.start);
+      const end = toMin(s.end);
+      return { start, end, label: `${formatTime(start)} - ${formatTime(end)}` };
+    });
+  }
+
+  function shiftsOverlap(shifts) {
+    for (let i = 0; i < shifts.length; i += 1) {
+      for (let j = i + 1; j < shifts.length; j += 1) {
+        if (shifts[i].start < shifts[j].end && shifts[j].start < shifts[i].end) return true;
+      }
+    }
+    return false;
+  }
+
+  function roleKey(position) {
+    const p = String(position || '').toLowerCase();
+    if (p.includes('coordinator')) return 'coordinator';
+    if (p.includes('advisor')) return 'advisor';
+    if (p.includes('promot')) return 'promoter';
+    if (p.includes('test')) return 'testdrive';
+    return 'other';
+  }
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0;
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function shuffle(list, rng) {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function splitPool(list, rng) {
+    const shuffled = shuffle(list, rng);
+    const n = shuffled.length;
+    if (!n) return { thursday: [], saturday: [] };
+    let thuN;
+    if (n >= 6) thuN = 3;
+    else thuN = rng() < 0.5 ? Math.ceil(n / 2) : Math.floor(n / 2);
+    return { thursday: shuffled.slice(0, thuN), saturday: shuffled.slice(thuN) };
+  }
+
+  function dayLoad(day, offMap, employees) {
+    let score = 0;
+    employees.forEach((emp) => {
+      if (offMap[emp.id].has(day)) return;
+      const shifts = normalizeShifts(emp);
+      BLOCKS.forEach((block) => {
+        if (shifts.some((s) => s.start < block.end && s.end > block.start)) score += 1;
+      });
+    });
+    return score;
+  }
+
+  function generateSchedule(employees, seed) {
+    const rng = mulberry32(seed);
+    const offMap = {};
+    employees.forEach((emp) => {
+      const set = new Set(['Friday']);
+      if (emp.offMode === 'fixed') (emp.fixedOffDays || []).forEach((d) => { if (DAYS.includes(d)) set.add(d); });
+      offMap[emp.id] = set;
+    });
+
+    const pool = employees.filter((e) => e.offMode === 'advisor-pool');
+    const split = splitPool(pool, rng);
+    split.thursday.forEach((e) => offMap[e.id].add('Thursday'));
+    split.saturday.forEach((e) => offMap[e.id].add('Saturday'));
+
+    shuffle(employees.filter((e) => e.offMode === 'flexible'), rng).forEach((emp) => {
+      const choices = WEEKDAYS.filter((d) => !offMap[emp.id].has(d));
+      let best = -1;
+      let ties = [];
+      choices.forEach((day) => {
+        const score = dayLoad(day, offMap, employees);
+        if (score > best) {
+          best = score;
+          ties = [day];
+        } else if (score === best) ties.push(day);
+      });
+      if (ties.length) offMap[emp.id].add(ties[Math.floor(rng() * ties.length)]);
+    });
+
+    const rows = [];
+    employees.forEach((emp) => {
+      const shifts = normalizeShifts(emp);
+      const kind = shifts.length > 1 ? 'split' : 'standard';
+      DAYS.forEach((day) => {
+        const isOff = offMap[emp.id].has(day);
+        let offReason = '';
+        if (isOff) {
+          if (day === 'Friday') offReason = 'friday';
+          else if (emp.offMode === 'fixed') offReason = 'fixed';
+          else offReason = 'generated';
+        }
+        rows.push({
+          employeeId: emp.id,
+          day,
+          status: isOff ? 'off' : 'work',
+          shifts: isOff ? [] : shifts.map((s) => ({ ...s })),
+          offReason,
+          kind,
+        });
+      });
+    });
+    return { seed, rows };
+  }
+
+  function signature(rows) {
+    return rows
+      .filter((r) => r.status === 'off' && r.offReason !== 'friday')
+      .map((r) => `${r.employeeId}:${r.day}`)
+      .sort()
+      .join('|');
+  }
+
+  function rowFor(empId, day) {
+    if (!state.schedule) return null;
+    return state.schedule.rows.find((r) => r.employeeId === empId && r.day === day) || null;
+  }
+
+  function expectedOff(emp) {
+    if (emp.offMode === 'fixed') {
+      const set = new Set(emp.fixedOffDays || []);
+      set.add('Friday');
+      return set;
+    }
+    return null;
+  }
+
+  function validateSchedule() {
+    const issues = [];
+    if (!state.schedule) return { ok: false, issues: [{ message: 'Generate a schedule first.' }] };
+    const employees = state.employees;
+    employees.forEach((emp) => {
+      const defined = normalizeShifts(emp);
+      if (!defined.length || defined.some((s) => s.end <= s.start)) {
+        issues.push({ message: `${emp.name} has an invalid shift time.` });
+      }
+      if (shiftsOverlap(defined)) {
+        issues.push({ message: `${emp.name} has two conflicting shifts: ${defined.map((s) => s.label).join(' and ')}.` });
+      }
+      const offs = [];
+      DAYS.forEach((day) => {
+        const row = rowFor(emp.id, day);
+        if (!row) {
+          issues.push({ message: `${emp.name} is missing ${day}.` });
+          return;
+        }
+        if (day === 'Friday' && row.status !== 'off') {
+          issues.push({ message: `${emp.name} is scheduled to work on Friday.` });
+        }
+        if (row.status === 'off') offs.push(day);
+        if (row.status === 'work') {
+          const got = row.shifts.map((s) => `${s.start}-${s.end}`).sort().join(',');
+          const want = defined.map((s) => `${s.start}-${s.end}`).sort().join(',');
+          if (got !== want) {
+            issues.push({ message: `${emp.name} has the wrong shift on ${day}. Expected ${defined.map((s) => s.label).join(' / ') || 'a shift'}.` });
+          }
+        } else if (row.shifts.length) {
+          issues.push({ message: `${emp.name} is off on ${day} but still has a shift.` });
+        }
+      });
+      const offSet = new Set(offs);
+      if (emp.offMode === 'friday-only' && offs.join('|') !== 'Friday' && !(offs.length === 1 && offs[0] === 'Friday')) {
+        const extra = offs.filter((d) => d !== 'Friday');
+        if (extra.length || !offSet.has('Friday')) {
+          issues.push({ message: `${emp.name} must be off Friday only, and working every other day.` });
+        }
+      }
+      if (emp.offMode === 'fixed') {
+        const want = expectedOff(emp);
+        DAYS.forEach((day) => {
+          const should = want.has(day);
+          const is = offSet.has(day);
+          if (should !== is) {
+            issues.push({ message: should
+              ? `${emp.name} must be off on ${day}.`
+              : `${emp.name} is off on ${day}, which is not a fixed off day.` });
+          }
+        });
+      }
+      if (emp.offMode === 'flexible') {
+        const extra = offs.filter((d) => d !== 'Friday');
+        if (!offSet.has('Friday') || extra.length !== 1) {
+          issues.push({ message: `${emp.name} must be off Friday plus exactly one generated weekday.` });
+        }
+      }
+      if (emp.offMode === 'advisor-pool') {
+        const extra = offs.filter((d) => d !== 'Friday');
+        const ok = extra.length === 1 && (extra[0] === 'Thursday' || extra[0] === 'Saturday');
+        if (!offSet.has('Friday') || !ok) {
+          issues.push({ message: `${emp.name} must be off Friday and exactly one of Thursday or Saturday.` });
+        }
+      }
+    });
+
+    const pool = employees.filter((e) => e.offMode === 'advisor-pool');
+    const thu = pool.filter((e) => {
+      const row = rowFor(e.id, 'Thursday');
+      const sat = rowFor(e.id, 'Saturday');
+      return row && row.status === 'off' && sat && sat.status === 'work';
+    });
+    const sat = pool.filter((e) => {
+      const row = rowFor(e.id, 'Saturday');
+      const thuRow = rowFor(e.id, 'Thursday');
+      return row && row.status === 'off' && thuRow && thuRow.status === 'work';
+    });
+    if (pool.length !== 6 || thu.length !== 3 || sat.length !== 3) {
+      const names = pool.map((e) => e.name).join(', ') || 'none';
+      issues.push({
+        message: `Thursday/Saturday pool is ${thu.length} Thursday OFF and ${sat.length} Saturday OFF. A 3-and-3 split needs 6 people in the pool. Currently ${pool.length}: ${names}.`,
+      });
+    }
+    return { ok: issues.length === 0, issues };
+  }
+
+  function buildCoverage() {
+    if (!state.schedule) return [];
+    return DAYS.map((day) => {
+      if (day === 'Friday') return { day, closed: true, blocks: [] };
+      const blocks = BLOCKS.map((block) => {
+        const counts = { advisor: 0, promoter: 0, testdrive: 0, coordinator: 0, other: 0 };
+        state.employees.forEach((emp) => {
+          const row = rowFor(emp.id, day);
+          if (!row || row.status !== 'work') return;
+          if (!row.shifts.some((s) => s.start < block.end && s.end > block.start)) return;
+          const key = roleKey(emp.position);
+          counts[key] += 1;
+        });
+        const total = ROLE_ORDER.reduce((sum, [key]) => sum + counts[key], 0);
+        return { ...block, counts, total };
+      });
+      return { day, closed: false, blocks };
+    });
+  }
+
+  function manpowerStats(coverage) {
+    const cells = [];
+    coverage.forEach((day) => {
+      if (day.closed) return;
+      day.blocks.forEach((block) => cells.push({ day: day.day, label: block.label, short: block.short, total: block.total }));
+    });
+    if (!cells.length) return { min: null, max: null, avg: null, lowest: [] };
+    const min = Math.min(...cells.map((c) => c.total));
+    const max = Math.max(...cells.map((c) => c.total));
+    const avg = cells.reduce((s, c) => s + c.total, 0) / cells.length;
+    return { min, max, avg, lowest: cells.filter((c) => c.total === min) };
+  }
+
+  function visibleEmployees() {
+    const dept = $('#filter-dept').value;
+    const pos = $('#filter-pos').value;
+    const emp = $('#filter-emp').value;
+    return state.employees.filter((e) => (
+      (!dept || e.department === dept)
+      && (!pos || e.position === pos)
+      && (!emp || e.id === emp)
+    ));
+  }
+
+  function visibleDays() {
+    const day = $('#filter-day').value;
+    return day ? DAYS.filter((d) => d === day) : DAYS.slice();
+  }
+
+  function loadEmployees() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data) || !data.length) return null;
+      const ok = data.every((e) => e && e.id && e.name && e.department && e.position && e.offMode && Array.isArray(e.shifts) && e.shifts.length);
+      return ok ? data : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function saveEmployees() {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state.employees));
+  }
+
+  function markStale() {
+    if (state.schedule) {
+      state.stale = true;
+      state.schedule = null;
+      state.validation = null;
+      state.lastSig = '';
+    }
+  }
+
+  function renderRoster() {
+    const list = state.employees;
+    const count = (pred) => list.filter(pred).length;
+    const cards = [
+      ['TOTAL EMPLOYEES', list.length, 'On the roster'],
+      ['SALES ADVISORS', count((e) => roleKey(e.position) === 'advisor'), 'Sales Advisor'],
+      ['PROMOTERS', count((e) => roleKey(e.position) === 'promoter'), 'Promoters'],
+      ['TEST DRIVE', count((e) => roleKey(e.position) === 'testdrive'), 'Test Drive'],
+      ['SALES COORDINATOR', count((e) => roleKey(e.position) === 'coordinator'), 'Sales Coordinator'],
+    ];
+    $('#roster-kpis').innerHTML = cards.map(([lbl, val, hint]) =>
+      `<article class="card"><div class="lbl">${esc(lbl)}</div><div class="val">${esc(val)}</div><div class="hint">${esc(hint)}</div></article>`
+    ).join('');
+  }
+
+  function renderManKpis(stats) {
+    const fmt = (n, digits) => (n == null ? '—' : digits ? n.toFixed(digits) : String(n));
+    const low = stats.lowest.length
+      ? stats.lowest.slice(0, 2).map((c) => `${c.day} ${c.short}`).join(', ') + (stats.lowest.length > 2 ? ` +${stats.lowest.length - 2}` : '')
+      : '—';
+    const cards = [
+      ['MINIMUM MANPOWER', fmt(stats.min), 'Lowest block, Friday excluded'],
+      ['MAXIMUM MANPOWER', fmt(stats.max), 'Highest block, Friday excluded'],
+      ['AVERAGE MANPOWER', fmt(stats.avg, 1), 'Across 18 open blocks'],
+      ['LOWEST COVERAGE PERIOD', low, stats.lowest.length ? `${stats.min} people` : 'Generate a schedule'],
+    ];
+    $('#man-kpis').innerHTML = cards.map(([lbl, val, hint]) =>
+      `<article class="card"><div class="lbl">${esc(lbl)}</div><div class="val">${esc(val)}</div><div class="hint">${esc(hint)}</div></article>`
+    ).join('');
+  }
+
+  function heatColor(value, min, max) {
+    if (max === min) return 'hsl(140 45% 88%)';
+    const t = (value - min) / (max - min);
+    return `hsl(${8 + t * 132} 62% ${90 - t * 36}%)`;
+  }
+
+  function renderHeat(coverage, stats) {
+    const wrap = $('#heat-wrap');
+    if (!coverage.length) {
+      wrap.innerHTML = '<p class="empty">Generate a schedule to see the heatmap.</p>';
+      return;
+    }
+    const head = BLOCKS.map((b) => `<th>${esc(b.short)}<br>${esc(b.label)}</th>`).join('');
+    const body = coverage.map((day) => {
+      if (day.closed) {
+        return `<tr><td class="day">${esc(day.day)}</td><td class="closed" colspan="3">OFF / CLOSED</td></tr>`;
+      }
+      const cells = day.blocks.map((block) => {
+        const tip = ROLE_ORDER.filter(([key]) => block.counts[key]).map(([key, label]) => `${label}: ${block.counts[key]}`).join(' · ');
+        return `<td style="background:${heatColor(block.total, stats.min, stats.max)}" title="${esc(tip)}"><b>${block.total}</b></td>`;
+      }).join('');
+      return `<tr><td class="day">${esc(day.day)}</td>${cells}</tr>`;
+    }).join('');
+    wrap.innerHTML = `<table class="heat"><thead><tr><th class="day">Day</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function renderDayCards(coverage) {
+    const host = $('#day-cards');
+    if (!coverage.length) {
+      host.innerHTML = '<p class="empty">Manpower is calculated after the schedule is generated.</p>';
+      return;
+    }
+    host.innerHTML = coverage.map((day) => {
+      if (day.closed) {
+        return `<article class="day-card closed"><h3>FRIDAY</h3><p><b>OFF / CLOSED</b></p><p>Total manpower = 0</p></article>`;
+      }
+      const blocks = day.blocks.map((block) => {
+        const lines = ROLE_ORDER.filter(([key]) => key !== 'other' || block.counts.other)
+          .map(([key, label]) => `<li><span>${esc(label)}</span><span>${block.counts[key]}</span></li>`)
+          .join('');
+        return `<div class="block"><h4>${esc(block.label)}</h4><ul>${lines}<li class="total"><span>TOTAL</span><span>${block.total}</span></li></ul></div>`;
+      }).join('');
+      return `<article class="day-card"><h3>${esc(day.day.toUpperCase())}</h3>${blocks}</article>`;
+    }).join('');
+  }
+
+  function cellHtml(row, emp) {
+    if (!row) return '<td class="cell"></td>';
+    if (row.status === 'off') {
+      const tag = row.offReason === 'friday' ? 'Mandatory' : row.offReason === 'fixed' ? 'Fixed' : 'Generated';
+      const cls = row.offReason === 'generated' ? 'off generated' : 'off';
+      return `<td class="cell ${cls}"><div class="off-label">OFF</div><span class="tag">${tag}</span></td>`;
+    }
+    const cls = row.kind === 'split' ? 'work split' : 'work';
+    const tags = [];
+    if (row.kind === 'split') tags.push('Split');
+    if (emp && (emp.offMode === 'friday-only' || emp.offMode === 'fixed')) tags.push('Fixed');
+    const shifts = row.shifts.map((s) => `<div class="shift">${esc(s.label)}</div>`).join('');
+    const tagHtml = tags.map((tag) => `<span class="tag">${tag}</span>`).join('');
+    return `<td class="cell ${cls}">${shifts}${tagHtml}</td>`;
+  }
+
+  function renderTable() {
+    const wrap = $('#schedule-wrap');
+    const people = visibleEmployees();
+    const days = visibleDays();
+    $('#filter-meta').textContent = state.schedule
+      ? `Showing ${people.length} of ${state.employees.length} employees`
+      : '';
+    if (!state.schedule) {
+      wrap.innerHTML = '<p class="empty">No schedule yet. Click GENERATE SCHEDULE.</p>';
+      return;
+    }
+    if (!people.length) {
+      wrap.innerHTML = '<p class="empty">No employees match these filters.</p>';
+      return;
+    }
+    const head = days.map((d) => `<th>${esc(d)}</th>`).join('');
+    const body = people.map((emp) => {
+      const tds = days.map((day) => cellHtml(rowFor(emp.id, day), emp)).join('');
+      return `<tr>
+        <td class="who"><strong>${esc(emp.name)}</strong></td>
+        <td>${esc(emp.id)}</td>
+        <td>${esc(emp.department)}</td>
+        <td>${esc(emp.position)}</td>
+        ${tds}
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<table class="sheet"><thead><tr>
+      <th class="who">Employee</th><th>ID</th><th>Department</th><th>Position</th>${head}
+    </tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function ruleText(emp) {
+    const hours = normalizeShifts(emp).map((s) => s.label).join(' and ') || 'No shift';
+    let offs = 'Friday OFF';
+    let mode = 'Fixed';
+    if (emp.offMode === 'fixed') {
+      const days = DAYS.filter((d) => (emp.fixedOffDays || []).includes(d) || d === 'Friday');
+      offs = `${days.join(' + ')} OFF`;
+    } else if (emp.offMode === 'advisor-pool') {
+      offs = 'Friday OFF · Thursday or Saturday OFF, split across the pool';
+      mode = 'Generated';
+    } else if (emp.offMode === 'flexible') {
+      offs = 'Friday OFF · one additional weekday OFF';
+      mode = 'Generated';
+    }
+    let week = '';
+    if (state.schedule && !state.stale) {
+      const extra = WEEKDAYS.filter((d) => {
+        const row = rowFor(emp.id, d);
+        return row && row.status === 'off';
+      });
+      week = extra.length ? `This week: ${extra.join(', ')} OFF` : 'This week: Friday is the only off day';
+    }
+    return { hours, offs, mode, week };
+  }
+
+  function renderRules() {
+    $('#rules').innerHTML = state.employees.map((emp) => {
+      const rule = ruleText(emp);
+      return `<article class="rule">
+        <strong>${esc(emp.name)}</strong>
+        <p>${esc(emp.position)} · ${esc(emp.department)} · ${esc(emp.id)}</p>
+        <p>${esc(rule.hours)}</p>
+        <p>${esc(rule.offs)}</p>
+        <p class="${rule.mode === 'Fixed' ? 'mode-fixed' : 'mode-gen'}">${esc(rule.mode)}</p>
+        ${rule.week ? `<p>${esc(rule.week)}</p>` : ''}
+      </article>`;
+    }).join('');
+  }
+
+  function fillSelect(id, values) {
+    const sel = $(id);
+    const current = sel.value;
+    const opts = ['<option value="">All</option>'].concat(values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`));
+    sel.innerHTML = opts.join('');
+    sel.value = values.includes(current) ? current : '';
+  }
+
+  function renderFilters() {
+    fillSelect('#filter-dept', [...new Set(state.employees.map((e) => e.department))]);
+    fillSelect('#filter-pos', [...new Set(state.employees.map((e) => e.position))]);
+    const empSel = $('#filter-emp');
+    const current = empSel.value;
+    empSel.innerHTML = '<option value="">All</option>' + state.employees.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+    empSel.value = state.employees.some((e) => e.id === current) ? current : '';
+    const daySel = $('#filter-day');
+    if (daySel.options.length <= 1) {
+      daySel.innerHTML = '<option value="">All</option>' + DAYS.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+    }
+  }
+
+  function renderEditor() {
+    $('#emp-list').innerHTML = state.employees.map((emp, index) => `<article class="emp-item">
+      <div><b>${esc(emp.name)}</b><span>${esc(emp.id)} · ${esc(emp.position)}</span></div>
+      <div>
+        <button type="button" class="btn small" data-act="up" data-i="${index}" ${index === 0 ? 'disabled' : ''}>Up</button>
+        <button type="button" class="btn small" data-act="down" data-i="${index}" ${index === state.employees.length - 1 ? 'disabled' : ''}>Down</button>
+        <button type="button" class="btn small" data-act="edit" data-i="${index}">Edit</button>
+        <button type="button" class="btn small" data-act="delete" data-i="${index}">Delete</button>
+      </div>
+    </article>`).join('');
+  }
+
+  function renderFixedDays() {
+    const host = $('#day-checks');
+    host.innerHTML = DAYS.map((day) => {
+      const locked = day === 'Friday';
+      return `<label><input type="checkbox" value="${esc(day)}" ${locked ? 'checked disabled' : ''} /> ${esc(day)}</label>`;
+    }).join('');
+  }
+
+  function syncFixedVisibility() {
+    const mode = $('#f-mode').value;
+    $('#fixed-days').hidden = mode !== 'fixed';
+    const second = $('#f-second').checked;
+    $('#f-s2-wrap').hidden = !second;
+    $('#f-e2-wrap').hidden = !second;
+    const fake = readForm(false);
+    if (fake) {
+      const rule = ruleText(fake);
+      $('#form-preview').textContent = `${rule.hours}. ${rule.offs}. ${rule.mode}.`;
+    }
+  }
+
+  function readForm(strict) {
+    const name = $('#f-name').value.trim();
+    const id = $('#f-id').value.trim();
+    const department = $('#f-dept').value.trim();
+    const position = $('#f-pos').value.trim();
+    const offMode = $('#f-mode').value;
+    const shifts = [{ start: $('#f-s1').value, end: $('#f-e1').value }];
+    if ($('#f-second').checked) shifts.push({ start: $('#f-s2').value, end: $('#f-e2').value });
+    const fixedOffDays = ['Friday'];
+    if (offMode === 'fixed') {
+      $('#day-checks').querySelectorAll('input').forEach((box) => {
+        if (box.checked && box.value !== 'Friday') fixedOffDays.push(box.value);
+      });
+    }
+    const emp = { id, name, department, position, offMode, shifts, fixedOffDays };
+    if (!strict) return emp;
+    if (!name || !id || !department || !position) return { error: 'Name, ID, department, and position are required.' };
+    if (state.employees.some((e) => e.id === id && e.id !== state.editingId)) return { error: 'That ID is already used.' };
+    const parsed = normalizeShifts(emp);
+    if (parsed.some((s) => !s.start && s.start !== 0 || s.end <= s.start)) return { error: 'Each shift needs an end time after the start time.' };
+    if (shiftsOverlap(parsed)) return { error: 'The two shifts overlap. Change the times.' };
+    return emp;
+  }
+
+  function fillForm(emp) {
+    state.editingId = emp ? emp.id : '';
+    $('#f-name').value = emp ? emp.name : '';
+    $('#f-id').value = emp ? emp.id : '';
+    $('#f-dept').value = emp ? emp.department : 'SA Showroom';
+    $('#f-pos').value = emp ? emp.position : 'Sales Advisor';
+    $('#f-mode').value = emp ? emp.offMode : 'advisor-pool';
+    const shifts = emp ? emp.shifts : [{ start: '12:00', end: '21:00' }];
+    $('#f-s1').value = shifts[0] ? shifts[0].start : '12:00';
+    $('#f-e1').value = shifts[0] ? shifts[0].end : '21:00';
+    $('#f-second').checked = shifts.length > 1;
+    $('#f-s2').value = shifts[1] ? shifts[1].start : '17:00';
+    $('#f-e2').value = shifts[1] ? shifts[1].end : '21:00';
+    $('#day-checks').querySelectorAll('input').forEach((box) => {
+      if (box.value === 'Friday') box.checked = true;
+      else box.checked = !!(emp && (emp.fixedOffDays || []).includes(box.value));
+    });
+    $('#f-save').textContent = emp ? 'SAVE EMPLOYEE' : 'ADD EMPLOYEE';
+    $('#form-msg').textContent = '';
+    syncFixedVisibility();
+  }
+
+  function suggestFromPosition() {
+    const pos = $('#f-pos').value.trim().toLowerCase();
+    if (!state.editingId && pos) {
+      if (pos.includes('coordinator')) {
+        $('#f-mode').value = 'friday-only';
+        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
+      } else if (pos.includes('test')) {
+        $('#f-mode').value = 'fixed';
+        $('#f-s1').value = '09:00'; $('#f-e1').value = '18:00'; $('#f-second').checked = false;
+        $('#day-checks').querySelectorAll('input').forEach((box) => { box.checked = box.value === 'Friday' || box.value === 'Saturday'; });
+      } else if (pos.includes('promot')) {
+        $('#f-mode').value = 'flexible';
+        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
+      } else if (pos.includes('advisor')) {
+        $('#f-mode').value = 'advisor-pool';
+        $('#f-s1').value = '12:00'; $('#f-e1').value = '21:00'; $('#f-second').checked = false;
+      }
+    }
+    syncFixedVisibility();
+  }
+
+  function renderValidation() {
+    const box = $('#valid-box');
+    const empty = $('#valid-empty');
+    const result = state.validation;
+    if (!result) {
+      box.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+    box.hidden = false;
+    box.className = `valid-box ${result.ok ? 'ok' : 'bad'}`;
+    $('#valid-toggle').textContent = result.ok ? '✓ Schedule Valid' : `⚠ ${result.issues.length} Issue${result.issues.length === 1 ? '' : 's'} Found`;
+    const list = $('#valid-list');
+    list.innerHTML = result.issues.map((issue) => `<li>${esc(issue.message)}</li>`).join('');
+    list.hidden = result.ok;
+  }
+
+  function renderGenerated() {
+    const coverage = buildCoverage();
+    const stats = manpowerStats(coverage);
+    renderManKpis(stats);
+    renderHeat(coverage, stats);
+    renderDayCards(coverage);
+    renderTable();
+    renderRules();
+    renderValidation();
+    $('#stale-banner').hidden = !state.stale;
+    if (!state.schedule) {
+      $('#gen-meta').textContent = state.stale
+        ? 'Rules changed. The previous week was cleared.'
+        : 'No schedule yet. Click GENERATE SCHEDULE.';
+      return;
+    }
+    const same = state.sameArrangement ? ' Flexible off days did not move, so this week matches the previous one.' : '';
+    $('#gen-meta').textContent = `Arrangement #${state.generation}. Friday is off for every employee.${same}`;
+  }
+
+  function renderAll() {
+    renderRoster();
+    renderFilters();
+    renderEditor();
+    renderFixedDays();
+    fillForm(null);
+    renderGenerated();
+  }
+
+  function runGenerate() {
+    if (!state.employees.length) {
+      $('#gen-meta').textContent = 'Add at least one employee before generating.';
+      return;
+    }
+    const had = state.generation > 0 && !!state.lastSig;
+    const base = (Date.now() ^ (state.generation * 10007)) >>> 0;
+    let best = null;
+    for (let i = 0; i < 12; i += 1) {
+      const result = generateSchedule(state.employees, (base + i * 9973) >>> 0);
+      result.sig = signature(result.rows);
+      best = result;
+      if (result.sig !== state.lastSig) break;
+    }
+    state.sameArrangement = had && best.sig === state.lastSig;
+    state.lastSig = best.sig;
+    state.schedule = best;
+    state.generation += 1;
+    state.stale = false;
+    state.validation = validateSchedule();
+    renderGenerated();
+  }
+
+  function exportExcel() {
+    if (!state.schedule) {
+      $('#gen-meta').textContent = 'Generate a schedule before exporting.';
+      return;
+    }
+    const days = DAYS;
+    const head = ['Employee', 'ID', 'Department', 'Position', ...days];
+    const scheduleRows = state.employees.map((emp) => {
+      const cells = days.map((day) => {
+        const row = rowFor(emp.id, day);
+        if (!row || row.status === 'off') return 'OFF';
+        return row.shifts.map((s) => s.label).join(' | ');
+      });
+      return [emp.name, emp.id, emp.department, emp.position, ...cells];
+    });
+    const manRows = [['Day', 'Block', 'Sales Advisors', 'Promoters', 'Test Drive', 'Sales Coordinator', 'Other', 'Total']];
+    buildCoverage().forEach((day) => {
+      if (day.closed) {
+        manRows.push([day.day, 'OFF / CLOSED', 0, 0, 0, 0, 0, 0]);
+        return;
+      }
+      day.blocks.forEach((block) => {
+        manRows.push([day.day, block.label, block.counts.advisor, block.counts.promoter, block.counts.testdrive, block.counts.coordinator, block.counts.other, block.total]);
+      });
+    });
+    const table = (title, headers, rows) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
+      rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')
+    }</tbody></table>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${table('Weekly schedule', head, scheduleRows)}${table('Manpower', manRows[0], manRows.slice(1))}</body></html>`;
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'employee-shift-schedule.xls';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }
+
+  function bind() {
+    $('#btn-generate').addEventListener('click', runGenerate);
+    $('#btn-regenerate').addEventListener('click', runGenerate);
+    $('#btn-validate').addEventListener('click', () => {
+      state.validation = validateSchedule();
+      renderValidation();
+      if (state.validation.issues.length) $('#valid-list').hidden = false;
+    });
+    $('#valid-toggle').addEventListener('click', () => {
+      if (!state.validation || state.validation.ok) return;
+      $('#valid-list').hidden = !$('#valid-list').hidden;
+    });
+    ['#filter-dept', '#filter-pos', '#filter-emp', '#filter-day'].forEach((id) => {
+      $(id).addEventListener('change', renderTable);
+    });
+    $('#btn-excel').addEventListener('click', exportExcel);
+    $('#btn-print').addEventListener('click', () => window.print());
+    $('#btn-pdf').addEventListener('click', () => window.print());
+    $('#btn-reset').addEventListener('click', () => {
+      if (!confirm('Reset every employee to the original master list? Saved edits on this browser will be replaced.')) return;
+      state.employees = defaultEmployees();
+      saveEmployees();
+      state.schedule = null;
+      state.validation = null;
+      state.generation = 0;
+      state.lastSig = '';
+      state.stale = false;
+      renderAll();
+    });
+    $('#emp-list').addEventListener('click', (event) => {
+      const btn = event.target.closest('button');
+      if (!btn) return;
+      const index = Number(btn.dataset.i);
+      const emp = state.employees[index];
+      if (!emp) return;
+      if (btn.dataset.act === 'edit') fillForm(emp);
+      if (btn.dataset.act === 'delete') {
+        if (!confirm(`Delete ${emp.name}?`)) return;
+        state.employees.splice(index, 1);
+        saveEmployees();
+        markStale();
+        renderRoster();
+        renderFilters();
+        renderEditor();
+        renderGenerated();
+      }
+      if (btn.dataset.act === 'up' || btn.dataset.act === 'down') {
+        const next = index + (btn.dataset.act === 'up' ? -1 : 1);
+        if (next < 0 || next >= state.employees.length) return;
+        const [item] = state.employees.splice(index, 1);
+        state.employees.splice(next, 0, item);
+        saveEmployees();
+        renderEditor();
+        renderTable();
+        renderRules();
+      }
+    });
+    $('#emp-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const emp = readForm(true);
+      if (emp.error) {
+        $('#form-msg').textContent = emp.error;
+        return;
+      }
+      if (state.editingId) {
+        const index = state.employees.findIndex((e) => e.id === state.editingId);
+        if (index >= 0) state.employees[index] = emp;
+      } else state.employees.push(emp);
+      saveEmployees();
+      markStale();
+      renderRoster();
+      renderFilters();
+      renderEditor();
+      fillForm(null);
+      renderGenerated();
+      $('#form-msg').textContent = 'Saved. Generate the schedule to use this roster.';
+    });
+    $('#f-cancel').addEventListener('click', () => fillForm(null));
+    $('#f-mode').addEventListener('change', syncFixedVisibility);
+    $('#f-second').addEventListener('change', syncFixedVisibility);
+    ['#f-s1', '#f-e1', '#f-s2', '#f-e2', '#f-name'].forEach((id) => $(id).addEventListener('input', syncFixedVisibility));
+    $('#day-checks').addEventListener('change', syncFixedVisibility);
+    $('#f-pos').addEventListener('change', suggestFromPosition);
+  }
+
+  state.employees = loadEmployees() || defaultEmployees();
+  bind();
+  renderAll();
+})();
+</script>
+</body>
+</html>

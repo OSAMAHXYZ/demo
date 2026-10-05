@@ -1481,8 +1481,8 @@ function createDeliveryTransformationRouter(opts = {}) {
   );
 
   /**
-   * Hanouf uploads Sales Raw — refreshes vehicle details on every matching VIN
-   * (all months), so every user sees the same data.
+   * Hanouf uploads Sales Raw. VINs already on the Live Sheet are left unchanged.
+   * New VINs (Proforma filled, Invoice Date empty) go to Assignment only.
    */
   router.post(
     '/sales-raw',
@@ -1522,64 +1522,55 @@ function createDeliveryTransformationRouter(opts = {}) {
         skippedNoProforma: 0,
         skippedInvoiced: 0,
         skippedOnSystem: 0,
+        ignoredOnSheet: 0,
         duplicates: parsed.duplicates || 0,
       };
       const pending = pendingMap();
+      const freshItems = [];
       parsed.items.forEach((item) => {
         const v = store.getVehicle(item.vin);
         const hasProforma = !!String((item.raw && item.raw.proformaDate) || '').trim();
         const hasInvoice = !!String((item.raw && item.raw.invoiceDate) || '').trim();
         const canAssign = hasProforma && !hasInvoice;
         const isToday = item.raw.proformaDate === summary.today;
-        if (!v) {
-          summary.notOnSheet += 1;
-          if (!hasProforma) summary.skippedNoProforma += 1;
-          else if (hasInvoice) summary.skippedInvoiced += 1;
-          else {
-            summary.assignable += 1;
-            if (isToday) summary.todayNew += 1;
-            const prev = pending[item.vin] || {};
-            const raw = { ...emptyRaw(), ...(prev.raw || {}) };
-            Object.entries(item.raw).forEach(([k, val]) => {
-              if (val !== '' && val != null) raw[k] = val;
-            });
-            raw.vin = item.vin;
-            pending[item.vin] = {
-              ...prev,
-              vin: item.vin,
-              raw,
-              uploadedBy: req.dtUser.name,
-              uploadedAt: now,
-              firstUploadedAt: prev.firstUploadedAt || prev.uploadedAt || now,
-              filename,
-              inventoryOwnerId: prev.inventoryOwnerId || '',
-              inventoryOwnerName: prev.inventoryOwnerName || '',
-              inventoryClaimedAt: prev.inventoryClaimedAt || '',
-            };
-          }
+        if (v) {
+          summary.matched += 1;
+          summary.ignoredOnSheet += 1;
+          if (canAssign) summary.skippedOnSystem += 1;
+          if (isToday) summary.todayOnSystem += 1;
           return;
         }
-        if (canAssign) summary.skippedOnSystem += 1;
-        if (isToday) summary.todayOnSystem += 1;
-        summary.matched += 1;
-        let changed = false;
-        Object.entries(item.raw).forEach(([k, val]) => {
-          if (val === '' || val == null) return;
-          if (String(v.raw[k] ?? '') !== String(val)) {
-            v.raw[k] = val;
-            changed = true;
-          }
-        });
-        if (changed) {
-          v.rawUpdatedAt = now;
-          store.upsertVehicle(item.vin, v);
-          summary.updated += 1;
+        freshItems.push(item);
+        summary.notOnSheet += 1;
+        if (!hasProforma) summary.skippedNoProforma += 1;
+        else if (hasInvoice) summary.skippedInvoiced += 1;
+        else {
+          summary.assignable += 1;
+          if (isToday) summary.todayNew += 1;
+          const prev = pending[item.vin] || {};
+          const raw = { ...emptyRaw(), ...(prev.raw || {}) };
+          Object.entries(item.raw).forEach(([k, val]) => {
+            if (val !== '' && val != null) raw[k] = val;
+          });
+          raw.vin = item.vin;
+          pending[item.vin] = {
+            ...prev,
+            vin: item.vin,
+            raw,
+            uploadedBy: req.dtUser.name,
+            uploadedAt: now,
+            firstUploadedAt: prev.firstUploadedAt || prev.uploadedAt || now,
+            filename,
+            inventoryOwnerId: prev.inventoryOwnerId || '',
+            inventoryOwnerName: prev.inventoryOwnerName || '',
+            inventoryClaimedAt: prev.inventoryClaimedAt || '',
+          };
         }
       });
 
       recordImport('lastSalesRaw', summary);
       if (companyPerformance.isHanoufUser(req.dtUser)) {
-        companyPerformance.recordHanoufSalesRaw(store, parsed.items, {
+        companyPerformance.recordHanoufSalesRaw(store, freshItems, {
           at: now,
           filename,
         });
@@ -1592,7 +1583,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         user: req.dtUser.name,
         action: 'upload_sales_raw',
         oldValue: filename,
-        newValue: `${summary.matched} matched · ${summary.updated} updated · ${summary.assignable} to Assignment (P filled · V empty)`,
+        newValue: `${summary.ignoredOnSheet} already on Live Sheet ignored · ${summary.assignable} to Assignment (P filled · V empty)`,
       });
       store.save();
       summary.pendingTotal = Object.keys(pending).length;
@@ -2314,9 +2305,35 @@ function createDeliveryTransformationRouter(opts = {}) {
     });
     const before = JSON.parse(JSON.stringify(byType));
 
-    const rows = Object.values(pending)
-      .sort((a, b) => typeLabel(a.raw.salesType).localeCompare(typeLabel(b.raw.salesType)) || a.vin.localeCompare(b.vin))
-      .map((p) => {
+    const pendingRows = Object.values(pending)
+      .sort((a, b) => typeLabel(a.raw.salesType).localeCompare(typeLabel(b.raw.salesType)) || a.vin.localeCompare(b.vin));
+    const lockedRows = [];
+    const openRows = [];
+    pendingRows.forEach((p) => {
+      const locked = p.fixedEmployeeId ? findAssignable(p.fixedEmployeeId) : null;
+      if (locked) lockedRows.push({ p, emp: locked });
+      else openRows.push(p);
+    });
+    const place = (emp, t) => {
+      if (!emp) return;
+      byType[emp.id][t] = (byType[emp.id][t] || 0) + 1;
+      total[emp.id] += 1;
+    };
+    let wroteLock = false;
+    const rows = [
+      ...lockedRows.map(({ p, emp }) => {
+        const t = typeLabel(p.raw.salesType);
+        place(emp, t);
+        return {
+          vin: p.vin,
+          salesType: t,
+          proformaDate: p.raw.proformaDate,
+          suggestedEmployeeId: emp.id,
+          suggestedEmployeeName: emp.name,
+          assignmentFixed: true,
+        };
+      }),
+      ...openRows.map((p) => {
         const t = typeLabel(p.raw.salesType);
         const pick = available.reduce((best, u) => {
           if (!best) return u;
@@ -2324,9 +2341,11 @@ function createDeliveryTransformationRouter(opts = {}) {
           const b = byType[best.id][t] || 0;
           return a < b || (a === b && total[u.id] < total[best.id]) ? u : best;
         }, null);
+        place(pick, t);
         if (pick) {
-          byType[pick.id][t] = (byType[pick.id][t] || 0) + 1;
-          total[pick.id] += 1;
+          pending[p.vin].fixedEmployeeId = pick.id;
+          pending[p.vin].fixedEmployeeName = pick.name;
+          wroteLock = true;
         }
         return {
           vin: p.vin,
@@ -2334,8 +2353,11 @@ function createDeliveryTransformationRouter(opts = {}) {
           proformaDate: p.raw.proformaDate,
           suggestedEmployeeId: pick ? pick.id : '',
           suggestedEmployeeName: pick ? pick.name : '',
+          assignmentFixed: !!pick,
         };
-      });
+      }),
+    ];
+    if (wroteLock) store.save();
 
     const types = new Set();
     employees.forEach((u) => Object.keys(byType[u.id]).forEach((t) => types.add(t)));
@@ -2389,7 +2411,29 @@ function createDeliveryTransformationRouter(opts = {}) {
     return res.json({ ...buildAssignmentView(), canConfirm: isManager(req.dtUser.role) });
   });
 
-  /** Hanouf confirms the automatic split. { all: true } or { vins: [...] } uses the even-by-sales-type pick. */
+  /** Change the locked employee on a pending VIN. The name stays until this is called. */
+  router.post('/assignment/employee', auth, requireRole('admin', 'hanouf'), (req, res) => {
+    const vin = normVin(req.body && req.body.vin);
+    const emp = findAssignable(req.body && req.body.employeeId);
+    const pending = pendingMap();
+    if (!vin || !pending[vin]) return res.status(400).json({ error: 'VIN is not waiting for assignment' });
+    if (!emp) return res.status(400).json({ error: 'Choose an employee' });
+    if (onVacation(emp.id)) return res.status(400).json({ error: `${emp.name} is on vacation` });
+    const old = pending[vin].fixedEmployeeName || '';
+    pending[vin].fixedEmployeeId = emp.id;
+    pending[vin].fixedEmployeeName = emp.name;
+    store.pushAudit({
+      vin,
+      user: req.dtUser.name,
+      action: 'change_pending_assignment',
+      oldValue: old || '(unassigned)',
+      newValue: emp.name,
+    });
+    store.save();
+    return res.json({ ok: true, ...buildAssignmentView(), canConfirm: true });
+  });
+
+  /** Hanouf confirms the locked split. { all: true } or { vins: [...] } uses the saved employee name. */
   router.post('/assignment/confirm', auth, requireRole('admin', 'hanouf'), (req, res) => {
     const view = buildAssignmentView();
     const want = req.body && req.body.all

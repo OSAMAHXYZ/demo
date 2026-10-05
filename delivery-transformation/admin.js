@@ -1276,6 +1276,23 @@
     if ($('vsnd-region-body')) renderCarrierPanel();
   }
 
+  function printedCityRows() {
+    const pivot = dash && dash.carrierPivot;
+    const map = new Map();
+    ((pivot && pivot.rows) || []).forEach((row) => {
+      Object.entries(row.cells || {}).forEach(([city, cell]) => {
+        const name = String(city || '').trim() || '—';
+        if (!map.has(name)) map.set(name, { city: name, count: 0, vins: [] });
+        const group = map.get(name);
+        (cell.vins || []).forEach((vin) => {
+          group.vins.push(vin);
+          group.count += 1;
+        });
+      });
+    });
+    return [...map.values()].sort((a, b) => (b.count - a.count) || a.city.localeCompare(b.city, 'ar'));
+  }
+
   function renderDaysToSalesPanel() {
     const host = $('vsnd-aging-dist-body');
     if (!host) return;
@@ -1283,36 +1300,95 @@
     if (more) {
       more.onclick = (e) => {
         e.stopPropagation();
-        openDaysToSalesDetails({});
+        openPrintedCityDetails('');
       };
     }
-    const perf = slaDash && slaDash.companyPerformance;
-    const dist = (perf && perf.daysDist) || [];
-    const totals = (perf && perf.totals) || {};
-    const completed = totals.completedVins || 0;
-    if (!dist.length && !(totals.totalUniqueVins > 0)) {
-      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator assignments in this month yet.</p>';
+    if (!dash) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading printed cities…</p>';
+      return;
+    }
+    const rows = printedCityRows();
+    const total = rows.reduce((sum, row) => sum + row.count, 0);
+    if (!total) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator prints yet.</p>';
       host.onclick = null;
       host.style.cursor = '';
       return;
     }
-    host.innerHTML = `${donutSvg(dist, String(completed), 'Sold', { size: 96 })}
-      <ul class="vsnd-legend-list is-clickable is-scroll">${dist.map((x) => `
-        <li class="vsnd-legend-hit" data-dts-bucket="${esc(x.label)}" role="button" tabindex="0" title="Open ${esc(x.label)} VINs">
-          <i style="background:${esc(x.color)}"></i>
-          <span>${esc(x.label)}</span>
-          <b>${esc(x.count)}</b>
-          <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
-        </li>`).join('')}</ul>`;
+    const top = rows[0];
+    const dist = rows.map((row, i) => ({
+      label: row.city,
+      count: row.count,
+      color: CITY_COLORS[i % CITY_COLORS.length],
+      pct: Math.round((row.count / total) * 1000) / 10,
+    }));
+    host.innerHTML = `<div class="print-city-chart">
+      <p class="hint print-city-top">Most printed · <b>${esc(top.city)}</b> · ${esc(top.count)} of ${esc(total)}</p>
+      <div class="print-city-row">
+        ${donutSvg(dist, String(top.count), 'Most', { size: 96 })}
+        <ul class="vsnd-legend-list is-clickable is-scroll">${dist.map((x, i) => `
+          <li class="vsnd-legend-hit${i === 0 ? ' is-top' : ''}" data-print-city="${esc(x.label)}" role="button" tabindex="0" title="Open ${esc(x.label)} printed VINs">
+            <i style="background:${esc(x.color)}"></i>
+            <span>${esc(x.label)}</span>
+            <b>${esc(x.count)}</b>
+            <em>${esc(x.pct)}%</em>
+          </li>`).join('')}</ul>
+      </div>
+    </div>`;
     host.style.cursor = '';
     host.onclick = null;
-    host.querySelectorAll('[data-dts-bucket]').forEach((el) => {
-      const open = () => openDaysToSalesDetails({ bucket: el.dataset.dtsBucket || '' });
+    host.querySelectorAll('[data-print-city]').forEach((el) => {
+      const open = () => openPrintedCityDetails(el.dataset.printCity || '');
       el.addEventListener('click', (e) => { e.stopPropagation(); open(); });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
+  }
+
+  function openPrintedCityDetails(cityName) {
+    const rows = printedCityRows();
+    const total = rows.reduce((sum, row) => sum + row.count, 0);
+    const focus = cityName ? rows.filter((row) => row.city === cityName) : rows;
+    const vins = focus.flatMap((row) => row.vins.map((vin) => ({ ...vin, city: row.city })));
+    const top = rows[0];
+    openDrawer(`
+      <div class="drawer-head vsnd-sheet-head">
+        <div>
+          <h2>${cityName ? esc(cityName) : 'Printed cities'}</h2>
+          <p class="sub">Coordinator delivery notes${top ? ` · most printed ${esc(top.city)} (${esc(top.count)})` : ''}</p>
+        </div>
+        <button type="button" class="btn" id="detail-close">Close</button>
+      </div>
+      <div class="dts-summary">
+        <div class="dts-sum-card"><span>Printed</span><strong>${esc(cityName ? vins.length : total)}</strong></div>
+        <div class="dts-sum-card"><span>Cities</span><strong>${esc(cityName ? 1 : rows.length)}</strong></div>
+        <div class="dts-sum-card"><span>Most</span><strong>${top ? esc(top.city) : '—'}</strong></div>
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap">
+        <table class="data vsnd-live-table">
+          <thead><tr><th>City</th><th class="num">Printed</th><th class="num">Share</th></tr></thead>
+          <tbody>${(cityName ? focus : rows).map((row) => `<tr>
+            <td><b>${esc(row.city)}</b></td>
+            <td class="num">${esc(row.count)}</td>
+            <td class="num">${total ? esc(Math.round((row.count / total) * 1000) / 10) : 0}%</td>
+          </tr>`).join('') || '<tr><td colspan="3">No prints</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div class="table-wrap vsnd-sheet-wrap" style="margin-top:12px">
+        <table class="data vsnd-live-table">
+          <thead><tr><th>VIN</th><th>Product</th><th>الناقل</th><th>City</th><th>Printed</th><th>By</th></tr></thead>
+          <tbody>${vins.map((vin) => `<tr>
+            <td class="detail-vin">${esc(vin.vin || '—')}</td>
+            <td>${esc(vin.product || '—')}</td>
+            <td>${esc(vin.company || '—')}</td>
+            <td>${esc(vin.city || '—')}</td>
+            <td>${vin.printedAt ? esc(fmtWhen(vin.printedAt)) : '—'}</td>
+            <td>${esc(vin.printedBy || '—')}</td>
+          </tr>`).join('') || '<tr><td colspan="6">No printed VINs</td></tr>'}</tbody>
+        </table>
+      </div>
+    `, { wide: true });
   }
 
   function getDaysToSalesData() {
@@ -2413,6 +2489,7 @@
       renderCities();
       renderEmployees();
       renderSchedule();
+      renderDaysToSalesPanel();
       renderInventoryPanel();
       renderFleetFreeLeft();
       renderDisplayCounter();

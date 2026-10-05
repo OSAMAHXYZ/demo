@@ -1012,6 +1012,24 @@ body.vsnd-screen #tab-vins {
   align-items: center;
   overflow: hidden;
 }
+.print-city-chart {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: 4px;
+}
+.print-city-top { margin: 0; }
+.print-city-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+.vsnd-legend-list .is-top span { font-weight: 700; }
 .vsnd-panel-body.vsnd-status-compact {
   position: relative;
   overflow-x: hidden;
@@ -1688,7 +1706,13 @@ body.vsnd-screen .vsnd-total-btn {
 .sla-warn { color: #ca8a04; font-weight: 700; }
 .sla-bad { color: #eb0a1e; font-weight: 700; }
 
-/* Schedule alerts from VSND calendar */
+/* Schedule alerts live in the former Free / Left panel */
+.vsnd-alerts-panel {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: auto;
+}
 .vsnd-alerts {
   margin-top: 10px;
   border-top: 1px solid var(--line);
@@ -1710,8 +1734,19 @@ body.vsnd-screen .vsnd-total-btn {
 .vsnd-alert-list {
   display: grid;
   gap: 6px;
-  max-height: 180px;
+  width: 100%;
+  max-height: none;
   overflow: auto;
+}
+.vsnd-alerts-panel .vsnd-alert-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.vsnd-alerts-panel .vsnd-alert-model,
+.vsnd-alerts-panel .vsnd-alert-pro {
+  display: none;
+}
+.vsnd-alerts-panel .vsnd-alert-status {
+  grid-column: 1 / -1;
 }
 .vsnd-alert-row {
   display: grid;

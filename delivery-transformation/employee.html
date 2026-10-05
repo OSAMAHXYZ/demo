@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20261001cc1" />
+  <link rel="stylesheet" href="employee.css?v=20261005assignlock" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -167,15 +167,23 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">All your assigned VINs on one page · edits save automatically and stay after refresh or logout · tick VINs to keep them in view, assign, unassign or remove</p>
+            <p class="hint">Same VINs as before · column filters and copy only change what you see · saved data stays the same for everyone</p>
             <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar">
               <input type="search" id="my-q" placeholder="Search VIN / order / product…" />
+              <select id="my-employee"><option value="">All employees</option></select>
               <select id="my-status"><option value="">All statuses</option></select>
               <button type="button" class="btn" id="my-clear">Clear</button>
             </div>
             <div class="sel-bar" id="my-sel-bar"></div>
-            <div class="table-wrap"><table class="data" id="my-table"></table></div>
+            <div class="live-copy-bar" id="my-copy-bar">
+              <span class="live-copy-info" id="my-copy-info">Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers</span>
+              <button type="button" class="btn live-copy-btn" id="my-copy-btn" disabled>Copy</button>
+              <button type="button" class="btn live-copy-btn" id="my-copy-values" disabled title="Values only, no header row">Copy values</button>
+              <button type="button" class="btn live-copy-btn" id="my-cf-clear" hidden>Clear column filters</button>
+            </div>
+            <datalist id="my-cf-list"></datalist>
+            <div class="table-wrap live-sheet-wrap"><table class="data live-sheet" id="my-table"></table></div>
             <div class="pager" id="my-pager"></div>
           </div>
         </section>
@@ -190,7 +198,7 @@
                 <p class="hint" id="asg-hint">
                   Unique Sales Raw VINs with a <b>Proforma Date (column P)</b> and <b>no Invoice Date (column V)</b>,
                   that are not already on the system.
-                  The employee is picked automatically so everyone has the <b>same number in each sales type</b>.
+                  The employee name stays on the VIN. Tick <b>Change assign</b> to give that VIN to someone else.
                 </p>
               </div>
             </div>
@@ -271,8 +279,8 @@
           <div class="card">
             <h2>Upload Sales Raw</h2>
             <p class="hint">
-              Upload <b>Sales Raw Data</b> to refresh vehicle details (Product, Order, Sales Type, S/A, Owner, Customer,
-              GT / Vehicle Location, Phone) on <b>every VIN</b> on the Live Sheet, any month. Everyone sees the update time in the top bar.
+              Upload <b>Sales Raw Data</b>. VINs already on the Live Sheet are ignored, so their saved details stay the same.
+              New VINs with a Proforma Date and no Invoice Date go to Assignment.
             </p>
             <div class="raw-status-card">
               <div class="lbl">Last Sales Raw update</div>
@@ -309,6 +317,6 @@
   </div>
 
   <script src="shared.js?v=20261003scope2"></script>
-  <script src="employee.js?v=20261003scope2"></script>
+  <script src="employee.js?v=20261005assignlock"></script>
 </body>
 </html>
