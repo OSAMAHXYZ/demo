@@ -293,9 +293,9 @@
     .page-head { margin-bottom: 8px; }
     h1 { font-size: 18px; }
     .month-sheet { overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
-    .month-sheet table { width: 100%; table-layout: fixed; font-size: 7px; }
-    .month-sheet th, .month-sheet td { min-width: 0; padding: 2px 1px; white-space: normal; overflow: hidden; }
-    .month-sheet thead .who, .month-sheet td.who { width: 15%; }
+    .month-sheet table { width: 100%; table-layout: fixed; font-size: 6px; }
+    .month-sheet th, .month-sheet td { min-width: 0; padding: 1px; white-space: normal; overflow: hidden; }
+    .month-sheet thead .who, .month-sheet td.who { width: 8%; }
     .month-sheet .who { min-width: 0; position: static; font-size: 7px; }
     .month-sheet th span, .month-sheet .who small { font-size: 6px; }
   }
@@ -502,8 +502,26 @@
         changed = true;
       }
     });
+    defaultEmployees().forEach((src) => {
+      if (state.employees.some((emp) => emp.id === src.id)) return;
+      state.employees.push({
+        ...src,
+        shifts: src.shifts.map((shift) => ({ ...shift })),
+        fixedOffDays: [...(src.fixedOffDays || ['Friday'])],
+      });
+      changed = true;
+    });
     if (!state.settings.rotationStart) state.settings.rotationStart = '2026-10-01';
     return changed;
+  }
+  function scheduleColumns() {
+    const advisors = ADVISORS.map((advisor) => ({ id: advisor.id, title: advisor.ar, sub: advisor.short }));
+    const others = state.employees.filter((emp) => !isAdvisor(emp.id)).map((emp) => {
+      const parts = String(emp.name || '').trim().split(/\s+/);
+      const title = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : (parts[0] || emp.id);
+      return { id: emp.id, title, sub: emp.position || '' };
+    });
+    return advisors.concat(others);
   }
   function compactShifts(shifts) {
     if (!shifts.length) return '';
@@ -1262,10 +1280,11 @@
     const when = scheduleMonth();
     if (!when) return emptyBlock('NO SCHEDULE GENERATED', 'Choose a month and year. The rotation fills every date from the schedule start.', '<button class="btn-primary" type="button" data-act="open-generate">Generate schedule</button>');
     const dates = monthDates(when.year, when.month);
-    const head = ADVISORS.map((a) => `<th>${a.ar}<br><span>${esc(a.short)}</span></th>`).join('');
+    const people = scheduleColumns();
+    const head = people.map((person) => `<th>${esc(person.title)}<br><span>${esc(person.sub)}</span></th>`).join('');
     const body = dates.map((d) => {
-      const cells = ADVISORS.map((a) => {
-        const row = rowOnDate(a.id, d.key);
+      const cells = people.map((person) => {
+        const row = rowOnDate(person.id, d.key);
         return `<td class="${cellClass(row)}">${cellHtml(row)}</td>`;
       }).join('');
       const fri = d.name === 'Friday' ? ' fri' : '';
@@ -1281,7 +1300,7 @@
     return `<div class="wrap wide">
       ${pageHead('Schedule', period)}
       ${scheduleControls()}
-      <p class="muted screen-only">${esc(meta)} Week A starts on the Thursday of the schedule start date. Vacation and time off cover that day only.</p>
+      <p class="muted screen-only">${esc(meta)} Every employee is on the month sheet. Sales advisors follow Week A and Week B. Vacation and time off cover that day only.</p>
       <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span><span><i class="dot" style="background:#b54708"></i>Time off</span></div>
       <div class="screen-only">${healthCard()}</div>
       <div style="margin-top:14px">${monthBoard()}</div>
@@ -1795,8 +1814,9 @@
     const when = scheduleMonth();
     if (!when) { toast('Generate a schedule before exporting.'); return; }
     const dates = monthDates(when.year, when.month);
-    const head = ['Date', 'Day', 'Rotation', ...ADVISORS.map((a) => a.short)];
-    const rows = dates.map((d) => [d.key, d.name, rotationName(rotationIndexFor(d.key)), ...ADVISORS.map((a) => cellPlain(rowOnDate(a.id, d.key)))]);
+    const people = scheduleColumns();
+    const head = ['Date', 'Day', 'Rotation', ...people.map((person) => person.sub ? `${person.title} (${person.sub})` : person.title)];
+    const rows = dates.map((d) => [d.key, d.name, rotationName(rotationIndexFor(d.key)), ...people.map((person) => cellPlain(rowOnDate(person.id, d.key)))]);
     const man = [['Date', 'Day', '9-12', '12-5', '5-9', 'Total']];
     advisorManpower().forEach((row) => man.push([row.key, row.name, row.counts[0], row.counts[1], row.counts[2], row.total]));
     const table = (title, headers, body) => `<h2>${esc(title)}</h2><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
