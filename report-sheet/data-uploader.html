@@ -502,8 +502,9 @@
       Only <b>Col J age 0</b> (or blank) from that file counts for that day’s Allocation <b>Tot</b> / <b>RES</b>.
       <br/><br/>
       Saves go to the <b>same server archive as Admin Push</b> (<code>report-sheet-data/rtl-daily</code> + stable <code>by-day/YYYY-MM-DD.xlsx</code>).
-      This browser also keeps a backup (like Admin). <b>Restore selected month</b> sends that backup back to the server only for the month showing in the calendar, and only when that month is this month or last month.
-      On Railway, mount a volume and set <code>PERSISTENT_DATA_DIR=/data</code> so day files survive redeploys.
+      Only <b>this month</b> is stored. Last month and older day files are deleted from the server and from this browser.
+      Saving a day <b>pushes it to the server</b> and automatically restores the rest of this month from this browser’s backup.
+      On Railway, mount a volume and set <code>PERSISTENT_DATA_DIR=/data</code> so this month’s day files survive redeploys.
       <br/><br/>
       <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — past days stay on their day boxes.
       If a green day shows <b>0 age 0</b>, that file has no age-0 rows — re-drop that day’s RTL extract.
@@ -518,7 +519,7 @@
           <input id="cal-month" type="month" />
         </div>
         <div class="actions" style="margin:0;align-items:flex-end">
-          <button type="button" id="btn-restore-browser" title="Re-upload this browser’s day files for the selected month. Only this month or last month.">Restore selected month</button>
+          <button type="button" id="btn-restore-browser" title="Re-upload this browser’s day files for this month. Runs automatically when a day is pushed to the server.">Restore this month</button>
         </div>
         <div class="status" id="day-cal-status">Drop an RTL file onto a day box.</div>
       </div>
@@ -785,6 +786,28 @@
     });
   }
 
+  async function idbDeleteRtlDays(dateKeys) {
+    const keys = (dateKeys || []).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(String(k)));
+    if (!keys.length) return;
+    const db = await openRtlIdb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(RTL_IDB_STORE, "readwrite");
+      const store = tx.objectStore(RTL_IDB_STORE);
+      keys.forEach((dateKey) => store.delete(dateKey));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /** Drop every browser day backup that is not the current Riyadh month. */
+  async function pruneBrowserDaysOutsideCurrentMonth() {
+    const month = monthKeyFromDate(todayRiyadh());
+    if (!month) return 0;
+    const drop = (await idbListRtlDayKeys()).filter((dateKey) => !String(dateKey).startsWith(`${month}-`));
+    if (drop.length) await idbDeleteRtlDays(drop);
+    return drop.length;
+  }
+
   /** Run async work over items with a concurrency limit. */
   async function mapPool(items, concurrency, worker) {
     const list = Array.isArray(items) ? items : [];
@@ -805,6 +828,7 @@
   /** Browser backup (same idea as Admin IndexedDB workbooks) so redeploys can restore. */
   async function cacheDayFileInBrowser(dateKey, { fileName, buffer, count, age0, source }) {
     if (!dateKey || !buffer) return;
+    if (!monthIsRestorable(monthKeyFromDate(dateKey))) return;
     try {
       await idbMergeRtlDays({
         [dateKey]: {
@@ -862,6 +886,7 @@
           source: "uploader-browser-restore",
           fileBlob: blob,
           skipBrowserCache: true,
+          skipAutoRestore: true,
         });
         restored += 1;
       } catch (err) {
@@ -905,10 +930,9 @@
     return (cal && cal.value) || monthKeyFromDate(todayRiyadh());
   }
 
-  /** Browser restore is allowed only for the current Riyadh month and the month before it. */
+  /** Browser restore is allowed only for the current Riyadh month. */
   function restorableMonthKeys() {
-    const current = monthKeyFromDate(todayRiyadh());
-    return [current, shiftMonthKey(current, -1)].filter(Boolean);
+    return [monthKeyFromDate(todayRiyadh())].filter(Boolean);
   }
 
   function monthIsRestorable(monthKey) {
@@ -1013,7 +1037,7 @@
     setStatus($("#day-cal-status"), text, kind);
   }
 
-  async function saveRtlToServer({ dateKey, fileName, source, fileBlob, fileBuffer, excelBase64, vehicles, skipBrowserCache }) {
+  async function saveRtlToServer({ dateKey, fileName, source, fileBlob, fileBuffer, excelBase64, vehicles, skipBrowserCache, skipAutoRestore }) {
     // Prefer binary upload (same durability as Admin Push Excel on disk).
     let saved = null;
     let bufferForCache = null;
@@ -1071,6 +1095,14 @@
         source: source || "uploader",
       });
     }
+    if (!skipAutoRestore && monthIsRestorable(monthKeyFromDate(dateKey))) {
+      try {
+        await pruneBrowserDaysOutsideCurrentMonth();
+        await restoreBrowserDayFilesToServer({ monthKey: monthKeyFromDate(todayRiyadh()) });
+      } catch (restoreErr) {
+        console.warn("[rtl-daily] auto restore after push", restoreErr);
+      }
+    }
     return saved;
   }
 
@@ -1078,6 +1110,9 @@
     if (!file) throw new Error("No file selected");
     if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
       throw new Error("Invalid schedule day");
+    }
+    if (!monthIsRestorable(monthKeyFromDate(dateKey))) {
+      throw new Error("Only this month is stored. Earlier months are removed.");
     }
     selectScheduleDay(dateKey);
     busyDayKey = dateKey;
@@ -1521,6 +1556,7 @@
     const gen = ++archiveSyncGen;
     setStatus($("#list-status"), "Loading…");
     try {
+      try { await pruneBrowserDaysOutsideCurrentMonth(); } catch { /* keep going */ }
       const res = await fetch(API_META, { cache: "no-store" });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
       const data = await res.json();
@@ -1530,6 +1566,7 @@
       const restoreNote = Number(data.rehydratedDays) > 0
         ? ` · reloaded ${data.rehydratedDays} day(s) from by-day Excel`
         : "";
+      const pruneNote = Number(data.prunedDays) > 0 ? " · earlier months removed" : "";
       const activeDays = Object.keys(activeByDay).length;
       const cal = $("#cal-month");
       const mk = (cal && cal.value) || monthKeyFromDate(todayRiyadh());
@@ -1540,8 +1577,8 @@
       setStatus(
         $("#list-status"),
         snapshots.length
-          ? `${snapshots.length} snapshot(s) · ${activeDays} active day(s) for schedule${restoreNote}`
-          : `No snapshots yet${restoreNote}`
+          ? `${snapshots.length} snapshot(s) · ${activeDays} active day(s) for schedule${restoreNote}${pruneNote}`
+          : `No snapshots yet${restoreNote}${pruneNote}`
       );
       void syncArchiveInBackground(gen, { autoRestore });
     } catch (err) {
@@ -1701,6 +1738,8 @@
     selectScheduleDay(dateKeyForDay(mk, nextDay), { syncMonth: false });
     if (monthIsRestorable(mk)) {
       void syncArchiveInBackground(archiveSyncGen, { autoRestore: true, monthKey: mk });
+    } else {
+      setDayCalStatus("Only this month is stored. Earlier months are removed.");
     }
   });
 
@@ -1827,6 +1866,10 @@
       setStatus($("#scan-status"), "Please select a snapshot date.", "err");
       return;
     }
+    if (!monthIsRestorable(monthKeyFromDate(date))) {
+      setStatus($("#scan-status"), "Only this month is stored. Earlier months are removed.", "err");
+      return;
+    }
     if (!scannedFileBlob && !scannedExcelBase64) {
       setStatus($("#scan-status"), "Excel file required — choose the RTL file again before saving.", "err");
       return;
@@ -1861,7 +1904,7 @@
     if (btn) btn.disabled = true;
     const mk = selectedMonthKey();
     if (!monthIsRestorable(mk)) {
-      setDayCalStatus("Select this month or last month. Older months are not restored.", "err");
+      setDayCalStatus("Only this month is stored. Earlier months are removed.", "err");
       if (btn) btn.disabled = false;
       return;
     }
@@ -1880,7 +1923,7 @@
       await loadMeta({ autoRestore: false });
       setDayCalStatus(
         r.blocked
-          ? "Select this month or last month. Older months are not restored."
+          ? "Only this month is stored. Earlier months are removed."
           : r.restored
           ? `Restored ${r.restored} day file(s) for ${mk}`
             + (r.skipped ? ` · ${r.skipped} already on server` : "")

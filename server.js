@@ -1211,7 +1211,53 @@ function persistRtlDailySnapshot({ dateKey, vehicles, fileName, source, excelBuf
   saveRtlDailyIndex({ snapshots: rest, activeByDay });
   // Stable by-day Excel mirror (same durability idea as Admin live files/rtl.xlsx).
   mirrorRtlActiveDayFiles(snap, savedExcelPath);
+  pruneRtlDailyOutsideCurrentMonth();
   return snap;
+}
+
+/** Data Uploader keeps the current Riyadh month only. Last month and older day files are removed. */
+function pruneRtlDailyOutsideCurrentMonth() {
+  const month = todayIsoRiyadh().slice(0, 7);
+  const inMonth = (dateKey) => String(dateKey || '').slice(0, 7) === month;
+  ensureRtlDailyDirs();
+  const index = loadRtlDailyIndex();
+  const keep = [];
+  let removed = 0;
+  for (const s of index.snapshots || []) {
+    if (inMonth(s.date)) {
+      keep.push(s);
+      continue;
+    }
+    removed += 1;
+    try {
+      const fp = rtlDailySnapshotPath(s.id);
+      if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch { /* ignore one file */ }
+    try {
+      const xfp = rtlDailyExcelPath(s.id);
+      if (xfp && fs.existsSync(xfp)) fs.unlinkSync(xfp);
+    } catch { /* ignore one file */ }
+  }
+  const activeByDay = {};
+  Object.entries(index.activeByDay || {}).forEach(([date, id]) => {
+    if (inMonth(date)) activeByDay[date] = id;
+  });
+  const activeChanged = Object.keys(activeByDay).length !== Object.keys(index.activeByDay || {}).length;
+  if (removed || activeChanged) saveRtlDailyIndex({ snapshots: keep, activeByDay });
+  const dropNamed = (dir, re) => {
+    if (!dir || !fs.existsSync(dir)) return;
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { return; }
+    names.forEach((name) => {
+      const m = re.exec(name);
+      if (!m || inMonth(m[1])) return;
+      try { fs.unlinkSync(path.join(dir, name)); removed += 1; } catch { /* ignore */ }
+    });
+  };
+  dropNamed(path.join(RTL_DAILY_DIR, 'by-day'), /^(\d{4}-\d{2}-\d{2})\.(?:xlsx|json)$/i);
+  dropNamed(RTL_DAILY_DIR, /^(\d{4}-\d{2}-\d{2})(?:T[^.]*)?\.json$/i);
+  dropNamed(RTL_DAILY_FILES_DIR, /^(\d{4}-\d{2}-\d{2})(?:T[^.]*)?\.xlsx$/i);
+  return { month, removed };
 }
 
 function loadRtlDailySnapshot(idOrDate) {
@@ -2275,7 +2321,7 @@ function ensureRtlDayRollover() {
     }
     if (prev === today) return { ok: true, today, rolled: false };
 
-    if (prev && prev < today) {
+    if (prev && prev < today && prev.slice(0, 7) === today.slice(0, 7)) {
       const ended = prev;
       const hasEnded = Boolean(resolveRtlActiveIdForDay(ended));
       if (!hasEnded) {
@@ -4540,6 +4586,9 @@ app.post('/api/rtl-daily/save-file', express.raw({ limit: '80mb', type: '*/*' })
       return res.status(400).json({ error: 'RTL Excel file required' });
     }
     const dateKey = normalizeDateKey(req.query.date) || todayIsoRiyadh();
+    if (dateKey.slice(0, 7) !== todayIsoRiyadh().slice(0, 7)) {
+      return res.status(400).json({ error: 'Only this month is stored. Last month has been removed.' });
+    }
     const fileName = decodeURIComponent(String(
       req.query.fileName || req.headers['x-filename'] || req.headers['x-file-name'] || 'rtl.xlsx'
     ).trim()) || 'rtl.xlsx';
@@ -5303,6 +5352,7 @@ app.post('/api/report-sheet/end-of-month', (req, res) => {
 app.get('/api/rtl-daily/meta', (_req, res) => {
   try {
     ensureRtlDayRollover();
+    const pruned = pruneRtlDailyOutsideCurrentMonth();
     const hydrated = rehydrateRtlFromByDayMirrors();
     const index = loadRtlDailyIndex();
     const activeByDay = index.activeByDay || {};
@@ -5317,7 +5367,9 @@ app.get('/api/rtl-daily/meta', (_req, res) => {
       persistentRoot: PERSISTENT_ROOT,
       archiveDir: RTL_DAILY_DIR,
       byDayDir: path.join(RTL_DAILY_DIR, 'by-day'),
-      rehydratedDays: Number(hydrated && hydrated.restored) || 0
+      rehydratedDays: Number(hydrated && hydrated.restored) || 0,
+      storedMonth: todayIsoRiyadh().slice(0, 7),
+      prunedDays: Number(pruned && pruned.removed) || 0
     });
   } catch (err) {
     console.error('[rtl-daily/meta]', err);
@@ -5358,6 +5410,7 @@ app.get('/api/rtl-daily/by-day/:date/excel', (req, res) => {
 app.get('/api/rtl-daily/active-month', (req, res) => {
   try {
     ensureRtlDayRollover();
+    pruneRtlDailyOutsideCurrentMonth();
     rehydrateRtlFromByDayMirrors();
     const month = String(req.query.month || '').trim();
     const pack = loadRtlActiveMonth(month);
@@ -5492,6 +5545,9 @@ app.post('/api/rtl-daily/save', (req, res) => {
   try {
     const body = req.body || {};
     const dateKey = normalizeDateKey(body.date) || todayIsoRiyadh();
+    if (dateKey.slice(0, 7) !== todayIsoRiyadh().slice(0, 7)) {
+      return res.status(400).json({ error: 'Only this month is stored. Last month has been removed.' });
+    }
     const vehiclesIn = Array.isArray(body.vehicles) ? body.vehicles : [];
     const source = String(body.source || 'uploader').trim() || 'uploader';
     let excelBuffer = null;
@@ -7841,6 +7897,7 @@ server.listen(PORT, () => {
   migrateLegacyRtlDailyDir();
   try {
     loadRtlDailyIndex();
+    pruneRtlDailyOutsideCurrentMonth();
     const hydrated = rehydrateRtlFromByDayMirrors();
     if (hydrated && hydrated.restored) {
       console.log(`[rtl-daily] rehydrated ${hydrated.restored} day(s) from by-day Excel mirrors`);
