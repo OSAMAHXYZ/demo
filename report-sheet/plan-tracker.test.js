@@ -289,6 +289,22 @@ test("later RES observation is not a swap", () => {
   assertEq(cc.register[0].statusKey, "My Stock");
 });
 
+test("my stock lists RES VINs when the date is not the file day", () => {
+  const model = build({
+    "2026-10-01": [veh("OLD1", RES, 4, d(2026, 9, 27), { year: "2025" })],
+    "2026-10-04": [veh("OLD1", RES, 7, d(2026, 9, 27), { year: "2025" })],
+  }, "2026-10");
+  assertEq(model.kpis.allocated, 0);
+  const rows = PT.myStockRows(model);
+  assertEq(rows.length, 1);
+  assertEq(rows[0].vin, "OLD1");
+  assertEq(rows[0].statusKey, "My Stock");
+  assertEq(rows[0].dateKey, "2026-10-01");
+  model.lists.current[0].salesKind = "delivered";
+  model.lists.current[0].invoiceDate = d(2026, 10, 4);
+  assertEq(PT.myStockRows(model).length, 0);
+});
+
 test("normalizeVin is stable", () => {
   assertEq(PT.normalizeVin(" ab c-123 "), "ABC123");
   assertEq(PT.normalizeVin(12345), "12345");

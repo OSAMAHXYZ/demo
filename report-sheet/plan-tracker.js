@@ -2309,6 +2309,50 @@
     render({ force: true, monthKey: mk });
   }
 
+  /**
+   * My Stock VINs: still Retail Electronic Sales, not delivered or proforma.
+   * Includes receipts from any day, plus current RES vehicles whose allocation date is not today.
+   */
+  function myStockRows(model, register) {
+    const src = model || {};
+    const reg = Array.isArray(register) ? register : (controlCenter(src).register || []);
+    const fromRegister = reg.filter((r) => r && r.statusKey === "My Stock");
+    const known = new Set(reg.map((r) => r && r.vin).filter(Boolean));
+    const values = global.allocationValues || {};
+    const extras = [];
+    ((src.lists && src.lists.current) || []).forEach((r) => {
+      if (!r || !r.vin || known.has(r.vin) || !isRES(r)) return;
+      const hist = (src.vinHistory && src.vinHistory.get(r.vin)) || [];
+      const first = hist[0] || r;
+      const receiptKey = first.snapshotDate || first.dateKey || r.dateKey || "";
+      const cls = classifyVinStatus({
+        ...r,
+        dateKey: receiptKey,
+        salesKind: r.salesKind,
+        invoiceDate: r.invoiceDate,
+        proformaDate: r.proformaDate,
+      }, hist);
+      if (cls.status !== "My Stock") return;
+      const leaf = leafOf(r);
+      extras.push(Object.assign({}, first, r, {
+        dateKey: receiptKey,
+        statusKey: "My Stock",
+        swapDate: "",
+        swapArea: "",
+        swapLocation: "",
+        statusConflict: false,
+        seg: leaf ? (leaf.seg || "—") : "—",
+        leafId: leaf ? leaf.id : "",
+        leafProduct: leaf ? leaf.product : (r.product || "—"),
+        leafSfx: leaf ? leaf.sfx : (r.suffix || "—"),
+        planQty: leaf ? (Number(values[leaf.id]) || 0) : 0,
+        stockOnly: true,
+      }));
+      known.add(r.vin);
+    });
+    return fromRegister.concat(extras);
+  }
+
   function renderTower(model) {
     if (!model) return;
     const dash = $("#pt-dash");
@@ -2328,6 +2372,9 @@
     const received = receivedSet.size;
     const counts = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
     scoped.forEach((r) => { counts[r.statusKey] = (counts[r.statusKey] || 0) + 1; });
+    const stockAll = myStockRows(model, cc.register).filter(scopeMatch);
+    const stockExtras = stockAll.filter((r) => r.stockOnly);
+    counts["My Stock"] = stockAll.length;
     const gap = gapInfo(plan, within);
     const hint = $("#pt-live-hint");
     if (hint) {
@@ -2342,11 +2389,16 @@
 
     const products = new Set(schedAll.map((r) => r.product).filter((p) => p && p !== "(unmatched)"));
     cc.register.forEach((r) => { if (r.leafProduct && r.leafProduct !== "—") products.add(r.leafProduct); });
+    stockAll.forEach((r) => { if (r.leafProduct && r.leafProduct !== "—") products.add(r.leafProduct); });
     const sfxes = new Set();
     schedAll.forEach((r) => { if (r.sfx && r.sfx !== "—") sfxes.add(r.sfx); });
     const years = new Set();
     const areas = new Set();
     cc.register.forEach((r) => {
+      if (r.year) years.add(String(r.year));
+      if (r.searchArea) areas.add(r.searchArea);
+    });
+    stockAll.forEach((r) => {
       if (r.year) years.add(String(r.year));
       if (r.searchArea) areas.add(r.searchArea);
     });
@@ -2368,7 +2420,7 @@
       ["plan", "Monthly plan", plan, "Admin Push"],
       ["received", "RTL age 0", received, "Unique RES · age 0"],
       ["within", "Within allocation", within, "RES · age 0 · alloc date"],
-      ["stock", "My stock", counts["My Stock"], "Still with RES"],
+      ["stock", "My stock", counts["My Stock"], "Still in RES · any day"],
       ["proforma", "Proforma", counts.Proforma, "Sales Raw col P"],
       ["delivered", "Delivered", counts.Delivered, "Sales Raw col V"],
       ["swapped", "Swapped", counts.Swapped, "Later non-RES area"],
@@ -2420,6 +2472,9 @@
           const mine = scoped.filter((v) => (r.id === "__unmatched__" ? !v.leafId : v.leafId === r.id));
           const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
           mine.forEach((v) => { c[v.statusKey] = (c[v.statusKey] || 0) + 1; });
+          stockExtras.forEach((v) => {
+            if (r.id === "__unmatched__" ? !v.leafId : v.leafId === r.id) c["My Stock"] += 1;
+          });
           const pct = r.allocation ? `${Math.round((mine.length / r.allocation) * 1000) / 10}%` : "—";
           return `<tr><td><button type="button" class="pt-link${view.sfx === r.sfx ? " is-on" : ""}" data-pt-sfx="${esc(r.sfx)}">${esc(r.product)} ${esc(r.sfx)}</button></td>
             <td class="num">${num(r.allocation)}</td><td class="num">${num(mine.length)}</td>
@@ -2548,6 +2603,7 @@
         const mine = scoped.filter((r) => r.dateKey === d.dateKey);
         const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
         mine.forEach((r) => { c[r.statusKey] = (c[r.statusKey] || 0) + 1; });
+        stockExtras.forEach((r) => { if (r.dateKey === d.dateKey) c["My Stock"] += 1; });
         const recN = (d.dailyUniqueRESAge0List || []).filter((r) => scopeMatch(r)).length;
         return `<tr><td>${esc(d.label)}</td><td class="num">—</td><td class="num">${num(recN)}</td><td class="num">${num(mine.length)}</td>
           <td class="num">${num(c.Delivered)}</td><td class="num">${num(c.Proforma)}</td>
@@ -2564,7 +2620,7 @@
 
     const todayKey = todayDateKey(model.monthKey);
     const tabCounts = {
-      all: scoped.length,
+      all: scoped.length + stockExtras.length,
       today: scoped.filter((r) => r.dateKey === todayKey).length,
       stock: counts["My Stock"],
       proforma: counts.Proforma,
@@ -2590,8 +2646,9 @@
         pin.textContent = view.scheduleTitle || `${view.vinPin.size} schedule VIN(s)`;
       } else pin.hidden = true;
     }
-    let tableRows = scoped;
+    let tableRows = scoped.concat(stockExtras);
     if (view.tab === "today") tableRows = scoped.filter((r) => r.dateKey === todayKey);
+    else if (view.tab === "stock" || view.status === "My Stock") tableRows = stockAll;
     else if (view.status) tableRows = scoped.filter((r) => r.statusKey === view.status);
     else if (view.tab && view.tab !== "all") tableRows = scoped.filter((r) => r.statusKey === tabToStatus(view.tab));
     vinPaintRows = tableRows;
@@ -2830,6 +2887,7 @@
     buildModel,
     buildScheduleRows,
     buildControlCenter,
+    myStockRows,
     classifyVinStatus,
     normalizeVin,
     isRES,
