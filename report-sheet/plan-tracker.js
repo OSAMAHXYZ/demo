@@ -115,6 +115,31 @@
     return null;
   }
 
+  function ymdKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  /**
+   * Calendar gaps between the first and last RTL file.
+   * A file with zero allocations is not a gap.
+   */
+  function missingSnapshotDates(dateKeys) {
+    const keys = (dateKeys || []).filter((k) => fileDateFromKey(k)).slice().sort();
+    if (keys.length < 2) return [];
+    const have = new Set(keys);
+    const missing = [];
+    const start = fileDateFromKey(keys[0]);
+    const end = fileDateFromKey(keys[keys.length - 1]);
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    while (cursor <= last) {
+      const key = ymdKey(cursor);
+      if (!have.has(key)) missing.push(key);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return missing;
+  }
+
   function sameCalendarDay(a, b) {
     if (!(a instanceof Date) || !(b instanceof Date)) return false;
     if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
@@ -671,6 +696,17 @@
       dayStats.currentRES = dayStats.resTotal;
       dayStats.transferredIntoRES = dayStats.transferIn.length;
       dayStats.transferredOutOfRES = dayStats.transferOut.length;
+      // One daily row per RTL file. Allocation count never decides whether the date exists.
+      const storedDate = String((snap && (snap.asOfDate || snap.date)) || "");
+      dayStats.fileName = String((snap && snap.fileName) || "");
+      dayStats.storedDate = /^\d{4}-\d{2}-\d{2}/.test(storedDate) ? storedDate.slice(0, 10) : dateKey;
+      dayStats.sheetUsed = String((snap && snap.sheetName) || "Sheet 1");
+      dayStats.totalRows = Array.isArray(snap && snap.vehicles) ? snap.vehicles.length : 0;
+      dayStats.uniqueVins = byVin.size;
+      dayStats.resRows = [];
+      byVin.forEach((r) => {
+        if (isRES(r)) dayStats.resRows.push(r);
+      });
 
       daily.push(dayStats);
       latestTarget = new Map([...byVin].filter(([, r]) => r.isTarget));
@@ -762,11 +798,23 @@
     enrichRowsWithSalesRaw(lists.age0);
     daily.forEach((d) => {
       enrichRowsWithSalesRaw(d.planReceipts);
+      enrichRowsWithSalesRaw(d.resRows);
       enrichRowsWithSalesRaw(d.transferOut);
       enrichRowsWithSalesRaw(d.transferIn);
       enrichRowsWithSalesRaw(d.newRes);
       enrichRowsWithSalesRaw(d.dailyUniqueRESAge0List);
     });
+    const missingDates = missingSnapshotDates(dateKeys);
+    const rtlFiles = daily.map((d) => ({
+      fileName: d.fileName || "",
+      dateKey: d.dateKey,
+      storedDate: d.storedDate || d.dateKey,
+      sheetUsed: d.sheetUsed || "Sheet 1",
+      totalRows: d.totalRows || 0,
+      uniqueVins: d.uniqueVins || 0,
+      res: (d.resRows || []).length,
+      allocation: (d.planReceipts || []).length,
+    }));
 
     const planTrackerDebug = daily.map((d) => ({
       date: d.dateKey,
@@ -798,6 +846,8 @@
       dateKeys,
       latestKey,
       daily,
+      missingDates,
+      rtlFiles,
       movements,
       vinHistory,
       firstSeenDateByVin,
@@ -1962,7 +2012,10 @@
     }
     const debugBtn = $("#pt-export-debug");
     if (debugBtn) {
-      debugBtn.addEventListener("click", () => exportPlanTrackerDebug());
+      debugBtn.addEventListener("click", () => {
+        const modal = document.getElementById("pt-recon-modal");
+        if (modal) modal.hidden = false;
+      });
     }
     const refreshBtn = $("#pt-refresh");
     if (refreshBtn) {
@@ -2602,7 +2655,9 @@
       const [dateKey, metric] = String(arg || "").split("~");
       const day = (lastModel.daily || []).find((d) => d.dateKey === dateKey);
       const mine = pack.scoped.filter((r) => r.dateKey === dateKey);
+      const resRows = ((day && day.resRows) || []).filter(scopeMatch);
       const map = {
+        res: resRows,
         allocation: mine,
         received: (day && day.dailyUniqueRESAge0List || []).filter(scopeMatch),
         delivered: mine.filter((r) => r.statusKey === "Delivered"),
@@ -2614,7 +2669,12 @@
         in: pack.swappedIn.filter((r) => r.dateKey === dateKey),
       };
       const label = (day && day.label) || dateKey;
-      return { title: `${label} · ${metric || "VINs"}`, sub: dateKey, rows: map[metric] || mine };
+      const titles = {
+        res: ["RES", "Retail Electronic Sales in this RTL file"],
+        allocation: ["My allocation", "RES · allocation date = this file date · age 0"],
+      };
+      const named = titles[metric] || [metric || "VINs", dateKey];
+      return { title: `${label} · ${named[0]}`, sub: named[1], rows: map[metric] || mine };
     }
     if (key === "product") {
       const [name, which] = String(arg || "").split("~");
@@ -2812,45 +2872,50 @@
 
     const days = model.daily || [];
     const labels = days.map((d) => d.label);
-    const withinDaily = days.map((d) => scoped.filter((r) => r.dateKey === d.dateKey).length);
-    const receivedDaily = days.map((d) => (d.dailyUniqueRESAge0List || []).filter((r) => scopeMatch(r)).length);
-    let runW = 0;
-    let runR = 0;
-    const cumW = withinDaily.map((n) => { runW += n; return runW; });
-    const cumR = receivedDaily.map((n) => { runR += n; return runR; });
+    const allocDaily = days.map((d) => (d.planReceipts || []).filter((r) => scopeMatch(r)).length);
+    let runA = 0;
+    const cumA = allocDaily.map((n) => { runA += n; return runA; });
     const cumulative = view.mode === "cumulative";
+    const missing = model.missingDates || [];
     const note = $("#pt-chart-note");
-    if (note) note.textContent = cumulative ? "Cumulative within allocation vs monthly plan" : "Daily within allocation and RES age 0";
+    if (note) {
+      note.textContent = missing.length
+        ? `Missing RTL snapshot: ${missing.join(", ")}`
+        : (cumulative ? "Cumulative allocation vs admin plan" : "Every RTL file date · allocation can be 0");
+    }
+    const planLine = (label, color, dash) => ({
+      type: "line",
+      label,
+      data: days.map(() => plan),
+      borderColor: color,
+      borderDash: dash,
+      pointRadius: 0,
+      yAxisID: "plan",
+      order: 0,
+    });
     const datasets = [
       {
         type: "bar",
-        label: cumulative ? "Cumulative within" : "Within allocation",
-        data: cumulative ? cumW : withinDaily,
+        label: "My allocation",
+        data: allocDaily,
         backgroundColor: "rgba(16,35,63,.85)",
         borderRadius: 3,
         order: 2,
-      },
-      {
-        type: "line",
-        label: cumulative ? "Cumulative RES age 0" : "RES age 0",
-        data: cumulative ? cumR : receivedDaily,
-        borderColor: "#2f6fed",
-        backgroundColor: "#2f6fed",
-        tension: 0.2,
-        pointRadius: 2,
-        order: 1,
       },
     ];
     if (cumulative) {
       datasets.push({
         type: "line",
-        label: "Admin plan",
-        data: days.map(() => plan),
-        borderColor: "#eb0a1e",
-        borderDash: [4, 3],
-        pointRadius: 0,
-        order: 0,
+        label: "Cumulative allocation",
+        data: cumA,
+        borderColor: "#2f6fed",
+        backgroundColor: "#2f6fed",
+        tension: 0.2,
+        pointRadius: 2,
+        order: 1,
       });
+      datasets.push(planLine("Admin plan", "#eb0a1e", [4, 3]));
+      datasets.push(planLine("Cumulative plan", "#e07a00", [1, 3]));
     }
     makeChart("pt-chart-daily", {
       type: "bar",
@@ -2859,10 +2924,12 @@
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } },
-        scales: {
-          x: { ticks: { font: { size: 9 }, maxRotation: 0 } },
-          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
-        },
+        scales: Object.assign({
+          x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false } },
+          y: { beginAtZero: true, position: "left", ticks: { precision: 0, font: { size: 10 } } },
+        }, cumulative ? {
+          plan: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, ticks: { precision: 0, font: { size: 10 } } },
+        } : {}),
         onClick: (_evt, els) => {
           if (!els.length) return;
           const day = days[els[0].index];
@@ -2905,11 +2972,12 @@
         const mine = scoped.filter((r) => r.dateKey === d.dateKey);
         const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
         mine.forEach((r) => { c[r.statusKey] = (c[r.statusKey] || 0) + 1; });
-        const recN = (d.dailyUniqueRESAge0List || []).filter((r) => scopeMatch(r)).length;
+        const resN = (d.resRows || []).filter((r) => scopeMatch(r)).length;
         const freeN = pack.free.filter((r) => r.dateKey === d.dateKey).length;
         const undefN = pack.undef.filter((r) => r.dateKey === d.dateKey).length;
         const inN = pack.swappedIn.filter((r) => r.dateKey === d.dateKey).length;
         return `<tr><td>${esc(d.label)}</td><td class="num">—</td>
+          ${cell(resN, d.dateKey, "res")}
           ${cell(mine.length, d.dateKey, "allocation")}
           ${cell(c.Delivered, d.dateKey, "delivered")}
           ${cell(c.Proforma, d.dateKey, "proforma")}
@@ -2917,13 +2985,15 @@
           ${cell(freeN, d.dateKey, "free")}
           ${cell(undefN, d.dateKey, "undef")}
           ${cell(c.Swapped, d.dateKey, "swapped")}
-          ${cell(inN, d.dateKey, "in")}
-          <td class="num">${num(recN)}</td></tr>`;
+          ${cell(inN, d.dateKey, "in")}</tr>`;
       }).join("");
+      const missingRow = missing.length
+        ? `<tr><td colspan="11">Missing RTL snapshot: ${esc(missing.join(", "))}</td></tr>`
+        : "";
       dayHost.innerHTML = `<table class="pt-table"><thead><tr>
-        <th>Day</th><th>Plan</th><th>My allocation</th><th>Delivered</th><th>Proforma</th><th>My stock</th>
-        <th>Free</th><th>Undefined</th><th>Swapped out</th><th>Swapped in</th><th>RES age 0</th>
-      </tr></thead><tbody>${body || `<tr><td colspan="11">No RTL files for this month.</td></tr>`}
+        <th>Day</th><th>Plan</th><th>RES</th><th>My allocation</th><th>Delivered</th><th>Proforma</th><th>My stock</th>
+        <th>Free</th><th>Undefined</th><th>Swapped out</th><th>Swapped in</th>
+      </tr></thead><tbody>${body || `<tr><td colspan="11">No RTL files for this month.</td></tr>`}${missingRow}
       </tbody></table>`;
     }
 
@@ -2999,7 +3069,11 @@
     if (recon) {
       const unmatched = schedAll.find((r) => r.id === "__unmatched__");
       const notReceived = schedAll.filter((r) => r.id !== "__unmatched__" && r.allocation > 0 && r.mtd === 0).length;
+      const files = model.rtlFiles || [];
       const lines = [
+        `RTL file count ${num(files.length)}`,
+        `Loaded daily files ${num(days.length)}`,
+        `Missing dates ${missing.length ? missing.join(", ") : "none"}`,
         `Admin plan ${num(plan)}`,
         `RES age 0 unique ${num(received)}`,
         `Within allocation ${num(within)}`,
@@ -3012,7 +3086,23 @@
       if (q.duplicateVin) warns.push(`${q.duplicateVin} duplicate VIN observation(s) inside a daily file. The first row is kept.`);
       if (q.missingAllocationDate) warns.push(`${q.missingAllocationDate} row(s) have no allocation date.`);
       if (q.invalidAge) warns.push(`${q.invalidAge} row(s) have a blank allocation age.`);
+      missing.forEach((k) => warns.push(`MISSING RTL SNAPSHOT: ${k}`));
+      const fileRows = files.map((f) => `<tr>
+        <td>${esc(f.fileName || "—")}</td>
+        <td>${esc(f.dateKey)}</td>
+        <td>${esc(f.sheetUsed || "Sheet 1")}</td>
+        <td class="num">${num(f.totalRows)}</td>
+        <td class="num">${num(f.uniqueVins)}</td>
+        <td class="num">${num(f.res)}</td>
+        <td class="num">${num(f.allocation)}</td>
+      </tr>`).join("");
       recon.innerHTML = `<ul class="pt-q-list">${lines.map((l) => `<li><span>${esc(l)}</span></li>`).join("")}</ul>
+        <h4>RTL files found this month</h4>
+        <div class="pt-scroll">
+          <table class="pt-table"><thead><tr>
+            <th>File</th><th>Detected date</th><th>Worksheet</th><th>Rows</th><th>Unique VINs</th><th>RES</th><th>My allocation</th>
+          </tr></thead><tbody>${fileRows || `<tr><td colspan="7">No RTL files loaded.</td></tr>`}</tbody></table>
+        </div>
         <h4>Warnings</h4>
         <ul class="pt-warn">${warns.length ? warns.map((w) => `<li>${esc(w)}</li>`).join("") : "<li>No warnings on this filter.</li>"}</ul>`;
     }

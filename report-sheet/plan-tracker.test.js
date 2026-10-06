@@ -319,6 +319,21 @@ test("swapped in is not my allocation", () => {
   assertEq(moved[0].statusKey, "Swapped In");
 });
 
+test("a day stays on the calendar when my allocation is zero", () => {
+  const model = build({
+    "2026-10-03": [veh("ABC123", RES, 0, d(2026, 10, 3))],
+    "2026-10-04": [veh("RES4", RES, 5, d(2026, 10, 3))],
+    "2026-10-06": [veh("NEW6", RES, 0, d(2026, 10, 6))],
+  }, "2026-10");
+  assertEq(model.daily.map((day) => day.dateKey).join(","), "2026-10-03,2026-10-04,2026-10-06");
+  const oct4 = model.daily.find((day) => day.dateKey === "2026-10-04");
+  assertEq(oct4.resRows.length, 1);
+  assertEq(oct4.resRows[0].vin, "RES4");
+  assertEq(oct4.planReceipts.length, 0);
+  assertEq(model.kpis.allocated, 2);
+  assertEq(model.missingDates.join(","), "2026-10-05");
+});
+
 test("my stock splits free and undefined by secondary status", () => {
   const model = build({
     "2026-10-03": [
