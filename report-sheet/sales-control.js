@@ -64,6 +64,15 @@
   const pct1 = (v) => (v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(1)}%`);
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ratioOf = (del, pro) => (del + pro > 0 ? (del / (del + pro)) * 100 : null);
+  const channelTargetOf = (id) => {
+    const map = (state.ctx && state.ctx.channelTargets) || {};
+    const v = Math.round(Number(map[id]) || 0);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  };
+  const targetText = (id) => {
+    const v = channelTargetOf(id);
+    return v > 0 ? n(v) : "—";
+  };
   const now = () => (global.performance ? global.performance.now() : Date.now());
 
   // ==================== Normalize once ====================
@@ -310,7 +319,7 @@
         <div class="sc-card-nums">
           <button type="button" class="sc-num is-del" data-drill="records" data-ch="${c.id}" data-metric="delivered" title="${esc(c.title)} · delivered VINs"><span>Delivered</span><b class="gec-num" data-v="del"></b></button>
           <button type="button" class="sc-num is-pro" data-drill="records" data-ch="${c.id}" data-metric="proforma" title="${esc(c.title)} · pro-forma VINs"><span>Pro-Forma</span><b class="gec-num" data-v="pro"></b></button>
-          <div class="sc-num is-ratio" title="Delivered ÷ (Delivered + Pro-Forma)"><span>Ratio</span><b class="gec-num" data-v="ratio"></b></div>
+          <div class="sc-num is-ratio" title="Monthly target from Admin"><span>Target</span><b class="gec-num" data-v="ratio"></b></div>
         </div>
         <div class="sc-card-bar" aria-hidden="true"><i class="d" data-v="bar-del"></i><i class="p" data-v="bar-pro"></i></div>
         <div class="sc-card-status"><span data-v="status-ico"></span><b data-v="status"></b><em data-v="status-tip"></em></div>
@@ -718,8 +727,7 @@
       card.classList.toggle("is-dim", !!sel && sel !== c.id);
       setNum(e.del, c.delivered);
       setNum(e.pro, c.proforma);
-      const r = ratioOf(c.delivered, c.proforma);
-      e.ratio.textContent = pct1(r);
+      e.ratio.textContent = targetText(c.id);
       e["bar-del"].style.width = `${((c.delivered / max) * 100).toFixed(1)}%`;
       e["bar-pro"].style.width = `${((c.proforma / max) * 100).toFixed(1)}%`;
       const st = state.ctx.statusFor(c.delivered, c.proforma, c.id);
@@ -993,7 +1001,7 @@
     return [
       { label: "Delivered", value: n(c.delivered) },
       { label: "Pro-Forma", value: n(c.proforma) },
-      { label: "Ratio", value: pct1(ratioOf(c.delivered, c.proforma)) },
+      { label: "Target", value: targetText(c.id) },
       { label: "Delivered · last period", value: n(c.prevDelivered) },
       { label: "Pro-Forma · last period", value: n(c.prevProforma) },
     ];
@@ -1027,7 +1035,7 @@
           { h: "Channel", v: (c) => c.title },
           { h: "Delivered", v: (c) => n(c.delivered), num: true },
           { h: "Pro-Forma", v: (c) => n(c.proforma), num: true },
-          { h: "Ratio", v: (c) => pct1(ratioOf(c.delivered, c.proforma)), num: true },
+          { h: "Target", v: (c) => targetText(c.id), num: true },
           { h: "Share of delivered", v: (c) => pct1(state.view.allDel ? (c.delivered / state.view.allDel) * 100 : null), num: true },
           { h: "Delivered · last period", v: (c) => n(c.prevDelivered), num: true },
           { h: "Pro-Forma · last period", v: (c) => n(c.prevProforma), num: true },

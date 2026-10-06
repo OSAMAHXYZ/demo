@@ -10,10 +10,10 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261006sfx"></script>
+  <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261006cal"></script>
   <script src="gec-dashboard.js?v=20261006cal"></script>
-  <script src="sales-control.js?v=20260928sc1"></script>
+  <script src="sales-control.js?v=20261006ch1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
@@ -2533,6 +2533,7 @@
   rebuildNameIdentityMap();
   let accessoriesSettled = loadAccessoriesSettled();
   let workingDays = loadWorkingDays();
+  let channelTargets = Store.readChannelTargets();
   let allocationValues = loadAllocationValues();
   applyAllocationSuffixes();
   let activeNav = "dashboard";
@@ -2542,6 +2543,7 @@
     rebuildNameIdentityMap();
     accessoriesSettled = loadAccessoriesSettled();
     workingDays = loadWorkingDays();
+    channelTargets = Store.readChannelTargets();
     allocationValues = loadAllocationValues();
     applyAllocationSuffixes();
   }
@@ -14916,6 +14918,7 @@
     return {
       dup_col_f: { id: "dup_col_f", label: `Duplicate ${f}`, severity: "critical" },
       missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70)`, severity: "critical" },
+      paid_other_product: { id: "paid_other_product", label: `${j} filled (not CAMRY·LC300·LC70)`, severity: "critical" },
       sales_type_not_confirmed: { id: "sales_type_not_confirmed", label: `ALJUF/Bank not Confirmed (${h})`, severity: "critical" },
       rav4_nop_040: { id: "rav4_nop_040", label: `RAV4 ${nop} = 040`, severity: "critical" },
       rav4_sh_forbidden_color: { id: "rav4_sh_forbidden_color", label: `RAV4 SH forbidden ${nop} → Col AC correction`, severity: "critical" },
@@ -15147,14 +15150,14 @@
           pushErr("dup_ship_to", [shipLetter]);
         }
 
-        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank
-        if (
-          salesType !== "ALJUF"
-          && salesType !== "Bank"
-          && boeIsProduct(product, ["CAMRY", "LC300", "LC70"])
-        ) {
+        // المبلغ المدفوع (Col J): required for CAMRY/LC300/LC70 — skip ALJUF & Bank.
+        // Any other product with a paid amount is an error.
+        if (salesType !== "ALJUF" && salesType !== "Bank") {
+          const paidAllowed = boeIsProduct(product, ["CAMRY", "LC300", "LC70"]);
           const jTok = boeToken(colJ);
-          if (isBlankBoField(colJ) || jTok === "0") pushErr("missing_col_j", ["J"]);
+          const paidBlank = isBlankBoField(colJ) || !jTok || /^0+$/.test(jTok);
+          if (paidAllowed && paidBlank) pushErr("missing_col_j", ["J"]);
+          if (!paidAllowed && !paidBlank) pushErr("paid_other_product", ["J"]);
         }
 
         // Bank / ALJUF: only Confirm Flag (Col H). Ignore المبلغ المدفوع entirely.
@@ -18994,6 +18997,7 @@
         const b = salesDateBounds(slots.sales.rows || []);
         return { min: toIsoDateInput(b.min), max: toIsoDateInput(b.max) };
       },
+      channelTargets,
       lastUpdated: Number(Store.readDataPushStamp().at) || 0,
       onRefresh: () => refreshFromAdmin("Sales refreshed", { force: true }),
       onExit: () => {
@@ -22610,7 +22614,7 @@
   }
 
   window.addEventListener("storage", (e) => {
-    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY || e.key === ALLOCATION_PLAN_KEY || e.key === ALLOCATION_PLAN_PUSH_KEY) {
+    if (e.key === TARGETS_KEY || e.key === TARGETS_PUSH_KEY || e.key === ACCESSORIES_SETTLED_KEY || e.key === WORKING_DAYS_KEY || e.key === Store.CHANNEL_TARGETS_KEY || e.key === ALLOCATION_PLAN_KEY || e.key === ALLOCATION_PLAN_PUSH_KEY) {
       markUpdateAvailable("Targets updated");
     }
     if (e.key === DATA_PUSH_KEY) {

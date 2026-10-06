@@ -13,6 +13,8 @@
   const ACCESSORIES_SETTLED_PUSH_KEY = "toyota_admin_accessories_settled_push_v1";
   const WORKING_DAYS_KEY = "toyota_admin_working_days_v1";
   const WORKING_DAYS_PUSH_KEY = "toyota_admin_working_days_push_v1";
+  const CHANNEL_TARGETS_KEY = "toyota_admin_channel_targets_v1";
+  const CHANNEL_TARGET_IDS = ["lexus", "telesales", "b2c", "guest"];
   const ALLOCATION_PLAN_KEY = "toyota_admin_allocation_plan_v1";
   const ALLOCATION_PLAN_PUSH_KEY = "toyota_admin_allocation_plan_push_v1";
   const GEC_SLA_KEY = "toyota_admin_gec_sla_minutes_v1";
@@ -85,6 +87,24 @@
     return btoa(binary);
   }
 
+  function normalizeChannelTargets(input) {
+    const out = { lexus: 0, telesales: 0, b2c: 0, guest: 0 };
+    const src = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    CHANNEL_TARGET_IDS.forEach((id) => {
+      const n = Math.round(Number(src[id]) || 0);
+      out[id] = Number.isFinite(n) && n > 0 ? n : 0;
+    });
+    return out;
+  }
+
+  function readChannelTargets() {
+    try {
+      return normalizeChannelTargets(JSON.parse(localStorage.getItem(CHANNEL_TARGETS_KEY) || "null"));
+    } catch {
+      return normalizeChannelTargets(null);
+    }
+  }
+
   function applySettingsToLocalStorage(meta) {
     if (!meta || typeof meta !== "object") return;
     const at = Number(meta.targetsAt || meta.at) || Date.now();
@@ -99,6 +119,9 @@
     const days = Math.max(1, Number(meta.workingDays) || 22);
     localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify({ days, at }));
     localStorage.setItem(WORKING_DAYS_PUSH_KEY, JSON.stringify({ days, at }));
+    if (meta.channelTargets && typeof meta.channelTargets === "object") {
+      localStorage.setItem(CHANNEL_TARGETS_KEY, JSON.stringify(normalizeChannelTargets(meta.channelTargets)));
+    }
     const values = meta.allocationValues && typeof meta.allocationValues === "object"
       ? meta.allocationValues
       : {};
@@ -332,6 +355,7 @@
     targets,
     accessoriesSettled,
     workingDays,
+    channelTargets,
     allocationValues,
     allocationSuffixes,
     gecSlaMinutes,
@@ -354,6 +378,7 @@
         targets: targets || [],
         accessoriesSettled: Math.max(0, Number(accessoriesSettled) || 0),
         workingDays: Math.max(1, Number(workingDays) || 22),
+        channelTargets: normalizeChannelTargets(channelTargets),
         allocationValues: allocationValues || {},
         allocationSuffixes: allocationSuffixes || {},
         gecSlaMinutes: normGecSla(gecSlaMinutes),
@@ -482,6 +507,10 @@
     ACCESSORIES_SETTLED_PUSH_KEY,
     WORKING_DAYS_KEY,
     WORKING_DAYS_PUSH_KEY,
+    CHANNEL_TARGETS_KEY,
+    CHANNEL_TARGET_IDS,
+    normalizeChannelTargets,
+    readChannelTargets,
     ALLOCATION_PLAN_KEY,
     ALLOCATION_PLAN_PUSH_KEY,
     GEC_SLA_KEY,

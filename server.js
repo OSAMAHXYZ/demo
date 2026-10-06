@@ -356,6 +356,18 @@ function positiveOr(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+const CHANNEL_TARGET_IDS = ['lexus', 'telesales', 'b2c', 'guest'];
+
+function sanitizeChannelTargets(input) {
+  const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const out = {};
+  CHANNEL_TARGET_IDS.forEach((id) => {
+    const n = Math.round(Number(src[id]) || 0);
+    out[id] = Number.isFinite(n) && n > 0 ? n : 0;
+  });
+  return out;
+}
+
 function defaultReportSheetMeta() {
   return {
     at: 0,
@@ -366,6 +378,7 @@ function defaultReportSheetMeta() {
     targets: [],
     accessoriesSettled: 0,
     workingDays: 22,
+    channelTargets: sanitizeChannelTargets(null),
     allocationValues: {},
     allocationSuffixes: {},
     gecSlaMinutes: 5,
@@ -4662,6 +4675,7 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     targets: Array.isArray(meta.targets) ? meta.targets : [],
     accessoriesSettled: Number(meta.accessoriesSettled) || 0,
     workingDays: Math.max(1, Number(meta.workingDays) || 22),
+    channelTargets: sanitizeChannelTargets(meta.channelTargets),
     allocationValues: meta.allocationValues && typeof meta.allocationValues === 'object'
       ? meta.allocationValues
       : {},
@@ -4975,6 +4989,9 @@ app.post('/api/report-sheet/push', (req, res) => {
       targets: Array.isArray(body.targets) ? body.targets : [],
       accessoriesSettled: Math.max(0, Number(body.accessoriesSettled) || 0),
       workingDays: Math.max(1, Number(body.workingDays) || 22),
+      channelTargets: body.channelTargets && typeof body.channelTargets === 'object'
+        ? sanitizeChannelTargets(body.channelTargets)
+        : sanitizeChannelTargets(prevMeta.channelTargets),
       allocationValues: body.allocationValues && typeof body.allocationValues === 'object'
         ? body.allocationValues
         : {},

@@ -286,20 +286,88 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
+  .cell-print { display: none; }
+  .sheet-stage { margin-top: 14px; }
   @media print {
-    .topnav, .actions, .filters, .scrim, .toast, .legend, .card, .warn, .screen-only, .menu { display: none !important; }
-    body { background: white; }
-    .wrap { max-width: none; padding: 0; }
-    .page-head { margin-bottom: 8px; }
-    h1 { font-size: 18px; }
-    .month-sheet { overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
-    .month-sheet table { width: 100%; table-layout: fixed; font-size: 6px; }
-    .month-sheet th, .month-sheet td { min-width: 0; padding: 1px; white-space: normal; overflow: hidden; }
-    .month-sheet thead .who, .month-sheet td.who { width: 8%; }
-    .month-sheet .who { min-width: 0; position: static; font-size: 7px; }
-    .month-sheet th span, .month-sheet .who small { font-size: 6px; }
+    .topnav, .actions, .filters, .sched-controls, .scrim, .toast, #overlay, #toast, #import-file, .screen-only, .menu, .card, .warn { display: none !important; }
+    html, body {
+      width: 420mm;
+      height: 296mm;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: #fff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .wrap {
+      width: 420mm;
+      height: 296mm;
+      max-width: none;
+      margin: 0;
+      padding: 7mm 8mm 6mm;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fff;
+    }
+    .page-head { margin: 0 0 2.5mm; align-items: flex-end; }
+    h1 { font-size: 20px; letter-spacing: -0.03em; }
+    .sub { margin: 1mm 0 0; font-size: 11px; }
+    .legend {
+      display: flex !important;
+      margin: 0 0 2.5mm;
+      font-size: 10px;
+      gap: 14px;
+    }
+    .sheet-stage {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0;
+      display: flex;
+      overflow: hidden;
+    }
+    .month-sheet {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid #e6ebf1;
+      border-radius: 10px;
+      box-shadow: none;
+      background: #fff;
+    }
+    .month-sheet table {
+      width: 100%;
+      height: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 8px;
+    }
+    .month-sheet th, .month-sheet td {
+      min-width: 0;
+      height: 1px;
+      padding: 1px 2px;
+      line-height: 1.15;
+      white-space: normal;
+      overflow: hidden;
+      word-break: break-word;
+    }
+    .month-sheet thead th { font-size: 8.5px; background: #f8fafb !important; }
+    .month-sheet th span, .month-sheet .who small { font-size: 7px; }
+    .month-sheet thead .who, .month-sheet td.who { width: 7.2%; }
+    .month-sheet th:nth-child(2), .month-sheet td:nth-child(2) { width: 6.4%; }
+    .month-sheet .who { min-width: 0; position: static; text-align: left; padding: 1px 4px; background: #fff !important; }
+    .month-sheet thead .who { background: #f8fafb !important; }
+    .month-sheet .st-work { background: #e8f6f1 !important; color: #0f6e56 !important; }
+    .month-sheet .st-off { background: #f2f4f7 !important; color: #667085 !important; }
+    .month-sheet .st-vac { background: #eef0fa !important; color: #3d4c9e !important; }
+    .month-sheet .st-leave { background: #fff6ed !important; color: #9a5410 !important; }
+    .cell-screen { display: none !important; }
+    .cell-print { display: block !important; }
   }
-  @page { size: A4 landscape; margin: 8mm; }
+  @page { size: A3 landscape; margin: 0; }
 </style>
 </head>
 <body>
@@ -1290,10 +1358,17 @@
     if (row.status === 'off') return 'OFF';
     return (row.shifts || []).map((s) => prettySpan(s)).join('\n');
   }
+  function cellPrint(row) {
+    if (!row) return '—';
+    if (row.status === 'timeoff') return 'TIME OFF';
+    if (row.status === 'vacation') return 'VACATION';
+    if (row.status === 'off') return 'OFF';
+    return compactShifts(row.shifts || []) || '—';
+  }
   function cellHtml(row) {
     const text = cellPlain(row);
-    if (!text) return '—';
-    return esc(text).replace(/\n/g, '<br>');
+    if (!text) return '<span class="cell-screen">—</span><span class="cell-print">—</span>';
+    return `<span class="cell-screen">${esc(text).replace(/\n/g, '<br>')}</span><span class="cell-print">${esc(cellPrint(row))}</span>`;
   }
   function cellClass(row) {
     if (!row) return 'st-empty';
@@ -1345,9 +1420,9 @@
       ${pageHead('Schedule', period)}
       ${scheduleControls()}
       <p class="muted screen-only">${esc(meta)} Every employee is on the month sheet. Work hours and off days come from each employee card. Vacation and time off cover that day only.</p>
-      <div class="legend screen-only" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span><span><i class="dot" style="background:#b54708"></i>Time off</span></div>
+      <div class="legend" style="margin:10px 0 14px"><span><i class="dot" style="background:#0f6e56"></i>Work</span><span><i class="dot" style="background:#98a2b3"></i>Off</span><span><i class="dot" style="background:#3d4c9e"></i>Vacation</span><span><i class="dot" style="background:#b54708"></i>Time off</span></div>
       <div class="screen-only">${healthCard()}</div>
-      <div style="margin-top:14px">${monthBoard()}</div>
+      <div class="sheet-stage">${monthBoard()}</div>
     </div>`;
   }
 

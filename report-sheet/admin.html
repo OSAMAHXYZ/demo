@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261006sfx"></script>
+  <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261006cal"></script>
   <script src="allocation-plan-data.js"></script>
   <style>
@@ -37,6 +37,11 @@
     .gec-ctl-add input { flex: 1; min-width: 0; }
     .gec-ctl-dirty { color: #d97706; font-weight: 700; }
     #discard-draft-btn[hidden] { display: none; }
+    .admin-channel-targets { flex-direction: column; align-items: stretch; }
+    .admin-channel-targets-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; }
+    .admin-channel-targets-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+    .admin-channel-targets-grid input { width: 100%; }
+    @media (max-width: 900px) { .admin-channel-targets-grid { grid-template-columns: 1fr 1fr; } }
     .pill.slot-draft { background: #fff4e2; color: #b45309; border: 1px solid #f5c98a; }
     .gec-found-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     .gec-found-table th, .gec-found-table td { padding: 7px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.25); text-align: left; }
@@ -183,6 +188,16 @@
           <div class="pbi-viz-head">
             <h2>Employees · monthly targets</h2>
             <span class="admin-section-tag">Edit · then Push</span>
+          </div>
+          <div class="admin-accessories-settled admin-channel-targets">
+            <label>Channel targets</label>
+            <span class="hint">Monthly target for each Summary channel. The Summary dashboard shows this number in place of the ratio. Click Push to live to publish it.</span>
+            <div class="admin-channel-targets-grid">
+              <label>Lexus Sales<input id="ch-target-lexus" type="number" min="0" step="1" placeholder="0" /></label>
+              <label>Telesales<input id="ch-target-telesales" type="number" min="0" step="1" placeholder="0" /></label>
+              <label>B2C Sales<input id="ch-target-b2c" type="number" min="0" step="1" placeholder="0" /></label>
+              <label>Experience Automall<input id="ch-target-guest" type="number" min="0" step="1" placeholder="0" /></label>
+            </div>
           </div>
           <div class="admin-accessories-settled">
             <label for="accessories-settled">Accessories settled (SAR)</label>
@@ -371,6 +386,24 @@
     } catch {
       return 0;
     }
+  }
+
+  function collectChannelTargets() {
+    const out = {};
+    Store.CHANNEL_TARGET_IDS.forEach((id) => {
+      const el = document.getElementById(`ch-target-${id}`);
+      out[id] = el ? el.value : 0;
+    });
+    return Store.normalizeChannelTargets(out);
+  }
+
+  function fillChannelTargetInputs() {
+    const saved = Store.readChannelTargets();
+    Store.CHANNEL_TARGET_IDS.forEach((id) => {
+      const el = document.getElementById(`ch-target-${id}`);
+      if (!el || document.activeElement === el) return;
+      el.value = saved[id] ? String(saved[id]) : "";
+    });
   }
 
   function loadWorkingDays() {
@@ -649,6 +682,7 @@
     if (workingDaysEl && document.activeElement !== workingDaysEl) {
       workingDaysEl.value = String(loadWorkingDays() || 22);
     }
+    fillChannelTargetInputs();
     const gecSlaEl = $("#gec-sla-minutes");
     if (gecSlaEl && document.activeElement !== gecSlaEl) {
       gecSlaEl.value = String(Store.readGecSlaMinutes());
@@ -974,6 +1008,9 @@
       localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
       localStorage.setItem(WORKING_DAYS_PUSH_KEY, JSON.stringify({ days: workingDays, at: targetStamp.at }));
 
+      const channelTargets = collectChannelTargets();
+      localStorage.setItem(Store.CHANNEL_TARGETS_KEY, JSON.stringify(channelTargets));
+
       const gecSlaInput = Number($("#gec-sla-minutes").value);
       const gecSlaMinutes = Number.isFinite(gecSlaInput) && gecSlaInput > 0 ? gecSlaInput : 5;
       localStorage.setItem(Store.GEC_SLA_KEY, JSON.stringify({ minutes: gecSlaMinutes, at: targetStamp.at }));
@@ -1003,6 +1040,7 @@
           targets: employeeTargets,
           accessoriesSettled: settledAmount,
           workingDays,
+          channelTargets,
           allocationValues,
           allocationSuffixes: submittedSuffixes,
           gecSlaMinutes,
@@ -1045,6 +1083,7 @@
         accessoriesSettledAt: targetStamp.at,
         workingDays,
         workingDaysAt: targetStamp.at,
+        channelTargets,
         allocationAt: targetStamp.at,
       });
 
