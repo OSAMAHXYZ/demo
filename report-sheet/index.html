@@ -10,7 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20260930lx1"></script>
+  <script src="data-store.js?v=20261006sfx"></script>
 <script src="gec-data.js?v=20261005resp"></script>
 <script src="gec-dashboard.js?v=20261005resp"></script>
   <script src="sales-control.js?v=20260928sc1"></script>
@@ -2462,11 +2462,26 @@
     }
   }
 
+  function applyAllocationSuffixes() {
+    let saved = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      if (parsed && parsed.suffixes && typeof parsed.suffixes === "object") saved = parsed.suffixes;
+    } catch { /* template names */ }
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind !== "leaf") return;
+      if (!r.defaultSfx) r.defaultSfx = r.sfx;
+      const custom = String(saved[r.id] == null ? "" : saved[r.id]).trim();
+      r.sfx = custom || r.defaultSfx;
+    });
+  }
+
   let employeeTargets = loadEmployeeTargets();
   rebuildNameIdentityMap();
   let accessoriesSettled = loadAccessoriesSettled();
   let workingDays = loadWorkingDays();
   let allocationValues = loadAllocationValues();
+  applyAllocationSuffixes();
   let activeNav = "dashboard";
 
   function refreshTargetsFromAdmin() {
@@ -2475,6 +2490,7 @@
     accessoriesSettled = loadAccessoriesSettled();
     workingDays = loadWorkingDays();
     allocationValues = loadAllocationValues();
+    applyAllocationSuffixes();
   }
 
   function applyLiveTargets(reason) {

@@ -339,6 +339,18 @@ function ensureReportSheetDirs() {
   if (!fs.existsSync(REPORT_SHEET_FILES)) fs.mkdirSync(REPORT_SHEET_FILES, { recursive: true });
 }
 
+function sanitizeAllocationSuffixes(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const out = {};
+  Object.keys(input).forEach((key) => {
+    const id = String(key || '').trim().slice(0, 80);
+    const name = String(input[key] == null ? '' : input[key]).trim().slice(0, 40);
+    if (!id || !name) return;
+    out[id] = name;
+  });
+  return out;
+}
+
 function positiveOr(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -355,6 +367,7 @@ function defaultReportSheetMeta() {
     accessoriesSettled: 0,
     workingDays: 22,
     allocationValues: {},
+    allocationSuffixes: {},
     gecSlaMinutes: 5,
     gecControl: null,
     gecControlAt: 0,
@@ -4600,6 +4613,7 @@ app.get('/api/report-sheet/meta', (_req, res) => {
     allocationValues: meta.allocationValues && typeof meta.allocationValues === 'object'
       ? meta.allocationValues
       : {},
+    allocationSuffixes: sanitizeAllocationSuffixes(meta.allocationSuffixes),
     gecSlaMinutes: positiveOr(meta.gecSlaMinutes, 5),
     gecControl: sanitizeGecControl(meta.gecControl),
     gecControlAt: Number(meta.gecControlAt) || 0,
@@ -4912,6 +4926,9 @@ app.post('/api/report-sheet/push', (req, res) => {
       allocationValues: body.allocationValues && typeof body.allocationValues === 'object'
         ? body.allocationValues
         : {},
+      allocationSuffixes: body.allocationSuffixes && typeof body.allocationSuffixes === 'object'
+        ? sanitizeAllocationSuffixes(body.allocationSuffixes)
+        : sanitizeAllocationSuffixes(prevMeta.allocationSuffixes),
       gecSlaMinutes: positiveOr(body.gecSlaMinutes, 5),
       gecControl: pushedControl || prevControl,
       gecControlAt: controlChanged ? at : (Number(prevMeta.gecControlAt) || 0),

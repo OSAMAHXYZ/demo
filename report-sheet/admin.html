@@ -7,12 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="dashboard.css?v=20260928id1" />
+  <link rel="stylesheet" href="dashboard.css?v=20261006sfx" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261001dr1"></script>
+  <script src="data-store.js?v=20261006sfx"></script>
   <script src="gec-data.js?v=20261005resp"></script>
   <script src="allocation-plan-data.js"></script>
   <style>
@@ -207,7 +207,7 @@
     <section class="admin-panel" id="panel-allocation" hidden>
       <div class="xl-toolbar admin-toolbar">
         <button type="button" class="btn-primary" id="push-btn-3">Push to live</button>
-        <span class="hint">Edit E-Sales only · product &amp; segment totals calculate automatically</span>
+        <span class="hint">Edit SFX and E-Sales · product &amp; segment totals calculate automatically · Push to live submits both</span>
       </div>
 
       <div class="card admin-section-card admin-allocation-card">
@@ -289,6 +289,7 @@
 
   const ALLOCATION_ROWS = window.AllocationPlanData.buildAllocationPlanRows();
   let allocationValues = loadAllocationValues();
+  let allocationSuffixes = loadAllocationSuffixes();
 
   const SLOT_DEFS = [
     { id: "backorder", n: 1, title: "Back Order", ar: "أوامر الحجز", blurb: "First worksheet only · back orders 7022" },
@@ -408,6 +409,35 @@
     }
   }
 
+  function loadAllocationSuffixes() {
+    const map = {};
+    ALLOCATION_ROWS.forEach((r) => {
+      if (r.kind === "leaf") map[r.id] = r.sfx;
+    });
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+      const saved = parsed && parsed.suffixes && typeof parsed.suffixes === "object" ? parsed.suffixes : {};
+      ALLOCATION_ROWS.forEach((r) => {
+        if (r.kind !== "leaf") return;
+        const custom = String(saved[r.id] == null ? "" : saved[r.id]).trim();
+        if (custom) map[r.id] = custom.slice(0, 40);
+      });
+    } catch { /* keep template names */ }
+    return map;
+  }
+
+  function collectAllocationSuffixes() {
+    const next = {};
+    document.querySelectorAll("[data-alloc-sfx]").forEach((el) => {
+      const id = el.getAttribute("data-alloc-sfx");
+      const row = ALLOCATION_ROWS.find((r) => r.id === id);
+      if (!row) return;
+      const typed = String(el.value || "").trim().slice(0, 40);
+      if (typed && typed !== row.sfx) next[id] = typed;
+    });
+    return next;
+  }
+
   function sumLeaves(filterFn) {
     return ALLOCATION_ROWS
       .filter((r) => r.kind === "leaf" && filterFn(r))
@@ -503,7 +533,9 @@
           } else {
             productTd = `<td class="alloc-product alloc-cont"></td>`;
           }
-          const sfxTd = isLeaf ? `<td class="alloc-sfx">${escapeHtml(r.sfx)}</td>` : `<td class="alloc-sfx"></td>`;
+          const sfxTd = isLeaf
+            ? `<td class="alloc-sfx"><input type="text" maxlength="40" data-alloc-sfx="${escapeHtml(r.id)}" value="${escapeHtml(allocationSuffixes[r.id] || r.sfx)}" aria-label="Suffix for ${escapeHtml(r.product)}" /></td>`
+            : `<td class="alloc-sfx"></td>`;
           const esalesTd = isLeaf
             ? `<td class="alloc-esales"><input type="number" min="0" step="1" data-alloc-id="${escapeHtml(r.id)}" value="${Number(allocationValues[r.id]) || 0}" /></td>`
             : `<td class="alloc-esales alloc-total-val" data-alloc-total="${escapeHtml(r.id)}">${formatNumber(allocationDisplayValue(r))}</td>`;
@@ -880,6 +912,7 @@
       await Store.syncFromServer();
       employeeTargets = loadEmployeeTargets();
       allocationValues = loadAllocationValues();
+      allocationSuffixes = loadAllocationSuffixes();
       if (!gecDirty()) {
         gecDraft = Gec.normalizeControl(Store.readGecControl());
         gecSaved = JSON.stringify(gecDraft);
@@ -946,7 +979,12 @@
       localStorage.setItem(Store.GEC_SLA_KEY, JSON.stringify({ minutes: gecSlaMinutes, at: targetStamp.at }));
 
       allocationValues = collectAllocationFromForm();
-      localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values: allocationValues, at: targetStamp.at }));
+      allocationSuffixes = loadAllocationSuffixes();
+      const submittedSuffixes = collectAllocationSuffixes();
+      ALLOCATION_ROWS.forEach((r) => {
+        if (r.kind === "leaf") allocationSuffixes[r.id] = submittedSuffixes[r.id] || r.sfx;
+      });
+      localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values: allocationValues, suffixes: submittedSuffixes, at: targetStamp.at }));
       localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at: targetStamp.at }));
 
       const filesBySlot = {};
@@ -966,6 +1004,7 @@
           accessoriesSettled: settledAmount,
           workingDays,
           allocationValues,
+          allocationSuffixes: submittedSuffixes,
           gecSlaMinutes,
           gecControl: pushedGec,
           filesBySlot,
@@ -1187,10 +1226,13 @@
   $("#eom-form").addEventListener("submit", runEndOfMonth);
   $("#eom-cancel").addEventListener("click", () => $("#eom-dialog").close());
   $("#allocation-plan-wrap").addEventListener("input", (e) => {
-    const input = e.target.closest("[data-alloc-id]");
-    if (!input) return;
-    allocationValues = collectAllocationFromForm();
-    updateAllocationTotalsDom();
+    const numberInput = e.target.closest("[data-alloc-id]");
+    const suffixInput = e.target.closest("[data-alloc-sfx]");
+    if (!numberInput && !suffixInput) return;
+    if (numberInput) {
+      allocationValues = collectAllocationFromForm();
+      updateAllocationTotalsDom();
+    }
     setStatus("Allocation updated — click Push to live", "busy");
   });
   $("#target-grid").addEventListener("change", (e) => {

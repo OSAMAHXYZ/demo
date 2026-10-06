@@ -102,7 +102,19 @@
     const values = meta.allocationValues && typeof meta.allocationValues === "object"
       ? meta.allocationValues
       : {};
-    localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, at }));
+    let suffixes = {};
+    if (meta.allocationSuffixes && typeof meta.allocationSuffixes === "object") {
+      Object.keys(meta.allocationSuffixes).forEach((id) => {
+        const name = String(meta.allocationSuffixes[id] == null ? "" : meta.allocationSuffixes[id]).trim().slice(0, 40);
+        if (id && name) suffixes[id] = name;
+      });
+    } else {
+      try {
+        const prev = JSON.parse(localStorage.getItem(ALLOCATION_PLAN_KEY) || "null");
+        if (prev && prev.suffixes && typeof prev.suffixes === "object") suffixes = prev.suffixes;
+      } catch { /* keep empty */ }
+    }
+    localStorage.setItem(ALLOCATION_PLAN_KEY, JSON.stringify({ values, suffixes, at }));
     localStorage.setItem(ALLOCATION_PLAN_PUSH_KEY, JSON.stringify({ at }));
     localStorage.setItem(GEC_SLA_KEY, JSON.stringify({ minutes: normGecSla(meta.gecSlaMinutes), at }));
     applyGecControlFromMeta(meta);
@@ -321,6 +333,7 @@
     accessoriesSettled,
     workingDays,
     allocationValues,
+    allocationSuffixes,
     gecSlaMinutes,
     gecControl,
     filesBySlot,
@@ -342,6 +355,7 @@
         accessoriesSettled: Math.max(0, Number(accessoriesSettled) || 0),
         workingDays: Math.max(1, Number(workingDays) || 22),
         allocationValues: allocationValues || {},
+        allocationSuffixes: allocationSuffixes || {},
         gecSlaMinutes: normGecSla(gecSlaMinutes),
         gecControl: gecControl !== undefined ? gecControl : readGecControl(),
         files,

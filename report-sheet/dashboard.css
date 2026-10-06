@@ -4350,6 +4350,25 @@ body.admin-page #panel-allocation:not([hidden]) {
   min-width: 120px;
 }
 
+.allocation-plan-table .alloc-sfx input {
+  width: 100%;
+  min-width: 88px;
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  background: #fff;
+}
+
+.allocation-plan-table .alloc-sfx input:focus {
+  outline: none;
+  border-color: #eb0a1e;
+  box-shadow: 0 0 0 3px rgba(235, 10, 30, 0.12);
+}
+
 .allocation-plan-table .alloc-esales {
   text-align: center;
   min-width: 88px;
