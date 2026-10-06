@@ -207,7 +207,7 @@
   const isActualSalesOrder = (v) => salesOrderState(v) === "order";
 
   /**
-   * Meet Sales Advisor: the Sales Response cell counts only when it contains both a date and a time.
+   * Meet Sales Advisor: column AG of the uploaded lead sheet counts only when it contains both a date and a time.
    * A date with no time, a time with no date, a blank, or any other text does not count.
    */
   function hasSalesResponse(v) {
@@ -725,6 +725,12 @@
     const colMap = { ...best.map };
     const warnings = [];
     resolveEmployeeColumn(colMap, headers, warnings);
+    const agIndex = colIndex("AG");
+    Object.keys(colMap).forEach((k) => { if (k !== "salesResponse" && colMap[k] === agIndex) delete colMap[k]; });
+    colMap.salesResponse = agIndex;
+    if (agIndex >= headers.length) {
+      warnings.push("The lead sheet has no column AG — Meet Sales Advisor will read as zero.");
+    }
     const productCols = config.PRODUCT_COLUMNS.map((letter) => ({ letter, index: colIndex(letter), header: headers[colIndex(letter)] || "" }));
     productCols.filter((p) => p.index >= headers.length)
       .forEach((p) => warnings.push(`The lead sheet has no column ${p.letter} — every customer will read as ${NO_PRODUCT}.`));

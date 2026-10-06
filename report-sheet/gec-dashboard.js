@@ -120,15 +120,15 @@
     get assignmentErrors() { return `No promoter assigned · customers with Employee Number (column ${empCol()}) blank`; },
     noProduct: "No product · customers with column D or column G blank",
     get invalidPromoter() { return `Invalid Promoter · Employee Number (column ${empCol()}) is not an official promoter number`; },
-    responded: "Meet Sales Advisor · Sales Response contains a date and a time",
-    responseRate: "Meet Sales Advisor · Sales Response contains a date and a time",
+    responded: "Meet Sales Advisor · column AG contains a date and a time",
+    responseRate: "Meet Sales Advisor · column AG contains a date and a time",
     salesOrders: "Leads with an actual Sales Order",
     salesOrderRate: "Leads with an actual Sales Order",
     noOrder: "“NO ORDER” leads (not counted as Sales Orders)",
     converted: "Converted leads (GEC CONTROL conversion statuses)",
     conversionRate: "Converted leads (GEC CONTROL conversion statuses)",
     noAdvisor: "Leads without a sales advisor",
-    noResponse: "Did not meet a sales advisor · Sales Response has no date and time",
+    noResponse: "Did not meet a sales advisor · column AG has no date and time",
     unlisted: "Leads with a status not in GEC CONTROL",
     promoterConsultant: "Leads assigned to a promoter (not a sales advisor)",
   };
@@ -1067,7 +1067,7 @@
       { h: "Source", v: (r) => (r.source === "(blank)" ? "" : r.source) },
       { h: "Status", v: (r) => r.status },
       { h: "Stage", v: (r) => STAGE_LABEL[r.stage] || "", html: stagePill },
-      { h: "Sales Response", v: (r) => (r.responded ? r.salesResponse : "Not responded"), dir: true,
+      { h: "Column AG", v: (r) => (r.responded ? r.salesResponse : "Not responded"), dir: true,
         html: (r) => (r.responded ? esc(r.salesResponse)
           : `<span class="gcc-pill st-error">Not responded</span>${r.salesResponse ? ` <span class="gcc-muted-val">${esc(r.salesResponse)}</span>` : ""}`) },
       { h: "Sales Order", v: (r) => r.salesOrder,
@@ -1230,7 +1230,7 @@
     const no = predicateRows("noResponse", m.rows);
     openModal({
       title: "Meet Sales Advisor",
-      sub: `${filterSubtitle()} · ${n(yes.length)} with a date and time · ${n(no.length)} without a date and time (Sales Response column)`,
+      sub: `${filterSubtitle()} · ${n(yes.length)} with a date and time · ${n(no.length)} without a date and time (column AG)`,
       stats: [
         { label: "Leads", value: n(m.rows.length) },
         { label: "Responded", value: `${n(yes.length)} · ${pct(ratio(yes.length, m.rows.length))}` },
@@ -1721,7 +1721,7 @@
         <li><b>Registered leads</b> — every transaction except visitor-stage statuses (${esc(Data().enabledStatuses("visitor").join(", ") || "none")}), which show as “registered, not yet leads”.</li>
         <li><b>Converted</b> — enabled conversion statuses only (“Won” alone is not converted unless enabled). A converted record is still a lead.</li>
         <li><b>Promoter</b> — ${col("employeeNumber")} is the only source (never Employee Responsible, Sales Employee, Sales Response or Status). Official number → that promoter. Blank → <b>${esc(c.ASSIGNMENT_ERROR)}</b> (unassigned customer). Any other value → <b>${esc(c.INVALID_PROMOTER)}</b>. The two are counted separately and neither is in any promoter's performance.</li>
-        <li><b>Meet Sales Advisor</b> — ${col("salesResponse")} contains both a date and a time. A date alone, a time alone, a blank, or any other text is not responded. <b>Sales Order</b> — ${col("salesOrder")} is an actual order number; <b>“NO ORDER”</b> and placeholders never count.</li>
+        <li><b>Meet Sales Advisor</b> — <b>column AG</b> of the uploaded lead sheet contains both a date and a time. A date alone, a time alone, a blank, or any other text is not responded. <b>Sales Order</b> — ${col("salesOrder")} is an actual order number; <b>“NO ORDER”</b> and placeholders never count.</li>
         <li><b>Visitors</b> — every unique transaction whose <b>column J date</b> is inside the selected dates (all of them when no date is selected). <b>Visitor → Lead</b> = registered leads ÷ visitors. <b>Lead → Conversion</b> = converted ÷ leads.</li>
         <li><b>Sales advisors</b> — ${col("consultant")} on lead records, excluding the official promoters. Conversion % = converted ÷ leads received.</li>
         <li><b>Response time / SLA</b> — not shown (timing data not validated).</li>
