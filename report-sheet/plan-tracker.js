@@ -11,11 +11,19 @@
 
   const view = {
     monthKey: "",
+    monthLocked: false,
     snapDate: "",
     movement: "",
     product: "",
+    sfx: "",
+    year: "",
+    status: "",
+    area: "",
+    tab: "all",
+    mode: "daily",
     q: "",
     vinQ: "",
+    vinPin: null,
     drill: "", // kpi key for VIN list
     ageBucket: "",
     scheduleTitle: "",
@@ -1208,10 +1216,29 @@
     }
   }
 
+  function monthLength(monthKey) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(monthKey || ""));
+    if (!m) return 31;
+    return new Date(Number(m[1]), Number(m[2]), 0).getDate();
+  }
+
   function emptyDayVins() {
-    const arr = Array(31);
-    for (let i = 0; i < 31; i += 1) arr[i] = [];
+    const arr = Array(32);
+    for (let i = 0; i < 32; i += 1) arr[i] = [];
     return arr;
+  }
+
+  function adminPlanTotal() {
+    const rows = global.ALLOCATION_ROWS || [];
+    const values = global.allocationValues || {};
+    let sum = 0;
+    let any = false;
+    rows.forEach((r) => {
+      if (!r || r.kind !== "leaf") return;
+      any = true;
+      sum += Number(values[r.id]) || 0;
+    });
+    return any ? sum : ALLOCATION_PLAN;
   }
 
   function buildScheduleRows(model) {
@@ -1227,7 +1254,7 @@
       product: "(unmatched)",
       sfx: "—",
       allocation: 0,
-      dayCounts: Array(31).fill(0),
+      dayCounts: Array(32).fill(0),
       dayVins: emptyDayVins(),
       mtd: 0,
       mtdVins: [],
@@ -1242,7 +1269,7 @@
         product: leaf.product || "—",
         sfx: leaf.sfx || "—",
         allocation: Number(values[leaf.id]) || 0,
-        dayCounts: Array(31).fill(0),
+        dayCounts: Array(32).fill(0),
         dayVins: emptyDayVins(),
         mtd: 0,
         mtdVins: [],
@@ -1261,7 +1288,8 @@
         // Only age-0 RES with AG on this file day (already filtered into planReceipts)
         if (!isPlanScheduleReceipt(r, day.dateKey)) return;
         const placeDay = snapDay;
-        if (!Number.isFinite(placeDay) || placeDay < 1 || placeDay > 30) return;
+        const dim = monthLength(model.monthKey);
+        if (!Number.isFinite(placeDay) || placeDay < 1 || placeDay > dim) return;
 
         const leaf = matchLeaf({ product: r.product, suffix: r.suffix });
         const row = leaf && byLeaf.has(leaf.id) ? byLeaf.get(leaf.id) : unmatched;
@@ -1284,9 +1312,18 @@
   }
 
   function showScheduleVinDrill(model, list, titleText) {
-    view.drill = "schedule";
     view.scheduleTitle = titleText || "Schedule VINs";
     view.scheduleList = Array.isArray(list) ? list : [];
+    view.vinPin = new Set(view.scheduleList.map((r) => r && r.vin).filter(Boolean));
+    view.tab = "all";
+    view.status = "";
+    const modal = $("#pt-schedule-modal");
+    if (modal) modal.hidden = true;
+    if (isTower()) {
+      renderTower(model);
+      return;
+    }
+    view.drill = "schedule";
     renderDrill(model);
     renderKpis(model);
     renderProgress(model);
@@ -1301,10 +1338,14 @@
     const tableEl = $("#pt-schedule-table");
     const footEl = $("#pt-schedule-foot");
     if (!tableEl) return;
-    const rows = buildScheduleRows(model);
+    let rows = buildScheduleRows(model);
+    if (view.product) rows = rows.filter((r) => r.product === view.product);
+    if (view.sfx) rows = rows.filter((r) => r.sfx === view.sfx);
     model.scheduleRows = rows;
+    const dim = monthLength(model.monthKey);
     const ctx = typeof global.basMonthContext === "function" ? global.basMonthContext() : null;
-    const todayDay = ctx && ctx.todayDay ? ctx.todayDay : 0;
+    const sameMonth = !!(ctx && ctx.monthKey && ctx.monthKey === model.monthKey);
+    const todayDay = sameMonth && ctx.todayDay ? ctx.todayDay : 0;
 
     if (!rows.length) {
       tableEl.innerHTML = `<p class="foot" style="padding:12px">No plan-schedule rows yet. Upload day RTL files and set the Admin allocation plan.</p>`;
@@ -1312,7 +1353,7 @@
       return;
     }
 
-    const dayHeaders = Array.from({ length: 30 }, (_, i) => {
+    const dayHeaders = Array.from({ length: dim }, (_, i) => {
       const day = i + 1;
       const cls = day === todayDay ? "bas-day-col is-today" : day > todayDay ? "bas-day-col is-future" : "bas-day-col";
       return `<th class="${cls}">${day}</th>`;
@@ -1322,7 +1363,7 @@
       const rowGap = r.allocation - r.mtd;
       const gapCls = rowGap > 0 ? "bas-gap-pos" : rowGap < 0 ? "bas-gap-neg" : "";
       const rowId = esc(r.id);
-      const dayCells = Array.from({ length: 30 }, (_, i) => {
+      const dayCells = Array.from({ length: dim }, (_, i) => {
         const day = i + 1;
         const n = r.dayCounts[day] || 0;
         const cls = day === todayDay ? "is-today" : "";
@@ -1342,7 +1383,7 @@
     const totals = rows.reduce((acc, r) => {
       acc.mtd += r.mtd;
       acc.alloc += r.allocation;
-      for (let d = 1; d <= 30; d += 1) {
+      for (let d = 1; d <= dim; d += 1) {
         acc.days[d] = (acc.days[d] || 0) + (r.dayCounts[d] || 0);
         if (!acc.dayVins[d]) acc.dayVins[d] = [];
         (r.dayVins[d] || []).forEach((v) => acc.dayVins[d].push(v));
@@ -1352,7 +1393,7 @@
     }, { mtd: 0, alloc: 0, days: {}, dayVins: emptyDayVins(), mtdVins: [] });
     model.scheduleTotals = totals;
 
-    const totalDayCells = Array.from({ length: 30 }, (_, i) => {
+    const totalDayCells = Array.from({ length: dim }, (_, i) => {
       const day = i + 1;
       const n = totals.days[day] || 0;
       return `<td class="num bas-day-cell${n ? " has-val is-clickable" : ""}"><b>${scheduleCellButton(n, `data-pt-sched-row="__total__" data-pt-sched-day="${day}"`, "pt-sched-total") || ""}</b></td>`;
@@ -1831,26 +1872,34 @@
     if (uiBound) return;
     uiBound = true;
     const search = $("#pt-search");
+    const repaint = () => {
+      if (!lastModel) return;
+      const sc = $("#pt-vin-scroll");
+      if (sc) sc.scrollTop = 0;
+      if (isTower()) renderTower(lastModel);
+      else renderMovements(lastModel);
+    };
     if (search) {
-      search.addEventListener("change", () => {
+      search.addEventListener("input", () => {
         view.q = search.value.trim();
-        if (lastModel) renderMovements(lastModel);
-      });
-      search.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          view.q = search.value.trim();
-          if (lastModel) renderMovements(lastModel);
-        }
+        view.vinPin = null;
+        repaint();
       });
     }
-    ["pt-f-snap", "pt-f-move", "pt-f-product"].forEach((id) => {
+    ["pt-f-product", "pt-f-sfx", "pt-f-year", "pt-f-status", "pt-f-area"].forEach((id) => {
       const el = $(`#${id}`);
       if (!el) return;
       el.addEventListener("change", () => {
-        if (id.endsWith("snap")) view.snapDate = el.value;
-        if (id.endsWith("move")) view.movement = el.value;
-        if (id.endsWith("product")) view.product = el.value;
-        if (lastModel) renderMovements(lastModel);
+        if (id === "pt-f-product") view.product = el.value;
+        if (id === "pt-f-sfx") view.sfx = el.value;
+        if (id === "pt-f-year") view.year = el.value;
+        if (id === "pt-f-status") {
+          view.status = el.value;
+          view.tab = view.status ? statusToTab(view.status) : "all";
+        }
+        if (id === "pt-f-area") view.area = el.value;
+        view.vinPin = null;
+        repaint();
       });
     });
     const clear = $("#pt-clear");
@@ -1859,13 +1908,16 @@
         view.snapDate = "";
         view.movement = "";
         view.product = "";
+        view.sfx = "";
+        view.year = "";
+        view.status = "";
+        view.area = "";
+        view.tab = "all";
         view.q = "";
         view.drill = "";
+        view.vinPin = null;
         if (search) search.value = "";
-        if (lastModel) {
-          fillFilters(lastModel);
-          renderAll(lastModel);
-        }
+        repaint();
       });
     }
     const vinBtn = $("#pt-vin-go");
@@ -1905,12 +1957,710 @@
         render({ force: true });
       });
     }
+    const prev = $("#pt-month-prev");
+    const nowBtn = $("#pt-month-now");
+    const next = $("#pt-month-next");
+    if (prev) prev.addEventListener("click", () => shiftMonth(-1));
+    if (next) next.addEventListener("click", () => shiftMonth(1));
+    if (nowBtn) {
+      nowBtn.addEventListener("click", () => {
+        view.monthLocked = false;
+        view.vinPin = null;
+        render({ force: true });
+      });
+    }
+    const mode = $("#pt-mode");
+    if (mode) {
+      mode.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-mode]");
+        if (!btn || !lastModel) return;
+        view.mode = btn.getAttribute("data-pt-mode") || "daily";
+        renderTower(lastModel);
+      });
+    }
+    const tabs = $("#pt-tabs");
+    if (tabs) {
+      tabs.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-tab]");
+        if (!btn || !lastModel) return;
+        view.tab = btn.getAttribute("data-pt-tab") || "all";
+        view.status = tabToStatus(view.tab);
+        const sc = $("#pt-vin-scroll");
+        if (sc) sc.scrollTop = 0;
+        renderTower(lastModel);
+      });
+    }
+    const kpis = $("#pt-kpis");
+    if (kpis) {
+      kpis.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-kpi]");
+        if (!btn || !lastModel) return;
+        const key = btn.getAttribute("data-pt-kpi");
+        const map = { stock: "My Stock", proforma: "Proforma", delivered: "Delivered", swapped: "Swapped" };
+        if (!map[key]) return;
+        view.status = view.status === map[key] ? "" : map[key];
+        view.tab = view.status ? statusToTab(view.status) : "all";
+        const sc = $("#pt-vin-scroll");
+        if (sc) sc.scrollTop = 0;
+        renderTower(lastModel);
+      });
+    }
+    const product = $("#pt-product");
+    if (product) {
+      product.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-product]");
+        if (!btn || !lastModel) return;
+        const name = btn.getAttribute("data-pt-product") || "";
+        view.product = view.product === name ? "" : name;
+        view.vinPin = null;
+        renderTower(lastModel);
+      });
+    }
+    const sfx = $("#pt-sfx");
+    if (sfx) {
+      sfx.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-sfx]");
+        if (!btn || !lastModel) return;
+        const name = btn.getAttribute("data-pt-sfx") || "";
+        view.sfx = view.sfx === name ? "" : name;
+        view.vinPin = null;
+        renderTower(lastModel);
+      });
+    }
+    document.addEventListener("click", (e) => {
+      const open = e.target.closest("[id='pt-schedule-open'], #pt-quality-open, #pt-recon-open");
+      if (open && lastModel) {
+        const id = open.id === "pt-schedule-open" ? "pt-schedule-modal"
+          : open.id === "pt-quality-open" ? "pt-quality-modal" : "pt-recon-modal";
+        const modal = document.getElementById(id);
+        if (modal) modal.hidden = false;
+      }
+      const close = e.target.closest("[data-pt-close]");
+      if (close) {
+        const modal = document.getElementById(close.getAttribute("data-pt-close"));
+        if (modal) modal.hidden = true;
+      }
+      if (e.target.classList && e.target.classList.contains("pt-modal")) e.target.hidden = true;
+    });
+    const drawerClose = $("#pt-drawer-close");
+    if (drawerClose) {
+      drawerClose.addEventListener("click", () => {
+        const drawer = $("#pt-drawer");
+        if (drawer) drawer.hidden = true;
+      });
+    }
+  }
+
+  function isTower() {
+    const dash = $("#pt-dash");
+    return !!(dash && dash.classList.contains("pt-tower"));
+  }
+
+  function leafOf(row) {
+    if (!row) return null;
+    if (Object.prototype.hasOwnProperty.call(row, "_leaf")) return row._leaf;
+    const fn = global.matchRtlToAllocLeaf;
+    const leaf = typeof fn === "function" ? fn({ product: row.product, suffix: row.suffix }) : null;
+    row._leaf = leaf || null;
+    return row._leaf;
+  }
+
+  function rowProduct(r) {
+    if (r && r.leafProduct) return r.leafProduct;
+    const leaf = leafOf(r);
+    return leaf ? leaf.product : ((r && r.product) || "");
+  }
+
+  function rowSfx(r) {
+    if (r && r.leafSfx) return r.leafSfx;
+    const leaf = leafOf(r);
+    return leaf ? leaf.sfx : ((r && r.suffix) || "");
+  }
+
+  /**
+   * Status priority: Delivered (Sales Raw col V) > Proforma (col P) > Swapped > My Stock.
+   * Swap requires a later snapshot in this month whose Search Area is not Retail Electronic Sales.
+   */
+  function classifyVinStatus(receipt, history) {
+    const hist = Array.isArray(history) ? history : [];
+    const receiptKey = String((receipt && receipt.dateKey) || "");
+    let swap = null;
+    hist.forEach((h) => {
+      if (!h) return;
+      const snap = String(h.snapshotDate || h.dateKey || "");
+      if (!snap || (receiptKey && snap <= receiptKey)) return;
+      if (isRES(h)) return;
+      if (!swap || snap < swap.snapshotDate) {
+        swap = {
+          snapshotDate: snap,
+          searchArea: h.searchArea || h.searchAreaDesc || "",
+          location: h.location || "",
+        };
+      }
+    });
+    const invoice = receipt && (receipt.invoiceDate || receipt.deliveryDate);
+    const proforma = receipt && receipt.proformaDate;
+    const delivered = !!(receipt && (receipt.salesKind === "delivered" || (invoice && parseDate(invoice))));
+    const isProforma = !delivered && !!(receipt && (receipt.salesKind === "proforma" || (proforma && parseDate(proforma))));
+    let status = "My Stock";
+    if (delivered) status = "Delivered";
+    else if (isProforma) status = "Proforma";
+    else if (swap) status = "Swapped";
+    return { status, swap, conflict: !!swap && (delivered || isProforma) };
+  }
+
+  function buildControlCenter(model) {
+    const src = model || {};
+    const history = src.vinHistory || new Map();
+    const values = global.allocationValues || {};
+    const register = ((src.lists && src.lists.allocated) || []).map((r) => {
+      const cls = classifyVinStatus(r, history.get(r.vin) || []);
+      const leaf = leafOf(r);
+      return Object.assign({}, r, {
+        statusKey: cls.status,
+        swapDate: cls.swap ? cls.swap.snapshotDate : "",
+        swapArea: cls.swap ? cls.swap.searchArea : "",
+        swapLocation: cls.swap ? cls.swap.location : "",
+        statusConflict: cls.conflict,
+        seg: leaf ? (leaf.seg || "—") : "—",
+        leafId: leaf ? leaf.id : "",
+        leafProduct: leaf ? leaf.product : (r.product || "—"),
+        leafSfx: leaf ? leaf.sfx : (r.suffix || "—"),
+        planQty: leaf ? (Number(values[leaf.id]) || 0) : 0,
+      });
+    });
+    const resAge0 = new Set();
+    (src.daily || []).forEach((d) => {
+      (d.dailyUniqueRESAge0List || []).forEach((r) => {
+        if (r && r.vin) resAge0.add(r.vin);
+      });
+    });
+    const counts = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
+    register.forEach((r) => { counts[r.statusKey] = (counts[r.statusKey] || 0) + 1; });
+    let laterCount = 0;
+    history.forEach((hist) => {
+      if (hist && hist.length > 1) laterCount += 1;
+    });
+    const statusSum = counts.Delivered + counts.Proforma + counts["My Stock"] + counts.Swapped;
+    const unmatchedSales = register.filter((r) => !r.salesKind || r.salesKind === "none").length;
+    const conflicts = register.filter((r) => r.statusConflict).length;
+    const warnings = [];
+    if (statusSum !== register.length) {
+      warnings.push(`Status total ${statusSum} does not equal within-allocation receipts ${register.length}.`);
+    }
+    if (conflicts) warnings.push(`${conflicts} VIN(s) are Delivered or Proforma and also move out of Retail Electronic Sales later.`);
+    if (unmatchedSales) warnings.push(`${unmatchedSales} received VIN(s) are missing from Sales Raw.`);
+    if (laterCount) warnings.push(`${laterCount} VIN(s) appear again in a later RTL snapshot.`);
+    return {
+      register,
+      counts,
+      statusSum,
+      laterCount,
+      unmatchedSales,
+      conflicts,
+      missingProduct: register.filter((r) => !r.product || r.product === "—").length,
+      missingSfx: register.filter((r) => !r.suffix || r.suffix === "—").length,
+      warnings,
+    };
+  }
+
+  let ccModel = null;
+  let ccCache = null;
+  function controlCenter(model) {
+    if (model && ccModel === model && ccCache) return ccCache;
+    ccCache = buildControlCenter(model);
+    ccModel = model;
+    return ccCache;
+  }
+
+  function scopeMatch(r) {
+    if (!r) return false;
+    if (view.product && rowProduct(r) !== view.product) return false;
+    if (view.sfx && rowSfx(r) !== view.sfx) return false;
+    if (view.year && String(r.year || "") !== String(view.year)) return false;
+    if (view.area) {
+      const area = normHeader(r.searchArea || r.searchAreaDesc || "");
+      if (!area.includes(normHeader(view.area))) return false;
+    }
+    if (view.q) {
+      const q = String(view.q).trim().toUpperCase();
+      const blob = [
+        normalizeVin(r.vin),
+        r.product, r.suffix, rowProduct(r), rowSfx(r),
+      ].join(" ").toUpperCase();
+      if (!blob.includes(q)) return false;
+    }
+    if (view.vinPin && view.vinPin.size && !view.vinPin.has(r.vin)) return false;
+    return true;
+  }
+
+  function todayDateKey(monthKey) {
+    const now = new Date();
+    const mk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    if (mk !== monthKey) return "";
+    return `${mk}-${String(now.getDate()).padStart(2, "0")}`;
+  }
+
+  function tabToStatus(tab) {
+    if (tab === "stock") return "My Stock";
+    if (tab === "proforma") return "Proforma";
+    if (tab === "delivered") return "Delivered";
+    if (tab === "swapped") return "Swapped";
+    return "";
+  }
+
+  function statusToTab(status) {
+    if (status === "My Stock") return "stock";
+    if (status === "Proforma") return "proforma";
+    if (status === "Delivered") return "delivered";
+    if (status === "Swapped") return "swapped";
+    return "all";
+  }
+
+  function gapInfo(plan, mtd) {
+    const gap = plan - mtd;
+    if (gap > 0) return { n: gap, cls: "pt-gap-left", word: "left" };
+    if (gap < 0) return { n: Math.abs(gap), cls: "pt-gap-over", word: "over" };
+    return { n: 0, cls: "pt-gap-ok", word: "done" };
+  }
+
+  function fillSelect(id, values, current, allLabel) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const list = [...values].filter((v) => v != null && String(v) !== "").map(String);
+    const uniq = [...new Set(list)].sort((a, b) => a.localeCompare(b));
+    el.innerHTML = `<option value="">${esc(allLabel)}</option>`
+      + uniq.map((v) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(v)}</option>`).join("");
+  }
+
+  let vinPaintRows = [];
+  const VIN_ROW_H = 28;
+
+  function statusPill(status) {
+    const cls = status === "Delivered" ? "ok"
+      : status === "Proforma" ? "pro"
+        : status === "Swapped" ? "swap" : "stock";
+    return `<span class="pt-pill pt-pill-${cls}">${esc(status || "—")}</span>`;
+  }
+
+  function paintVinWindow() {
+    const sc = $("#pt-vin-scroll");
+    const body = $("#pt-vin-body");
+    const spacer = $("#pt-vin-spacer");
+    if (!sc || !body) return;
+    const rows = vinPaintRows;
+    const total = rows.length;
+    const h = sc.clientHeight || 160;
+    const start = Math.max(0, Math.floor(sc.scrollTop / VIN_ROW_H) - 2);
+    const count = Math.ceil(h / VIN_ROW_H) + 8;
+    const slice = rows.slice(start, start + count);
+    if (spacer) spacer.style.height = `${Math.max(total, 1) * VIN_ROW_H}px`;
+    body.style.transform = `translateY(${start * VIN_ROW_H}px)`;
+    body.innerHTML = slice.map((r) => `<tr style="height:${VIN_ROW_H}px">
+      <td>${esc(r.dateKey || "—")}</td>
+      <td><button type="button" class="pt-vin-btn" data-pt-vin="${esc(r.vin)}">${esc(r.vin)}</button></td>
+      <td>${esc(r.leafProduct || r.product || "—")}</td>
+      <td>${esc(r.leafSfx || r.suffix || "—")}</td>
+      <td>${esc(r.year || "—")}</td>
+      <td class="num">${r.planQty ? num(r.planQty) : "—"}</td>
+      <td>${esc(fmtDate(r.allocationDate))}</td>
+      <td class="num">${r.allocationAge == null ? "—" : num(r.allocationAge)}</td>
+      <td>${esc(r.searchArea || "—")}</td>
+      <td>${statusPill(r.statusKey)}</td>
+      <td>${esc(fmtDate(r.invoiceDate))}</td>
+      <td>${esc(fmtDate(r.proformaDate))}</td>
+      <td>${r.swapArea ? `${esc(r.swapArea)} · ${esc(r.swapDate)}` : "—"}</td>
+    </tr>`).join("") || `<tr><td colspan="13">No VINs for this filter.</td></tr>`;
+  }
+
+  function openVinDrawer(vin) {
+    if (!lastModel) return;
+    const key = normalizeVin(vin);
+    const cc = controlCenter(lastModel);
+    const rec = cc.register.find((r) => r.vin === key) || null;
+    const hist = (lastModel.vinHistory && lastModel.vinHistory.get(key)) || [];
+    const drawer = $("#pt-drawer");
+    const title = $("#pt-drawer-title");
+    const body = $("#pt-drawer-body");
+    if (title) title.textContent = key || "VIN";
+    if (body) {
+      const lines = hist.map((h) => `<li><b>${esc(h.snapshotDate || h.dateKey || "—")}</b> · ${esc(h.searchArea || "—")} · age ${h.allocationAge == null ? "—" : esc(h.allocationAge)} · alloc ${esc(fmtDate(h.allocationDate))}</li>`).join("");
+      body.innerHTML = `
+        <p>${statusPill(rec ? rec.statusKey : "—")} ${esc(rec ? (rec.leafProduct || rec.product) : "")} · ${esc(rec ? (rec.leafSfx || rec.suffix) : "")}</p>
+        <p class="pt-drawer-meta">Receipt ${esc(rec ? rec.dateKey : "—")} · Proforma ${esc(fmtDate(rec && rec.proformaDate))} · Delivery ${esc(fmtDate(rec && rec.invoiceDate))}</p>
+        ${rec && rec.swapArea ? `<p class="pt-drawer-meta">Swap ${esc(rec.swapDate)} · ${esc(rec.swapArea)}${rec.swapLocation ? ` · ${esc(rec.swapLocation)}` : ""}</p>` : ""}
+        <h4>RTL observations</h4>
+        <ol class="pt-timeline">${lines || "<li>No snapshot history.</li>"}</ol>`;
+    }
+    if (drawer) drawer.hidden = false;
+  }
+
+  function shiftMonth(delta) {
+    const base = view.monthKey || "";
+    const m = /^(\d{4})-(\d{2})$/.exec(base);
+    const now = new Date();
+    const y = m ? Number(m[1]) : now.getFullYear();
+    const mo = m ? Number(m[2]) - 1 : now.getMonth();
+    const d = new Date(y, mo + delta, 1);
+    const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    view.monthLocked = true;
+    view.monthKey = mk;
+    view.vinPin = null;
+    render({ force: true, monthKey: mk });
+  }
+
+  function renderTower(model) {
+    if (!model) return;
+    const dash = $("#pt-dash");
+    if (!dash) return;
+    const cc = controlCenter(model);
+    const scoped = cc.register.filter(scopeMatch);
+    const schedAll = buildScheduleRows(model);
+    const sched = schedAll.filter((r) => (!view.product || r.product === view.product) && (!view.sfx || r.sfx === view.sfx));
+    const plan = sched.reduce((s, r) => s + (Number(r.allocation) || 0), 0);
+    const within = scoped.length;
+    const receivedSet = new Set();
+    (model.daily || []).forEach((d) => {
+      (d.dailyUniqueRESAge0List || []).forEach((r) => {
+        if (r && r.vin && scopeMatch(r)) receivedSet.add(r.vin);
+      });
+    });
+    const received = receivedSet.size;
+    const counts = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
+    scoped.forEach((r) => { counts[r.statusKey] = (counts[r.statusKey] || 0) + 1; });
+    const gap = gapInfo(plan, within);
+    const hint = $("#pt-live-hint");
+    if (hint) {
+      const label = model.monthKey || "—";
+      hint.textContent = `${label} · ${model.dateKeys.length} RTL day file(s) · latest ${model.latestKey || "—"} · plan ${num(plan)} · within allocation ${num(within)}`;
+    }
+    const updated = $("#pt-updated");
+    if (updated) {
+      const stamp = model.refreshedAt instanceof Date ? model.refreshedAt : new Date();
+      updated.textContent = stamp.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    }
+
+    const products = new Set(schedAll.map((r) => r.product).filter((p) => p && p !== "(unmatched)"));
+    cc.register.forEach((r) => { if (r.leafProduct && r.leafProduct !== "—") products.add(r.leafProduct); });
+    const sfxes = new Set();
+    schedAll.forEach((r) => { if (r.sfx && r.sfx !== "—") sfxes.add(r.sfx); });
+    const years = new Set();
+    const areas = new Set();
+    cc.register.forEach((r) => {
+      if (r.year) years.add(String(r.year));
+      if (r.searchArea) areas.add(r.searchArea);
+    });
+    fillSelect("pt-f-product", products, view.product, "All products");
+    fillSelect("pt-f-sfx", sfxes, view.sfx, "All SFX");
+    fillSelect("pt-f-year", years, view.year, "All years");
+    fillSelect("pt-f-area", areas, view.area, "All search areas");
+    const statusEl = $("#pt-f-status");
+    if (statusEl) {
+      const cur = view.status;
+      statusEl.innerHTML = `<option value="">All statuses</option>`
+        + ["Delivered", "Proforma", "My Stock", "Swapped"].map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("");
+    }
+    $$("#pt-mode [data-pt-mode]").forEach((btn) => {
+      btn.classList.toggle("is-on", btn.getAttribute("data-pt-mode") === (view.mode || "daily"));
+    });
+
+    const kpis = [
+      ["plan", "Monthly plan", plan, "Admin Push"],
+      ["received", "RTL age 0", received, "Unique RES · age 0"],
+      ["within", "Within allocation", within, "RES · age 0 · alloc date"],
+      ["stock", "My stock", counts["My Stock"], "Still with RES"],
+      ["proforma", "Proforma", counts.Proforma, "Sales Raw col P"],
+      ["delivered", "Delivered", counts.Delivered, "Sales Raw col V"],
+      ["swapped", "Swapped", counts.Swapped, "Later non-RES area"],
+    ];
+    const kpiHost = $("#pt-kpis");
+    if (kpiHost) {
+      kpiHost.innerHTML = kpis.map(([key, label, value, sub]) => {
+        const active = (key === "plan" && gap.word === "done") || (key !== "plan" && key !== "received" && view.tab === statusToTab(label === "My stock" ? "My Stock" : label));
+        return `<button type="button" class="pt-kpi${active ? " is-on" : ""}" data-pt-kpi="${key}">
+          <span>${esc(label)}</span><strong>${num(value)}</strong><em>${esc(sub)}</em>
+          ${key === "within" ? `<b class="${gap.cls}">${gap.word === "done" ? "Completed" : gap.word === "over" ? `Over ${num(gap.n)}` : `Gap ${num(gap.n)}`}</b>` : ""}
+        </button>`;
+      }).join("");
+    }
+
+    const byProduct = new Map();
+    sched.forEach((r) => {
+      if (r.product === "(unmatched)" && !r.mtd) return;
+      const g = byProduct.get(r.product) || { product: r.product, plan: 0, mtd: 0 };
+      g.plan += Number(r.allocation) || 0;
+      byProduct.set(r.product, g);
+    });
+    scoped.forEach((r) => {
+      const key = r.leafId ? r.leafProduct : "(unmatched)";
+      const g = byProduct.get(key) || { product: key, plan: 0, mtd: 0 };
+      g.mtd += 1;
+      byProduct.set(key, g);
+    });
+    const prodHost = $("#pt-product");
+    if (prodHost) {
+      const rows = [...byProduct.values()].sort((a, b) => String(a.product).localeCompare(String(b.product)));
+      prodHost.innerHTML = `<table class="pt-table"><thead><tr><th>Product</th><th>Plan</th><th>Received</th><th>%</th><th>Gap</th></tr></thead><tbody>${
+        rows.map((r) => {
+          const g = gapInfo(r.plan, r.mtd);
+          const pct = r.plan ? `${Math.round((r.mtd / r.plan) * 1000) / 10}%` : "—";
+          return `<tr><td><button type="button" class="pt-link${view.product === r.product ? " is-on" : ""}" data-pt-product="${esc(r.product)}">${esc(r.product)}</button></td>
+            <td class="num">${num(r.plan)}</td><td class="num">${num(r.mtd)}</td><td class="num">${pct}</td>
+            <td class="num ${g.cls}">${g.word === "done" ? "Done" : g.word === "over" ? `+${num(g.n)}` : num(g.n)}</td></tr>`;
+        }).join("") || `<tr><td colspan="5">No Admin plan or receipts for this filter.</td></tr>`
+      }</tbody></table>`;
+    }
+
+    const sfxHost = $("#pt-sfx");
+    if (sfxHost) {
+      sfxHost.innerHTML = `<table class="pt-table"><thead><tr>
+        <th>SFX</th><th>Plan</th><th>Within</th><th>Delivered</th><th>Proforma</th><th>Stock</th><th>Swapped</th><th>%</th>
+      </tr></thead><tbody>${
+        sched.map((r) => {
+          const mine = scoped.filter((v) => (r.id === "__unmatched__" ? !v.leafId : v.leafId === r.id));
+          const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
+          mine.forEach((v) => { c[v.statusKey] = (c[v.statusKey] || 0) + 1; });
+          const pct = r.allocation ? `${Math.round((mine.length / r.allocation) * 1000) / 10}%` : "—";
+          return `<tr><td><button type="button" class="pt-link${view.sfx === r.sfx ? " is-on" : ""}" data-pt-sfx="${esc(r.sfx)}">${esc(r.product)} ${esc(r.sfx)}</button></td>
+            <td class="num">${num(r.allocation)}</td><td class="num">${num(mine.length)}</td>
+            <td class="num">${num(c.Delivered)}</td><td class="num">${num(c.Proforma)}</td>
+            <td class="num">${num(c["My Stock"])}</td><td class="num">${num(c.Swapped)}</td><td class="num">${pct}</td></tr>`;
+        }).join("") || `<tr><td colspan="8">No SFX rows.</td></tr>`
+      }</tbody></table>`;
+    }
+
+    const yearMap = new Map();
+    scoped.forEach((r) => {
+      const y = r.year ? String(r.year) : "—";
+      yearMap.set(y, (yearMap.get(y) || 0) + 1);
+    });
+    const yearLabels = [...yearMap.keys()].sort();
+    makeChart("pt-chart-year", {
+      type: "bar",
+      data: {
+        labels: yearLabels,
+        datasets: [{ data: yearLabels.map((y) => yearMap.get(y) || 0), backgroundColor: "#10233f", borderRadius: 3 }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } },
+        onClick: (_evt, els) => {
+          if (!els.length) return;
+          const y = yearLabels[els[0].index];
+          view.year = view.year === y ? "" : y;
+          renderTower(model);
+        },
+      },
+    });
+
+    const days = model.daily || [];
+    const labels = days.map((d) => d.label);
+    const withinDaily = days.map((d) => scoped.filter((r) => r.dateKey === d.dateKey).length);
+    const receivedDaily = days.map((d) => (d.dailyUniqueRESAge0List || []).filter((r) => scopeMatch(r)).length);
+    let runW = 0;
+    let runR = 0;
+    const cumW = withinDaily.map((n) => { runW += n; return runW; });
+    const cumR = receivedDaily.map((n) => { runR += n; return runR; });
+    const cumulative = view.mode === "cumulative";
+    const note = $("#pt-chart-note");
+    if (note) note.textContent = cumulative ? "Cumulative within allocation vs monthly plan" : "Daily within allocation and RES age 0";
+    const datasets = [
+      {
+        type: "bar",
+        label: cumulative ? "Cumulative within" : "Within allocation",
+        data: cumulative ? cumW : withinDaily,
+        backgroundColor: "rgba(16,35,63,.85)",
+        borderRadius: 3,
+        order: 2,
+      },
+      {
+        type: "line",
+        label: cumulative ? "Cumulative RES age 0" : "RES age 0",
+        data: cumulative ? cumR : receivedDaily,
+        borderColor: "#2f6fed",
+        backgroundColor: "#2f6fed",
+        tension: 0.2,
+        pointRadius: 2,
+        order: 1,
+      },
+    ];
+    if (cumulative) {
+      datasets.push({
+        type: "line",
+        label: "Admin plan",
+        data: days.map(() => plan),
+        borderColor: "#eb0a1e",
+        borderDash: [4, 3],
+        pointRadius: 0,
+        order: 0,
+      });
+    }
+    makeChart("pt-chart-daily", {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } },
+        scales: {
+          x: { ticks: { font: { size: 9 }, maxRotation: 0 } },
+          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+        },
+      },
+    });
+
+    const donutLabels = ["Delivered", "Proforma", "My Stock", "Swapped"];
+    makeChart("pt-chart-status", {
+      type: "doughnut",
+      data: {
+        labels: donutLabels,
+        datasets: [{
+          data: donutLabels.map((k) => counts[k] || 0),
+          backgroundColor: ["#1f8a4c", "#2f6fed", "#e07a00", "#eb0a1e"],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 10 } } } },
+        onClick: (_evt, els) => {
+          if (!els.length) return;
+          const label = donutLabels[els[0].index];
+          view.status = view.status === label ? "" : label;
+          view.tab = view.status ? statusToTab(view.status) : "all";
+          const scroller = $("#pt-vin-scroll");
+          if (scroller) scroller.scrollTop = 0;
+          renderTower(model);
+        },
+      },
+    });
+    const mid = $("#pt-donut-mid");
+    if (mid) mid.innerHTML = `<strong>${num(within)}</strong><span>Received</span>`;
+
+    const dayHost = $("#pt-daily-count");
+    if (dayHost) {
+      const body = days.map((d) => {
+        const mine = scoped.filter((r) => r.dateKey === d.dateKey);
+        const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
+        mine.forEach((r) => { c[r.statusKey] = (c[r.statusKey] || 0) + 1; });
+        const recN = (d.dailyUniqueRESAge0List || []).filter((r) => scopeMatch(r)).length;
+        return `<tr><td>${esc(d.label)}</td><td class="num">—</td><td class="num">${num(recN)}</td><td class="num">${num(mine.length)}</td>
+          <td class="num">${num(c.Delivered)}</td><td class="num">${num(c.Proforma)}</td>
+          <td class="num">${num(c["My Stock"])}</td><td class="num">${num(c.Swapped)}</td></tr>`;
+      }).join("");
+      dayHost.innerHTML = `<table class="pt-table"><thead><tr>
+        <th>Day</th><th>Plan</th><th>RES age 0</th><th>Within</th><th>Deliv.</th><th>Prof.</th><th>Stock</th><th>Swap</th>
+      </tr></thead><tbody>${body || `<tr><td colspan="8">No RTL files for this month.</td></tr>`}
+        <tr class="pt-total"><td>Month</td><td class="num">${num(plan)}</td><td class="num">${num(received)}</td><td class="num">${num(within)}</td>
+          <td class="num">${num(counts.Delivered)}</td><td class="num">${num(counts.Proforma)}</td>
+          <td class="num">${num(counts["My Stock"])}</td><td class="num">${num(counts.Swapped)}</td></tr>
+      </tbody></table>`;
+    }
+
+    const todayKey = todayDateKey(model.monthKey);
+    const tabCounts = {
+      all: scoped.length,
+      today: scoped.filter((r) => r.dateKey === todayKey).length,
+      stock: counts["My Stock"],
+      proforma: counts.Proforma,
+      delivered: counts.Delivered,
+      swapped: counts.Swapped,
+    };
+    const tabs = $("#pt-tabs");
+    if (tabs) {
+      const defs = [
+        ["all", "All VINs"],
+        ["today", "Today"],
+        ["stock", "My stock"],
+        ["proforma", "Proforma"],
+        ["delivered", "Delivered"],
+        ["swapped", "Swapped"],
+      ];
+      tabs.innerHTML = defs.map(([id, label]) => `<button type="button" class="${view.tab === id ? "is-on" : ""}" data-pt-tab="${id}">${label} (${num(tabCounts[id] || 0)})</button>`).join("");
+    }
+    const pin = $("#pt-pin");
+    if (pin) {
+      if (view.vinPin && view.vinPin.size) {
+        pin.hidden = false;
+        pin.textContent = view.scheduleTitle || `${view.vinPin.size} schedule VIN(s)`;
+      } else pin.hidden = true;
+    }
+    let tableRows = scoped;
+    if (view.tab === "today") tableRows = scoped.filter((r) => r.dateKey === todayKey);
+    else if (view.status) tableRows = scoped.filter((r) => r.statusKey === view.status);
+    else if (view.tab && view.tab !== "all") tableRows = scoped.filter((r) => r.statusKey === tabToStatus(view.tab));
+    vinPaintRows = tableRows;
+    const sc = $("#pt-vin-scroll");
+    paintVinWindow();
+
+    const q = model.quality || {};
+    const qBody = $("#pt-quality-body");
+    if (qBody) {
+      const items = [
+        ["Unique within-allocation VINs", within],
+        ["Duplicate VIN observations", q.duplicateVin || 0],
+        ["Missing VIN", q.blankVin || 0],
+        ["Missing product", cc.missingProduct],
+        ["Missing SFX", cc.missingSfx],
+        ["Missing allocation date", q.missingAllocationDate || 0],
+        ["Missing search area", q.missingArea || 0],
+        ["Invalid allocation age", q.invalidAge || 0],
+        ["Sales Raw unmatched", cc.unmatchedSales],
+      ];
+      qBody.innerHTML = `<ul class="pt-q-list">${items.map(([l, n]) => `<li><span>${esc(l)}</span><b>${num(n)}</b></li>`).join("")}</ul>`;
+    }
+    const qBtn = $("#pt-quality-open");
+    if (qBtn) qBtn.textContent = `Quality ${num(model.qualityScore || 0)}`;
+
+    const recon = $("#pt-recon-body");
+    if (recon) {
+      const unmatched = schedAll.find((r) => r.id === "__unmatched__");
+      const notReceived = schedAll.filter((r) => r.id !== "__unmatched__" && r.allocation > 0 && r.mtd === 0).length;
+      const lines = [
+        `Admin plan ${num(plan)}`,
+        `RES age 0 unique ${num(received)}`,
+        `Within allocation ${num(within)}`,
+        `Status total ${num(counts.Delivered + counts.Proforma + counts["My Stock"] + counts.Swapped)}`,
+        `Plan gap ${gap.word === "over" ? "over " : ""}${num(gap.n)} (${gap.word})`,
+      ];
+      const warns = cc.warnings.slice();
+      if (unmatched && unmatched.mtd) warns.push(`${unmatched.mtd} within-allocation VIN(s) do not match an Admin product + SFX.`);
+      if (notReceived) warns.push(`${notReceived} Admin SFX row(s) have a plan and zero receipts.`);
+      if (q.duplicateVin) warns.push(`${q.duplicateVin} duplicate VIN observation(s) inside a daily file. The first row is kept.`);
+      if (q.missingAllocationDate) warns.push(`${q.missingAllocationDate} row(s) have no allocation date.`);
+      if (q.invalidAge) warns.push(`${q.invalidAge} row(s) have a blank allocation age.`);
+      recon.innerHTML = `<ul class="pt-q-list">${lines.map((l) => `<li><span>${esc(l)}</span></li>`).join("")}</ul>
+        <h4>Warnings</h4>
+        <ul class="pt-warn">${warns.length ? warns.map((w) => `<li>${esc(w)}</li>`).join("") : "<li>No warnings on this filter.</li>"}</ul>`;
+    }
+
+    renderSchedule(model);
+    if (sc && !sc.dataset.bound) {
+      sc.dataset.bound = "1";
+      sc.addEventListener("scroll", () => paintVinWindow());
+      sc.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-pt-vin]");
+        if (!btn) return;
+        openVinDrawer(btn.getAttribute("data-pt-vin"));
+      });
+    }
   }
 
   function renderAll(model) {
     lastModel = model;
     const empty = $("#pt-empty");
     const dash = $("#pt-dash");
+    if (isTower()) {
+      if (empty) empty.hidden = true;
+      if (dash) dash.hidden = false;
+      renderTower(model);
+      return;
+    }
     if (!model.dateKeys.length) {
       if (empty) empty.hidden = false;
       if (dash) dash.hidden = true;
@@ -1989,7 +2739,7 @@
         MTD: r.mtd,
         Gap: r.allocation - r.mtd,
       };
-      for (let d = 1; d <= 30; d += 1) out[`D${d}`] = r.dayCounts[d] || 0;
+      for (let d = 1; d <= monthLength(lastModel.monthKey); d += 1) out[`D${d}`] = r.dayCounts[d] || 0;
       return out;
     });
     if (sched.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sched), "Schedule");
@@ -2033,24 +2783,31 @@
       const mk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       ctx = { monthKey: mk, monthLabel: mk };
     }
-    view.monthKey = ctx.monthKey;
+    let mk = ctx.monthKey;
+    if (opts && opts.monthKey) {
+      mk = opts.monthKey;
+      view.monthKey = mk;
+      view.monthLocked = true;
+    } else if (view.monthLocked && view.monthKey) {
+      mk = view.monthKey;
+    } else {
+      view.monthLocked = false;
+      view.monthKey = ctx.monthKey;
+      mk = ctx.monthKey;
+    }
 
     let pack = null;
     if (typeof global.ensureRtlActiveMonth === "function") {
-      pack = await global.ensureRtlActiveMonth(ctx.monthKey, !!(opts && opts.force));
+      pack = await global.ensureRtlActiveMonth(mk, !!(opts && opts.force));
     } else if (typeof global.getCachedRtlActiveMonth === "function") {
-      pack = global.getCachedRtlActiveMonth(ctx.monthKey);
+      pack = global.getCachedRtlActiveMonth(mk);
     }
 
     if (loading) loading.hidden = true;
 
-    if (!pack || !pack.days || !Object.keys(pack.days).length) {
-      if (empty) empty.hidden = false;
-      if (dash) dash.hidden = true;
-      return;
-    }
-
-    const model = buildModel(pack, { plan: ALLOCATION_PLAN });
+    const model = buildModel(pack || { month: mk, days: {} }, { plan: adminPlanTotal() });
+    if (!model.monthKey) model.monthKey = mk;
+    model.refreshedAt = new Date();
     renderAll(model);
   }
 
@@ -2071,6 +2828,9 @@
     ALLOCATION_PLAN,
     render,
     buildModel,
+    buildScheduleRows,
+    buildControlCenter,
+    classifyVinStatus,
     normalizeVin,
     isRES,
     isPlanScheduleReceipt,

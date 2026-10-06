@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20260926ptfix"></script>
+  <script src="plan-tracker.js?v=20261006res"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261005resp" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261005tower2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261006res" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -1058,140 +1058,144 @@
           <p class="foot" id="pt-loading" hidden>Loading day RTL snapshots…</p>
         </div>
 
-        <div id="pt-dash" class="bo-dash pt-dash" hidden>
-          <header class="aa-cc-header pt-header">
-            <div class="aa-cc-header-copy">
-              <p class="aa-cc-eyebrow">TOYOTA · ALJ MOTORS</p>
-              <h2 class="aa-cc-title">Plan Tracker</h2>
-              <p class="aa-cc-sub">Retail Electronic Sales · 315 allocation plan · VIN movement</p>
-              <p class="aa-cc-live" id="pt-live-hint">—</p>
+        <div id="pt-dash" class="pt-dash pt-tower" hidden>
+          <header class="pt-top">
+            <div class="pt-top-copy">
+              <p class="pt-eye">TOYOTA · ALJ DIGITAL RETAIL</p>
+              <h2>RES Plan &amp; VIN Tracking</h2>
+              <p class="pt-sub" id="pt-live-hint">—</p>
             </div>
-            <div class="aa-cc-toolbar pt-toolbar">
-              <button type="button" class="btn" id="pt-refresh">Refresh snapshots</button>
-              <button type="button" class="btn" id="pt-export-debug" title="Export planTrackerDebug JSON">Export Debug</button>
-              <button type="button" class="btn-primary" id="pt-export">Export Excel</button>
+            <div class="pt-actions">
+              <button type="button" class="btn" id="pt-month-prev">Prev</button>
+              <button type="button" class="btn" id="pt-month-now">This month</button>
+              <button type="button" class="btn" id="pt-month-next">Next</button>
+              <span class="pt-updated" id="pt-updated">—</span>
+              <button type="button" class="btn" id="pt-refresh">Refresh</button>
+              <button type="button" class="btn" id="pt-schedule-open">Schedule</button>
+              <button type="button" class="btn" id="pt-quality-open">Data quality</button>
+              <button type="button" class="btn" id="pt-recon-open">Reconcile</button>
+              <button type="button" class="btn" id="pt-export-debug">Debug</button>
+              <button type="button" class="btn-primary" id="pt-export">Excel</button>
             </div>
           </header>
 
-          <div class="bo-kpis bas-kpi-row" id="pt-kpis"></div>
-          <div class="pt-progress card" id="pt-progress"></div>
-
-          <div class="card pt-card" id="pt-free-stock-card">
-            <div class="bas-retail-head">
-              <div class="bas-retail-title">
-                <h3>Free stock · prior / last month</h3>
-                <span class="hint">RES · Age 0 · Allocation Date before this month — unique VINs · excluded from 315 progress</span>
-              </div>
-              <div class="bas-retail-total-card">
-                <span class="bas-retail-total-lab">Free stock</span>
-                <span class="bas-retail-total-val" id="pt-free-stock-total">0</span>
-              </div>
-            </div>
-            <div class="table-wrap bas-table-wrap" id="pt-free-stock-table"></div>
-            <p class="foot" id="pt-free-stock-foot"></p>
-          </div>
-
-          <div class="pt-grid-2">
-            <div class="card pt-card" id="pt-yesterday"></div>
-            <div class="card pt-card">
-              <h3 class="bas-subhead">Age 0 by Search Area</h3>
-              <div class="table-wrap" id="pt-age0-table"></div>
+          <div class="pt-filters" id="pt-filterbar">
+            <select id="pt-f-product" aria-label="Product"></select>
+            <select id="pt-f-sfx" aria-label="SFX"></select>
+            <select id="pt-f-year" aria-label="Model year"></select>
+            <select id="pt-f-status" aria-label="Status"></select>
+            <select id="pt-f-area" aria-label="Search area"></select>
+            <input type="search" id="pt-search" placeholder="VIN, product, or SFX" autocomplete="off" />
+            <button type="button" class="btn" id="pt-clear">Clear</button>
+            <div class="pt-mode" id="pt-mode">
+              <button type="button" data-pt-mode="daily">Daily</button>
+              <button type="button" data-pt-mode="cumulative">Cumulative</button>
             </div>
           </div>
 
-          <div class="card pt-card pt-schedule-card">
-            <div class="bas-retail-head">
-              <div class="bas-retail-title">
-                <h3>RES plan schedule</h3>
-                <span class="hint">Seg · Product · SFX · Plan · days 1–30 · age 0 · Allocation Date = file day · Retail Electronic Sales · mapped to Admin plan</span>
-              </div>
-            </div>
-            <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="pt-schedule-table"></div>
-            <p class="foot bas-foot" id="pt-schedule-foot"></p>
-          </div>
+          <div class="pt-kpis" id="pt-kpis"></div>
 
-          <div class="pt-charts">
-            <article class="card">
-              <div class="pbi-viz-head"><h3>Plan vs allocated</h3></div>
-              <div class="chart-box"><canvas id="pt-chart-plan"></canvas></div>
+          <div class="pt-row pt-row-charts">
+            <article class="pt-card">
+              <div class="pt-card-h">
+                <h3>Daily plan vs received</h3>
+                <span id="pt-chart-note">Within allocation · RES age 0</span>
+              </div>
+              <div class="pt-chart"><canvas id="pt-chart-daily"></canvas></div>
             </article>
-            <article class="card pt-span-2">
-              <div class="pbi-viz-head"><h3>Daily allocations &amp; movement</h3></div>
-              <div class="chart-box"><canvas id="pt-chart-daily"></canvas></div>
+            <article class="pt-card">
+              <div class="pt-card-h"><h3>Product allocation vs received</h3></div>
+              <div class="pt-scroll" id="pt-product"></div>
             </article>
-            <article class="card">
-              <div class="pbi-viz-head"><h3>RES total trend</h3></div>
-              <div class="chart-box"><canvas id="pt-chart-res"></canvas></div>
-            </article>
-            <article class="card">
-              <div class="pbi-viz-head"><h3>RES allocation age</h3></div>
-              <div class="chart-box"><canvas id="pt-chart-age"></canvas></div>
+            <article class="pt-card pt-donut-card">
+              <div class="pt-card-h"><h3>VIN status</h3></div>
+              <div class="pt-donut">
+                <canvas id="pt-chart-status"></canvas>
+                <div class="pt-donut-mid" id="pt-donut-mid"></div>
+              </div>
             </article>
           </div>
 
-          <div class="bas-day-ops-detail" id="pt-drill" hidden>
-            <div class="bas-retail-head">
-              <div class="bas-retail-title">
-                <h3 id="pt-drill-title">VIN list</h3>
-                <span class="hint">Click a KPI or daily number · click again to clear</span>
+          <div class="pt-row pt-row-mid">
+            <article class="pt-card">
+              <div class="pt-card-h"><h3>SFX plan progress</h3></div>
+              <div class="pt-scroll" id="pt-sfx"></div>
+            </article>
+            <article class="pt-card">
+              <div class="pt-card-h"><h3>Model year</h3></div>
+              <div class="pt-chart"><canvas id="pt-chart-year"></canvas></div>
+            </article>
+            <article class="pt-card">
+              <div class="pt-card-h"><h3>Daily VIN count</h3></div>
+              <div class="pt-scroll" id="pt-daily-count"></div>
+            </article>
+          </div>
+
+          <section class="pt-card pt-register">
+            <div class="pt-reg-head">
+              <div>
+                <h3>Received VINs</h3>
+                <p class="pt-pin" id="pt-pin" hidden></p>
               </div>
-              <button type="button" class="btn" id="pt-drill-close">Close</button>
+              <div class="pt-tabs" id="pt-tabs"></div>
             </div>
-            <div class="table-wrap" id="pt-drill-table"></div>
-          </div>
-
-          <div class="card pt-card">
-            <h3 class="bas-subhead">Daily table</h3>
-            <div class="table-wrap" id="pt-daily-table"></div>
-          </div>
-
-          <div class="pt-grid-2">
-            <div class="card pt-card">
-              <h3 class="bas-subhead">Search Area flow</h3>
-              <div id="pt-corridor"></div>
-            </div>
-            <div class="card pt-card">
-              <h3 class="bas-subhead">Movement matrix</h3>
-              <div id="pt-matrix"></div>
-            </div>
-          </div>
-
-          <div class="card pt-card">
-            <div class="bas-retail-head">
-              <div class="bas-retail-title">
-                <h3>Movement ledger</h3>
-                <span class="hint">VIN-level · previous vs current Search Area</span>
+            <div class="pt-vin-scroll" id="pt-vin-scroll">
+              <table class="pt-table">
+                <thead>
+                  <tr>
+                    <th>Received</th><th>VIN</th><th>Product</th><th>SFX</th><th>Year</th>
+                    <th>Plan</th><th>Alloc date</th><th>Age</th><th>Search area</th>
+                    <th>Status</th><th>Delivery</th><th>Proforma</th><th>Swap</th>
+                  </tr>
+                </thead>
+              </table>
+              <div class="pt-vin-spacer" id="pt-vin-spacer">
+                <table class="pt-table"><tbody id="pt-vin-body"></tbody></table>
               </div>
             </div>
-            <div class="bas-alloc-toolbar pt-filters">
-              <input type="search" id="pt-search" placeholder="Search VIN / product / area…" autocomplete="off" />
-              <select id="pt-f-snap"></select>
-              <select id="pt-f-move"></select>
-              <select id="pt-f-product"></select>
-              <button type="button" class="btn" id="pt-clear">Clear filters</button>
-            </div>
-            <div class="table-wrap" id="pt-move-table"></div>
-          </div>
+          </section>
 
-          <div class="pt-grid-2">
-            <div class="card pt-card">
-              <h3 class="bas-subhead">VIN investigation</h3>
-              <div class="bas-alloc-toolbar">
-                <input type="search" id="pt-vin-q" placeholder="Enter VIN…" autocomplete="off" />
-                <button type="button" class="btn-primary" id="pt-vin-go">Trace VIN</button>
+          <div class="pt-modal" id="pt-schedule-modal" hidden>
+            <div class="pt-modal-card pt-modal-wide">
+              <div class="pt-modal-h">
+                <div>
+                  <h3>RES plan schedule</h3>
+                  <p>SEG · Product · SFX · Plan · daily allocation · age 0 · RTL receipts</p>
+                </div>
+                <button type="button" class="btn" data-pt-close="pt-schedule-modal">Close</button>
               </div>
-              <div id="pt-vin-result"></div>
-            </div>
-            <div class="card pt-card">
-              <h3 class="bas-subhead">Data quality</h3>
-              <div id="pt-quality"></div>
+              <div class="pt-schedule-wrap" id="pt-schedule-table"></div>
+              <p class="pt-modal-foot" id="pt-schedule-foot"></p>
             </div>
           </div>
 
-          <div class="card pt-card">
-            <h3 class="bas-subhead">Current RES inventory</h3>
-            <div class="pt-inv-grid" id="pt-inventory"></div>
+          <div class="pt-modal" id="pt-quality-modal" hidden>
+            <div class="pt-modal-card">
+              <div class="pt-modal-h">
+                <h3>Data quality</h3>
+                <button type="button" class="btn" data-pt-close="pt-quality-modal">Close</button>
+              </div>
+              <div id="pt-quality-body"></div>
+            </div>
           </div>
+
+          <div class="pt-modal" id="pt-recon-modal" hidden>
+            <div class="pt-modal-card">
+              <div class="pt-modal-h">
+                <h3>Reconciliation</h3>
+                <button type="button" class="btn" data-pt-close="pt-recon-modal">Close</button>
+              </div>
+              <div id="pt-recon-body"></div>
+            </div>
+          </div>
+
+          <aside class="pt-drawer" id="pt-drawer" hidden>
+            <div class="pt-drawer-h">
+              <h3 id="pt-drawer-title">VIN</h3>
+              <button type="button" class="btn" id="pt-drawer-close">Close</button>
+            </div>
+            <div id="pt-drawer-body"></div>
+          </aside>
         </div>
       </div>
 

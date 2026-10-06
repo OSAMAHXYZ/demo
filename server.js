@@ -563,7 +563,7 @@ function rehydrateRtlFromByDayMirrors() {
     }
     try {
       const buf = fs.readFileSync(xfp);
-      const vehicles = scanRtlStockBuffer(buf);
+      const vehicles = scanRtlStockBuffer(buf, { firstSheetOnly: true });
       if (!vehicles.length) continue;
       persistRtlDailySnapshot({
         dateKey,
@@ -994,7 +994,7 @@ function rtlResolveCol(headers, tests, fallbackLetter) {
 }
 
 /** Scan RTL workbook buffer → unique VIN rows with location + vehicle search area. */
-function scanRtlStockBuffer(buffer) {
+function scanRtlStockBuffer(buffer, opts) {
   if (!buffer || !buffer.length) return [];
   let wb;
   try {
@@ -1004,11 +1004,14 @@ function scanRtlStockBuffer(buffer) {
   }
   const names = wb.SheetNames || [];
   if (!names.length) return [];
-  // Prefer an RTL / stock sheet when workbooks include cover tabs.
-  const sheetName =
-    names.find((n) => /rtl/i.test(String(n || '')))
-    || names.find((n) => /stock|مخزون|retail/i.test(String(n || '')))
-    || names[0];
+  // Daily RTL files: first worksheet only (ignore Format / Header / Pivot / RawHeader).
+  // Stock workbooks may still prefer a named RTL sheet.
+  const firstOnly = !!(opts && opts.firstSheetOnly);
+  const sheetName = firstOnly
+    ? names[0]
+    : (names.find((n) => /rtl/i.test(String(n || '')))
+      || names.find((n) => /stock|مخزون|retail/i.test(String(n || '')))
+      || names[0]);
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!matrix.length) return [];
@@ -4543,7 +4546,7 @@ app.post('/api/rtl-daily/save-file', express.raw({ limit: '80mb', type: '*/*' })
     const source = String(req.query.source || 'uploader-day-box').trim() || 'uploader-day-box';
     let vehicles = [];
     try {
-      vehicles = scanRtlStockBuffer(buf);
+      vehicles = scanRtlStockBuffer(buf, { firstSheetOnly: true });
     } catch (scanErr) {
       console.error('[rtl-daily/save-file] scan failed', scanErr);
       return res.status(400).json({ error: scanErr.message || 'Failed to scan RTL Excel' });
@@ -5509,7 +5512,7 @@ app.post('/api/rtl-daily/save', (req, res) => {
     let vehicles = vehiclesIn;
     if (excelBuffer && excelBuffer.length) {
       try {
-        const scanned = scanRtlStockBuffer(excelBuffer);
+        const scanned = scanRtlStockBuffer(excelBuffer, { firstSheetOnly: true });
         if (scanned.length) vehicles = scanned;
       } catch (scanErr) {
         console.error('[rtl-daily/save] excel rescan failed, using client vehicles', scanErr);

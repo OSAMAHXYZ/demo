@@ -237,6 +237,63 @@ test("Reconciliation OK for stay / transfer / disappear", () => {
   assertEq(model.daily[2].disappearedTarget, 1); // A gone
 });
 
+test("day 31 stays on the schedule", () => {
+  const model = build({
+    "2026-10-31": [veh("VIN31", RES, 0, d(2026, 10, 31))],
+  }, "2026-10");
+  assertEq(model.kpis.allocated, 1);
+  const rows = PT.buildScheduleRows(model);
+  const row = rows.find((r) => r.mtd === 1);
+  assert(row, "schedule row missing");
+  assertEq(row.dayCounts[31], 1);
+  assertEq(row.dayCounts[1] || 0, 0);
+});
+
+test("one VIN keeps the original receipt when status changes", () => {
+  const model = build({
+    "2026-10-01": [veh("ABC123", RES, 0, d(2026, 10, 1), { product: "RAV4", suffix: "A2", year: "2026" })],
+    "2026-10-02": [veh("ABC123", RES, 1, d(2026, 10, 1))],
+    "2026-10-03": [veh("ABC123", "Other Search Area", 2, d(2026, 10, 1))],
+  }, "2026-10");
+  assertEq(model.kpis.allocated, 1);
+  assertEq(model.lists.allocated[0].dateKey, "2026-10-01");
+  const swapped = PT.buildControlCenter(model);
+  assertEq(swapped.register.length, 1);
+  assertEq(swapped.register[0].dateKey, "2026-10-01");
+  assertEq(swapped.register[0].statusKey, "Swapped");
+  assertEq(swapped.register[0].swapArea, "Other Search Area");
+  assertEq(swapped.counts.Swapped + swapped.counts.Delivered + swapped.counts.Proforma + swapped.counts["My Stock"], 1);
+
+  model.lists.allocated[0].salesKind = "proforma";
+  model.lists.allocated[0].proformaDate = d(2026, 10, 2);
+  const pro = PT.buildControlCenter(model);
+  assertEq(pro.register.length, 1);
+  assertEq(pro.register[0].statusKey, "Proforma");
+  assertEq(pro.register[0].dateKey, "2026-10-01");
+
+  model.lists.allocated[0].salesKind = "delivered";
+  model.lists.allocated[0].invoiceDate = d(2026, 10, 5);
+  const del = PT.buildControlCenter(model);
+  assertEq(del.register[0].statusKey, "Delivered");
+  assertEq(del.register[0].dateKey, "2026-10-01");
+  assert(del.register[0].statusConflict, "delivered plus later non-RES should warn");
+});
+
+test("later RES observation is not a swap", () => {
+  const model = build({
+    "2026-10-01": [veh("STAY1", RES, 0, d(2026, 10, 1))],
+    "2026-10-04": [veh("STAY1", RES, 3, d(2026, 10, 1))],
+  }, "2026-10");
+  const cc = PT.buildControlCenter(model);
+  assertEq(cc.register.length, 1);
+  assertEq(cc.register[0].statusKey, "My Stock");
+});
+
+test("normalizeVin is stable", () => {
+  assertEq(PT.normalizeVin(" ab c-123 "), "ABC123");
+  assertEq(PT.normalizeVin(12345), "12345");
+});
+
 console.log(`\n${passed} tests passed`);
 if (process.exitCode) {
   console.error("Some tests failed");
