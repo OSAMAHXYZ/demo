@@ -2,7 +2,7 @@
  * GEC data layer · Guest Experience Center.
  * Two independent datasets:
  *   • Leads    — one lead = one unique Transaction No. (Lead Data sheet)
- *   • Visitors — every transaction whose column J date is in the selected period
+ *   • Visitors — every transaction whose column O date is in the selected period
  * Business rules live in this file only; the dashboard is presentation.
  */
 (function (global) {
@@ -382,7 +382,9 @@
   const hasTime = (d) => d && (d.getHours() || d.getMinutes() || d.getSeconds());
   const atMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-  /** Date filter source: column J of the uploaded sheet (raw value, then the date Excel displays). */
+  /** Date filter source: column O of the uploaded sheet (raw value, then the date Excel displays). */
+  const DATE_FILTER_COLUMN = "O";
+
   function dateFromWorksheetCell(cell) {
     if (!cell) return null;
     const direct = parseAnyDate(cell.v);
@@ -395,21 +397,21 @@
     return null;
   }
 
-  function columnJCell(ws, rowIndex) {
+  function filterColumnCell(ws, rowIndex) {
     if (!ws || rowIndex == null || rowIndex < 0) return null;
-    return ws[colLetter(colIndex("J")) + (rowIndex + 1)] || null;
+    return ws[colLetter(colIndex(DATE_FILTER_COLUMN)) + (rowIndex + 1)] || null;
   }
 
-  function columnJDate(line, textLine, ws, rowIndex) {
-    const idx = colIndex("J");
-    return dateFromWorksheetCell(columnJCell(ws, rowIndex))
+  function filterColumnDate(line, textLine, ws, rowIndex) {
+    const idx = colIndex(DATE_FILTER_COLUMN);
+    return dateFromWorksheetCell(filterColumnCell(ws, rowIndex))
       || parseAnyDate(line && line[idx])
       || parseAnyDate(textLine && textLine[idx]);
   }
 
-  function columnJLabel(line, textLine, ws, rowIndex) {
-    const idx = colIndex("J");
-    const cell = columnJCell(ws, rowIndex);
+  function filterColumnLabel(line, textLine, ws, rowIndex) {
+    const idx = colIndex(DATE_FILTER_COLUMN);
+    const cell = filterColumnCell(ws, rowIndex);
     const hit = [cell && cell.w, cell && cell.v, textLine && textLine[idx], line && line[idx]]
       .find((v) => v != null && String(v).trim() !== "");
     return hit == null ? "" : String(hit).replace(/\s+/g, " ").trim().slice(0, 40);
@@ -736,7 +738,7 @@
       .forEach((p) => warnings.push(`The lead sheet has no column ${p.letter} — every customer will read as ${NO_PRODUCT}.`));
     if (colMap.createdDate == null) {
       colMap.createdDate = colIndex("O");
-      warnings.push("Created Date was not found by name — response time uses column O. The date filter still uses column J.");
+      warnings.push("Created Date was not found by name — response time uses column O. The date filter also reads column O.");
     }
     LEAD_FIELDS.filter((f) => f.required && colMap[f.key] == null)
       .forEach((f) => warnings.push(`Column “${f.label}” not found — related KPIs will read as zero.`));
@@ -763,7 +765,7 @@
     }
 
     const records = [];
-    const columnJSample = [];
+    const columnOSample = [];
     groups.forEach((g) => {
       let latest = g.rows[g.rows.length - 1];
       if (colMap.modifiedDate != null) {
@@ -777,15 +779,15 @@
         leadDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
       if (!leadDate) leadDate = parseAnyDate(line[colIndex("O")]);
-      let sheetDate = columnJDate(line, textLine, best.ws, latest.r);
+      let sheetDate = filterColumnDate(line, textLine, best.ws, latest.r);
       if (!sheetDate) {
-        const dated = g.rows.map((e) => columnJDate(e.line, text[e.r] || [], best.ws, e.r)).filter(Boolean);
+        const dated = g.rows.map((e) => filterColumnDate(e.line, text[e.r] || [], best.ws, e.r)).filter(Boolean);
         sheetDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
       const filterDate = sheetDate;
-      if (!filterDate && columnJSample.length < 3) {
-        const label = columnJLabel(line, textLine, best.ws, latest.r);
-        if (label && !columnJSample.includes(label)) columnJSample.push(label);
+      if (!filterDate && columnOSample.length < 3) {
+        const label = filterColumnLabel(line, textLine, best.ws, latest.r);
+        if (label && !columnOSample.includes(label)) columnOSample.push(label);
       }
       const shown = (key) => {
         const rawV = cell(line, key);
@@ -866,10 +868,10 @@
     if (quality.knownPromoter + quality.blankEmployee + quality.unmappedEmployee !== records.length) warnings.push("Employee Number assignment (promoter + blank + invalid) does not add up to unique transactions.");
     if (quality.undated) warnings.push(`${quality.undated} transaction(s) have no readable Created Date — response time cannot be calculated for them.`);
     const missingVisitDate = records.filter((x) => !x.visitDay).length;
-    if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column J — left out when a date is selected.`);
+    if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column O — left out when a date is selected.`);
 
     const days = records.map((x) => x.day).filter(Boolean).sort();
-    const dateHint = days.length ? "" : (columnJSample.length ? `Column J: ${columnJSample.join(" · ")}` : "Column J is blank");
+    const dateHint = days.length ? "" : (columnOSample.length ? `Column O: ${columnOSample.join(" · ")}` : "Column O is blank");
     return applyControl({
       ok: records.length > 0,
       fileName: options.fileName || "",
@@ -1295,7 +1297,7 @@
 
   function computeFresh(dataset, f, options, _vds) {
     const all = (dataset && dataset.records) || [];
-    /** Visitors are the GEC rows themselves. The date is column J of the uploaded sheet. */
+    /** Visitors are the GEC rows themselves. The date is column O of the uploaded sheet. */
     const hasVisitors = !!(dataset && dataset.ok && all.length);
     /** A model/source/status/consultant filter changes the lead population only, so Visitor→Lead is not comparable. */
     const leadOnlyFilter = !!(f.model || f.source || f.status || f.consultant);
