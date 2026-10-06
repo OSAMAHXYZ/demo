@@ -32,6 +32,7 @@
     chart: null,
     resizeObserver: null,
     resizeTimer: null,
+    cal: { open: false, field: "from", month: "" },
     debug: /[?&]gecdebug=1\b/.test(global.location ? global.location.search : ""),
     modal: { views: [], active: 0, search: "", allCols: false, filterAction: null },
   };
@@ -148,8 +149,9 @@
           </div>
           <div class="gcc-filters">
             <div class="gcc-f gcc-f-date" data-fwrap="date"><span>Date</span>
-              <input type="date" data-f="from" aria-label="From date" /><em>→</em><input type="date" data-f="to" aria-label="To date" />
+              <input type="date" data-f="from" aria-label="From date" title="Dates in the file" /><em>→</em><input type="date" data-f="to" aria-label="To date" title="Dates in the file" />
               <b class="gcc-date-range" data-el="date-range"></b>
+              <div class="gcc-cal" data-el="calendar" hidden></div>
             </div>
             <label class="gcc-f" data-fwrap="promoter"><span>Promoter</span><select data-f="promoter"></select></label>
             <label class="gcc-f" data-fwrap="consultant"><span>Sales Advisor</span><select data-f="consultant" dir="auto"></select></label>
@@ -250,6 +252,12 @@
 
   function bindEvents() {
     const root = state.root;
+    root.addEventListener("pointerdown", (e) => {
+      const inp = e.target.closest('input[data-f="from"], input[data-f="to"]');
+      if (!inp || inp.disabled) return;
+      e.preventDefault();
+      openCalendar(inp.dataset.f);
+    });
     root.addEventListener("click", (e) => {
       const drill = e.target.closest("[data-drill]");
       const act = e.target.closest("[data-act]");
@@ -259,6 +267,10 @@
       const row = e.target.closest("tr[data-row]");
       if (row) { onModalRow(Number(row.dataset.row)); return; }
       if (e.target === el("modal")) closeModal();
+      if (state.cal.open && !e.target.closest("[data-el='calendar']") && !e.target.closest('input[data-f="from"], input[data-f="to"]')) {
+        state.cal.open = false;
+        renderCalendar();
+      }
     });
     root.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !el("modal").hidden) { e.stopPropagation(); closeModal(); return; }
@@ -279,6 +291,11 @@
     el("m-search").addEventListener("input", (e) => { state.modal.search = e.target.value; renderModalTable(); });
     document.addEventListener("keydown", (e) => {
       if (!state.root || !state.root.getClientRects().length) return;
+      if (e.key === "Escape" && state.cal.open && el("modal").hidden) {
+        state.cal.open = false;
+        renderCalendar();
+        return;
+      }
       if (e.key === "Escape" && !el("modal").hidden) closeModal();
       if (e.ctrlKey && e.shiftKey && (e.key === "D" || e.key === "d")) {
         e.preventDefault();
@@ -316,8 +333,11 @@
       else document.documentElement.requestFullscreen().catch(() => {});
     } else if (act === "reset") {
       state.filters = { ...EMPTY_FILTERS };
+      state.cal.open = false;
       renderAll();
     } else if (act === "clear-filter") setFilter(d.key, "");
+    else if (act === "cal-prev" || act === "cal-next") shiftCalendar(act === "cal-next" ? 1 : -1);
+    else if (act === "cal-day") pickCalendarDay(d.day);
     else if (act === "purpose") setFilter("purpose", state.filters.purpose === d.value ? "" : d.value);
     else if (act === "mode") {
       const v = state.view[d.panel];
@@ -407,6 +427,9 @@
         : (ds && ds.dateHint ? ds.dateHint : "No dates in column O");
     }
     state.root.querySelector('[data-fwrap="date"]').classList.toggle("is-active", !!(state.filters.from || state.filters.to));
+    from.classList.toggle("is-picking", state.cal.open && state.cal.field === "from");
+    to.classList.toggle("is-picking", state.cal.open && state.cal.field === "to");
+    renderCalendar();
     const chips = [];
     if (state.filters.purpose) chips.push(["purpose", "Purpose", state.filters.purpose]);
     el("chips").innerHTML = chips.map(([k, lab, v]) =>
@@ -455,8 +478,96 @@
 
   // ---------- Render ----------
 
+  /** Column O dates that exist on the uploaded GEC file. */
+  function fileDaySet() {
+    const set = new Set();
+    const records = (state.dataset && state.dataset.records) || [];
+    records.forEach((r) => { if (r.day) set.add(r.day); });
+    return set;
+  }
+
+  function openCalendar(field) {
+    const days = [...fileDaySet()].sort();
+    if (!days.length) return;
+    const next = field === "to" ? "to" : "from";
+    if (state.cal.open && state.cal.field === next) {
+      state.cal.open = false;
+      renderCalendar();
+      return;
+    }
+    state.cal.open = true;
+    state.cal.field = next;
+    const current = state.filters[next] || (next === "to" ? days[days.length - 1] : days[0]);
+    state.cal.month = String(current).slice(0, 7);
+    renderCalendar();
+  }
+
+  function shiftCalendar(delta) {
+    const months = [...new Set([...fileDaySet()].map((d) => d.slice(0, 7)))].sort();
+    const i = months.indexOf(state.cal.month);
+    const next = months[i + delta];
+    if (!next) return;
+    state.cal.month = next;
+    renderCalendar();
+  }
+
+  function pickCalendarDay(day) {
+    if (!day || !fileDaySet().has(day)) return;
+    const field = state.cal.field;
+    if (field === "from") {
+      state.cal.field = "to";
+      state.cal.month = day.slice(0, 7);
+      state.cal.open = true;
+    } else state.cal.open = false;
+    setFilter(field, day);
+  }
+
+  function renderCalendar() {
+    const pop = el("calendar");
+    if (!pop) return;
+    const fromInp = state.root.querySelector('[data-f="from"]');
+    const toInp = state.root.querySelector('[data-f="to"]');
+    if (fromInp) fromInp.classList.toggle("is-picking", state.cal.open && state.cal.field === "from");
+    if (toInp) toInp.classList.toggle("is-picking", state.cal.open && state.cal.field === "to");
+    if (!state.cal.open) { pop.hidden = true; return; }
+    const days = [...fileDaySet()].sort();
+    const months = [...new Set(days.map((d) => d.slice(0, 7)))].sort();
+    if (!months.includes(state.cal.month)) state.cal.month = months[0] || "";
+    const month = state.cal.month;
+    const [y, m] = month.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const count = new Date(y, m, 0).getDate();
+    const pad = first.getDay();
+    const from = state.filters.from;
+    const to = state.filters.to;
+    const marked = (key) => (from && to ? key >= from && key <= to : key === from || key === to);
+    const cells = [];
+    for (let i = 0; i < pad; i += 1) cells.push('<span class="gcc-cal-day is-empty"></span>');
+    for (let day = 1; day <= count; day += 1) {
+      const key = `${month}-${String(day).padStart(2, "0")}`;
+      const has = days.includes(key);
+      const on = has && marked(key) ? " is-on" : "";
+      cells.push(has
+        ? `<button type="button" class="gcc-cal-day is-file${on}" data-act="cal-day" data-day="${key}" title="${esc(fmtDay(key, true))}">${day}</button>`
+        : `<span class="gcc-cal-day">${day}</span>`);
+    }
+    const mi = months.indexOf(month);
+    pop.hidden = false;
+    pop.innerHTML = `
+      <div class="gcc-cal-head">
+        <button type="button" data-act="cal-prev" aria-label="Previous month"${mi <= 0 ? " disabled" : ""}>${icon("left")}</button>
+        <b>${esc(MONTHS[m - 1])} ${y}</b>
+        <button type="button" data-act="cal-next" aria-label="Next month"${mi < 0 || mi >= months.length - 1 ? " disabled" : ""}>${icon("right")}</button>
+      </div>
+      <div class="gcc-cal-pick">${state.cal.field === "to" ? "To" : "From"} · dates in the file</div>
+      <div class="gcc-cal-week">${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => `<span>${d}</span>`).join("")}</div>
+      <div class="gcc-cal-days">${cells.join("")}</div>
+      <div class="gcc-cal-foot">${n(days.length)} date${days.length === 1 ? "" : "s"} in the file</div>`;
+  }
+
   function renderAll() {
     const t0 = performance.now();
+    if (state.filters.consultant && Data().isPromoterName(state.filters.consultant)) state.filters.consultant = "";
     state.metrics = computeWith(state.filters);
     renderFilterControls();
     renderHeader();
@@ -1838,6 +1949,7 @@
     if (sig !== state.sig) {
       state.sig = sig;
       state.filters = { ...EMPTY_FILTERS };
+      state.cal.open = false;
       state.view.promoter.day = "";
       state.view.advisor.day = "";
       if (!el("modal").hidden) closeModal();

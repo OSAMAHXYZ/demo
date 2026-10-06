@@ -86,7 +86,7 @@
 #gec-host .gcc .gcc-link:hover { text-decoration: underline; }
 
 /* ---------- Header ---------- */
-.gcc-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px; min-width: 0; }
+.gcc-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px; min-width: 0; position: relative; z-index: 5; overflow: visible; }
 .gcc-brand { display: flex; align-items: center; gap: 12px; }
 .gcc-logo {
   width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; color: #fff;
@@ -117,6 +117,34 @@
   color: #0f172a !important; box-shadow: none !important; color-scheme: light; cursor: pointer;
 }
 #gec-host .gcc .gcc-f-date input[type="date"]::-webkit-calendar-picker-indicator { display: block; opacity: 1; cursor: pointer; }
+#gec-host .gcc .gcc-f-date input.is-picking { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 6px; }
+.gcc-f-date { position: relative; }
+.gcc-cal {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: 280px;
+  padding: 10px 10px 8px; border-radius: 14px; border: 1px solid var(--line-2);
+  background: #fff; box-shadow: 0 16px 40px -18px rgba(15, 23, 42, 0.45);
+}
+.gcc-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.gcc-cal-head b { font-size: 13px; font-weight: 800; letter-spacing: 0.02em; }
+#gec-host .gcc .gcc-cal-head button {
+  width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 8px;
+  border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; padding: 0;
+}
+#gec-host .gcc .gcc-cal-head button:disabled { opacity: 0.35; cursor: default; }
+.gcc-cal-head .gcc-ic { width: 14px; height: 14px; }
+.gcc-cal-pick { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2563eb; margin-bottom: 6px; }
+.gcc-cal-week, .gcc-cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.gcc-cal-week span { font-size: 10px; font-weight: 700; color: var(--dim); padding: 2px 0 4px; }
+#gec-host .gcc .gcc-cal-day {
+  height: 30px; display: grid; place-items: center; border-radius: 8px; font-size: 12px; font-weight: 600;
+  color: #cbd5e1; background: transparent; border: 0; padding: 0; min-height: 0;
+}
+#gec-host .gcc button.gcc-cal-day.is-file {
+  color: #1d4ed8; background: #eff6ff; font-weight: 800; cursor: pointer;
+}
+#gec-host .gcc button.gcc-cal-day.is-file:hover { background: #dbeafe; }
+#gec-host .gcc button.gcc-cal-day.is-on { background: #2563eb; color: #fff; }
+.gcc-cal-foot { margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
 #gec-host .gcc .gcc-f-date input:disabled { opacity: 0.55; }
 .gcc-f-date { display: inline-grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto auto; column-gap: 0; align-items: center; }
 .gcc-f-date > span, .gcc-date-range { grid-column: 1 / -1; }

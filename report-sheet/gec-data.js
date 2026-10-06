@@ -1432,7 +1432,9 @@
       models: optionList(all, "modelGroup"),
       sources: optionList(all, "source"),
       statuses: optionList(all, "statusLabel"),
-      consultants: dataset && dataset.hasConsultant ? optionList(all, "consultantLabel") : [],
+      consultants: dataset && dataset.hasConsultant
+        ? optionList(all.filter((r) => r.consultant && !isPromoterName(r.consultant)), "consultant")
+        : [],
     };
   }
 
