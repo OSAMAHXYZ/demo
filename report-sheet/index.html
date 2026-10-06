@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261006stock"></script>
+  <script src="plan-tracker.js?v=20261006tower2"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261006cal" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261006res" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261006tower2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -1062,22 +1062,28 @@
           <header class="pt-top">
             <div class="pt-top-copy">
               <p class="pt-eye">TOYOTA · ALJ DIGITAL RETAIL</p>
-              <h2>RES Plan &amp; VIN Tracking</h2>
+              <h2>Plan Tracker</h2>
               <p class="pt-sub" id="pt-live-hint">—</p>
             </div>
             <div class="pt-actions">
-              <button type="button" class="btn" id="pt-month-prev">Prev</button>
-              <button type="button" class="btn" id="pt-month-now">This month</button>
-              <button type="button" class="btn" id="pt-month-next">Next</button>
+              <input type="search" id="pt-search" placeholder="Search VIN, product, or SFX" autocomplete="off" />
               <span class="pt-updated" id="pt-updated">—</span>
-              <button type="button" class="btn" id="pt-refresh">Refresh</button>
-              <button type="button" class="btn" id="pt-schedule-open">Schedule</button>
-              <button type="button" class="btn" id="pt-quality-open">Data quality</button>
-              <button type="button" class="btn" id="pt-recon-open">Reconcile</button>
-              <button type="button" class="btn" id="pt-export-debug">Debug</button>
-              <button type="button" class="btn-primary" id="pt-export">Excel</button>
+              <button type="button" class="btn" id="pt-dark" title="Dark mode">Dark</button>
+              <button type="button" class="btn" id="pt-clear">Clear</button>
+              <button type="button" class="btn-primary" id="pt-refresh">Refresh</button>
             </div>
           </header>
+          <div class="pt-actions pt-monthbar">
+            <span class="pt-month-label" id="pt-month-label">Month</span>
+            <button type="button" class="btn" id="pt-month-prev">Previous</button>
+            <button type="button" class="btn" id="pt-month-now">This Month</button>
+            <button type="button" class="btn" id="pt-month-next">Next</button>
+            <button type="button" class="btn" id="pt-schedule-open">Schedule</button>
+            <button type="button" class="btn" id="pt-quality-open">Quality</button>
+            <button type="button" class="btn" id="pt-recon-open">Reconcile</button>
+            <button type="button" class="btn" id="pt-export-debug">Debug</button>
+            <button type="button" class="btn" id="pt-export">Excel</button>
+          </div>
 
           <div class="pt-filters" id="pt-filterbar">
             <select id="pt-f-product" aria-label="Product"></select>
@@ -1085,8 +1091,7 @@
             <select id="pt-f-year" aria-label="Model year"></select>
             <select id="pt-f-status" aria-label="Status"></select>
             <select id="pt-f-area" aria-label="Search area"></select>
-            <input type="search" id="pt-search" placeholder="VIN, product, or SFX" autocomplete="off" />
-            <button type="button" class="btn" id="pt-clear">Clear</button>
+            <button type="button" class="btn" id="pt-clear-2">Clear</button>
             <div class="pt-mode" id="pt-mode">
               <button type="button" data-pt-mode="daily">Daily</button>
               <button type="button" data-pt-mode="cumulative">Cumulative</button>
@@ -1094,21 +1099,23 @@
           </div>
 
           <div class="pt-kpis" id="pt-kpis"></div>
+          <div class="pt-indicators" id="pt-indicators"></div>
 
           <div class="pt-row pt-row-charts">
-            <article class="pt-card">
+            <article class="pt-card" id="pt-card-daily">
               <div class="pt-card-h">
-                <h3>Daily plan vs received</h3>
-                <span id="pt-chart-note">Within allocation · RES age 0</span>
+                <h3>Daily plan vs my allocation</h3>
+                <span id="pt-chart-note">RES · allocation date = file date · age 0</span>
+                <button type="button" class="pt-expand" data-pt-expand="daily" title="Expand">⛶</button>
               </div>
               <div class="pt-chart"><canvas id="pt-chart-daily"></canvas></div>
             </article>
-            <article class="pt-card">
-              <div class="pt-card-h"><h3>Product allocation vs received</h3></div>
+            <article class="pt-card" id="pt-card-product">
+              <div class="pt-card-h"><h3>Product allocation vs received</h3><button type="button" class="pt-expand" data-pt-expand="product" title="Expand">⛶</button></div>
               <div class="pt-scroll" id="pt-product"></div>
             </article>
-            <article class="pt-card pt-donut-card">
-              <div class="pt-card-h"><h3>VIN status</h3></div>
+            <article class="pt-card pt-donut-card" id="pt-card-status">
+              <div class="pt-card-h"><h3>My allocation status</h3><button type="button" class="pt-expand" data-pt-expand="status" title="Expand">⛶</button></div>
               <div class="pt-donut">
                 <canvas id="pt-chart-status"></canvas>
                 <div class="pt-donut-mid" id="pt-donut-mid"></div>
@@ -1117,26 +1124,27 @@
           </div>
 
           <div class="pt-row pt-row-mid">
-            <article class="pt-card">
-              <div class="pt-card-h"><h3>SFX plan progress</h3></div>
+            <article class="pt-card" id="pt-card-sfx">
+              <div class="pt-card-h"><h3>SFX plan progress</h3><button type="button" class="pt-expand" data-pt-expand="sfx" title="Expand">⛶</button></div>
               <div class="pt-scroll" id="pt-sfx"></div>
             </article>
-            <article class="pt-card">
-              <div class="pt-card-h"><h3>Model year</h3></div>
+            <article class="pt-card" id="pt-card-year">
+              <div class="pt-card-h"><h3>Model year</h3><button type="button" class="pt-expand" data-pt-expand="year" title="Expand">⛶</button></div>
               <div class="pt-chart"><canvas id="pt-chart-year"></canvas></div>
             </article>
-            <article class="pt-card">
-              <div class="pt-card-h"><h3>Daily VIN count</h3></div>
+            <article class="pt-card" id="pt-card-count">
+              <div class="pt-card-h"><h3>Daily VIN count</h3><button type="button" class="pt-expand" data-pt-expand="count" title="Expand">⛶</button></div>
               <div class="pt-scroll" id="pt-daily-count"></div>
             </article>
           </div>
 
-          <section class="pt-card pt-register">
+          <section class="pt-card pt-register" id="pt-card-register">
             <div class="pt-reg-head">
               <div>
                 <h3>Received VINs</h3>
                 <p class="pt-pin" id="pt-pin" hidden></p>
               </div>
+              <button type="button" class="pt-expand" data-pt-expand="register" title="Expand">⛶</button>
               <div class="pt-tabs" id="pt-tabs"></div>
             </div>
             <div class="pt-vin-scroll" id="pt-vin-scroll">
@@ -1186,6 +1194,47 @@
                 <button type="button" class="btn" data-pt-close="pt-recon-modal">Close</button>
               </div>
               <div id="pt-recon-body"></div>
+            </div>
+          </div>
+
+          <div class="pt-modal" id="pt-vin-modal" hidden>
+            <div class="pt-modal-card pt-modal-wide">
+              <div class="pt-modal-h">
+                <div>
+                  <p class="pt-eye">VIN RESULTS</p>
+                  <h3 id="pt-vin-modal-title">VINs</h3>
+                  <p class="pt-sub" id="pt-vin-modal-sub"></p>
+                </div>
+                <button type="button" class="btn" data-pt-close="pt-vin-modal">Close</button>
+              </div>
+              <div class="pt-vin-tools">
+                <input type="search" id="pt-vin-modal-q" placeholder="Search VIN" autocomplete="off" />
+                <select id="pt-vin-modal-product" aria-label="Product"></select>
+                <select id="pt-vin-modal-sfx" aria-label="SFX"></select>
+                <select id="pt-vin-modal-status" aria-label="Status"></select>
+                <select id="pt-vin-modal-date" aria-label="Date"></select>
+              </div>
+              <div class="pt-vin-modal-scroll">
+                <table class="pt-table">
+                  <thead>
+                    <tr>
+                      <th>VIN</th><th>Product</th><th>SFX</th><th>Model year</th><th>Received</th>
+                      <th>Allocation date</th><th>Age</th><th>Search area</th><th>Status</th><th>Secondary status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pt-vin-modal-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-modal" id="pt-expand-modal" hidden>
+            <div class="pt-modal-card pt-modal-wide">
+              <div class="pt-modal-h">
+                <h3 id="pt-expand-title">Detail</h3>
+                <button type="button" class="btn" data-pt-close="pt-expand-modal">Close</button>
+              </div>
+              <div class="pt-expand-body" id="pt-expand-body"></div>
             </div>
           </div>
 

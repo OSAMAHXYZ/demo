@@ -305,6 +305,38 @@ test("my stock lists RES VINs when the date is not the file day", () => {
   assertEq(PT.myStockRows(model).length, 0);
 });
 
+test("swapped in is not my allocation", () => {
+  const model = build({
+    "2026-10-03": [veh("IN123", "Other Search Area", 0, d(2026, 10, 3))],
+    "2026-10-04": [veh("IN123", RES, 1, d(2026, 10, 3))],
+  }, "2026-10");
+  assertEq(model.kpis.allocated, 0);
+  const cc = PT.buildControlCenter(model);
+  assertEq(cc.register.length, 0);
+  const moved = PT.swappedInList(model, cc.register);
+  assertEq(moved.length, 1);
+  assertEq(moved[0].vin, "IN123");
+  assertEq(moved[0].statusKey, "Swapped In");
+});
+
+test("my stock splits free and undefined by secondary status", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("FREE1", RES, 0, d(2026, 10, 3), { secondaryStatus: "Vehicle allocation completed" }),
+      veh("UND1", RES, 0, d(2026, 10, 3), { secondaryStatus: "Waiting" }),
+    ],
+  }, "2026-10");
+  const cc = PT.buildControlCenter(model);
+  assertEq(cc.register.length, 2);
+  assertEq(cc.register.every((r) => r.statusKey === "My Stock"), true);
+  const free = cc.register.filter((r) => PT.isVehicleAllocationCompleted(r.secondaryStatus));
+  const undef = cc.register.filter((r) => !PT.isVehicleAllocationCompleted(r.secondaryStatus));
+  assertEq(free.length, 1);
+  assertEq(free[0].vin, "FREE1");
+  assertEq(undef.length, 1);
+  assertEq(undef[0].vin, "UND1");
+});
+
 test("normalizeVin is stable", () => {
   assertEq(PT.normalizeVin(" ab c-123 "), "ABC123");
   assertEq(PT.normalizeVin(12345), "12345");
