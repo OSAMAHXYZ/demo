@@ -502,7 +502,7 @@
       Only <b>Col J age 0</b> (or blank) from that file counts for that day’s Allocation <b>Tot</b> / <b>RES</b>.
       <br/><br/>
       Saves go to the <b>same server archive as Admin Push</b> (<code>report-sheet-data/rtl-daily</code> + stable <code>by-day/YYYY-MM-DD.xlsx</code>).
-      This browser also keeps a backup (like Admin), so after a code deploy you can click <b>Restore browser backups</b> instead of re-dropping every day.
+      This browser also keeps a backup (like Admin). <b>Restore selected month</b> sends that backup back to the server only for the month showing in the calendar, and only when that month is this month or last month.
       On Railway, mount a volume and set <code>PERSISTENT_DATA_DIR=/data</code> so day files survive redeploys.
       <br/><br/>
       <b>Admin Push to Live</b> only updates <b>today’s</b> RTL day (Riyadh) — past days stay on their day boxes.
@@ -518,7 +518,7 @@
           <input id="cal-month" type="month" />
         </div>
         <div class="actions" style="margin:0;align-items:flex-end">
-          <button type="button" id="btn-restore-browser" title="Re-upload day Excels saved in this browser after a server redeploy">Restore browser backups</button>
+          <button type="button" id="btn-restore-browser" title="Re-upload this browser’s day files for the selected month. Only this month or last month.">Restore selected month</button>
         </div>
         <div class="status" id="day-cal-status">Drop an RTL file onto a day box.</div>
       </div>
@@ -825,9 +825,13 @@
    * Restore missing day Excels from this browser to the server.
    * Parallel uploads (skip re-writing IndexedDB — data is already local).
    */
-  async function restoreBrowserDayFilesToServer({ onProgress } = {}) {
-    const dates = (await idbListRtlDayKeys()).sort();
-    if (!dates.length) return { restored: 0, skipped: 0, failed: 0 };
+  async function restoreBrowserDayFilesToServer({ onProgress, monthKey } = {}) {
+    const mk = String(monthKey || selectedMonthKey() || "");
+    if (!monthIsRestorable(mk)) {
+      return { restored: 0, skipped: 0, failed: 0, monthKey: mk, blocked: true };
+    }
+    const dates = (await idbListRtlDayKeys()).filter((dateKey) => String(dateKey).startsWith(`${mk}-`)).sort();
+    if (!dates.length) return { restored: 0, skipped: 0, failed: 0, monthKey: mk };
     const toRestore = [];
     let skipped = 0;
     for (const dateKey of dates) {
@@ -837,7 +841,7 @@
       }
       toRestore.push(dateKey);
     }
-    if (!toRestore.length) return { restored: 0, skipped, failed: 0 };
+    if (!toRestore.length) return { restored: 0, skipped, failed: 0, monthKey: mk };
 
     let restored = 0;
     let failed = 0;
@@ -869,7 +873,7 @@
       }
     });
 
-    return { restored, skipped, failed };
+    return { restored, skipped, failed, monthKey: mk };
   }
 
   function snapLabel(s) {
@@ -887,6 +891,28 @@
   function monthKeyFromDate(dateStr) {
     const s = String(dateStr || "");
     return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : "";
+  }
+
+  function shiftMonthKey(monthKey, delta) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(monthKey || ""));
+    if (!m) return "";
+    const d = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function selectedMonthKey() {
+    const cal = $("#cal-month");
+    return (cal && cal.value) || monthKeyFromDate(todayRiyadh());
+  }
+
+  /** Browser restore is allowed only for the current Riyadh month and the month before it. */
+  function restorableMonthKeys() {
+    const current = monthKeyFromDate(todayRiyadh());
+    return [current, shiftMonthKey(current, -1)].filter(Boolean);
+  }
+
+  function monthIsRestorable(monthKey) {
+    return restorableMonthKeys().includes(String(monthKey || ""));
   }
 
   function daysInMonth(year, month1to12) {
@@ -1440,13 +1466,16 @@
   let archiveSyncGen = 0;
 
   /** Browser restore and Excel backups run after the calendar is already on screen. */
-  async function syncArchiveInBackground(gen, { autoRestore }) {
+  async function syncArchiveInBackground(gen, { autoRestore, monthKey } = {}) {
+    const mk = String(monthKey || selectedMonthKey() || "");
+    if (!monthIsRestorable(mk)) return;
     if (autoRestore) {
       try {
         const r = await restoreBrowserDayFilesToServer({
+          monthKey: mk,
           onProgress: ({ done, total }) => {
             if (gen !== archiveSyncGen || !total) return;
-            setStatus($("#list-status"), `Archive ready · restoring browser backups ${done}/${total}…`);
+            setStatus($("#list-status"), `Archive ready · restoring ${mk} ${done}/${total}…`);
           },
         });
         if (gen !== archiveSyncGen) return;
@@ -1462,7 +1491,7 @@
     try {
       const have = new Set(await idbListRtlDayKeys());
       if (gen !== archiveSyncGen) return;
-      const missing = Object.keys(activeByDay || {}).filter((dateKey) => !have.has(dateKey));
+      const missing = Object.keys(activeByDay || {}).filter((dateKey) => !have.has(dateKey) && String(dateKey).startsWith(`${mk}-`));
       if (!missing.length) return;
       const updates = {};
       await mapPool(missing, 4, async (dateKey) => {
@@ -1670,6 +1699,9 @@
     const nextDay = Math.min(Math.max(1, day || 1), dim);
     applyMonthStatsFromMeta(mk);
     selectScheduleDay(dateKeyForDay(mk, nextDay), { syncMonth: false });
+    if (monthIsRestorable(mk)) {
+      void syncArchiveInBackground(archiveSyncGen, { autoRestore: true, monthKey: mk });
+    }
   });
 
   $("#day-grid")?.addEventListener("click", (e) => {
@@ -1827,9 +1859,16 @@
   $("#btn-restore-browser")?.addEventListener("click", async () => {
     const btn = $("#btn-restore-browser");
     if (btn) btn.disabled = true;
-    setDayCalStatus("Restoring day files from this browser…");
+    const mk = selectedMonthKey();
+    if (!monthIsRestorable(mk)) {
+      setDayCalStatus("Select this month or last month. Older months are not restored.", "err");
+      if (btn) btn.disabled = false;
+      return;
+    }
+    setDayCalStatus(`Restoring ${mk} from this browser…`);
     try {
       const r = await restoreBrowserDayFilesToServer({
+        monthKey: mk,
         onProgress: ({ done, total, restored, failed }) => {
           setDayCalStatus(
             `Restoring… ${done}/${total}`
@@ -1840,14 +1879,16 @@
       });
       await loadMeta({ autoRestore: false });
       setDayCalStatus(
-        r.restored
-          ? `Restored ${r.restored} day file(s) to server`
+        r.blocked
+          ? "Select this month or last month. Older months are not restored."
+          : r.restored
+          ? `Restored ${r.restored} day file(s) for ${mk}`
             + (r.skipped ? ` · ${r.skipped} already on server` : "")
             + (r.failed ? ` · ${r.failed} failed` : "")
             + "."
           : r.skipped
-            ? `Nothing to restore · ${r.skipped} day(s) already on server.`
-            : "No browser backups found yet — drop RTL on day boxes once to create them.",
+            ? `Nothing to restore for ${mk} · ${r.skipped} day(s) already on server.`
+            : `No browser backup for ${mk} yet — drop RTL on day boxes once to create it.`,
         r.restored ? "ok" : r.failed ? "err" : ""
       );
     } catch (err) {
