@@ -23,7 +23,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261005usage" />
+  <link rel="stylesheet" href="dashboard.css?v=20261005tower" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261005resp" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261001lx1" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261005tower2" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -552,23 +552,32 @@
           <p class="foot" style="margin:0">Until then, Sales Dashboard can still run from Sales Raw alone.</p>
         </div>
 
-        <div id="bo-dash" class="bo-dash bo-dash--fit" hidden>
-          <header class="bo-dash-header">
+        <div id="bo-dash" class="bo-dash bo-dash--fit bo-tower" hidden>
+          <header class="bo-dash-header bo-tower-head">
             <div class="bo-dash-brand">
-              <p class="bo-dash-eyebrow">Abdul Latif Jameel Motors</p>
-              <h1 class="bo-dash-title">BO Dashboard</h1>
+              <p class="bo-dash-eyebrow">Toyota · ALJ · Digital Retail</p>
+              <h1 class="bo-dash-title">Back Order Control Center</h1>
               <p class="bo-dash-subtitle">Back Order Performance &amp; Analysis</p>
             </div>
             <div class="bo-dash-meta">
-              <div class="bo-dash-daterange" id="bo-date-range" title="Global report date range">—</div>
+              <div class="bo-date-presets" role="group" aria-label="Order date">
+                <button type="button" data-bo-date="">All file</button>
+                <button type="button" data-bo-date="today">Today</button>
+                <button type="button" data-bo-date="yesterday">Yesterday</button>
+                <button type="button" data-bo-date="week">This week</button>
+                <button type="button" data-bo-date="month">This month</button>
+              </div>
+              <label class="bo-date-custom">From <input id="bo-date-from" type="date" /></label>
+              <label class="bo-date-custom">To <input id="bo-date-to" type="date" /></label>
+              <div class="bo-dash-daterange" id="bo-date-range" title="Report period">—</div>
               <div class="bo-dash-updated">
                 <span class="bo-live-dot" aria-hidden="true"></span>
                 <span>Last updated <strong id="bo-last-updated">—</strong></span>
               </div>
-              <div class="bo-dash-logo">
-                <img src="../images/logo/toyota.png" alt="ALJ Motors" width="40" height="40" onerror="this.style.display='none'" />
-                <span>ALJ Motors</span>
-              </div>
+              <div class="bo-source-line">Data <strong id="bo-data-source">Back Order</strong></div>
+              <button type="button" id="bo-refresh-btn" class="btn">Refresh</button>
+              <button type="button" id="bo-excel-btn" class="btn-primary bo-btn-export">Export Excel</button>
+              <button type="button" id="bo-defs-btn" class="btn">Definitions</button>
             </div>
           </header>
 
@@ -578,19 +587,18 @@
             <select id="bo-f-year" aria-label="Model Year"><option value="">All Model Years</option></select>
             <select id="bo-f-channel" aria-label="Showroom"><option value="">All Showrooms</option></select>
             <select id="bo-f-type" aria-label="Sales Type"><option value="">All Sales Types</option></select>
-            <input id="bo-search" type="search" placeholder="Search product / SFX / salesman…" aria-label="Search back orders" />
-            <select id="bo-f-scope" hidden aria-hidden="true"><option value="">All sales scopes</option></select>
-            <select id="bo-f-sfx" hidden aria-hidden="true"><option value="">All SFX / grades</option></select>
-            <select id="bo-f-confirm" hidden aria-hidden="true">
+            <select id="bo-f-salesman" aria-label="Salesman"><option value="">All salesmen</option></select>
+            <select id="bo-f-confirm" aria-label="Confirmation">
               <option value="">All confirmation</option>
               <option value="yes">Confirmed</option>
               <option value="no">Not confirmed</option>
             </select>
-            <div class="bo-toolbar-actions">
-              <button type="button" id="bo-clear-filters" class="btn bo-btn-clear">Clear Filter</button>
-              <button type="button" id="bo-excel-btn" class="btn-primary bo-btn-export">Export Excel</button>
-            </div>
+            <input id="bo-search" type="search" placeholder="VIN, product, suffix, salesman, BO number…" aria-label="Search back orders" />
+            <select id="bo-f-scope" hidden aria-hidden="true"><option value="">All sales scopes</option></select>
+            <select id="bo-f-sfx" hidden aria-hidden="true"><option value="">All SFX / grades</option></select>
+            <button type="button" id="bo-clear-filters" class="btn bo-btn-clear">Clear filters</button>
           </div>
+          <div class="bo-chips" id="bo-chips"></div>
 
           <div class="bo-kpis" id="bo-kpis"></div>
 
@@ -629,7 +637,7 @@
                     <h2>Back Orders by Product</h2>
                     <span class="hint">Click a product to open drill-down</span>
                   </div>
-                  <button type="button" class="btn bo-view-all" id="bo-view-all-products" title="Expand table height inside panel">View All</button>
+                  <button type="button" class="btn bo-view-all" id="bo-view-all-products" title="Open every filtered back order">View All</button>
                 </div>
                 <div class="table-wrap bo-product-table-wrap" id="bo-product-table"></div>
               </article>
@@ -650,6 +658,32 @@
             </div>
           </div>
 
+          <div class="bo-row bo-row-ops">
+            <article class="card bo-ops-card">
+              <div class="pbi-viz-head"><h2>Back orders by sales type</h2></div>
+              <div class="table-wrap" id="bo-salestype-table"></div>
+            </article>
+            <article class="card bo-ops-card">
+              <div class="pbi-viz-head"><h2>Back orders by showroom</h2></div>
+              <div class="table-wrap" id="bo-showroom-table"></div>
+            </article>
+            <article class="card bo-ops-card">
+              <div class="pbi-viz-head"><h2>Sales person performance</h2><span class="hint">Backlog size is not a performance score</span></div>
+              <div class="table-wrap" id="bo-salesman-table"></div>
+            </article>
+          </div>
+          <div class="bo-row bo-row-critical">
+            <article class="card bo-oldest-card">
+              <div class="pbi-viz-head">
+                <h2>Critical aging</h2>
+                <button type="button" class="btn bo-view-all" id="bo-view-all-rows">View all back orders</button>
+              </div>
+              <div class="table-wrap" id="bo-oldest"></div>
+            </article>
+            <article class="card bo-quality-card" id="bo-quality" role="button" tabindex="0"></article>
+          </div>
+          <div class="bo-attention" id="bo-attention"></div>
+          <div class="bo-park" hidden>
           <details class="bo-drilldown card bo-more-charts">
             <summary class="bo-drilldown-summary">
               <span>More charts · Sales type, backlog &amp; contribution</span>
@@ -687,7 +721,8 @@
             </div>
           </details>
 
-          <details class="bo-drilldown card" id="bo-car-detail">
+          </div>
+          <details class="bo-drilldown card bo-drawer" id="bo-car-detail">
             <summary class="bo-drilldown-summary">
               <span>Product drill-down · suffix &amp; payment mix</span>
               <span class="hint">Select a product from the table or below</span>
@@ -727,10 +762,6 @@
               <span>Sales type &amp; SFX detail tables</span>
             </summary>
             <div class="bo-grid">
-              <article class="card" style="margin:0">
-                <h2>Sales type analysis</h2>
-                <div class="table-wrap" id="bo-salestype-table"></div>
-              </article>
               <article class="card pbi-viz bo-tap" data-chart-id="chart-bo-sfx" data-expand="chart-bo-sfx" role="button" tabindex="0" style="margin:0" aria-label="Open SFX demand wide view">
                 <div class="pbi-viz-head">
                   <h2>SFX / Grade demand (Top 12)</h2>
@@ -758,6 +789,34 @@
               </article>
             </div>
           </details>
+          <div class="bo-modal" id="bo-all-modal" hidden>
+            <div class="bo-modal-card">
+              <div class="pbi-viz-head">
+                <h2>All back orders</h2>
+                <button type="button" class="btn" id="bo-all-close">Close</button>
+              </div>
+              <div class="table-wrap" id="bo-all-table"></div>
+              <div class="bo-pager" id="bo-all-pager"></div>
+            </div>
+          </div>
+          <div class="bo-modal" id="bo-defs-modal" hidden>
+            <div class="bo-modal-card">
+              <div class="pbi-viz-head">
+                <h2>How these numbers are calculated</h2>
+                <button type="button" class="btn" id="bo-defs-close">Close</button>
+              </div>
+              <div id="bo-defs-body"></div>
+            </div>
+          </div>
+          <div class="bo-modal" id="bo-record-modal" hidden>
+            <div class="bo-modal-card">
+              <div class="pbi-viz-head">
+                <h2>Back order detail</h2>
+                <button type="button" class="btn" id="bo-record-close">Close</button>
+              </div>
+              <div id="bo-record-body"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -10226,6 +10285,14 @@
     sfx: "",
     confirm: "",
     car: "",
+    salesman: "",
+    aging: "",
+    datePreset: "",
+    dateFrom: null,
+    dateTo: null,
+    page: 1,
+    sortKey: "",
+    sortDir: "asc",
   };
 
   function boMetrics(list) {
@@ -10254,7 +10321,7 @@
     const q = boView.search.trim().toLowerCase();
     if (q) {
       list = list.filter((b) =>
-        [b.product, b.sfx, b.salesman, b.customer, b.boNumber, b.category, b.salesType]
+        [b.product, b.sfx, b.salesman, b.customer, b.boNumber, b.category, b.salesType, b.vin]
           .some((v) => String(v || "").toLowerCase().includes(q))
       );
     }
@@ -10269,6 +10336,21 @@
     if (boView.sfx) list = list.filter((b) => b.sfx === boView.sfx);
     if (boView.confirm === "yes") list = list.filter((b) => b.confirmed);
     if (boView.confirm === "no") list = list.filter((b) => !b.confirmed);
+    if (boView.salesman) list = list.filter((b) => b.salesman === boView.salesman);
+    if (boView.aging) {
+      const spec = agingBucketCounts([]).find((bucket) => bucket.label === boView.aging);
+      if (spec) {
+        list = list.filter((row) => {
+          const age = Number(row.aging);
+          return Number.isFinite(age) && age >= spec.min && age <= spec.max;
+        });
+      }
+    }
+    if (boView.dateFrom || boView.dateTo) {
+      const from = boView.dateFrom ? startOfDay(boView.dateFrom).getTime() : -Infinity;
+      const to = boView.dateTo ? startOfDay(boView.dateTo).getTime() + 86400000 - 1 : Infinity;
+      list = list.filter((b) => b.orderDateObj && b.orderDateObj.getTime() >= from && b.orderDateObj.getTime() <= to);
+    }
     return list;
   }
 
@@ -10362,7 +10444,7 @@
       el.innerHTML = `<div class="bo-insights-head"><span class="bo-insights-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9V21Zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm2.5 13.5h-5v-.8l.5-.4A5.5 5.5 0 1 1 17.5 9a5.5 5.5 0 0 1-2.5 4.7l.5.4v.9Z"/></svg></span><h2>Executive Insights</h2></div><p class="foot">No back orders match the current filters.</p>`;
       return;
     }
-    const byProd = productAgg(list);
+    const byProd = productAgg(list).filter((p) => p.product && p.product !== "—");
     const top = byProd[0];
     const lowestConfirm = byProd.slice().sort((a, b) => a.confirmPct - b.confirmPct)[0];
     const highestAging = byProd.slice().sort((a, b) => b.avgAging - a.avgAging)[0];
@@ -15554,6 +15636,262 @@
     setStatus("BO Errors Excel exported · AC corrections green · AD–AI removed", "ok");
   }
 
+  function boAggRows(list, keyFn) {
+    return [...groupBoBy(list, keyFn).entries()]
+      .map(([name, rows]) => ({ name, ...boMetrics(rows) }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function renderBoMiniTable(el, rows, nameKey, dataAttr) {
+    if (!el) return;
+    const top = rows.slice(0, 6);
+    el.innerHTML = `<table class="bo-table">
+      <thead><tr><th>${nameKey}</th><th class="num">Total</th><th class="num">Conf.</th><th class="num">Open</th><th class="num">%</th><th class="num">Age</th></tr></thead>
+      <tbody>${top.map((row) => `<tr>
+        <td><button type="button" class="bo-link" ${dataAttr}="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button></td>
+        <td class="num">${formatNumber(row.total)}</td>
+        <td class="num">${formatNumber(row.confirmed)}</td>
+        <td class="num">${formatNumber(row.notConfirmed)}</td>
+        <td class="num ${heatConfirm(row.confirmPct)}">${(row.confirmPct * 100).toFixed(1)}%</td>
+        <td class="num ${heatAging(row.avgAging)}">${formatNumber(row.avgAging)}</td>
+      </tr>`).join("") || `<tr><td colspan="6" class="foot">No rows</td></tr>`}</tbody>
+    </table>`;
+  }
+
+  function renderBoTowerExtras(list, m) {
+    renderBoMiniTable($("#bo-showroom-table"), boAggRows(list, (b) => b.salesChannel || b.salesScope || "—"), "Showroom", "data-bo-channel");
+    const people = boAggRows(list, (b) => b.salesman || "—");
+    renderBoMiniTable($("#bo-salesman-table"), people, "Salesman", "data-bo-salesman");
+    const oldest = list.filter((b) => !b.confirmed && Number.isFinite(Number(b.aging)))
+      .slice()
+      .sort((a, b) => Number(b.aging) - Number(a.aging))
+      .slice(0, 6);
+    const oldEl = $("#bo-oldest");
+    if (oldEl) {
+      oldEl.innerHTML = `<table class="bo-table">
+        <thead><tr><th>BO</th><th>Product</th><th>VIN</th><th>Salesman</th><th>Age</th><th>Status</th></tr></thead>
+        <tbody>${oldest.map((b) => {
+          const age = Number(b.aging) || 0;
+          const tone = age > 180 ? "heat-bad" : age > 90 ? "heat-mid" : "";
+          return `<tr>
+            <td><button type="button" class="bo-link" data-bo-record="${b.id}">${escapeHtml(b.boNumber || "—")}</button></td>
+            <td>${escapeHtml(b.product)}</td>
+            <td>${escapeHtml(b.vin || "—")}</td>
+            <td>${escapeHtml(b.salesman || "—")}</td>
+            <td class="num ${tone}">${formatNumber(age)}d</td>
+            <td>${b.confirmed ? "Confirmed" : "Not confirmed"}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="6" class="foot">No open orders with an age.</td></tr>`}</tbody>
+      </table>`;
+    }
+    const over180 = list.filter((b) => Number(b.aging) > 180).length;
+    const missingSales = list.filter((b) => !b.salesman || b.salesman === "—").length;
+    const attn = $("#bo-attention");
+    if (attn) {
+      const bits = [
+        m.notConfirmed ? `${formatNumber(m.notConfirmed)} not confirmed` : "",
+        m.avgAging ? `${formatNumber(m.avgAging)} average waiting days` : "",
+        missingSales ? `${formatNumber(missingSales)} missing salesman` : "",
+        over180 ? `${formatNumber(over180)} orders older than 180 days` : "",
+      ].filter(Boolean);
+      attn.innerHTML = bits.length ? `<b>Attention</b> ${bits.map((bit) => `<span>${escapeHtml(bit)}</span>`).join("")}` : `<b>Attention</b> <span>No backlog warnings for this filter.</span>`;
+    }
+    const vins = new Map();
+    let dup = 0;
+    list.forEach((b) => {
+      const vin = String(b.vin || "").trim();
+      if (!vin) return;
+      vins.set(vin, (vins.get(vin) || 0) + 1);
+    });
+    vins.forEach((n) => { if (n > 1) dup += 1; });
+    const quality = $("#bo-quality");
+    if (quality) {
+      quality.innerHTML = `<div class="pbi-viz-head"><h2>Data quality</h2></div>
+        <ul class="bo-quality-list">
+          <li><span>In view</span><b>${formatNumber(list.length)}</b></li>
+          <li><span>Missing VIN</span><b>${formatNumber(list.filter((b) => !b.vin).length)}</b></li>
+          <li><span>Missing product</span><b>${formatNumber(list.filter((b) => !b.product || b.product === "—").length)}</b></li>
+          <li><span>Missing salesman</span><b>${formatNumber(missingSales)}</b></li>
+          <li><span>Missing confirm flag</span><b>${formatNumber(list.filter((b) => !b.confirm).length)}</b></li>
+          <li><span>Duplicate VIN</span><b>${formatNumber(dup)}</b></li>
+          <li><span>No order date</span><b>${formatNumber(list.filter((b) => !b.orderDateObj).length)}</b></li>
+        </ul>`;
+    }
+    const chips = $("#bo-chips");
+    if (chips) {
+      const items = [
+        ["product", "Product", boView.product],
+        ["category", "Category", boView.category],
+        ["year", "Year", boView.year],
+        ["channel", "Showroom", boView.channel],
+        ["type", "Sales type", boView.type],
+        ["salesman", "Salesman", boView.salesman],
+        ["confirm", "Confirmation", boView.confirm === "yes" ? "Confirmed" : boView.confirm === "no" ? "Not confirmed" : ""],
+        ["aging", "Aging", boView.aging],
+        ["datePreset", "Order date", boView.datePreset],
+      ].filter((item) => item[2]);
+      chips.innerHTML = items.map(([key, label, value]) => `<button type="button" class="bo-chip" data-bo-clear="${key}">${escapeHtml(label)}: ${escapeHtml(value)} ×</button>`).join("");
+    }
+    document.querySelectorAll("[data-bo-date]").forEach((btn) => {
+      btn.classList.toggle("is-on", (btn.getAttribute("data-bo-date") || "") === (boView.datePreset || ""));
+    });
+    const src = $("#bo-data-source");
+    if (src) src.textContent = (slots.backorder && slots.backorder.sheet) || "Back Order file";
+  }
+
+  function boRecordHtml(row) {
+    if (!row) return `<p class="foot">Record not found.</p>`;
+    const fields = [
+      ["BO number", row.boNumber],
+      ["VIN", row.vin],
+      ["Product", row.product],
+      ["Suffix", row.sfx],
+      ["Category", row.category],
+      ["Model year", row.year],
+      ["Exterior", row.ext],
+      ["Interior", row.int],
+      ["Sales type", row.salesType],
+      ["Showroom", row.salesChannel],
+      ["Scope", row.salesScope],
+      ["Salesman", row.salesman],
+      ["Customer", row.customer],
+      ["Order date", row.orderDate],
+      ["Aging days", row.aging],
+      ["Confirm flag", row.confirm],
+      ["Confirmed", row.confirmed ? "Yes" : "No"],
+      ["Paid", row.paid ? "Yes" : "No"],
+    ].filter((pair) => pair[1] != null && String(pair[1]) !== "");
+    return `<dl class="bo-record-list">${fields.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>`;
+  }
+
+  const BO_ALL_COLS = [
+    ["boNumber", "BO"],
+    ["vin", "VIN"],
+    ["product", "Product"],
+    ["sfx", "Suffix"],
+    ["year", "Year"],
+    ["salesType", "Sales type"],
+    ["salesman", "Salesman"],
+    ["salesChannel", "Showroom"],
+    ["orderDate", "Date"],
+    ["aging", "Age"],
+    ["confirmed", "Status"],
+  ];
+
+  function boAllCell(row, key) {
+    if (key === "boNumber") return `<button type="button" class="bo-link" data-bo-record="${row.id}">${escapeHtml(row.boNumber || "—")}</button>`;
+    if (key === "aging") return row.aging == null ? "—" : formatNumber(row.aging);
+    if (key === "confirmed") return row.confirmed ? "Confirmed" : "Not confirmed";
+    return escapeHtml(row[key] || "—");
+  }
+
+  function renderBoAllTable() {
+    const host = $("#bo-all-table");
+    const pager = $("#bo-all-pager");
+    if (!host || !window._data) return;
+    if (!boView.hiddenCols) boView.hiddenCols = {};
+    const cols = BO_ALL_COLS.filter((col) => !boView.hiddenCols[col[0]]);
+    let list = filteredBos(window._data).slice();
+    if (boView.sortKey) {
+      const key = boView.sortKey;
+      const dir = boView.sortDir === "desc" ? -1 : 1;
+      list.sort((a, b) => {
+        const av = key === "aging" ? Number(a.aging) : key === "confirmed" ? (a.confirmed ? 1 : 0) : String(a[key] || "");
+        const bv = key === "aging" ? Number(b.aging) : key === "confirmed" ? (b.confirmed ? 1 : 0) : String(b[key] || "");
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+    const size = 40;
+    const pages = Math.max(1, Math.ceil(list.length / size));
+    boView.page = Math.min(Math.max(1, boView.page || 1), pages);
+    const slice = list.slice((boView.page - 1) * size, boView.page * size);
+    const toggles = BO_ALL_COLS.map(([key, label]) => `<label class="bo-col-toggle"><input type="checkbox" data-bo-col="${key}" ${boView.hiddenCols[key] ? "" : "checked"} /> ${escapeHtml(label)}</label>`).join("");
+    host.innerHTML = `<div class="bo-col-toggles">${toggles}</div><table class="bo-table">
+      <thead><tr>${cols.map(([key, label]) => `<th><button type="button" class="bo-sort" data-bo-sort="${key}">${escapeHtml(label)}${boView.sortKey === key ? (boView.sortDir === "desc" ? " ↓" : " ↑") : ""}</button></th>`).join("")}</tr></thead>
+      <tbody>${slice.map((b) => `<tr>${cols.map(([key]) => `<td class="${key === "aging" ? "num" : ""}">${boAllCell(b, key)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length || 1}" class="foot">No rows.</td></tr>`}</tbody>
+    </table>`;
+    if (pager) {
+      pager.innerHTML = `<span>${formatNumber(list.length)} rows</span>
+        <button type="button" class="btn" data-bo-page="${boView.page - 1}" ${boView.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>${boView.page} / ${pages}</span>
+        <button type="button" class="btn" data-bo-page="${boView.page + 1}" ${boView.page >= pages ? "disabled" : ""}>Next</button>`;
+    }
+  }
+
+  function boDefinitionsHtml() {
+    return `<dl class="bo-record-list">
+      <div><dt>Total back orders</dt><dd>Count of Back Order rows after the current filters. Each row is one record from worksheet 1.</dd></div>
+      <div><dt>Confirmed</dt><dd>Rows whose confirm flag is classified as confirmed by the existing confirm rule.</dd></div>
+      <div><dt>Not confirmed</dt><dd>Total minus confirmed. These are still waiting.</dd></div>
+      <div><dt>Confirmation rate</dt><dd>Confirmed divided by total back orders.</dd></div>
+      <div><dt>Average waiting days</dt><dd>Average of the aging value already stored on each row. Aging comes from the file aging column, or from the order date when that column is empty.</dd></div>
+      <div><dt>Cars in pipeline</dt><dd>Same count as not confirmed.</dd></div>
+      <div><dt>Returned orders</dt><dd>Count of rows in the cancelled Back Order file. This card is not reduced by the product filters.</dd></div>
+      <div><dt>Order date filter</dt><dd>Optional. All file leaves every row in place, which is the previous dashboard. Today, yesterday, this week, this month, or a custom range keeps rows whose order date falls in that range.</dd></div>
+      <div><dt>Aging buckets</dt><dd>0–30, 31–60, 61–90, 91–180, and over 180 days, using the same aging number as the chart.</dd></div>
+    </dl>`;
+  }
+
+  function applyBoDatePreset(preset) {
+    boView.datePreset = preset || "";
+    boView.page = 1;
+    if (!preset) {
+      boView.dateFrom = null;
+      boView.dateTo = null;
+      refreshBoFromFilters();
+      return;
+    }
+    const today = startOfDay(saudiToday());
+    let from = today;
+    let to = today;
+    if (preset === "yesterday") {
+      from = new Date(today.getTime() - 86400000);
+      to = from;
+    } else if (preset === "week") {
+      const day = today.getDay();
+      from = new Date(today.getTime() - day * 86400000);
+    } else if (preset === "month") {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+    }
+    boView.dateFrom = from;
+    boView.dateTo = to;
+    const fromEl = $("#bo-date-from");
+    const toEl = $("#bo-date-to");
+    if (fromEl) fromEl.value = toIsoDateInput(from);
+    if (toEl) toEl.value = toIsoDateInput(to);
+    refreshBoFromFilters();
+  }
+
+  function wireBoChartClicks() {
+    const bind = (id, apply) => {
+      const chart = charts[id];
+      if (!chart) return;
+      chart.canvas.onclick = (evt) => {
+        const points = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+        if (!points.length) return;
+        apply(points[0].index, chart.data.labels[points[0].index]);
+      };
+    };
+    bind("chart-bo-top5", (_index, label) => {
+      boView.product = label;
+      boView.car = label;
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-status", (index) => {
+      boView.confirm = index === 0 ? "yes" : "no";
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-aging-buckets", (_index, label) => {
+      boView.aging = label;
+      refreshBoFromFilters();
+    });
+    bind("chart-bo-salestype", (_index, label) => {
+      boView.type = label;
+      refreshBoFromFilters();
+    });
+  }
+
   function renderBoDashboard(d) {
     const empty = $("#bo-empty");
     const dash = $("#bo-dash");
@@ -15576,6 +15914,7 @@
     fillBoSelect("#bo-f-year", new Set(all.map((b) => b.year).filter(Boolean)), boView.year, "All Model Years");
     fillBoSelect("#bo-f-channel", showrooms, boView.channel, "All Showrooms");
     fillBoSelect("#bo-f-type", new Set(all.map((b) => b.salesType).filter(Boolean)), boView.type, "All Sales Types");
+    fillBoSelect("#bo-f-salesman", new Set(all.map((b) => b.salesman).filter((name) => name && name !== "—")), boView.salesman, "All salesmen");
     fillBoSelect("#bo-f-scope", new Set(all.map((b) => b.salesScope).filter(Boolean)), boView.scope, "All sales scopes");
     fillBoSelect("#bo-f-sfx", new Set(all.map((b) => b.sfx).filter(Boolean)), boView.sfx, "All SFX / grades");
     if ($("#bo-f-confirm")) $("#bo-f-confirm").value = boView.confirm || "";
@@ -15595,6 +15934,10 @@
       rangeEl.textContent = (live && live.rangeLabel) || (typeof globalDatePresetLabel === "function"
         ? globalDatePresetLabel((globalDateFilter && globalDateFilter.preset) || "today")
         : "—");
+      if (boView.datePreset && boView.dateFrom && boView.dateTo) {
+        const fmt = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        rangeEl.textContent = `${fmt(boView.dateFrom)} – ${fmt(boView.dateTo)}`;
+      }
     }
 
     const list = filteredBos(d);
@@ -15609,6 +15952,9 @@
     renderBoSalesTypeTable(list);
     renderBoSfxTable(list);
     renderBoCharts(list, aggs, m);
+    renderBoTowerExtras(list, m);
+    wireBoChartClicks();
+    if ($("#bo-all-modal") && !$("#bo-all-modal").hidden) renderBoAllTable();
 
     const detail = $("#bo-car-detail");
     if (detail && boView.car) detail.open = true;
@@ -22648,7 +22994,7 @@
   if (boDashEl) {
     boDashEl.addEventListener("click", (e) => {
       const expand = e.target.closest("[data-expand]");
-      if (expand) {
+      if (expand && !e.target.closest("canvas")) {
         e.preventDefault();
         e.stopPropagation();
         openWideChart(expand.getAttribute("data-expand"));
@@ -22661,10 +23007,38 @@
         boView.product = name;
         if (window._data) renderBoDashboard(window._data);
         const detail = $("#bo-car-detail");
-        if (detail) {
-          detail.open = true;
-          detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+        if (detail) detail.open = true;
+        return;
+      }
+      const channel = e.target.closest("[data-bo-channel]");
+      if (channel) {
+        boView.channel = channel.getAttribute("data-bo-channel") || "";
+        refreshBoFromFilters();
+        return;
+      }
+      const person = e.target.closest("[data-bo-salesman]");
+      if (person) {
+        boView.salesman = person.getAttribute("data-bo-salesman") || "";
+        refreshBoFromFilters();
+        return;
+      }
+      const record = e.target.closest("[data-bo-record]");
+      if (record && window._data) {
+        const row = (window._data.bos || []).find((item) => String(item.id) === record.getAttribute("data-bo-record"));
+        const body = $("#bo-record-body");
+        const modal = $("#bo-record-modal");
+        if (body) body.innerHTML = boRecordHtml(row);
+        if (modal) modal.hidden = false;
+        return;
+      }
+      const chip = e.target.closest("[data-bo-clear]");
+      if (chip) {
+        const key = chip.getAttribute("data-bo-clear");
+        if (key === "datePreset") applyBoDatePreset("");
+        else if (key === "confirm") boView.confirm = "";
+        else boView[key] = "";
+        if (key === "product") boView.car = "";
+        refreshBoFromFilters();
         return;
       }
       const typ = e.target.closest("[data-bo-type]");
@@ -22722,6 +23096,7 @@
     ["#bo-f-type", "type"],
     ["#bo-f-sfx", "sfx"],
     ["#bo-f-confirm", "confirm"],
+    ["#bo-f-salesman", "salesman"],
   ].forEach(([sel, key]) => {
     const el = $(sel);
     if (!el) return;
@@ -22733,18 +23108,88 @@
   const boClearEl = $("#bo-clear-filters");
   if (boClearEl) {
     boClearEl.addEventListener("click", () => {
-      boView = { search: "", product: "", category: "", year: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "" };
+      boView = { search: "", product: "", category: "", year: "", scope: "", channel: "", type: "", sfx: "", confirm: "", car: "", salesman: "", aging: "", datePreset: "", dateFrom: null, dateTo: null, page: 1, sortKey: "", sortDir: "asc" };
       refreshBoFromFilters();
     });
   }
+  document.querySelectorAll("[data-bo-date]").forEach((btn) => {
+    btn.addEventListener("click", () => applyBoDatePreset(btn.getAttribute("data-bo-date") || ""));
+  });
+  const boDateFrom = $("#bo-date-from");
+  const boDateTo = $("#bo-date-to");
+  const applyCustomBoDate = () => {
+    const from = boDateFrom && parseIsoDateInput(boDateFrom.value);
+    const to = boDateTo && parseIsoDateInput(boDateTo.value);
+    if (!from || !to) return;
+    boView.datePreset = "custom";
+    boView.dateFrom = startOfDay(from);
+    boView.dateTo = startOfDay(to);
+    boView.page = 1;
+    refreshBoFromFilters();
+  };
+  if (boDateFrom) boDateFrom.addEventListener("change", applyCustomBoDate);
+  if (boDateTo) boDateTo.addEventListener("change", applyCustomBoDate);
+  const boRefresh = $("#bo-refresh-btn");
+  if (boRefresh) boRefresh.addEventListener("click", () => refreshFromAdmin("Back Order refreshed", { force: true }));
+  const boDefs = $("#bo-defs-btn");
+  if (boDefs) boDefs.addEventListener("click", () => {
+    const body = $("#bo-defs-body");
+    const modal = $("#bo-defs-modal");
+    if (body) body.innerHTML = boDefinitionsHtml();
+    if (modal) modal.hidden = false;
+  });
+  const boDefsClose = $("#bo-defs-close");
+  if (boDefsClose) boDefsClose.addEventListener("click", () => { const modal = $("#bo-defs-modal"); if (modal) modal.hidden = true; });
+  const boRecordClose = $("#bo-record-close");
+  if (boRecordClose) boRecordClose.addEventListener("click", () => { const modal = $("#bo-record-modal"); if (modal) modal.hidden = true; });
+  const boAllOpen = $("#bo-view-all-rows");
+  if (boAllOpen) boAllOpen.addEventListener("click", () => {
+    boView.page = 1;
+    const modal = $("#bo-all-modal");
+    if (modal) modal.hidden = false;
+    renderBoAllTable();
+  });
+  const boAllClose = $("#bo-all-close");
+  if (boAllClose) boAllClose.addEventListener("click", () => { const modal = $("#bo-all-modal"); if (modal) modal.hidden = true; });
+  const boPager = $("#bo-all-pager");
+  if (boPager) boPager.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-bo-page]");
+    if (!btn || btn.disabled) return;
+    boView.page = Number(btn.getAttribute("data-bo-page")) || 1;
+    renderBoAllTable();
+  });
+  const boQuality = $("#bo-quality");
+  if (boQuality) boQuality.addEventListener("click", () => {
+    const body = $("#bo-defs-body");
+    const modal = $("#bo-defs-modal");
+    if (body) body.innerHTML = ($("#bo-quality") ? $("#bo-quality").innerHTML : "") + boDefinitionsHtml();
+    if (modal) modal.hidden = false;
+  });
   const boViewAll = $("#bo-view-all-products");
   if (boViewAll) {
     boViewAll.addEventListener("click", () => {
-      const wrap = $("#bo-product-table");
-      if (!wrap) return;
-      const expanded = wrap.classList.toggle("is-expanded");
-      boViewAll.textContent = expanded ? "Compact" : "View All";
-      boViewAll.title = expanded ? "Use compact table height" : "Expand table height inside panel";
+      boView.page = 1;
+      const modal = $("#bo-all-modal");
+      if (modal) modal.hidden = false;
+      renderBoAllTable();
+    });
+  }
+  const boAllHost = $("#bo-all-table");
+  if (boAllHost) {
+    boAllHost.addEventListener("click", (e) => {
+      const sort = e.target.closest("[data-bo-sort]");
+      if (!sort) return;
+      const key = sort.getAttribute("data-bo-sort");
+      if (boView.sortKey === key) boView.sortDir = boView.sortDir === "asc" ? "desc" : "asc";
+      else { boView.sortKey = key; boView.sortDir = "asc"; }
+      renderBoAllTable();
+    });
+    boAllHost.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-bo-col]");
+      if (!box) return;
+      if (!boView.hiddenCols) boView.hiddenCols = {};
+      boView.hiddenCols[box.getAttribute("data-bo-col")] = !box.checked;
+      renderBoAllTable();
     });
   }
   const boCarSelect = $("#bo-car-select");

@@ -1157,3 +1157,98 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
   body.sr-mode .pbi-wide-backdrop .acc-summary-board--wide { grid-template-columns: minmax(0, 1fr); }
   body.sr-mode .pbi-wide-backdrop .acc-summary-board--wide .acc-summary-cols--detail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Back Order Control Center — keep the executive view inside the viewport */
+@media (min-width: 1101px) {
+  body.live-app:has(#bo-dash.bo-tower:not([hidden])) {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body.live-app:has(#bo-dash.bo-tower:not([hidden])) .app-frame,
+  body.live-app:has(#bo-dash.bo-tower:not([hidden])) .app-main {
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.live-app:has(#bo-dash.bo-tower:not([hidden])) .app-main {
+    display: flex;
+    flex-direction: column;
+  }
+  body.live-app.toyota-theme:has(#bo-dash.bo-tower:not([hidden])) .app-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden !important;
+    display: flex;
+    flex-direction: column;
+    padding-top: 8px !important;
+    padding-bottom: 4px !important;
+  }
+  body.live-app:has(#bo-dash.bo-tower:not([hidden])) #dashboard.show {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.live-app #panel-bodashboard:has(#bo-dash.bo-tower:not([hidden])) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    max-height: none !important;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #bo-dash.bo-tower {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    max-height: 100%;
+  }
+  #bo-dash.bo-tower .pbi-viz,
+  #bo-dash.bo-tower .bo-status-card,
+  #bo-dash.bo-tower .bo-product-panel,
+  #bo-dash.bo-tower .bo-model-panel,
+  #bo-dash.bo-tower .bo-ops-card,
+  #bo-dash.bo-tower .bo-oldest-card {
+    min-height: 0 !important;
+    height: 100%;
+  }
+  #bo-dash.bo-tower .bo-donut-wrap {
+    min-height: 0 !important;
+    flex: 1 1 auto;
+    padding: 0 !important;
+  }
+  #bo-dash.bo-tower .bo-donut-wrap .chart-scroll {
+    width: min(100%, 132px) !important;
+    height: auto !important;
+    max-height: 100%;
+    aspect-ratio: 1;
+    flex: 0 1 auto;
+  }
+  #bo-dash.bo-tower .chart-box,
+  #bo-dash.bo-tower .chart-box.pbi-box,
+  #bo-dash.bo-tower .bo-chart-donut {
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+  #bo-dash.bo-tower,
+  #bo-dash.bo-tower .bo-tower-head,
+  #bo-dash.bo-tower .bo-dash-meta,
+  #bo-dash.bo-tower .bo-toolbar,
+  #bo-dash.bo-tower .bo-kpis {
+    min-width: 0;
+    max-width: 100%;
+  }
+  #bo-dash.bo-tower .bo-toolbar select,
+  #bo-dash.bo-tower .bo-toolbar input {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+  }
+  #bo-dash.bo-tower .bo-toolbar input[type="search"] {
+    flex: 1.6 1 0 !important;
+  }
+}
