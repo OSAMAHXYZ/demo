@@ -2046,7 +2046,7 @@
         const on = !dash.classList.contains("is-wide");
         dash.classList.toggle("is-wide", on);
         document.body.classList.toggle("pt-wide-mode", on);
-        wide.textContent = on ? "Collapse View" : "Wide View";
+        wide.textContent = on ? "✕ Collapse View" : "↗ Wide View";
         const title = dash.querySelector(".pt-top-copy h2");
         if (title) title.textContent = on ? "Plan Tracker - Wide View" : "Plan Tracker";
         const fit = () => {
