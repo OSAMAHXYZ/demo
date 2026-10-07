@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261006rtl4"></script>
+  <script src="plan-tracker.js?v=20261007noyear"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007cal" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261006tower2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261007noyear" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -1162,7 +1162,7 @@
             <article class="pt-card" id="pt-card-daily">
               <div class="pt-card-h">
                 <h3>Daily plan vs my allocation</h3>
-                <span id="pt-chart-note">RES · allocation date = file date · age 0</span>
+                <span id="pt-chart-note">Each submitted RTL day · Retail Electronic Sales · age 0 · allocation date = file day</span>
                 <button type="button" class="pt-expand" data-pt-expand="daily" title="Expand">⛶</button>
               </div>
               <div class="pt-chart"><canvas id="pt-chart-daily"></canvas></div>
@@ -1184,10 +1184,6 @@
             <article class="pt-card" id="pt-card-sfx">
               <div class="pt-card-h"><h3>SFX plan progress</h3><button type="button" class="pt-expand" data-pt-expand="sfx" title="Expand">⛶</button></div>
               <div class="pt-scroll" id="pt-sfx"></div>
-            </article>
-            <article class="pt-card" id="pt-card-year">
-              <div class="pt-card-h"><h3>Model year</h3><button type="button" class="pt-expand" data-pt-expand="year" title="Expand">⛶</button></div>
-              <div class="pt-chart"><canvas id="pt-chart-year"></canvas></div>
             </article>
             <article class="pt-card" id="pt-card-count">
               <div class="pt-card-h"><h3>Daily VIN count</h3><button type="button" class="pt-expand" data-pt-expand="count" title="Expand">⛶</button></div>
@@ -7904,7 +7900,7 @@
       if (wait) wait.style.display = "none";
       const frame = document.getElementById("delivery-view-frame");
       if (frame && (!frame.getAttribute("src") || frame.getAttribute("src") === "about:blank")) {
-        frame.setAttribute("src", "../delivery-transformation/admin.html?view=1");
+        frame.setAttribute("src", "https://delivery-operation-production.up.railway.app/delivery-transformation/admin.html?view=1");
       }
     } else if (leavingDelivery && !window._data) {
       const dash = $("#dashboard");

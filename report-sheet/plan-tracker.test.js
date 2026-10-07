@@ -319,6 +319,27 @@ test("swapped in is not my allocation", () => {
   assertEq(moved[0].statusKey, "Swapped In");
 });
 
+test("each submitted RTL day counts every VIN with RES, age 0, and allocation date equal to that file", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("KEEP3", RES, 0, d(2026, 10, 3)),
+      veh("OLDAG", RES, 0, d(2026, 10, 1)),
+      veh("AGED", RES, 2, d(2026, 10, 3)),
+      veh("FLEET3", FLEET, 0, d(2026, 10, 3)),
+    ],
+    "2026-10-04": [
+      veh("KEEP3", RES, 0, d(2026, 10, 4)),
+      veh("STALE", RES, 0, d(2026, 10, 3)),
+    ],
+    "2026-10-06": [veh("NEW6", RES, 0, d(2026, 10, 6))],
+  }, "2026-10");
+  const vins = (key) => model.daily.find((day) => day.dateKey === key).fileDayReceipts.map((r) => r.vin).sort().join(",");
+  assertEq(model.daily.map((day) => day.dateKey).join(","), "2026-10-03,2026-10-04,2026-10-06");
+  assertEq(vins("2026-10-03"), "KEEP3");
+  assertEq(vins("2026-10-04"), "KEEP3");
+  assertEq(vins("2026-10-06"), "NEW6");
+});
+
 test("a day stays on the calendar when my allocation is zero", () => {
   const model = build({
     "2026-10-03": [veh("ABC123", RES, 0, d(2026, 10, 3))],

@@ -1434,7 +1434,7 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-kpi.is-on { border-color: #eb0a1e; }
 #pt-dash.pt-tower .pt-row { display: grid; gap: 6px; }
 #pt-dash.pt-tower .pt-row-charts { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(180px, .7fr); }
-#pt-dash.pt-tower .pt-row-mid { grid-template-columns: minmax(0, 1.3fr) minmax(160px, .7fr) minmax(0, 1.1fr); }
+#pt-dash.pt-tower .pt-row-mid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 #pt-dash.pt-tower .pt-card {
   background: #fff;
   border: 1px solid #e4e8ee;

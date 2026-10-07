@@ -704,8 +704,10 @@
       dayStats.totalRows = Array.isArray(snap && snap.vehicles) ? snap.vehicles.length : 0;
       dayStats.uniqueVins = byVin.size;
       dayStats.resRows = [];
+      dayStats.fileDayReceipts = [];
       byVin.forEach((r) => {
         if (isRES(r)) dayStats.resRows.push(r);
+        if (isPlanScheduleReceipt(r, dateKey)) dayStats.fileDayReceipts.push(r);
       });
 
       daily.push(dayStats);
@@ -798,6 +800,7 @@
     enrichRowsWithSalesRaw(lists.age0);
     daily.forEach((d) => {
       enrichRowsWithSalesRaw(d.planReceipts);
+      enrichRowsWithSalesRaw(d.fileDayReceipts);
       enrichRowsWithSalesRaw(d.resRows);
       enrichRowsWithSalesRaw(d.transferOut);
       enrichRowsWithSalesRaw(d.transferIn);
@@ -2121,7 +2124,6 @@
           count: "#pt-daily-count",
           register: "#pt-vin-scroll",
           status: "#pt-card-status .pt-donut",
-          year: "#pt-card-year .pt-chart",
           daily: "#pt-card-daily .pt-chart",
         }[which];
         const title = {
@@ -2130,7 +2132,6 @@
           count: "Daily VIN count",
           register: "Received VINs",
           status: "My allocation status",
-          year: "Model year",
           daily: "Daily plan vs my allocation",
         }[which] || "Detail";
         const modal = $("#pt-expand-modal");
@@ -2195,6 +2196,12 @@
     if (r && r.leafProduct) return r.leafProduct;
     const leaf = leafOf(r);
     return leaf ? leaf.product : ((r && r.product) || "");
+  }
+
+  function adminProductName(r) {
+    const leaf = leafOf(r);
+    if (leaf && leaf.product) return leaf.product;
+    return (r && r.product) || "(unmatched)";
   }
 
   function rowSfx(r) {
@@ -2678,11 +2685,17 @@
     }
     if (key === "product") {
       const [name, which] = String(arg || "").split("~");
-      const rows = pack.scoped.filter((r) => (r.leafProduct || r.product) === name);
+      const rows = [];
+      (lastModel.daily || []).forEach((day) => {
+        (day.fileDayReceipts || []).forEach((r) => {
+          if (!scopeMatch(r) || adminProductName(r) !== name) return;
+          rows.push(r);
+        });
+      });
       if (which === "gap") {
-        return { title: `${name} · gap`, sub: "Remaining plan units are not VINs. These are the allocation VINs already received.", rows };
+        return { title: `${name} · gap`, sub: "Plan is the Admin Push target. These are the received VINs through the last submitted RTL day.", rows };
       }
-      return { title: `${name} · my allocation`, sub: "Allocation VINs for this product", rows };
+      return { title: `${name} · received`, sub: "Retail Electronic Sales · age 0 · allocation date = each file day · through the last submitted day", rows };
     }
     if (key === "sfx") {
       const [id, metric] = String(arg || "").split("~");
@@ -2796,20 +2809,27 @@
 
     const byProduct = new Map();
     sched.forEach((r) => {
-      if (r.product === "(unmatched)" && !r.mtd) return;
+      if (!r || r.product === "(unmatched)") return;
       const g = byProduct.get(r.product) || { product: r.product, plan: 0, mtd: 0 };
       g.plan += Number(r.allocation) || 0;
       byProduct.set(r.product, g);
     });
-    scoped.forEach((r) => {
-      const key = r.leafId ? r.leafProduct : "(unmatched)";
-      const g = byProduct.get(key) || { product: key, plan: 0, mtd: 0 };
-      g.mtd += 1;
-      byProduct.set(key, g);
+    const submittedDays = (model.daily || []).filter((d) => d && d.dateKey)
+      .slice()
+      .sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+    submittedDays.forEach((d) => {
+      (d.fileDayReceipts || []).forEach((r) => {
+        if (!scopeMatch(r)) return;
+        const key = adminProductName(r);
+        const g = byProduct.get(key) || { product: key, plan: 0, mtd: 0 };
+        g.mtd += 1;
+        byProduct.set(key, g);
+      });
     });
     const prodHost = $("#pt-product");
     if (prodHost) {
-      const rows = [...byProduct.values()].sort((a, b) => String(a.product).localeCompare(String(b.product)));
+      const rows = [...byProduct.values()].filter((r) => r.plan > 0 || r.mtd > 0)
+        .sort((a, b) => String(a.product).localeCompare(String(b.product)));
       prodHost.innerHTML = `<table class="pt-table"><thead><tr><th>Product</th><th>Plan</th><th>Received</th><th>%</th><th>Gap</th></tr></thead><tbody>${
         rows.map((r) => {
           const g = gapInfo(r.plan, r.mtd);
@@ -2845,43 +2865,19 @@
       }</tbody></table>`;
     }
 
-    const yearMap = new Map();
-    scoped.forEach((r) => {
-      const y = r.year ? String(r.year) : "—";
-      yearMap.set(y, (yearMap.get(y) || 0) + 1);
-    });
-    const yearLabels = [...yearMap.keys()].sort();
-    makeChart("pt-chart-year", {
-      type: "bar",
-      data: {
-        labels: yearLabels,
-        datasets: [{ data: yearLabels.map((y) => yearMap.get(y) || 0), backgroundColor: "#10233f", borderRadius: 3 }],
-      },
-      options: {
-        indexAxis: "y",
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } },
-        onClick: (_evt, els) => {
-          if (!els.length) return;
-          openFromSpec("year", yearLabels[els[0].index]);
-        },
-      },
-    });
-
-    const days = model.daily || [];
+    const days = (model.daily || []).filter((d) => d.dateKey);
     const labels = days.map((d) => d.label);
-    const allocDaily = days.map((d) => (d.planReceipts || []).filter((r) => scopeMatch(r)).length);
+    const fileDayRows = (d) => (d.fileDayReceipts || []).filter((r) => scopeMatch(r));
+    const allocDaily = days.map((d) => fileDayRows(d).length);
     let runA = 0;
     const cumA = allocDaily.map((n) => { runA += n; return runA; });
     const cumulative = view.mode === "cumulative";
     const missing = model.missingDates || [];
     const note = $("#pt-chart-note");
     if (note) {
-      note.textContent = missing.length
-        ? `Missing RTL snapshot: ${missing.join(", ")}`
-        : (cumulative ? "Cumulative allocation vs admin plan" : "Every RTL file date · allocation can be 0");
+      note.textContent = days.length
+        ? `${days.length} submitted RTL day(s) · Retail Electronic Sales · age 0 · allocation date = file day`
+        : "No RTL file submitted for this month";
     }
     const planLine = (label, color, dash) => ({
       type: "line",
@@ -2896,7 +2892,7 @@
     const datasets = [
       {
         type: "bar",
-        label: "My allocation",
+        label: "Submitted day",
         data: allocDaily,
         backgroundColor: "rgba(16,35,63,.85)",
         borderRadius: 3,
@@ -2933,7 +2929,12 @@
         onClick: (_evt, els) => {
           if (!els.length) return;
           const day = days[els[0].index];
-          if (day) openFromSpec("day", `${day.dateKey}~allocation`);
+          if (!day) return;
+          openVinResults(
+            `${day.label} · submitted file`,
+            "Retail Electronic Sales · allocation age 0 · allocation date = this file day",
+            fileDayRows(day)
+          );
         },
       },
     });
