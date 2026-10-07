@@ -291,7 +291,7 @@
         allocationDate: agDate instanceof Date && !Number.isNaN(agDate.getTime()) ? agDate : null,
         allocationAge: age,
         status: car.status || "",
-        secondaryStatus: (v && (v.secondaryStatus || v.secondary_status)) || "",
+        secondaryStatus: rtlSecondaryStatus(v),
         deliveryStatus: "",
         location: car.location || "—",
         usage: car.usage || "",
@@ -320,7 +320,7 @@
       allocationDate: ag instanceof Date && !Number.isNaN(ag.getTime()) ? ag : null,
       allocationAge: age,
       status: v.status || "",
-      secondaryStatus: v.secondaryStatus || "",
+      secondaryStatus: rtlSecondaryStatus(v),
       deliveryStatus: "",
       location: v.location || "—",
       usage: v.usage || "",
@@ -2715,7 +2715,31 @@
   }
 
   function isProformaInvoiceCreated(text) {
-    return normHeader(text).includes("pro forma invoice created");
+    const n = normHeader(text);
+    return n.includes("pro forma invoice created") || n.includes("dio completed vehicle registered");
+  }
+
+  function isReservedDamageStatus(text) {
+    return normHeader(text).includes("sales order created veh damaged");
+  }
+
+  function descriptionFromDetails(details) {
+    if (!details || typeof details !== "object") return "";
+    const keys = Object.keys(details);
+    for (let i = 0; i < keys.length; i += 1) {
+      const name = normHeader(keys[i]);
+      if (!name.includes("secondary status")) continue;
+      if (!name.includes("desc") && !name.includes("description")) continue;
+      const val = String(details[keys[i]] || "").trim();
+      if (val) return val;
+    }
+    return "";
+  }
+
+  function rtlSecondaryStatus(v) {
+    const described = descriptionFromDetails(v && v.details);
+    if (described) return described;
+    return String((v && (v.secondaryStatus || v.secondary_status)) || "");
   }
 
   function hasSalesRawDelivery(row) {
@@ -2754,12 +2778,13 @@
     const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
     const sec = secondaryText(row, hist);
     const proforma = isProformaInvoiceCreated(sec);
-    const stock = !proforma && isVehicleAllocationCompleted(sec);
+    const damaged = isReservedDamageStatus(sec);
+    const stock = !proforma && !damaged && isVehicleAllocationCompleted(sec);
     return {
       delivered: hasSalesRawDelivery(row),
       proforma,
       stock,
-      reserved: !proforma && !stock && !!normHeader(sec),
+      reserved: damaged || (!proforma && !stock && !!normHeader(sec)),
       swappedOut: laterLeftRes(model, row.vin, creditDayOf(row)),
     };
   }
@@ -2864,17 +2889,19 @@
     if (!lastModel) return { title: "VINs", sub: "", rows: [] };
     const pack = towerPack(lastModel);
     const key = String(spec || "");
+    const totals = monthStatusTotals(lastModel);
     const kpi = {
       plan: ["Monthly plan", "Admin allocation target. This number is plan units, not VINs.", []],
-      allocation: ["My allocation", "RES · allocation date = file date · age 0", pack.scoped],
-      received: ["Received / RES", "Unique Retail Electronic Sales · age 0", pack.received],
-      delivered: ["Delivered", "Sales Raw column V", pack.scoped.filter((r) => r.statusKey === "Delivered")],
-      proforma: ["Proforma", "Sales Raw column P · not delivered", pack.scoped.filter((r) => r.statusKey === "Proforma")],
-      stock: ["My stock", "My allocation · not delivered · not proforma · not swapped out", pack.stock],
-      swapped: ["Swapped out", "My allocation · later search area is not Retail Electronic Sales", pack.scoped.filter((r) => r.statusKey === "Swapped")],
+      allocation: ["My allocation", "New cars this month", totals.within],
+      received: ["Received / RES", "New cars this month", totals.within],
+      delivered: ["Delivered", "Sales Raw column V", totals.delivered],
+      proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered", totals.proforma],
+      reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged", totals.reserved],
+      stock: ["Stock", "Secondary status · vehicle allocation completed", totals.stock],
+      swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales", totals.swappedOut],
+      in: ["Swapped in", "Added to Retail Electronic Sales · not a new car", totals.swappedIn],
       free: ["Free in my stock", "Secondary status · Vehicle allocation completed", pack.free],
       undef: ["Undefined", "My stock · secondary status is not Vehicle allocation completed", pack.undef],
-      in: ["Swapped in", "Started in another search area · later Retail Electronic Sales · not my allocation", pack.swappedIn],
     };
     if (kpi[key]) return { title: kpi[key][0], sub: kpi[key][1], rows: kpi[key][2] };
     if (key === "day") {
@@ -2901,8 +2928,8 @@
         res: ["RES", "Retail Electronic Sales in this RTL file"],
         allocation: ["My allocation", "New cars credited to this day"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "Secondary status · pro-forma invoice created"],
-        reserved: ["Reserved", "Any other secondary status"],
+        proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered"],
+        reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
         stock: ["Stock", "Secondary status · vehicle allocation completed"],
         swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
         in: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
@@ -2916,8 +2943,8 @@
       const titles = {
         within: ["Allocation", "New cars this month"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "Secondary status · pro-forma invoice created"],
-        reserved: ["Reserved", "Any other secondary status"],
+        proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered"],
+        reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
         stock: ["Stock", "Secondary status · vehicle allocation completed"],
         swappedOut: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
         swappedIn: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
@@ -2946,7 +2973,7 @@
       const titles = {
         within: "Within",
         delivered: "Delivered · Sales Raw column V",
-        proforma: "Proforma · pro-forma invoice created",
+        proforma: "Proforma · pro-forma invoice created or DIO completed - vehicle registered",
         reserved: "Reserved",
         stock: "Stock · vehicle allocation completed",
         swappedOut: "Swapped out",
@@ -2976,8 +3003,9 @@
     const schedAll = buildScheduleRows(model);
     const sched = schedAll.filter((r) => (!view.product || r.product === view.product) && (!view.sfx || r.sfx === view.sfx));
     const plan = sched.reduce((s, r) => s + (Number(r.allocation) || 0), 0);
-    const within = scoped.length;
-    const received = pack.received.length;
+    const statusTotals = monthStatusTotals(model);
+    const within = statusTotals.within.length;
+    const received = statusTotals.within.length;
     const counts = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
     scoped.forEach((r) => { counts[r.statusKey] = (counts[r.statusKey] || 0) + 1; });
     counts["My Stock"] = pack.stock.length;
@@ -3027,12 +3055,12 @@
     if (monthLabel) monthLabel.textContent = model.monthKey || "Month";
     const kpis = [
       ["plan", "Monthly plan", plan, "Admin Push"],
-      ["allocation", "My allocation", within, "RES · date = file · age 0"],
-      ["received", "Received / RES", received, "Unique RES · age 0"],
-      ["delivered", "Delivered", counts.Delivered, "Sales Raw col V"],
-      ["proforma", "Proforma", counts.Proforma, "Sales Raw col P"],
-      ["stock", "My stock", counts["My Stock"], "Still allocated"],
-      ["swapped", "Swapped out", counts.Swapped, "Left RES"],
+      ["allocation", "My allocation", within, "New cars this month"],
+      ["received", "Received / RES", received, "New cars this month"],
+      ["delivered", "Delivered", statusTotals.delivered.length, "Sales Raw col V"],
+      ["proforma", "Proforma", statusTotals.proforma.length, "Pro-forma or DIO completed"],
+      ["stock", "Stock", statusTotals.stock.length, "Vehicle allocation completed"],
+      ["swapped", "Swapped out", statusTotals.swappedOut.length, "Later day left RES"],
     ];
     const kpiHost = $("#pt-kpis");
     if (kpiHost) {
@@ -3044,11 +3072,10 @@
     const indHost = $("#pt-indicators");
     if (indHost) {
       const inds = [
-        ["free", "Free in my stock", pack.free.length],
-        ["undef", "Undefined", pack.undef.length],
-        ["in", "Swapped in", pack.swappedIn.length],
+        ["reserved", "Reserved", statusTotals.reserved.length, ""],
+        ["in", "Swapped in", statusTotals.swappedIn.length, statusTotals.swappedIn.length ? "is-swap-in" : ""],
       ];
-      indHost.innerHTML = inds.map(([key, label, value]) => `<button type="button" class="pt-ind" data-pt-open="${key}"><span>${esc(label)}</span><strong>${num(value)}</strong></button>`).join("");
+      indHost.innerHTML = inds.map(([key, label, value, cls]) => `<button type="button" class="pt-ind${cls ? ` ${cls}` : ""}" data-pt-open="${key}"><span>${esc(label)}</span><strong>${num(value)}</strong></button>`).join("");
     }
 
     const byProduct = new Map();
@@ -3183,7 +3210,6 @@
       },
     });
 
-    const statusTotals = monthStatusTotals(model);
     const statusSlices = [
       { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#1f8a4c" },
       { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#2f6fed" },

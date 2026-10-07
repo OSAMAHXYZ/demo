@@ -467,6 +467,44 @@ function emptyMerge(buckets) {
   return out;
 }
 
+test("DIO completed vehicle registered counts as proforma", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("DIO1", RES, 0, d(2026, 10, 3), { secondaryStatus: "DIO completed - vehicle registered", product: "HILUX", suffix: "M0" }),
+    ],
+  }, "2026-10");
+  const all = emptyMerge(PT.buildSfxBuckets(model, "2026-10"));
+  assertEq(all.proforma.map((r) => r.vin).join(","), "DIO1");
+  assertEq(all.reserved.length, 0);
+  assertEq(all.stock.length, 0);
+  const month = PT.monthStatusTotals(model, "2026-10");
+  assertEq(month.proforma.length, 1);
+});
+
+test("sales order created veh damaged counts as reserved", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("DMG1", RES, 0, d(2026, 10, 3), { secondaryStatus: "Sales order created - veh damaged", product: "HILUX", suffix: "M0" }),
+    ],
+  }, "2026-10");
+  const all = emptyMerge(PT.buildSfxBuckets(model, "2026-10"));
+  assertEq(all.reserved.map((r) => r.vin).join(","), "DMG1");
+  assertEq(all.proforma.length, 0);
+  assertEq(all.stock.length, 0);
+  const described = build({
+    "2026-10-03": [
+      veh("DMG2", RES, 0, d(2026, 10, 3), {
+        secondaryStatus: "10",
+        product: "HILUX",
+        suffix: "M0",
+        details: { "Secondary Status Description": "Sales order created - veh damaged" },
+      }),
+    ],
+  }, "2026-10");
+  const fromDetails = emptyMerge(PT.buildSfxBuckets(described, "2026-10"));
+  assertEq(fromDetails.reserved.map((r) => r.vin).join(","), "DMG2");
+});
+
 test("normalizeVin is stable", () => {
   assertEq(PT.normalizeVin(" ab c-123 "), "ABC123");
   assertEq(PT.normalizeVin(12345), "12345");

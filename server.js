@@ -1093,10 +1093,16 @@ function scanRtlStockBuffer(buffer, opts) {
     (n) => n === 'status' || n === 'primary status' || n === 'vehicle status',
     (n) => n === 'status' || n.includes('primary status')
   ], 'D');
-  const idxSecondary = rtlResolveCol(headers, [
-    (n) => n === 'secondary status' || n === 'sec status',
-    (n) => n.includes('secondary status')
-  ], 'L');
+  const secondaryDescIdx = headers.findIndex((h) => {
+    const n = rtlNormHeader(h);
+    return n.includes('secondary status') && (n.includes('desc') || n.includes('description'));
+  });
+  const idxSecondary = secondaryDescIdx >= 0
+    ? secondaryDescIdx
+    : rtlResolveCol(headers, [
+      (n) => n === 'secondary status' || n === 'sec status',
+      (n) => n.includes('secondary status')
+    ], 'L');
   const idxLocation = rtlResolveCol(headers, [
     (n) => n === 'allocated location' || n === 'location' || n === 'loc',
     (n) => n.includes('allocated location') || (n.includes('location') && !n.includes('search'))
