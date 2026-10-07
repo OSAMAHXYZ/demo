@@ -2261,6 +2261,11 @@
     return days.concat(extras).sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
   }
 
+  function currentMonthReceiptDays(model) {
+    const month = currentMonthKey();
+    return receiptChartDays(model).filter((d) => String(d.dateKey).slice(0, 7) === month);
+  }
+
   function adminProductName(r) {
     const leaf = leafOf(r);
     if (leaf && leaf.product) return leaf.product;
@@ -2749,7 +2754,7 @@
     if (key === "product") {
       const [name, which] = String(arg || "").split("~");
       const rows = [];
-      receiptChartDays(lastModel).forEach((day) => {
+      currentMonthReceiptDays(lastModel).forEach((day) => {
         (day.fileDayReceipts || []).forEach((r) => {
           if (!scopeMatch(r) || adminProductName(r) !== name) return;
           rows.push(r);
@@ -2758,7 +2763,7 @@
       if (which === "gap") {
         return { title: `${name} · gap`, sub: "Plan is the Admin Push target. These are the received VINs through the last submitted RTL day.", rows };
       }
-      return { title: `${name} · received`, sub: "Retail Electronic Sales · age matches the days since the allocation date · through the last submitted day", rows };
+      return { title: `${name} · received`, sub: `${currentMonthKey()} · Retail Electronic Sales · age matches the days since the allocation date`, rows };
     }
     if (key === "sfx") {
       const [id, metric] = String(arg || "").split("~");
@@ -2877,7 +2882,7 @@
       g.plan += Number(r.allocation) || 0;
       byProduct.set(r.product, g);
     });
-    const submittedDays = receiptChartDays(model);
+    const submittedDays = currentMonthReceiptDays(model);
     submittedDays.forEach((d) => {
       (d.fileDayReceipts || []).forEach((r) => {
         if (!scopeMatch(r)) return;
@@ -2927,7 +2932,7 @@
     }
 
     const monthKey = currentMonthKey();
-    const days = receiptChartDays(model).filter((d) => String(d.dateKey).slice(0, 7) === monthKey);
+    const days = currentMonthReceiptDays(model);
     const labels = days.map((d) => d.label);
     const fileDayRows = (d) => (d.fileDayReceipts || []).filter((r) => scopeMatch(r));
     const allocDaily = days.map((d) => fileDayRows(d).length);
