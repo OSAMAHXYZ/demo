@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261007ptcenter"></script>
+  <script src="plan-tracker.js?v=20261007ptcolv"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -145,7 +145,7 @@
         </div>
         <div class="top-actions app-topbar-actions">
         <span class="status" id="status">Waiting for Admin Push</span>
-          <span class="status ok" id="live-badge" title="Data loads only when you click Refresh">Manual</span>
+          <span class="status ok" id="live-badge" title="Every laptop that opens this server shows the same Admin Push">Live</span>
           <button type="button" class="btn theme-toggle" id="theme-toggle" title="Toggle dark mode" aria-pressed="false">Dark</button>
           <button type="button" class="btn" id="clear-btn" disabled>Clear</button>
           <button type="button" class="btn-primary" id="run-btn" disabled title="Reload the latest Admin Push data">Refresh</button>
@@ -22530,6 +22530,7 @@
     const onlyGec = hasGec && SLOT_DEFS.every((s) => s.id === "gec" || s.id === "gecVisitors" || !(slots[s.id] && slots[s.id].file));
     if (activePanel === "gec" || onlyGec) activePanel = "gec";
     else if (activePanel === "delivery") activePanel = "delivery";
+    else if (activePanel === "plantracker") activePanel = "plantracker";
     else if (activePanel === "summary" && hasSummaryInputs()) activePanel = "summary";
     else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
@@ -22711,9 +22712,11 @@
         else setStatus(painted && sync && sync.cached && !forceSync ? "Ready (cached)" : "Synced from server", "ok");
         const badge = $("#live-badge");
         if (badge) {
-          badge.textContent = "Manual";
+          badge.textContent = liveSync ? "Live" : "Server";
           badge.className = "status ok";
-          badge.title = "Data loads only when you click Refresh";
+          badge.title = liveSync
+            ? "Every open page on this server shows the same Admin Push"
+            : "Opened from the shared Admin Push on this server";
         }
         try {
           lastDataPushAt = Number(Store.readDataPushStamp().at) || lastDataPushAt;
@@ -23007,7 +23010,7 @@
     bc.onmessage = (ev) => { onAdminPushMessage(ev); };
   }
 
-  // Manual Refresh only — no poll / focus / live auto-reload (keeps the page responsive)
+  // Live sync starts at boot (WebSocket + poll) so every open page follows Admin Push.
   $("#panel-tabs").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-panel]");
     if (!btn) return;
@@ -24092,7 +24095,22 @@
     document.body.classList.add("lexus-view");
     switchPanel("lexus");
   } else {
-    refreshFromAdmin();
+    const boot = GEC_VIEW
+      ? refreshFromAdmin()
+      : refreshFromAdmin("Opening shared Admin Push", { skipLocal: true });
+    Promise.resolve(boot).finally(() => {
+      if (liveSync || !Store || typeof Store.startLiveSync !== "function") return;
+      liveSync = Store.startLiveSync(
+        () => refreshFromAdmin("Updated from Admin Push", { skipLocal: true }),
+        { initialAt: lastDataPushAt }
+      );
+      const badge = $("#live-badge");
+      if (badge) {
+        badge.textContent = "Live";
+        badge.className = "status ok";
+        badge.title = "Every open page on this server shows the same Admin Push";
+      }
+    });
   }
 })();
 </script>

@@ -413,7 +413,7 @@ test("SFX progress classifies daily-chart VINs", () => {
   const all = emptyMerge(buckets);
   assertEq(all.within.map((r) => r.vin).sort().join(","), "HOLD1,WITHIN1");
   assertEq(all.delivered.map((r) => r.vin).join(","), "WITHIN1");
-  assertEq(all.proforma.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(all.proforma.map((r) => r.vin).join(","), "HOLD1");
   assertEq(all.stock.map((r) => r.vin).join(","), "");
   assertEq(all.reserved.map((r) => r.vin).join(","), "HOLD1");
   assertEq(all.swappedOut.map((r) => r.vin).join(","), "HOLD1");
@@ -445,7 +445,7 @@ test("daily VIN count totals the same checks by day", () => {
   const oct4 = days.get("2026-10-04");
   assertEq(oct3.within.map((r) => r.vin).join(","), "WITHIN1");
   assertEq(oct3.delivered.map((r) => r.vin).join(","), "WITHIN1");
-  assertEq(oct3.proforma.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(oct3.proforma.map((r) => r.vin).join(","), "");
   assertEq(oct4.within.map((r) => r.vin).join(","), "HOLD1");
   assertEq(oct4.reserved.map((r) => r.vin).join(","), "HOLD1");
   assertEq(oct4.swappedOut.map((r) => r.vin).join(","), "HOLD1");
@@ -489,7 +489,7 @@ test("sales order created veh damaged counts as reserved", () => {
   }, "2026-10");
   const all = emptyMerge(PT.buildSfxBuckets(model, "2026-10"));
   assertEq(all.reserved.map((r) => r.vin).join(","), "DMG1");
-  assertEq(all.proforma.length, 0);
+  assertEq(all.proforma.map((r) => r.vin).join(","), "DMG1");
   assertEq(all.stock.length, 0);
   const described = build({
     "2026-10-03": [

@@ -2505,17 +2505,21 @@
   }
 
   function presentReceiptRow(model, row, kind) {
-    const flags = kind === "in" ? null : classifyWithinFlags(model, row);
+    const flags = classifyWithinFlags(model, row);
     const swap = kind === "in" ? null : laterSwapInfo(model, row);
     const leaf = leafOf(row);
     const hist = (model.vinHistory && model.vinHistory.get(row && row.vin)) || [];
-    let statusKey = "—";
-    if (kind === "in") statusKey = "Swapped in";
-    else if (flags.proforma) statusKey = "Proforma";
+    let statusKey = "Proforma";
+    if (flags.delivered) statusKey = "Delivered";
+    else if (kind === "in") statusKey = "Swapped in";
     else if (flags.stock) statusKey = "Stock";
     else if (flags.reserved) statusKey = "Reserved";
+    const sales = salesRawForVin(row && row.vin);
+    const colVDate = (sales && (sales.invoiceDate || sales.deliveryDate)) || row.invoiceDate || row.deliveryDate || null;
     return Object.assign({}, row, {
       statusKey,
+      colVDelivered: !!flags.delivered,
+      invoiceDate: flags.delivered ? colVDate : (row.invoiceDate || null),
       secondaryStatus: secondaryText(row, hist) || row.secondaryStatus || "",
       leafProduct: (leaf && leaf.product) || row.product || "—",
       leafSfx: (leaf && leaf.sfx) || row.suffix || "—",
@@ -2856,6 +2860,32 @@
     return !!(invoice && parseDate(invoice));
   }
 
+  let salesLookupMemo = undefined;
+  function resetSalesLookup() {
+    salesLookupMemo = undefined;
+  }
+
+  /** Admin Push Sales Raw for one VIN. Column V date is delivery. */
+  function salesRawForVin(vin) {
+    if (salesLookupMemo === undefined) {
+      salesLookupMemo = null;
+      if (typeof global.buildSalesVinLookup === "function" && typeof global.resolveAaSalesStatus === "function") {
+        try { salesLookupMemo = global.buildSalesVinLookup(); } catch (_) { salesLookupMemo = null; }
+      }
+    }
+    if (!salesLookupMemo || !vin || typeof global.resolveAaSalesStatus !== "function") return null;
+    return global.resolveAaSalesStatus(vin, salesLookupMemo);
+  }
+
+  function hasSalesRawColV(row) {
+    const sales = salesRawForVin(row && row.vin);
+    if (sales) {
+      const invoice = sales.invoiceDate || sales.deliveryDate;
+      return sales.kind === "delivered" || !!(invoice && parseDate(invoice));
+    }
+    return hasSalesRawDelivery(row);
+  }
+
   function sfxBucketId(row) {
     const leaf = leafOf(row);
     if (leaf && leaf.id) return leaf.id;
@@ -2884,14 +2914,15 @@
   function classifyWithinFlags(model, row) {
     const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
     const sec = secondaryText(row, hist);
-    const proforma = isProformaInvoiceCreated(sec);
+    const textProforma = isProformaInvoiceCreated(sec);
     const damaged = isReservedDamageStatus(sec);
-    const stock = !proforma && !damaged && isVehicleAllocationCompleted(sec);
+    const stock = !textProforma && !damaged && isVehicleAllocationCompleted(sec);
+    const delivered = hasSalesRawColV(row);
     return {
-      delivered: hasSalesRawDelivery(row),
-      proforma,
+      delivered,
+      proforma: !delivered,
       stock,
-      reserved: damaged || (!proforma && !stock && !!normHeader(sec)),
+      reserved: damaged || (!textProforma && !stock && !!normHeader(sec)),
       swappedOut: laterLeftRes(model, row.vin, creditDayOf(row)),
     };
   }
@@ -2931,8 +2962,9 @@
   /**
    * SFX plan progress for one month.
    * Within = daily new-car VINs, matched on product + suffix.
-   * Delivered = those VINs with a Sales Raw column V date.
-   * Proforma / Stock / Reserved come from the latest RTL secondary status.
+   * Delivered = Sales Raw column V has a date.
+   * Proforma = Sales Raw column V has no date.
+   * Stock / Reserved still come from the latest RTL secondary status.
    * Swapped out = a later RTL day whose search area is not Retail Electronic Sales.
    * Swapped in = a VIN added to Retail Electronic Sales that is not a new car.
    */
@@ -3002,7 +3034,7 @@
       allocation: ["My allocation", "New cars this month", totals.within],
       received: ["Received / RES", "New cars this month", totals.within],
       delivered: ["Delivered", "Sales Raw column V", totals.delivered],
-      proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered", totals.proforma],
+      proforma: ["Proforma", "No date in Sales Raw column V", totals.proforma],
       reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged", totals.reserved],
       stock: ["Stock", "Secondary status · vehicle allocation completed", totals.stock],
       swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales", totals.swappedOut],
@@ -3035,7 +3067,7 @@
         res: ["RES", "Retail Electronic Sales in this RTL file"],
         allocation: ["My allocation", "New cars credited to this day"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered"],
+        proforma: ["Proforma", "No date in Sales Raw column V"],
         reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
         stock: ["Stock", "Secondary status · vehicle allocation completed"],
         swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
@@ -3050,7 +3082,7 @@
       const titles = {
         within: ["Allocation", "New cars this month"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "Secondary status · pro-forma invoice created or DIO completed - vehicle registered"],
+        proforma: ["Proforma", "No date in Sales Raw column V"],
         reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
         stock: ["Stock", "Secondary status · vehicle allocation completed"],
         swappedOut: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
@@ -3080,7 +3112,7 @@
       const titles = {
         within: "Within",
         delivered: "Delivered · Sales Raw column V",
-        proforma: "Proforma · pro-forma invoice created or DIO completed - vehicle registered",
+        proforma: "Proforma · no date in Sales Raw column V",
         reserved: "Reserved",
         stock: "Stock · vehicle allocation completed",
         swappedOut: "Swapped out",
@@ -3101,6 +3133,7 @@
   }
 
   function renderTower(model) {
+    resetSalesLookup();
     if (!model) return;
     const dash = $("#pt-dash");
     if (!dash) return;
@@ -3165,7 +3198,7 @@
       ["allocation", "My allocation", within, "New cars this month"],
       ["received", "Received / RES", received, "New cars this month"],
       ["delivered", "Delivered", statusTotals.delivered.length, "Sales Raw col V"],
-      ["proforma", "Proforma", statusTotals.proforma.length, "Pro-forma or DIO completed"],
+      ["proforma", "Proforma", statusTotals.proforma.length, "No Sales Raw column V date"],
       ["stock", "Stock", statusTotals.stock.length, "Vehicle allocation completed"],
       ["swapped", "Swapped out", statusTotals.swappedOut.length, "Later day left RES"],
     ];
@@ -3442,11 +3475,11 @@
     const pick = (list) => list.map((r) => byVin.get(r.vin)).filter(Boolean);
     const stockRows = pick(statusTotals.stock);
     const reservedRows = pick(statusTotals.reserved);
-    const proformaRows = pick(statusTotals.proforma);
-    const deliveredRows = pick(statusTotals.delivered);
     const swappedRows = pick(statusTotals.swappedOut);
     const todayRows = allocationRows.filter((r) => creditDayOf(r) === todayKey);
     const allRows = allocationRows.concat(inRows);
+    const deliveredRows = allRows.filter((r) => r.colVDelivered);
+    const proformaRows = allRows.filter((r) => !r.colVDelivered);
     const tabCounts = {
       all: allRows.length,
       allocation: allocationRows.length,
