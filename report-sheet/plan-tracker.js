@@ -263,6 +263,25 @@
     if (!canvas || typeof global.Chart === "undefined") return;
     destroyChart(id);
     PT_CHARTS[id] = new global.Chart(canvas, cfg);
+    if (id === "pt-chart-status") placeDonutMid();
+  }
+
+  function placeDonutMid() {
+    const chart = PT_CHARTS["pt-chart-status"];
+    const mid = document.getElementById("pt-donut-mid");
+    if (!chart || !mid || !chart.canvas) return;
+    const arcs = (chart.getDatasetMeta(0).data || []).filter((arc) => arc && Number.isFinite(arc.x));
+    const area = chart.chartArea || {};
+    const x = arcs.length ? arcs[0].x : (area.left + area.right) / 2;
+    const y = arcs.length ? arcs[0].y : (area.top + area.bottom) / 2;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const canvas = chart.canvas;
+    mid.style.left = `${canvas.offsetLeft + x}px`;
+    mid.style.top = `${canvas.offsetTop + y}px`;
+    mid.style.right = "auto";
+    mid.style.bottom = "auto";
+    mid.style.width = "max-content";
+    mid.style.transform = "translate(-50%, -50%)";
   }
 
   function mapVehicle(v, dateKey, snapId, i) {
@@ -2077,7 +2096,11 @@
     if (debugBtn) {
       debugBtn.addEventListener("click", () => {
         const modal = document.getElementById("pt-recon-modal");
-        if (modal) modal.hidden = false;
+        if (modal) {
+          liftPtOverlay(modal);
+          modal.hidden = false;
+          syncPtCharts();
+        }
       });
     }
     const refreshBtn = $("#pt-refresh");
@@ -2213,14 +2236,22 @@
             body.innerHTML = src ? src.innerHTML : "";
           }
         }
-        if (modal) modal.hidden = false;
+        if (modal) {
+          liftPtOverlay(modal);
+          modal.hidden = false;
+          syncPtCharts();
+        }
       }
       const open = e.target.closest("[id='pt-schedule-open'], #pt-quality-open, #pt-recon-open");
       if (open && lastModel) {
         const id = open.id === "pt-schedule-open" ? "pt-schedule-modal"
           : open.id === "pt-quality-open" ? "pt-quality-modal" : "pt-recon-modal";
         const modal = document.getElementById(id);
-        if (modal) modal.hidden = false;
+        if (modal) {
+          liftPtOverlay(modal);
+          modal.hidden = false;
+          syncPtCharts();
+        }
       }
       const close = e.target.closest("[data-pt-close]");
       if (close) {
@@ -2228,12 +2259,14 @@
         if (modal) modal.hidden = true;
       }
       if (e.target.classList && e.target.classList.contains("pt-modal")) e.target.hidden = true;
+      if (close || (e.target.classList && e.target.classList.contains("pt-modal"))) syncPtCharts();
     });
     const drawerClose = $("#pt-drawer-close");
     if (drawerClose) {
       drawerClose.addEventListener("click", () => {
         const drawer = $("#pt-drawer");
         if (drawer) drawer.hidden = true;
+        syncPtCharts();
       });
     }
   }
@@ -2565,7 +2598,11 @@
         <h4>Classification</h4>
         <p class="pt-drawer-meta">${esc(stockLine)}</p>`;
     }
-    if (drawer) drawer.hidden = false;
+    if (drawer) {
+      liftPtOverlay(drawer);
+      drawer.hidden = false;
+      syncPtCharts();
+    }
   }
 
   function shiftMonth(delta) {
@@ -2734,6 +2771,20 @@
     el.innerHTML = `<option value="">${esc(label)}</option>` + uniq.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
   }
 
+  function liftPtOverlay(el) {
+    const dash = document.getElementById("pt-dash");
+    if (el && dash && el.parentElement === dash) dash.appendChild(el);
+  }
+
+  function syncPtCharts() {
+    const dash = document.getElementById("pt-dash");
+    if (!dash) return;
+    const open = dash.querySelector(".pt-modal:not([hidden]), .pt-drawer:not([hidden])");
+    dash.querySelectorAll("#pt-chart-daily, #pt-chart-status").forEach((canvas) => {
+      canvas.style.visibility = open ? "hidden" : "";
+    });
+  }
+
   function openVinResults(title, sub, rows) {
     modalRows = Array.isArray(rows) ? rows.filter(Boolean) : [];
     const modal = $("#pt-vin-modal");
@@ -2753,7 +2804,11 @@
       if (el) el.value = "";
     });
     paintVinModal();
-    if (modal) modal.hidden = false;
+    if (modal) {
+      liftPtOverlay(modal);
+      modal.hidden = false;
+      syncPtCharts();
+    }
   }
 
   function numBtn(n, spec, extra, cls) {
@@ -3243,8 +3298,13 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 8, right: 8, bottom: 2, left: 4 } },
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 }, color: "#64748B" } },
+          legend: {
+            position: "bottom",
+            align: "center",
+            labels: { boxWidth: 10, padding: 12, font: { size: 10 }, color: "#64748B" },
+          },
           tooltip: {
             backgroundColor: "#FFFFFF",
             titleColor: "#172033",
@@ -3255,14 +3315,14 @@
         },
         scales: Object.assign({
           x: {
-            ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#64748B" },
             grid: { color: "rgba(229, 231, 235, 0.8)" },
             border: { color: "#E5E7EB" },
           },
           y: {
             beginAtZero: true,
             position: "left",
-            ticks: { precision: 0, font: { size: 10 }, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 10 }, color: "#64748B" },
             grid: { color: "rgba(229, 231, 235, 0.8)" },
             border: { color: "#E5E7EB" },
           },
@@ -3271,7 +3331,7 @@
             beginAtZero: true,
             position: "right",
             grid: { drawOnChartArea: false },
-            ticks: { precision: 0, font: { size: 10 }, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 10 }, color: "#64748B" },
             border: { color: "#E5E7EB" },
           },
         } : {}),
@@ -3311,11 +3371,16 @@
         responsive: true,
         maintainAspectRatio: false,
         cutout: "68%",
+        layout: { padding: { top: 4, right: 4, bottom: 0, left: 4 } },
+        onResize() { placeDonutMid(); },
+        animation: { onComplete() { placeDonutMid(); } },
         plugins: {
           legend: {
             position: "bottom",
+            align: "center",
             labels: {
               boxWidth: 8,
+              padding: 10,
               font: { size: 10 },
               color: "#64748B",
               generateLabels(chart) {
@@ -3341,6 +3406,7 @@
     });
     const mid = $("#pt-donut-mid");
     if (mid) mid.innerHTML = `<strong>${num(statusTotals.within.length)}</strong><span>Total</span>`;
+    placeDonutMid();
 
     const dayHost = $("#pt-daily-count");
     if (dayHost) {
@@ -3498,6 +3564,7 @@
         openVinDrawer(btn.getAttribute("data-pt-vin"));
       });
     }
+    syncPtCharts();
   }
 
   function renderAll(model) {
