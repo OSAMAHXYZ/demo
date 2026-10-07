@@ -1526,6 +1526,7 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-pill-pro { background: #e7f0ff; color: #2f6fed; }
 #pt-dash.pt-tower .pt-pill-stock { background: #fff3e4; color: #e07a00; }
 #pt-dash.pt-tower .pt-pill-swap { background: #fde8ea; color: #eb0a1e; }
+#pt-dash.pt-tower .pt-pill-reserved { background: #eef0f3; color: #4b5563; }
 #pt-dash.pt-tower .pt-register { padding-bottom: 4px; }
 #pt-dash.pt-tower .pt-vin-scroll { position: relative; }
 #pt-dash.pt-tower .pt-vin-spacer { position: relative; }

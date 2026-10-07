@@ -2403,18 +2403,22 @@
   }
 
   function tabToStatus(tab) {
-    if (tab === "stock") return "My Stock";
+    if (tab === "stock") return "Stock";
+    if (tab === "reserved") return "Reserved";
     if (tab === "proforma") return "Proforma";
     if (tab === "delivered") return "Delivered";
-    if (tab === "swapped") return "Swapped";
+    if (tab === "swapped") return "Swapped out";
+    if (tab === "in") return "Swapped in";
     return "";
   }
 
   function statusToTab(status) {
-    if (status === "My Stock") return "stock";
+    if (status === "Stock" || status === "My Stock") return "stock";
+    if (status === "Reserved") return "reserved";
     if (status === "Proforma") return "proforma";
     if (status === "Delivered") return "delivered";
-    if (status === "Swapped") return "swapped";
+    if (status === "Swapped out" || status === "Swapped") return "swapped";
+    if (status === "Swapped in") return "in";
     return "all";
   }
 
@@ -2440,8 +2444,44 @@
   function statusPill(status) {
     const cls = status === "Delivered" ? "ok"
       : status === "Proforma" ? "pro"
-        : status === "Swapped" ? "swap" : "stock";
+        : status === "Reserved" ? "reserved"
+          : (status === "Swapped" || status === "Swapped out" || status === "Swapped in") ? "swap"
+            : "stock";
     return `<span class="pt-pill pt-pill-${cls}">${esc(status || "—")}</span>`;
+  }
+
+  function laterSwapInfo(model, row) {
+    const creditKey = creditDayOf(row);
+    const hist = (model.vinHistory && model.vinHistory.get(row && row.vin)) || [];
+    let hit = null;
+    hist.forEach((h) => {
+      if (!h) return;
+      const snap = String(h.snapshotDate || h.dateKey || "");
+      if (!snap || !creditKey || snap <= creditKey || isRES(h)) return;
+      if (!hit || snap < hit.date) hit = { date: snap, area: h.searchArea || h.searchAreaDesc || "" };
+    });
+    return hit;
+  }
+
+  function presentReceiptRow(model, row, kind) {
+    const flags = kind === "in" ? null : classifyWithinFlags(model, row);
+    const swap = kind === "in" ? null : laterSwapInfo(model, row);
+    const leaf = leafOf(row);
+    const hist = (model.vinHistory && model.vinHistory.get(row && row.vin)) || [];
+    let statusKey = "—";
+    if (kind === "in") statusKey = "Swapped in";
+    else if (flags.proforma) statusKey = "Proforma";
+    else if (flags.stock) statusKey = "Stock";
+    else if (flags.reserved) statusKey = "Reserved";
+    return Object.assign({}, row, {
+      statusKey,
+      secondaryStatus: secondaryText(row, hist) || row.secondaryStatus || "",
+      leafProduct: (leaf && leaf.product) || row.product || "—",
+      leafSfx: (leaf && leaf.sfx) || row.suffix || "—",
+      planQty: leaf ? (Number((global.allocationValues || {})[leaf.id]) || 0) : (Number(row.planQty) || 0),
+      swapArea: swap ? swap.area : "",
+      swapDate: swap ? swap.date : "",
+    });
   }
 
   function paintVinWindow() {
@@ -2469,7 +2509,7 @@
       <td>${esc(r.searchArea || "—")}</td>
       <td>${statusPill(r.statusKey)}</td>
       <td>${esc(fmtDate(r.invoiceDate))}</td>
-      <td>${esc(fmtDate(r.proformaDate))}</td>
+      <td>${esc(r.secondaryStatus || "—")}</td>
       <td>${r.swapArea ? `${esc(r.swapArea)} · ${esc(r.swapDate)}` : "—"}</td>
     </tr>`).join("") || `<tr><td colspan="13">No VINs for this filter.</td></tr>`;
   }
@@ -2495,14 +2535,18 @@
         return `<li><b>${esc(snap || "—")}</b><span>${esc(h.searchArea || "—")}</span><span>Allocation age ${h.allocationAge == null ? "—" : esc(h.allocationAge)}</span><em>${step}</em></li>`;
       }).join("");
       const sec = secondaryText(rec, hist);
-      const stockLine = rec && rec.statusKey === "My Stock"
-        ? (isVehicleAllocationCompleted(sec) ? "FREE IN MY STOCK" : "UNDEFINED")
-        : (rec ? rec.statusKey : "—");
+      const totals = monthStatusTotals(lastModel);
+      const withinHit = totals.within.find((r) => r.vin === key);
+      const inHit = totals.swappedIn.find((r) => r.vin === key);
+      const shown = withinHit
+        ? presentReceiptRow(lastModel, withinHit, "within")
+        : (inHit ? presentReceiptRow(lastModel, inHit, "in") : null);
+      const stockLine = shown ? shown.statusKey : "—";
       body.innerHTML = `
         <p class="pt-drawer-id">${esc(key)}</p>
         <p>${esc(rec ? (rec.leafProduct || rec.product) : (hist[0] && hist[0].product) || "")} · ${esc(rec ? (rec.leafSfx || rec.suffix) : (hist[0] && hist[0].suffix) || "")} · ${esc(rec ? rec.year : (hist[0] && hist[0].year) || "—")}</p>
         <h4>Current status</h4>
-        <p>${statusPill(rec ? rec.statusKey : (hist.length ? "Swapped In" : "—"))}</p>
+        <p>${statusPill(shown ? shown.statusKey : "—")}</p>
         <h4>VIN journey</h4>
         <ol class="pt-timeline">${lines || "<li>No daily RTL history.</li>"}</ol>
         <h4>Sales Raw</h4>
@@ -2510,7 +2554,7 @@
         <p class="pt-drawer-meta">Delivery date ${esc(fmtDate(rec && rec.invoiceDate))}</p>
         <h4>Secondary status</h4>
         <p class="pt-drawer-meta">${esc(sec || "—")}</p>
-        <h4>Stock status</h4>
+        <h4>Classification</h4>
         <p class="pt-drawer-meta">${esc(stockLine)}</p>`;
     }
     if (drawer) drawer.hidden = false;
@@ -3045,7 +3089,7 @@
     if (statusEl) {
       const cur = view.status;
       statusEl.innerHTML = `<option value="">All statuses</option>`
-        + ["Delivered", "Proforma", "My Stock", "Swapped"].map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("");
+        + ["Proforma", "Reserved", "Stock", "Delivered", "Swapped out", "Swapped in"].map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("");
     }
     $$("#pt-mode [data-pt-mode]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pt-mode") === (view.mode || "daily"));
@@ -3290,17 +3334,27 @@
     }
 
     const todayKey = todayDateKey(model.monthKey);
+    const allocationRows = statusTotals.within.map((r) => presentReceiptRow(model, r, "within"));
+    const inRows = statusTotals.swappedIn.map((r) => presentReceiptRow(model, r, "in"));
+    const byVin = new Map(allocationRows.map((r) => [r.vin, r]));
+    const pick = (list) => list.map((r) => byVin.get(r.vin)).filter(Boolean);
+    const stockRows = pick(statusTotals.stock);
+    const reservedRows = pick(statusTotals.reserved);
+    const proformaRows = pick(statusTotals.proforma);
+    const deliveredRows = pick(statusTotals.delivered);
+    const swappedRows = pick(statusTotals.swappedOut);
+    const todayRows = allocationRows.filter((r) => creditDayOf(r) === todayKey);
+    const allRows = allocationRows.concat(inRows);
     const tabCounts = {
-      all: scoped.length + pack.swappedIn.length,
-      allocation: scoped.length,
-      today: scoped.filter((r) => r.dateKey === todayKey).length,
-      stock: counts["My Stock"],
-      free: pack.free.length,
-      undef: pack.undef.length,
-      proforma: counts.Proforma,
-      delivered: counts.Delivered,
-      swapped: counts.Swapped,
-      in: pack.swappedIn.length,
+      all: allRows.length,
+      allocation: allocationRows.length,
+      today: todayRows.length,
+      stock: stockRows.length,
+      reserved: reservedRows.length,
+      proforma: proformaRows.length,
+      delivered: deliveredRows.length,
+      swapped: swappedRows.length,
+      in: inRows.length,
     };
     const tabs = $("#pt-tabs");
     if (tabs) {
@@ -3308,9 +3362,8 @@
         ["all", "All"],
         ["allocation", "My allocation"],
         ["today", "Today"],
-        ["stock", "My stock"],
-        ["free", "Free stock"],
-        ["undef", "Undefined"],
+        ["stock", "Stock"],
+        ["reserved", "Reserved"],
         ["proforma", "Proforma"],
         ["delivered", "Delivered"],
         ["swapped", "Swapped out"],
@@ -3325,15 +3378,15 @@
         pin.textContent = view.scheduleTitle || `${view.vinPin.size} schedule VIN(s)`;
       } else pin.hidden = true;
     }
-    let tableRows = scoped.concat(pack.swappedIn);
-    if (view.tab === "allocation") tableRows = scoped;
-    else if (view.tab === "today") tableRows = scoped.filter((r) => r.dateKey === todayKey);
-    else if (view.tab === "stock" || view.status === "My Stock") tableRows = stockAll;
-    else if (view.tab === "free") tableRows = pack.free;
-    else if (view.tab === "undef") tableRows = pack.undef;
-    else if (view.tab === "in") tableRows = pack.swappedIn;
-    else if (view.status) tableRows = scoped.filter((r) => r.statusKey === view.status);
-    else if (view.tab && view.tab !== "all") tableRows = scoped.filter((r) => r.statusKey === tabToStatus(view.tab));
+    let tableRows = allRows;
+    if (view.tab === "allocation") tableRows = allocationRows;
+    else if (view.tab === "today") tableRows = todayRows;
+    else if (view.tab === "stock") tableRows = stockRows;
+    else if (view.tab === "reserved") tableRows = reservedRows;
+    else if (view.tab === "proforma") tableRows = proformaRows;
+    else if (view.tab === "delivered") tableRows = deliveredRows;
+    else if (view.tab === "swapped") tableRows = swappedRows;
+    else if (view.tab === "in") tableRows = inRows;
     vinPaintRows = tableRows;
     const sc = $("#pt-vin-scroll");
     paintVinWindow();
