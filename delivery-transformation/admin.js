@@ -6,6 +6,26 @@
   migrateCollectorSession();
 
   const $ = (id) => document.getElementById(id);
+  const VIEW_MODE = new URLSearchParams(location.search).get('view') === '1';
+
+  function applyViewChrome() {
+    if (!VIEW_MODE) return;
+    document.documentElement.classList.add('dtx-view');
+    document.body.classList.add('dtx-view');
+    document.title = 'Delivery — Toyota';
+    const brand = document.querySelector('#collector-app .brand span');
+    if (brand) brand.textContent = 'Delivery';
+    const opsHero = document.querySelector('#tab-ops .hero p');
+    if (opsHero) opsHero.textContent = 'Attendance, delivery notes, and employee performance. Pick a month, then open a company or employee.';
+    const gateH = document.querySelector('#collector-gate h1');
+    const gateP = document.querySelector('#collector-gate p');
+    if (gateH) gateH.textContent = 'Delivery';
+    if (gateP) gateP.textContent = 'View only · choose a month, then open VSND or Operations';
+    const gateBtn = $('collector-btn');
+    if (gateBtn) gateBtn.textContent = 'Open delivery';
+  }
+
+  applyViewChrome();
 
   function isCollector(user) {
     return !!(user && (user.id === 'collector' || user.role === 'admin'));
@@ -14,6 +34,7 @@
   function showCollector(user) {
     $('collector-gate').classList.add('hidden');
     $('collector-app').classList.remove('hidden');
+    applyViewChrome();
     startApp(user);
   }
 
@@ -52,6 +73,9 @@
       } catch {
         clearSession();
       }
+    }
+    if (VIEW_MODE && $('collector-app').classList.contains('hidden')) {
+      await collectorLogin();
     }
   }());
 

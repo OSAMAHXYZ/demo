@@ -11,8 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
-  <script src="gec-data.js?v=20261006cal"></script>
-  <script src="gec-dashboard.js?v=20261006cal"></script>
+  <script src="gec-data.js?v=20261007cal"></script>
+  <script src="gec-dashboard.js?v=20261007cal"></script>
   <script src="sales-control.js?v=20261006ch1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
@@ -29,10 +29,62 @@
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
   <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
   <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
-  <link rel="stylesheet" href="gec-control.css?v=20261006cal" />
+  <link rel="stylesheet" href="gec-control.css?v=20261007cal" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261006tower2" />
+  <style>
+    body.delivery-mode .app-frame {
+      display: flex !important;
+      height: 100vh !important;
+      min-height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
+    body.delivery-mode .app-main {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+    }
+    body.delivery-mode .app-content {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      height: auto !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    body.delivery-mode .app-content > .page-foot { display: none !important; }
+    body.delivery-mode #dashboard,
+    body.delivery-mode #dashboard.show {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      animation: none !important;
+      overflow: hidden !important;
+    }
+    body.delivery-mode #panel-delivery {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      display: flex !important;
+      padding: 0 !important;
+      background: #f4f7fb;
+    }
+    body.delivery-mode .delivery-view-frame {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: #f4f7fb;
+    }
+  </style>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
 </head>
@@ -117,6 +169,11 @@
 
       <!-- PANEL: GEC Control Center (full-viewport overlay, see gec-dashboard.css) -->
       <div class="panel-section" id="panel-gec" style="display:none"><div id="gec-host"></div></div>
+
+      <!-- PANEL: Delivery · view of delivery-transformation/admin.html -->
+      <div class="panel-section" id="panel-delivery" style="display:none">
+        <iframe id="delivery-view-frame" class="delivery-view-frame" title="Delivery" src="about:blank"></iframe>
+      </div>
 
       <!-- PANEL: Lexus Tracker (lexus-control/lexus-tracker.js) -->
       <div class="panel-section" id="panel-lexus" style="display:none"><div id="lexus-tracker-host"></div></div>
@@ -2592,7 +2649,7 @@
     });
     const dash = $("#dashboard");
     const wait = $("#wait-section");
-    const showDash = nav === "dashboard" && dash && dash.classList.contains("show");
+    const showDash = activePanel === "delivery" || (nav === "dashboard" && dash && dash.classList.contains("show"));
     if (dash) dash.style.display = showDash ? "" : "none";
     if (wait) wait.style.display = showDash ? "none" : "";
   }
@@ -7077,6 +7134,7 @@
     { id: "summary", label: "Summary · Del vs Prof" },
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "gec", label: "GEC Dashboard" },
+    { id: "delivery", label: "Delivery" },
     { id: "lexus", label: "Lexus Tracker" },
     { id: "b2c", label: "B2C Tracker" },
     { id: "bodashboard", label: "BO Dashboard" },
@@ -7140,6 +7198,7 @@
       if (p.id === "allocationaudit") return true;
       if (p.id === "plantracker") return true;
       if (p.id === "gec") return true;
+      if (p.id === "delivery") return true;
       if (p.id === "boerrors") return true;
       // BO + Allocation + Stock & BO Dashboard always visible — empty state when files missing
       return true;
@@ -7777,6 +7836,7 @@
     if (!panels.some((p) => p.id === panelId)) {
       panelId = panels[0] ? panels[0].id : "dashboard";
     }
+    const leavingDelivery = activePanel === "delivery" && panelId !== "delivery";
     if (panelId === "gec" && activePanel !== "gec") panelBeforeGec = activePanel;
     if (panelId === "lexus" && activePanel !== "lexus") panelBeforeLexus = activePanel;
     if (panelId === "b2c" && activePanel !== "b2c") panelBeforeB2c = activePanel;
@@ -7791,6 +7851,7 @@
     document.body.classList.toggle("tb-mode", panelId === "b2c");
     document.body.classList.toggle("sc-mode", panelId === "summary");
     document.body.classList.toggle("sr-mode", panelId === "salesreport");
+    document.body.classList.toggle("delivery-mode", panelId === "delivery");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
     PANEL_DEFS.forEach((p) => {
@@ -7801,6 +7862,7 @@
       summary: "◫",
       salesreport: "▣",
       gec: "✦",
+      delivery: "D",
       lexus: "L",
       b2c: "T",
       bodashboard: "▤",
@@ -7832,6 +7894,27 @@
       dateEl.textContent = `TOYOTA · ${d}`;
     }
     if (panelId === "summary") renderSummaryDashboard();
+    if (panelId === "delivery") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+      const frame = document.getElementById("delivery-view-frame");
+      if (frame && (!frame.getAttribute("src") || frame.getAttribute("src") === "about:blank")) {
+        frame.setAttribute("src", "../delivery-transformation/admin.html?view=1");
+      }
+    } else if (leavingDelivery && !window._data) {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.remove("show");
+        dash.style.display = "none";
+      }
+      if (wait) wait.style.display = "";
+    }
     if (panelId === "gec") renderGecPanel();
     if (panelId === "lexus" && window.LexusTracker) {
       const lxHost = $("#lexus-tracker-host");
@@ -22187,6 +22270,23 @@
     setStatus("Allocation Audit Excel exported", "ok");
   }
 
+  function paintIdleNav() {
+    if (document.querySelector("#panel-tabs button")) return;
+    switchPanel("boerrors");
+    const titleEl = $("#app-page-title");
+    if (titleEl) titleEl.textContent = "Dashboard";
+    if (!window._data) {
+      const dash = $("#dashboard");
+      if (dash) {
+        dash.classList.remove("show");
+        dash.style.display = "none";
+      }
+      const wait = $("#wait-section");
+      if (wait) wait.style.display = "";
+      document.querySelectorAll("#panel-tabs .side-nav-item.active").forEach((b) => b.classList.remove("active"));
+    }
+  }
+
   function buildDashboard(opts) {
     const options = opts && typeof opts === "object" ? opts : {};
     const progressive = options.progressive !== false;
@@ -22199,6 +22299,18 @@
     if (!hasAnyPushedFiles()) {
       setStatus("Waiting for Admin Push");
       if (GEC_VIEW) switchPanel("gec");
+      else {
+        switchPanel("boerrors");
+        const titleEl = $("#app-page-title");
+        if (titleEl) titleEl.textContent = "Dashboard";
+        const dash = $("#dashboard");
+        if (dash) {
+          dash.classList.remove("show");
+          dash.style.display = "none";
+        }
+        const wait = $("#wait-section");
+        if (wait) wait.style.display = "";
+      }
       return;
     }
     invalidateRtlActiveMonthCache();
@@ -22213,6 +22325,7 @@
     const hasGec = !!(slots.gec && slots.gec.gec && slots.gec.gec.records && slots.gec.gec.records.length);
     const onlyGec = hasGec && SLOT_DEFS.every((s) => s.id === "gec" || s.id === "gecVisitors" || !(slots[s.id] && slots[s.id].file));
     if (activePanel === "gec" || onlyGec) activePanel = "gec";
+    else if (activePanel === "delivery") activePanel = "delivery";
     else if (activePanel === "summary" && hasSummaryInputs()) activePanel = "summary";
     else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
@@ -22362,6 +22475,7 @@
       if (sync && sync.cleared) {
         clearAll();
         setStatus(reason || "Waiting for Admin Push");
+        paintIdleNav();
         return;
       }
 
@@ -22371,6 +22485,7 @@
           if (!painted) {
             clearAll();
             setStatus(reason || "Waiting for Admin Push");
+            paintIdleNav();
           }
           return;
         }
@@ -22381,6 +22496,7 @@
         if (!ok) {
           clearAll();
           setStatus(reason || "Waiting for Admin Push");
+          paintIdleNav();
           return;
         }
         buildDashboard({ progressive: true });

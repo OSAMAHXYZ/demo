@@ -870,7 +870,16 @@
     const missingVisitDate = records.filter((x) => !x.visitDay).length;
     if (missingVisitDate) warnings.push(`${missingVisitDate} transaction(s) have no readable date in column O — left out when a date is selected.`);
 
-    const days = records.map((x) => x.day).filter(Boolean).sort();
+    const fileDaySet = new Set(records.map((x) => x.day).filter(Boolean));
+    for (let r = best.headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (!line.some((v) => str(v) !== "")) continue;
+      if (TOTAL_ROW.test(str(line.find((v) => str(v)) || ""))) continue;
+      const key = dayKey(filterColumnDate(line, text[r] || [], best.ws, r));
+      if (key) fileDaySet.add(key);
+    }
+    const fileDays = [...fileDaySet].sort();
+    const days = fileDays;
     const dateHint = days.length ? "" : (columnOSample.length ? `Column O: ${columnOSample.join(" · ")}` : "Column O is blank");
     return applyControl({
       ok: records.length > 0,
@@ -890,6 +899,7 @@
       hasConsultant: colMap.consultant != null,
       productColumns: productCols.map((p) => ({ letter: p.letter, header: p.header })),
       range: { from: days[0] || "", to: days[days.length - 1] || "" },
+      fileDays,
       dateHint,
       sheets,
       visitors,

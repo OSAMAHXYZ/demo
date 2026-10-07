@@ -8,6 +8,44 @@
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="admin.css?v=20261005alerts" />
+  <script>
+    if (new URLSearchParams(location.search).get("view") === "1") {
+      document.documentElement.classList.add("dtx-view");
+    }
+  </script>
+  <style>
+    html.dtx-view .nav-links a,
+    html.dtx-view .tab-btn[data-tab="weights"],
+    html.dtx-view .tab-btn[data-tab="schedule"],
+    html.dtx-view .tab-btn[data-tab="vins"],
+    html.dtx-view #xls-live,
+    html.dtx-view #xls-admin,
+    html.dtx-view #xls-all,
+    html.dtx-view #xls-all-upload,
+    html.dtx-view #logout-btn,
+    html.dtx-view #who,
+    html.dtx-view #backup-card,
+    html.dtx-view #full-excel-card,
+    html.dtx-view #tab-weights,
+    html.dtx-view #tab-schedule,
+    html.dtx-view #tab-vins,
+    html.dtx-view #pdf-win,
+    html.dtx-view .pdf-add { display: none !important; }
+    html.dtx-view body.vsnd-screen .topnav .brand span { display: block; }
+    html.dtx-view .topnav {
+      background: #fff;
+      border-bottom: 1px solid #e6edf5;
+    }
+    html.dtx-view .tab-btn {
+      border-radius: 999px;
+      padding: 8px 16px;
+    }
+    html.dtx-view #collector-gate {
+      background:
+        radial-gradient(900px 420px at 10% -10%, rgba(235, 10, 30, 0.12), transparent 55%),
+        linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+    }
+  </style>
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -428,6 +466,6 @@
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20261003scope2"></script>
   <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20261005alerts"></script>
+  <script src="admin.js?v=20261007view"></script>
 </body>
 </html>

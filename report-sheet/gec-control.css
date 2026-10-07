@@ -107,18 +107,14 @@
 .gcc-f > span { font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
 #gec-host .gcc .gcc-f select { font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; max-width: 150px; min-width: 110px; height: 19px; }
 #gec-host .gcc .gcc-f select:disabled { opacity: 0.5; cursor: default; }
-.gcc-f-date { flex-direction: column; }
-.gcc-f-date > span { display: block; }
-.gcc-f-date em { font-style: normal; color: var(--dim); margin: 0 6px; }
-#gec-host .gcc .gcc-f.gcc-f-date { height: auto; min-height: 58px; min-width: 340px; flex: none; overflow: visible; padding-top: 5px; padding-bottom: 5px; }
-#gec-host .gcc .gcc-f-date input[type="date"] {
-  font-size: 13px !important; font-weight: 700 !important; height: 28px !important; width: 148px !important;
-  padding: 0 4px !important; margin: 0; border: 0 !important; background: transparent !important;
-  color: #0f172a !important; box-shadow: none !important; color-scheme: light; cursor: pointer;
+.gcc-f-date { position: relative; display: block; padding: 0; overflow: visible; }
+#gec-host .gcc .gcc-f.gcc-f-date { height: auto; min-height: 42px; min-width: 168px; flex: none; overflow: visible; padding: 0; }
+#gec-host .gcc .gcc-date-btn {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+  width: 100%; min-height: 42px; padding: 4px 12px; border: 0; background: transparent; cursor: pointer; text-align: left;
 }
-#gec-host .gcc .gcc-f-date input[type="date"]::-webkit-calendar-picker-indicator { display: block; opacity: 1; cursor: pointer; }
-#gec-host .gcc .gcc-f-date input.is-picking { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 6px; }
-.gcc-f-date { position: relative; }
+#gec-host .gcc .gcc-date-btn span { font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+#gec-host .gcc .gcc-f-date.is-open { border-color: rgba(37, 99, 235, 0.45); background: #f3f7ff; }
 .gcc-cal {
   position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: 280px;
   padding: 10px 10px 8px; border-radius: 14px; border: 1px solid var(--line-2);
@@ -144,11 +140,11 @@
 }
 #gec-host .gcc button.gcc-cal-day.is-file:hover { background: #dbeafe; }
 #gec-host .gcc button.gcc-cal-day.is-on { background: #2563eb; color: #fff; }
-.gcc-cal-foot { margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
-#gec-host .gcc .gcc-f-date input:disabled { opacity: 0.55; }
-.gcc-f-date { display: inline-grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto auto; column-gap: 0; align-items: center; }
-.gcc-f-date > span, .gcc-date-range { grid-column: 1 / -1; }
-.gcc-date-range { font-size: 11px; font-weight: 700; color: #0f172a; line-height: 1.2; white-space: nowrap; }
+.gcc-cal-foot { margin-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+#gec-host .gcc .gcc-cal-foot button {
+  border: 0; background: transparent; color: #2563eb; font-size: 11px; font-weight: 800; cursor: pointer; padding: 0;
+}
+.gcc-date-range { font-size: 12px; font-weight: 700; color: #0f172a; line-height: 1.2; white-space: nowrap; }
 .gcc-f.is-active { border-color: rgba(37, 99, 235, 0.45); background: #f3f7ff; }
 .gcc-f.is-active > span { color: #2563eb; }
 .gcc-fchips { display: inline-flex; gap: 6px; }

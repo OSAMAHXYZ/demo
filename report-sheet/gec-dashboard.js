@@ -148,9 +148,11 @@
             <div class="gcc-brand-text"><strong>GEC CONTROL CENTER</strong><span>GUEST EXPERIENCE CENTER</span></div>
           </div>
           <div class="gcc-filters">
-            <div class="gcc-f gcc-f-date" data-fwrap="date"><span>Date</span>
-              <input type="date" data-f="from" aria-label="From date" title="Dates in the file" /><em>→</em><input type="date" data-f="to" aria-label="To date" title="Dates in the file" />
-              <b class="gcc-date-range" data-el="date-range"></b>
+            <div class="gcc-f gcc-f-date" data-fwrap="date">
+              <button type="button" class="gcc-date-btn" data-act="open-cal" aria-label="Choose dates from the file">
+                <span>Date</span>
+                <b class="gcc-date-range" data-el="date-range">Dates in the file</b>
+              </button>
               <div class="gcc-cal" data-el="calendar" hidden></div>
             </div>
             <label class="gcc-f" data-fwrap="promoter"><span>Promoter</span><select data-f="promoter"></select></label>
@@ -252,12 +254,6 @@
 
   function bindEvents() {
     const root = state.root;
-    root.addEventListener("pointerdown", (e) => {
-      const inp = e.target.closest('input[data-f="from"], input[data-f="to"]');
-      if (!inp || inp.disabled) return;
-      e.preventDefault();
-      openCalendar(inp.dataset.f);
-    });
     root.addEventListener("click", (e) => {
       const drill = e.target.closest("[data-drill]");
       const act = e.target.closest("[data-act]");
@@ -267,7 +263,7 @@
       const row = e.target.closest("tr[data-row]");
       if (row) { onModalRow(Number(row.dataset.row)); return; }
       if (e.target === el("modal")) closeModal();
-      if (state.cal.open && !e.target.closest("[data-el='calendar']") && !e.target.closest('input[data-f="from"], input[data-f="to"]')) {
+      if (state.cal.open && !e.target.closest("[data-el='calendar']") && !e.target.closest("[data-act='open-cal']")) {
         state.cal.open = false;
         renderCalendar();
       }
@@ -336,6 +332,8 @@
       state.cal.open = false;
       renderAll();
     } else if (act === "clear-filter") setFilter(d.key, "");
+    else if (act === "open-cal") openCalendar();
+    else if (act === "cal-all") { state.cal.open = false; state.cal.field = "from"; setFilter("from", ""); setFilter("to", ""); }
     else if (act === "cal-prev" || act === "cal-next") shiftCalendar(act === "cal-next" ? 1 : -1);
     else if (act === "cal-day") pickCalendarDay(d.day);
     else if (act === "purpose") setFilter("purpose", state.filters.purpose === d.value ? "" : d.value);
@@ -414,21 +412,22 @@
     fill("model", opts.models, "All models");
     fill("source", opts.sources, "All sources");
     fill("status", opts.statuses, "All statuses");
-    const from = state.root.querySelector('[data-f="from"]');
-    const to = state.root.querySelector('[data-f="to"]');
-    const r = (ds && ds.range) || {};
-    [from, to].forEach((inp) => { inp.min = r.from || ""; inp.max = r.to || ""; inp.disabled = !r.from; });
-    from.value = state.filters.from || r.from || "";
-    to.value = state.filters.to || r.to || "";
+    const days = [...fileDaySet()].sort();
     const dateRange = el("date-range");
     if (dateRange) {
-      dateRange.textContent = r.from
-        ? `${fmtDay(r.from, true)} – ${fmtDay(r.to || r.from, true)}`
-        : (ds && ds.dateHint ? ds.dateHint : "No dates in column O");
+      if (state.filters.from || state.filters.to) {
+        const a = state.filters.from || state.filters.to;
+        const b = state.filters.to || state.filters.from;
+        dateRange.textContent = a === b ? fmtDay(a, true) : `${fmtDay(a, true)} – ${fmtDay(b, true)}`;
+      } else if (days.length) {
+        dateRange.textContent = `${n(days.length)} date${days.length === 1 ? "" : "s"} in the file`;
+      } else {
+        dateRange.textContent = ds && ds.dateHint ? ds.dateHint : "No dates in the file";
+      }
     }
-    state.root.querySelector('[data-fwrap="date"]').classList.toggle("is-active", !!(state.filters.from || state.filters.to));
-    from.classList.toggle("is-picking", state.cal.open && state.cal.field === "from");
-    to.classList.toggle("is-picking", state.cal.open && state.cal.field === "to");
+    const dateWrap = state.root.querySelector('[data-fwrap="date"]');
+    dateWrap.classList.toggle("is-active", !!(state.filters.from || state.filters.to));
+    dateWrap.classList.toggle("is-open", state.cal.open);
     renderCalendar();
     const chips = [];
     if (state.filters.purpose) chips.push(["purpose", "Purpose", state.filters.purpose]);
@@ -478,26 +477,30 @@
 
   // ---------- Render ----------
 
-  /** Column O dates that exist on the uploaded GEC file. */
+  /** Every date found in the GEC file date column. */
   function fileDaySet() {
     const set = new Set();
+    const listed = state.dataset && state.dataset.fileDays;
+    if (Array.isArray(listed) && listed.length) {
+      listed.forEach((d) => { if (d) set.add(d); });
+      return set;
+    }
     const records = (state.dataset && state.dataset.records) || [];
     records.forEach((r) => { if (r.day) set.add(r.day); });
     return set;
   }
 
-  function openCalendar(field) {
+  function openCalendar() {
     const days = [...fileDaySet()].sort();
     if (!days.length) return;
-    const next = field === "to" ? "to" : "from";
-    if (state.cal.open && state.cal.field === next) {
+    if (state.cal.open) {
       state.cal.open = false;
       renderCalendar();
       return;
     }
     state.cal.open = true;
-    state.cal.field = next;
-    const current = state.filters[next] || (next === "to" ? days[days.length - 1] : days[0]);
+    state.cal.field = state.filters.from ? "to" : "from";
+    const current = state.filters.to || state.filters.from || days[days.length - 1];
     state.cal.month = String(current).slice(0, 7);
     renderCalendar();
   }
@@ -513,26 +516,35 @@
 
   function pickCalendarDay(day) {
     if (!day || !fileDaySet().has(day)) return;
-    const field = state.cal.field;
-    if (field === "from") {
+    if (state.cal.field !== "to") {
+      state.filters.from = day;
+      state.filters.to = day;
       state.cal.field = "to";
       state.cal.month = day.slice(0, 7);
       state.cal.open = true;
-    } else state.cal.open = false;
-    setFilter(field, day);
+    } else {
+      if (state.filters.from && day < state.filters.from) {
+        state.filters.to = state.filters.from;
+        state.filters.from = day;
+      } else state.filters.to = day;
+      state.cal.field = "from";
+      state.cal.open = false;
+    }
+    const r = (state.dataset && state.dataset.range) || {};
+    if ((!state.filters.from || state.filters.from <= r.from) && (!state.filters.to || state.filters.to >= r.to)) {
+      state.filters.from = "";
+      state.filters.to = "";
+    }
+    renderAll();
   }
 
   function renderCalendar() {
     const pop = el("calendar");
     if (!pop) return;
-    const fromInp = state.root.querySelector('[data-f="from"]');
-    const toInp = state.root.querySelector('[data-f="to"]');
-    if (fromInp) fromInp.classList.toggle("is-picking", state.cal.open && state.cal.field === "from");
-    if (toInp) toInp.classList.toggle("is-picking", state.cal.open && state.cal.field === "to");
     if (!state.cal.open) { pop.hidden = true; return; }
     const days = [...fileDaySet()].sort();
     const months = [...new Set(days.map((d) => d.slice(0, 7)))].sort();
-    if (!months.includes(state.cal.month)) state.cal.month = months[0] || "";
+    if (!months.includes(state.cal.month)) state.cal.month = months[months.length - 1] || "";
     const month = state.cal.month;
     const [y, m] = month.split("-").map(Number);
     const first = new Date(y, m - 1, 1);
@@ -541,28 +553,29 @@
     const from = state.filters.from;
     const to = state.filters.to;
     const marked = (key) => (from && to ? key >= from && key <= to : key === from || key === to);
+    const inMonth = days.filter((d) => d.slice(0, 7) === month);
     const cells = [];
     for (let i = 0; i < pad; i += 1) cells.push('<span class="gcc-cal-day is-empty"></span>');
     for (let day = 1; day <= count; day += 1) {
       const key = `${month}-${String(day).padStart(2, "0")}`;
-      const has = days.includes(key);
+      const has = inMonth.includes(key);
       const on = has && marked(key) ? " is-on" : "";
       cells.push(has
         ? `<button type="button" class="gcc-cal-day is-file${on}" data-act="cal-day" data-day="${key}" title="${esc(fmtDay(key, true))}">${day}</button>`
-        : `<span class="gcc-cal-day">${day}</span>`);
+        : `<span class="gcc-cal-day is-empty"></span>`);
     }
     const mi = months.indexOf(month);
     pop.hidden = false;
     pop.innerHTML = `
       <div class="gcc-cal-head">
-        <button type="button" data-act="cal-prev" aria-label="Previous month"${mi <= 0 ? " disabled" : ""}>${icon("left")}</button>
-        <b>${esc(MONTHS[m - 1])} ${y}</b>
-        <button type="button" data-act="cal-next" aria-label="Next month"${mi < 0 || mi >= months.length - 1 ? " disabled" : ""}>${icon("right")}</button>
+        <button type="button" data-act="cal-prev" aria-label="Previous month in the file"${mi <= 0 ? " disabled" : ""}>${icon("left")}</button>
+        <b>${esc(MONTHS[m - 1] || "")} ${y || ""}</b>
+        <button type="button" data-act="cal-next" aria-label="Next month in the file"${mi < 0 || mi >= months.length - 1 ? " disabled" : ""}>${icon("right")}</button>
       </div>
-      <div class="gcc-cal-pick">${state.cal.field === "to" ? "To" : "From"} · dates in the file</div>
+      <div class="gcc-cal-pick">${state.cal.field === "to" ? "End date" : "Start date"} · only days in the file</div>
       <div class="gcc-cal-week">${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => `<span>${d}</span>`).join("")}</div>
       <div class="gcc-cal-days">${cells.join("")}</div>
-      <div class="gcc-cal-foot">${n(days.length)} date${days.length === 1 ? "" : "s"} in the file</div>`;
+      <div class="gcc-cal-foot"><span>${n(inMonth.length)} in ${esc(MONTHS[m - 1] || "this month")} · ${n(days.length)} in the file</span><button type="button" data-act="cal-all">All dates</button></div>`;
   }
 
   function renderAll() {
