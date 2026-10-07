@@ -3217,8 +3217,8 @@
         type: "bar",
         label: "New cars",
         data: allocDaily,
-        backgroundColor: "#3b82f6",
-        hoverBackgroundColor: "#4f9dff",
+        backgroundColor: "#2563EB",
+        hoverBackgroundColor: "#3B82F6",
         borderRadius: 3,
         order: 2,
       },
@@ -3228,14 +3228,14 @@
         type: "line",
         label: "Cumulative allocation",
         data: cumA,
-        borderColor: "#7dd3fc",
-        backgroundColor: "#7dd3fc",
+        borderColor: "#3B82F6",
+        backgroundColor: "#3B82F6",
         tension: 0.2,
         pointRadius: 2,
         order: 1,
       });
-      datasets.push(planLine("Admin plan", "#93c5fd", [4, 3]));
-      datasets.push(planLine("Cumulative plan", "#1d4ed8", [1, 3]));
+      datasets.push(planLine("Admin plan", "#2563EB", [4, 3]));
+      datasets.push(planLine("Cumulative plan", "#3B82F6", [1, 3]));
     }
     makeChart("pt-chart-daily", {
       type: "bar",
@@ -3244,35 +3244,35 @@
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 }, color: "#8d9bb0" } },
+          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 }, color: "#64748B" } },
           tooltip: {
-            backgroundColor: "#0f1828",
-            titleColor: "#e8eef7",
-            bodyColor: "#e8eef7",
-            borderColor: "rgba(148,163,184,.28)",
+            backgroundColor: "#FFFFFF",
+            titleColor: "#172033",
+            bodyColor: "#172033",
+            borderColor: "#DCE3EC",
             borderWidth: 1,
           },
         },
         scales: Object.assign({
           x: {
-            ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#8d9bb0" },
-            grid: { color: "rgba(148,163,184,.12)" },
-            border: { color: "rgba(148,163,184,.18)" },
+            ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#64748B" },
+            grid: { color: "rgba(229, 231, 235, 0.8)" },
+            border: { color: "#E5E7EB" },
           },
           y: {
             beginAtZero: true,
             position: "left",
-            ticks: { precision: 0, font: { size: 10 }, color: "#8d9bb0" },
-            grid: { color: "rgba(148,163,184,.12)" },
-            border: { color: "rgba(148,163,184,.18)" },
+            ticks: { precision: 0, font: { size: 10 }, color: "#64748B" },
+            grid: { color: "rgba(229, 231, 235, 0.8)" },
+            border: { color: "#E5E7EB" },
           },
         }, cumulative ? {
           plan: {
             beginAtZero: true,
             position: "right",
             grid: { drawOnChartArea: false },
-            ticks: { precision: 0, font: { size: 10 }, color: "#8d9bb0" },
-            border: { color: "rgba(148,163,184,.18)" },
+            ticks: { precision: 0, font: { size: 10 }, color: "#64748B" },
+            border: { color: "#E5E7EB" },
           },
         } : {}),
         onClick: (_evt, els) => {
@@ -3289,12 +3289,12 @@
     });
 
     const statusSlices = [
-      { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#34d399" },
-      { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#a78bfa" },
-      { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#3b82f6" },
-      { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#f59e0b" },
-      { key: "swappedOut", label: "Swapped out", n: statusTotals.swappedOut.length, color: "#eb0a1e" },
-      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#ff4d5e" },
+      { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#16A34A" },
+      { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#7C3AED" },
+      { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#2563EB" },
+      { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#F59E0B" },
+      { key: "swappedOut", label: "Swapped out", n: statusTotals.swappedOut.length, color: "#DC2626" },
+      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#EF4444" },
     ];
     makeChart("pt-chart-status", {
       type: "doughnut",
@@ -3303,7 +3303,7 @@
         datasets: [{
           data: statusSlices.map((s) => s.n),
           backgroundColor: statusSlices.map((s) => s.color),
-          borderColor: "#0c1422",
+          borderColor: "#FFFFFF",
           borderWidth: 2,
         }],
       },
@@ -3317,7 +3317,7 @@
             labels: {
               boxWidth: 8,
               font: { size: 10 },
-              color: "#8d9bb0",
+              color: "#64748B",
               generateLabels(chart) {
                 const dataset = chart.data.datasets[0];
                 return chart.data.labels.map((label, i) => ({
