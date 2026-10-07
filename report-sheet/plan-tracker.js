@@ -179,6 +179,23 @@
   }
 
   /**
+   * New-car day for a VIN in one RTL file.
+   * RES, and allocation age equals the calendar days from the allocation date to this file.
+   * Age 0 on the file day stays on that day. Age 1 on the next file belongs to the day before.
+   */
+  function newCarCreditKey(row, fileDateKey) {
+    if (!row || !row.vin || !isRES(row)) return "";
+    const fileDate = fileDateFromKey(fileDateKey || row.dateKey || "");
+    if (!fileDate) return "";
+    if (!(row.allocationDate instanceof Date) || Number.isNaN(row.allocationDate.getTime())) return "";
+    const age = row.allocationAge;
+    if (age == null || !Number.isFinite(Number(age)) || Number(age) < 0) return "";
+    const gap = daysBetween(row.allocationDate, fileDate);
+    if (gap == null || gap < 0 || Math.floor(Number(age)) !== gap) return "";
+    return ymdKey(row.allocationDate);
+  }
+
+  /**
    * Free stock: RES + Age 0 + Allocation Date before the active month.
    * Independent of 315. Does NOT use age≥1 as a substitute.
    */
@@ -794,6 +811,39 @@
       }),
     };
 
+    const dayByKey = new Map(daily.map((d) => [d.dateKey, d]));
+    const chartExtraDays = [];
+    const extraByKey = new Map();
+    const creditedVin = new Set();
+    daily.forEach((d) => {
+      (d.resRows || []).forEach((r) => {
+        const credit = newCarCreditKey(r, d.dateKey);
+        if (!credit || credit === d.dateKey) return;
+        const mark = `${r.vin}|${credit}`;
+        if (creditedVin.has(mark)) return;
+        creditedVin.add(mark);
+        let target = dayByKey.get(credit);
+        if (!target) {
+          target = extraByKey.get(credit);
+          if (!target) {
+            const creditDate = fileDateFromKey(credit);
+            target = {
+              dateKey: credit,
+              label: creditDate
+                ? creditDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : credit,
+              fileDayReceipts: [],
+              carriedOnly: true,
+            };
+            extraByKey.set(credit, target);
+            chartExtraDays.push(target);
+          }
+        }
+        if ((target.fileDayReceipts || []).some((x) => x.vin === r.vin)) return;
+        target.fileDayReceipts.push(r);
+      });
+    });
+
     enrichRowsWithSalesRaw(lists.allocated);
     enrichRowsWithSalesRaw(lists.freeStock);
     enrichRowsWithSalesRaw(lists.current);
@@ -807,6 +857,7 @@
       enrichRowsWithSalesRaw(d.newRes);
       enrichRowsWithSalesRaw(d.dailyUniqueRESAge0List);
     });
+    chartExtraDays.forEach((d) => enrichRowsWithSalesRaw(d.fileDayReceipts));
     const missingDates = missingSnapshotDates(dateKeys);
     const rtlFiles = daily.map((d) => ({
       fileName: d.fileName || "",
@@ -849,6 +900,7 @@
       dateKeys,
       latestKey,
       daily,
+      chartExtraDays,
       missingDates,
       rtlFiles,
       movements,
@@ -2198,6 +2250,12 @@
     return leaf ? leaf.product : ((r && r.product) || "");
   }
 
+  function receiptChartDays(model) {
+    const days = ((model && model.daily) || []).filter((d) => d && d.dateKey);
+    const extras = ((model && model.chartExtraDays) || []).filter((d) => d && d.dateKey);
+    return days.concat(extras).sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+  }
+
   function adminProductName(r) {
     const leaf = leafOf(r);
     if (leaf && leaf.product) return leaf.product;
@@ -2686,7 +2744,7 @@
     if (key === "product") {
       const [name, which] = String(arg || "").split("~");
       const rows = [];
-      (lastModel.daily || []).forEach((day) => {
+      receiptChartDays(lastModel).forEach((day) => {
         (day.fileDayReceipts || []).forEach((r) => {
           if (!scopeMatch(r) || adminProductName(r) !== name) return;
           rows.push(r);
@@ -2695,7 +2753,7 @@
       if (which === "gap") {
         return { title: `${name} · gap`, sub: "Plan is the Admin Push target. These are the received VINs through the last submitted RTL day.", rows };
       }
-      return { title: `${name} · received`, sub: "Retail Electronic Sales · age 0 · allocation date = each file day · through the last submitted day", rows };
+      return { title: `${name} · received`, sub: "Retail Electronic Sales · age matches the days since the allocation date · through the last submitted day", rows };
     }
     if (key === "sfx") {
       const [id, metric] = String(arg || "").split("~");
@@ -2814,9 +2872,7 @@
       g.plan += Number(r.allocation) || 0;
       byProduct.set(r.product, g);
     });
-    const submittedDays = (model.daily || []).filter((d) => d && d.dateKey)
-      .slice()
-      .sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+    const submittedDays = receiptChartDays(model);
     submittedDays.forEach((d) => {
       (d.fileDayReceipts || []).forEach((r) => {
         if (!scopeMatch(r)) return;
@@ -2865,7 +2921,7 @@
       }</tbody></table>`;
     }
 
-    const days = (model.daily || []).filter((d) => d.dateKey);
+    const days = receiptChartDays(model);
     const labels = days.map((d) => d.label);
     const fileDayRows = (d) => (d.fileDayReceipts || []).filter((r) => scopeMatch(r));
     const allocDaily = days.map((d) => fileDayRows(d).length);
@@ -2876,7 +2932,7 @@
     const note = $("#pt-chart-note");
     if (note) {
       note.textContent = days.length
-        ? `${days.length} submitted RTL day(s) · Retail Electronic Sales · age 0 · allocation date = file day`
+        ? "New cars · Retail Electronic Sales · age 0 on the file day, plus later files where age matches the days since the allocation date"
         : "No RTL file submitted for this month";
     }
     const planLine = (label, color, dash) => ({
@@ -2892,7 +2948,7 @@
     const datasets = [
       {
         type: "bar",
-        label: "Submitted day",
+        label: "New cars",
         data: allocDaily,
         backgroundColor: "rgba(16,35,63,.85)",
         borderRadius: 3,
@@ -2931,8 +2987,8 @@
           const day = days[els[0].index];
           if (!day) return;
           openVinResults(
-            `${day.label} · submitted file`,
-            "Retail Electronic Sales · allocation age 0 · allocation date = this file day",
+            `${day.label} · new cars`,
+            "Retail Electronic Sales · age 0 on this file day, or a later file whose age points back to this allocation date",
             fileDayRows(day)
           );
         },

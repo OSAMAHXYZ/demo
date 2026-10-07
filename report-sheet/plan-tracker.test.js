@@ -340,6 +340,22 @@ test("each submitted RTL day counts every VIN with RES, age 0, and allocation da
   assertEq(vins("2026-10-06"), "NEW6");
 });
 
+test("age on a later file counts as a new car on the allocation date", () => {
+  const model = build({
+    "2026-10-04": [veh("DAY4", RES, 0, d(2026, 10, 4))],
+    "2026-10-05": [
+      veh("BACK", RES, 1, d(2026, 10, 4)),
+      veh("DAY5", RES, 0, d(2026, 10, 5)),
+      veh("DAY4", RES, 1, d(2026, 10, 4)),
+      veh("WRONG", RES, 2, d(2026, 10, 4)),
+      veh("FLEET5", FLEET, 1, d(2026, 10, 4)),
+    ],
+  }, "2026-10");
+  const vins = (key) => model.daily.find((day) => day.dateKey === key).fileDayReceipts.map((r) => r.vin).sort().join(",");
+  assertEq(vins("2026-10-04"), "BACK,DAY4");
+  assertEq(vins("2026-10-05"), "DAY5");
+});
+
 test("a day stays on the calendar when my allocation is zero", () => {
   const model = build({
     "2026-10-03": [veh("ABC123", RES, 0, d(2026, 10, 3))],
