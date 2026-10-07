@@ -2250,6 +2250,11 @@
     return leaf ? leaf.product : ((r && r.product) || "");
   }
 
+  function currentMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
   function receiptChartDays(model) {
     const days = ((model && model.daily) || []).filter((d) => d && d.dateKey);
     const extras = ((model && model.chartExtraDays) || []).filter((d) => d && d.dateKey);
@@ -2921,7 +2926,8 @@
       }</tbody></table>`;
     }
 
-    const days = receiptChartDays(model);
+    const monthKey = currentMonthKey();
+    const days = receiptChartDays(model).filter((d) => String(d.dateKey).slice(0, 7) === monthKey);
     const labels = days.map((d) => d.label);
     const fileDayRows = (d) => (d.fileDayReceipts || []).filter((r) => scopeMatch(r));
     const allocDaily = days.map((d) => fileDayRows(d).length);
@@ -2932,8 +2938,8 @@
     const note = $("#pt-chart-note");
     if (note) {
       note.textContent = days.length
-        ? "New cars · Retail Electronic Sales · age 0 on the file day, plus later files where age matches the days since the allocation date"
-        : "No RTL file submitted for this month";
+        ? `${monthKey} · new cars · Retail Electronic Sales · age 0 on the file day, plus later files where age matches the days since the allocation date`
+        : `No RTL file submitted for ${monthKey}`;
     }
     const planLine = (label, color, dash) => ({
       type: "line",
