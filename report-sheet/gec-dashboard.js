@@ -32,7 +32,7 @@
     chart: null,
     resizeObserver: null,
     resizeTimer: null,
-    cal: { open: false, field: "from", month: "" },
+    cal: { open: false, field: "from", month: "", mode: "day" },
     debug: /[?&]gecdebug=1\b/.test(global.location ? global.location.search : ""),
     modal: { views: [], active: 0, search: "", allCols: false, filterAction: null },
   };
@@ -335,6 +335,11 @@
     else if (act === "open-cal") openCalendar();
     else if (act === "cal-all") { state.cal.open = false; state.cal.field = "from"; setFilter("from", ""); setFilter("to", ""); }
     else if (act === "cal-prev" || act === "cal-next") shiftCalendar(act === "cal-next" ? 1 : -1);
+    else if (act === "cal-mode") {
+      state.cal.mode = d.mode === "range" ? "range" : "day";
+      state.cal.field = "from";
+      renderCalendar();
+    }
     else if (act === "cal-day") pickCalendarDay(d.day);
     else if (act === "purpose") setFilter("purpose", state.filters.purpose === d.value ? "" : d.value);
     else if (act === "mode") {
@@ -516,6 +521,15 @@
 
   function pickCalendarDay(day) {
     if (!day || !fileDaySet().has(day)) return;
+    if (state.cal.mode !== "range") {
+      state.filters.from = day;
+      state.filters.to = day;
+      state.cal.field = "from";
+      state.cal.month = day.slice(0, 7);
+      state.cal.open = false;
+      renderAll();
+      return;
+    }
     if (state.cal.field !== "to") {
       state.filters.from = day;
       state.filters.to = day;
@@ -531,7 +545,8 @@
       state.cal.open = false;
     }
     const r = (state.dataset && state.dataset.range) || {};
-    if ((!state.filters.from || state.filters.from <= r.from) && (!state.filters.to || state.filters.to >= r.to)) {
+    if (state.filters.from && state.filters.to && state.filters.from !== state.filters.to
+      && state.filters.from <= r.from && state.filters.to >= r.to) {
       state.filters.from = "";
       state.filters.to = "";
     }
@@ -565,6 +580,7 @@
         : `<span class="gcc-cal-day is-empty"></span>`);
     }
     const mi = months.indexOf(month);
+    const dayMode = state.cal.mode !== "range";
     pop.hidden = false;
     pop.innerHTML = `
       <div class="gcc-cal-head">
@@ -572,7 +588,11 @@
         <b>${esc(MONTHS[m - 1] || "")} ${y || ""}</b>
         <button type="button" data-act="cal-next" aria-label="Next month in the file"${mi < 0 || mi >= months.length - 1 ? " disabled" : ""}>${icon("right")}</button>
       </div>
-      <div class="gcc-cal-pick">${state.cal.field === "to" ? "End date" : "Start date"} · only days in the file</div>
+      <div class="gcc-cal-modes">
+        <button type="button" data-act="cal-mode" data-mode="day" class="${dayMode ? "is-on" : ""}">Day</button>
+        <button type="button" data-act="cal-mode" data-mode="range" class="${dayMode ? "" : "is-on"}">Range</button>
+      </div>
+      <div class="gcc-cal-pick">${dayMode ? "One day from the file" : (state.cal.field === "to" ? "End date" : "Start date")}</div>
       <div class="gcc-cal-week">${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => `<span>${d}</span>`).join("")}</div>
       <div class="gcc-cal-days">${cells.join("")}</div>
       <div class="gcc-cal-foot"><span>${n(inMonth.length)} in ${esc(MONTHS[m - 1] || "this month")} · ${n(days.length)} in the file</span><button type="button" data-act="cal-all">All dates</button></div>`;

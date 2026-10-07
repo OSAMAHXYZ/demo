@@ -343,10 +343,16 @@
     m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm|ص|م)?)?/i);
     if (m) {
       const y = +m[3] < 100 ? 2000 + +m[3] : +m[3];
-      let day = +m[1];
-      let mon = +m[2];
-      if (mon > 12 && day <= 12) [day, mon] = [mon, day];
-      return buildDate(y, mon - 1, day, m[4], m[5], m[6], m[7]);
+      const a = +m[1];
+      const b = +m[2];
+      const at = (month, day) => buildDate(y, month - 1, day, m[4], m[5], m[6], m[7]);
+      if (a > 12 && b <= 12) return at(b, a);
+      if (b > 12 && a <= 12) return at(a, b);
+      // Both parts are months (10/6). Keep the reading closer to today, so 10/6 is 6 Oct, not 10 Jun.
+      const us = at(a, b);
+      const eu = at(b, a);
+      if (us && eu) return Math.abs(us.getTime() - Date.now()) <= Math.abs(eu.getTime() - Date.now()) ? us : eu;
+      return us || eu;
     }
     m = s.match(/^(\d{1,2})[-\s/]([a-z]{3,4})[a-z]*[-\s/,]+(\d{2,4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
     if (m && MONTHS[m[2].toLowerCase()] != null) {
