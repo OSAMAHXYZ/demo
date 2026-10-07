@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261007vins"></script>
+  <script src="plan-tracker.js?v=20261007wide"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007cal" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261007vins" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261007wide" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -1118,13 +1118,14 @@
         <div id="pt-dash" class="pt-dash pt-tower" hidden>
           <header class="pt-top">
             <div class="pt-top-copy">
-              <p class="pt-eye">TOYOTA · ALJ DIGITAL RETAIL</p>
+              <p class="pt-eye">TOYOTA | ALJ DIGITAL RETAIL</p>
               <h2>Plan Tracker</h2>
               <p class="pt-sub" id="pt-live-hint">—</p>
             </div>
             <div class="pt-actions">
               <input type="search" id="pt-search" placeholder="Search VIN, product, or SFX" autocomplete="off" />
               <span class="pt-updated" id="pt-updated">—</span>
+              <button type="button" class="btn pt-wide" id="pt-wide" title="Open the plan tracker on one screen">Wide View</button>
               <button type="button" class="btn" id="pt-dark" title="Dark mode">Dark</button>
               <button type="button" class="btn" id="pt-clear">Clear</button>
               <button type="button" class="btn-primary" id="pt-refresh">Refresh</button>

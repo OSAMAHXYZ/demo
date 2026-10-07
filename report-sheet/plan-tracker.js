@@ -2038,6 +2038,23 @@
         dark.textContent = dash.classList.contains("is-dark") ? "Light" : "Dark";
       });
     }
+    const wide = $("#pt-wide");
+    if (wide) {
+      wide.addEventListener("click", () => {
+        const dash = $("#pt-dash");
+        if (!dash) return;
+        const on = !dash.classList.contains("is-wide");
+        dash.classList.toggle("is-wide", on);
+        document.body.classList.toggle("pt-wide-mode", on);
+        wide.textContent = on ? "Collapse View" : "Wide View";
+        const title = dash.querySelector(".pt-top-copy h2");
+        if (title) title.textContent = on ? "Plan Tracker - Wide View" : "Plan Tracker";
+        const fit = () => {
+          try { window.dispatchEvent(new Event("resize")); } catch (_) { /* ignore */ }
+        };
+        requestAnimationFrame(() => requestAnimationFrame(fit));
+      });
+    }
     const vinBtn = $("#pt-vin-go");
     const vinInput = $("#pt-vin-q");
     const runVin = () => {
