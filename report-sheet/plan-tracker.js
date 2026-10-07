@@ -2750,6 +2750,52 @@
     });
   }
 
+  function classifyWithinFlags(model, row) {
+    const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
+    const sec = secondaryText(row, hist);
+    const proforma = isProformaInvoiceCreated(sec);
+    const stock = !proforma && isVehicleAllocationCompleted(sec);
+    return {
+      delivered: hasSalesRawDelivery(row),
+      proforma,
+      stock,
+      reserved: !proforma && !stock && !!normHeader(sec),
+      swappedOut: laterLeftRes(model, row.vin, creditDayOf(row)),
+    };
+  }
+
+  function pushClassified(bucket, row, flags) {
+    bucket.within.push(row);
+    if (flags.delivered) bucket.delivered.push(row);
+    if (flags.proforma) bucket.proforma.push(row);
+    if (flags.reserved) bucket.reserved.push(row);
+    if (flags.stock) bucket.stock.push(row);
+    if (flags.swappedOut) bucket.swappedOut.push(row);
+  }
+
+  function eachSwappedIn(model, month, visit) {
+    const monthFileDays = ((model && model.daily) || [])
+      .map((d) => d && d.dateKey)
+      .filter((key) => key && String(key).slice(0, 7) === month)
+      .sort();
+    const firstFile = monthFileDays[0] || "";
+    const history = (model && model.vinHistory) || new Map();
+    history.forEach((hist, vin) => {
+      if (!vin || !hist || !hist.length) return;
+      const resSnap = hist.find((h) => h && String(h.snapshotDate || h.dateKey || "").slice(0, 7) === month && isRES(h));
+      if (!resSnap || !scopeMatch(resSnap)) return;
+      const firstRes = hist.find((h) => h && isRES(h));
+      const firstResDate = String((firstRes && (firstRes.snapshotDate || firstRes.dateKey)) || "");
+      const priorNonRes = hist.some((h) => {
+        const snap = String((h && (h.snapshotDate || h.dateKey)) || "");
+        return !!(snap && firstResDate && snap < firstResDate && !isRES(h));
+      });
+      const addedLater = !!(firstFile && firstResDate > firstFile && firstResDate.slice(0, 7) === month);
+      if (!priorNonRes && !addedLater) return;
+      visit(Object.assign({}, resSnap, { vin, dateKey: firstResDate }));
+    });
+  }
+
   /**
    * SFX plan progress for one month.
    * Within = daily new-car VINs, matched on product + suffix.
@@ -2770,39 +2816,48 @@
       (day.fileDayReceipts || []).forEach((row) => {
         if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
         withinVins.add(row.vin);
-        const bucket = take(sfxBucketId(row));
-        bucket.within.push(row);
-        if (hasSalesRawDelivery(row)) bucket.delivered.push(row);
-        const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
-        const sec = secondaryText(row, hist);
-        if (isProformaInvoiceCreated(sec)) bucket.proforma.push(row);
-        else if (isVehicleAllocationCompleted(sec)) bucket.stock.push(row);
-        else if (normHeader(sec)) bucket.reserved.push(row);
-        if (laterLeftRes(model, row.vin, creditDayOf(row))) bucket.swappedOut.push(row);
+        pushClassified(take(sfxBucketId(row)), row, classifyWithinFlags(model, row));
       });
     });
-
-    const monthFileDays = ((model && model.daily) || [])
-      .map((d) => d && d.dateKey)
-      .filter((key) => key && String(key).slice(0, 7) === month)
-      .sort();
-    const firstFile = monthFileDays[0] || "";
-    const history = (model && model.vinHistory) || new Map();
-    history.forEach((hist, vin) => {
-      if (!vin || withinVins.has(vin) || !hist || !hist.length) return;
-      const resSnap = hist.find((h) => h && String(h.snapshotDate || h.dateKey || "").slice(0, 7) === month && isRES(h));
-      if (!resSnap || !scopeMatch(resSnap)) return;
-      const firstRes = hist.find((h) => h && isRES(h));
-      const firstResDate = String((firstRes && (firstRes.snapshotDate || firstRes.dateKey)) || "");
-      const priorNonRes = hist.some((h) => {
-        const snap = String((h && (h.snapshotDate || h.dateKey)) || "");
-        return !!(snap && firstResDate && snap < firstResDate && !isRES(h));
-      });
-      const addedLater = !!(firstFile && firstResDate > firstFile && firstResDate.slice(0, 7) === month);
-      if (!priorNonRes && !addedLater) return;
-      take(sfxBucketId(resSnap)).swappedIn.push(Object.assign({}, resSnap, { vin }));
+    eachSwappedIn(model, month, (row) => {
+      if (withinVins.has(row.vin)) return;
+      take(sfxBucketId(row)).swappedIn.push(row);
     });
     return buckets;
+  }
+
+  /** Same checks as SFX plan progress, totaled for each day. */
+  function buildDayBuckets(model, monthKey) {
+    const buckets = new Map();
+    const take = (id) => {
+      if (!buckets.has(id)) buckets.set(id, emptySfxBucket());
+      return buckets.get(id);
+    };
+    const month = monthKey || currentMonthKey();
+    const withinVins = new Set();
+    receiptChartDays(model).filter((d) => d && String(d.dateKey).slice(0, 7) === month).forEach((day) => {
+      const bucket = take(day.dateKey);
+      (day.fileDayReceipts || []).forEach((row) => {
+        if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
+        withinVins.add(row.vin);
+        pushClassified(bucket, row, classifyWithinFlags(model, row));
+      });
+    });
+    eachSwappedIn(model, month, (row) => {
+      if (withinVins.has(row.vin) || !row.dateKey) return;
+      take(row.dateKey).swappedIn.push(row);
+    });
+    return buckets;
+  }
+
+  function monthStatusTotals(model, monthKey) {
+    const out = emptySfxBucket();
+    buildDayBuckets(model, monthKey).forEach((bucket) => {
+      Object.keys(out).forEach((key) => {
+        out[key] = out[key].concat(bucket[key] || []);
+      });
+    });
+    return out;
   }
 
   function rowsForOpen(spec, arg) {
@@ -2824,28 +2879,51 @@
     if (kpi[key]) return { title: kpi[key][0], sub: kpi[key][1], rows: kpi[key][2] };
     if (key === "day") {
       const [dateKey, metric] = String(arg || "").split("~");
-      const day = (lastModel.daily || []).find((d) => d.dateKey === dateKey);
-      const mine = pack.scoped.filter((r) => r.dateKey === dateKey);
+      const day = receiptChartDays(lastModel).find((d) => d.dateKey === dateKey)
+        || (lastModel.daily || []).find((d) => d.dateKey === dateKey);
+      const bucket = buildDayBuckets(lastModel).get(dateKey) || emptySfxBucket();
       const resRows = ((day && day.resRows) || []).filter(scopeMatch);
       const map = {
         res: resRows,
-        allocation: mine,
-        received: (day && day.dailyUniqueRESAge0List || []).filter(scopeMatch),
-        delivered: mine.filter((r) => r.statusKey === "Delivered"),
-        proforma: mine.filter((r) => r.statusKey === "Proforma"),
-        stock: pack.stock.filter((r) => r.dateKey === dateKey),
-        free: pack.free.filter((r) => r.dateKey === dateKey),
-        undef: pack.undef.filter((r) => r.dateKey === dateKey),
-        swapped: mine.filter((r) => r.statusKey === "Swapped"),
-        in: pack.swappedIn.filter((r) => r.dateKey === dateKey),
+        allocation: bucket.within,
+        within: bucket.within,
+        delivered: bucket.delivered,
+        proforma: bucket.proforma,
+        reserved: bucket.reserved,
+        stock: bucket.stock,
+        swapped: bucket.swappedOut,
+        swappedOut: bucket.swappedOut,
+        in: bucket.swappedIn,
+        swappedIn: bucket.swappedIn,
       };
       const label = (day && day.label) || dateKey;
       const titles = {
         res: ["RES", "Retail Electronic Sales in this RTL file"],
-        allocation: ["My allocation", "RES · allocation date = this file date · age 0"],
+        allocation: ["My allocation", "New cars credited to this day"],
+        delivered: ["Delivered", "Sales Raw column V"],
+        proforma: ["Proforma", "Secondary status · pro-forma invoice created"],
+        reserved: ["Reserved", "Any other secondary status"],
+        stock: ["Stock", "Secondary status · vehicle allocation completed"],
+        swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
+        in: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
       };
       const named = titles[metric] || [metric || "VINs", dateKey];
-      return { title: `${label} · ${named[0]}`, sub: named[1], rows: map[metric] || mine };
+      return { title: `${label} · ${named[0]}`, sub: named[1], rows: map[metric] || bucket.within };
+    }
+    if (key === "allocstatus") {
+      const metric = String(arg || "within");
+      const totals = monthStatusTotals(lastModel);
+      const titles = {
+        within: ["Allocation", "New cars this month"],
+        delivered: ["Delivered", "Sales Raw column V"],
+        proforma: ["Proforma", "Secondary status · pro-forma invoice created"],
+        reserved: ["Reserved", "Any other secondary status"],
+        stock: ["Stock", "Secondary status · vehicle allocation completed"],
+        swappedOut: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
+        swappedIn: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
+      };
+      const named = titles[metric] || titles.within;
+      return { title: named[0], sub: named[1], rows: totals[metric] || totals.within };
     }
     if (key === "product") {
       const [name, which] = String(arg || "").split("~");
@@ -3105,14 +3183,22 @@
       },
     });
 
-    const donutLabels = ["Delivered", "Proforma", "My Stock", "Swapped"];
+    const statusTotals = monthStatusTotals(model);
+    const statusSlices = [
+      { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#1f8a4c" },
+      { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#2f6fed" },
+      { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#6b7280" },
+      { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#e07a00" },
+      { key: "swappedOut", label: "Swapped out", n: statusTotals.swappedOut.length, color: "#eb0a1e" },
+      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#9f1239" },
+    ];
     makeChart("pt-chart-status", {
       type: "doughnut",
       data: {
-        labels: donutLabels,
+        labels: statusSlices.map((s) => s.label),
         datasets: [{
-          data: donutLabels.map((k) => counts[k] || 0),
-          backgroundColor: ["#1f8a4c", "#2f6fed", "#e07a00", "#eb0a1e"],
+          data: statusSlices.map((s) => s.n),
+          backgroundColor: statusSlices.map((s) => s.color),
           borderWidth: 0,
         }],
       },
@@ -3120,47 +3206,60 @@
         responsive: true,
         maintainAspectRatio: false,
         cutout: "68%",
-        plugins: { legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 10 } } } },
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              boxWidth: 8,
+              font: { size: 10 },
+              generateLabels(chart) {
+                const dataset = chart.data.datasets[0];
+                return chart.data.labels.map((label, i) => ({
+                  text: `${label} ${dataset.data[i]}`,
+                  fillStyle: dataset.backgroundColor[i],
+                  strokeStyle: dataset.backgroundColor[i],
+                  lineWidth: 0,
+                  hidden: false,
+                  index: i,
+                }));
+              },
+            },
+          },
+        },
         onClick: (_evt, els) => {
           if (!els.length) return;
-          const label = donutLabels[els[0].index];
-          const map = { Delivered: "delivered", Proforma: "proforma", "My Stock": "stock", Swapped: "swapped" };
-          openFromSpec(map[label] || "allocation");
+          const slice = statusSlices[els[0].index];
+          if (slice) openFromSpec("allocstatus", slice.key);
         },
       },
     });
     const mid = $("#pt-donut-mid");
-    if (mid) mid.innerHTML = `<strong>${num(within)}</strong><span>Allocation</span>`;
+    if (mid) mid.innerHTML = `<strong>${num(statusTotals.within.length)}</strong><span>Allocation</span>`;
 
     const dayHost = $("#pt-daily-count");
     if (dayHost) {
-      const cell = (n, dateKey, metric) => `<td class="num">${numBtn(n, "day", `data-pt-arg="${esc(dateKey)}~${metric}"`)}</td>`;
+      const dayBuckets = buildDayBuckets(model);
+      const cell = (n, dateKey, metric, cls) => `<td class="num">${numBtn(n, "day", `data-pt-arg="${esc(dateKey)}~${metric}"`, cls || "")}</td>`;
       const body = days.map((d) => {
-        const mine = scoped.filter((r) => r.dateKey === d.dateKey);
-        const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
-        mine.forEach((r) => { c[r.statusKey] = (c[r.statusKey] || 0) + 1; });
+        const bucket = dayBuckets.get(d.dateKey) || emptySfxBucket();
         const resN = (d.resRows || []).filter((r) => scopeMatch(r)).length;
-        const freeN = pack.free.filter((r) => r.dateKey === d.dateKey).length;
-        const undefN = pack.undef.filter((r) => r.dateKey === d.dateKey).length;
-        const inN = pack.swappedIn.filter((r) => r.dateKey === d.dateKey).length;
         return `<tr><td>${esc(d.label)}</td><td class="num">—</td>
           ${cell(resN, d.dateKey, "res")}
-          ${cell(mine.length, d.dateKey, "allocation")}
-          ${cell(c.Delivered, d.dateKey, "delivered")}
-          ${cell(c.Proforma, d.dateKey, "proforma")}
-          ${cell(c["My Stock"], d.dateKey, "stock")}
-          ${cell(freeN, d.dateKey, "free")}
-          ${cell(undefN, d.dateKey, "undef")}
-          ${cell(c.Swapped, d.dateKey, "swapped")}
-          ${cell(inN, d.dateKey, "in")}</tr>`;
+          ${cell(bucket.within.length, d.dateKey, "allocation")}
+          ${cell(bucket.delivered.length, d.dateKey, "delivered")}
+          ${cell(bucket.proforma.length, d.dateKey, "proforma")}
+          ${cell(bucket.reserved.length, d.dateKey, "reserved")}
+          ${cell(bucket.stock.length, d.dateKey, "stock")}
+          ${cell(bucket.swappedOut.length, d.dateKey, "swapped")}
+          ${cell(bucket.swappedIn.length, d.dateKey, "in", bucket.swappedIn.length ? "is-swap-in" : "")}</tr>`;
       }).join("");
       const missingRow = missing.length
-        ? `<tr><td colspan="11">Missing RTL snapshot: ${esc(missing.join(", "))}</td></tr>`
+        ? `<tr><td colspan="10">Missing RTL snapshot: ${esc(missing.join(", "))}</td></tr>`
         : "";
       dayHost.innerHTML = `<table class="pt-table"><thead><tr>
-        <th>Day</th><th>Plan</th><th>RES</th><th>My allocation</th><th>Delivered</th><th>Proforma</th><th>My stock</th>
-        <th>Free</th><th>Undefined</th><th>Swapped out</th><th>Swapped in</th>
-      </tr></thead><tbody>${body || `<tr><td colspan="11">No RTL files for this month.</td></tr>`}${missingRow}
+        <th>Day</th><th>Plan</th><th>RES</th><th>My allocation</th><th>Delivered</th><th>Proforma</th><th>Reserved</th><th>Stock</th>
+        <th>Swapped out</th><th>Swapped in</th>
+      </tr></thead><tbody>${body || `<tr><td colspan="10">No RTL files for this month.</td></tr>`}${missingRow}
       </tbody></table>`;
     }
 
@@ -3469,6 +3568,8 @@
     swappedInList,
     isVehicleAllocationCompleted,
     buildSfxBuckets,
+    buildDayBuckets,
+    monthStatusTotals,
     classifyVinStatus,
     normalizeVin,
     isRES,

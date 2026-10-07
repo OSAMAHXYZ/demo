@@ -420,6 +420,45 @@ test("SFX progress classifies daily-chart VINs", () => {
   assertEq(all.swappedIn.map((r) => r.vin).sort().join(","), "FLEET1,NEW1");
 });
 
+test("daily VIN count totals the same checks by day", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("WITHIN1", RES, 0, d(2026, 10, 3), { secondaryStatus: "Vehicle allocation completed", product: "HILUX", suffix: "M0" }),
+      veh("FLEET1", FLEET, 0, d(2026, 10, 3), { product: "HILUX", suffix: "MH" }),
+    ],
+    "2026-10-04": [
+      veh("WITHIN1", RES, 1, d(2026, 10, 3), { secondaryStatus: "Pro-forma invoice created", product: "HILUX", suffix: "M0" }),
+      veh("FLEET1", RES, 9, d(2026, 9, 1), { secondaryStatus: "Vehicle allocation completed", product: "HILUX", suffix: "MH" }),
+      veh("NEW1", RES, 4, d(2026, 9, 1), { secondaryStatus: "Waiting", product: "HILUX", suffix: "U0" }),
+      veh("HOLD1", RES, 0, d(2026, 10, 4), { secondaryStatus: "Customer hold", product: "HILUX", suffix: "U0" }),
+    ],
+    "2026-10-05": [
+      veh("HOLD1", FLEET, 1, d(2026, 10, 4), { secondaryStatus: "Customer hold", product: "HILUX", suffix: "U0" }),
+    ],
+  }, "2026-10");
+  const day = model.daily.find((d) => d.dateKey === "2026-10-03");
+  day.fileDayReceipts.forEach((r) => {
+    if (r.vin === "WITHIN1") r.invoiceDate = d(2026, 10, 6);
+  });
+  const days = PT.buildDayBuckets(model, "2026-10");
+  const oct3 = days.get("2026-10-03");
+  const oct4 = days.get("2026-10-04");
+  assertEq(oct3.within.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(oct3.delivered.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(oct3.proforma.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(oct4.within.map((r) => r.vin).join(","), "HOLD1");
+  assertEq(oct4.reserved.map((r) => r.vin).join(","), "HOLD1");
+  assertEq(oct4.swappedOut.map((r) => r.vin).join(","), "HOLD1");
+  assertEq(oct4.swappedIn.map((r) => r.vin).sort().join(","), "FLEET1,NEW1");
+  const month = PT.monthStatusTotals(model, "2026-10");
+  assertEq(month.within.length, 2);
+  assertEq(month.delivered.length, 1);
+  assertEq(month.proforma.length, 1);
+  assertEq(month.reserved.length, 1);
+  assertEq(month.swappedOut.length, 1);
+  assertEq(month.swappedIn.length, 2);
+});
+
 function emptyMerge(buckets) {
   const out = { within: [], delivered: [], proforma: [], reserved: [], stock: [], swappedOut: [], swappedIn: [] };
   buckets.forEach((bucket) => {
