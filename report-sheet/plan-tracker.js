@@ -2038,21 +2038,12 @@
         dark.textContent = dash.classList.contains("is-dark") ? "Light" : "Dark";
       });
     }
-    const wide = $("#pt-wide");
-    if (wide) {
-      wide.addEventListener("click", () => {
-        const dash = $("#pt-dash");
-        if (!dash) return;
-        const on = !dash.classList.contains("is-wide");
-        dash.classList.toggle("is-wide", on);
-        document.body.classList.toggle("pt-wide-mode", on);
-        wide.textContent = on ? "✕ Collapse View" : "↗ Wide View";
-        const title = dash.querySelector(".pt-top-copy h2");
-        if (title) title.textContent = on ? "Plan Tracker - Wide View" : "Plan Tracker";
-        const fit = () => {
-          try { window.dispatchEvent(new Event("resize")); } catch (_) { /* ignore */ }
-        };
-        requestAnimationFrame(() => requestAnimationFrame(fit));
+    const dashOpen = $("#pt-dash");
+    if (dashOpen) dashOpen.classList.add("is-wide");
+    const exitBtn = $("#pt-exit");
+    if (exitBtn) {
+      exitBtn.addEventListener("click", () => {
+        if (typeof global.switchReportPanel === "function") global.switchReportPanel("salesreport");
       });
     }
     const vinBtn = $("#pt-vin-go");
@@ -3075,7 +3066,7 @@
     const hint = $("#pt-live-hint");
     if (hint) {
       const label = model.monthKey || "—";
-      hint.textContent = `${label} · ${model.dateKeys.length} RTL day file(s) · latest ${model.latestKey || "—"} · plan ${num(plan)} · within allocation ${num(within)}`;
+      hint.textContent = `${label} · Retail Electronic Sales (RTL)`;
     }
     const updated = $("#pt-updated");
     if (updated) {
@@ -3125,7 +3116,7 @@
     ];
     const kpiHost = $("#pt-kpis");
     if (kpiHost) {
-      kpiHost.innerHTML = kpis.map(([key, label, value, sub]) => `<button type="button" class="pt-kpi" data-pt-open="${key}">
+      kpiHost.innerHTML = kpis.map(([key, label, value, sub]) => `<button type="button" class="pt-kpi pt-tone-${key}" data-pt-open="${key}">
           <span>${esc(label)}</span><strong>${num(value)}</strong><em>${esc(sub)}</em>
           ${key === "allocation" ? `<b class="${gap.cls}">${gap.word === "done" ? "Completed" : gap.word === "over" ? `Over ${num(gap.n)}` : `Gap ${num(gap.n)}`}</b>` : ""}
         </button>`).join("");
@@ -3226,7 +3217,8 @@
         type: "bar",
         label: "New cars",
         data: allocDaily,
-        backgroundColor: "rgba(16,35,63,.85)",
+        backgroundColor: "#3b82f6",
+        hoverBackgroundColor: "#4f9dff",
         borderRadius: 3,
         order: 2,
       },
@@ -3236,14 +3228,14 @@
         type: "line",
         label: "Cumulative allocation",
         data: cumA,
-        borderColor: "#2f6fed",
-        backgroundColor: "#2f6fed",
+        borderColor: "#7dd3fc",
+        backgroundColor: "#7dd3fc",
         tension: 0.2,
         pointRadius: 2,
         order: 1,
       });
-      datasets.push(planLine("Admin plan", "#eb0a1e", [4, 3]));
-      datasets.push(planLine("Cumulative plan", "#e07a00", [1, 3]));
+      datasets.push(planLine("Admin plan", "#93c5fd", [4, 3]));
+      datasets.push(planLine("Cumulative plan", "#1d4ed8", [1, 3]));
     }
     makeChart("pt-chart-daily", {
       type: "bar",
@@ -3251,12 +3243,37 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } },
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 }, color: "#8d9bb0" } },
+          tooltip: {
+            backgroundColor: "#0f1828",
+            titleColor: "#e8eef7",
+            bodyColor: "#e8eef7",
+            borderColor: "rgba(148,163,184,.28)",
+            borderWidth: 1,
+          },
+        },
         scales: Object.assign({
-          x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false } },
-          y: { beginAtZero: true, position: "left", ticks: { precision: 0, font: { size: 10 } } },
+          x: {
+            ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#8d9bb0" },
+            grid: { color: "rgba(148,163,184,.12)" },
+            border: { color: "rgba(148,163,184,.18)" },
+          },
+          y: {
+            beginAtZero: true,
+            position: "left",
+            ticks: { precision: 0, font: { size: 10 }, color: "#8d9bb0" },
+            grid: { color: "rgba(148,163,184,.12)" },
+            border: { color: "rgba(148,163,184,.18)" },
+          },
         }, cumulative ? {
-          plan: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, ticks: { precision: 0, font: { size: 10 } } },
+          plan: {
+            beginAtZero: true,
+            position: "right",
+            grid: { drawOnChartArea: false },
+            ticks: { precision: 0, font: { size: 10 }, color: "#8d9bb0" },
+            border: { color: "rgba(148,163,184,.18)" },
+          },
         } : {}),
         onClick: (_evt, els) => {
           if (!els.length) return;
@@ -3272,12 +3289,12 @@
     });
 
     const statusSlices = [
-      { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#1f8a4c" },
-      { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#2f6fed" },
-      { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#6b7280" },
-      { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#e07a00" },
+      { key: "delivered", label: "Delivered", n: statusTotals.delivered.length, color: "#34d399" },
+      { key: "proforma", label: "Proforma", n: statusTotals.proforma.length, color: "#a78bfa" },
+      { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#3b82f6" },
+      { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#f59e0b" },
       { key: "swappedOut", label: "Swapped out", n: statusTotals.swappedOut.length, color: "#eb0a1e" },
-      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#9f1239" },
+      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#ff4d5e" },
     ];
     makeChart("pt-chart-status", {
       type: "doughnut",
@@ -3286,7 +3303,8 @@
         datasets: [{
           data: statusSlices.map((s) => s.n),
           backgroundColor: statusSlices.map((s) => s.color),
-          borderWidth: 0,
+          borderColor: "#0c1422",
+          borderWidth: 2,
         }],
       },
       options: {
@@ -3299,6 +3317,7 @@
             labels: {
               boxWidth: 8,
               font: { size: 10 },
+              color: "#8d9bb0",
               generateLabels(chart) {
                 const dataset = chart.data.datasets[0];
                 return chart.data.labels.map((label, i) => ({
@@ -3321,7 +3340,7 @@
       },
     });
     const mid = $("#pt-donut-mid");
-    if (mid) mid.innerHTML = `<strong>${num(statusTotals.within.length)}</strong><span>Allocation</span>`;
+    if (mid) mid.innerHTML = `<strong>${num(statusTotals.within.length)}</strong><span>Total</span>`;
 
     const dayHost = $("#pt-daily-count");
     if (dayHost) {
