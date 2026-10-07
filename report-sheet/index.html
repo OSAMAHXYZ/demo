@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007cal" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261007palette" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261007ptrows3" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -891,34 +891,49 @@
           </ol>
         </div>
 
-        <div id="boe-dash" class="bo-dash boe-dash" hidden>
-          <div class="rv-head">
-            <div>
-              <h2 class="rv-title">BO Errors</h2>
-              <p class="rv-sub" id="boe-live-hint">Back Order rule checks · Col F/T duplicates · product color · confirm · year</p>
+        <div id="boe-dash" class="bo-dash boe-dash boe-tower" hidden>
+          <header class="boe-top">
+            <div class="boe-top-brand">
+              <p class="boe-eye">ALJ DIGITAL RETAIL</p>
+              <h2>BO Errors</h2>
+              <p class="boe-sub" id="boe-live-hint">Back Order Error Report</p>
             </div>
-            <div class="rv-head-actions">
-              <select id="boe-filter-severity" title="Filter by severity">
-                <option value="">All severities</option>
-                <option value="critical">Critical</option>
-                <option value="warn">Warning</option>
-                <option value="info">Info</option>
-              </select>
-              <select id="boe-filter-type" title="Filter by error type">
-                <option value="">All error types</option>
-              </select>
-              <input id="boe-search" type="search" placeholder="Search BO / product / salesman / VIN…" />
-              <button type="button" id="boe-excel-btn" class="btn-primary">Export Excel</button>
+            <div class="boe-top-status">
+              <span class="boe-ready" id="boe-ready">● Ready</span>
+              <span class="boe-updated"><span>Last Updated</span><strong id="boe-updated">—</strong></span>
             </div>
+            <div class="boe-top-actions">
+              <button type="button" class="btn boe-ghost" id="boe-theme">Dark</button>
+              <button type="button" class="btn boe-ghost" id="boe-app-clear">Clear</button>
+              <button type="button" class="btn boe-ghost" id="boe-app-refresh">Refresh</button>
+              <button type="button" class="btn boe-ghost" id="boe-export-top">Export</button>
+            </div>
+          </header>
+          <div class="boe-filters">
+            <select id="boe-filter-severity" title="Filter by severity">
+              <option value="">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="warn">Warning</option>
+              <option value="info">Info</option>
+            </select>
+            <select id="boe-filter-type" title="Filter by error type">
+              <option value="">All error types</option>
+            </select>
+            <label class="boe-search-wrap">
+              <input id="boe-search" type="search" placeholder="Search product, VIN, salesman, or BO number..." />
+              <kbd>Ctrl K</kbd>
+            </label>
+            <button type="button" id="boe-excel-btn" class="btn-primary">Export Excel</button>
           </div>
-          <div class="bo-kpis" id="boe-kpis"></div>
+          <div class="boe-kpis" id="boe-kpis"></div>
           <article class="card boe-employee-card" id="boe-employee-section">
-            <div class="pbi-viz-head">
+            <div class="boe-card-head">
               <div>
                 <h2>Filter by employee</h2>
                 <span class="hint">Show only Back Order errors for the selected sales employee</span>
               </div>
               <div class="boe-employee-actions">
+                <input id="boe-employee-find" type="search" placeholder="Search employee..." aria-label="Search employee" />
                 <select id="boe-filter-employee" title="Filter by employee" aria-label="Filter BO errors by employee">
                   <option value="">All employees</option>
                 </select>
@@ -927,17 +942,37 @@
             </div>
             <div class="boe-employee-chips" id="boe-employee-chips" aria-label="Employees with errors"></div>
           </article>
-          <div class="boe-type-chips" id="boe-type-chips" aria-label="Error type breakdown"></div>
-          <article class="card boe-table-card">
-            <div class="pbi-viz-head">
+          <section class="boe-breakdown">
+            <div class="boe-card-head">
               <div>
-                <h2>Error schedule</h2>
-                <span class="hint">All error rows in file order · scroll the page · filter by error chip · click a row for full BO · Export adds Error Definition + red cells</span>
+                <h2>Error type breakdown</h2>
+                <span class="hint">Existing error types · click a chip to filter the schedule</span>
               </div>
             </div>
-            <div class="table-wrap aa-table-wrap" id="boe-table-wrap"></div>
-            <p class="foot" id="boe-table-foot"></p>
-          </article>
+            <div class="boe-type-chips" id="boe-type-chips" aria-label="Error type breakdown"></div>
+          </section>
+          <div class="boe-split">
+            <article class="card boe-table-card">
+              <div class="boe-card-head">
+                <div>
+                  <h2>Error schedule</h2>
+                  <span class="hint">All error rows in file order · scroll inside the table · filter by error chip · click a row for full BO</span>
+                </div>
+                <strong class="boe-schedule-count" id="boe-schedule-count">0 Errors</strong>
+              </div>
+              <div class="table-wrap aa-table-wrap" id="boe-table-wrap"></div>
+              <div class="foot boe-pager" id="boe-table-foot"></div>
+            </article>
+            <aside class="card boe-bars-card">
+              <div class="boe-card-head">
+                <div>
+                  <h2>Errors by type</h2>
+                  <span class="hint">Share of existing issue flags</span>
+                </div>
+              </div>
+              <div class="boe-bars" id="boe-type-bars" aria-label="Errors by type"></div>
+            </aside>
+          </div>
         </div>
       </div>
 
@@ -7854,6 +7889,16 @@
     if (activePanel === "boerrors" && panelId !== "boerrors") {
       const boeWrap = document.getElementById("boe-table-wrap");
       if (boeWrap) boeWrap.textContent = "";
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker"];
+      if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
+        const dash = $("#dashboard");
+        const wait = $("#wait-section");
+        if (dash) {
+          dash.classList.remove("show");
+          dash.style.display = "none";
+        }
+        if (wait) wait.style.display = "";
+      }
     }
     activePanel = panelId;
     document.body.classList.toggle("gec-mode", panelId === "gec");
@@ -7862,6 +7907,7 @@
     document.body.classList.toggle("sc-mode", panelId === "summary");
     document.body.classList.toggle("sr-mode", panelId === "salesreport");
     document.body.classList.toggle("pt-wide-mode", panelId === "plantracker");
+    document.body.classList.toggle("boe-mode", panelId === "boerrors");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
@@ -7905,6 +7951,15 @@
       dateEl.textContent = `TOYOTA · ${d}`;
     }
     if (panelId === "summary") renderSummaryDashboard();
+    if (panelId === "boerrors") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+    }
     if (panelId === "delivery") {
       const dash = $("#dashboard");
       const wait = $("#wait-section");
@@ -14975,7 +15030,7 @@
     // 1M6, 6X7, 3T3: still flagged; no mapped correction
   };
 
-  let boeView = { search: "", severity: "", type: "", employee: "" };
+  let boeView = { search: "", severity: "", type: "", employee: "", page: 1, pageSize: 50, empMore: false, empQuery: "" };
   let boeLastPack = null;
 
   /** Resolve Excel letter → header name from the live Back Order file. */
@@ -15010,7 +15065,7 @@
     const ab = boeColName("AB");
     const nop = boeColorGroupLabel(["N", "O", "P"], "Exterior Color 1–3");
     const qrs = boeColorGroupLabel(["Q", "R", "S"], "Interior Color 1–3");
-    return {
+    const defs = {
       dup_col_f: { id: "dup_col_f", label: `Duplicate ${f}`, severity: "critical" },
       missing_col_j: { id: "missing_col_j", label: `${j} missing/0 (CAMRY·LC300·LC70)`, severity: "critical" },
       paid_other_product: { id: "paid_other_product", label: `${j} filled (not CAMRY·LC300·LC70)`, severity: "critical" },
@@ -15026,6 +15081,16 @@
       crown_qrs_20: { id: "crown_qrs_20", label: `CROWN ${qrs} = 20`, severity: "critical" },
       bad_model_year: { id: "bad_model_year", label: "Model Year not 2026", severity: "warn" },
     };
+    const phoneLetter = boePhoneLetter();
+    if (phoneLetter) {
+      const phoneName = boeColName(phoneLetter);
+      defs.phone_empty = {
+        id: "phone_empty",
+        label: `${phoneName && !/^column\s+/i.test(phoneName) ? phoneName : "Phone"} empty`,
+        severity: "warn",
+      };
+    }
+    return defs;
   }
 
   function isBlankBoField(v) {
@@ -15104,6 +15169,18 @@
       if (name && !/^column\s+/i.test(name)) return name;
     }
     return "Ship to Party";
+  }
+
+  /** Phone / mobile column on the live BO sheet. Empty cells are flagged; the number is never shown. */
+  function boePhoneLetter() {
+    return boeFindColLetterByHeader([
+      (n) => {
+        const t = String(n || "").replace(/[._\-/#]/g, " ").replace(/\s+/g, " ").trim();
+        if (!t || t.includes("ship")) return false;
+        if (/^(phone|phone no|phone number|mobile|mobile no|mobile number|contact|contact number|contact no|customer phone|customer mobile|tel|telephone|cell|cell phone)$/.test(t)) return true;
+        return t.includes("phone") || t.includes("mobile") || t.includes("جوال") || t.includes("هاتف") || t.includes("موبايل");
+      },
+    ]);
   }
 
   function boeIsEmployeeSalesType(row) {
@@ -15189,6 +15266,7 @@
     const rawRows = slots.backorder.rows || [];
     const checkedRows = rawRows.filter((r) => !boeIsEmployeeSalesType(r));
     const { fMap, shipMap, shipLetter } = buildBoeDupMaps(rawRows);
+    const phoneLetter = boePhoneLetter();
     const BOE_ERROR_DEFS = getBoeErrorDefs();
     const rows = [];
     const typeCounts = Object.fromEntries(Object.keys(BOE_ERROR_DEFS).map((k) => [k, 0]));
@@ -15235,7 +15313,12 @@
         pushErr("col_ab_aljre_or_blank", ["AB"]);
       }
 
-      // Employee sales type: only CRM Lead rule above applies
+      // Empty phone: all rows, including Employee. Number is never displayed.
+      if (phoneLetter && isBlankBoField(cellByLetter(r, phoneLetter))) {
+        pushErr("phone_empty", [phoneLetter]);
+      }
+
+      // Employee sales type: only CRM Lead and empty-phone rules above apply
       if (!isEmployee) {
         const fKey = boeDupKey(colF);
         if (fKey && (fMap.get(fKey) || 0) > 1) pushErr("dup_col_f", ["F"]);
@@ -15356,6 +15439,8 @@
     const set = new Set(BOE_HIGHLIGHT_BASE);
     const ship = boeShipToPartyLetter();
     if (ship) set.add(ship);
+    const phone = boePhoneLetter();
+    if (phone) set.add(phone);
     return set;
   }
 
@@ -15408,9 +15493,11 @@
         ).join("")}</div>`
       : "";
 
+    const phoneLetter = boePhoneLetter();
     const fieldRows = headers.map((h, i) => {
       const letter = indexToColLetter(i);
-      const value = formatBoeCellDisplay(cells[i] != null ? cells[i] : raw[h]);
+      const rawVal = cells[i] != null ? cells[i] : raw[h];
+      const value = phoneLetter && letter === phoneLetter ? maskPhone(rawVal) : formatBoeCellDisplay(rawVal);
       const hi = boeHighlightLetters().has(letter) ? " is-hot" : "";
       return `<tr class="boe-detail-row${hi}">
         <td class="boe-detail-letter mono">${escapeHtml(letter)}</td>
@@ -15509,18 +15596,48 @@
       }
     }
     if (chips) {
+      const qEmp = String(boeView.empQuery || "").trim().toLowerCase();
+      const matched = qEmp
+        ? list.filter((e) => String(e.name || "").toLowerCase().includes(qEmp))
+        : list;
+      const cap = 12;
+      const visible = boeView.empMore || qEmp ? matched : matched.slice(0, cap);
+      const hidden = Math.max(0, matched.length - visible.length);
       if (!list.length) {
         chips.innerHTML = `<span class="rv-muted">No employees on error rows</span>`;
+      } else if (!matched.length) {
+        chips.innerHTML = `<span class="rv-muted">No employees match that search</span>`;
       } else {
-        chips.innerHTML = list.map((e) => {
+        chips.innerHTML = visible.map((e) => {
           const active = e.key === cur ? " is-active" : "";
+          const initials = boeInitials(e.name);
+          const hue = boeAvatarHue(e.name);
           return `<button type="button" class="boe-chip boe-emp-chip${active}" data-boe-employee="${escapeHtml(e.key)}" title="${escapeHtml(e.name)}">
+            <span class="boe-avatar" style="--boe-hue:${hue}">${escapeHtml(initials)}</span>
             <span class="boe-chip-lab">${escapeHtml(e.name)}</span>
             <strong>${formatNumber(e.n)}</strong>
           </button>`;
-        }).join("");
+        }).join("") + (hidden
+          ? `<button type="button" class="boe-more" data-boe-emp-more="1">Show more ↓</button>`
+          : (boeView.empMore && !qEmp && list.length > cap
+            ? `<button type="button" class="boe-more" data-boe-emp-more="1">Show less ↑</button>`
+            : ""));
       }
     }
+  }
+
+  function boeInitials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    const a = parts[0] ? parts[0].charAt(0) : "?";
+    const b = parts.length > 1 ? parts[1].charAt(0) : "";
+    return (a + b).toUpperCase();
+  }
+
+  function boeAvatarHue(name) {
+    let h = 0;
+    const s = String(name || "");
+    for (let i = 0; i < s.length; i += 1) h = (h * 33 + s.charCodeAt(i)) >>> 0;
+    return [210, 262, 168, 24, 332, 198][h % 6];
   }
 
   function populateBoeTypeFilter(totals) {
@@ -15583,27 +15700,48 @@
     const empLabel = empKey
       ? (employeeScoped[0] && employeeScoped[0].salesman) || empKey
       : "";
+    const statusEl = $("#status");
+    const readyEl = $("#boe-ready");
+    if (readyEl) {
+      const live = statusEl && String(statusEl.textContent || "").trim();
+      readyEl.textContent = live ? `● ${live}` : "● Ready";
+    }
+    const updatedEl = $("#boe-updated");
+    const srUpdated = $("#sr-last-updated");
+    if (updatedEl) {
+      const liveUpdated = srUpdated && String(srUpdated.textContent || "").trim();
+      updatedEl.textContent = liveUpdated && liveUpdated !== "—" ? liveUpdated : "—";
+    }
+
     const hint = $("#boe-live-hint");
     if (hint) {
       const empNote = empKey
-        ? ` · employee ${empLabel} (${formatNumber(employeeScoped.length)} errors)`
+        ? ` · ${empLabel} (${formatNumber(employeeScoped.length)} errors)`
         : "";
-      hint.textContent = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(viewTotals.critical)} critical · ${formatNumber(viewTotals.warn)} warning${empNote} · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee sales type (${formatNumber(totals.skippedEmployee || 0)})`;
+      hint.textContent = `Back Order Error Report${empNote}`;
+      hint.title = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(viewTotals.critical)} critical · ${formatNumber(viewTotals.warn)} warning · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee sales type (${formatNumber(totals.skippedEmployee || 0)})`;
     }
 
+    const shareOf = (n, d) => {
+      const den = Number(d) || 0;
+      if (!den) return "0%";
+      return `${((Number(n) || 0) / den * 100).toFixed(1)}%`;
+    };
     const kpis = $("#boe-kpis");
     if (kpis) {
-      kpis.innerHTML = [
-        ["Total BOs", totals.totalBos, "ok"],
-        [empKey ? "Employee errors" : "With errors", viewTotals.errorRows, viewTotals.errorRows ? "bad" : "ok"],
-        ["Critical", viewTotals.critical, viewTotals.critical ? "bad" : "ok"],
-        ["Warnings", viewTotals.warn, viewTotals.warn ? "warn" : "ok"],
-        ["Issue flags", viewTotals.errorHits, viewTotals.errorHits ? "warn" : "ok"],
-        ["Clean BOs", totals.cleanRows, "ok"],
-      ].map(([lab, val, status]) => `
-        <div class="bo-kpi ${status}">
-          <div class="lab">${escapeHtml(lab)}</div>
-          <div class="val">${escapeHtml(String(val))}</div>
+      const cards = [
+        ["Total BOs", totals.totalBos, "blue", `${formatNumber(totals.totalBos)} checked`],
+        ["With errors", viewTotals.errorRows, "red", `${shareOf(viewTotals.errorRows, totals.totalBos)} of BOs`],
+        ["Critical", viewTotals.critical, "red", `${shareOf(viewTotals.critical, viewTotals.errorRows)} of errors`],
+        ["Warnings", viewTotals.warn, "orange", `${shareOf(viewTotals.warn, viewTotals.errorRows)} of errors`],
+        ["Issue flags", viewTotals.errorHits, "purple", "rule hits"],
+        ["Clean BOs", totals.cleanRows, "green", `${shareOf(totals.cleanRows, totals.totalBos)} of BOs`],
+      ];
+      kpis.innerHTML = cards.map(([lab, val, tone, note]) => `
+        <div class="boe-kpi tone-${tone}">
+          <span class="boe-kpi-lab">${escapeHtml(lab)}</span>
+          <strong class="boe-kpi-val">${escapeHtml(formatNumber(val))}</strong>
+          <span class="boe-kpi-note">${escapeHtml(note)}</span>
         </div>`).join("");
     }
 
@@ -15618,6 +15756,40 @@
         </button>`;
       }).join("");
     }
+
+    const bars = $("#boe-type-bars");
+    if (bars) {
+      const hitTotal = Number(viewTotals.errorHits) || 0;
+      const ranked = Object.values(BOE_ERROR_DEFS)
+        .map((def) => ({
+          def,
+          n: (viewTotals.typeCounts && viewTotals.typeCounts[def.id]) || 0,
+        }))
+        .filter((x) => x.n > 0 || boeView.type === x.def.id)
+        .sort((a, b) => b.n - a.n || a.def.label.localeCompare(b.def.label));
+      const maxN = ranked.reduce((m, x) => Math.max(m, x.n), 0) || 1;
+      bars.innerHTML = ranked.length
+        ? ranked.map(({ def, n }) => {
+          const active = boeView.type === def.id ? " is-active" : "";
+          const width = Math.max(2, Math.round((n / maxN) * 100));
+          return `<button type="button" class="boe-bar sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}">
+            <span class="boe-bar-lab">${escapeHtml(def.label)}</span>
+            <span class="boe-bar-track"><span style="width:${width}%"></span></span>
+            <strong>${formatNumber(n)}</strong>
+            <em>${escapeHtml(shareOf(n, hitTotal))}</em>
+          </button>`;
+        }).join("")
+        : `<p class="foot">No issue flags in the current view.</p>`;
+    }
+
+    const pageSize = Math.max(1, Number(boeView.pageSize) || 50);
+    const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize) || 1);
+    if (!Number.isFinite(boeView.page) || boeView.page < 1) boeView.page = 1;
+    if (boeView.page > maxPage) boeView.page = maxPage;
+    const pageStart = (boeView.page - 1) * pageSize;
+    const pageRows = filtered.slice(pageStart, pageStart + pageSize);
+    const scheduleCount = $("#boe-schedule-count");
+    if (scheduleCount) scheduleCount.textContent = `${formatNumber(filtered.length)} Errors`;
 
     const wrap = $("#boe-table-wrap");
     const foot = $("#boe-table-foot");
@@ -15648,7 +15820,7 @@
             </tr>
           </thead>
           <tbody>
-            ${filtered.map((r) => `
+            ${pageRows.map((r) => `
               <tr class="boe-row sev-${escapeHtml(r.severity)} boe-row-click" data-boe-idx="${escapeHtml(String(r.idx))}" tabindex="0" role="button" title="Open full Back Order row">
                 <td><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
                 <td class="mono">${escapeHtml(r.colF)}</td>
@@ -15657,7 +15829,7 @@
                 <td><span class="aa-sfx">${escapeHtml(r.sfx)}</span></td>
                 <td>${escapeHtml(r.salesType)}</td>
                 <td>${escapeHtml(r.year)}</td>
-                <td>${escapeHtml(r.colH)}</td>
+                <td><span class="boe-flag ${r.confirmed ? "is-ok" : "is-pend"}">${escapeHtml(r.colH)}</span></td>
                 <td>${escapeHtml(r.colJ)}</td>
                 <td class="mono">${escapeHtml(r.nop)}</td>
                 <td class="mono">${escapeHtml(r.qrs)}</td>
@@ -15673,8 +15845,28 @@
       }
     }
     if (foot) {
-      const empFoot = empKey ? ` · employee ${empLabel}` : "";
-      foot.textContent = `Showing ${formatNumber(filtered.length)} of ${formatNumber(viewTotals.errorRows)} error BOs${empFoot} · ${formatNumber(totals.errorRows)} total errors · ${formatNumber(totals.cleanRows)} clean · ${formatNumber(viewTotals.errorHits)} issue flags`;
+      const from = filtered.length ? pageStart + 1 : 0;
+      const to = filtered.length ? pageStart + pageRows.length : 0;
+      const pages = [];
+      const windowStart = Math.max(1, boeView.page - 2);
+      const windowEnd = Math.min(maxPage, windowStart + 4);
+      if (windowStart > 1) pages.push(1);
+      for (let p = windowStart; p <= windowEnd; p += 1) pages.push(p);
+      if (windowEnd < maxPage) pages.push(maxPage);
+      const uniquePages = [];
+      pages.forEach((p) => { if (uniquePages[uniquePages.length - 1] !== p) uniquePages.push(p); });
+      const pageBtns = uniquePages.map((p, i) => {
+        const gap = i > 0 && p - uniquePages[i - 1] > 1 ? `<span class="boe-page-gap">…</span>` : "";
+        return `${gap}<button type="button" class="boe-page${p === boeView.page ? " is-on" : ""}" data-boe-page="${p}">${p}</button>`;
+      }).join("");
+      foot.innerHTML = `
+        <span>Showing ${formatNumber(from)}–${formatNumber(to)} of ${formatNumber(filtered.length)} errors</span>
+        <div class="boe-page-nav">
+          <button type="button" class="boe-page" data-boe-page="prev"${boeView.page <= 1 ? " disabled" : ""}>Previous</button>
+          ${pageBtns}
+          <button type="button" class="boe-page" data-boe-page="next"${boeView.page >= maxPage ? " disabled" : ""}>Next</button>
+        </div>
+        <span>50 / page</span>`;
     }
   }
 
@@ -22582,10 +22774,27 @@
   }
   const boeExcelBtn = $("#boe-excel-btn");
   if (boeExcelBtn) boeExcelBtn.addEventListener("click", exportBoErrorsExcel);
+  const boeExportTop = $("#boe-export-top");
+  if (boeExportTop) boeExportTop.addEventListener("click", exportBoErrorsExcel);
+  const boeTheme = $("#boe-theme");
+  if (boeTheme) boeTheme.addEventListener("click", () => { const t = $("#theme-toggle"); if (t) t.click(); });
+  const boeAppClear = $("#boe-app-clear");
+  if (boeAppClear) boeAppClear.addEventListener("click", () => { const t = $("#clear-btn"); if (t) t.click(); });
+  const boeAppRefresh = $("#boe-app-refresh");
+  if (boeAppRefresh) boeAppRefresh.addEventListener("click", () => { const t = $("#run-btn"); if (t) t.click(); });
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || String(e.key || "").toLowerCase() !== "k") return;
+    if (activePanel !== "boerrors") return;
+    const el = $("#boe-search");
+    if (!el) return;
+    e.preventDefault();
+    el.focus();
+  });
   const boeSearch = $("#boe-search");
   if (boeSearch) {
     boeSearch.addEventListener("input", (e) => {
       boeView.search = e.target.value;
+      boeView.page = 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -22593,6 +22802,7 @@
   if (boeSev) {
     boeSev.addEventListener("change", (e) => {
       boeView.severity = e.target.value;
+      boeView.page = 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -22600,6 +22810,7 @@
   if (boeType) {
     boeType.addEventListener("change", (e) => {
       boeView.type = e.target.value;
+      boeView.page = 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -22607,6 +22818,14 @@
   if (boeEmp) {
     boeEmp.addEventListener("change", (e) => {
       boeView.employee = e.target.value;
+      boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeEmpFind = $("#boe-employee-find");
+  if (boeEmpFind) {
+    boeEmpFind.addEventListener("input", (e) => {
+      boeView.empQuery = e.target.value;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -22614,26 +22833,51 @@
   if (boeEmpClear) {
     boeEmpClear.addEventListener("click", () => {
       boeView.employee = "";
+      boeView.empQuery = "";
+      boeView.page = 1;
+      if (boeEmpFind) boeEmpFind.value = "";
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
   const boeEmpChips = $("#boe-employee-chips");
   if (boeEmpChips) {
     boeEmpChips.addEventListener("click", (e) => {
+      const more = e.target.closest("[data-boe-emp-more]");
+      if (more) {
+        boeView.empMore = !boeView.empMore;
+        if (window._data) renderBoErrorsDashboard(window._data);
+        return;
+      }
       const btn = e.target.closest("[data-boe-employee]");
       if (!btn) return;
       const next = btn.getAttribute("data-boe-employee") || "";
       boeView.employee = boeView.employee === next ? "" : next;
+      boeView.page = 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
+  const onBoeTypeClick = (e) => {
+    const btn = e.target.closest("[data-boe-type]");
+    if (!btn) return;
+    const next = btn.getAttribute("data-boe-type") || "";
+    boeView.type = boeView.type === next ? "" : next;
+    boeView.page = 1;
+    if (window._data) renderBoErrorsDashboard(window._data);
+  };
   const boeChips = $("#boe-type-chips");
-  if (boeChips) {
-    boeChips.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-boe-type]");
-      if (!btn) return;
-      const next = btn.getAttribute("data-boe-type") || "";
-      boeView.type = boeView.type === next ? "" : next;
+  if (boeChips) boeChips.addEventListener("click", onBoeTypeClick);
+  const boeBars = $("#boe-type-bars");
+  if (boeBars) boeBars.addEventListener("click", onBoeTypeClick);
+  const boeFoot = $("#boe-table-foot");
+  if (boeFoot) {
+    boeFoot.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-boe-page]");
+      if (!btn || btn.disabled) return;
+      const v = btn.getAttribute("data-boe-page");
+      const cur = Number(boeView.page) || 1;
+      if (v === "prev") boeView.page = Math.max(1, cur - 1);
+      else if (v === "next") boeView.page = cur + 1;
+      else boeView.page = Number(v) || 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -22670,7 +22914,7 @@
     globalSearchEl.addEventListener("input", (e) => {
       const q = String(e.target.value || "").trim();
       // Route search into the active panel's primary search box when present
-      const targets = ["#icc-search", "#bas-search", "#bo-search", "#stock-search", "#rv-search", "#aa-search", "#search", "#bas-alloc-search"];
+      const targets = ["#icc-search", "#bas-search", "#bo-search", "#boe-search", "#stock-search", "#rv-search", "#aa-search", "#search", "#bas-alloc-search"];
       for (const sel of targets) {
         const el = $(sel);
         if (!el || el.offsetParent === null) continue;
