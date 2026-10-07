@@ -2704,9 +2704,105 @@
     if (modal) modal.hidden = false;
   }
 
-  function numBtn(n, spec, extra) {
+  function numBtn(n, spec, extra, cls) {
     const attrs = extra ? ` ${extra}` : "";
-    return `<button type="button" class="pt-num" data-pt-open="${esc(spec)}"${attrs}>${num(n)}</button>`;
+    const klass = cls ? `pt-num ${cls}` : "pt-num";
+    return `<button type="button" class="${klass}" data-pt-open="${esc(spec)}"${attrs}>${num(n)}</button>`;
+  }
+
+  function emptySfxBucket() {
+    return { within: [], delivered: [], proforma: [], reserved: [], stock: [], swappedOut: [], swappedIn: [] };
+  }
+
+  function isProformaInvoiceCreated(text) {
+    return normHeader(text).includes("pro forma invoice created");
+  }
+
+  function hasSalesRawDelivery(row) {
+    if (!row) return false;
+    if (row.salesKind === "delivered") return true;
+    const invoice = row.invoiceDate || row.deliveryDate;
+    return !!(invoice && parseDate(invoice));
+  }
+
+  function sfxBucketId(row) {
+    const leaf = leafOf(row);
+    if (leaf && leaf.id) return leaf.id;
+    const leaves = global.ALLOCATION_ROWS || [];
+    const pk = normHeader(row && row.product);
+    const sk = normHeader(row && row.suffix);
+    const hit = leaves.find((item) => item && item.kind === "leaf"
+      && normHeader(item.product) === pk
+      && normHeader(item.sfx) === sk);
+    return hit ? hit.id : "__unmatched__";
+  }
+
+  function creditDayOf(row) {
+    return newCarCreditKey(row, row && row.dateKey) || String((row && row.dateKey) || "");
+  }
+
+  function laterLeftRes(model, vin, creditKey) {
+    const hist = (model.vinHistory && model.vinHistory.get(vin)) || [];
+    return hist.some((h) => {
+      if (!h) return false;
+      const snap = String(h.snapshotDate || h.dateKey || "");
+      return !!(snap && creditKey && snap > creditKey && !isRES(h));
+    });
+  }
+
+  /**
+   * SFX plan progress for one month.
+   * Within = daily new-car VINs, matched on product + suffix.
+   * Delivered = those VINs with a Sales Raw column V date.
+   * Proforma / Stock / Reserved come from the latest RTL secondary status.
+   * Swapped out = a later RTL day whose search area is not Retail Electronic Sales.
+   * Swapped in = a VIN added to Retail Electronic Sales that is not a new car.
+   */
+  function buildSfxBuckets(model, monthKey) {
+    const buckets = new Map();
+    const take = (id) => {
+      if (!buckets.has(id)) buckets.set(id, emptySfxBucket());
+      return buckets.get(id);
+    };
+    const month = monthKey || currentMonthKey();
+    const withinVins = new Set();
+    receiptChartDays(model).filter((d) => d && String(d.dateKey).slice(0, 7) === month).forEach((day) => {
+      (day.fileDayReceipts || []).forEach((row) => {
+        if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
+        withinVins.add(row.vin);
+        const bucket = take(sfxBucketId(row));
+        bucket.within.push(row);
+        if (hasSalesRawDelivery(row)) bucket.delivered.push(row);
+        const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
+        const sec = secondaryText(row, hist);
+        if (isProformaInvoiceCreated(sec)) bucket.proforma.push(row);
+        else if (isVehicleAllocationCompleted(sec)) bucket.stock.push(row);
+        else if (normHeader(sec)) bucket.reserved.push(row);
+        if (laterLeftRes(model, row.vin, creditDayOf(row))) bucket.swappedOut.push(row);
+      });
+    });
+
+    const monthFileDays = ((model && model.daily) || [])
+      .map((d) => d && d.dateKey)
+      .filter((key) => key && String(key).slice(0, 7) === month)
+      .sort();
+    const firstFile = monthFileDays[0] || "";
+    const history = (model && model.vinHistory) || new Map();
+    history.forEach((hist, vin) => {
+      if (!vin || withinVins.has(vin) || !hist || !hist.length) return;
+      const resSnap = hist.find((h) => h && String(h.snapshotDate || h.dateKey || "").slice(0, 7) === month && isRES(h));
+      if (!resSnap || !scopeMatch(resSnap)) return;
+      const firstRes = hist.find((h) => h && isRES(h));
+      const firstResDate = String((firstRes && (firstRes.snapshotDate || firstRes.dateKey)) || "");
+      const priorNonRes = hist.some((h) => {
+        const snap = String((h && (h.snapshotDate || h.dateKey)) || "");
+        return !!(snap && firstResDate && snap < firstResDate && !isRES(h));
+      });
+      const addedLater = !!(firstFile && firstResDate > firstFile && firstResDate.slice(0, 7) === month);
+      if (!priorNonRes && !addedLater) return;
+      take(sfxBucketId(resSnap)).swappedIn.push(Object.assign({}, resSnap, { vin }));
+    });
+    return buckets;
   }
 
   function rowsForOpen(spec, arg) {
@@ -2767,15 +2863,18 @@
     }
     if (key === "sfx") {
       const [id, metric] = String(arg || "").split("~");
-      const mine = pack.scoped.filter((v) => (id === "__unmatched__" ? !v.leafId : v.leafId === id));
-      const map = {
-        allocation: mine,
-        delivered: mine.filter((r) => r.statusKey === "Delivered"),
-        proforma: mine.filter((r) => r.statusKey === "Proforma"),
-        stock: pack.stock.filter((v) => (id === "__unmatched__" ? !v.leafId : v.leafId === id)),
-        swapped: mine.filter((r) => r.statusKey === "Swapped"),
+      const buckets = buildSfxBuckets(lastModel);
+      const bucket = buckets.get(id) || emptySfxBucket();
+      const titles = {
+        within: "Within",
+        delivered: "Delivered · Sales Raw column V",
+        proforma: "Proforma · pro-forma invoice created",
+        reserved: "Reserved",
+        stock: "Stock · vehicle allocation completed",
+        swappedOut: "Swapped out",
+        swappedIn: "Swapped in",
       };
-      return { title: `SFX · ${metric || "allocation"}`, sub: id, rows: map[metric] || mine };
+      return { title: `SFX · ${titles[metric] || "Within"}`, sub: id, rows: bucket[metric] || bucket.within };
     }
     if (key === "year") {
       const y = String(arg || "");
@@ -2805,7 +2904,6 @@
     scoped.forEach((r) => { counts[r.statusKey] = (counts[r.statusKey] || 0) + 1; });
     counts["My Stock"] = pack.stock.length;
     const stockAll = pack.stock;
-    const stockExtras = [];
     const gap = gapInfo(plan, within);
     const hint = $("#pt-live-hint");
     if (hint) {
@@ -2909,25 +3007,26 @@
 
     const sfxHost = $("#pt-sfx");
     if (sfxHost) {
+      const sfxBuckets = buildSfxBuckets(model);
       sfxHost.innerHTML = `<table class="pt-table"><thead><tr>
-        <th>SFX</th><th>Plan</th><th>Within</th><th>Delivered</th><th>Proforma</th><th>Stock</th><th>Swapped</th><th>%</th>
+        <th>SFX</th><th>Plan</th><th>Within</th><th>Delivered</th><th>Proforma</th><th>Reserved</th><th>Stock</th><th>Swapped out</th><th>Swapped in</th><th>%</th>
       </tr></thead><tbody>${
         sched.map((r) => {
-          const mine = scoped.filter((v) => (r.id === "__unmatched__" ? !v.leafId : v.leafId === r.id));
-          const c = { Delivered: 0, Proforma: 0, "My Stock": 0, Swapped: 0 };
-          mine.forEach((v) => { c[v.statusKey] = (c[v.statusKey] || 0) + 1; });
-          stockExtras.forEach((v) => {
-            if (r.id === "__unmatched__" ? !v.leafId : v.leafId === r.id) c["My Stock"] += 1;
-          });
-          const pct = r.allocation ? `${Math.round((mine.length / r.allocation) * 1000) / 10}%` : "—";
+          const bucket = sfxBuckets.get(r.id) || emptySfxBucket();
+          const pct = r.allocation ? `${Math.round((bucket.within.length / r.allocation) * 1000) / 10}%` : "—";
           const id = r.id || "";
-          return `<tr><td><button type="button" class="pt-link" data-pt-open="sfx" data-pt-arg="${esc(id)}~allocation">${esc(r.product)} ${esc(r.sfx)}</button></td>
-            <td class="num">${num(r.allocation)}</td><td class="num">${numBtn(mine.length, "sfx", `data-pt-arg="${esc(id)}~allocation"`)}</td>
-            <td class="num">${numBtn(c.Delivered, "sfx", `data-pt-arg="${esc(id)}~delivered"`)}</td>
-            <td class="num">${numBtn(c.Proforma, "sfx", `data-pt-arg="${esc(id)}~proforma"`)}</td>
-            <td class="num">${numBtn(c["My Stock"], "sfx", `data-pt-arg="${esc(id)}~stock"`)}</td>
-            <td class="num">${numBtn(c.Swapped, "sfx", `data-pt-arg="${esc(id)}~swapped"`)}</td><td class="num">${pct}</td></tr>`;
-        }).join("") || `<tr><td colspan="8">No SFX rows.</td></tr>`
+          const arg = (metric) => `data-pt-arg="${esc(id)}~${metric}"`;
+          return `<tr><td><button type="button" class="pt-link" data-pt-open="sfx" data-pt-arg="${esc(id)}~within">${esc(r.product)} ${esc(r.sfx)}</button></td>
+            <td class="num">${num(r.allocation)}</td>
+            <td class="num">${numBtn(bucket.within.length, "sfx", arg("within"))}</td>
+            <td class="num">${numBtn(bucket.delivered.length, "sfx", arg("delivered"))}</td>
+            <td class="num">${numBtn(bucket.proforma.length, "sfx", arg("proforma"))}</td>
+            <td class="num">${numBtn(bucket.reserved.length, "sfx", arg("reserved"))}</td>
+            <td class="num">${numBtn(bucket.stock.length, "sfx", arg("stock"))}</td>
+            <td class="num">${numBtn(bucket.swappedOut.length, "sfx", arg("swappedOut"))}</td>
+            <td class="num">${numBtn(bucket.swappedIn.length, "sfx", arg("swappedIn"), bucket.swappedIn.length ? "is-swap-in" : "")}</td>
+            <td class="num">${pct}</td></tr>`;
+        }).join("") || `<tr><td colspan="10">No SFX rows.</td></tr>`
       }</tbody></table>`;
     }
 
@@ -3369,6 +3468,7 @@
     myStockRows,
     swappedInList,
     isVehicleAllocationCompleted,
+    buildSfxBuckets,
     classifyVinStatus,
     normalizeVin,
     isRES,

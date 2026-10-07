@@ -1615,6 +1615,8 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
   border: 0; background: transparent; color: #1d4ed8; font: inherit; font-weight: 800; cursor: pointer; padding: 0;
 }
 #pt-dash.pt-tower .pt-num:hover { text-decoration: underline; }
+#pt-dash.pt-tower .pt-num.is-swap-in,
+#pt-dash.pt-tower .pt-num.is-swap-in:hover { color: #eb0a1e; }
 #pt-dash.pt-tower .pt-kpi { border-radius: 14px; box-shadow: 0 1px 2px rgba(16, 35, 63, .04); }
 #pt-dash.pt-tower .pt-vin-tools { display: flex; gap: 6px; padding: 0 12px 8px; }
 #pt-dash.pt-tower .pt-vin-tools input,

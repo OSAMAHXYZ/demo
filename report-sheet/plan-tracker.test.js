@@ -389,6 +389,45 @@ test("my stock splits free and undefined by secondary status", () => {
   assertEq(undef[0].vin, "UND1");
 });
 
+test("SFX progress classifies daily-chart VINs", () => {
+  const model = build({
+    "2026-10-03": [
+      veh("WITHIN1", RES, 0, d(2026, 10, 3), { secondaryStatus: "Vehicle allocation completed", product: "HILUX", suffix: "M0" }),
+      veh("FLEET1", FLEET, 0, d(2026, 10, 3), { product: "HILUX", suffix: "MH" }),
+    ],
+    "2026-10-04": [
+      veh("WITHIN1", RES, 1, d(2026, 10, 3), { secondaryStatus: "Pro-forma invoice created", product: "HILUX", suffix: "M0" }),
+      veh("FLEET1", RES, 9, d(2026, 9, 1), { secondaryStatus: "Vehicle allocation completed", product: "HILUX", suffix: "MH" }),
+      veh("NEW1", RES, 4, d(2026, 9, 1), { secondaryStatus: "Waiting", product: "HILUX", suffix: "U0" }),
+      veh("HOLD1", RES, 0, d(2026, 10, 4), { secondaryStatus: "Customer hold", product: "HILUX", suffix: "U0" }),
+    ],
+    "2026-10-05": [
+      veh("HOLD1", FLEET, 1, d(2026, 10, 4), { secondaryStatus: "Customer hold", product: "HILUX", suffix: "U0" }),
+    ],
+  }, "2026-10");
+  const day = model.daily.find((d) => d.dateKey === "2026-10-03");
+  day.fileDayReceipts.forEach((r) => {
+    if (r.vin === "WITHIN1") r.invoiceDate = d(2026, 10, 6);
+  });
+  const buckets = PT.buildSfxBuckets(model, "2026-10");
+  const all = emptyMerge(buckets);
+  assertEq(all.within.map((r) => r.vin).sort().join(","), "HOLD1,WITHIN1");
+  assertEq(all.delivered.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(all.proforma.map((r) => r.vin).join(","), "WITHIN1");
+  assertEq(all.stock.map((r) => r.vin).join(","), "");
+  assertEq(all.reserved.map((r) => r.vin).join(","), "HOLD1");
+  assertEq(all.swappedOut.map((r) => r.vin).join(","), "HOLD1");
+  assertEq(all.swappedIn.map((r) => r.vin).sort().join(","), "FLEET1,NEW1");
+});
+
+function emptyMerge(buckets) {
+  const out = { within: [], delivered: [], proforma: [], reserved: [], stock: [], swappedOut: [], swappedIn: [] };
+  buckets.forEach((bucket) => {
+    Object.keys(out).forEach((key) => { out[key] = out[key].concat(bucket[key] || []); });
+  });
+  return out;
+}
+
 test("normalizeVin is stable", () => {
   assertEq(PT.normalizeVin(" ab c-123 "), "ABC123");
   assertEq(PT.normalizeVin(12345), "12345");
