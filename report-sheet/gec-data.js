@@ -335,13 +335,21 @@
   function parseDottedDmy(v) {
     if (typeof v !== "string") return null;
     const s = normalizeDateText(v);
-    const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+    const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:\s*(am|pm))?$/i);
     if (!m) return null;
     const day = +m[1];
     const month = +m[2];
     const year = +m[3];
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    const dt = new Date(year, month - 1, day);
+    let hh = m[4] != null ? +m[4] : 0;
+    const mi = m[5] != null ? +m[5] : 0;
+    const ss = m[6] != null ? +m[6] : 0;
+    if (m[7]) {
+      const pm = /pm/i.test(m[7]);
+      if (pm && hh < 12) hh += 12;
+      if (!pm && hh === 12) hh = 0;
+    }
+    const dt = new Date(year, month - 1, day, hh, mi, ss);
     if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
     return dt;
   }
@@ -416,11 +424,21 @@
     return ws[colLetter(colIndex(DATE_FILTER_COLUMN)) + (rowIndex + 1)] || null;
   }
 
-  /** Original Column O text. CSV cells stay strings (readWorkbook raw:true). */
+  /** CSV source rows (strings). Null for a real Excel workbook. */
+  let csvTextRows = null;
+
+  function csvTextCell(rowIndex, col) {
+    const row = csvTextRows && rowIndex != null ? csvTextRows[rowIndex] : null;
+    if (!row || col == null || col < 0) return "";
+    return row[col] != null ? String(row[col]) : "";
+  }
+
+  /** Original Column O text. CSV dates come from the file text, not from SheetJS. */
   function columnOText(line, textLine, ws, rowIndex) {
     const idx = colIndex(DATE_FILTER_COLUMN);
     const cell = filterColumnCell(ws, rowIndex);
     const bits = [
+      csvTextCell(rowIndex, idx),
       cell && typeof cell.v === "string" ? cell.v : "",
       cell && typeof cell.w === "string" ? cell.w : "",
       textLine && textLine[idx] != null ? String(textLine[idx]) : "",
@@ -433,7 +451,16 @@
   }
 
   function filterColumnDate(line, textLine, ws, rowIndex) {
-    return parseDottedDmy(columnOText(line, textLine, ws, rowIndex));
+    const dotted = parseDottedDmy(columnOText(line, textLine, ws, rowIndex));
+    if (dotted) return dotted;
+    // A CSV dotted date must not fall through to the serial SheetJS invented from it.
+    if (csvTextRows) return null;
+    const idx = colIndex(DATE_FILTER_COLUMN);
+    const cell = filterColumnCell(ws, rowIndex);
+    if (cell && isSerial(cell.v)) return serialToDate(cell.v);
+    const raw = line && line[idx];
+    if (isSerial(raw)) return serialToDate(raw);
+    return null;
   }
 
   function filterColumnLabel(line, textLine, ws, rowIndex) {
@@ -656,24 +683,74 @@
     return Object.keys(counts).reduce((a, b) => (counts[b] > counts[a] ? b : a), ",");
   }
 
-  function readWorkbook(buffer, fileName) {
-    const bytes = new Uint8Array(buffer);
-    const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
-    const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
-    if (zip || ole || !/\.(csv|tsv|txt)$/i.test(String(fileName || ""))) {
-      return global.XLSX.read(buffer, { type: "array", cellDates: false });
+  /** Quote-aware split. Row index matches SheetJS so column O can be read as the original text. */
+  function splitDelimited(text, delimiter) {
+    const rows = [];
+    let row = [];
+    let cur = "";
+    let quoted = false;
+    const s = String(text || "");
+    for (let i = 0; i < s.length; i += 1) {
+      const c = s[i];
+      if (quoted) {
+        if (c === '"') {
+          if (s[i + 1] === '"') { cur += '"'; i += 1; }
+          else quoted = false;
+        } else cur += c;
+      } else if (c === '"') quoted = true;
+      else if (c === delimiter) { row.push(cur); cur = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && s[i + 1] === "\n") i += 1;
+        row.push(cur);
+        rows.push(row);
+        row = [];
+        cur = "";
+      } else cur += c;
     }
+    if (cur.length || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+
+  function looksLikeTableText(bytes) {
+    let sample = "";
+    try { sample = decodeText(bytes.subarray ? bytes.subarray(0, 8000) : bytes); } catch { return false; }
+    if (/^\s*</.test(sample)) return true;
+    const delim = (sample.match(/[,;\t]/g) || []).length;
+    return delim > 5 && /transaction|created date|employee number/i.test(sample);
+  }
+
+  function readTextWorkbook(bytes) {
     let text = decodeText(bytes);
     if (/^\s*</.test(text)) return global.XLSX.read(text, { type: "string", cellDates: false });
     const sep = /^sep=(.)\r?\n/i.exec(text);
     if (sep) text = text.slice(sep[0].length);
-    // raw:true keeps "01.10.2026" as text. Without it SheetJS stores a serial and 12.10.2026 becomes December.
-    return global.XLSX.read(text, { type: "string", cellDates: false, raw: true, FS: sep ? sep[1] : guessDelimiter(text) });
+    const FS = sep ? sep[1] : guessDelimiter(text);
+    const wb = global.XLSX.read(text, { type: "string", cellDates: false, FS });
+    wb.__gecTextRows = splitDelimited(text, FS);
+    return wb;
+  }
+
+  function readWorkbook(buffer, fileName) {
+    const bytes = new Uint8Array(buffer);
+    const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+    const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+    const namedText = /\.(csv|tsv|txt)$/i.test(String(fileName || ""));
+    if (!zip && !ole && (namedText || looksLikeTableText(bytes))) return readTextWorkbook(bytes);
+    try {
+      return global.XLSX.read(buffer, { type: "array", cellDates: false });
+    } catch (err) {
+      if (zip || ole) throw err;
+      return readTextWorkbook(bytes);
+    }
   }
 
   /** GEC File (ArrayBuffer) → lead dataset (+ visitors when the workbook has a visitor sheet). */
   function parseBuffer(buffer, opts) {
-    return parseWorkbook(readWorkbook(buffer, opts && opts.fileName), opts);
+    try {
+      return parseWorkbook(readWorkbook(buffer, opts && opts.fileName), opts);
+    } catch (err) {
+      return emptyDataset(opts || {}, [], (err && err.message) || "The GEC file could not be read.");
+    }
   }
 
   /** Separate visitor file (ArrayBuffer) → visitor dataset. */
@@ -738,6 +815,7 @@
    */
   function parseWorkbook(workbook, opts) {
     const options = opts || {};
+    csvTextRows = (workbook && workbook.__gecTextRows) || null;
     date1904 = !!(workbook && workbook.Workbook && workbook.Workbook.WBProps && workbook.Workbook.WBProps.date1904);
     resetRuleCaches();
     const { analysed, best } = pickLeadSheet(workbook);
@@ -807,6 +885,9 @@
         const dated = g.rows.map((e) => leadDateOf(cell(e.line, "createdDate"), cell(e.line, "createdTime"))).filter(Boolean);
         leadDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
+      const createdText = csvTextCell(latest.r, colMap.createdDate);
+      const createdDotted = parseDottedDmy(createdText);
+      if (createdDotted) leadDate = createdDotted;
       const columnORaw = columnOText(line, textLine, best.ws, latest.r);
       if (!leadDate) leadDate = parseDottedDmy(columnORaw);
       let sheetDate = parseDottedDmy(columnORaw);

@@ -2509,11 +2509,11 @@
     const swap = kind === "in" ? null : laterSwapInfo(model, row);
     const leaf = leafOf(row);
     const hist = (model.vinHistory && model.vinHistory.get(row && row.vin)) || [];
-    let statusKey = "Proforma";
+    let statusKey = "Reserved";
     if (flags.delivered) statusKey = "Delivered";
     else if (kind === "in") statusKey = "Swapped in";
     else if (flags.stock) statusKey = "Stock";
-    else if (flags.reserved) statusKey = "Reserved";
+    else if (flags.proforma) statusKey = "Proforma";
     const sales = salesRawForVin(row && row.vin);
     const colVDate = (sales && (sales.invoiceDate || sales.deliveryDate)) || row.invoiceDate || row.deliveryDate || null;
     return Object.assign({}, row, {
@@ -2825,13 +2825,26 @@
     return { within: [], delivered: [], proforma: [], reserved: [], stock: [], swappedOut: [], swappedIn: [] };
   }
 
-  function isProformaInvoiceCreated(text) {
-    const n = normHeader(text);
-    return n.includes("pro forma invoice created") || n.includes("dio completed vehicle registered");
-  }
+  /** Secondary status description → one bucket. Anything not listed is Reserved. */
+  const SECONDARY_STATUS_CLASS = {
+    "dio completed": "proforma",
+    "dio started": "proforma",
+    "pro forma invoice created": "proforma",
+    "pro forma invoice created damage block": "proforma",
+    "sales order released by sales manager": "proforma",
+    "vehicle registered": "proforma",
+    "vehicle reserved": "proforma",
+    "sales order created": "reserved",
+    "sales order created veh damaged": "reserved",
+    "vehicle assigned to cust damage block": "reserved",
+    "vehicle allocation completed": "stock",
+    "vehicle damaged": "stock",
+    "vehicle freeze from s000": "stock",
+  };
 
-  function isReservedDamageStatus(text) {
-    return normHeader(text).includes("sales order created veh damaged");
+  function secondaryStatusClass(text) {
+    const key = String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return SECONDARY_STATUS_CLASS[key] || "reserved";
   }
 
   function descriptionFromDetails(details) {
@@ -2913,16 +2926,12 @@
 
   function classifyWithinFlags(model, row) {
     const hist = (model.vinHistory && model.vinHistory.get(row.vin)) || [];
-    const sec = secondaryText(row, hist);
-    const textProforma = isProformaInvoiceCreated(sec);
-    const damaged = isReservedDamageStatus(sec);
-    const stock = !textProforma && !damaged && isVehicleAllocationCompleted(sec);
-    const delivered = hasSalesRawColV(row);
+    const kind = secondaryStatusClass(secondaryText(row, hist));
     return {
-      delivered,
-      proforma: !delivered,
-      stock,
-      reserved: damaged || (!textProforma && !stock && !!normHeader(sec)),
+      delivered: hasSalesRawColV(row),
+      proforma: kind === "proforma",
+      stock: kind === "stock",
+      reserved: kind === "reserved",
       swappedOut: laterLeftRes(model, row.vin, creditDayOf(row)),
     };
   }
@@ -2963,8 +2972,8 @@
    * SFX plan progress for one month.
    * Within = daily new-car VINs, matched on product + suffix.
    * Delivered = Sales Raw column V has a date.
-   * Proforma = Sales Raw column V has no date.
-   * Stock / Reserved still come from the latest RTL secondary status.
+   * Proforma, Reserved, and Stock come from the latest RTL secondary status description.
+   * Any secondary status that is not listed is Reserved.
    * Swapped out = a later RTL day whose search area is not Retail Electronic Sales.
    * Swapped in = a VIN added to Retail Electronic Sales that is not a new car.
    */
@@ -3034,9 +3043,9 @@
       allocation: ["My allocation", "New cars this month", totals.within],
       received: ["Received / RES", "New cars this month", totals.within],
       delivered: ["Delivered", "Sales Raw column V", totals.delivered],
-      proforma: ["Proforma", "No date in Sales Raw column V", totals.proforma],
-      reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged", totals.reserved],
-      stock: ["Stock", "Secondary status · vehicle allocation completed", totals.stock],
+      proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved", totals.proforma],
+      reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status", totals.reserved],
+      stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze", totals.stock],
       swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales", totals.swappedOut],
       in: ["Swapped in", "Added to Retail Electronic Sales · not a new car", totals.swappedIn],
       free: ["Free in my stock", "Secondary status · Vehicle allocation completed", pack.free],
@@ -3067,9 +3076,9 @@
         res: ["RES", "Retail Electronic Sales in this RTL file"],
         allocation: ["My allocation", "New cars credited to this day"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "No date in Sales Raw column V"],
-        reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
-        stock: ["Stock", "Secondary status · vehicle allocation completed"],
+        proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved"],
+        reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status"],
+        stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze"],
         swapped: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
         in: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
       };
@@ -3082,9 +3091,9 @@
       const titles = {
         within: ["Allocation", "New cars this month"],
         delivered: ["Delivered", "Sales Raw column V"],
-        proforma: ["Proforma", "No date in Sales Raw column V"],
-        reserved: ["Reserved", "Any other secondary status, including sales order created - veh damaged"],
-        stock: ["Stock", "Secondary status · vehicle allocation completed"],
+        proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved"],
+        reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status"],
+        stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze"],
         swappedOut: ["Swapped out", "A later RTL day is not Retail Electronic Sales"],
         swappedIn: ["Swapped in", "Added to Retail Electronic Sales · not a new car"],
       };
@@ -3112,9 +3121,9 @@
       const titles = {
         within: "Within",
         delivered: "Delivered · Sales Raw column V",
-        proforma: "Proforma · no date in Sales Raw column V",
-        reserved: "Reserved",
-        stock: "Stock · vehicle allocation completed",
+        proforma: "Proforma · secondary status",
+        reserved: "Reserved · secondary status",
+        stock: "Stock · secondary status",
         swappedOut: "Swapped out",
         swappedIn: "Swapped in",
       };
@@ -3198,8 +3207,8 @@
       ["allocation", "My allocation", within, "New cars this month"],
       ["received", "Received / RES", received, "New cars this month"],
       ["delivered", "Delivered", statusTotals.delivered.length, "Sales Raw col V"],
-      ["proforma", "Proforma", statusTotals.proforma.length, "No Sales Raw column V date"],
-      ["stock", "Stock", statusTotals.stock.length, "Vehicle allocation completed"],
+      ["proforma", "Proforma", statusTotals.proforma.length, "Secondary status"],
+      ["stock", "Stock", statusTotals.stock.length, "My stock · secondary status"],
       ["swapped", "Swapped out", statusTotals.swappedOut.length, "Later day left RES"],
     ];
     const kpiHost = $("#pt-kpis");
@@ -3479,7 +3488,7 @@
     const todayRows = allocationRows.filter((r) => creditDayOf(r) === todayKey);
     const allRows = allocationRows.concat(inRows);
     const deliveredRows = allRows.filter((r) => r.colVDelivered);
-    const proformaRows = allRows.filter((r) => !r.colVDelivered);
+    const proformaRows = pick(statusTotals.proforma);
     const tabCounts = {
       all: allRows.length,
       allocation: allocationRows.length,
