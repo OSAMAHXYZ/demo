@@ -100,13 +100,33 @@
         );
         $('employee-name').innerHTML = options.join('');
     }
+    function chosen(id) {
+        const value = String($(id).value || '').trim();
+        if (!value || value.toLowerCase() === 'all') return '';
+        return value;
+    }
+    function restoreSelect(select, value) {
+        const wanted = value && Array.from(select.options).some((opt) => opt.value === value) ? value : '';
+        select.value = wanted;
+    }
     async function loadLive() {
-        const data = await fetch('/api/reserved-orders/live').then((res) => res.json());
-        const next = data.orders || [];
-        const payload = (data.updatedAt || '') + next.length + (next[0] && next[0].statusChangedAt || '');
+        let data;
+        try {
+            const res = await fetch('/api/reserved-orders/live');
+            data = await res.json();
+            if (!res.ok) throw new Error(data.error || ('Live data request failed (' + res.status + ')'));
+        } catch (err) {
+            console.error('Reserved Orders load failed:', err);
+            orders = [];
+            $('cards').innerHTML = '<div class="empty">Reserved orders could not be loaded.</div>';
+            return;
+        }
+        const next = Array.isArray(data.orders) ? data.orders : [];
         orders = next;
-        $('updated-at').textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
-        if (payload === loadLive.last && document.querySelector('.order')) return tickTimers();
+        const stamp = $('updated-at');
+        if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
+        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || ''].join('|');
+        if (payload === loadLive.last && document.querySelector('#cards .lane')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
         render();
@@ -116,20 +136,23 @@
         const advisor = $('filter-advisor');
         const queue = $('filter-queue');
         const keep = [status.value, advisor.value, queue.value];
-        status.innerHTML = '<option value="">Status</option>' + STATUSES.map((item) => `<option>${esc(item)}</option>`).join('');
-        const advisors = Array.from(new Set(orders.map((order) => order.salesAdvisor).filter(Boolean))).sort();
-        advisor.innerHTML = '<option value="">Sales advisor</option>' + advisors.map((item) => `<option>${esc(item)}</option>`).join('');
+        status.innerHTML = '<option value="">All</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+        const advisors = Array.from(new Set(orders.map((order) => order.salesAdvisor).filter((name) => name && name !== 'UNASSIGNED'))).sort();
+        const unassigned = orders.some((order) => order.salesAdvisor === 'UNASSIGNED') ? '<option value="UNASSIGNED">UNASSIGNED</option>' : '';
+        advisor.innerHTML = '<option value="">All</option>' + advisors.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + unassigned;
         const queues = Array.from(new Set(orders.map((order) => order.queueNumber).filter((n) => n != null))).sort((a, b) => a - b);
-        queue.innerHTML = '<option value="">Queue</option>' + queues.map((n) => `<option value="${n}">#${n}</option>`).join('');
-        status.value = keep[0]; advisor.value = keep[1]; queue.value = keep[2];
+        queue.innerHTML = '<option value="">All</option>' + queues.map((n) => `<option value="${n}">#${n}</option>`).join('');
+        restoreSelect(status, keep[0]);
+        restoreSelect(advisor, keep[1]);
+        restoreSelect(queue, keep[2]);
     }
     function visibleOrders() {
         const q = $('search').value.trim().toLowerCase();
-        const status = $('filter-status').value;
-        const payment = $('filter-payment').value;
-        const advisor = $('filter-advisor').value;
-        const queue = $('filter-queue').value;
-        const state = $('filter-state').value;
+        const status = chosen('filter-status');
+        const payment = chosen('filter-payment');
+        const advisor = chosen('filter-advisor');
+        const queue = chosen('filter-queue');
+        const state = chosen('filter-state');
         const sort = $('sort').value;
         const list = orders.filter((order) => {
             if (q && ![order.vin, order.orderNumber, order.customerName, order.salesAdvisor].join(' ').toLowerCase().includes(q)) return false;
@@ -155,11 +178,11 @@
         const expired = orders.filter(isExpired).length;
         const soon = orders.filter((order) => isActive(order) && (remainingMs(order) || 0) > 0 && remainingMs(order) <= 6 * 3600000).length;
         $('kpis').innerHTML = [
-            ['Total', orders.length, ''],
-            ['Active', orders.filter(isActive).length, 'ok'],
+            ['Total reserved', orders.length, ''],
+            ['Active orders', orders.filter(isActive).length, 'ok'],
             ['Expired', expired, 'bad'],
-            ['Invoiced', orders.filter(isCompleted).length, 'ok'],
-            ['Deadline', soon, 'warn']
+            ['Completed / invoiced', orders.filter(isCompleted).length, 'ok'],
+            ['Approaching deadline', soon, 'warn']
         ].map(([label, value, cls]) => `<article class="kpi ${cls}"><em>${label}</em><strong>${value}</strong></article>`).join('');
         const top = list.slice(0, 3);
         $('cards').innerHTML = top.length ? top.map(cardHtml).join('') : '<div class="empty">No reserved orders match this view.</div>';
@@ -172,7 +195,7 @@
         const ahead = (order.ahead || []).slice(0, 3).map((item) => `#${item.queueNumber} ${esc(item.orderNumber || 'NO ORDER')}`).join(' · ') || 'None ahead';
         return `<article class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
             <div><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
-            <div><b>ORDER #${esc(order.orderNumber || 'NO ORDER')}</b><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
+            <div><b>${esc(order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER')}</b><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
             <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span></div>
             <div><b>${esc(show(order.salesAdvisor, 'UNASSIGNED'))}</b><span class="muted">${esc(show(order.paymentLabel, 'UNKNOWN'))}</span><span class="muted">${esc(order.assignDisplay || 'NO ASSIGN DATE')}</span></div>
             <div><span class="muted">Next</span><b>${ahead}</b></div>
