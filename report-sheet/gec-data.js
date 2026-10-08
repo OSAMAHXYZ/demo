@@ -92,7 +92,7 @@
      */
     SHOW_TIMING: false,
     SLA_MINUTES: 5,
-    headerScanRows: 30,
+    headerScanRows: 60,
     maxDailyBuckets: 62,
   };
 
@@ -588,6 +588,8 @@
   function matchScore(field, hn) {
     if (!hn) return 0;
     if ((field.exact || []).includes(hn)) return 100;
+    const strong = (field.contains || []).find((c) => hn === c || hn.startsWith(`${c} `) || hn.endsWith(` ${c}`) || hn.includes(` ${c} `));
+    if (strong) return 80 + Math.min(strong.length, 20);
     const padded = ` ${hn} `;
     // Leading-space tokens (" no", " id") only match whole words.
     if ((field.not || []).some((x) => (x.startsWith(" ") ? padded.includes(`${x} `) : hn.includes(x)))) return 0;
@@ -719,13 +721,37 @@
     return delim > 5 && /transaction|created date|employee number/i.test(sample);
   }
 
+  function leadSplitScore(rows) {
+    const header = findHeader(rows, LEAD_FIELDS);
+    return header.map.txn != null ? header.score : -1;
+  }
+
+  /** Pick the delimiter that separates “Transaction No.” into its own column. */
+  function chooseDelimiter(text, forced) {
+    if (forced) return forced;
+    const options = [",", ";", "\t", "|"];
+    let bestFs = guessDelimiter(text);
+    let bestScore = -1;
+    options.forEach((fs) => {
+      const sample = splitDelimited(text, fs).slice(0, config.headerScanRows + 2);
+      const score = leadSplitScore(sample);
+      if (score > bestScore) { bestScore = score; bestFs = fs; }
+    });
+    return bestFs;
+  }
+
   function readTextWorkbook(bytes) {
     let text = decodeText(bytes);
     if (/^\s*</.test(text)) return global.XLSX.read(text, { type: "string", cellDates: false });
     const sep = /^sep=(.)\r?\n/i.exec(text);
     if (sep) text = text.slice(sep[0].length);
-    const FS = sep ? sep[1] : guessDelimiter(text);
-    const wb = global.XLSX.read(text, { type: "string", cellDates: false, FS });
+    const FS = chooseDelimiter(text, sep ? sep[1] : "");
+    let wb;
+    try {
+      wb = global.XLSX.read(text, { type: "string", cellDates: false, FS });
+    } catch {
+      wb = { SheetNames: ["CSV"], Sheets: { CSV: {} } };
+    }
     wb.__gecTextRows = splitDelimited(text, FS);
     return wb;
   }
@@ -774,6 +800,16 @@
   }
 
   function pickLeadSheet(workbook) {
+    const textRows = workbook && workbook.__gecTextRows;
+    if (Array.isArray(textRows) && textRows.length && leadSplitScore(textRows) >= 0) {
+      const header = findHeader(textRows, LEAD_FIELDS);
+      const name = (workbook.SheetNames && workbook.SheetNames[0]) || "CSV";
+      const analysed = [{ name, matrix: textRows, rows: textRows.length, count: header.count, fields: header.count }];
+      return {
+        analysed,
+        best: { name, ws: null, matrix: textRows, textMatrix: textRows, ...header, sheetScore: header.score },
+      };
+    }
     const names = (workbook && workbook.SheetNames) || [];
     const analysed = names.filter((n) => workbook.Sheets[n]).map((name) => {
       const ws = workbook.Sheets[name];
@@ -829,7 +865,7 @@
     }
 
     const matrix = best.matrix;
-    const text = sheetMatrix(best.ws, false);
+    const text = best.textMatrix || (best.ws ? sheetMatrix(best.ws, false) : matrix);
     const headers = buildHeaders(matrix, best.headerIdx);
     const colMap = { ...best.map };
     const warnings = [];
