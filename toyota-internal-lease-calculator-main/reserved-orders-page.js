@@ -184,28 +184,48 @@
             ['Completed / invoiced', orders.filter(isCompleted).length, 'ok'],
             ['Approaching deadline', soon, 'warn']
         ].map(([label, value, cls]) => `<article class="kpi ${cls}"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        const top = list.slice(0, 3);
-        $('cards').innerHTML = top.length ? top.map(cardHtml).join('') : '<div class="empty">No reserved orders match this view.</div>';
-        if (!$('overlay-all').classList.contains('hidden')) renderAll(list);
+        const leaders = queueLeaderHtml();
+        $('cards').innerHTML = list.length ? list.map((order) => cardHtml(order, leaders)).join('') : '<div class="empty">No reserved orders match this view.</div>';
     }
-    function cardHtml(order) {
+    function queueLeaderHtml() {
+        const found = new Map();
+        orders.forEach((item) => {
+            const n = Number(item.queueNumber);
+            if ((n === 1 || n === 2 || n === 3) && !found.has(n)) found.set(n, item);
+        });
+        return [1, 2, 3].map((n) => {
+            const item = found.get(n);
+            const advisor = !item ? '—' : (item.salesAdvisor || 'UNASSIGNED');
+            return `<b>#${n} ${esc(advisor)}</b>`;
+        }).join('');
+    }
+    function retailMatch(value) {
+        const text = String(value || '').trim().toLowerCase();
+        return text === 'rtlesal' || text.includes('retail electronic sales');
+    }
+    function ageFlag(days) {
+        if (days == null || days === '' || Number.isNaN(Number(days))) return '<span class="flag">Age —</span>';
+        const n = Number(days);
+        const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
+        return `<span class="flag ${tone}">Age ${n}d</span>`;
+    }
+    function stockFlag(label, value) {
+        const shown = value && value !== '—' ? value : '—';
+        return `<span class="flag ${retailMatch(shown) ? 'good' : 'bad'}">${label} ${esc(shown)}</span>`;
+    }
+    function cardHtml(order, leaders) {
         const ms = remainingMs(order);
         const hours = order.paymentHours || 48;
         const img = carImage(order.vehicle);
-        const ahead = (order.ahead || []).slice(0, 3).map((item) => `#${item.queueNumber} ${esc(item.orderNumber || 'NO ORDER')}`).join(' · ') || 'None ahead';
         return `<article class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
-            <div><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
-            <div><b>${esc(order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER')}</b><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
-            <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span></div>
+            <div class="lane-id"><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
+            <div><b>${esc(order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER')}</b><span class="vin-line"><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span>${ageFlag(order.allocationAging)}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
+            <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span>${stockFlag('Area', order.searchArea)}${stockFlag('Share', order.shareLevel)}</div>
             <div><b>${esc(show(order.salesAdvisor, 'UNASSIGNED'))}</b><span class="muted">${esc(show(order.paymentLabel, 'UNKNOWN'))}</span><span class="muted">${esc(order.assignDisplay || 'NO ASSIGN DATE')}</span></div>
-            <div><span class="muted">Next</span><b>${ahead}</b></div>
+            <div class="queue-top"><span class="muted">Ahead</span>${leaders}</div>
             <div><div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${formatRemain(ms)}</div><span class="muted">${hours} HOURS</span></div>
             <div><span class="badge ${badge(order.status)}">${esc(order.status || 'محجوز')}</span><div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div></div>
         </article>`;
-    }
-    function renderAll(list) {
-        const rows = list || visibleOrders();
-        $('all-rows').innerHTML = rows.map(cardHtml).join('') || '<div class="empty">No reserved orders match this view.</div>';
     }
     function tickTimers() {
         paintSession();
@@ -326,7 +346,6 @@
     function showView(name) {
         $('overlay-lookup').classList.toggle('hidden', name !== 'lookup');
         $('overlay-message').classList.toggle('hidden', name !== 'message');
-        if (name !== 'all') $('overlay-all').classList.add('hidden');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'lookup') loadVehicles();
     }
@@ -367,8 +386,6 @@
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
         $(id).addEventListener('change', render);
     });
-    $('view-all').addEventListener('click', () => { renderAll(); $('overlay-all').classList.remove('hidden'); });
-    $('close-all').addEventListener('click', () => $('overlay-all').classList.add('hidden'));
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
     $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
     $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });

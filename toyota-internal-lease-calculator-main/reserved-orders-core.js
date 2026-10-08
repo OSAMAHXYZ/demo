@@ -24,7 +24,7 @@ const STATUSES = [
 
 const STATUS_SET = new Set(STATUSES.map((s) => s.toLowerCase()));
 
-const COL = { order: 5, product: 8, suffix: 9, vin: 11, exterior: 12, interior: 13 };
+const COL = { order: 5, assign: 6, product: 8, suffix: 9, vin: 11, exterior: 12, interior: 13, searchArea: 15 };
 
 function pad2(n) {
     return String(n).padStart(2, '0');
@@ -309,6 +309,53 @@ function findHeaderIndex(patterns, headers) {
     return -1;
 }
 
+function findHeaderByPriority(groups, headers) {
+    for (let g = 0; g < groups.length; g++) {
+        const index = findHeaderIndex(groups[g], headers);
+        if (index >= 0) return index;
+    }
+    return -1;
+}
+
+function parseAgingDays(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+    const match = String(value).trim().match(/-?\d+/);
+    if (!match) return null;
+    const days = Number(match[0]);
+    return Number.isFinite(days) ? days : null;
+}
+
+function pickRtlSheet(sheets) {
+    const list = sheets || [];
+    return list.find((sheet) => /rtl/i.test(String(sheet && sheet.name || ''))) || list[0] || null;
+}
+
+function indexRtlAging(sheets) {
+    const map = new Map();
+    const sheet = pickRtlSheet(sheets);
+    if (!sheet) return map;
+    const grid = sheet.grid || [];
+    const headerIdx = detectHeaderRow(grid);
+    const headers = grid[headerIdx] || [];
+    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+    const ageCol = findHeaderByPriority([
+        [/vin\s*allocation\s*ag[ei]ing/, /allocation\s*ag[ei]ing/, /allocation\s*age/],
+        [/^ag[ei]ing$/, /^age$/, /stock\s*age/]
+    ], headers);
+    const vinIndex = vinCol >= 0 ? vinCol : columnIndex('E');
+    const ageIndex = ageCol >= 0 ? ageCol : columnIndex('J');
+    for (let r = headerIdx + 1; r < grid.length; r++) {
+        const line = grid[r] || [];
+        const vin = normalizeVin(cell(line, vinIndex));
+        if (!vin || map.has(vin)) continue;
+        const days = parseAgingDays(cell(line, ageIndex));
+        if (days == null) continue;
+        map.set(vin, days);
+    }
+    return map;
+}
+
 function detectHeaderRow(grid) {
     const limit = Math.min(grid.length, 40);
     for (let r = 0; r < limit; r++) {
@@ -324,6 +371,12 @@ function detectHeaderRow(grid) {
 function cell(row, index) {
     if (index == null || index < 0) return '';
     return (row || [])[index];
+}
+
+function filledCell(value) {
+    if (value == null || value === '') return '';
+    if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+    return String(value).trim();
 }
 
 function extractReservedRows(grid) {
@@ -342,6 +395,8 @@ function extractReservedRows(grid) {
     const assignCol = findHeaderIndex([/assign(?:ment|ed)?\s*date/, /order\s*assign/, /allocation\s*date/], headers);
     const paymentCol = findHeaderIndex([/payment\s*type/, /payment/, /finance\s*type/, /طريقة الدفع/], headers);
     const statusCol = findHeaderIndex([/^status$/, /current\s*status/, /الحالة/], headers);
+    const searchCol = findHeaderIndex([/vehicle\s*search\s*area/, /search\s*area\s*desc/, /search\s*area/], headers);
+    const shareCol = findHeaderIndex([/shar(?:e|ing)\s*level/, /stock\s*sharing/, /^sharing$/], headers);
 
     const rows = [];
     for (let r = headerIdx + 1; r < grid.length; r++) {
@@ -359,9 +414,11 @@ function extractReservedRows(grid) {
             salesAdvisor: advisorCol >= 0 ? cell(line, advisorCol) : '',
             customerName: customerCol >= 0 ? cell(line, customerCol) : '',
             createdRaw: createdCol >= 0 ? cell(line, createdCol) : '',
-            assignRaw: assignCol >= 0 ? cell(line, assignCol) : '',
+            assignRaw: filledCell(cell(line, COL.assign)) || (assignCol >= 0 && assignCol !== COL.assign ? cell(line, assignCol) : ''),
             paymentRaw: paymentCol >= 0 ? cell(line, paymentCol) : '',
-            statusRaw: statusCol >= 0 ? cell(line, statusCol) : ''
+            statusRaw: statusCol >= 0 ? cell(line, statusCol) : '',
+            searchArea: filledCell(cell(line, COL.searchArea)) || (searchCol >= 0 && searchCol !== COL.searchArea ? cell(line, searchCol) : ''),
+            shareLevel: shareCol >= 0 ? cell(line, shareCol) : ''
         });
     }
     return { headerIdx, rows };
@@ -467,7 +524,7 @@ function applyQueue(orders) {
     return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
 }
 
-function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
+function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin }) {
     const sheet = pickReservedSheet(sheets);
     if (!sheet) {
         return {
@@ -479,6 +536,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
     }
     const extracted = extractReservedRows(sheet.grid || []);
     const backOrder = indexBackOrder(boRows, boHeaders);
+    const rtlAges = rtlByVin instanceof Map ? rtlByVin : new Map();
     const previousByKey = new Map();
     (previous || []).forEach((order) => {
         if (order && order.key) previousByKey.set(order.key, order);
@@ -513,6 +571,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
             modelYear: prefer(row.modelYear, bo && bo.modelYear),
             exterior: prefer(row.exterior, bo && bo.exterior),
             interior: prefer(row.interior, bo && bo.interior),
+            searchArea: cleanText(row.searchArea) || '—',
+            shareLevel: cleanText(row.shareLevel) || '—',
+            allocationAging: rtlAges.has(vin) ? rtlAges.get(vin) : null,
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -560,6 +621,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
             modelYear: prefer(row.modelYear, bo && bo.modelYear),
             exterior: prefer(row.exterior, bo && bo.exterior),
             interior: prefer(row.interior, bo && bo.interior),
+            searchArea: cleanText(row.searchArea) || '—',
+            shareLevel: cleanText(row.shareLevel) || '—',
+            allocationAging: null,
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -841,7 +905,8 @@ function attachReservedOrders(app, options) {
             sheets,
             boRows: bo.rows,
             boHeaders: bo.headers,
-            previous: previous || loadLive().orders || []
+            previous: previous || loadLive().orders || [],
+            rtlByVin: indexRtlAging(names.rtlSheets || [])
         });
         if (!built.ok) return built;
         const live = {
@@ -1056,7 +1121,9 @@ function attachReservedOrders(app, options) {
             if (!esalesBuffer || !esalesBuffer.length) return null;
             const sheets = sheetGridsFromBuffer(esalesBuffer);
             const bo = backOrderFromBuffer(boBuffer);
-            return publish(sheets, bo, names || {});
+            const meta = names || {};
+            const rtlSheets = meta.rtlBuffer && meta.rtlBuffer.length ? sheetGridsFromBuffer(meta.rtlBuffer) : (meta.rtlSheets || []);
+            return publish(sheets, bo, Object.assign({}, meta, { rtlSheets }));
         }
     };
 }

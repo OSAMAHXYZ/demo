@@ -469,11 +469,16 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
   const esalesPath = reportSheetFilePath('central');
   if (!esalesPath || !fs.existsSync(esalesPath)) return null;
   const boPath = reportSheetFilePath('backorder');
+  const rtlPath = reportSheetFilePath('rtl');
   const names = fileNames || {};
   return reservedOrdersHub.refreshFromBuffers(
     fs.readFileSync(esalesPath),
     boPath && fs.existsSync(boPath) ? fs.readFileSync(boPath) : null,
-    { esalesName: names.central || 'E-Sales', boName: names.backorder || 'Back Order' }
+    {
+      esalesName: names.central || 'E-Sales',
+      boName: names.backorder || 'Back Order',
+      rtlBuffer: rtlPath && fs.existsSync(rtlPath) ? fs.readFileSync(rtlPath) : null
+    }
   );
 }
 
