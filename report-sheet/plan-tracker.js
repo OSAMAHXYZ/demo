@@ -2025,6 +2025,7 @@
           view.tab = view.status ? statusToTab(view.status) : "all";
         }
         if (id === "pt-f-area") view.area = el.value;
+        sizeFilterSelect(el);
         view.vinPin = null;
         repaint();
       });
@@ -2340,9 +2341,8 @@
         };
       }
     });
-    const invoice = receipt && (receipt.invoiceDate || receipt.deliveryDate);
     const proforma = receipt && receipt.proformaDate;
-    const delivered = !!(receipt && (receipt.salesKind === "delivered" || (invoice && parseDate(invoice))));
+    const delivered = hasSalesRawColV(receipt);
     const isProforma = !delivered && !!(receipt && (receipt.salesKind === "proforma" || (proforma && parseDate(proforma))));
     let status = "My Stock";
     if (delivered) status = "Delivered";
@@ -2470,6 +2470,15 @@
     return { n: 0, cls: "pt-gap-ok", word: "done" };
   }
 
+  function sizeFilterSelect(el) {
+    if (!el) return;
+    const text = el.options[el.selectedIndex] ? el.options[el.selectedIndex].textContent : "";
+    const label = String(text || "").trim();
+    const chars = Math.min(28, Math.max(8, label.length + 5));
+    el.style.width = chars + "ch";
+    el.title = label;
+  }
+
   function fillSelect(id, values, current, allLabel) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -2477,6 +2486,7 @@
     const uniq = [...new Set(list)].sort((a, b) => a.localeCompare(b));
     el.innerHTML = `<option value="">${esc(allLabel)}</option>`
       + uniq.map((v) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(v)}</option>`).join("");
+    sizeFilterSelect(el);
   }
 
   let vinPaintRows = [];
@@ -2590,6 +2600,7 @@
       body.innerHTML = `
         <p class="pt-drawer-id">${esc(key)}</p>
         <p>${esc(rec ? (rec.leafProduct || rec.product) : (hist[0] && hist[0].product) || "")} · ${esc(rec ? (rec.leafSfx || rec.suffix) : (hist[0] && hist[0].suffix) || "")} · ${esc(rec ? rec.year : (hist[0] && hist[0].year) || "—")}</p>
+        <p>Exterior ${esc(colorOf(shown || rec || hist[hist.length - 1], "ext") || "—")} · Interior ${esc(colorOf(shown || rec || hist[hist.length - 1], "int") || "—")}</p>
         <h4>Current status</h4>
         <p>${statusPill(shown ? shown.statusKey : "—")}</p>
         <h4>VIN journey</h4>
@@ -2728,12 +2739,26 @@
 
   let modalRows = [];
 
+  function colorOf(row, key) {
+    const direct = row && row[key] ? String(row[key]).trim() : "";
+    if (direct) return direct;
+    if (!lastModel || !row || !row.vin || !lastModel.vinHistory) return "";
+    const hist = lastModel.vinHistory.get(row.vin) || [];
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const value = hist[i] && hist[i][key] ? String(hist[i][key]).trim() : "";
+      if (value) return value;
+    }
+    return "";
+  }
+
   function vinResultRow(r) {
     const sec = r.secondaryStatus || "";
     return `<tr data-pt-vin="${esc(r.vin)}">
       <td><button type="button" class="pt-vin-btn" data-pt-vin="${esc(r.vin)}">${esc(r.vin || "—")}</button></td>
       <td>${esc(r.leafProduct || r.product || "—")}</td>
       <td>${esc(r.leafSfx || r.suffix || "—")}</td>
+      <td>${esc(colorOf(r, "ext") || "—")}</td>
+      <td>${esc(colorOf(r, "int") || "—")}</td>
       <td>${esc(r.year || "—")}</td>
       <td>${esc(r.dateKey || "—")}</td>
       <td>${esc(fmtDate(r.allocationDate))}</td>
@@ -2760,7 +2785,7 @@
       if (q && !String(r.vin || "").toUpperCase().includes(q)) return false;
       return true;
     });
-    body.innerHTML = rows.map(vinResultRow).join("") || `<tr><td colspan="10">No VINs in this result.</td></tr>`;
+    body.innerHTML = rows.map(vinResultRow).join("") || `<tr><td colspan="12">No VINs in this result.</td></tr>`;
     const sub = $("#pt-vin-modal-sub");
     if (sub) {
       const base = sub.getAttribute("data-base") || "";
@@ -2890,13 +2915,19 @@
     return global.resolveAaSalesStatus(vin, salesLookupMemo);
   }
 
+  /** My Allocation VIN is delivered only when Admin Push Sales Raw contains that VIN and column V has a date. */
   function hasSalesRawColV(row) {
-    const sales = salesRawForVin(row && row.vin);
-    if (sales) {
-      const invoice = sales.invoiceDate || sales.deliveryDate;
-      return sales.kind === "delivered" || !!(invoice && parseDate(invoice));
+    if (!row || !row.vin || typeof global.allocationSalesRawColumnV !== "function") return false;
+    let hit = null;
+    try { hit = global.allocationSalesRawColumnV(row.vin); } catch (_) { hit = null; }
+    if (!hit || !hit.delivered) return false;
+    const date = hit.date instanceof Date ? hit.date : parseDate(hit.date);
+    if (date) {
+      row.invoiceDate = date;
+      row.deliveryDate = date;
+      row.salesKind = "delivered";
     }
-    return hasSalesRawDelivery(row);
+    return true;
   }
 
   function sfxBucketId(row) {
@@ -2971,7 +3002,7 @@
   /**
    * SFX plan progress for one month.
    * Within = daily new-car VINs, matched on product + suffix.
-   * Delivered = Sales Raw column V has a date.
+   * Delivered = that My Allocation VIN is in Admin Push Sales Raw and column V has a date.
    * Proforma, Reserved, and Stock come from the latest RTL secondary status description.
    * Any secondary status that is not listed is Reserved.
    * Swapped out = a later RTL day whose search area is not Retail Electronic Sales.
@@ -3042,7 +3073,7 @@
       plan: ["Monthly plan", "Admin allocation target. This number is plan units, not VINs.", []],
       allocation: ["My allocation", "New cars this month", totals.within],
       received: ["Received / RES", "New cars this month", totals.within],
-      delivered: ["Delivered", "Sales Raw column V", totals.delivered],
+      delivered: ["Delivered", "My allocation VIN with a date in Sales Raw column V", totals.delivered],
       proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved", totals.proforma],
       reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status", totals.reserved],
       stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze", totals.stock],
@@ -3075,7 +3106,7 @@
       const titles = {
         res: ["RES", "Retail Electronic Sales in this RTL file"],
         allocation: ["My allocation", "New cars credited to this day"],
-        delivered: ["Delivered", "Sales Raw column V"],
+        delivered: ["Delivered", "My allocation VIN with a date in Sales Raw column V"],
         proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved"],
         reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status"],
         stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze"],
@@ -3090,7 +3121,7 @@
       const totals = monthStatusTotals(lastModel);
       const titles = {
         within: ["Allocation", "New cars this month"],
-        delivered: ["Delivered", "Sales Raw column V"],
+        delivered: ["Delivered", "My allocation VIN with a date in Sales Raw column V"],
         proforma: ["Proforma", "Secondary status · DIO, pro-forma, registered, or reserved"],
         reserved: ["Reserved", "Secondary status · sales order created, damage block, or any other status"],
         stock: ["Stock", "Secondary status · allocation completed, vehicle damaged, or freeze"],
@@ -3120,7 +3151,7 @@
       const bucket = buckets.get(id) || emptySfxBucket();
       const titles = {
         within: "Within",
-        delivered: "Delivered · Sales Raw column V",
+        delivered: "Delivered · My allocation VIN with a date in Sales Raw column V",
         proforma: "Proforma · secondary status",
         reserved: "Reserved · secondary status",
         stock: "Stock · secondary status",
@@ -3195,6 +3226,7 @@
       const cur = view.status;
       statusEl.innerHTML = `<option value="">All statuses</option>`
         + ["Proforma", "Reserved", "Stock", "Delivered", "Swapped out", "Swapped in"].map((s) => `<option value="${s}"${s === cur ? " selected" : ""}>${s}</option>`).join("");
+      sizeFilterSelect(statusEl);
     }
     $$("#pt-mode [data-pt-mode]").forEach((btn) => {
       btn.classList.toggle("is-on", btn.getAttribute("data-pt-mode") === (view.mode || "daily"));
@@ -3206,7 +3238,7 @@
       ["plan", "Monthly plan", plan, "Admin Push"],
       ["allocation", "My allocation", within, "New cars this month"],
       ["received", "Received / RES", received, "New cars this month"],
-      ["delivered", "Delivered", statusTotals.delivered.length, "Sales Raw col V"],
+      ["delivered", "Delivered", statusTotals.delivered.length, "My allocation · Sales Raw col V"],
       ["proforma", "Proforma", statusTotals.proforma.length, "Secondary status"],
       ["stock", "Stock", statusTotals.stock.length, "My stock · secondary status"],
       ["swapped", "Swapped out", statusTotals.swappedOut.length, "Later day left RES"],

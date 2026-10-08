@@ -6,7 +6,10 @@
     let archive = [];
     let audit = [];
     let report = {};
+    let alerts = [];
+    let alertFields = [];
     let editing = '';
+    const ALERT_OPS = { equals: 'equals', not_equals: 'does not equal', contains: 'contains', not_contains: 'does not contain', gt: 'greater than', lt: 'less than', empty: 'is empty', not_empty: 'is not empty' };
 
     const $ = (id) => document.getElementById(id);
     function password() { return sessionStorage.getItem(passKey) || ''; }
@@ -122,7 +125,36 @@
     function renderReport() {
         $('report-body').innerHTML = `<h2>Latest push</h2><p>Reserved VINs ${report.reservedVinCount || 0}<br>Matched ${report.matchedOrders || 0}<br>Unmatched ${report.unmatchedVins || 0}<br>Advisors ${report.salesAdvisorCount || 0}<br>Earliest ${esc(report.earliestAssignDate || '—')}<br>Latest ${esc(report.latestAssignDate || '—')}</p>`;
     }
-    function renderAll() { renderOverview(); renderOrders(); renderStaff(); renderArchive(); renderAudit(); renderReport(); }
+    function fillAlertFields() {
+        const select = $('alert-field');
+        const current = select.value;
+        select.innerHTML = '<option value="">Choose a BO column</option>' + alertFields.map((field) => `<option value="${esc(field.name)}">${esc(field.name)}</option>`).join('');
+        if (current) select.value = current;
+        fillAlertValues();
+    }
+    function fillAlertValues() {
+        const field = alertFields.find((item) => item.name === $('alert-field').value);
+        $('alert-values').innerHTML = ((field && field.samples) || []).map((value) => `<option value="${esc(value)}"></option>`).join('');
+    }
+    function renderAlerts() {
+        $('alert-list').innerHTML = (alertFields.length ? '' : '<p>Push Back Order, E-Sales, and RTL from Report Sheet admin. The column list is that Back Order file.</p>') + (alerts.length ? alerts.map((rule) => `<article class="panel" style="margin-bottom:10px;">
+            <b>${esc(rule.message)}</b>
+            <p>${esc(rule.field)} ${esc(ALERT_OPS[rule.operator] || rule.operator)} ${rule.operator === 'empty' || rule.operator === 'not_empty' ? '' : esc(rule.value)}</p>
+            <p>${esc(rule.tone)} · ${rule.active === false ? 'Off' : 'Active'}</p>
+            <button class="ghost" type="button" data-alert-off="${esc(rule.id)}">${rule.active === false ? 'Enable' : 'Disable'}</button>
+            <button class="ghost" type="button" data-alert-del="${esc(rule.id)}">Delete</button>
+        </article>`).join('') : '<p>No alerts yet. Add one from the Back Order columns.</p>');
+    }
+    async function saveAlertList(next) {
+        const data = await api('/api/reserved-orders/alerts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password(), alerts: next })
+        });
+        alerts = data.alerts || [];
+        renderAlerts();
+    }
+    function renderAll() { renderOverview(); renderOrders(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); }
 
     async function refresh() {
         const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
@@ -141,6 +173,12 @@
         const selected = $('audit-action').value;
         $('audit-action').innerHTML = '<option value="">Action</option>' + actions.map((item) => `<option>${esc(item)}</option>`).join('');
         $('audit-action').value = selected;
+        try {
+            const alertData = await api('/api/reserved-orders/alerts?password=' + encodeURIComponent(password()));
+            alerts = alertData.alerts || [];
+            alertFields = alertData.fields || [];
+            fillAlertFields();
+        } catch (e) { alerts = []; alertFields = []; }
         renderAll();
     }
 
@@ -212,6 +250,33 @@
             reader.readAsDataURL(file);
         });
     }
+    $('alert-field').addEventListener('change', fillAlertValues);
+    $('save-alert').addEventListener('click', async () => {
+        $('alert-error').textContent = '';
+        const field = $('alert-field').value;
+        const message = $('alert-message').value.trim();
+        if (!field || !message) { $('alert-error').textContent = 'Choose a BO column and write the message.'; return; }
+        try {
+            await saveAlertList(alerts.concat([{
+                field,
+                operator: $('alert-operator').value,
+                value: $('alert-value').value,
+                message,
+                tone: $('alert-tone').value,
+                active: $('alert-active').checked
+            }]));
+            $('alert-message').value = '';
+            $('alert-value').value = '';
+        } catch (e) { if (e.message !== 'unauthorized') $('alert-error').textContent = e.message; }
+    });
+    $('alert-list').addEventListener('click', async (event) => {
+        const del = event.target.closest('[data-alert-del]');
+        const off = event.target.closest('[data-alert-off]');
+        if (!del && !off) return;
+        const id = (del || off).dataset.alertDel || (del || off).dataset.alertOff;
+        const next = del ? alerts.filter((rule) => rule.id !== id) : alerts.map((rule) => rule.id === id ? { ...rule, active: rule.active === false } : rule);
+        try { await saveAlertList(next); } catch (e) { if (e.message !== 'unauthorized') $('alert-error').textContent = e.message; }
+    });
     $('push-live').addEventListener('click', async () => {
         $('push-error').textContent = '';
         const esales = $('esales-file').files[0];

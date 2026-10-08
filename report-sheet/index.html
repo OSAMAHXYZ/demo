@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261008sec"></script>
+  <script src="plan-tracker.js?v=20261008bar"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -1077,11 +1077,11 @@
           </header>
 
           <div class="pt-filters" id="pt-filterbar">
-            <select id="pt-f-product" aria-label="Product"></select>
-            <select id="pt-f-sfx" aria-label="SFX"></select>
-            <select id="pt-f-year" aria-label="Model year"></select>
-            <select id="pt-f-status" aria-label="Status"></select>
-            <select id="pt-f-area" aria-label="Search area"></select>
+            <select id="pt-f-product" aria-label="Product" title="All products"><option value="">All products</option></select>
+            <select id="pt-f-sfx" aria-label="SFX" title="All SFX"><option value="">All SFX</option></select>
+            <select id="pt-f-year" aria-label="Model year" title="All years"><option value="">All years</option></select>
+            <select id="pt-f-status" aria-label="Status" title="All statuses"><option value="">All statuses</option></select>
+            <select id="pt-f-area" aria-label="Search area" title="All search areas"><option value="">All search areas</option></select>
             <button type="button" class="btn" id="pt-clear-2">Clear</button>
             <div class="pt-mode" id="pt-mode">
               <button type="button" data-pt-mode="daily">Daily</button>
@@ -1091,10 +1091,10 @@
             <button type="button" class="btn" id="pt-quality-open">Quality</button>
             <button type="button" class="btn" id="pt-recon-open">Reconcile</button>
             <button type="button" class="btn" id="pt-export-debug">Debug</button>
+            <div class="pt-indicators" id="pt-indicators"></div>
           </div>
 
           <div class="pt-kpis" id="pt-kpis"></div>
-          <div class="pt-indicators" id="pt-indicators"></div>
 
           <div class="pt-row pt-row-charts">
             <article class="pt-card" id="pt-card-daily">
@@ -1209,7 +1209,7 @@
                 <table class="pt-table">
                   <thead>
                     <tr>
-                      <th>VIN</th><th>Product</th><th>SFX</th><th>Model year</th><th>Received</th>
+                      <th>VIN</th><th>Product</th><th>SFX</th><th>Exterior</th><th>Interior</th><th>Model year</th><th>Received</th>
                       <th>Allocation date</th><th>Age</th><th>Search area</th><th>Status</th><th>Secondary status</th>
                     </tr>
                   </thead>
@@ -6040,12 +6040,13 @@
       categoryScale.ticks.padding = 4;
     }
     if (horizontal && (opts.stacked || fitRowPx >= 30)) {
+      const tight = fitRowPx > 0 && fitRowPx < 24;
       categoryScale.ticks.font = {
         ...categoryScale.ticks.font,
-        size: fitRowPx >= 36 ? 12 : 11,
+        size: fitRowPx >= 36 ? 12 : (tight ? 9 : 11),
         weight: "700",
       };
-      categoryScale.ticks.padding = 8;
+      categoryScale.ticks.padding = tight ? 2 : 8;
       categoryScale.ticks.color = strongTick;
     }
     const chartConfig = {
@@ -6568,6 +6569,23 @@
       </div>`;
   }
 
+  function sizeAccessoriesWideChart(n) {
+    const box = $("#pbi-wide-box");
+    const scroll = $("#pbi-wide-scroll");
+    const wideCanvas = document.getElementById("pbi-wide-canvas");
+    if (!box || !scroll) return;
+    const count = Math.max(1, Number(n) || 1);
+    const pad = 36;
+    const maxH = Math.max(180, Math.min(250, Math.floor(window.innerHeight * 0.26)));
+    const rowPx = Math.max(12, Math.min(20, Math.floor((maxH - pad) / count)));
+    const chartH = Math.min(maxH, Math.max(150, count * rowPx + pad));
+    box.style.height = chartH + "px";
+    box.style.minHeight = chartH + "px";
+    if (wideCanvas) wideCanvas.dataset.fitRowPx = String(rowPx);
+    scroll.style.maxHeight = chartH + "px";
+    scroll.classList.remove("is-scroll");
+  }
+
   function openWideAccessories() {
     const snap = chartSnapshots["chart-sr-accessories"];
     const source = $("#acc-remain-table");
@@ -6582,7 +6600,7 @@
 
     $("#pbi-wide-title").textContent = "Accessories";
     const hint = $("#pbi-wide-hint");
-    if (hint) hint.textContent = "Scroll the chart for every advisor · Achieved + In Progress + Remaining · click a name to filter";
+    if (hint) hint.textContent = "Chart, numbers, and the advisor table on one screen · click a name to filter";
 
     const backdrop = $("#pbi-wide-backdrop");
     backdrop.hidden = false;
@@ -6611,14 +6629,7 @@
       const scroll = $("#pbi-wide-scroll");
       const wideCanvas = document.getElementById("pbi-wide-canvas");
       if (horizontal && snap.type === "bar" && n > 1) {
-        const preferredRow = 42;
-        const chartH = Math.max(320, n * preferredRow + 64);
-        const viewH = Math.max(360, Math.floor(window.innerHeight * 0.58));
-        box.style.height = chartH + "px";
-        box.style.minHeight = Math.min(chartH, viewH) + "px";
-        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(preferredRow);
-        scroll.style.maxHeight = viewH + "px";
-        scroll.classList.add("is-scroll");
+        sizeAccessoriesWideChart(n);
       } else if (snap.type === "doughnut") {
         box.style.height = "280px";
         scroll.style.maxHeight = "";
@@ -6635,14 +6646,7 @@
       const extra = { ...(snap.extra || {}) };
       upsertChart("pbi-wide-canvas", snap.type, snap.labels, snap.values, extra);
       if (horizontal && snap.type === "bar" && n > 1) {
-        const preferredRow = 42;
-        const chartH = Math.max(320, n * preferredRow + 64);
-        const viewH = Math.max(360, Math.floor(window.innerHeight * 0.58));
-        box.style.height = chartH + "px";
-        box.style.minHeight = Math.min(chartH, viewH) + "px";
-        if (wideCanvas) wideCanvas.dataset.fitRowPx = String(preferredRow);
-        scroll.style.maxHeight = viewH + "px";
-        scroll.classList.add("is-scroll");
+        sizeAccessoriesWideChart(n);
         if (charts["pbi-wide-canvas"]) charts["pbi-wide-canvas"].resize();
       }
     } else {
@@ -7712,6 +7716,7 @@
     window.formatNumber = formatNumber;
     window.parseDate = parseDate;
     window.extractVinValue = extractVinValue;
+    window.allocationSalesRawColumnV = allocationSalesRawColumnV;
     window.normHeader = normHeader;
     window.setStatus = setStatus;
     window.matchRtlToAllocLeaf = matchRtlToAllocLeaf;
@@ -17082,6 +17087,68 @@
     });
     return byVin;
   }
+
+  function salesVinKey(raw) {
+    const full = extractVinValue(raw);
+    if (full) return full;
+    return String(raw == null ? "" : raw).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function salesVinMatchesAllocation(allocationVin, salesVin) {
+    const left = salesVinKey(allocationVin);
+    const right = salesVinKey(salesVin);
+    if (!left || !right) return false;
+    if (left === right) return true;
+    if (left.length >= 8 && right.length >= 8 && (left.endsWith(right) || right.endsWith(left))) return true;
+    if (left.length >= 8 && right.length >= 8 && left.slice(-8) === right.slice(-8)) return true;
+    return false;
+  }
+
+  function salesRawColumnVCell(row) {
+    if (!row) return "";
+    const idx = row._colDelivery != null ? Number(row._colDelivery) : colLetterToIndex("V");
+    if (Array.isArray(row.__cells) && idx >= 0 && idx < row.__cells.length) return row.__cells[idx];
+    if (row.deliveryDate != null && row.deliveryDate !== "") return row.deliveryDate;
+    return row.invoiceDate;
+  }
+
+  function salesRawColumnVDate(raw) {
+    if (raw == null || raw === "") return null;
+    if (typeof raw === "string" && !String(raw).trim()) return null;
+    const parsed = parseDate(raw);
+    return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  }
+
+  /** My Allocation VIN is delivered only when that VIN is in the Admin Push Sales Raw file and column V has a date. */
+  function allocationSalesRawColumnV(vin) {
+    const rows = (slots.sales && slots.sales.rows) || [];
+    const key = salesVinKey(vin);
+    let inFile = false;
+    let date = null;
+    rows.forEach((row) => {
+      if (!salesRawRowHasVin(row, key)) return;
+      inFile = true;
+      if (date) return;
+      date = salesRawColumnVDate(salesRawColumnVCell(row));
+    });
+    return { inFile, delivered: !!date, date };
+  }
+
+  function salesRawRowHasVin(row, key) {
+    if (!row || !key || key.length < 8) return false;
+    if (salesVinMatchesAllocation(key, row.vin)) return true;
+    const cells = row.__cells;
+    if (!Array.isArray(cells)) return false;
+    for (let i = 0; i < cells.length; i += 1) {
+      const token = salesVinKey(cells[i]);
+      if (!token || token.length < 8 || !/[A-Z]/.test(token)) continue;
+      if (token === key) return true;
+      if (token.endsWith(key) || key.endsWith(token)) return true;
+      if (token.slice(-8) === key.slice(-8)) return true;
+    }
+    return false;
+  }
+  window.allocationSalesRawColumnV = allocationSalesRawColumnV;
 
   function vinSalesStatusForLookup(vin, salesLookup, live) {
     const key = extractVinValue(vin) || upperTrim(vin);

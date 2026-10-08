@@ -7944,15 +7944,7 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   readStoredBackOrder() {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
-    const sheets = reservedOrdersApi.sheetGridsFromBuffer(fs.readFileSync(boPath));
-    const grid = (sheets[0] && sheets[0].grid) || [];
-    const headers = (grid[0] || []).map((header, index) => String(header || `Column_${index + 1}`));
-    const rows = grid.slice(1).filter((row) => (row || []).some((cell) => String(cell || '').trim())).map((row) => {
-      const obj = {};
-      headers.forEach((header, index) => { obj[header] = row[index] ?? ''; });
-      return obj;
-    });
-    return { headers, rows };
+    return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
   }
 });
 

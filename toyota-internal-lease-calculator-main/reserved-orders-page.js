@@ -12,6 +12,7 @@
     const sessionKey = 'reserved-orders-session';
     let orders = [];
     let carsData = {};
+    let alertRules = [];
     let searchTimer = null;
     let clock = null;
 
@@ -213,11 +214,31 @@
         const shown = value && value !== '—' ? value : '—';
         return `<span class="flag ${retailMatch(shown) ? 'good' : 'bad'}">${label} ${esc(shown)}</span>`;
     }
+    function fieldTone(label, value) {
+        const name = String(label || '').toLowerCase();
+        if (/search area|share|sharing/.test(name)) return retailMatch(value) ? 'good' : 'bad';
+        if (/allocation ag|vin allocation|^age$|ageing|aging/.test(name)) {
+            const match = String(value || '').match(/-?\d+/);
+            if (!match) return '';
+            const n = Number(match[0]);
+            return n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
+        }
+        return '';
+    }
+    function excelFieldsHtml(order) {
+        const fields = Array.isArray(order.fields) ? order.fields : [];
+        if (!fields.length) return '';
+        return `<div class="excel-row">${fields.map((field) => {
+            const tone = fieldTone(field.label, field.value);
+            return `<div class="excel-field${tone ? ' ' + tone : ''}"><span>${esc(field.label)}</span><b>${esc(field.value || '—')}</b></div>`;
+        }).join('')}</div>`;
+    }
     function cardHtml(order, leaders) {
         const ms = remainingMs(order);
         const hours = order.paymentHours || 48;
         const img = carImage(order.vehicle);
-        return `<article class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
+        return `<article class="order-block${isExpired(order) ? ' expired' : ''}">
+            <div class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
             <div class="lane-id"><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
             <div><b>${esc(order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER')}</b><span class="vin-line"><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span>${ageFlag(order.allocationAging)}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
             <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span>${stockFlag('Area', order.searchArea)}${stockFlag('Share', order.shareLevel)}</div>
@@ -225,6 +246,8 @@
             <div class="queue-top"><span class="muted">Ahead</span>${leaders}</div>
             <div><div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${formatRemain(ms)}</div><span class="muted">${hours} HOURS</span></div>
             <div><span class="badge ${badge(order.status)}">${esc(order.status || 'محجوز')}</span><div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div></div>
+            </div>
+            ${excelFieldsHtml(order)}
         </article>`;
     }
     function tickTimers() {
@@ -252,50 +275,142 @@
         await loadLive();
     }
 
+    async function loadAlertRules() {
+        try {
+            const data = await fetch('/api/reserved-orders/alert-rules').then((res) => res.json());
+            alertRules = data.alerts || [];
+        } catch (e) { alertRules = []; }
+    }
+    function alertMatches(rule, bag) {
+        const left = String(bag[String(rule.field || '').toLowerCase()] == null ? '' : bag[String(rule.field || '').toLowerCase()]).trim();
+        const right = String(rule.value || '').trim();
+        const op = rule.operator || 'equals';
+        if (op === 'empty') return !left;
+        if (op === 'not_empty') return !!left;
+        const a = left.toLowerCase();
+        const b = right.toLowerCase();
+        if (op === 'equals') return a === b;
+        if (op === 'not_equals') return a !== b;
+        if (op === 'contains') return b ? a.includes(b) : false;
+        if (op === 'not_contains') return b ? !a.includes(b) : true;
+        const na = Number(left.replace(/,/g, ''));
+        const nb = Number(right.replace(/,/g, ''));
+        if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
+        if (op === 'gt') return na > nb;
+        if (op === 'lt') return na < nb;
+        return false;
+    }
+    function paintAlerts(bo, query) {
+        const box = $('lookup-alerts');
+        if (!box) return;
+        const bag = {};
+        const details = (bo && bo.details) || {};
+        Object.keys(details).forEach((key) => { bag[String(key).toLowerCase()] = details[key]; });
+        const values = (bo && bo.queue && bo.queue.values) || {};
+        Object.keys(values).forEach((key) => {
+            const name = String(key).toLowerCase();
+            if (bag[name] == null || bag[name] === '') bag[name] = values[key];
+        });
+        const hits = bo ? alertRules.filter((rule) => alertMatches(rule, bag)) : [];
+        box.innerHTML = hits.map((rule) => `<div class="bo-alert ${esc(rule.tone || 'info')}" role="alert">${esc(rule.message)}</div>`).join('');
+        if (query) {
+            fetch('/api/reserved-orders/alerts/match?q=' + encodeURIComponent(query))
+                .then((res) => res.json())
+                .then((data) => {
+                    const extra = (data.alerts || []).filter((rule) => !hits.some((hit) => hit.message === rule.message));
+                    if (!extra.length) return;
+                    box.insertAdjacentHTML('beforeend', extra.map((rule) => `<div class="bo-alert ${esc(rule.tone || 'info')}" role="alert">${esc(rule.message)}</div>`).join(''));
+                })
+                .catch(() => {});
+        }
+    }
+    function pushedFacts(title, pairs) {
+        const chips = pairs.filter((item) => item && item.label).map((item) => `<div><span>${esc(item.label)}</span><strong class="${esc(item.tone || '')}">${esc(item.value || '—')}</strong></div>`).join('');
+        return chips ? `<h4>${esc(title)}</h4><div class="bo-facts">${chips}</div>` : '';
+    }
     async function lookup(query) {
         const box = $('lookup-result');
-        const local = orders.find((order) => order.vin === query.toUpperCase().replace(/\s/g, '') || String(order.orderNumber) === query);
+        paintAlerts(null);
+        if (!query) { box.innerHTML = ''; return; }
+        let pushed = null;
+        try {
+            const res = await fetch('/api/reserved-orders/lookup?q=' + encodeURIComponent(query));
+            if (res.ok) pushed = await res.json();
+        } catch (e) { pushed = null; }
+        const local = (pushed && pushed.order) || orders.find((order) => order.vin === query.toUpperCase().replace(/\s/g, '') || String(order.orderNumber) === query);
         const orderNumber = local && local.orderNumber && local.orderNumber !== 'NO ORDER' ? local.orderNumber : query;
-        let bo = null;
+        let bo = pushed && pushed.bo ? { orderNumber: pushed.bo.orderNumber, details: pushed.bo.details || {} } : null;
         try {
             const res = await fetch('/api/bo-data/order/' + encodeURIComponent(orderNumber));
-            if (res.ok) bo = await res.json();
-        } catch (e) { bo = null; }
+            if (res.ok) {
+                const extra = await res.json();
+                if (!bo) bo = extra;
+                else bo.queue = extra.queue;
+            }
+        } catch (e) { /* Report Sheet push supplies the row when this API is absent */ }
         const details = (bo && bo.details) || {};
         const queue = bo && bo.queue && bo.queue.queueResult;
         const values = (bo && bo.queue && bo.queue.values) || {};
         if (!local && !bo) {
-            box.innerHTML = '<div class="lookup-result">No reserved order or back order matched that VIN or order number.</div>';
+            box.innerHTML = '<div class="bo-result"><h3>No match</h3><p>No reserved order or back order matched that VIN or order number.</p></div>';
+            paintAlerts(null, query);
             return;
         }
-        box.innerHTML = `<div class="lookup-result"><strong>${esc((bo && bo.orderNumber) || orderNumber)}</strong>
-            <div class="facts" style="margin-top:10px;">
-                <div><span>Vehicle</span><strong>${esc(values.product || (local && local.vehicle) || details.Product || '—')}</strong></div>
-                <div><span>Suffix</span><strong>${esc(values.suffix || '—')}</strong></div>
-                <div><span>Exterior</span><strong>${esc(values.extColor1 || (local && local.exterior) || '—')}</strong></div>
-                <div><span>Interior</span><strong>${esc(values.intColor1 || (local && local.interior) || '—')}</strong></div>
-                <div><span>Payment</span><strong>${esc((local && local.paymentLabel) || '—')}</strong></div>
-                <div><span>Advisor</span><strong>${esc((local && local.salesAdvisor) || '—')}</strong></div>
-                <div><span>BO queue</span><strong>${queue && queue.position ? '#' + queue.position + ' of ' + queue.totalQueueSize : '—'}</strong></div>
-                <div><span>Orders ahead</span><strong>${queue && queue.ordersAhead != null ? queue.ordersAhead : '—'}</strong></div>
-            </div></div>`;
+        paintAlerts(bo, query);
+        const age = local && local.allocationAging != null ? local.allocationAging : null;
+        const ageTone = age == null ? '' : (age <= 5 ? 'good' : (age === 6 ? 'warn' : 'bad'));
+        const boPairs = Object.keys(details).map((key) => ({ label: key, value: details[key] == null || details[key] === '' ? '—' : details[key] }));
+        box.innerHTML = `<div class="bo-result"><h3>${esc((bo && bo.orderNumber) || orderNumber)}</h3>
+            <p>E-Sales, Back Order, and RTL from the latest Report Sheet push.</p>
+            ${pushedFacts('E-Sales', [
+                { label: 'Order', value: local && local.orderNumber },
+                { label: 'VIN', value: local && local.vin },
+                { label: 'Vehicle', value: (local && local.vehicle) || values.product || (pushed && pushed.bo && pushed.bo.vehicle) },
+                { label: 'Advisor', value: local && local.salesAdvisor },
+                { label: 'Payment', value: local && local.paymentLabel },
+                { label: 'Assign date', value: local && (local.assignDisplay || local.assignDate) },
+                { label: 'Search area', value: local && local.searchArea },
+                { label: 'Share level', value: local && local.shareLevel }
+            ])}
+            ${pushedFacts('RTL', [{ label: 'Allocation aging', value: age == null ? '—' : age + ' days', tone: ageTone }])}
+            ${pushedFacts('Back Order', boPairs.length ? boPairs : [
+                { label: 'Vehicle', value: values.product || (pushed && pushed.bo && pushed.bo.vehicle) },
+                { label: 'Exterior', value: values.extColor1 || (pushed && pushed.bo && pushed.bo.exterior) },
+                { label: 'Interior', value: values.intColor1 || (pushed && pushed.bo && pushed.bo.interior) },
+                { label: 'BO queue', value: queue && queue.position ? '#' + queue.position + ' of ' + queue.totalQueueSize : '' },
+                { label: 'Orders ahead', value: queue && queue.ordersAhead != null ? queue.ordersAhead : '' }
+            ])}
+        </div>`;
     }
     async function loadVehicles() {
         let products = [];
         try {
-            const res = await fetch('/api/bo-data/taxonomy');
-            if (res.ok) products = (await res.json()).products || [];
+            const pushed = await fetch('/api/reserved-orders/bo-products');
+            if (pushed.ok) products = (await pushed.json()).products || [];
         } catch (e) { products = []; }
+        if (!products.length) {
+            try {
+                const res = await fetch('/api/bo-data/taxonomy');
+                if (res.ok) products = (await res.json()).products || [];
+            } catch (e) { products = []; }
+        }
         const source = products.length ? products.map((item) => [item.product, item.rowCount, item.suffixes || []]) : CARS.map(([name]) => [name, 0, []]);
-        $('vehicles').innerHTML = source.slice(0, 18).map(([name, count, suffixes]) => {
+        $('vehicles').innerHTML = source.map(([name, count, suffixes]) => {
             const img = carImage(name);
-            return `<button class="vehicle" type="button" data-name="${esc(name)}" data-suffixes="${esc(JSON.stringify(suffixes))}"><img src="${img}" alt="" onerror="this.style.display='none'"><b>${esc(name)}</b><span>${count || 0} orders</span></button>`;
+            const suffixCount = Array.isArray(suffixes) ? suffixes.length : 0;
+            return `<button class="product-card vehicle" type="button" data-name="${esc(name)}" data-suffixes="${esc(JSON.stringify(suffixes))}">
+                <div class="pc-pill">${count || 0} on order</div>
+                <div class="pc-img-wrap">${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}<div class="pc-fallback"${img ? ' style="display:none"' : ''}>${esc(name)}</div></div>
+                <div class="pc-name">${esc(name)}</div>
+                <div class="pc-meta">${suffixCount === 1 ? '1 suffix' : suffixCount + ' suffixes'}</div>
+            </button>`;
         }).join('');
     }
     function showVehicle(button) {
+        document.querySelectorAll('#vehicles .product-card').forEach((card) => card.classList.toggle('selected', card === button));
         let suffixes = [];
         try { suffixes = JSON.parse(button.dataset.suffixes || '[]'); } catch (e) { suffixes = []; }
-        $('vehicle-detail').innerHTML = `<div class="vehicle-detail"><strong>${esc(button.dataset.name)}</strong><p>${suffixes.length ? suffixes.map((item) => esc(item.suffix || item) + (item.rowCount ? ' · ' + item.rowCount : '')).join('<br>') : 'No suffix breakdown until a Back Order file is uploaded.'}</p></div>`;
+        $('vehicle-detail').innerHTML = `<div class="bo-result"><h3>${esc(button.dataset.name)}</h3><p>${suffixes.length ? suffixes.map((item) => esc(item.suffix || item) + (item.rowCount ? ' · ' + item.rowCount : '')).join('<br>') : 'No suffix breakdown until a Back Order file is uploaded.'}</p></div>`;
     }
 
     function price(n) { return Number(n || 0).toLocaleString('en-US'); }
@@ -347,7 +462,7 @@
         $('overlay-lookup').classList.toggle('hidden', name !== 'lookup');
         $('overlay-message').classList.toggle('hidden', name !== 'message');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
-        if (name === 'lookup') loadVehicles();
+        if (name === 'lookup') { loadVehicles(); loadAlertRules(); }
     }
     $('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();

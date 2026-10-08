@@ -39,7 +39,6 @@
             <div class="top-links">
                 <div class="who"><b id="who"></b><span id="who-id"></span></div>
                 <span class="session-pill" id="session-pill">Session: 03:00</span>
-                <a class="ghost" href="hub.html">Hub</a>
                 <button class="ghost" id="logout" type="button">Sign out</button>
             </div>
         </header>
@@ -75,16 +74,31 @@
         </main>
 
         <div id="overlay-lookup" class="overlay hidden">
-            <section class="overlay-panel navy">
-                <div class="overlay-head"><h2>BO Lookup</h2><button class="ghost" type="button" data-view="orders">Close</button></div>
-                <form class="lookup-row" id="lookup-form">
-                    <input id="lookup-q" placeholder="VIN or order number">
-                    <button class="solid" type="submit">Look up</button>
-                </form>
-                <div id="lookup-result"></div>
-                <div class="vehicles" id="vehicles"></div>
-                <div id="vehicle-detail"></div>
-            </section>
+            <div class="bo-look">
+                <div class="bo-look-nav">
+                    <strong>BO Order Lookup</strong>
+                    <button class="bo-look-close" type="button" data-view="orders">Close</button>
+                </div>
+                <div class="bo-look-wrap">
+                    <section class="bo-hero">
+                        <div class="bo-eyebrow">BO Lookup · Live Queue Insights</div>
+                        <h2>BO Order Lookup</h2>
+                        <p>Search uses the Back Order, E-Sales, and RTL files from the latest Report Sheet push.</p>
+                        <form class="bo-hero-search" id="lookup-form">
+                            <input id="lookup-q" placeholder="Enter order number or VIN">
+                            <button type="submit">Search</button>
+                        </form>
+                    </section>
+                    <div id="lookup-alerts"></div>
+                    <div id="lookup-result"></div>
+                    <section class="bo-card">
+                        <h3>Choose a vehicle</h3>
+                        <p class="bo-sub">Pick a car to see the suffix breakdown from the latest back order file.</p>
+                        <div class="product-grid" id="vehicles"></div>
+                        <div id="vehicle-detail"></div>
+                    </section>
+                </div>
+            </div>
         </div>
 
         <div id="overlay-message" class="overlay hidden">

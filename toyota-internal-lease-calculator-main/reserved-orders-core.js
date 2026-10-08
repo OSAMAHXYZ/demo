@@ -379,6 +379,42 @@ function filledCell(value) {
     return String(value).trim();
 }
 
+function columnLetter(index) {
+    let n = index + 1;
+    let text = '';
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        text = String.fromCharCode(65 + rem) + text;
+        n = Math.floor((n - 1) / 26);
+    }
+    return text;
+}
+
+function formatFieldValue(label, value) {
+    if (value == null || String(value).trim() === '') return '';
+    if (/date/i.test(label)) {
+        const parsed = parseExcelDate(value);
+        if (parsed) {
+            const shown = displayStamp(parsed);
+            return localStamp(parsed).endsWith('T00:00:00') ? shown.replace(/ 12:00 AM$/, '') : shown;
+        }
+    }
+    if (typeof value === 'number') return String(value);
+    return cleanText(value);
+}
+
+function rowFields(headers, line) {
+    const width = Math.max((headers || []).length, (line || []).length);
+    const fields = [];
+    for (let i = 0; i < width; i++) {
+        const label = cleanText(headers[i]) || columnLetter(i);
+        const value = formatFieldValue(headers[i] || label, cell(line, i));
+        if (!cleanText(headers[i]) && !value) continue;
+        fields.push({ label, value: value || '—' });
+    }
+    return fields;
+}
+
 function extractReservedRows(grid) {
     const headerIdx = detectHeaderRow(grid);
     const headers = grid[headerIdx] || [];
@@ -418,7 +454,8 @@ function extractReservedRows(grid) {
             paymentRaw: paymentCol >= 0 ? cell(line, paymentCol) : '',
             statusRaw: statusCol >= 0 ? cell(line, statusCol) : '',
             searchArea: filledCell(cell(line, COL.searchArea)) || (searchCol >= 0 && searchCol !== COL.searchArea ? cell(line, searchCol) : ''),
-            shareLevel: shareCol >= 0 ? cell(line, shareCol) : ''
+            shareLevel: shareCol >= 0 ? cell(line, shareCol) : '',
+            fields: rowFields(headers, line)
         });
     }
     return { headerIdx, rows };
@@ -574,6 +611,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
             searchArea: cleanText(row.searchArea) || '—',
             shareLevel: cleanText(row.shareLevel) || '—',
             allocationAging: rtlAges.has(vin) ? rtlAges.get(vin) : null,
+            fields: Array.isArray(row.fields) ? row.fields : [],
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -624,6 +662,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
             searchArea: cleanText(row.searchArea) || '—',
             shareLevel: cleanText(row.shareLevel) || '—',
             allocationAging: null,
+            fields: Array.isArray(row.fields) ? row.fields : [],
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -716,6 +755,22 @@ function publicStaff(person) {
     };
 }
 
+function backOrderTableFromBuffer(buffer) {
+    if (!buffer || !buffer.length) return { headers: [], rows: [] };
+    const sheets = sheetGridsFromBuffer(buffer);
+    let best = sheets[0] || { grid: [] };
+    let bestScore = -1;
+    sheets.forEach((sheet) => {
+        const sample = (sheet.grid || []).slice(0, 20).map((row) => (row || []).map((cell) => headerText(cell)).join(' ')).join(' ');
+        let score = 0;
+        if (sample.includes('vin')) score += 2;
+        if (sample.includes('order')) score += 1;
+        if (sample.includes('payment')) score += 1;
+        if (score > bestScore) { best = sheet; bestScore = score; }
+    });
+    return rowsFromGrid(best.grid);
+}
+
 function rowsFromGrid(grid) {
     const source = grid || [];
     if (!source.length) return { headers: [], rows: [] };
@@ -774,6 +829,7 @@ const SEEDED_EMPLOYEES = [
 
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
+    const alertsFile = path.join(options.storeDir, 'reserved-orders-alerts.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
     const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
@@ -795,6 +851,107 @@ function attachReservedOrders(app, options) {
     function saveStaff(data) {
         fs.mkdirSync(options.storeDir, { recursive: true });
         fs.writeFileSync(staffFile, JSON.stringify(data, null, 2), 'utf8');
+    }
+    function loadAlerts() {
+        const data = readJson(alertsFile, []);
+        return Array.isArray(data) ? data : [];
+    }
+    function saveAlerts(data) {
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(alertsFile, JSON.stringify(data, null, 2), 'utf8');
+    }
+    function loadBoTable() {
+        if (typeof options.readStoredBackOrder !== 'function') return { headers: [], rows: [] };
+        try {
+            const data = options.readStoredBackOrder() || {};
+            return { headers: data.headers || [], rows: Array.isArray(data.rows) ? data.rows : [] };
+        } catch (e) {
+            return { headers: [], rows: [] };
+        }
+    }
+    function boFieldCatalog() {
+        const table = loadBoTable();
+        const headers = (table.headers || []).map((header) => cleanText(header)).filter(Boolean);
+        const samples = {};
+        headers.forEach((header) => { samples[header] = []; });
+        (table.rows || []).slice(0, 3000).forEach((row) => {
+            headers.forEach((header) => {
+                const value = cleanText(row[header]);
+                if (!value || samples[header].includes(value) || samples[header].length >= 25) return;
+                samples[header].push(value);
+            });
+        });
+        return headers.map((name) => ({ name, samples: samples[name] }));
+    }
+    function cleanAlert(raw) {
+        const operators = ['equals', 'not_equals', 'contains', 'not_contains', 'gt', 'lt', 'empty', 'not_empty'];
+        const tones = ['info', 'warning', 'urgent'];
+        const operator = operators.includes(raw.operator) ? raw.operator : 'equals';
+        return {
+            id: cleanText(raw.id) || `al-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            field: cleanText(raw.field),
+            operator,
+            value: cleanText(raw.value),
+            message: cleanText(raw.message),
+            tone: tones.includes(raw.tone) ? raw.tone : 'warning',
+            active: raw.active !== false
+        };
+    }
+    function alertMatches(rule, bag) {
+        const left = cleanText(bag[String(rule.field || '').toLowerCase()]);
+        const right = cleanText(rule.value);
+        const op = rule.operator || 'equals';
+        if (op === 'empty') return !left;
+        if (op === 'not_empty') return !!left;
+        const a = left.toLowerCase();
+        const b = right.toLowerCase();
+        if (op === 'equals') return a === b;
+        if (op === 'not_equals') return a !== b;
+        if (op === 'contains') return b ? a.includes(b) : false;
+        if (op === 'not_contains') return b ? !a.includes(b) : true;
+        const na = Number(left.replace(/,/g, ''));
+        const nb = Number(right.replace(/,/g, ''));
+        if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
+        if (op === 'gt') return na > nb;
+        if (op === 'lt') return na < nb;
+        return false;
+    }
+    function findPushedRow(query) {
+        const q = cleanText(query).toLowerCase();
+        const vin = normalizeVin(query);
+        const table = loadBoTable();
+        const indexed = indexBackOrder(table.rows, table.headers);
+        let item = vin ? indexed.byVin.get(vin) : null;
+        if (!item && q) item = indexed.byOrder.get(q);
+        if (!item && q) {
+            const index = (table.rows || []).findIndex((record) => Object.keys(record || {}).some((key) => {
+                const value = cleanText(record[key]).toLowerCase();
+                return value === q || (vin && normalizeVin(record[key]) === vin);
+            }));
+            if (index >= 0) return { table, row: table.rows[index], item: null };
+        }
+        return { table, row: item ? table.rows[item.index] : null, item };
+    }
+    function boProducts(table) {
+        const headers = table.headers || [];
+        const productCol = boColumn(headers, [/product/, /model/, /vehicle/]);
+        const suffixCol = boColumn(headers, [/suffix/, /sfx/]);
+        const productName = productCol >= 0 ? headers[productCol] : '';
+        const suffixName = suffixCol >= 0 ? headers[suffixCol] : '';
+        const products = new Map();
+        (table.rows || []).forEach((row) => {
+            const product = cleanText(productName ? row[productName] : '') || 'Unknown';
+            if (!products.has(product)) products.set(product, { product, rowCount: 0, suffixes: new Map() });
+            const entry = products.get(product);
+            entry.rowCount += 1;
+            const suffix = cleanText(suffixName ? row[suffixName] : '');
+            if (suffix) entry.suffixes.set(suffix, (entry.suffixes.get(suffix) || 0) + 1);
+        });
+        return Array.from(products.values()).map((entry) => ({
+            product: entry.product,
+            rowCount: entry.rowCount,
+            suffixes: Array.from(entry.suffixes.entries()).map(([suffix, rowCount]) => ({ suffix, rowCount }))
+        })).sort((a, b) => b.rowCount - a.rowCount || a.product.localeCompare(b.product));
     }
     function notify() {
         if (typeof options.broadcast === 'function') options.broadcast(loadLive().updatedAt || '');
@@ -886,19 +1043,7 @@ function attachReservedOrders(app, options) {
     }
     ensureStaff();
     function backOrderFromBuffer(buffer) {
-        if (!buffer || !buffer.length) return { headers: [], rows: [] };
-        const sheets = sheetGridsFromBuffer(buffer);
-        let best = sheets[0] || { grid: [] };
-        let bestScore = -1;
-        sheets.forEach((sheet) => {
-            const sample = (sheet.grid || []).slice(0, 20).map((row) => (row || []).map((cell) => headerText(cell)).join(' ')).join(' ');
-            let score = 0;
-            if (sample.includes('vin')) score += 2;
-            if (sample.includes('order')) score += 1;
-            if (sample.includes('payment')) score += 1;
-            if (score > bestScore) { best = sheet; bestScore = score; }
-        });
-        return rowsFromGrid(best.grid);
+        return backOrderTableFromBuffer(buffer);
     }
     function publish(sheets, bo, names, previous) {
         const built = buildReservedDataset({
@@ -1091,6 +1236,57 @@ function attachReservedOrders(app, options) {
         if (!version || !fs.existsSync(file)) return res.status(404).json({ error: 'Archive version not found.' });
         res.json(readJson(file, {}));
     });
+    app.get('/api/reserved-orders/lookup', (req, res) => {
+        const query = cleanText(req.query.q);
+        const vin = normalizeVin(query);
+        const live = loadLive();
+        const order = (live.orders || []).find((item) => (vin && item.vin === vin) || (query && String(item.orderNumber) === query));
+        const found = findPushedRow(query || (order && order.vin) || (order && order.orderNumber));
+        const boItem = found.item;
+        res.json({
+            order: order ? publicOrder(order) : null,
+            bo: found.row ? {
+                orderNumber: (boItem && boItem.orderNumber) || (order && order.orderNumber) || query,
+                vehicle: (boItem && boItem.vehicle) || '',
+                exterior: (boItem && boItem.exterior) || '',
+                interior: (boItem && boItem.interior) || '',
+                details: found.row
+            } : null,
+            sources: {
+                esales: live.esalesName || 'E-Sales',
+                backorder: live.boName || 'Back Order',
+                rtl: 'RTL'
+            }
+        });
+    });
+    app.get('/api/reserved-orders/bo-products', (req, res) => {
+        res.json({ products: boProducts(loadBoTable()) });
+    });
+    app.get('/api/reserved-orders/alert-rules', (req, res) => {
+        res.json({ alerts: loadAlerts().filter((rule) => rule.active !== false && rule.message && rule.field) });
+    });
+    app.get('/api/reserved-orders/alerts/match', (req, res) => {
+        const query = cleanText(req.query.q).toLowerCase();
+        if (!query) return res.json({ alerts: [] });
+        const table = loadBoTable();
+        const row = (table.rows || []).find((item) => Object.keys(item).some((key) => cleanText(item[key]).toLowerCase() === query));
+        if (!row) return res.json({ alerts: [] });
+        const bag = {};
+        Object.keys(row).forEach((key) => { bag[String(key).toLowerCase()] = row[key]; });
+        const alerts = loadAlerts().filter((rule) => rule.active !== false && rule.message && rule.field && alertMatches(rule, bag));
+        res.json({ alerts: alerts.map((rule) => ({ message: rule.message, tone: rule.tone })) });
+    });
+    app.get('/api/reserved-orders/alerts', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        res.json({ alerts: loadAlerts(), fields: boFieldCatalog() });
+    });
+    app.post('/api/reserved-orders/alerts', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const alerts = (Array.isArray(req.body?.alerts) ? req.body.alerts : []).slice(0, 50).map(cleanAlert).filter((rule) => rule.field && rule.message);
+        saveAlerts(alerts);
+        audit(req, { user: 'Admin', role: 'admin', action: 'ALERTS_SAVED', entity: 'alert', source: 'admin', details: `${alerts.length} BO alert rule(s)` });
+        res.json({ ok: true, alerts });
+    });
     app.post('/api/reserved-orders/staff', (req, res) => {
         if (!requireAdmin(req, res)) return;
         const name = String(req.body?.name || '').trim();
@@ -1140,6 +1336,7 @@ module.exports = {
     normalizePayment,
     normalizeStatus,
     sheetGridsFromBuffer,
+    backOrderTableFromBuffer,
     calculateQueueNumber,
     getNextThreeOrders,
     buildReservedDataset,
