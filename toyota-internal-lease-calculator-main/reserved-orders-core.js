@@ -445,24 +445,26 @@ function calculateQueueNumber(order, allOrders) {
     return index < 0 ? null : index + 1;
 }
 
+function getNextThreeOrders(order, allOrders) {
+    return (allOrders || [])
+        .filter((item) => item && item.key !== order.key && item.queueNumber != null && order.queueNumber != null && item.queueNumber < order.queueNumber)
+        .sort((a, b) => b.queueNumber - a.queueNumber)
+        .slice(0, 3)
+        .sort((a, b) => a.queueNumber - b.queueNumber)
+        .map((item) => ({
+            queueNumber: item.queueNumber,
+            orderNumber: item.orderNumber,
+            vin: item.vin,
+            vehicle: item.vehicle,
+            customerName: item.customerName,
+            salesAdvisor: item.salesAdvisor,
+            paymentLabel: item.paymentLabel
+        }));
+}
+
 function applyQueue(orders) {
     const list = orders.map((order) => ({ ...order, queueNumber: calculateQueueNumber(order, orders) }));
-    return list.map((order) => {
-        const ahead = list
-            .filter((item) => item.queueNumber != null && order.queueNumber != null && item.queueNumber < order.queueNumber)
-            .sort((a, b) => b.queueNumber - a.queueNumber)
-            .slice(0, 3)
-            .sort((a, b) => a.queueNumber - b.queueNumber)
-            .map((item) => ({
-                queueNumber: item.queueNumber,
-                orderNumber: item.orderNumber,
-                vin: item.vin,
-                vehicle: item.vehicle,
-                salesAdvisor: item.salesAdvisor,
-                paymentLabel: item.paymentLabel
-            }));
-        return { ...order, ahead };
-    });
+    return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
 }
 
 function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
@@ -523,9 +525,17 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
             statusChangedBy: prev ? prev.statusChangedBy || '' : '',
             statusChangedAt: prev ? prev.statusChangedAt || '' : '',
             history: Array.isArray(prev && prev.history) ? prev.history : [],
+            assignmentHistory: Array.isArray(prev && prev.assignmentHistory) ? prev.assignmentHistory : [],
             matchedBackOrder: Boolean(bo),
             sourceRow: row.rowIndex
         };
+        if (prev && (prev.salesAdvisor !== record.salesAdvisor || prev.assignDate !== record.assignDate)) {
+            record.assignmentHistory = record.assignmentHistory.concat([{
+                salesAdvisor: record.salesAdvisor,
+                assignDate: record.assignDisplay || record.assignDate,
+                at: localStamp(new Date())
+            }]);
+        }
         if (byVin.has(vin)) duplicateVinRows += 1;
         const existing = byVin.get(vin);
         if (!existing || record.sourceRow >= existing.sourceRow) byVin.set(vin, record);
@@ -562,6 +572,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous }) {
             statusChangedBy: prev ? prev.statusChangedBy || '' : '',
             statusChangedAt: prev ? prev.statusChangedAt || '' : '',
             history: Array.isArray(prev && prev.history) ? prev.history : [],
+            assignmentHistory: Array.isArray(prev && prev.assignmentHistory) ? prev.assignmentHistory : [],
             matchedBackOrder: Boolean(bo),
             sourceRow: row.rowIndex
         });
@@ -627,7 +638,18 @@ function emptyReport() {
 function publicOrder(order) {
     const copy = { ...order };
     delete copy.history;
+    delete copy.assignmentHistory;
     return copy;
+}
+
+function publicStaff(person) {
+    return {
+        recordId: person.recordId,
+        name: person.name,
+        id: person.id,
+        role: person.role || 'employee',
+        active: person.active !== false
+    };
 }
 
 function rowsFromGrid(grid) {
@@ -657,9 +679,40 @@ function readJson(file, fallback) {
     }
 }
 
+const SEEDED_EMPLOYEES = [
+    ['36684', 'Samaher Abdulmoghni Al Amri', 'emp-samaher'],
+    ['49601', 'Haneen Talal Aqeel Al Madani', 'emp-haneen'],
+    ['22323', 'Wasim Kathem Awad', 'emp-wasim'],
+    ['50822', 'Ahmed Saleh Ahmed Binmahfoodh', 'emp-ahmed-binmahfoodh'],
+    ['46659', 'Ghina Assad Alameer', 'emp-ghina'],
+    ['49597', 'Amjad Ahmed Alwafi', 'emp-amjad'],
+    ['49973', 'Ghadeer Abdulhadi Attia Altayyari', 'emp-ghadeer'],
+    ['48714', 'Maryam Salah Abdulrahman Tabakh', 'emp-maryam'],
+    ['50345', 'Muteb Abdullah Nasser Al Shehri', 'emp-muteb'],
+    ['47674', 'Mansuor Ali Al Qahtani', 'emp-mansuor'],
+    ['50338', 'Ahmed Mahmoud Yousef Al Fitni', 'emp-ahmed-fitni'],
+    ['13251', 'Mohammed Abkar Mohammed Abkar Negry', 'emp-mohammed-negry'],
+    ['24870', 'Mohammed Al Khateeb', 'emp-mohammed-khateeb'],
+    ['48461', 'Mohsen Zuhair Ali Al Attas', 'emp-mohsen'],
+    ['45615', 'Fatmah Mohammed Alasseri', 'emp-fatmah'],
+    ['45646', 'Essa Meraizeeq Almutairy', 'emp-essa'],
+    ['31629', 'Moath Khalel Al Hjoouj', 'emp-moath'],
+    ['46662', 'Khulood Abdulmajeed Albaloushi', 'emp-khulood'],
+    ['46643', 'Raoum Fahad Samkari', 'emp-raoum'],
+    ['49602', 'Alawiyyah Rafi Saad Al Shehri', 'emp-alawiyyah'],
+    ['45752', 'Manal Moshref Almalki', 'emp-manal'],
+    ['50093', 'Lujen Sami Saeed Bazhair', 'emp-lujen'],
+    ['50863', 'Muhannad Abdullah Makdour Minyawi', 'emp-muhannad'],
+    ['46661', 'Maqbool Omar Ashour', 'emp-maqbool'],
+    ['48476', 'Tawdod Al Sharef', 'emp-tawdod'],
+    ['48476', 'Ali Muharraq A Alharbi', 'emp-ali-muharraq']
+].map(([id, name, recordId]) => ({ recordId, id, name, role: 'employee', active: true }));
+
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
+    const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
+    const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
     const sessions = new Map();
 
     function loadLive() {
@@ -690,12 +743,84 @@ function attachReservedOrders(app, options) {
         res.status(401).json({ error: 'Unauthorized: Invalid password' });
         return false;
     }
+    function ensureStaff() {
+        let staff = loadStaff().map((person, index) => ({
+            recordId: person.recordId || `emp-legacy-${person.id || 'x'}-${index}`,
+            id: String(person.id || ''),
+            name: String(person.name || ''),
+            role: person.role === 'admin' ? 'admin' : 'employee',
+            active: person.active !== false
+        }));
+        SEEDED_EMPLOYEES.forEach((seed) => {
+            if (!staff.some((person) => person.recordId === seed.recordId)) staff.push({ ...seed });
+        });
+        saveStaff(staff);
+        return staff;
+    }
     function sessionUser(token) {
         const session = sessions.get(String(token || ''));
         if (!session) return null;
-        const person = loadStaff().find((item) => item.id === session.employeeId && item.active !== false);
-        return person ? { name: person.name, employeeId: person.id } : null;
+        const person = loadStaff().find((item) => item.recordId === session.recordId && item.active !== false);
+        if (!person) return null;
+        return { name: person.name, employeeNumber: person.id, recordId: person.recordId, role: person.role || 'employee' };
     }
+    function clientIp(req) {
+        return String((req && req.headers && req.headers['x-forwarded-for']) || (req && req.ip) || '').split(',')[0].trim();
+    }
+    function audit(req, event) {
+        const now = new Date();
+        const line = JSON.stringify({
+            at: now.toISOString(),
+            display: displayStamp(now),
+            user: event.user || '',
+            employeeNumber: event.employeeNumber || '',
+            recordId: event.recordId || '',
+            role: event.role || '',
+            action: event.action || '',
+            entity: event.entity || '',
+            vin: event.vin || '',
+            orderNumber: event.orderNumber || '',
+            oldValue: event.oldValue == null ? '' : String(event.oldValue),
+            newValue: event.newValue == null ? '' : String(event.newValue),
+            ip: clientIp(req),
+            source: event.source || 'reserved-orders',
+            details: event.details || ''
+        });
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.appendFileSync(auditFile, `${line}\n`, 'utf8');
+    }
+    function readAudit() {
+        try {
+            if (!fs.existsSync(auditFile)) return [];
+            return fs.readFileSync(auditFile, 'utf8').split(/\n/).filter(Boolean).map((line) => {
+                try { return JSON.parse(line); } catch (e) { return null; }
+            }).filter(Boolean);
+        } catch (e) {
+            return [];
+        }
+    }
+    function writeArchive(live, actor) {
+        fs.mkdirSync(archiveDir, { recursive: true });
+        const version = `v-${Date.now()}`;
+        fs.writeFileSync(path.join(archiveDir, `${version}.json`), JSON.stringify(live), 'utf8');
+        const indexFile = path.join(archiveDir, 'index.json');
+        const index = readJson(indexFile, []);
+        index.push({
+            version,
+            at: live.updatedAt,
+            display: displayStamp(new Date()),
+            uploadedBy: actor.name || 'Admin Push',
+            employeeNumber: actor.employeeNumber || '',
+            esalesName: live.esalesName || '',
+            boName: live.boName || '',
+            reservedOrders: (live.report && live.report.reservedVinCount) || (live.orders || []).length,
+            matched: (live.report && live.report.matchedOrders) || 0,
+            unmatched: (live.report && live.report.unmatchedVins) || 0
+        });
+        fs.writeFileSync(indexFile, JSON.stringify(index, null, 2), 'utf8');
+        return version;
+    }
+    ensureStaff();
     function backOrderFromBuffer(buffer) {
         if (!buffer || !buffer.length) return { headers: [], rows: [] };
         const sheets = sheetGridsFromBuffer(buffer);
@@ -726,23 +851,76 @@ function attachReservedOrders(app, options) {
             report: built.report,
             orders: built.orders
         };
+        const previousOrders = previous || loadLive().orders || [];
+        const previousKeys = new Set(previousOrders.map((order) => order.key));
+        const created = built.orders.filter((order) => !previousKeys.has(order.key)).length;
         saveLive(live);
+        const version = writeArchive(live, names.actor || { name: 'Admin Push' });
+        audit(names.req, {
+            user: (names.actor && names.actor.name) || 'Admin',
+            employeeNumber: (names.actor && names.actor.employeeNumber) || '',
+            role: 'admin',
+            action: 'PUSH_LIVE',
+            entity: 'dataset',
+            source: names.source || 'admin-push',
+            newValue: version,
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}`
+        });
+        if (created) {
+            audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
+        }
+        audit(names.req, { user: 'System', role: 'system', action: 'QUEUE_RECALCULATED', entity: 'queue', source: 'import', details: `Queue ranked for ${built.orders.length} orders` });
         notify();
-        return built;
+        return { ...built, version };
     }
 
     app.get('/api/reserved-orders/staff-names', (req, res) => {
-        const names = loadStaff().filter((person) => person.active !== false && person.name).map((person) => person.name).sort((a, b) => a.localeCompare(b));
-        res.json({ names });
+        const people = loadStaff()
+            .filter((person) => person.active !== false && person.name)
+            .map((person) => ({ recordId: person.recordId, name: person.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        res.json({ people, names: people.map((person) => person.name) });
     });
     app.post('/api/reserved-orders/login', (req, res) => {
+        const recordId = String(req.body?.recordId || '').trim();
         const name = String(req.body?.name || '').trim();
         const password = String(req.body?.password || '').trim();
-        const person = loadStaff().find((item) => item.active !== false && item.name === name);
-        if (!person || password !== String(person.id)) return res.status(401).json({ error: 'Name or employee ID is not valid.' });
+        const staff = loadStaff();
+        let person = recordId ? staff.find((item) => item.recordId === recordId) : null;
+        if (!person && name) {
+            const matches = staff.filter((item) => item.name === name);
+            person = matches.length === 1 ? matches[0] : null;
+        }
+        const sameNumber = staff.filter((item) => item.id === password && item.active !== false);
+        if (!person && !name && sameNumber.length > 1) {
+            audit(req, { action: 'LOGIN_FAILED', entity: 'session', role: 'employee', details: 'Duplicate employee ID requires a selected name', newValue: password });
+            return res.status(401).json({ error: 'Select your name. That employee ID is shared.' });
+        }
+        if (!person || person.active === false || password !== String(person.id)) {
+            audit(req, { user: name, action: 'LOGIN_FAILED', entity: 'session', role: 'employee', details: 'Name and employee ID did not match' });
+            return res.status(401).json({ error: 'Name or employee ID is not valid.' });
+        }
         const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-        sessions.set(token, { employeeId: person.id });
-        res.json({ token, name: person.name });
+        sessions.set(token, { recordId: person.recordId });
+        audit(req, { user: person.name, employeeNumber: person.id, recordId: person.recordId, role: person.role, action: 'LOGIN', entity: 'session', source: 'employee' });
+        res.json({ token, name: person.name, recordId: person.recordId, employeeNumber: person.id, role: person.role || 'employee' });
+    });
+    app.post('/api/reserved-orders/logout', (req, res) => {
+        const user = sessionUser(req.body?.token);
+        const reason = String(req.body?.reason || 'logout');
+        if (user) {
+            sessions.delete(String(req.body?.token || ''));
+            audit(req, {
+                user: user.name,
+                employeeNumber: user.employeeNumber,
+                recordId: user.recordId,
+                role: user.role,
+                action: reason === 'timeout' ? 'SESSION_TIMEOUT' : 'LOGOUT',
+                entity: 'session',
+                source: 'employee'
+            });
+        }
+        res.json({ ok: true });
     });
     app.get('/api/reserved-orders/live', (req, res) => {
         const live = loadLive();
@@ -757,13 +935,35 @@ function attachReservedOrders(app, options) {
         const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
         if (!order) return res.status(404).json({ error: 'Order not found.' });
         const now = new Date();
+        const oldStatus = order.status || '';
         order.status = normalizeStatus(rawStatus);
         order.statusChangedBy = user.name;
         order.statusChangedAt = localStamp(now);
         order.history = Array.isArray(order.history) ? order.history : [];
-        order.history.push({ status: order.status, changedBy: user.name, changedAt: order.statusChangedAt, changedDisplay: displayStamp(now) });
+        order.history.push({
+            status: order.status,
+            oldStatus,
+            changedBy: user.name,
+            employeeNumber: user.employeeNumber,
+            recordId: user.recordId,
+            changedAt: order.statusChangedAt,
+            changedDisplay: displayStamp(now)
+        });
         live.updatedAt = now.toISOString();
         saveLive(live);
+        audit(req, {
+            user: user.name,
+            employeeNumber: user.employeeNumber,
+            recordId: user.recordId,
+            role: user.role,
+            action: 'STATUS_CHANGED',
+            entity: 'order',
+            vin: order.vin,
+            orderNumber: order.orderNumber,
+            oldValue: oldStatus,
+            newValue: order.status,
+            source: 'employee'
+        });
         notify();
         res.json({ ok: true, order: publicOrder(order) });
     });
@@ -775,7 +975,13 @@ function attachReservedOrders(app, options) {
             const bo = req.body.boBase64
                 ? backOrderFromBuffer(Buffer.from(String(req.body.boBase64), 'base64'))
                 : (typeof options.readStoredBackOrder === 'function' ? options.readStoredBackOrder() : { headers: [], rows: [] });
-            const built = publish(sheets, bo, { esalesName: req.body.esalesName, boName: req.body.boName || (req.body.boBase64 ? '' : 'admin-back-order') });
+            const built = publish(sheets, bo, {
+                esalesName: req.body.esalesName,
+                boName: req.body.boName || (req.body.boBase64 ? '' : 'admin-back-order'),
+                req,
+                source: 'reserved-admin',
+                actor: { name: 'Admin' }
+            });
             if (!built.ok) return res.status(400).json({ error: built.error, report: built.report });
             res.json({ ok: true, updatedAt: loadLive().updatedAt, report: built.report });
         } catch (e) {
@@ -791,26 +997,58 @@ function attachReservedOrders(app, options) {
             boName: live.boName || '',
             report: live.report || {},
             orders: live.orders || [],
-            staff: loadStaff().map((person) => ({ name: person.name, id: person.id, active: person.active !== false }))
+            staff: loadStaff().map(publicStaff),
+            archive: readJson(path.join(archiveDir, 'index.json'), []),
+            auditCount: readAudit().length
         });
+    });
+    app.get('/api/reserved-orders/audit', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const q = String(req.query.q || '').toLowerCase();
+        const action = String(req.query.action || '');
+        const employee = String(req.query.employee || '').toLowerCase();
+        const events = readAudit().filter((event) => {
+            if (action && event.action !== action) return false;
+            if (employee && !`${event.user} ${event.employeeNumber}`.toLowerCase().includes(employee)) return false;
+            if (q && !JSON.stringify(event).toLowerCase().includes(q)) return false;
+            return true;
+        });
+        res.json({ total: events.length, events: events.slice(-1000).reverse() });
+    });
+    app.get('/api/reserved-orders/archive', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        res.json({ versions: readJson(path.join(archiveDir, 'index.json'), []) });
+    });
+    app.get('/api/reserved-orders/archive/:version', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const version = String(req.params.version || '').replace(/[^a-z0-9-]/gi, '');
+        const file = path.join(archiveDir, `${version}.json`);
+        if (!version || !fs.existsSync(file)) return res.status(404).json({ error: 'Archive version not found.' });
+        res.json(readJson(file, {}));
     });
     app.post('/api/reserved-orders/staff', (req, res) => {
         if (!requireAdmin(req, res)) return;
         const name = String(req.body?.name || '').trim();
         const id = String(req.body?.id || '').trim();
+        const role = req.body?.role === 'admin' ? 'admin' : 'employee';
         const active = req.body?.active !== false;
-        const previousId = String(req.body?.previousId || id).trim();
+        const previousRecordId = String(req.body?.previousRecordId || '').trim();
         if (!name || !id) return res.status(400).json({ error: 'Employee name and ID are required.' });
         const staff = loadStaff();
-        const index = staff.findIndex((person) => String(person.id) === previousId);
+        const index = previousRecordId ? staff.findIndex((person) => person.recordId === previousRecordId) : -1;
+        let action = 'EMPLOYEE_ADDED';
+        let oldValue = '';
         if (index >= 0) {
-            if (id !== previousId && staff.some((person) => String(person.id) === id)) return res.status(400).json({ error: 'That employee ID is already used.' });
-            staff[index] = { name, id, active };
-        } else if (staff.some((person) => String(person.id) === id)) {
-            return res.status(400).json({ error: 'That employee ID is already used.' });
-        } else staff.push({ name, id, active });
+            oldValue = `${staff[index].name} / ${staff[index].active ? 'active' : 'inactive'} / ${staff[index].role}`;
+            const wasActive = staff[index].active !== false;
+            staff[index] = { ...staff[index], name, id, role, active };
+            action = !active && wasActive ? 'EMPLOYEE_DISABLED' : (active && !wasActive ? 'EMPLOYEE_ENABLED' : 'EMPLOYEE_EDITED');
+        } else {
+            staff.push({ recordId: `emp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name, id, role, active });
+        }
         saveStaff(staff);
-        res.json({ ok: true, staff: staff.map((person) => ({ name: person.name, id: person.id, active: person.active !== false })) });
+        audit(req, { user: 'Admin', role: 'admin', action, entity: 'employee', oldValue, newValue: `${name} / ${id} / ${role} / ${active ? 'active' : 'inactive'}`, source: 'admin' });
+        res.json({ ok: true, staff: staff.map(publicStaff) });
     });
 
     return {
@@ -836,6 +1074,7 @@ module.exports = {
     normalizeStatus,
     sheetGridsFromBuffer,
     calculateQueueNumber,
+    getNextThreeOrders,
     buildReservedDataset,
     publicOrder,
     attachReservedOrders

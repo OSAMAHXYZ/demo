@@ -5158,6 +5158,26 @@ app.delete('/api/delivery-coordinator/queue/:vin', (req, res) => {
     }
 });
 
+try {
+    const reservedOrdersApi = require('./reserved-orders-core');
+    reservedOrdersApi.attachReservedOrders(app, {
+        storeDir: path.join(__dirname, '..', 'report-sheet-data'),
+        adminPassword: BACKEND_PASSWORD,
+        broadcast() {},
+        readStoredBackOrder() {
+            try {
+                if (!fs.existsSync(BO_DATA_FILE)) return { headers: [], rows: [] };
+                const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
+                return { headers: data.headers || [], rows: data.rows || [] };
+            } catch (e) {
+                return { headers: [], rows: [] };
+            }
+        }
+    });
+} catch (reservedBootError) {
+    console.error('Reserved orders module did not start:', reservedBootError.message);
+}
+
 // Start HTTP server
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);

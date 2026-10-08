@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reserved Orders Admin</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
 </head>
 <body>
     <section id="gate" class="login-screen">
         <form class="login-card" id="gate-form">
-            <div class="mark">T</div>
+            <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
             <h1>Reserved admin</h1>
-            <p>Use the same admin password as the report admin. A normal Admin Push of E-Sales also updates this list. Employees cannot open this page.</p>
+            <p>Use the same admin password as the report admin.</p>
             <label class="field"><span>Admin password</span><input id="admin-password" type="password" required></label>
             <div class="err" id="gate-error"></div>
             <button class="solid" type="submit">Continue</button>
@@ -23,73 +22,89 @@
     <div id="admin-app" class="hidden">
         <header class="topbar">
             <div class="brand">
-                <div class="mark">T</div>
-                <div>
-                    <strong>Reserved Orders Admin</strong>
-                    <span id="admin-updated">No live push yet</span>
-                </div>
+                <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+                <div><strong>Sales CRM</strong><span id="admin-updated">Reserved Orders admin</span></div>
             </div>
             <div class="top-links">
                 <a class="ghost" href="hub.html">Hub</a>
                 <a class="ghost" href="reserved-orders.html">Employee page</a>
-                <button class="text-btn" id="admin-out" type="button">Sign out</button>
+                <button class="ghost" id="admin-out" type="button">Sign out</button>
             </div>
         </header>
         <main class="wrap">
-            <div class="admin-grid">
-                <div>
+            <nav class="admin-nav" id="admin-nav">
+                <button class="ghost active" type="button" data-panel="overview">Overview</button>
+                <button class="ghost" type="button" data-panel="orders">Orders</button>
+                <button class="ghost" type="button" data-panel="employees">Employees</button>
+                <button class="ghost" type="button" data-panel="push">Data push</button>
+                <button class="ghost" type="button" data-panel="archive">Archive</button>
+                <button class="ghost" type="button" data-panel="audit">Audit logs</button>
+                <button class="ghost" type="button" data-panel="reports">Reports</button>
+                <button class="ghost" type="button" data-panel="settings">Settings</button>
+            </nav>
+            <section id="panel-overview">
+                <div class="kpis" id="admin-kpis"></div>
+                <section class="panel" style="margin-top:14px;"><h2>Payment mix</h2><div class="bars" id="pay-bars"></div></section>
+            </section>
+            <section id="panel-orders" class="hidden">
+                <div class="toolbar">
+                    <input class="search" id="admin-search" placeholder="VIN, order, advisor, customer">
+                    <select id="admin-status"></select>
+                    <select id="admin-payment"><option value="">Payment</option><option value="cash">Cash</option><option value="bank">Bank</option><option value="other">Other</option><option value="unknown">Unknown</option></select>
+                    <select id="admin-expired"><option value="">All timers</option><option value="expired">Expired only</option></select>
+                </div>
+                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
+            </section>
+            <section id="panel-employees" class="hidden">
+                <div class="admin-grid">
                     <section class="panel">
-                        <h2>Push live</h2>
-                        <div class="stack">
-                            <label>E-Sales Excel<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
-                            <label>Back Order file (optional)<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
-                            <button class="solid" id="push-live" type="button">PUSH LIVE</button>
-                            <div class="err" id="push-error"></div>
-                            <div class="report" id="push-report"></div>
-                        </div>
-                    </section>
-                    <section class="panel" style="margin-top:16px;">
-                        <h2>Employees</h2>
+                        <h2>Employee</h2>
                         <div class="stack">
                             <input id="staff-name" placeholder="Employee name">
                             <input id="staff-id" placeholder="Employee ID">
+                            <select id="staff-role"><option value="employee">Employee</option><option value="admin">Admin</option></select>
                             <label><input id="staff-active" type="checkbox" checked> Active</label>
                             <button class="solid" id="save-staff" type="button">Save employee</button>
                             <div class="err" id="staff-error"></div>
                         </div>
-                        <div id="staff-list"></div>
                     </section>
+                    <section class="panel" id="staff-list"></section>
                 </div>
-                <section class="panel">
-                    <h2>Live reserved orders</h2>
-                    <div class="toolbar">
-                        <input class="search" id="admin-search" placeholder="VIN, order number, or sales advisor">
-                        <select class="filter" id="admin-status"></select>
-                        <select class="filter" id="admin-payment">
-                            <option value="">Payment</option>
-                            <option value="cash">Cash</option>
-                            <option value="bank">Bank</option>
-                            <option value="other">Other</option>
-                            <option value="unknown">Unknown</option>
-                        </select>
-                        <select class="filter" id="admin-expired">
-                            <option value="">All timers</option>
-                            <option value="expired">Expired only</option>
-                        </select>
-                    </div>
-                    <div style="overflow:auto;">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th>History</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-rows"></tbody>
-                        </table>
-                    </div>
+            </section>
+            <section id="panel-push" class="hidden">
+                <section class="panel stack">
+                    <h2>Push live</h2>
+                    <label>E-Sales Excel<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <label>Back Order file<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <button class="solid" id="push-live" type="button">PUSH LIVE</button>
+                    <div class="err" id="push-error"></div>
+                    <div id="push-report"></div>
                 </section>
-            </div>
+            </section>
+            <section id="panel-archive" class="hidden">
+                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Version</th><th>Date</th><th>Uploaded by</th><th>E-Sales</th><th>BO</th><th>Reserved</th><th>Matched</th><th>Unmatched</th><th></th></tr></thead><tbody id="archive-rows"></tbody></table></div>
+                <div id="archive-view" style="margin-top:12px;"></div>
+            </section>
+            <section id="panel-audit" class="hidden">
+                <div class="toolbar">
+                    <input class="search" id="audit-q" placeholder="Search audit">
+                    <input id="audit-employee" placeholder="Employee or ID">
+                    <select id="audit-action"><option value="">Action</option></select>
+                </div>
+                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Time</th><th>Employee</th><th>Role</th><th>Action</th><th>VIN</th><th>Order</th><th>Old</th><th>New</th><th></th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+            </section>
+            <section id="panel-reports" class="hidden"><section class="panel" id="report-body"></section></section>
+            <section id="panel-settings" class="hidden">
+                <section class="panel">
+                    <h2>System</h2>
+                    <p>Employee sessions end after 3 minutes without a click, key press, scroll, search, or status change.</p>
+                    <p>Queue rank is calculated by <b>calculateQueueNumber</b>. Replace that function when the real queue rule is ready. The page reads whatever number it returns.</p>
+                    <p>Dates such as 01.10.2026 are read as 1 October 2026.</p>
+                    <p>Employees are never deleted. Disabling them keeps their audit history.</p>
+                </section>
+            </section>
         </main>
+        <aside id="drawer" class="drawer hidden"></aside>
     </div>
     <script src="reserved-orders-admin.js"></script>
 </body>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Reserved Orders</title>
+    <title>Reserved Orders Control Tower</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
@@ -11,7 +11,7 @@
 <body>
     <section id="login" class="login-screen">
         <form class="login-card" id="login-form">
-            <div class="mark">T</div>
+            <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
             <h1>Reserved Orders</h1>
             <p>Select your name. Your password is your employee ID.</p>
             <label class="field"><span>Employee</span><select id="employee-name" required></select></label>
@@ -21,50 +21,131 @@
             <p style="margin-top:14px;"><a href="hub.html">Back to hub</a></p>
         </form>
     </section>
+
     <div id="app" class="hidden">
         <header class="topbar">
             <div class="brand">
-                <div class="mark">T</div>
+                <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
                 <div>
-                    <strong>Reserved Orders</strong>
-                    <span id="updated-at">Waiting for a live push</span>
+                    <strong>Sales CRM</strong>
+                    <span>Reserved Orders</span>
                 </div>
             </div>
+            <nav class="jump">
+                <a href="#orders">Reserved Orders</a>
+                <a href="#lookup">BO Lookup</a>
+                <a href="#message">Message Builder</a>
+            </nav>
             <div class="top-links">
-                <span class="who" id="who"></span>
+                <div class="who"><b id="who"></b><span id="who-id"></span></div>
                 <span class="session-pill" id="session-pill">Session: 03:00</span>
                 <a class="ghost" href="hub.html">Hub</a>
-                <button class="text-btn" id="logout" type="button">Sign out</button>
+                <button class="ghost" id="logout" type="button">Sign out</button>
             </div>
         </header>
+
         <main class="wrap">
-            <section class="kpis" id="kpis"></section>
-            <div class="toolbar">
-                <input class="search" id="search" type="search" placeholder="Search VIN, order number, customer, or sales advisor">
-                <select class="filter" id="filter-status"></select>
-                <select class="filter" id="filter-payment">
-                    <option value="">Payment type</option>
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank</option>
-                    <option value="other">Other</option>
-                    <option value="unknown">Unknown</option>
-                </select>
-                <select class="filter" id="filter-advisor"></select>
-                <select class="filter" id="filter-queue"></select>
-                <select class="filter" id="filter-state">
-                    <option value="">Show all</option>
-                    <option value="active">Active</option>
-                    <option value="expired">Expired</option>
-                </select>
-                <select class="filter" id="sort">
-                    <option value="queue">Queue</option>
-                    <option value="assign">Assign date</option>
-                    <option value="remaining">Remaining time</option>
-                    <option value="order">Order number</option>
-                    <option value="advisor">Sales advisor</option>
-                </select>
-            </div>
-            <section class="cards" id="cards"></section>
+            <section id="orders">
+                <div class="section-head">
+                    <div>
+                        <h2>Reserved Orders</h2>
+                        <p id="updated-at">Waiting for a live push</p>
+                    </div>
+                </div>
+                <section class="kpis" id="kpis"></section>
+                <div class="toolbar">
+                    <input class="search" id="search" type="search" placeholder="Search VIN, order number, customer, or sales advisor">
+                    <select id="filter-status"></select>
+                    <select id="filter-payment">
+                        <option value="">Payment type</option>
+                        <option value="cash">Cash</option>
+                        <option value="bank">Bank</option>
+                        <option value="other">Other</option>
+                        <option value="unknown">Unknown</option>
+                    </select>
+                    <select id="filter-advisor"></select>
+                    <select id="filter-queue"></select>
+                    <select id="filter-state">
+                        <option value="">Show all</option>
+                        <option value="expired">Expired only</option>
+                        <option value="active">Active</option>
+                    </select>
+                    <select id="sort">
+                        <option value="queue-asc">Queue ascending</option>
+                        <option value="queue-desc">Queue descending</option>
+                        <option value="assign-asc">Oldest assignment</option>
+                        <option value="assign-desc">Newest assignment</option>
+                        <option value="remaining">Remaining time</option>
+                    </select>
+                </div>
+                <section class="cards" id="cards"></section>
+                <button class="ghost more hidden" id="more" type="button">Show more</button>
+            </section>
+
+            <section class="navy" id="lookup">
+                <div class="section-head">
+                    <div>
+                        <h2>BO Order Lookup</h2>
+                        <p>Search a VIN or order number without leaving this page.</p>
+                    </div>
+                </div>
+                <form class="lookup-row" id="lookup-form">
+                    <input id="lookup-q" placeholder="VIN or order number">
+                    <button class="solid" type="submit">Look up</button>
+                </form>
+                <div id="lookup-result" style="margin-top:12px;"></div>
+                <div class="vehicles" id="vehicles"></div>
+                <div id="vehicle-detail" style="margin-top:12px;"></div>
+            </section>
+
+            <section id="message">
+                <div class="section-head">
+                    <div>
+                        <h2>Customer Message Builder</h2>
+                        <p>Write the WhatsApp message from the same workspace.</p>
+                    </div>
+                </div>
+                <div class="message-grid">
+                    <section class="card panel">
+                        <div class="facts" style="margin-bottom:10px;">
+                            <label class="field"><span>Customer name</span><input id="msg-customer"></label>
+                            <label class="field"><span>Advisor name</span><input id="msg-advisor"></label>
+                        </div>
+                        <label class="field"><span>Customer WhatsApp</span><input id="msg-phone" placeholder="9665xxxxxxxx"></label>
+                        <div class="facts">
+                            <label class="field"><span>Car</span><select id="msg-car"></select></label>
+                            <label class="field"><span>Model / trim</span><select id="msg-model"></select></label>
+                        </div>
+                        <div class="facts">
+                            <label class="field"><span>Message type</span>
+                                <select id="msg-type">
+                                    <option value="followup">After call — follow-up</option>
+                                    <option value="quote">Price quote</option>
+                                    <option value="showroom">Showroom visit</option>
+                                    <option value="finance">Financing and lease</option>
+                                </select>
+                            </label>
+                            <label class="field"><span>Language</span>
+                                <select id="msg-lang">
+                                    <option value="ar">Arabic</option>
+                                    <option value="en">English</option>
+                                    <option value="both">Arabic + English</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="field"><span>Extra note</span><input id="msg-note"></label>
+                        <div class="car-preview" id="msg-preview-car"></div>
+                    </section>
+                    <section class="card panel">
+                        <div class="preview-box" id="msg-preview">Select a car and model to generate the message.</div>
+                        <div class="toolbar">
+                            <button class="solid" id="msg-wa" type="button">Send on WhatsApp</button>
+                            <button class="ghost" id="msg-copy" type="button">Copy message</button>
+                            <button class="ghost" id="msg-reset" type="button">Reset</button>
+                        </div>
+                    </section>
+                </div>
+            </section>
         </main>
     </div>
     <script src="reserved-orders-page.js"></script>
