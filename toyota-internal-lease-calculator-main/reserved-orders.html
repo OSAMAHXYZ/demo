@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reserved Orders</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="reserved-orders.css">
+</head>
+<body>
+    <section id="login" class="login-screen">
+        <form class="login-card" id="login-form">
+            <div class="mark">T</div>
+            <h1>Reserved Orders</h1>
+            <p>Select your name. Your password is your employee ID.</p>
+            <label class="field"><span>Employee</span><select id="employee-name" required></select></label>
+            <label class="field"><span>Employee ID</span><input id="employee-id" type="password" autocomplete="current-password" required></label>
+            <div class="err" id="login-error"></div>
+            <button class="solid" type="submit">Sign in</button>
+            <p style="margin-top:14px;"><a href="hub.html">Back to hub</a></p>
+        </form>
+    </section>
+    <div id="app" class="hidden">
+        <header class="topbar">
+            <div class="brand">
+                <div class="mark">T</div>
+                <div>
+                    <strong>Reserved Orders</strong>
+                    <span id="updated-at">Waiting for a live push</span>
+                </div>
+            </div>
+            <div class="top-links">
+                <span class="who" id="who"></span>
+                <span class="session-pill" id="session-pill">Session: 03:00</span>
+                <a class="ghost" href="hub.html">Hub</a>
+                <button class="text-btn" id="logout" type="button">Sign out</button>
+            </div>
+        </header>
+        <main class="wrap">
+            <section class="kpis" id="kpis"></section>
+            <div class="toolbar">
+                <input class="search" id="search" type="search" placeholder="Search VIN, order number, customer, or sales advisor">
+                <select class="filter" id="filter-status"></select>
+                <select class="filter" id="filter-payment">
+                    <option value="">Payment type</option>
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank</option>
+                    <option value="other">Other</option>
+                    <option value="unknown">Unknown</option>
+                </select>
+                <select class="filter" id="filter-advisor"></select>
+                <select class="filter" id="filter-queue"></select>
+                <select class="filter" id="filter-state">
+                    <option value="">Show all</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select class="filter" id="sort">
+                    <option value="queue">Queue</option>
+                    <option value="assign">Assign date</option>
+                    <option value="remaining">Remaining time</option>
+                    <option value="order">Order number</option>
+                    <option value="advisor">Sales advisor</option>
+                </select>
+            </div>
+            <section class="cards" id="cards"></section>
+        </main>
+    </div>
+    <script src="reserved-orders-page.js"></script>
+</body>
+</html>

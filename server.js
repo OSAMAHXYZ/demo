@@ -454,6 +454,29 @@ function reportSheetFilePath(slot) {
   return path.join(REPORT_SHEET_FILES, id);
 }
 
+const reservedOrdersApi = require('./toyota-internal-lease-calculator-main/reserved-orders-core');
+let reservedOrdersHub = null;
+function broadcastReservedOrdersUpdate(updatedAt) {
+  const payload = JSON.stringify({ type: 'reserved_orders_updated', updatedAt: updatedAt || '' });
+  for (const client of wsClients) {
+    if (client.readyState === 1) {
+      try { client.send(payload); } catch { /* ignore */ }
+    }
+  }
+}
+function refreshReservedOrdersFromAdminPush(fileNames) {
+  if (!reservedOrdersHub) return null;
+  const esalesPath = reportSheetFilePath('central');
+  if (!esalesPath || !fs.existsSync(esalesPath)) return null;
+  const boPath = reportSheetFilePath('backorder');
+  const names = fileNames || {};
+  return reservedOrdersHub.refreshFromBuffers(
+    fs.readFileSync(esalesPath),
+    boPath && fs.existsSync(boPath) ? fs.readFileSync(boPath) : null,
+    { esalesName: names.central || 'E-Sales', boName: names.backorder || 'Back Order' }
+  );
+}
+
 function broadcastReportSheetUpdate(at) {
   const payload = JSON.stringify({ type: 'report_sheet_updated', at: at || Date.now() });
   for (const client of wsClients) {
@@ -5011,6 +5034,9 @@ app.post('/api/report-sheet/push', (req, res) => {
     };
     saveReportSheetMeta(meta);
     broadcastReportSheetUpdate(at);
+    try { refreshReservedOrdersFromAdminPush(fileNames); } catch (reservedErr) {
+      console.error('[reserved-orders] rebuild from admin push', reservedErr);
+    }
     return res.json({
       ok: true,
       at,
@@ -7905,6 +7931,25 @@ app.get('/', (_req, res) => {
 });
 
 loadStore();
+
+reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
+  storeDir: REPORT_SHEET_DIR,
+  adminPassword: END_OF_MONTH_PASSWORD,
+  broadcast: broadcastReservedOrdersUpdate,
+  readStoredBackOrder() {
+    const boPath = reportSheetFilePath('backorder');
+    if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
+    const sheets = reservedOrdersApi.sheetGridsFromBuffer(fs.readFileSync(boPath));
+    const grid = (sheets[0] && sheets[0].grid) || [];
+    const headers = (grid[0] || []).map((header, index) => String(header || `Column_${index + 1}`));
+    const rows = grid.slice(1).filter((row) => (row || []).some((cell) => String(cell || '').trim())).map((row) => {
+      const obj = {};
+      headers.forEach((header, index) => { obj[header] = row[index] ?? ''; });
+      return obj;
+    });
+    return { headers, rows };
+  }
+});
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });

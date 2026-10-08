@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reserved Orders Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="reserved-orders.css">
+</head>
+<body>
+    <section id="gate" class="login-screen">
+        <form class="login-card" id="gate-form">
+            <div class="mark">T</div>
+            <h1>Reserved admin</h1>
+            <p>Use the same admin password as the report admin. A normal Admin Push of E-Sales also updates this list. Employees cannot open this page.</p>
+            <label class="field"><span>Admin password</span><input id="admin-password" type="password" required></label>
+            <div class="err" id="gate-error"></div>
+            <button class="solid" type="submit">Continue</button>
+            <p style="margin-top:14px;"><a href="hub.html">Back to hub</a></p>
+        </form>
+    </section>
+    <div id="admin-app" class="hidden">
+        <header class="topbar">
+            <div class="brand">
+                <div class="mark">T</div>
+                <div>
+                    <strong>Reserved Orders Admin</strong>
+                    <span id="admin-updated">No live push yet</span>
+                </div>
+            </div>
+            <div class="top-links">
+                <a class="ghost" href="hub.html">Hub</a>
+                <a class="ghost" href="reserved-orders.html">Employee page</a>
+                <button class="text-btn" id="admin-out" type="button">Sign out</button>
+            </div>
+        </header>
+        <main class="wrap">
+            <div class="admin-grid">
+                <div>
+                    <section class="panel">
+                        <h2>Push live</h2>
+                        <div class="stack">
+                            <label>E-Sales Excel<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                            <label>Back Order file (optional)<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                            <button class="solid" id="push-live" type="button">PUSH LIVE</button>
+                            <div class="err" id="push-error"></div>
+                            <div class="report" id="push-report"></div>
+                        </div>
+                    </section>
+                    <section class="panel" style="margin-top:16px;">
+                        <h2>Employees</h2>
+                        <div class="stack">
+                            <input id="staff-name" placeholder="Employee name">
+                            <input id="staff-id" placeholder="Employee ID">
+                            <label><input id="staff-active" type="checkbox" checked> Active</label>
+                            <button class="solid" id="save-staff" type="button">Save employee</button>
+                            <div class="err" id="staff-error"></div>
+                        </div>
+                        <div id="staff-list"></div>
+                    </section>
+                </div>
+                <section class="panel">
+                    <h2>Live reserved orders</h2>
+                    <div class="toolbar">
+                        <input class="search" id="admin-search" placeholder="VIN, order number, or sales advisor">
+                        <select class="filter" id="admin-status"></select>
+                        <select class="filter" id="admin-payment">
+                            <option value="">Payment</option>
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
+                            <option value="other">Other</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                        <select class="filter" id="admin-expired">
+                            <option value="">All timers</option>
+                            <option value="expired">Expired only</option>
+                        </select>
+                    </div>
+                    <div style="overflow:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th>History</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-rows"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="reserved-orders-admin.js"></script>
+</body>
+</html>
