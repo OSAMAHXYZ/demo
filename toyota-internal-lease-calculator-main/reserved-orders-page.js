@@ -9,10 +9,8 @@
         ['GR86', 'images/cars/gr86.png']
     ];
     const IDLE_MS = 3 * 60 * 1000;
-    const PAGE = 24;
     const sessionKey = 'reserved-orders-session';
     let orders = [];
-    let shown = PAGE;
     let carsData = {};
     let searchTimer = null;
     let clock = null;
@@ -65,6 +63,7 @@
     async function endSession(reason) {
         const session = readSession();
         sessionStorage.removeItem(sessionKey);
+        document.body.classList.remove('dash');
         if (session && session.token) {
             await fetch('/api/reserved-orders/logout', {
                 method: 'POST',
@@ -94,11 +93,12 @@
     }
 
     async function loadNames() {
-        const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json());
+        const data = await fetch('/api/reserved-orders/staff-names').then((res) => res.json()).catch(() => ({ people: [] }));
         const people = data.people || [];
-        $('employee-name').innerHTML = people.length
-            ? people.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}</option>`).join('')
-            : '<option value="">No active employees</option>';
+        const options = ['<option value="__admin__">Admin</option>'].concat(
+            people.map((person) => `<option value="${esc(person.recordId)}">${esc(person.name)}</option>`)
+        );
+        $('employee-name').innerHTML = options.join('');
     }
     async function loadLive() {
         const data = await fetch('/api/reserved-orders/live').then((res) => res.json());
@@ -155,54 +155,34 @@
         const expired = orders.filter(isExpired).length;
         const soon = orders.filter((order) => isActive(order) && (remainingMs(order) || 0) > 0 && remainingMs(order) <= 6 * 3600000).length;
         $('kpis').innerHTML = [
-            ['Total reserved', orders.length, ''],
-            ['Active orders', orders.filter(isActive).length, 'ok'],
+            ['Total', orders.length, ''],
+            ['Active', orders.filter(isActive).length, 'ok'],
             ['Expired', expired, 'bad'],
-            ['Completed / invoiced', orders.filter(isCompleted).length, 'ok'],
-            ['Approaching deadline', soon, 'warn']
+            ['Invoiced', orders.filter(isCompleted).length, 'ok'],
+            ['Deadline', soon, 'warn']
         ].map(([label, value, cls]) => `<article class="kpi ${cls}"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        const slice = list.slice(0, shown);
-        $('cards').innerHTML = slice.length ? slice.map(cardHtml).join('') : '<div class="empty">No reserved orders match this view.</div>';
-        $('more').classList.toggle('hidden', slice.length >= list.length);
+        const top = list.slice(0, 3);
+        $('cards').innerHTML = top.length ? top.map(cardHtml).join('') : '<div class="empty">No reserved orders match this view.</div>';
+        if (!$('overlay-all').classList.contains('hidden')) renderAll(list);
     }
     function cardHtml(order) {
         const ms = remainingMs(order);
         const hours = order.paymentHours || 48;
         const img = carImage(order.vehicle);
-        const ahead = (order.ahead || []).map((item, index) => `<li><strong>${index + 1}. Queue #${item.queueNumber}</strong><br>Order ${esc(item.orderNumber || 'NO ORDER')}<br>${esc(item.vehicle || '')} · ${esc(item.salesAdvisor || 'UNASSIGNED')}</li>`).join('');
-        return `<article class="order${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
-            <div class="order-grid">
-                <div class="order-col">
-                    ${img ? `<img src="${img}" alt="" style="height:74px;object-fit:contain" onerror="this.style.display='none'">` : ''}
-                    <div class="eyebrow">Order</div>
-                    <h3>#${esc(order.orderNumber || 'NO ORDER')}</h3>
-                    <div class="facts">
-                        <div><span>VIN</span><strong>${esc(show(order.vin, 'VIN NOT FOUND'))}</strong></div>
-                        <div><span>Customer</span><strong>${esc(order.customerName || '—')}</strong></div>
-                        <div><span>Vehicle</span><strong>${esc(order.vehicle || '—')}</strong></div>
-                        <div><span>Model year</span><strong>${esc(order.modelYear || '—')}</strong></div>
-                    </div>
-                </div>
-                <div class="order-col">
-                    <div class="facts">
-                        <div><span>Exterior</span><strong>${esc(order.exterior || '—')}</strong></div>
-                        <div><span>Interior</span><strong>${esc(order.interior || '—')}</strong></div>
-                        <div><span>Sales advisor</span><strong>${esc(show(order.salesAdvisor, 'UNASSIGNED'))}</strong></div>
-                        <div><span>Payment</span><strong>${esc(show(order.paymentLabel, 'UNKNOWN'))}</strong></div>
-                        <div><span>Assigned</span><strong>${esc(order.assignDisplay || 'NO ASSIGN DATE')}</strong></div>
-                        <div><span>Queue</span><strong>#${order.queueNumber == null ? '—' : order.queueNumber}</strong></div>
-                    </div>
-                </div>
-                <div class="order-col timer-col">
-                    <span class="side-label">Time remaining</span>
-                    <div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${formatRemain(ms)}</div>
-                    <span class="side-label">${hours} hours</span>
-                    <div style="margin-top:10px;"><span class="badge ${badge(order.status)}">${esc(order.status || 'محجوز')}</span></div>
-                    <div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>
-                </div>
-            </div>
-            <div class="ahead"><span class="side-label">Next in queue</span><ol>${ahead || '<li>No orders ahead</li>'}</ol></div>
+        const ahead = (order.ahead || []).slice(0, 3).map((item) => `#${item.queueNumber} ${esc(item.orderNumber || 'NO ORDER')}`).join(' · ') || 'None ahead';
+        return `<article class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
+            <div><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
+            <div><b>ORDER #${esc(order.orderNumber || 'NO ORDER')}</b><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
+            <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span></div>
+            <div><b>${esc(show(order.salesAdvisor, 'UNASSIGNED'))}</b><span class="muted">${esc(show(order.paymentLabel, 'UNKNOWN'))}</span><span class="muted">${esc(order.assignDisplay || 'NO ASSIGN DATE')}</span></div>
+            <div><span class="muted">Next</span><b>${ahead}</b></div>
+            <div><div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${formatRemain(ms)}</div><span class="muted">${hours} HOURS</span></div>
+            <div><span class="badge ${badge(order.status)}">${esc(order.status || 'محجوز')}</span><div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div></div>
         </article>`;
+    }
+    function renderAll(list) {
+        const rows = list || visibleOrders();
+        $('all-rows').innerHTML = rows.map(cardHtml).join('') || '<div class="empty">No reserved orders match this view.</div>';
     }
     function tickTimers() {
         paintSession();
@@ -211,7 +191,7 @@
             const ms = end ? end.getTime() - Date.now() : null;
             el.textContent = formatRemain(ms);
             el.className = `timer ${timerClass(ms)}`;
-            const card = el.closest('.order');
+            const card = el.closest('.lane');
             if (card) card.classList.toggle('expired', ms != null && ms <= 0);
         });
     }
@@ -320,14 +300,30 @@
         return digits;
     }
 
+    function showView(name) {
+        $('overlay-lookup').classList.toggle('hidden', name !== 'lookup');
+        $('overlay-message').classList.toggle('hidden', name !== 'message');
+        if (name !== 'all') $('overlay-all').classList.add('hidden');
+        document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
+        if (name === 'lookup') loadVehicles();
+    }
     $('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         $('login-error').textContent = '';
         const select = $('employee-name');
+        const password = $('employee-id').value;
+        if (select.value === '__admin__') {
+            if (password !== '1234') { $('login-error').textContent = 'Admin password was not accepted.'; return; }
+            sessionStorage.removeItem(sessionKey);
+            sessionStorage.setItem('reserved-orders-admin-pass', '1234');
+            $('employee-id').value = '';
+            location.href = 'reserved-orders-admin.html';
+            return;
+        }
         const res = await fetch('/api/reserved-orders/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recordId: select.value, name: select.selectedOptions[0] ? select.selectedOptions[0].textContent : '', password: $('employee-id').value })
+            body: JSON.stringify({ recordId: select.value, name: select.selectedOptions[0] ? select.selectedOptions[0].textContent : '', password })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { $('login-error').textContent = data.error || 'Could not sign in.'; return; }
@@ -337,16 +333,20 @@
     });
     $('logout').addEventListener('click', () => endSession('logout'));
     ['click', 'keydown', 'input', 'change', 'scroll'].forEach((type) => window.addEventListener(type, touch, { passive: true }));
-    $('cards').addEventListener('change', (event) => {
+    document.addEventListener('change', (event) => {
         const select = event.target.closest('.status-select');
         if (!select) return;
-        changeStatus(select.closest('.order').dataset.key, select.value);
+        const card = select.closest('.lane');
+        if (!card) return;
+        changeStatus(card.dataset.key, select.value);
     });
     ['search', 'filter-status', 'filter-payment', 'filter-advisor', 'filter-queue', 'filter-state', 'sort'].forEach((id) => {
-        $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { shown = PAGE; render(); }, 120); });
-        $(id).addEventListener('change', () => { shown = PAGE; render(); });
+        $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
+        $(id).addEventListener('change', render);
     });
-    $('more').addEventListener('click', () => { shown += PAGE; render(); });
+    $('view-all').addEventListener('click', () => { renderAll(); $('overlay-all').classList.remove('hidden'); });
+    $('close-all').addEventListener('click', () => $('overlay-all').classList.add('hidden'));
+    document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
     $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
     $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });
     ['msg-customer', 'msg-advisor', 'msg-phone', 'msg-type', 'msg-lang', 'msg-note', 'msg-model'].forEach((id) => $(id).addEventListener('input', paintMessage));
@@ -365,6 +365,8 @@
         if (!session || Date.now() - session.last >= IDLE_MS) return endSession('timeout');
         $('login').classList.add('hidden');
         $('app').classList.remove('hidden');
+        document.body.classList.add('dash');
+        showView('orders');
         $('who').textContent = session.name;
         $('who-id').textContent = 'ID: ' + session.employeeNumber;
         $('msg-advisor').value = session.name;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Reserved Orders Control Tower</title>
+    <title>Reserved Orders</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
@@ -12,17 +12,17 @@
     <section id="login" class="login-screen">
         <form class="login-card" id="login-form">
             <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
+            <p class="login-kicker">Sales CRM</p>
             <h1>Reserved Orders</h1>
-            <p>Select your name. Your password is your employee ID.</p>
             <label class="field"><span>Employee</span><select id="employee-name" required></select></label>
-            <label class="field"><span>Employee ID</span><input id="employee-id" type="password" autocomplete="current-password" required></label>
+            <label class="field"><span>Employee ID / Password</span><input id="employee-id" type="password" autocomplete="current-password" required></label>
             <div class="err" id="login-error"></div>
-            <button class="solid" type="submit">Sign in</button>
-            <p style="margin-top:14px;"><a href="hub.html">Back to hub</a></p>
+            <button class="solid" type="submit">Login</button>
+            <p class="login-note">Session expires after 3 minutes of inactivity.</p>
         </form>
     </section>
 
-    <div id="app" class="hidden">
+    <div id="app" class="hidden tower-app">
         <header class="topbar">
             <div class="brand">
                 <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
@@ -32,9 +32,9 @@
                 </div>
             </div>
             <nav class="jump">
-                <a href="#orders">Reserved Orders</a>
-                <a href="#lookup">BO Lookup</a>
-                <a href="#message">Message Builder</a>
+                <button type="button" class="nav-on" data-view="orders">Reserved Orders</button>
+                <button type="button" data-view="lookup">BO Lookup</button>
+                <button type="button" data-view="message">Message Builder</button>
             </nav>
             <div class="top-links">
                 <div class="who"><b id="who"></b><span id="who-id"></span></div>
@@ -44,70 +44,56 @@
             </div>
         </header>
 
-        <main class="wrap">
-            <section id="orders">
-                <div class="section-head">
-                    <div>
-                        <h2>Reserved Orders</h2>
-                        <p id="updated-at">Waiting for a live push</p>
-                    </div>
-                </div>
-                <section class="kpis" id="kpis"></section>
-                <div class="toolbar">
-                    <input class="search" id="search" type="search" placeholder="Search VIN, order number, customer, or sales advisor">
-                    <select id="filter-status"></select>
-                    <select id="filter-payment">
-                        <option value="">Payment type</option>
-                        <option value="cash">Cash</option>
-                        <option value="bank">Bank</option>
-                        <option value="other">Other</option>
-                        <option value="unknown">Unknown</option>
-                    </select>
-                    <select id="filter-advisor"></select>
-                    <select id="filter-queue"></select>
-                    <select id="filter-state">
-                        <option value="">Show all</option>
-                        <option value="expired">Expired only</option>
-                        <option value="active">Active</option>
-                    </select>
-                    <select id="sort">
-                        <option value="queue-asc">Queue ascending</option>
-                        <option value="queue-desc">Queue descending</option>
-                        <option value="assign-asc">Oldest assignment</option>
-                        <option value="assign-desc">Newest assignment</option>
-                        <option value="remaining">Remaining time</option>
-                    </select>
-                </div>
-                <section class="cards" id="cards"></section>
-                <button class="ghost more hidden" id="more" type="button">Show more</button>
-            </section>
+        <main class="tower">
+            <section class="kpis" id="kpis"></section>
+            <div class="toolbar">
+                <input class="search" id="search" type="search" placeholder="Search VIN, order, customer, advisor">
+                <select id="filter-status"></select>
+                <select id="filter-payment">
+                    <option value="">Payment</option>
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank</option>
+                    <option value="other">Other</option>
+                    <option value="unknown">Unknown</option>
+                </select>
+                <select id="filter-advisor"></select>
+                <select id="filter-queue"></select>
+                <select id="filter-state">
+                    <option value="">All</option>
+                    <option value="expired">Expired</option>
+                    <option value="active">Active</option>
+                </select>
+                <select id="sort">
+                    <option value="queue-asc">Queue ascending</option>
+                    <option value="queue-desc">Queue descending</option>
+                    <option value="assign-asc">Oldest assignment</option>
+                    <option value="assign-desc">Newest assignment</option>
+                    <option value="remaining">Remaining time</option>
+                </select>
+            </div>
+            <section class="cards" id="cards"></section>
+            <button class="ghost view-all" id="view-all" type="button">View all orders</button>
+        </main>
 
-            <section class="navy" id="lookup">
-                <div class="section-head">
-                    <div>
-                        <h2>BO Order Lookup</h2>
-                        <p>Search a VIN or order number without leaving this page.</p>
-                    </div>
-                </div>
+        <div id="overlay-lookup" class="overlay hidden">
+            <section class="overlay-panel navy">
+                <div class="overlay-head"><h2>BO Lookup</h2><button class="ghost" type="button" data-view="orders">Close</button></div>
                 <form class="lookup-row" id="lookup-form">
                     <input id="lookup-q" placeholder="VIN or order number">
                     <button class="solid" type="submit">Look up</button>
                 </form>
-                <div id="lookup-result" style="margin-top:12px;"></div>
+                <div id="lookup-result"></div>
                 <div class="vehicles" id="vehicles"></div>
-                <div id="vehicle-detail" style="margin-top:12px;"></div>
+                <div id="vehicle-detail"></div>
             </section>
+        </div>
 
-            <section id="message">
-                <div class="section-head">
-                    <div>
-                        <h2>Customer Message Builder</h2>
-                        <p>Write the WhatsApp message from the same workspace.</p>
-                    </div>
-                </div>
+        <div id="overlay-message" class="overlay hidden">
+            <section class="overlay-panel">
+                <div class="overlay-head"><h2>Message Builder</h2><button class="ghost" type="button" data-view="orders">Close</button></div>
                 <div class="message-grid">
-                    <section class="card panel">
-                        <div class="facts" style="margin-bottom:10px;">
+                    <div>
+                        <div class="facts">
                             <label class="field"><span>Customer name</span><input id="msg-customer"></label>
                             <label class="field"><span>Advisor name</span><input id="msg-advisor"></label>
                         </div>
@@ -135,18 +121,25 @@
                         </div>
                         <label class="field"><span>Extra note</span><input id="msg-note"></label>
                         <div class="car-preview" id="msg-preview-car"></div>
-                    </section>
-                    <section class="card panel">
+                    </div>
+                    <div>
                         <div class="preview-box" id="msg-preview">Select a car and model to generate the message.</div>
                         <div class="toolbar">
                             <button class="solid" id="msg-wa" type="button">Send on WhatsApp</button>
                             <button class="ghost" id="msg-copy" type="button">Copy message</button>
                             <button class="ghost" id="msg-reset" type="button">Reset</button>
                         </div>
-                    </section>
+                    </div>
                 </div>
             </section>
-        </main>
+        </div>
+
+        <div id="overlay-all" class="overlay hidden">
+            <section class="overlay-panel">
+                <div class="overlay-head"><h2>All reserved orders</h2><button class="ghost" id="close-all" type="button">Close</button></div>
+                <div class="all-table" id="all-rows"></div>
+            </section>
+        </div>
     </div>
     <script src="reserved-orders-page.js"></script>
 </body>
