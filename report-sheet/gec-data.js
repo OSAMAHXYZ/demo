@@ -328,6 +328,24 @@
       .trim();
   }
 
+  /**
+   * Column O text is DD.MM.YYYY (01.10.2026 = 1 October 2026).
+   * Built from the three parts only — never Date.parse and never new Date(the string).
+   */
+  function parseDottedDmy(v) {
+    if (typeof v !== "string") return null;
+    const s = normalizeDateText(v);
+    const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+    if (!m) return null;
+    const day = +m[1];
+    const month = +m[2];
+    const year = +m[3];
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const dt = new Date(year, month - 1, day);
+    if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
+    return dt;
+  }
+
   function parseAnyDate(v) {
     if (v == null || v === "") return null;
     if (v instanceof Date) return isNaN(v) || v.getFullYear() < 1990 ? null : v;
@@ -338,6 +356,8 @@
     }
     const s = normalizeDateText(v);
     if (!s) return null;
+    const dotted = parseDottedDmy(s);
+    if (dotted) return dotted;
     let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(am|pm|ص|م)?)?/i);
     if (m) return buildDate(+m[1], +m[2] - 1, +m[3], m[4], m[5], m[6], m[7]);
     m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm|ص|م)?)?/i);
@@ -388,31 +408,32 @@
   const hasTime = (d) => d && (d.getHours() || d.getMinutes() || d.getSeconds());
   const atMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-  /** Date filter source: column O of the uploaded sheet (raw value, then the date Excel displays). */
+  /** Date filter source: column O text, format DD.MM.YYYY. */
   const DATE_FILTER_COLUMN = "O";
-
-  function dateFromWorksheetCell(cell) {
-    if (!cell) return null;
-    const direct = parseAnyDate(cell.v);
-    if (direct) return direct;
-    const shown = parseAnyDate(cell.w);
-    if (shown) return shown;
-    if (cell.z && global.XLSX && global.XLSX.SSF && cell.v != null && cell.v !== "") {
-      try { return parseAnyDate(global.XLSX.SSF.format(cell.z, cell.v)); } catch { return null; }
-    }
-    return null;
-  }
 
   function filterColumnCell(ws, rowIndex) {
     if (!ws || rowIndex == null || rowIndex < 0) return null;
     return ws[colLetter(colIndex(DATE_FILTER_COLUMN)) + (rowIndex + 1)] || null;
   }
 
-  function filterColumnDate(line, textLine, ws, rowIndex) {
+  /** Original Column O text. CSV cells stay strings (readWorkbook raw:true). */
+  function columnOText(line, textLine, ws, rowIndex) {
     const idx = colIndex(DATE_FILTER_COLUMN);
-    return dateFromWorksheetCell(filterColumnCell(ws, rowIndex))
-      || parseAnyDate(line && line[idx])
-      || parseAnyDate(textLine && textLine[idx]);
+    const cell = filterColumnCell(ws, rowIndex);
+    const bits = [
+      cell && typeof cell.v === "string" ? cell.v : "",
+      cell && typeof cell.w === "string" ? cell.w : "",
+      textLine && textLine[idx] != null ? String(textLine[idx]) : "",
+      line && typeof line[idx] === "string" ? line[idx] : "",
+    ];
+    const dotted = bits.find((s) => parseDottedDmy(s));
+    if (dotted) return normalizeDateText(dotted);
+    const shown = bits.find((s) => normalizeDateText(s));
+    return shown ? normalizeDateText(shown) : "";
+  }
+
+  function filterColumnDate(line, textLine, ws, rowIndex) {
+    return parseDottedDmy(columnOText(line, textLine, ws, rowIndex));
   }
 
   function filterColumnLabel(line, textLine, ws, rowIndex) {
@@ -605,18 +626,19 @@
 
   /** CSV bytes → text. CRM exports arrive as UTF-8 (± BOM), UTF-16 (“Unicode Text”) or Windows-1256 (Arabic). */
   function decodeText(bytes) {
-    if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
-    if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+    const stripBom = (s) => String(s || "").replace(/^\uFEFF/, "");
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) return stripBom(new TextDecoder("utf-16le").decode(bytes));
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) return stripBom(new TextDecoder("utf-16be").decode(bytes));
     const n = Math.min(bytes.length, 4000);
     let oddNul = 0;
     let evenNul = 0;
     for (let i = 0; i < n; i += 1) if (!bytes[i]) { if (i % 2) oddNul += 1; else evenNul += 1; }
-    if (oddNul > n / 8) return new TextDecoder("utf-16le").decode(bytes);
-    if (evenNul > n / 8) return new TextDecoder("utf-16be").decode(bytes);
+    if (oddNul > n / 8) return stripBom(new TextDecoder("utf-16le").decode(bytes));
+    if (evenNul > n / 8) return stripBom(new TextDecoder("utf-16be").decode(bytes));
     try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      return stripBom(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
-      return new TextDecoder("windows-1256").decode(bytes);
+      return stripBom(new TextDecoder("windows-1256").decode(bytes));
     }
   }
 
@@ -645,7 +667,8 @@
     if (/^\s*</.test(text)) return global.XLSX.read(text, { type: "string", cellDates: false });
     const sep = /^sep=(.)\r?\n/i.exec(text);
     if (sep) text = text.slice(sep[0].length);
-    return global.XLSX.read(text, { type: "string", cellDates: false, FS: sep ? sep[1] : guessDelimiter(text) });
+    // raw:true keeps "01.10.2026" as text. Without it SheetJS stores a serial and 12.10.2026 becomes December.
+    return global.XLSX.read(text, { type: "string", cellDates: false, raw: true, FS: sep ? sep[1] : guessDelimiter(text) });
   }
 
   /** GEC File (ArrayBuffer) → lead dataset (+ visitors when the workbook has a visitor sheet). */
@@ -784,8 +807,9 @@
         const dated = g.rows.map((e) => leadDateOf(cell(e.line, "createdDate"), cell(e.line, "createdTime"))).filter(Boolean);
         leadDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
       }
-      if (!leadDate) leadDate = parseAnyDate(line[colIndex("O")]);
-      let sheetDate = filterColumnDate(line, textLine, best.ws, latest.r);
+      const columnORaw = columnOText(line, textLine, best.ws, latest.r);
+      if (!leadDate) leadDate = parseDottedDmy(columnORaw);
+      let sheetDate = parseDottedDmy(columnORaw);
       if (!sheetDate) {
         const dated = g.rows.map((e) => filterColumnDate(e.line, text[e.r] || [], best.ws, e.r)).filter(Boolean);
         sheetDate = dated.length ? dated.sort((a, b) => a - b)[0] : null;
@@ -823,6 +847,7 @@
         rowNo: latest.r + 1,
         rowCount: g.rows.length,
         leadDate,
+        columnOText: columnORaw,
         day: dayKey(filterDate),
         visitDate: filterDate,
         visitDay: dayKey(filterDate),

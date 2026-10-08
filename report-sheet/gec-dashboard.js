@@ -50,11 +50,11 @@
   function fmtDay(key, withYear) {
     const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return "—";
-    return `${m[3]} ${MONTHS[+m[2] - 1]}${withYear ? ` ${m[1]}` : ""}`;
+    return withYear ? `${m[3]}/${m[2]}/${m[1]}` : `${m[3]}/${m[2]}`;
   }
   function fmtDate(d, withTime) {
     if (!(d instanceof Date) || isNaN(d)) return "";
-    const base = `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    const base = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
     if (!withTime || (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0)) return base;
     return `${base} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
