@@ -262,6 +262,7 @@
     const canvas = document.getElementById(id);
     if (!canvas || typeof global.Chart === "undefined") return;
     destroyChart(id);
+    if (cfg && cfg.options && cfg.options.animation == null) cfg.options.animation = false;
     PT_CHARTS[id] = new global.Chart(canvas, cfg);
     if (id === "pt-chart-status") placeDonutMid();
   }
@@ -2515,7 +2516,7 @@
   }
 
   function presentReceiptRow(model, row, kind) {
-    const flags = classifyWithinFlags(model, row);
+    const flags = flagsFor(model, row);
     const swap = kind === "in" ? null : laterSwapInfo(model, row);
     const leaf = leafOf(row);
     const hist = (model.vinHistory && model.vinHistory.get(row && row.vin)) || [];
@@ -2917,10 +2918,15 @@
 
   /** My Allocation VIN is delivered only when Admin Push Sales Raw contains that VIN and column V has a date. */
   function hasSalesRawColV(row) {
-    if (!row || !row.vin || typeof global.allocationSalesRawColumnV !== "function") return false;
+    if (!row || !row.vin) return false;
+    if (row._colVChecked) return !!row._colVDelivered;
+    row._colVChecked = true;
+    row._colVDelivered = false;
+    if (typeof global.allocationSalesRawColumnV !== "function") return false;
     let hit = null;
     try { hit = global.allocationSalesRawColumnV(row.vin); } catch (_) { hit = null; }
     if (!hit || !hit.delivered) return false;
+    row._colVDelivered = true;
     const date = hit.date instanceof Date ? hit.date : parseDate(hit.date);
     if (date) {
       row.invoiceDate = date;
@@ -2967,6 +2973,58 @@
     };
   }
 
+  function flagsFor(model, row) {
+    if (!model || !row || !row.vin) return classifyWithinFlags(model, row);
+    const bag = model._ptFlags || (model._ptFlags = new Map());
+    const cached = bag.get(row.vin);
+    if (cached) return cached;
+    const flags = classifyWithinFlags(model, row);
+    bag.set(row.vin, flags);
+    return flags;
+  }
+
+  function monthScopeKey() {
+    return [view.product, view.sfx, view.year, view.status, view.area, view.q].join("\u0001");
+  }
+
+  function monthPack(model, monthKey) {
+    const month = monthKey || currentMonthKey();
+    const scope = monthScopeKey();
+    const cached = model && model._ptMonthPack;
+    if (cached && cached.month === month && cached.scope === scope) return cached;
+    const days = new Map();
+    const sfx = new Map();
+    const take = (map, id) => {
+      if (!map.has(id)) map.set(id, emptySfxBucket());
+      return map.get(id);
+    };
+    const withinVins = new Set();
+    receiptChartDays(model).filter((d) => d && String(d.dateKey).slice(0, 7) === month).forEach((day) => {
+      const dayBucket = take(days, day.dateKey);
+      (day.fileDayReceipts || []).forEach((row) => {
+        if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
+        withinVins.add(row.vin);
+        const flags = flagsFor(model, row);
+        pushClassified(dayBucket, row, flags);
+        pushClassified(take(sfx, sfxBucketId(row)), row, flags);
+      });
+    });
+    eachSwappedIn(model, month, (row) => {
+      if (!row || withinVins.has(row.vin)) return;
+      take(sfx, sfxBucketId(row)).swappedIn.push(row);
+      if (row.dateKey) take(days, row.dateKey).swappedIn.push(row);
+    });
+    const totals = emptySfxBucket();
+    days.forEach((bucket) => {
+      Object.keys(totals).forEach((key) => {
+        totals[key] = totals[key].concat(bucket[key] || []);
+      });
+    });
+    const pack = { month, scope, days, sfx, totals };
+    if (model) model._ptMonthPack = pack;
+    return pack;
+  }
+
   function pushClassified(bucket, row, flags) {
     bucket.within.push(row);
     if (flags.delivered) bucket.delivered.push(row);
@@ -3009,59 +3067,16 @@
    * Swapped in = a VIN added to Retail Electronic Sales that is not a new car.
    */
   function buildSfxBuckets(model, monthKey) {
-    const buckets = new Map();
-    const take = (id) => {
-      if (!buckets.has(id)) buckets.set(id, emptySfxBucket());
-      return buckets.get(id);
-    };
-    const month = monthKey || currentMonthKey();
-    const withinVins = new Set();
-    receiptChartDays(model).filter((d) => d && String(d.dateKey).slice(0, 7) === month).forEach((day) => {
-      (day.fileDayReceipts || []).forEach((row) => {
-        if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
-        withinVins.add(row.vin);
-        pushClassified(take(sfxBucketId(row)), row, classifyWithinFlags(model, row));
-      });
-    });
-    eachSwappedIn(model, month, (row) => {
-      if (withinVins.has(row.vin)) return;
-      take(sfxBucketId(row)).swappedIn.push(row);
-    });
-    return buckets;
+    return monthPack(model, monthKey).sfx;
   }
 
   /** Same checks as SFX plan progress, totaled for each day. */
   function buildDayBuckets(model, monthKey) {
-    const buckets = new Map();
-    const take = (id) => {
-      if (!buckets.has(id)) buckets.set(id, emptySfxBucket());
-      return buckets.get(id);
-    };
-    const month = monthKey || currentMonthKey();
-    const withinVins = new Set();
-    receiptChartDays(model).filter((d) => d && String(d.dateKey).slice(0, 7) === month).forEach((day) => {
-      const bucket = take(day.dateKey);
-      (day.fileDayReceipts || []).forEach((row) => {
-        if (!row || !row.vin || !scopeMatch(row) || withinVins.has(row.vin)) return;
-        withinVins.add(row.vin);
-        pushClassified(bucket, row, classifyWithinFlags(model, row));
-      });
-    });
-    eachSwappedIn(model, month, (row) => {
-      if (withinVins.has(row.vin) || !row.dateKey) return;
-      take(row.dateKey).swappedIn.push(row);
-    });
-    return buckets;
+    return monthPack(model, monthKey).days;
   }
 
   function monthStatusTotals(model, monthKey) {
-    const out = emptySfxBucket();
-    buildDayBuckets(model, monthKey).forEach((bucket) => {
-      Object.keys(out).forEach((key) => {
-        out[key] = out[key].concat(bucket[key] || []);
-      });
-    });
-    return out;
+    return monthPack(model, monthKey).totals;
   }
 
   function rowsForOpen(spec, arg) {
@@ -3377,7 +3392,7 @@
           legend: {
             position: "bottom",
             align: "center",
-            labels: { boxWidth: 10, padding: 12, font: { size: 10 }, color: "#64748B" },
+            labels: { boxWidth: 10, padding: 12, font: { size: 11, weight: "600" }, color: "#1E293B" },
           },
           tooltip: {
             backgroundColor: "#FFFFFF",
@@ -3389,14 +3404,14 @@
         },
         scales: Object.assign({
           x: {
-            ticks: { align: "center", crossAlign: "center", font: { size: 9 }, maxRotation: 0, autoSkip: false, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", font: { size: 11, weight: "600" }, maxRotation: 0, autoSkip: false, color: "#1E293B" },
             grid: { color: "rgba(229, 231, 235, 0.8)" },
             border: { color: "#E5E7EB" },
           },
           y: {
             beginAtZero: true,
             position: "left",
-            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 10 }, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 11, weight: "600" }, color: "#1E293B" },
             grid: { color: "rgba(229, 231, 235, 0.8)" },
             border: { color: "#E5E7EB" },
           },
@@ -3405,7 +3420,7 @@
             beginAtZero: true,
             position: "right",
             grid: { drawOnChartArea: false },
-            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 10 }, color: "#64748B" },
+            ticks: { align: "center", crossAlign: "center", precision: 0, font: { size: 11, weight: "600" }, color: "#1E293B" },
             border: { color: "#E5E7EB" },
           },
         } : {}),
@@ -3455,8 +3470,8 @@
             labels: {
               boxWidth: 8,
               padding: 10,
-              font: { size: 10 },
-              color: "#64748B",
+              font: { size: 11, weight: "600" },
+              color: "#1E293B",
               generateLabels(chart) {
                 const dataset = chart.data.datasets[0];
                 return chart.data.labels.map((label, i) => ({

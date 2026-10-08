@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261008bar"></script>
+  <script src="plan-tracker.js?v=20261008fast"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -17119,34 +17119,61 @@
     return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
   }
 
-  /** My Allocation VIN is delivered only when that VIN is in the Admin Push Sales Raw file and column V has a date. */
-  function allocationSalesRawColumnV(vin) {
-    const rows = (slots.sales && slots.sales.rows) || [];
-    const key = salesVinKey(vin);
-    let inFile = false;
-    let date = null;
-    rows.forEach((row) => {
-      if (!salesRawRowHasVin(row, key)) return;
-      inFile = true;
-      if (date) return;
-      date = salesRawColumnVDate(salesRawColumnVCell(row));
-    });
-    return { inFile, delivered: !!date, date };
+  let salesColVCache = null;
+
+  function rememberSalesColV(exact, tail, token, date) {
+    if (!token || token.length < 8 || !/[A-Z]/.test(token)) return;
+    const prev = exact.get(token);
+    if (!prev) exact.set(token, { inFile: true, delivered: !!date, date: date || null });
+    else if (!prev.delivered && date) {
+      prev.delivered = true;
+      prev.date = date;
+    }
+    const end = token.slice(-8);
+    const prevTail = tail.get(end);
+    if (!prevTail) tail.set(end, { inFile: true, delivered: !!date, date: date || null, token });
+    else if (!prevTail.delivered && date) {
+      prevTail.delivered = true;
+      prevTail.date = date;
+      prevTail.token = token;
+    }
   }
 
-  function salesRawRowHasVin(row, key) {
-    if (!row || !key || key.length < 8) return false;
-    if (salesVinMatchesAllocation(key, row.vin)) return true;
-    const cells = row.__cells;
-    if (!Array.isArray(cells)) return false;
-    for (let i = 0; i < cells.length; i += 1) {
-      const token = salesVinKey(cells[i]);
-      if (!token || token.length < 8 || !/[A-Z]/.test(token)) continue;
-      if (token === key) return true;
-      if (token.endsWith(key) || key.endsWith(token)) return true;
-      if (token.slice(-8) === key.slice(-8)) return true;
+  function salesColVIndex() {
+    const rows = (slots.sales && slots.sales.rows) || [];
+    if (salesColVCache && salesColVCache.rows === rows) return salesColVCache;
+    const exact = new Map();
+    const tail = new Map();
+    rows.forEach((row) => {
+      if (!row) return;
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      const direct = salesVinKey(row.vin);
+      if (direct) {
+        rememberSalesColV(exact, tail, direct, date);
+        return;
+      }
+      const cells = row.__cells;
+      if (!Array.isArray(cells)) return;
+      cells.forEach((cell) => rememberSalesColV(exact, tail, salesVinKey(cell), date));
+    });
+    salesColVCache = { rows, exact, tail };
+    return salesColVCache;
+  }
+
+  /** My Allocation VIN is delivered only when that VIN is in the Admin Push Sales Raw file and column V has a date. */
+  function allocationSalesRawColumnV(vin) {
+    const empty = { inFile: false, delivered: false, date: null };
+    const key = salesVinKey(vin);
+    if (!key || key.length < 8) return empty;
+    const index = salesColVIndex();
+    const exact = index.exact.get(key);
+    if (exact) return exact;
+    const tail = index.tail.get(key.slice(-8));
+    if (!tail) return empty;
+    if (tail.token === key || key.endsWith(tail.token) || tail.token.endsWith(key)) {
+      return { inFile: true, delivered: !!tail.delivered, date: tail.date || null };
     }
-    return false;
+    return empty;
   }
   window.allocationSalesRawColumnV = allocationSalesRawColumnV;
 

@@ -1391,7 +1391,10 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
   border-radius: 10px;
   padding: 4px 6px;
   flex-wrap: nowrap;
+  align-self: start;
+  min-height: 46px;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 #pt-dash.pt-tower .pt-filters select,
 #pt-dash.pt-tower .pt-filters input {
@@ -1461,16 +1464,16 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-kpi em,
 #pt-dash.pt-tower .pt-kpi b {
   display: block;
-  font-size: 10px;
-  color: #5c6b80;
+  font-size: 11px;
+  color: #1E293B;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 700;
 }
 #pt-dash.pt-tower .pt-kpi strong {
   display: block;
   font-size: 20px;
   line-height: 1.1;
-  color: #10233f;
+  color: #0F172A;
 }
 #pt-dash.pt-tower .pt-kpi.is-on { border-color: #eb0a1e; }
 #pt-dash.pt-tower .pt-row { display: grid; gap: 6px; }
@@ -1537,9 +1540,10 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-table th {
   position: sticky;
   top: 0;
-  background: #f7f9fb;
-  color: #5c6b80;
-  font-size: 10px;
+  background: #F8FAFC;
+  color: #1E293B;
+  font-size: 11px;
+  font-weight: 700;
   z-index: 1;
 }
 #pt-dash.pt-tower .pt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -1848,7 +1852,7 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
   vertical-align: -1px;
 }
 #pt-dash.pt-tower .pt-card-h span,
-#pt-dash.pt-tower .pt-pin { color: #64748B; }
+#pt-dash.pt-tower .pt-pin { color: #334155; }
 #pt-dash.pt-tower .pt-expand {
   background: #fff;
   color: #475569;
@@ -1873,33 +1877,34 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-kpi.pt-tone-swapped { --tone: #DC2626; }
 #pt-dash.pt-tower .pt-kpi span {
   text-transform: uppercase;
-  letter-spacing: .08em;
-  color: #64748B;
+  letter-spacing: .04em;
+  color: #1E293B;
+  font-weight: 700;
 }
-#pt-dash.pt-tower .pt-kpi strong { color: var(--tone); }
+#pt-dash.pt-tower .pt-kpi strong { color: #0F172A; }
 #pt-dash.pt-tower .pt-kpi em,
-#pt-dash.pt-tower .pt-kpi b { color: #64748B; }
+#pt-dash.pt-tower .pt-kpi b { color: #1E293B; font-weight: 600; }
 #pt-dash.pt-tower .pt-tone-plan strong,
-#pt-dash.pt-tower .pt-tone-allocation strong { color: #2563EB; }
-#pt-dash.pt-tower .pt-tone-received strong { color: #3B82F6; }
-#pt-dash.pt-tower .pt-tone-delivered strong { color: #16A34A; }
-#pt-dash.pt-tower .pt-tone-proforma strong { color: #7C3AED; }
-#pt-dash.pt-tower .pt-tone-stock strong { color: #F59E0B; }
-#pt-dash.pt-tower .pt-tone-swapped strong { color: #DC2626; }
+#pt-dash.pt-tower .pt-tone-allocation strong { color: #1E40AF; }
+#pt-dash.pt-tower .pt-tone-received strong { color: #1D4ED8; }
+#pt-dash.pt-tower .pt-tone-delivered strong { color: #166534; }
+#pt-dash.pt-tower .pt-tone-proforma strong { color: #5B21B6; }
+#pt-dash.pt-tower .pt-tone-stock strong { color: #9A3412; }
+#pt-dash.pt-tower .pt-tone-swapped strong { color: #991B1B; }
 #pt-dash.pt-tower .pt-table { color: #172033; }
 #pt-dash.pt-tower .pt-table th,
 #pt-dash.pt-tower .pt-table td { border-bottom-color: #E8EDF3; }
 #pt-dash.pt-tower .pt-table th {
   background: #F8FAFC;
-  color: #64748B;
+  color: #1E293B;
   text-transform: uppercase;
   letter-spacing: .04em;
   border-bottom: 1px solid #DCE3EC;
 }
-#pt-dash.pt-tower .pt-table td { color: #172033; background: #fff; }
+#pt-dash.pt-tower .pt-table td { color: #0F172A; background: #fff; }
 #pt-dash.pt-tower .pt-table tbody tr:hover td { background: #F8FAFC; }
 #pt-dash.pt-tower .pt-link,
-#pt-dash.pt-tower .pt-num { color: #2563EB; }
+#pt-dash.pt-tower .pt-num { color: #1E40AF; }
 #pt-dash.pt-tower .pt-table td.pt-gap-left { color: #D97706; }
 #pt-dash.pt-tower .pt-table td.pt-gap-over { color: #DC2626; }
 #pt-dash.pt-tower .pt-table td.pt-gap-ok { color: #16A34A; }
@@ -1947,7 +1952,7 @@ body.sr-mode .pbi-wide-backdrop #pbi-wide-hint {
 #pt-dash.pt-tower .pt-vin-tools select option { background: #fff; color: #172033; }
 #pt-dash.pt-tower .pt-mode { background: #F8FAFC; border: 1px solid #E8EDF3; }
 #pt-dash.pt-tower .pt-mode button,
-#pt-dash.pt-tower .pt-tabs button { color: #64748B; }
+#pt-dash.pt-tower .pt-tabs button { color: #1E293B; font-weight: 700; }
 #pt-dash.pt-tower .pt-mode button.is-on,
 #pt-dash.pt-tower .pt-tabs button.is-on { background: #2563EB; color: #fff; }
 #pt-dash.pt-tower .pt-modal { background: rgba(15, 23, 42, 0.72); }
