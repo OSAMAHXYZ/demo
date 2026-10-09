@@ -8,6 +8,24 @@
     let report = {};
     let alerts = [];
     let alertFields = [];
+    let alertProducts = [];
+    const BO_ERRORS = [
+        ['dup_col_f', 'Duplicate Back Order Number'],
+        ['missing_col_j', 'Paid amount missing on CAMRY, LC300, or LC70'],
+        ['paid_other_product', 'Paid amount filled on another product'],
+        ['sales_type_not_confirmed', 'ALJUF or Bank is not Confirmed'],
+        ['rav4_nop_040', 'RAV4 exterior color is 040'],
+        ['rav4_sh_forbidden_color', 'RAV4 SH forbidden exterior color'],
+        ['rav4_other_sfx_qrs_20', 'RAV4 interior color is 20'],
+        ['dup_ship_to', 'Duplicate Ship to Party'],
+        ['col_ab_aljre_or_blank', 'Column AB blank or ALJRe'],
+        ['camry_nop_00_20', 'CAMRY exterior color is 00 or 20'],
+        ['lc300_nop_00_20', 'LC300 exterior color is 00 or 20'],
+        ['veloz_nop_s28', 'VELOZ exterior color is S28'],
+        ['crown_qrs_20', 'CROWN interior color is 20'],
+        ['bad_model_year', 'Model Year is not 2026'],
+        ['phone_empty', 'Phone is empty']
+    ];
     let editing = '';
     const ALERT_OPS = { equals: 'equals', not_equals: 'does not equal', contains: 'contains', not_contains: 'does not contain', gt: 'greater than', lt: 'less than', empty: 'is empty', not_empty: 'is not empty' };
 
@@ -136,14 +154,31 @@
         const field = alertFields.find((item) => item.name === $('alert-field').value);
         $('alert-values').innerHTML = ((field && field.samples) || []).map((value) => `<option value="${esc(value)}"></option>`).join('');
     }
+    function fillErrorAlertForm() {
+        const type = $('error-alert-type');
+        const currentType = type.value;
+        type.innerHTML = '<option value="">Choose a BO error</option>' + BO_ERRORS.map(([id, label]) => `<option value="${esc(id)}">${esc(label)}</option>`).join('');
+        if (currentType) type.value = currentType;
+        const car = $('error-alert-car');
+        const currentCar = car.value;
+        car.innerHTML = '<option value="">All cars</option>' + alertProducts.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+        if (currentCar) car.value = currentCar;
+    }
+    function alertRuleText(rule) {
+        if (rule.kind === 'bo_error') {
+            const label = rule.errorLabel || (BO_ERRORS.find((item) => item[0] === rule.errorId) || [])[1] || rule.errorId;
+            return `BO error · ${label}${rule.product ? ' · ' + rule.product : ' · All cars'}`;
+        }
+        return `${rule.field} ${ALERT_OPS[rule.operator] || rule.operator} ${rule.operator === 'empty' || rule.operator === 'not_empty' ? '' : rule.value}`;
+    }
     function renderAlerts() {
-        $('alert-list').innerHTML = (alertFields.length ? '' : '<p>Push Back Order, E-Sales, and RTL from Report Sheet admin. The column list is that Back Order file.</p>') + (alerts.length ? alerts.map((rule) => `<article class="panel" style="margin-bottom:10px;">
+        $('alert-list').innerHTML = `<h2>Alerts employees can see</h2>` + (alerts.length ? alerts.map((rule) => `<article class="panel" style="margin-bottom:10px;">
             <b>${esc(rule.message)}</b>
-            <p>${esc(rule.field)} ${esc(ALERT_OPS[rule.operator] || rule.operator)} ${rule.operator === 'empty' || rule.operator === 'not_empty' ? '' : esc(rule.value)}</p>
-            <p>${esc(rule.tone)} · ${rule.active === false ? 'Off' : 'Active'}</p>
+            <p>${esc(alertRuleText(rule))}</p>
+            <p>${rule.kind === 'bo_error' ? 'Message Builder' : 'BO lookup'} · ${esc(rule.tone)} · ${rule.active === false ? 'Off' : 'Active'}</p>
             <button class="ghost" type="button" data-alert-off="${esc(rule.id)}">${rule.active === false ? 'Enable' : 'Disable'}</button>
             <button class="ghost" type="button" data-alert-del="${esc(rule.id)}">Delete</button>
-        </article>`).join('') : '<p>No alerts yet. Add one from the Back Order columns.</p>');
+        </article>`).join('') : '<p>No alerts yet. Add one for a BO error, or from a Back Order column.</p>');
     }
     async function saveAlertList(next) {
         const data = await api('/api/reserved-orders/alerts', {
@@ -177,7 +212,9 @@
             const alertData = await api('/api/reserved-orders/alerts?password=' + encodeURIComponent(password()));
             alerts = alertData.alerts || [];
             alertFields = alertData.fields || [];
+            alertProducts = alertData.products || [];
             fillAlertFields();
+            fillErrorAlertForm();
         } catch (e) { alerts = []; alertFields = []; }
         renderAll();
     }
@@ -250,6 +287,25 @@
             reader.readAsDataURL(file);
         });
     }
+    $('save-error-alert').addEventListener('click', async () => {
+        $('error-alert-error').textContent = '';
+        const errorId = $('error-alert-type').value;
+        const message = $('error-alert-message').value.trim();
+        const known = BO_ERRORS.find((item) => item[0] === errorId);
+        if (!known || !message) { $('error-alert-error').textContent = 'Choose a BO error and write the message.'; return; }
+        try {
+            await saveAlertList(alerts.concat([{
+                kind: 'bo_error',
+                errorId,
+                errorLabel: known[1],
+                product: $('error-alert-car').value,
+                message,
+                tone: $('error-alert-tone').value,
+                active: $('error-alert-active').checked
+            }]));
+            $('error-alert-message').value = '';
+        } catch (e) { if (e.message !== 'unauthorized') $('error-alert-error').textContent = e.message; }
+    });
     $('alert-field').addEventListener('change', fillAlertValues);
     $('save-alert').addEventListener('click', async () => {
         $('alert-error').textContent = '';
@@ -258,6 +314,7 @@
         if (!field || !message) { $('alert-error').textContent = 'Choose a BO column and write the message.'; return; }
         try {
             await saveAlertList(alerts.concat([{
+                kind: 'column',
                 field,
                 operator: $('alert-operator').value,
                 value: $('alert-value').value,

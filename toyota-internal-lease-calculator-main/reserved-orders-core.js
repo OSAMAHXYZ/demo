@@ -887,9 +887,14 @@ function attachReservedOrders(app, options) {
         const operators = ['equals', 'not_equals', 'contains', 'not_contains', 'gt', 'lt', 'empty', 'not_empty'];
         const tones = ['info', 'warning', 'urgent'];
         const operator = operators.includes(raw.operator) ? raw.operator : 'equals';
+        const kind = raw.kind === 'bo_error' ? 'bo_error' : 'column';
         return {
             id: cleanText(raw.id) || `al-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            kind,
             field: cleanText(raw.field),
+            errorId: cleanText(raw.errorId),
+            errorLabel: cleanText(raw.errorLabel),
+            product: cleanText(raw.product),
             operator,
             value: cleanText(raw.value),
             message: cleanText(raw.message),
@@ -898,6 +903,7 @@ function attachReservedOrders(app, options) {
         };
     }
     function alertMatches(rule, bag) {
+        if (!rule || rule.kind === 'bo_error') return false;
         const left = cleanText(bag[String(rule.field || '').toLowerCase()]);
         const right = cleanText(rule.value);
         const op = rule.operator || 'equals';
@@ -1263,7 +1269,7 @@ function attachReservedOrders(app, options) {
         res.json({ products: boProducts(loadBoTable()) });
     });
     app.get('/api/reserved-orders/alert-rules', (req, res) => {
-        res.json({ alerts: loadAlerts().filter((rule) => rule.active !== false && rule.message && rule.field) });
+        res.json({ alerts: loadAlerts().filter((rule) => rule.active !== false && rule.message && (rule.kind === 'bo_error' ? rule.errorId : rule.field)) });
     });
     app.get('/api/reserved-orders/alerts/match', (req, res) => {
         const query = cleanText(req.query.q).toLowerCase();
@@ -1273,16 +1279,16 @@ function attachReservedOrders(app, options) {
         if (!row) return res.json({ alerts: [] });
         const bag = {};
         Object.keys(row).forEach((key) => { bag[String(key).toLowerCase()] = row[key]; });
-        const alerts = loadAlerts().filter((rule) => rule.active !== false && rule.message && rule.field && alertMatches(rule, bag));
+        const alerts = loadAlerts().filter((rule) => rule.active !== false && rule.message && rule.field && rule.kind !== 'bo_error' && alertMatches(rule, bag));
         res.json({ alerts: alerts.map((rule) => ({ message: rule.message, tone: rule.tone })) });
     });
     app.get('/api/reserved-orders/alerts', (req, res) => {
         if (!requireAdmin(req, res)) return;
-        res.json({ alerts: loadAlerts(), fields: boFieldCatalog() });
+        res.json({ alerts: loadAlerts(), fields: boFieldCatalog(), products: boProducts(loadBoTable()).map((item) => item.product) });
     });
     app.post('/api/reserved-orders/alerts', (req, res) => {
         if (!requireAdmin(req, res)) return;
-        const alerts = (Array.isArray(req.body?.alerts) ? req.body.alerts : []).slice(0, 50).map(cleanAlert).filter((rule) => rule.field && rule.message);
+        const alerts = (Array.isArray(req.body?.alerts) ? req.body.alerts : []).slice(0, 80).map(cleanAlert).filter((rule) => rule.message && (rule.kind === 'bo_error' ? rule.errorId : rule.field));
         saveAlerts(alerts);
         audit(req, { user: 'Admin', role: 'admin', action: 'ALERTS_SAVED', entity: 'alert', source: 'admin', details: `${alerts.length} BO alert rule(s)` });
         res.json({ ok: true, alerts });

@@ -294,6 +294,29 @@ body.dash { min-height: 100vh; background: var(--bg); }
     height: 100%; overflow: auto; background: #fff; color: var(--ink);
     border-radius: 16px; padding: 14px 16px;
 }
+#overlay-message .overlay-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+#overlay-message .message-grid { flex: 1 1 auto; }
+#overlay-message .msg-alerts {
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+}
+#overlay-message .msg-alerts h3 { margin: 0 0 8px; font-size: 15px; }
+#overlay-message .msg-alert {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 0 0 8px;
+}
+#overlay-message .msg-alert small { display: block; color: #64748b; margin-bottom: 4px; font-weight: 700; }
+#overlay-message .msg-alert.info { background: #eff6ff; border-color: #bfdbfe; }
+#overlay-message .msg-alert.warning { background: #fffbeb; border-color: #fde68a; }
+#overlay-message .msg-alert.urgent { background: #fef2f2; border-color: #fecaca; }
+#overlay-message .msg-alerts .muted { color: #64748b; margin: 0; }
 .overlay-panel.navy { background: var(--navy); color: #fff; }
 #overlay-lookup.overlay {
     inset: 0;

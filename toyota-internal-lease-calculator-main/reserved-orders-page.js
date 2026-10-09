@@ -281,7 +281,20 @@
             alertRules = data.alerts || [];
         } catch (e) { alertRules = []; }
     }
+    function paintMessageAlerts() {
+        const box = $('msg-alert-list');
+        if (!box) return;
+        const car = String($('msg-car') && $('msg-car').value || '').trim().toLowerCase();
+        const rules = alertRules.filter((rule) => {
+            if (rule.kind !== 'bo_error' || rule.active === false || !rule.message) return false;
+            if (!car || !rule.product) return true;
+            const product = String(rule.product).toLowerCase();
+            return product === car || car.includes(product) || product.includes(car);
+        });
+        box.innerHTML = rules.length ? rules.map((rule) => `<div class="msg-alert ${esc(rule.tone || 'info')}" role="alert"><small>${esc(rule.errorLabel || 'BO error')}${rule.product ? ' · ' + esc(rule.product) : ''}</small>${esc(rule.message)}</div>`).join('') : '<p class="muted">No alerts from admin for this view.</p>';
+    }
     function alertMatches(rule, bag) {
+        if (!rule || rule.kind === 'bo_error') return false;
         const left = String(bag[String(rule.field || '').toLowerCase()] == null ? '' : bag[String(rule.field || '').toLowerCase()]).trim();
         const right = String(rule.value || '').trim();
         const op = rule.operator || 'equals';
@@ -437,6 +450,7 @@
         const car = $('msg-car').value;
         const img = carImage(car);
         $('msg-preview-car').innerHTML = car ? `${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}<div><strong>Toyota ${esc(car)}</strong></div>` : '';
+        paintMessageAlerts();
     }
     async function loadCars() {
         try {
@@ -463,6 +477,7 @@
         $('overlay-message').classList.toggle('hidden', name !== 'message');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'lookup') { loadVehicles(); loadAlertRules(); }
+        if (name === 'message') loadAlertRules().then(paintMessageAlerts);
     }
     $('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();
