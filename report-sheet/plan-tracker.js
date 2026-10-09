@@ -3443,7 +3443,6 @@
       { key: "reserved", label: "Reserved", n: statusTotals.reserved.length, color: "#2563EB" },
       { key: "stock", label: "Stock", n: statusTotals.stock.length, color: "#F59E0B" },
       { key: "swappedOut", label: "Swapped out", n: statusTotals.swappedOut.length, color: "#DC2626" },
-      { key: "swappedIn", label: "Swapped in", n: statusTotals.swappedIn.length, color: "#EF4444" },
     ];
     makeChart("pt-chart-status", {
       type: "doughnut",
@@ -3494,7 +3493,8 @@
       },
     });
     const mid = $("#pt-donut-mid");
-    if (mid) mid.innerHTML = `<strong>${num(statusTotals.within.length)}</strong><span>Total</span>`;
+    const statusTotal = statusTotals.within.length;
+    if (mid) mid.innerHTML = `<strong>${num(statusTotal)}</strong><span>Total</span>`;
     placeDonutMid();
 
     const dayHost = $("#pt-daily-count");

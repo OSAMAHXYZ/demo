@@ -18,7 +18,7 @@
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261008fast"></script>
+  <script src="plan-tracker.js?v=20261009status"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261007ptcenter" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261009boe" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -930,7 +930,7 @@
             <div class="boe-card-head">
               <div>
                 <h2>Filter by employee</h2>
-                <span class="hint">Show only Back Order errors for the selected sales employee</span>
+                <span class="hint">All employees</span>
               </div>
               <div class="boe-employee-actions">
                 <input id="boe-employee-find" type="search" placeholder="Search employee..." aria-label="Search employee" />
@@ -946,7 +946,7 @@
             <div class="boe-card-head">
               <div>
                 <h2>Error type breakdown</h2>
-                <span class="hint">Existing error types · click a chip to filter the schedule</span>
+                  <span class="hint">Click a chip to filter</span>
               </div>
             </div>
             <div class="boe-type-chips" id="boe-type-chips" aria-label="Error type breakdown"></div>
@@ -956,7 +956,7 @@
               <div class="boe-card-head">
                 <div>
                   <h2>Error schedule</h2>
-                  <span class="hint">All error rows in file order · scroll inside the table · filter by error chip · click a row for full BO</span>
+                  <span class="hint">Click a row for the full BO</span>
                 </div>
                 <strong class="boe-schedule-count" id="boe-schedule-count">0 Errors</strong>
               </div>
@@ -15414,6 +15414,7 @@
   }
 
   function filteredBoeRows(rows) {
+    if (String(boeView.focus || "") === "clean") return [];
     const q = String(boeView.search || "").trim().toLowerCase();
     const sev = String(boeView.severity || "").trim();
     const typ = String(boeView.type || "").trim();
@@ -15606,6 +15607,13 @@
       hint.title = `${formatNumber(totals.errorRows)} of ${formatNumber(totals.totalBos)} BOs with rule errors · ${formatNumber(viewTotals.critical)} critical · ${formatNumber(viewTotals.warn)} warning · CRM Lead on all (skip Col A = EB2C) · other rules skip Employee sales type (${formatNumber(totals.skippedEmployee || 0)})`;
     }
 
+    const empHint = document.querySelector("#boe-employee-section .hint");
+    if (empHint) {
+      empHint.textContent = empKey
+        ? `${empLabel} · ${formatNumber(employeeScoped.length)} errors`
+        : `All employees · ${formatNumber(rows.length)} errors`;
+    }
+
     const shareOf = (n, d) => {
       const den = Number(d) || 0;
       if (!den) return "0%";
@@ -15613,20 +15621,21 @@
     };
     const kpis = $("#boe-kpis");
     if (kpis) {
+      const focus = String(boeView.focus || "");
       const cards = [
-        ["Total BOs", totals.totalBos, "blue", `${formatNumber(totals.totalBos)} checked`],
-        ["With errors", viewTotals.errorRows, "red", `${shareOf(viewTotals.errorRows, totals.totalBos)} of BOs`],
-        ["Critical", viewTotals.critical, "red", `${shareOf(viewTotals.critical, viewTotals.errorRows)} of errors`],
-        ["Warnings", viewTotals.warn, "orange", `${shareOf(viewTotals.warn, viewTotals.errorRows)} of errors`],
-        ["Issue flags", viewTotals.errorHits, "purple", "rule hits"],
-        ["Clean BOs", totals.cleanRows, "green", `${shareOf(totals.cleanRows, totals.totalBos)} of BOs`],
+        ["total", "Total BOs", totals.totalBos, "blue", `${formatNumber(totals.totalBos)} checked`],
+        ["errors", "BOs With Errors", viewTotals.errorRows, "red", `${shareOf(viewTotals.errorRows, totals.totalBos)} of BOs`],
+        ["critical", "Critical Errors", viewTotals.critical, "red", `${shareOf(viewTotals.critical, viewTotals.errorRows)} of errors`],
+        ["warn", "Warnings", viewTotals.warn, "orange", `${shareOf(viewTotals.warn, viewTotals.errorRows)} of errors`],
+        ["flags", "Issue Flags", viewTotals.errorHits, "purple", "rule hits"],
+        ["clean", "Clean BOs", totals.cleanRows, "green", `${shareOf(totals.cleanRows, totals.totalBos)} of BOs`],
       ];
-      kpis.innerHTML = cards.map(([lab, val, tone, note]) => `
-        <div class="boe-kpi tone-${tone}">
+      kpis.innerHTML = cards.map(([key, lab, val, tone, note]) => `
+        <button type="button" class="boe-kpi tone-${tone}${focus === key ? " is-on" : ""}" data-boe-kpi="${escapeHtml(key)}">
           <span class="boe-kpi-lab">${escapeHtml(lab)}</span>
           <strong class="boe-kpi-val">${escapeHtml(formatNumber(val))}</strong>
           <span class="boe-kpi-note">${escapeHtml(note)}</span>
-        </div>`).join("");
+        </button>`).join("");
     }
 
     const chips = $("#boe-type-chips");
@@ -15673,12 +15682,18 @@
     const pageStart = (boeView.page - 1) * pageSize;
     const pageRows = filtered.slice(pageStart, pageStart + pageSize);
     const scheduleCount = $("#boe-schedule-count");
-    if (scheduleCount) scheduleCount.textContent = `${formatNumber(filtered.length)} Errors`;
+    if (scheduleCount) {
+      scheduleCount.textContent = boeView.focus === "clean"
+        ? `${formatNumber(totals.cleanRows)} Clean`
+        : `${formatNumber(filtered.length)} Errors`;
+    }
 
     const wrap = $("#boe-table-wrap");
     const foot = $("#boe-table-foot");
     if (wrap) {
-      if (!rows.length) {
+      if (boeView.focus === "clean") {
+        wrap.innerHTML = `<p class="foot" style="padding:16px">${formatNumber(totals.cleanRows)} clean BOs passed every checked rule. They do not appear as error rows.</p>`;
+      } else if (!rows.length) {
         wrap.innerHTML = `<p class="foot" style="padding:16px">No BO errors found — all checked rules passed.</p>`;
       } else if (!filtered.length) {
         wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters${empKey ? " for this employee" : ""}.</p>`;
@@ -20812,7 +20827,28 @@
   if (boeSev) {
     boeSev.addEventListener("change", (e) => {
       boeView.severity = e.target.value;
+      if (e.target.value === "critical") boeView.focus = "critical";
+      else if (e.target.value === "warn") boeView.focus = "warn";
+      else if (boeView.focus === "critical" || boeView.focus === "warn" || boeView.focus === "clean") boeView.focus = "";
       boeView.page = 1;
+      if (window._data) renderBoErrorsDashboard(window._data);
+    });
+  }
+  const boeKpis = $("#boe-kpis");
+  if (boeKpis) {
+    boeKpis.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-boe-kpi]");
+      if (!btn) return;
+      const key = btn.getAttribute("data-boe-kpi") || "";
+      if (boeView.focus === key) {
+        boeView.focus = "";
+        boeView.severity = "";
+      } else {
+        boeView.focus = key;
+        boeView.severity = key === "critical" ? "critical" : key === "warn" ? "warn" : "";
+      }
+      boeView.page = 1;
+      if (boeSev) boeSev.value = boeView.severity;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
   }
@@ -20862,6 +20898,7 @@
       if (!btn) return;
       const next = btn.getAttribute("data-boe-employee") || "";
       boeView.employee = boeView.employee === next ? "" : next;
+      if (boeView.focus === "clean") boeView.focus = "";
       boeView.page = 1;
       if (window._data) renderBoErrorsDashboard(window._data);
     });
@@ -20871,6 +20908,7 @@
     if (!btn) return;
     const next = btn.getAttribute("data-boe-type") || "";
     boeView.type = boeView.type === next ? "" : next;
+    if (boeView.focus === "clean") boeView.focus = "";
     boeView.page = 1;
     if (window._data) renderBoErrorsDashboard(window._data);
   };
