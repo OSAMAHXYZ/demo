@@ -2250,12 +2250,23 @@ body.boe-mode .app-content {
   border-color: #2563eb !important;
   color: #fff !important;
 }
-#panel-boerrors .boe-tower input { min-width: 0; flex: 1; }
-#panel-boerrors #boe-search { width: 100%; }
-#panel-boerrors .boe-kpis {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
+#panel-boerrors #boe-search { width: 100%; min-width: 0; flex: 1 1 auto; }
+#panel-boerrors #boe-employee-find {
+  flex: 0 1 200px;
+  width: 200px;
+  min-width: 140px;
+}
+#panel-boerrors #boe-filter-employee {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 380px;
+}
+#panel-boerrors #boe-employee-clear { flex: 0 0 auto; white-space: nowrap; }
+body.boe-mode #panel-boerrors .boe-kpis,
+.live-app.toyota-theme #panel-boerrors .boe-kpis {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 6px !important;
 }
 #panel-boerrors button.boe-kpi {
   text-align: left;
@@ -2302,7 +2313,15 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-kpi.tone-purple { box-shadow: inset 0 2px 0 var(--boe-purple); }
 #panel-boerrors .boe-kpi.tone-green { box-shadow: inset 0 2px 0 var(--boe-green); }
 #panel-boerrors .boe-kpi.tone-blue { box-shadow: inset 0 2px 0 var(--boe-blue); }
-#panel-boerrors .boe-employee-card,
+#panel-boerrors .boe-employee-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px 8px 8px !important;
+  min-width: 0;
+  overflow: hidden;
+}
 #panel-boerrors .boe-breakdown {
   display: flex;
   flex-direction: row;
@@ -2310,6 +2329,7 @@ body.boe-mode .app-content {
   gap: 8px;
   padding: 6px 8px !important;
   min-width: 0;
+  overflow: hidden;
 }
 #panel-boerrors .boe-table-card,
 #panel-boerrors .boe-bars-card { padding: 8px 10px; }
@@ -2324,7 +2344,11 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-breakdown .boe-card-head {
   margin: 0;
   flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
 }
+#panel-boerrors .boe-employee-card .boe-card-head { gap: 10px; }
+#panel-boerrors .boe-employee-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
 #panel-boerrors .boe-employee-card h2,
 #panel-boerrors .boe-breakdown .hint { display: none; }
 #panel-boerrors .boe-employee-card .hint {
@@ -2344,32 +2368,40 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-type-chips {
   display: flex;
   flex-wrap: nowrap;
+  align-items: center;
   gap: 6px;
   margin: 0;
   min-width: 0;
-  flex: 1 1 auto;
+  min-height: 36px;
+  width: 100%;
+  flex: 0 0 auto;
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 2px 2px 6px;
+  scrollbar-gutter: stable;
 }
 #panel-boerrors .boe-chip,
-#panel-boerrors .boe-more,
-#panel-boerrors .boe-bar {
-  display: flex;
+#panel-boerrors .boe-more {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   width: auto;
+  height: auto;
+  min-height: 30px;
   flex: 0 0 auto;
-  max-width: 240px;
+  max-width: 260px;
   min-width: 0;
   text-align: left;
   background: #0c1424 !important;
   color: #e8eef8 !important;
   border: 1px solid var(--boe-line) !important;
   border-radius: 999px !important;
-  padding: 4px 8px !important;
+  padding: 5px 10px !important;
   box-shadow: none !important;
   cursor: pointer;
   overflow: hidden;
+  position: relative;
+  z-index: 0;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 #panel-boerrors .boe-bar {
@@ -2381,8 +2413,15 @@ body.boe-mode .app-content {
   width: 100%;
   max-width: none;
   flex: 0 0 auto;
+  background: #0c1424 !important;
+  color: #e8eef8 !important;
+  border: 1px solid var(--boe-line) !important;
   border-radius: 10px !important;
   padding: 6px 8px !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
 }
 #panel-boerrors .boe-chip:hover,
 #panel-boerrors .boe-bar:hover,
@@ -2391,8 +2430,9 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-bar.is-active,
 #panel-boerrors .boe-emp-chip.is-active {
   outline: none;
-  border-color: #60a5fa !important;
-  background: #162844 !important;
+  border-color: #93c5fd !important;
+  background: #1d4ed8 !important;
+  box-shadow: inset 0 0 0 1px #93c5fd !important;
 }
 #panel-boerrors .boe-chip strong,
 #panel-boerrors .boe-bar strong {
@@ -2433,10 +2473,15 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-chip.sev-critical { border-color: rgba(240, 82, 82, 0.45) !important; }
 #panel-boerrors .boe-chip.sev-warn { border-color: rgba(245, 165, 36, 0.5) !important; }
 #panel-boerrors .boe-chip.sev-info { border-color: rgba(167, 139, 250, 0.5) !important; }
-#panel-boerrors .boe-more { justify-content: center; color: var(--boe-blue) !important; grid-column: 1 / -1; }
+#panel-boerrors .boe-more {
+  justify-content: center;
+  color: var(--boe-blue) !important;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 #panel-boerrors .boe-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 0.9fr);
+  grid-template-columns: minmax(0, 7fr) minmax(260px, 3fr);
   gap: 8px;
   min-width: 0;
   min-height: 0;
@@ -2447,42 +2492,85 @@ body.boe-mode .app-content {
   font-size: 13px;
   white-space: nowrap;
 }
-#panel-boerrors #boe-table-wrap {
-  overflow: auto;
-  max-height: min(52vh, 620px);
+#panel-boerrors #boe-table-wrap.table-wrap,
+#panel-boerrors #boe-table-wrap.aa-table-wrap,
+.live-app #panel-boerrors #boe-table-wrap,
+.live-app.toyota-theme #panel-boerrors #boe-table-wrap {
+  overflow: auto !important;
+  max-height: none;
   max-width: 100%;
+  width: 100%;
   border: 1px solid var(--boe-line);
   border-radius: 12px;
-  background: #0c1424;
+  background: #0c1424 !important;
+  scrollbar-gutter: stable;
 }
-#panel-boerrors .boe-table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-  background: transparent;
-  color: #e8eef8;
+#panel-boerrors table.boe-table,
+.live-app.toyota-theme #panel-boerrors table.boe-table {
+  width: 2104px !important;
+  min-width: 2104px !important;
+  max-width: none !important;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  background: #101a2e !important;
+  color: #f4f7fb !important;
+  font-size: 13px !important;
 }
 #panel-boerrors .boe-table th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: #121c31 !important;
   color: #dbe4f0 !important;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: none;
   font-weight: 700;
   border-bottom: 1px solid var(--boe-line) !important;
   white-space: nowrap;
-  padding: 5px 6px;
+  padding: 8px 8px;
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
 }
 #panel-boerrors .boe-table td {
-  background: #101a2e;
-  color: #e8eef8;
-  border-bottom: 1px solid rgba(96, 140, 196, 0.12) !important;
+  background: #101a2e !important;
+  color: #f4f7fb !important;
+  border-bottom: 1px solid rgba(96, 140, 196, 0.16) !important;
   white-space: nowrap;
-  font-size: 12px;
-  padding: 4px 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 7px 8px;
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
+}
+#panel-boerrors .boe-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+}
+#panel-boerrors .boe-table .boe-flag,
+#panel-boerrors .boe-table .aa-sfx,
+#panel-boerrors .boe-table .boe-sev {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+#panel-boerrors .boe-table td.boe-tags,
+#panel-boerrors .boe-table .boe-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  max-width: none;
+  overflow: hidden;
+  white-space: nowrap;
 }
 #panel-boerrors .boe-table tr:hover td { background: #182743; }
 #panel-boerrors .boe-sev {
@@ -2510,12 +2598,14 @@ body.boe-mode .app-content {
 #panel-boerrors .boe-flag.is-pend { background: rgba(245, 165, 36, 0.16); color: #fde68a; }
 #panel-boerrors .boe-pager {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   color: var(--boe-muted);
-  margin: 10px 0 0;
+  margin: 6px 0 0;
+  min-height: 34px;
 }
 #panel-boerrors .boe-page-nav { display: flex; gap: 4px; align-items: center; }
 #panel-boerrors .boe-page {
@@ -2673,7 +2763,10 @@ body.boe-mode .app-content {
   #panel-boerrors .boe-top-status { justify-content: flex-start; }
 }
 @media (max-width: 1100px) {
-  #panel-boerrors .boe-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.boe-mode #panel-boerrors .boe-kpis,
+  .live-app.toyota-theme #panel-boerrors .boe-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
   #panel-boerrors .boe-split { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {

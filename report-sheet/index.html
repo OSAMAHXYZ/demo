@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261009boe" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261009boe2" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -15643,7 +15643,7 @@
       chips.innerHTML = Object.values(BOE_ERROR_DEFS).map((def) => {
         const n = (viewTotals.typeCounts && viewTotals.typeCounts[def.id]) || 0;
         const active = boeView.type === def.id ? " is-active" : "";
-        return `<button type="button" class="boe-chip sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}">
+        return `<button type="button" class="boe-chip sev-${escapeHtml(def.severity)}${active}" data-boe-type="${escapeHtml(def.id)}" title="${escapeHtml(def.label)}">
           <span class="boe-chip-lab">${escapeHtml(def.label)}</span>
           <strong>${formatNumber(n)}</strong>
         </button>`;
@@ -15698,47 +15698,58 @@
       } else if (!filtered.length) {
         wrap.innerHTML = `<p class="foot" style="padding:16px">No rows match the current filters${empKey ? " for this employee" : ""}.</p>`;
       } else {
+        const boeCols = [
+          ["Severity", "92px"],
+          [colNames.f, "148px"],
+          ["Employee", "156px"],
+          ["Product", "112px"],
+          ["SFX", "72px"],
+          ["Sales type", "132px"],
+          ["Model Year", "96px"],
+          [colNames.h, "128px"],
+          [colNames.j, "128px"],
+          [colNames.nop, "176px"],
+          [colNames.qrs, "176px"],
+          [colNames.ship, "168px"],
+          [colNames.ab, "132px"],
+          ["Col AC correction", "148px"],
+          ["Errors", "240px"],
+        ];
+        const boeTip = (value) => {
+          const raw = value == null || String(value).trim() === "" ? "—" : String(value);
+          return escapeHtml(raw);
+        };
         wrap.innerHTML = `<table class="data-table aa-table boe-table">
+          <colgroup>${boeCols.map(([, w]) => `<col style="width:${w}">`).join("")}</colgroup>
           <thead>
             <tr>
-              <th>Severity</th>
-              <th>${escapeHtml(colNames.f)}</th>
-              <th>Employee</th>
-              <th>Product</th>
-              <th>SFX</th>
-              <th>Sales type</th>
-              <th>Model Year</th>
-              <th>${escapeHtml(colNames.h)}</th>
-              <th>${escapeHtml(colNames.j)}</th>
-              <th>${escapeHtml(colNames.nop)}</th>
-              <th>${escapeHtml(colNames.qrs)}</th>
-              <th>${escapeHtml(colNames.ship)}</th>
-              <th>${escapeHtml(colNames.ab)}</th>
-              <th>Col AC correction</th>
-              <th>Errors</th>
+              ${boeCols.map(([label]) => `<th title="${boeTip(label)}"><span class="boe-cell" dir="auto">${boeTip(label)}</span></th>`).join("")}
             </tr>
           </thead>
           <tbody>
-            ${pageRows.map((r) => `
+            ${pageRows.map((r) => {
+              const errTitle = (r.errors || []).map((e) => e.label).join(" · ") || "—";
+              return `
               <tr class="boe-row sev-${escapeHtml(r.severity)} boe-row-click" data-boe-idx="${escapeHtml(String(r.idx))}" tabindex="0" role="button" title="Open full Back Order row">
-                <td><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
-                <td class="mono">${escapeHtml(r.colF)}</td>
-                <td>${escapeHtml(r.salesman || "—")}</td>
-                <td><strong>${escapeHtml(r.product)}</strong></td>
-                <td><span class="aa-sfx">${escapeHtml(r.sfx)}</span></td>
-                <td>${escapeHtml(r.salesType)}</td>
-                <td>${escapeHtml(r.year)}</td>
-                <td><span class="boe-flag ${r.confirmed ? "is-ok" : "is-pend"}">${escapeHtml(r.colH)}</span></td>
-                <td>${escapeHtml(r.colJ)}</td>
-                <td class="mono">${escapeHtml(r.nop)}</td>
-                <td class="mono">${escapeHtml(r.qrs)}</td>
-                <td class="mono">${escapeHtml(r.colShip)}</td>
-                <td>${escapeHtml(r.colAB)}</td>
-                <td class="mono${r.acCorrection ? " boe-ac-fix" : ""}">${escapeHtml(r.acCorrection || "—")}</td>
-                <td class="boe-tags">${(r.errors || []).map((e) =>
+                <td title="${escapeHtml(r.severity)}"><span class="boe-sev boe-sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
+                <td class="mono" title="${boeTip(r.colF)}"><span class="boe-cell" dir="auto">${boeTip(r.colF)}</span></td>
+                <td title="${boeTip(r.salesman || "—")}"><span class="boe-cell" dir="auto">${boeTip(r.salesman || "—")}</span></td>
+                <td title="${boeTip(r.product)}"><strong class="boe-cell" dir="auto">${boeTip(r.product)}</strong></td>
+                <td title="${boeTip(r.sfx)}"><span class="aa-sfx boe-cell" dir="auto">${boeTip(r.sfx)}</span></td>
+                <td title="${boeTip(r.salesType)}"><span class="boe-cell" dir="auto">${boeTip(r.salesType)}</span></td>
+                <td title="${boeTip(r.year)}"><span class="boe-cell" dir="auto">${boeTip(r.year)}</span></td>
+                <td title="${boeTip(r.colH)}"><span class="boe-flag ${r.confirmed ? "is-ok" : "is-pend"} boe-cell" dir="auto">${boeTip(r.colH)}</span></td>
+                <td title="${boeTip(r.colJ)}"><span class="boe-cell" dir="auto">${boeTip(r.colJ)}</span></td>
+                <td class="mono" title="${boeTip(r.nop)}"><span class="boe-cell" dir="auto">${boeTip(r.nop)}</span></td>
+                <td class="mono" title="${boeTip(r.qrs)}"><span class="boe-cell" dir="auto">${boeTip(r.qrs)}</span></td>
+                <td class="mono" title="${boeTip(r.colShip)}"><span class="boe-cell" dir="auto">${boeTip(r.colShip)}</span></td>
+                <td title="${boeTip(r.colAB)}"><span class="boe-cell" dir="auto">${boeTip(r.colAB)}</span></td>
+                <td class="mono${r.acCorrection ? " boe-ac-fix" : ""}" title="${boeTip(r.acCorrection || "—")}"><span class="boe-cell" dir="auto">${boeTip(r.acCorrection || "—")}</span></td>
+                <td class="boe-tags" title="${escapeHtml(errTitle)}">${(r.errors || []).map((e) =>
                   `<span class="boe-tag sev-${escapeHtml(e.severity)}" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>`
                 ).join("")}</td>
-              </tr>`).join("")}
+              </tr>`;
+            }).join("")}
           </tbody>
         </table>`;
       }
