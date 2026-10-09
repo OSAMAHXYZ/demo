@@ -15816,6 +15816,15 @@
 
     const headerLabels = headers.map((h, i) => cellToString(h).trim() || `Column ${indexToColLetter(i)}`);
     const headerNorms = headerLabels.map((h) => normHeader(h));
+    const empKey = String(boeView.employee || "").trim();
+    const employeeRows = empKey
+      ? (pack.rows || []).filter((r) => {
+        const key = nameKey(r.salesman);
+        return key === empKey || String(r.salesman || "").trim() === empKey;
+      })
+      : null;
+    const employeeIdx = employeeRows ? new Set(employeeRows.map((r) => r.idx)) : null;
+    const employeeName = employeeRows && employeeRows[0] ? String(employeeRows[0].salesman || empKey) : empKey;
     const errByIdx = new Map((pack.rows || []).map((r) => [r.idx, r]));
     const aoa = [];
     aoa.push([...headerLabels, "Error Definition"]);
@@ -15841,6 +15850,7 @@
     };
 
     rawRows.forEach((raw, idx) => {
+      if (employeeIdx && !employeeIdx.has(idx)) return;
       const cells = Array.isArray(raw.__cells) ? raw.__cells : [];
       const row = [];
       for (let i = 0; i <= AC_IDX; i += 1) {
@@ -15886,23 +15896,37 @@
 
     ws["!cols"] = headerLabels.map(() => ({ wch: 14 })).concat([{ wch: 48 }]);
 
+    const summaryRows = employeeRows || (pack.rows || []);
+    const summaryTotals = employeeRows ? boeTotalsFromRows(employeeRows) : pack.totals;
     const summary = Object.values(BOE_ERROR_DEFS).map((def) => ({
       Error: def.label,
       Severity: def.severity,
-      Count: (pack.totals.typeCounts && pack.totals.typeCounts[def.id]) || 0,
+      Count: (summaryTotals.typeCounts && summaryTotals.typeCounts[def.id]) || 0,
     }));
     summary.push({
       Error: "RAV4 SH corrections (Col AC)",
       Severity: "info",
-      Count: (pack.rows || []).filter((r) => r.acCorrection).length,
+      Count: summaryRows.filter((r) => r.acCorrection).length,
     });
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Back Order");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Error Summary");
-    const name = `BO-Errors-${excelFileStamp()}.xlsx`;
+    const safeEmployee = String(employeeName || "")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+    const name = safeEmployee
+      ? `BO-Errors-${safeEmployee}-${excelFileStamp()}.xlsx`
+      : `BO-Errors-${excelFileStamp()}.xlsx`;
     XLSX.writeFile(wb, name, { cellStyles: true, bookType: "xlsx" });
-    setStatus("BO Errors Excel exported · AC corrections green · AD–AI removed", "ok");
+    setStatus(
+      safeEmployee
+        ? `BO Errors Excel exported for ${employeeName} · ${formatNumber(employeeRows.length)} error rows`
+        : "BO Errors Excel exported · AC corrections green · AD–AI removed",
+      "ok",
+    );
   }
 
   function boAggRows(list, keyFn) {
