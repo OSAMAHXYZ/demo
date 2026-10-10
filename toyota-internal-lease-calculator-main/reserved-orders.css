@@ -317,6 +317,9 @@ body.dash { min-height: 100vh; background: var(--bg); }
 #overlay-message .msg-alert.warning { background: #fffbeb; border-color: #fde68a; }
 #overlay-message .msg-alert.urgent { background: #fef2f2; border-color: #fecaca; }
 #overlay-message .msg-alerts .muted { color: #64748b; margin: 0; }
+#overlay-message .msg-alert textarea { width: 100%; margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+#overlay-message .msg-alert.sent { background: #ecfdf5; border-color: #86efac; }
+#br-preview, #br-note { margin: 8px 0 0; color: #334155; font-size: 13px; }
 .br-page { display: flex; flex-direction: column; gap: 12px; }
 .br-file, .br-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .br-file div, .br-kpis article { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }

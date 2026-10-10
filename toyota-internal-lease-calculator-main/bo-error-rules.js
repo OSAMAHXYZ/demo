@@ -294,6 +294,16 @@ function attachBoErrorRules(app, deps) {
         if (!rule) return res.status(404).json({ error: 'Rule not found.' });
         res.json({
             rule,
+            delivery: ((rule.current && rule.current.employees) || []).map((item) => {
+                const state = store.statuses[statusKey(rule.id, item)] || {};
+                return {
+                    salesmanId: item.salesmanId,
+                    salesmanName: item.salesmanName,
+                    orderCount: (item.orders || []).length,
+                    sentAt: state.sentAt || '',
+                    status: state.sentAt ? 'sent' : (rule.notificationStatus === 'pushed' ? 'waiting' : 'not_pushed')
+                };
+            }),
             history: store.history.filter((item) => item.ruleId === rule.id).slice(-30).reverse(),
             publications: store.publications.filter((item) => item.ruleId === rule.id).slice(-20).reverse(),
             whatsapp: store.whatsapp.filter((item) => item.ruleId === rule.id).slice(-40).reverse()
@@ -453,6 +463,7 @@ function attachBoErrorRules(app, deps) {
                 }),
                 affectedOrderCount: mine.orders.length,
                 status: state.status || 'new',
+                sentAt: state.sentAt || '',
                 orders: mine.orders.map((order) => ({
                     ...order,
                     status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new'
@@ -493,6 +504,27 @@ function attachBoErrorRules(app, deps) {
         saveStore(store);
         deps.audit(req, { user: user.name, employeeNumber: user.employeeNumber, recordId: user.recordId, role: 'employee', action: status === 'completed' ? 'BO_CORRECTION_COMPLETED' : 'BO_ALERT_OPENED', entity: 'bo-rule', source: 'employee', orderNumber: req.body?.boNumber || '', details: rule.name, newValue: status });
         res.json({ ok: true });
+    });
+
+    app.post('/api/reserved-orders/my-bo-corrections/sent', (req, res) => {
+        const user = deps.sessionUser(req.body?.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const store = loadStore();
+        const rule = store.rules.find((item) => item.id === req.body?.ruleId);
+        if (!rule || !rule.current) return res.status(404).json({ error: 'Message not found.' });
+        const mine = (rule.current.employees || []).find((item) => employeeCanSee(user, item));
+        if (!mine) return res.status(403).json({ error: 'This message is not yours.' });
+        const key = statusKey(rule.id, mine);
+        const state = store.statuses[key] || { status: 'new', at: '', orders: {} };
+        const now = new Date().toISOString();
+        state.sentAt = now;
+        state.sentMessage = cellString(req.body?.message);
+        state.status = 'completed';
+        state.at = now;
+        store.statuses[key] = state;
+        saveStore(store);
+        deps.audit(req, { user: user.name, employeeNumber: user.employeeNumber, recordId: user.recordId, role: 'employee', action: 'BO_MESSAGE_SENT', entity: 'bo-rule', source: 'employee', details: `${rule.name} · ${mine.orders.length} orders`, newValue: 'sent' });
+        res.json({ ok: true, sentAt: now });
     });
 
     return { reanalyzeActive, analyzeTable };

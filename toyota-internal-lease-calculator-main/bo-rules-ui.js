@@ -6,6 +6,7 @@
     let detail = null;
     let editing = null;
     let q = '';
+    let notice = '';
     const OPS = [
         ['equals', 'Equals'],
         ['not_equals', 'Does not equal'],
@@ -87,7 +88,7 @@
                     <button type="button" data-open="${esc(rule.id)}">View</button>
                     <button type="button" data-edit="${esc(rule.id)}">Edit</button>
                     <button type="button" data-run="${esc(rule.id)}">Re-analyze</button>
-                    <button type="button" data-push="${esc(rule.id)}">Push</button>
+                    <button type="button" data-push="${esc(rule.id)}">Push to Message Builder</button>
                     <button type="button" data-archive="${esc(rule.id)}">${rule.archived ? 'Restore' : 'Archive'}</button>
                 </td>
             </tr>`).join('')}
@@ -108,12 +109,13 @@
                 <article><span>Analyzed</span><strong>${esc(stamp(rule.lastAnalysisAt))}</strong></article>
             </div>
             ${rule.columnMissing ? '<p class="err">This column is not in the latest BO file. The rule is kept and will run again when the column returns.</p>' : ''}
-            <table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Affected orders</th><th>Notification</th><th></th></tr></thead><tbody>
+            <p>The latest BO file has <b>${rule.affectedEmployees || 0}</b> employees and <b>${rule.affectedOrders || 0}</b> matching orders. Push sends each employee only their own count in Message Builder.</p>
+            <table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Found in BO file</th><th>Message Builder</th><th></th></tr></thead><tbody>
                 ${employees.map((item) => `<tr>
                     <td>${esc(item.salesmanName)}</td>
                     <td>${esc(item.salesmanId)}</td>
                     <td>${item.orders.length}</td>
-                    <td>${item.salesmanId === 'UNASSIGNED' ? 'No employee id' : esc(rule.notificationStatus || 'pending')}</td>
+                    <td>${messageState(item)}</td>
                     <td><button type="button" data-orders="${esc(item.salesmanId)}" data-name="${esc(item.salesmanName)}">View orders</button> <button type="button" data-wa="${esc(item.salesmanId)}" data-name="${esc(item.salesmanName)}">WhatsApp</button></td>
                 </tr>`).join('') || '<tr><td colspan="5">No matching orders in the latest file.</td></tr>'}
             </tbody></table>
@@ -153,7 +155,8 @@
                     <label>Condition<select id="br-op">${OPS.map(([id, label]) => `<option value="${id}"${op === id ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
                     <label id="br-bad-wrap">Incorrect value<input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2025 or Not_Confirmed. Separate several values with commas."></label>
                     <label>Correct value<input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
-                    <label class="wide">Employee message<textarea id="br-message" rows="3">${esc(selected.message || 'Hello {employeeName}, {affectedOrderCount} {product} orders need {columnName} changed from {incorrectValue} to {correctValue}.')}</textarea></label>
+                    <label class="wide">Employee message<textarea id="br-message" rows="3">${esc(selected.message || 'Hello {employeeName}, the BO file shows {affectedOrderCount} {product} orders where {columnName} is {incorrectValue}. Please change it to {correctValue}.')}</textarea></label>
+                    <p class="wide" id="br-preview"></p>
                     <label class="wide">WhatsApp message<textarea id="br-wa" rows="3">${esc(selected.whatsappMessage || '')}</textarea></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
                 </div>
@@ -164,6 +167,7 @@
                     <button id="br-cancel" type="button">Cancel</button>
                 </div>
                 <div class="err" id="br-error"></div>
+                <p id="br-note"></p>
             </section>
             ${detailHtml()}
             <section class="panel">
@@ -173,12 +177,43 @@
         </div>`;
         const bad = document.getElementById('br-bad-wrap');
         if (bad) bad.hidden = !needsValue(document.getElementById('br-op').value);
+        const note = document.getElementById('br-note');
+        if (note) note.textContent = notice;
+        paintPreview();
         bind();
+    }
+    function messageState(item) {
+        if (item.salesmanId === 'UNASSIGNED') return 'No employee id';
+        const row = ((detail && detail.delivery) || []).find((person) => person.salesmanId === item.salesmanId && person.salesmanName === item.salesmanName);
+        if (row && row.sentAt) return 'Sent · ' + stamp(row.sentAt);
+        if (row && row.status === 'waiting') return 'Waiting in Message Builder';
+        return 'Not pushed';
+    }
+    function paintPreview() {
+        const box = document.getElementById('br-preview');
+        const field = document.getElementById('br-message');
+        if (!box || !field) return;
+        const people = (detail && detail.rule && detail.rule.current && detail.rule.current.employees) || [];
+        const sample = people.find((item) => item.salesmanId !== 'UNASSIGNED');
+        if (!sample) {
+            box.textContent = 'Analyze the BO file to see how many orders each employee has. {employeeName} and {affectedOrderCount} are filled separately for each person.';
+            return;
+        }
+        const rule = formRule();
+        const text = field.value
+            .replaceAll('{employeeName}', sample.salesmanName)
+            .replaceAll('{product}', rule.product || 'all cars')
+            .replaceAll('{columnName}', rule.column || '')
+            .replaceAll('{incorrectValue}', rule.incorrectValues || 'blank')
+            .replaceAll('{correctValue}', rule.correctValue || '—')
+            .replaceAll('{affectedOrderCount}', String(sample.orders.length));
+        box.textContent = `BO file example for ${sample.salesmanName}: ${sample.orders.length} found. ${text}`;
     }
     function bind() {
         document.getElementById('br-op').addEventListener('change', () => { document.getElementById('br-bad-wrap').hidden = !needsValue(document.getElementById('br-op').value); });
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
         document.getElementById('br-cancel').addEventListener('click', () => { editing = null; render(); });
+        document.getElementById('br-message').addEventListener('input', paintPreview);
         document.getElementById('br-save').addEventListener('click', () => save(false));
         document.getElementById('br-run').addEventListener('click', () => {
             if (editing && editing.id) run(editing.id);
@@ -213,10 +248,11 @@
     }
     async function push(id, confirmRepublish) {
         const rule = pack.rules.find((item) => item.id === id) || (detail && detail.rule);
-        const ok = window.confirm(`Push "${rule ? rule.name : 'this rule'}" to ${rule ? rule.affectedEmployees : 0} employees and ${rule ? rule.affectedOrders : 0} orders?`);
+        const ok = window.confirm(`Push "${rule ? rule.name : 'this rule'}" to Message Builder for ${rule ? rule.affectedEmployees : 0} employees (${rule ? rule.affectedOrders : 0} orders in the BO file)?`);
         if (!ok) return;
         try {
             await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(id) + '/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), confirmRepublish }) });
+            notice = 'Pushed to Message Builder. Each employee sees only their own message and count.';
             await load(id);
         } catch (e) {
             if (e.needsConfirm && window.confirm(e.message)) return push(id, true);

@@ -281,17 +281,40 @@
             alertRules = data.alerts || [];
         } catch (e) { alertRules = []; }
     }
-    function paintMessageAlerts() {
+    async function paintMessageAlerts() {
         const box = $('msg-alert-list');
-        if (!box) return;
-        const car = String($('msg-car') && $('msg-car').value || '').trim().toLowerCase();
-        const rules = alertRules.filter((rule) => {
-            if (rule.kind !== 'bo_error' || rule.active === false || !rule.message) return false;
-            if (!car || !rule.product) return true;
-            const product = String(rule.product).toLowerCase();
-            return product === car || car.includes(product) || product.includes(car);
+        const session = readSession();
+        if (!box || !session) return;
+        const res = await fetch('/api/reserved-orders/my-bo-corrections?token=' + encodeURIComponent(session.token));
+        const data = res.ok ? await res.json().catch(() => ({})) : {};
+        const items = data.alerts || [];
+        if (!items.length) {
+            box.innerHTML = '<p class="muted">No messages from admin yet.</p>';
+            return;
+        }
+        box.innerHTML = items.map((item) => `<article class="msg-alert ${item.sentAt ? 'sent' : 'warning'}">
+            <small>${esc(item.name)} · ${esc(item.product || 'All cars')} · ${esc(item.column)}</small>
+            <p><b>${item.affectedOrderCount}</b> found for you in the BO file. Change ${esc(item.incorrectValue || 'blank')} to ${esc(item.correctValue || '—')}.</p>
+            <textarea data-admin-msg="${esc(item.ruleId)}" rows="3">${esc(item.message)}</textarea>
+            <p>${item.sentAt ? 'Sent' : 'Not sent yet'}</p>
+            <button type="button" data-send-admin="${esc(item.ruleId)}">${item.sentAt ? 'Send again' : 'Send'}</button>
+        </article>`).join('');
+        box.querySelectorAll('[data-send-admin]').forEach((button) => button.addEventListener('click', () => sendAdminMessage(button.dataset.sendAdmin)));
+    }
+    async function sendAdminMessage(ruleId) {
+        const session = readSession();
+        const field = document.querySelector(`[data-admin-msg="${CSS.escape(ruleId)}"]`);
+        const text = field ? field.value.trim() : '';
+        if (!session || !text) return;
+        const res = await fetch('/api/reserved-orders/my-bo-corrections/sent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: session.token, ruleId, message: text })
         });
-        box.innerHTML = rules.length ? rules.map((rule) => `<div class="msg-alert ${esc(rule.tone || 'info')}" role="alert"><small>${esc(rule.errorLabel || 'BO error')}${rule.product ? ' · ' + esc(rule.product) : ''}</small>${esc(rule.message)}</div>`).join('') : '<p class="muted">No alerts from admin for this view.</p>';
+        if (!res.ok) return;
+        const number = phone($('msg-phone').value);
+        window.open((number ? `https://wa.me/${number}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
+        paintMessageAlerts();
     }
     function alertMatches(rule, bag) {
         if (!rule || rule.kind === 'bo_error') return false;
@@ -450,7 +473,6 @@
         const car = $('msg-car').value;
         const img = carImage(car);
         $('msg-preview-car').innerHTML = car ? `${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}<div><strong>Toyota ${esc(car)}</strong></div>` : '';
-        paintMessageAlerts();
     }
     async function loadCars() {
         try {
