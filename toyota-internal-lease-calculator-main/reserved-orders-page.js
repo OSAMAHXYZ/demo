@@ -31,10 +31,15 @@
         return end ? end.getTime() - Date.now() : null;
     }
     function formatRemain(ms) {
-        if (ms == null) return 'No Assignment Date';
+        if (ms == null) return '';
         if (ms <= 0) return 'EXPIRED';
         const total = Math.floor(ms / 1000);
         return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+    }
+    function timerLabel(dateText, ms) {
+        if (!dateText) return 'No Assignment Date';
+        const remain = formatRemain(ms);
+        return remain ? `${dateText} ( ${remain} )` : dateText;
     }
     function timerClass(ms) {
         if (ms == null) return '';
@@ -176,7 +181,7 @@
         const queue = chosen('filter-queue');
         const state = chosen('filter-state');
         const sort = $('sort').value;
-        const list = orders.filter((order) => {
+        const list = dataOrders().filter((order) => {
             if (q && ![order.vin, order.orderNumber, order.customerName, order.salesAdvisor].join(' ').toLowerCase().includes(q)) return false;
             if (status && order.status !== status) return false;
             if (payment && order.paymentKind !== payment) return false;
@@ -225,13 +230,14 @@
     }
     function render() {
         const list = visibleOrders();
-        const soon = orders.filter(isSoon).length;
+        const source = dataOrders();
+        const soon = source.filter(isSoon).length;
         const activeKey = activeKpi();
         $('kpis').innerHTML = [
-            ['total', 'Total Reserved', orders.length, ''],
-            ['active', 'Active Orders', orders.filter(isActive).length, 'ok'],
-            ['expired', 'Expired', orders.filter(isExpired).length, 'bad'],
-            ['completed', 'Completed / Invoiced', orders.filter(isCompleted).length, 'info'],
+            ['total', 'Total Reserved', source.length, ''],
+            ['active', 'Active Orders', source.filter(isActive).length, 'ok'],
+            ['expired', 'Expired', source.filter(isExpired).length, 'bad'],
+            ['completed', 'Completed / Invoiced', source.filter(isCompleted).length, 'info'],
             ['soon', 'Approaching Deadline', soon, 'warn']
         ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
         $('cards').innerHTML = list.length ? list.map((order) => cardHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
@@ -246,10 +252,73 @@
         const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
         return `<span class="flag ${tone}">${n}d</span>`;
     }
-    function toneValue(value) {
-        const shown = value && value !== '—' ? value : '—';
-        if (shown === '—') return '<span class="flag">—</span>';
-        return `<span class="flag ${retailMatch(shown) ? 'good' : 'bad'}">${esc(shown)}</span>`;
+    function toneValue(value, good) {
+        return `<span class="flag ${good ? 'good' : 'bad'}">${esc(value)}</span>`;
+    }
+    function dataOrders() {
+        return orders.filter((order) => !isSheetHeader(order));
+    }
+    function byCol(order, letter) {
+        const want = String(letter || '').toUpperCase();
+        const hit = sourceFields(order).find((field) => {
+            const label = String(field.label || '').trim().toUpperCase();
+            const col = String(field.col || '').trim().toUpperCase();
+            return label === want || col === want;
+        });
+        if (!hit || isBlankValue(hit.value)) return '';
+        return String(hit.value).replace(/\u00a0/g, ' ').trim();
+    }
+    function columnText(order, letter) {
+        const value = byCol(order, letter);
+        if (/^(product|alj suffix|model year|age|assign date|salesman name|sharing levels|vehicle search area)$/i.test(value)) return '';
+        return value;
+    }
+    function productOnly(product, sfx) {
+        const name = String(product || '').trim();
+        const suffix = String(sfx || '').trim();
+        if (!name || !suffix) return name;
+        if (name.toLowerCase().endsWith(' ' + suffix.toLowerCase())) return name.slice(0, name.length - suffix.length).trim();
+        return name;
+    }
+    function areaText(order) {
+        const fromB = columnText(order, 'B');
+        if (fromB) return fromB;
+        const first = sourceFields(order)[0];
+        if (!first) return '';
+        const label = String(first.label || '').trim();
+        if (/^[A-Z]{1,3}$/.test(label)) return '';
+        const value = String(first.value || '').replace(/\u00a0/g, ' ').trim();
+        if (isBlankValue(value) || /^vehicle search area$/i.test(value)) return '';
+        return value;
+    }
+    function isSheetHeader(order) {
+        return columnText(order, 'I').toLowerCase() === '' && byCol(order, 'I').toLowerCase() === 'product' && /model year/i.test(byCol(order, 'K'));
+    }
+    function dateText(raw) {
+        const iso = String(raw || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!iso) return String(raw || '').trim();
+        return `${iso[3]}.${iso[2]}.${iso[1]}`;
+    }
+    function assignText(order) {
+        const raw = columnText(order, 'G');
+        if (raw) return dateText(raw);
+        return order.assignDisplay || '';
+    }
+    function columnDeadline(order) {
+        if (order.deadline) return order.deadline;
+        const raw = columnText(order, 'G');
+        const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!iso) return '';
+        const date = new Date(+iso[1], +iso[2] - 1, +iso[3], order.paymentHours || 48);
+        const p = (n) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+    }
+    function ageHtml(raw) {
+        const match = String(raw || '').match(/-?\d+/);
+        if (!match) return esc(raw);
+        const n = Number(match[0]);
+        const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
+        return `<span class="flag ${tone}">${n}d</span>`;
     }
     function fieldTone(label, value) {
         const name = String(label || '').toLowerCase();
@@ -265,71 +334,101 @@
     function sourceFields(order) {
         return Array.isArray(order.fields) ? order.fields : [];
     }
+    function isBlankValue(value) {
+        const text = String(value == null ? '' : value).replace(/\u00a0/g, ' ').trim();
+        return !text || text === '—' || text === '-' || text === '–' || /^n\/?a$/i.test(text);
+    }
+    function fieldText(order, test) {
+        const hit = sourceFields(order).find((field) => {
+            const label = String(field.label || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
+            return label && test(label) && !isBlankValue(field.value);
+        });
+        return hit ? String(hit.value).replace(/\u00a0/g, ' ').trim() : '';
+    }
+    function firstText(order, current, test) {
+        if (!isBlankValue(current)) return String(current).replace(/\u00a0/g, ' ').trim();
+        return fieldText(order, test);
+    }
     function sfxValue(order) {
-        const hit = sourceFields(order).find((field) => /suffix|\bsfx\b/i.test(String(field.label || '')));
-        const value = hit && hit.value && hit.value !== '—' ? hit.value : '';
-        return value || '—';
+        return fieldText(order, (label) => label === 'sfx' || label === 'suffix' || label.includes('suffix') || /\bsfx\b/.test(label));
     }
     function productName(order) {
-        const vehicle = String(order.vehicle || '').trim();
         const sfx = sfxValue(order);
-        if (sfx !== '—' && vehicle.endsWith(' ' + sfx)) return vehicle.slice(0, -(sfx.length + 1)).trim() || vehicle;
-        return vehicle || '—';
+        let vehicle = firstText(order, order.vehicle, (label) => label === 'product' || label === 'vehicle' || label === 'car' || label === 'المنتج');
+        if (sfx && vehicle.endsWith(' ' + sfx)) vehicle = vehicle.slice(0, -(sfx.length + 1)).trim();
+        return isBlankValue(vehicle) ? '' : vehicle;
     }
-    function meta(label, valueHtml) {
+    function meta(label, valueHtml, plain) {
+        if (isBlankValue(plain)) return '';
         return `<div class="meta"><span>${esc(label)}</span><b dir="auto">${valueHtml}</b></div>`;
     }
     function aheadHtml(order) {
         const ahead = Array.isArray(order.ahead) ? order.ahead : [];
         if (!ahead.length) return '<span class="ahead-empty">No orders ahead</span>';
-        return `<div class="ahead-list">${ahead.map((item) => `<b title="${esc(item.salesAdvisor || 'UNASSIGNED')}">${queueLabel(item.queueNumber)} ${esc(item.salesAdvisor || 'UNASSIGNED')}</b>`).join('')}</div>`;
+        return `<div class="ahead-list">${ahead.map((item) => {
+            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? item.orderNumber : '';
+            const who = item.salesAdvisor || '';
+            const text = ['#' + (item.queueNumber == null ? ahead.length : item.queueNumber), orderNo, who].filter(Boolean).join(' ');
+            return `<b title="${esc(text)}">${esc(text)}</b>`;
+        }).join('')}</div>`;
     }
     function excelFieldsHtml(order) {
-        const fields = sourceFields(order);
+        const fields = sourceFields(order).filter((field) => !isBlankValue(field.value));
         const body = fields.length
             ? fields.map((field) => {
                 const tone = fieldTone(field.label, field.value);
-                const shown = field.value || '—';
-                return `<div class="excel-field${tone ? ' ' + tone : ''}"><span title="${esc(field.label)}">${esc(field.label)}</span><b dir="auto" title="${esc(shown)}">${esc(shown)}</b></div>`;
+                return `<div class="excel-field${tone ? ' ' + tone : ''}"><span dir="auto" title="${esc(field.label)}">${esc(field.label)}</span><b dir="auto" title="${esc(field.value)}">${esc(field.value)}</b></div>`;
             }).join('')
-            : '<div class="excel-field"><span>Source</span><b>—</b></div>';
+            : '<div class="excel-field"><span>Source</span><b>No values on this order</b></div>';
         return `<div class="excel-row hidden">${body}</div>`;
     }
     function cardHtml(order) {
-        const ms = remainingMs(order);
+        const deadline = columnDeadline(order);
+        const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
         const hours = order.paymentHours || 48;
-        const img = carImage(order.vehicle);
-        const assigned = order.salesAdvisor && order.salesAdvisor !== 'UNASSIGNED';
+        const sfx = columnText(order, 'J');
+        const product = productOnly(columnText(order, 'I'), sfx);
+        const year = columnText(order, 'K');
+        const ageRaw = columnText(order, 'P');
+        const area = areaText(order);
+        const share = columnText(order, 'C');
+        const colors = [columnText(order, 'M'), columnText(order, 'N')].filter((item) => !isBlankValue(item)).join(' / ');
+        const advisor = columnText(order, 'T');
+        const assignedOn = assignText(order);
+        const customer = firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
+        const img = carImage(product);
+        const assigned = Boolean(advisor);
         const orderLabel = order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER';
         const vin = show(order.vin, 'VIN NOT FOUND');
-        const colors = `${order.exterior || '—'} / ${order.interior || '—'}`;
+        const initial = product ? product.slice(0, 1) : '';
+        const specs = [
+            meta('Product', esc(product), product),
+            meta('SFX', esc(sfx), sfx),
+            meta('Model year', esc(year), year),
+            meta('Reservation age', ageHtml(ageRaw), ageRaw),
+            meta('Area', toneValue(area, String(area).trim().toLowerCase() === 'rtlesal'), area),
+            meta('Share level', toneValue(share, String(share).trim().toLowerCase().includes('retail electronic sales')), share),
+            meta('Colors', esc(colors), colors)
+        ].join('');
         return `<article class="order-block${isExpired(order) ? ' expired' : ''}">
-            <div class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
+            <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
             <div class="lane-id">
                 <div class="qmark">${queueLabel(order.queueNumber)}</div>
-                <div class="thumb">${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${esc((productName(order) || '?').slice(0, 1))}</span>` : `<span class="thumb-fallback">${esc((productName(order) || '?').slice(0, 1))}</span>`}</div>
+                <div class="thumb">${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${esc(initial)}</span>` : (initial ? `<span class="thumb-fallback">${esc(initial)}</span>` : '')}</div>
                 <b dir="auto" title="${esc(orderLabel)}">${esc(orderLabel)}</b>
                 <span class="muted" dir="auto" title="${esc(vin)}">VIN ${esc(vin)}</span>
-                <span class="muted" dir="auto" title="${esc(order.customerName || '—')}">${esc(order.customerName || '—')}</span>
+                ${isBlankValue(customer) ? '' : `<span class="muted" dir="auto" title="${esc(customer)}">${esc(customer)}</span>`}
             </div>
-            <div class="lane-mid">
-                ${meta('Product', esc(productName(order)))}
-                ${meta('SFX', esc(sfxValue(order)))}
-                ${meta('Model year', esc(order.modelYear || '—'))}
-                ${meta('Reservation age', ageValue(order.allocationAging))}
-                ${meta('Area', toneValue(order.searchArea))}
-                ${meta('Share level', toneValue(order.shareLevel))}
-                ${meta('Colors', esc(colors))}
-            </div>
+            ${specs ? `<div class="lane-mid">${specs}</div>` : ''}
             <div class="lane-assign">
                 <span class="assign-pill ${assigned ? 'on' : 'off'}">${assigned ? 'Assigned' : 'Unassigned'}</span>
-                ${meta('Advisor', esc(show(order.salesAdvisor, 'UNASSIGNED')))}
-                ${meta('Assignment date', esc(order.assignDisplay || 'No Assignment Date'))}
+                ${meta('Advisor', esc(advisor || 'UNASSIGNED'), advisor || 'UNASSIGNED')}
+                ${meta('Assignment date', esc(assignedOn || 'No Assignment Date'), assignedOn || 'No Assignment Date')}
                 ${meta('Payment', esc(show(order.paymentLabel, 'UNKNOWN')))}
                 <div class="meta ahead-meta"><span>Upcoming queue</span>${aheadHtml(order)}</div>
             </div>
             <div class="lane-side">
-                <div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${ms == null ? 'No Assignment Date' : formatRemain(ms)}</div>
+                <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(assignedOn || '')}">${esc(timerLabel(assignedOn, ms))}</div>
                 <span class="muted">${hours} HOURS</span>
                 <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
                 <div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>
@@ -344,7 +443,7 @@
         document.querySelectorAll('.timer').forEach((el) => {
             const end = parseLocal(el.dataset.deadline);
             const ms = end ? end.getTime() - Date.now() : null;
-            el.textContent = formatRemain(ms);
+            el.textContent = timerLabel(el.dataset.date || '', ms);
             el.className = `timer ${timerClass(ms)}`;
             const card = el.closest('.lane');
             const expired = ms != null && ms <= 0;
@@ -588,13 +687,8 @@
     }
 
     function showView(name) {
-        $('overlay-lookup').classList.toggle('hidden', name !== 'lookup');
         $('overlay-message').classList.toggle('hidden', name !== 'message');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
-        if (name === 'lookup') {
-            const frame = $('bo-lookup-frame');
-            if (frame && !frame.getAttribute('src')) frame.src = 'bo-hub/bo-order-lookup.html';
-        }
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
     }
     $('login-form').addEventListener('submit', async (event) => {

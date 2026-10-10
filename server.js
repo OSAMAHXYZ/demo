@@ -4946,38 +4946,43 @@ app.post('/api/report-sheet/push', (req, res) => {
     const body = req.body || {};
     const at = Date.now();
     const filesIn = body.files && typeof body.files === 'object' ? body.files : {};
-    const fileNames = {};
     const slots = [];
     const prevMeta = loadReportSheetMeta();
     const pushedControl = sanitizeGecControl(body.gecControl);
     const prevControl = sanitizeGecControl(prevMeta.gecControl);
     const controlChanged = !!pushedControl && JSON.stringify(pushedControl) !== JSON.stringify(prevControl);
 
-    // B2C files (Lexus · Toyota) are cumulative: a Push merges into them and never drops them.
-    const prevB2c = {};
+    // A Push only replaces the workbooks included in this upload.
+    // Files the admin did not send stay on disk, including E-Sales and Back Order.
+    const prevFiles = {};
     const b2cMerge = {};
-    B2C_SLOT_IDS.forEach((id) => {
+    REPORT_SLOT_IDS.forEach((id) => {
       const fp = reportSheetFilePath(id);
-      prevB2c[id] = {
+      prevFiles[id] = {
         fp,
         buf: fs.existsSync(fp) ? fs.readFileSync(fp) : null,
         name: (prevMeta.fileNames && prevMeta.fileNames[id]) || `${id}.xlsx`,
       };
-      b2cMerge[id] = null;
     });
+    B2C_SLOT_IDS.forEach((id) => { b2cMerge[id] = null; });
 
-    clearReportSheetFiles();
-
+    const fileNames = { ...(prevMeta.fileNames || {}) };
     let rtlSnapshot = null;
 
     for (const id of REPORT_SLOT_IDS) {
       const entry = filesIn[id];
-      if (!entry || !entry.base64) continue;
+      if (!entry || !entry.base64) {
+        if (prevFiles[id].buf) slots.push(id);
+        continue;
+      }
       let buf = Buffer.from(String(entry.base64), 'base64');
-      if (!buf.length) continue;
+      if (!buf.length) {
+        if (prevFiles[id].buf) slots.push(id);
+        continue;
+      }
       let name = String(entry.name || `${id}.xlsx`).trim() || `${id}.xlsx`;
       if (B2C_SLOTS[id]) {
-        const prev = prevB2c[id];
+        const prev = prevFiles[id];
         const merged = pushLexusB2c(prev.buf, prev.name, buf, name, id);
         buf = merged.buffer;
         name = merged.name;
@@ -5005,14 +5010,6 @@ app.post('/api/report-sheet/push', (req, res) => {
         }
       }
     }
-
-    B2C_SLOT_IDS.forEach((id) => {
-      const prev = prevB2c[id];
-      if (!prev.buf || slots.includes(id)) return;
-      fs.writeFileSync(prev.fp, prev.buf);
-      fileNames[id] = prev.name;
-      slots.push(id);
-    });
 
     const meta = {
       at,

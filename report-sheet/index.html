@@ -23,7 +23,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261005tower" />
+  <link rel="stylesheet" href="dashboard.css?v=20261010alloc" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -1433,6 +1433,7 @@
 
           <div class="bo-kpis bas-kpi-row act-kpi-row" id="bas-kpis"></div>
 
+          <div class="act-charts">
           <div class="act-main-grid">
             <article class="card act-card act-hero-bars act-supply-card">
               <div class="pbi-viz-head act-supply-head">
@@ -1539,6 +1540,7 @@
               </div>
               <div class="table-wrap act-alert-table" id="act-alert-table"></div>
             </article>
+          </div>
           </div>
 
           <div class="act-details-block">
@@ -7794,6 +7796,7 @@
     document.body.classList.toggle("sr-mode", panelId === "salesreport");
     document.body.classList.toggle("pt-wide-mode", panelId === "plantracker");
     document.body.classList.toggle("boe-mode", panelId === "boerrors");
+    document.body.classList.toggle("alloc-mode", panelId === "boallocstock");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
@@ -11486,31 +11489,46 @@
     const leaves = ALLOCATION_ROWS.filter((r) => r.kind === "leaf");
     const boByLeaf = new Map();
     leaves.forEach((row) => boByLeaf.set(row.id, 0));
+    const bestLeafBySpec = new Map();
     bos.forEach((bo) => {
-      const units = basBoUnitCount(bo);
-      let best = null;
-      let bestScore = -1;
-      leaves.forEach((row) => {
-        if (!productMatchesAlloc(bo.product, row.product)) return;
-        const score = scoreSuffixMatch(bo.suffix || bo.sfx, row.sfx, row.product || bo.product);
-        if (score < 0) return;
-        if (score > bestScore) {
-          best = row;
-          bestScore = score;
-        }
-      });
-      if (best) boByLeaf.set(best.id, (boByLeaf.get(best.id) || 0) + units);
+      const spec = `${bo.product || ""}\0${bo.suffix || bo.sfx || ""}`;
+      let best = bestLeafBySpec.get(spec);
+      if (best === undefined) {
+        best = null;
+        let bestScore = -1;
+        leaves.forEach((row) => {
+          if (!productMatchesAlloc(bo.product, row.product)) return;
+          const score = scoreSuffixMatch(bo.suffix || bo.sfx, row.sfx, row.product || bo.product);
+          if (score < 0) return;
+          if (score > bestScore) {
+            best = row;
+            bestScore = score;
+          }
+        });
+        bestLeafBySpec.set(spec, best);
+      }
+      if (best) boByLeaf.set(best.id, (boByLeaf.get(best.id) || 0) + basBoUnitCount(bo));
     });
-    if (typeof console !== "undefined" && console.info) {
-      const matchedUnits = [...boByLeaf.values()].reduce((s, n) => s + n, 0);
-      console.info("[ACT BO match]", { boRows: bos.length, matchedUnits });
-    }
+    const stockGroups = new Map();
+    stockRows.forEach((s) => {
+      const spec = `${s.product || ""}\0${s.suffix || ""}`;
+      const group = stockGroups.get(spec);
+      if (group) group.count += 1;
+      else stockGroups.set(spec, { product: s.product, suffix: s.suffix, count: 1 });
+    });
+    const stockCountByLeaf = new Map();
+    leaves.forEach((row) => stockCountByLeaf.set(row.id, 0));
+    stockGroups.forEach((group) => {
+      leaves.forEach((row) => {
+        if (!productMatchesAlloc(group.product, row.product)) return;
+        if (!suffixMatchesAlloc(group.suffix, row.sfx, row.product || group.product)) return;
+        stockCountByLeaf.set(row.id, stockCountByLeaf.get(row.id) + group.count);
+      });
+    });
     return leaves.map((row) => {
       const allocation = Number(allocationValues[row.id]) || 0;
       const boCount = boByLeaf.get(row.id) || 0;
-      const stockCount = stockRows.filter((s) =>
-        productMatchesAlloc(s.product, row.product) && suffixMatchesAlloc(s.suffix, row.sfx, row.product || s.product)
-      ).length;
+      const stockCount = stockCountByLeaf.get(row.id) || 0;
       const gap = boCount - allocation;
       // Gap = BO − Allocation: positive = shortfall (below plan), negative = surplus (above plan)
       const status = gap > 0 ? "below" : gap < 0 ? "above" : "match";
@@ -12821,43 +12839,48 @@
     });
     renderBasTowerCharts(metrics);
 
-    renderBasTable(rows);
-
-    renderBasKpis(confirmedAllRows, {
-      kpiEl: "#bas-conf-kpis",
-      boLabel: "Confirmed back orders",
-      boSub: "Confirmed only · same product + suffix",
-      compact: true,
-    });
-    renderBasInsights(confirmedAllRows, {
-      insightEl: "#bas-conf-insights",
-      boWord: "Confirmed BO",
-    });
-    renderBasTable(confirmedRows, {
-      tableEl: "#bas-conf-table",
-      footEl: "#bas-conf-foot",
-      summaryEl: "#bas-conf-table-summary",
-      boColHeader: "Confirmed BO",
-    });
-    renderBasMonthlyCollection(d);
-    renderBasAllocatedVehicles(d);
+    const paintToken = (renderBoAllocStockDashboard.token = (renderBoAllocStockDashboard.token || 0) + 1);
+    const paintHeavy = () => {
+      if (paintToken !== renderBoAllocStockDashboard.token || activePanel !== "boallocstock") return;
+      renderBasTable(rows);
+      renderBasKpis(confirmedAllRows, {
+        kpiEl: "#bas-conf-kpis",
+        boLabel: "Confirmed back orders",
+        boSub: "Confirmed only · same product + suffix",
+        compact: true,
+      });
+      renderBasInsights(confirmedAllRows, {
+        insightEl: "#bas-conf-insights",
+        boWord: "Confirmed BO",
+      });
+      renderBasTable(confirmedRows, {
+        tableEl: "#bas-conf-table",
+        footEl: "#bas-conf-foot",
+        summaryEl: "#bas-conf-table-summary",
+        boColHeader: "Confirmed BO",
+      });
+      renderBasMonthlyCollection(d);
+      renderBasAllocatedVehicles(d);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(paintHeavy));
+    else paintHeavy();
 
     // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
-    // Force refresh so a newly saved day (e.g. day 3) is picked up without a full page reload.
+    // A full Refresh clears this cache first, so a new day file is still picked up.
     const monthKey = basMonthContext().monthKey;
-    ensureRtlActiveMonth(monthKey, true).then((pack) => {
-      if (!pack || activePanel !== "boallocstock") return;
-      if (!window._data) return;
-      const nextRows = filteredBasRows(buildBasRows(window._data));
-      const nextMetrics = computeBasTowerMetrics(window._data, nextRows);
-      actTowerCache = Object.assign(nextMetrics, { allRows: buildBasRows(window._data) });
+    const sourceData = d;
+    ensureRtlActiveMonth(monthKey, false).then((pack) => {
+      if (!pack || activePanel !== "boallocstock" || window._data !== sourceData) return;
+      const nextRows = filteredBasRows(allRows);
+      const nextMetrics = computeBasTowerMetrics(sourceData, nextRows);
+      actTowerCache = Object.assign(nextMetrics, { allRows });
       renderBasKpis(nextRows, {
         totalDemand: nextMetrics.totalDemand,
         lateRtl: nextMetrics.lateRtl,
         resReceived: nextMetrics.resReceived,
       });
       renderBasTowerCharts(nextMetrics);
-      renderBasMonthlyCollection(window._data);
+      if (paintToken === renderBoAllocStockDashboard.token) renderBasMonthlyCollection(sourceData);
     });
   }
 

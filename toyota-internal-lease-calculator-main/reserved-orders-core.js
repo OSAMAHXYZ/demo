@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { BoOrderLookup } = require('./scripts/bo-order-lookup');
 
 const STATUSES = [
     'تم الفوترة',
@@ -101,6 +102,17 @@ function parseExcelDate(value) {
         if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) return date;
     }
     if (/^\d+(\.\d+)?$/.test(text)) return serialToLocalDate(Number(text));
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (iso) {
+        const year = +iso[1];
+        const month = +iso[2];
+        const day = +iso[3];
+        const hh = iso[4] != null ? +iso[4] : 0;
+        const mi = iso[5] != null ? +iso[5] : 0;
+        const ss = iso[6] != null ? +iso[6] : 0;
+        const date = new Date(year, month - 1, day, hh, mi, ss);
+        if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) return date;
+    }
     return null;
 }
 
@@ -410,7 +422,7 @@ function rowFields(headers, line) {
         const label = cleanText(headers[i]) || columnLetter(i);
         const value = formatFieldValue(headers[i] || label, cell(line, i));
         if (!cleanText(headers[i]) && !value) continue;
-        fields.push({ label, value: value || '—' });
+        fields.push({ label, col: columnLetter(i), value: value || '—' });
     }
     return fields;
 }
@@ -420,41 +432,34 @@ function extractReservedRows(grid) {
     const headers = grid[headerIdx] || [];
     const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
     const orderCol = findHeaderIndex([/order\s*(no|number|#)?/, /sales\s*order/, /رقم الطلب/, /^bo$/], headers);
-    const productCol = findHeaderIndex([/product/, /model/, /vehicle/, /car/], headers);
-    const suffixCol = findHeaderIndex([/suffix/, /\bsfx\b/], headers);
-    const exteriorCol = findHeaderIndex([/exterior/, /ext(erior)?\s*color/, /ext colour/], headers);
-    const interiorCol = findHeaderIndex([/interior/, /int(erior)?\s*color/], headers);
-    const yearCol = findHeaderIndex([/model\s*year/, /\byear\b/, /سنة/], headers);
-    const advisorCol = findHeaderIndex([/sales\s*advisor/, /advisor/, /salesman/, /consultant/, /مستشار/], headers);
     const customerCol = findHeaderIndex([/customer\s*name/, /customer/, /guest/, /العميل/], headers);
     const createdCol = findHeaderIndex([/created\s*date/, /order\s*created/, /order\s*date/, /creation/], headers);
-    const assignCol = findHeaderIndex([/assign(?:ment|ed)?\s*date/, /order\s*assign/, /allocation\s*date/], headers);
     const paymentCol = findHeaderIndex([/payment\s*type/, /payment/, /finance\s*type/, /طريقة الدفع/], headers);
     const statusCol = findHeaderIndex([/^status$/, /current\s*status/, /الحالة/], headers);
-    const searchCol = findHeaderIndex([/vehicle\s*search\s*area/, /search\s*area\s*desc/, /search\s*area/], headers);
-    const shareCol = findHeaderIndex([/shar(?:e|ing)\s*level/, /stock\s*sharing/, /^sharing$/], headers);
 
     const rows = [];
     for (let r = headerIdx + 1; r < grid.length; r++) {
         const line = grid[r] || [];
         if (!line.some((v) => cleanText(v))) continue;
+        if (cleanText(cell(line, columnIndex('I'))).toLowerCase() === 'product' && /model year/i.test(cleanText(cell(line, columnIndex('K'))))) continue;
         rows.push({
             rowIndex: r + 1,
             vin: cell(line, vinCol >= 0 ? vinCol : COL.vin),
             orderNumber: cell(line, orderCol >= 0 ? orderCol : COL.order),
-            vehicle: cell(line, productCol >= 0 ? productCol : COL.product),
-            suffix: cell(line, suffixCol >= 0 ? suffixCol : COL.suffix),
-            exterior: cell(line, exteriorCol >= 0 ? exteriorCol : COL.exterior),
-            interior: cell(line, interiorCol >= 0 ? interiorCol : COL.interior),
-            modelYear: yearCol >= 0 ? cell(line, yearCol) : '',
-            salesAdvisor: advisorCol >= 0 ? cell(line, advisorCol) : '',
+            vehicle: cell(line, columnIndex('I')),
+            suffix: cell(line, columnIndex('J')),
+            exterior: cell(line, columnIndex('M')),
+            interior: cell(line, columnIndex('N')),
+            modelYear: cell(line, columnIndex('K')),
+            salesAdvisor: cell(line, columnIndex('T')),
             customerName: customerCol >= 0 ? cell(line, customerCol) : '',
             createdRaw: createdCol >= 0 ? cell(line, createdCol) : '',
-            assignRaw: filledCell(cell(line, COL.assign)) || (assignCol >= 0 && assignCol !== COL.assign ? cell(line, assignCol) : ''),
+            assignRaw: cell(line, columnIndex('G')),
             paymentRaw: paymentCol >= 0 ? cell(line, paymentCol) : '',
             statusRaw: statusCol >= 0 ? cell(line, statusCol) : '',
-            searchArea: filledCell(cell(line, COL.searchArea)) || (searchCol >= 0 && searchCol !== COL.searchArea ? cell(line, searchCol) : ''),
-            shareLevel: shareCol >= 0 ? cell(line, shareCol) : '',
+            searchArea: filledCell(cell(line, columnIndex('B'))) || filledCell(cell(line, columnIndex('A'))),
+            shareLevel: cell(line, columnIndex('C')),
+            reservationAge: cell(line, columnIndex('P')),
             fields: rowFields(headers, line)
         });
     }
@@ -572,13 +577,50 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
         };
     }
     const extracted = extractReservedRows(sheet.grid || []);
+    const readableRows = (sheet.grid || []).filter((line) => (line || []).some((value) => cleanText(value))).length;
+    if (!extracted.rows.length && readableRows > 1 && (previous || []).length) {
+        return {
+            ok: false,
+            error: 'E-Sales rows could not be read. Existing reserved orders were kept.',
+            orders: previous,
+            report: emptyReport()
+        };
+    }
     const backOrder = indexBackOrder(boRows, boHeaders);
     const rtlAges = rtlByVin instanceof Map ? rtlByVin : new Map();
     const previousByKey = new Map();
     (previous || []).forEach((order) => {
-        if (order && order.key) previousByKey.set(order.key, order);
-        if (order && order.vin) previousByKey.set(`vin:${order.vin}`, order);
+        if (!order) return;
+        if (order.key) previousByKey.set(order.key, order);
+        const vin = normalizeVin(order.vin);
+        if (vin) previousByKey.set(`vin:${vin}`, order);
+        const orderNo = cleanText(order.orderNumber).toLowerCase();
+        if (orderNo && orderNo !== 'no order') previousByKey.set(`order:${orderNo}`, order);
     });
+    function earlierOrder(row, vin) {
+        const orderNo = cleanText(row.orderNumber).toLowerCase();
+        return (vin && previousByKey.get(`vin:${vin}`)) || (orderNo && orderNo !== 'no order' && previousByKey.get(`order:${orderNo}`)) || null;
+    }
+    function carryForward(prev, record) {
+        if (!prev) return record;
+        const assignmentHistory = Array.isArray(prev.assignmentHistory) ? prev.assignmentHistory.slice() : [];
+        if (prev.salesAdvisor !== record.salesAdvisor || prev.assignDate !== record.assignDate) {
+            assignmentHistory.push({
+                salesAdvisor: record.salesAdvisor,
+                assignDate: record.assignDisplay || record.assignDate,
+                at: localStamp(new Date())
+            });
+        }
+        return {
+            ...record,
+            key: prev.key || record.key,
+            status: normalizeStatus(prev.status),
+            statusChangedBy: prev.statusChangedBy || '',
+            statusChangedAt: prev.statusChangedAt || '',
+            history: Array.isArray(prev.history) ? prev.history : [],
+            assignmentHistory
+        };
+    }
 
     const byVin = new Map();
     const noVin = [];
@@ -593,24 +635,24 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
             noVin.push(row);
             return;
         }
-        const assign = parseExcelDate(prefer(row.assignRaw, bo && bo.assignRaw));
+        const assign = parseExcelDate(row.assignRaw);
         const created = parseExcelDate(prefer(row.createdRaw, bo && bo.createdRaw));
         const payment = normalizePayment(prefer(row.paymentRaw, bo && bo.paymentRaw));
         const key = `vin:${vin}`;
-        const prev = previousByKey.get(key);
-        const record = {
+        const prev = earlierOrder(row, vin);
+        const record = carryForward(prev, {
             key,
             vin,
             orderNumber: prefer(row.orderNumber, bo && bo.orderNumber) || 'NO ORDER',
-            salesAdvisor: prefer(row.salesAdvisor, bo && bo.salesAdvisor) || 'UNASSIGNED',
+            salesAdvisor: cleanText(row.salesAdvisor) || 'UNASSIGNED',
             customerName: prefer(row.customerName, bo && bo.customerName),
-            vehicle: [prefer(row.vehicle, bo && bo.vehicle), cleanText(row.suffix)].filter(Boolean).join(' ').trim(),
-            modelYear: prefer(row.modelYear, bo && bo.modelYear),
-            exterior: prefer(row.exterior, bo && bo.exterior),
-            interior: prefer(row.interior, bo && bo.interior),
+            vehicle: cleanText(row.vehicle),
+            modelYear: cleanText(row.modelYear),
+            exterior: cleanText(row.exterior),
+            interior: cleanText(row.interior),
             searchArea: cleanText(row.searchArea) || '—',
             shareLevel: cleanText(row.shareLevel) || '—',
-            allocationAging: rtlAges.has(vin) ? rtlAges.get(vin) : null,
+            allocationAging: parseAgingDays(row.reservationAge),
             fields: Array.isArray(row.fields) ? row.fields : [],
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
@@ -620,21 +662,14 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
             paymentLabel: payment.kind === 'unknown' ? 'UNKNOWN' : payment.label,
             paymentHours: payment.hours,
             deadline: assign ? localStamp(new Date(assign.getTime() + payment.hours * 3600000)) : '',
-            status: prev ? normalizeStatus(prev.status) : normalizeStatus(row.statusRaw),
-            statusChangedBy: prev ? prev.statusChangedBy || '' : '',
-            statusChangedAt: prev ? prev.statusChangedAt || '' : '',
-            history: Array.isArray(prev && prev.history) ? prev.history : [],
-            assignmentHistory: Array.isArray(prev && prev.assignmentHistory) ? prev.assignmentHistory : [],
+            status: normalizeStatus(row.statusRaw),
+            statusChangedBy: '',
+            statusChangedAt: '',
+            history: [],
+            assignmentHistory: [],
             matchedBackOrder: Boolean(bo),
             sourceRow: row.rowIndex
-        };
-        if (prev && (prev.salesAdvisor !== record.salesAdvisor || prev.assignDate !== record.assignDate)) {
-            record.assignmentHistory = record.assignmentHistory.concat([{
-                salesAdvisor: record.salesAdvisor,
-                assignDate: record.assignDisplay || record.assignDate,
-                at: localStamp(new Date())
-            }]);
-        }
+        });
         if (byVin.has(vin)) duplicateVinRows += 1;
         const existing = byVin.get(vin);
         if (!existing || record.sourceRow >= existing.sourceRow) byVin.set(vin, record);
@@ -643,25 +678,25 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
     noVin.forEach((row, index) => {
         const orderNumber = cleanText(row.orderNumber);
         const bo = backOrder.byOrder.get(orderNumber.toLowerCase()) || null;
-        const assign = parseExcelDate(prefer(row.assignRaw, bo && bo.assignRaw));
+        const assign = parseExcelDate(row.assignRaw);
         const created = parseExcelDate(prefer(row.createdRaw, bo && bo.createdRaw));
         const payment = normalizePayment(prefer(row.paymentRaw, bo && bo.paymentRaw));
         const key = orderNumber ? `order:${orderNumber.toLowerCase()}` : `missing:${index}`;
-        const prev = previousByKey.get(key);
+        const prev = earlierOrder(row, '');
         if (byVin.has(key)) return;
-        noVinKeysSet(byVin, key, {
+        noVinKeysSet(byVin, prev && prev.key ? prev.key : key, carryForward(prev, {
             key,
             vin: 'VIN NOT FOUND',
             orderNumber: orderNumber || (bo && bo.orderNumber) || 'NO ORDER',
-            salesAdvisor: prefer(row.salesAdvisor, bo && bo.salesAdvisor) || 'UNASSIGNED',
+            salesAdvisor: cleanText(row.salesAdvisor) || 'UNASSIGNED',
             customerName: prefer(row.customerName, bo && bo.customerName),
-            vehicle: [prefer(row.vehicle, bo && bo.vehicle), cleanText(row.suffix)].filter(Boolean).join(' ').trim(),
-            modelYear: prefer(row.modelYear, bo && bo.modelYear),
-            exterior: prefer(row.exterior, bo && bo.exterior),
-            interior: prefer(row.interior, bo && bo.interior),
+            vehicle: cleanText(row.vehicle),
+            modelYear: cleanText(row.modelYear),
+            exterior: cleanText(row.exterior),
+            interior: cleanText(row.interior),
             searchArea: cleanText(row.searchArea) || '—',
             shareLevel: cleanText(row.shareLevel) || '—',
-            allocationAging: null,
+            allocationAging: parseAgingDays(row.reservationAge),
             fields: Array.isArray(row.fields) ? row.fields : [],
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
@@ -671,14 +706,14 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
             paymentLabel: payment.kind === 'unknown' ? 'UNKNOWN' : payment.label,
             paymentHours: payment.hours,
             deadline: assign ? localStamp(new Date(assign.getTime() + payment.hours * 3600000)) : '',
-            status: prev ? normalizeStatus(prev.status) : normalizeStatus(row.statusRaw),
-            statusChangedBy: prev ? prev.statusChangedBy || '' : '',
-            statusChangedAt: prev ? prev.statusChangedAt || '' : '',
-            history: Array.isArray(prev && prev.history) ? prev.history : [],
-            assignmentHistory: Array.isArray(prev && prev.assignmentHistory) ? prev.assignmentHistory : [],
+            status: normalizeStatus(row.statusRaw),
+            statusChangedBy: '',
+            statusChangedAt: '',
+            history: [],
+            assignmentHistory: [],
             matchedBackOrder: Boolean(bo),
             sourceRow: row.rowIndex
-        });
+        }));
     });
 
     const orders = applyQueue(Array.from(byVin.values()));
@@ -736,6 +771,75 @@ function emptyReport() {
         sampleDeadlines: [],
         sampleQueue: []
     };
+}
+
+function reservedColumn(order, letter) {
+    const want = String(letter || '').toUpperCase();
+    const fields = Array.isArray(order && order.fields) ? order.fields : [];
+    const hit = fields.find((field) => {
+        const label = String(field.label || '').trim().toUpperCase();
+        const col = String(field.col || '').trim().toUpperCase();
+        return label === want || col === want;
+    });
+    const value = hit ? String(hit.value == null ? '' : hit.value).trim() : '';
+    if (!value || value === '—' || value === '-') return '';
+    return value;
+}
+
+function withColorQueue(orders, table) {
+    const rows = table && Array.isArray(table.rows) ? table.rows : [];
+    const headers = table && Array.isArray(table.headers) ? table.headers : [];
+    const list = Array.isArray(orders) ? orders : [];
+    if (!rows.length || !headers.length) return list.map((order) => ({ ...order, ahead: [] }));
+    const lookup = BoOrderLookup.fromBoData({ rows, headers });
+    const productColumn = lookup.resolveColumn(headers, [/^product$/i, /product/i, /model/i]);
+    const suffixColumn = lookup.resolveColumn(headers, [/^alj\s*suffix$/i, /\balj\s*suffix\b/i, /^au\s*suffix$/i, /\bau\s*suffix\b/i, /suffix/i, /trim/i, /grade/i]);
+    const dateColumn = lookup.resolveReservationCreatedDateColumn(headers);
+    const orderColumn = lookup.resolveBackOrderColumn(headers, null);
+    const extCols = [1, 2, 3].map((n) => lookup.resolvePriorityColumn(headers, 'ext', n));
+    const intCols = [1, 2, 3].map((n) => lookup.resolvePriorityColumn(headers, 'int', n));
+    const salesmanColumn = lookup.resolveColumn(headers, [/salesman\s*name/i, /salesman/i, /sales\s*advisor/i]);
+    const allEntries = suffixColumn && extCols[0] && intCols[0]
+        ? lookup.mergeOrderEntries(rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols)
+        : [];
+    const cache = new Map();
+    return list.map((order) => {
+        const product = reservedColumn(order, 'I');
+        const suffix = reservedColumn(order, 'J');
+        const exterior = reservedColumn(order, 'M');
+        const interior = reservedColumn(order, 'N');
+        if (!allEntries.length || !suffix || !exterior || !interior) return { ...order, ahead: [] };
+        const key = [product, suffix, exterior, interior].map((item) => lookup.normalizeText(item)).join('\u0001');
+        if (!cache.has(key)) {
+            const refPair = {
+                tier: 1,
+                exterior,
+                interior,
+                extNorm: lookup.normalizeText(exterior),
+                intNorm: lookup.normalizeText(interior)
+            };
+            const productNorm = lookup.normalizeText(product);
+            const suffixNorm = lookup.normalizeText(suffix);
+            cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
+                if (productColumn && productNorm && lookup.normalizeText(entry.product) !== productNorm) return false;
+                if (lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
+                return lookup.entryMatchesRefPair(entry.pairs, refPair);
+            })));
+        }
+        const needle = lookup.normalizeText(order.orderNumber);
+        const ahead = [];
+        cache.get(key).forEach((entry) => {
+            if (ahead.length >= 3) return;
+            if (needle && entry.orderNorm === needle) return;
+            ahead.push({
+                queueNumber: ahead.length + 1,
+                orderNumber: entry.orderNumber,
+                salesAdvisor: salesmanColumn ? String(entry.row[salesmanColumn] || '').trim() : '',
+                vehicle: [entry.product, entry.suffix].filter(Boolean).join(' ')
+            });
+        });
+        return { ...order, ahead };
+    });
 }
 
 function publicOrder(order) {
@@ -1089,7 +1193,10 @@ function attachReservedOrders(app, options) {
         };
         const previousOrders = previous || loadLive().orders || [];
         const previousKeys = new Set(previousOrders.map((order) => order.key));
+        const nextKeys = new Set(built.orders.map((order) => order.key));
         const created = built.orders.filter((order) => !previousKeys.has(order.key)).length;
+        const updated = built.orders.length - created;
+        const removed = previousOrders.filter((order) => !nextKeys.has(order.key)).length;
         saveLive(live);
         const version = writeArchive(live, names.actor || { name: 'Admin Push' });
         audit(names.req, {
@@ -1100,7 +1207,7 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed}`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
@@ -1161,7 +1268,8 @@ function attachReservedOrders(app, options) {
     });
     app.get('/api/reserved-orders/live', (req, res) => {
         const live = loadLive();
-        res.json({ updatedAt: live.updatedAt || '', report: live.report || {}, orders: (live.orders || []).map(publicOrder) });
+        const orders = withColorQueue(live.orders || [], loadBoTable());
+        res.json({ updatedAt: live.updatedAt || '', report: live.report || {}, orders: orders.map(publicOrder) });
     });
     app.post('/api/reserved-orders/status', (req, res) => {
         const user = sessionUser(req.body?.token);

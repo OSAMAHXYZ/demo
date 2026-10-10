@@ -209,9 +209,10 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 #app .brand strong { display: block; font-size: 13px; line-height: 1.1; color: #fff; }
 #app .brand span { display: block; font-size: 11px; color: #93a0b8; }
 #app .jump { display: flex; gap: 4px; }
-#app .jump button {
+#app .jump button, #app .jump a {
     border: 0; background: transparent; color: #b7c3d6;
     font-weight: 700; font-size: 13px; border-radius: 999px; padding: 6px 12px;
+    text-decoration: none;
 }
 #app .jump button.nav-on { background: var(--red); color: #fff; }
 #app .who b { color: #fff; }
@@ -279,9 +280,10 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
     flex: 0 0 auto;
 }
 #app .order-block.expired { box-shadow: inset 3px 0 0 #fb7185; }
+#app .lane.no-specs { grid-template-columns: 168px minmax(280px, 1fr) 228px; }
 #app .lane {
     display: grid;
-    grid-template-columns: 168px minmax(0, 1.35fr) minmax(220px, 1.05fr) 176px;
+    grid-template-columns: 168px minmax(0, 1.35fr) minmax(220px, 1.05fr) 228px;
     gap: 12px;
     align-items: start;
     padding: 12px;
@@ -370,7 +372,7 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 #app .ahead-list b, #app .ahead-empty { display: block; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #app .ahead-empty { color: #93a0b8; font-weight: 600; }
 #app .lane-side { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-#app .timer { font-size: 18px; margin: 0; line-height: 1.1; color: #34d399; }
+#app .timer { font-size: 15px; margin: 0; line-height: 1.3; color: #34d399; white-space: normal; }
 #app .timer.soon { color: #fbbf24; }
 #app .timer.expired { color: #fb7185; }
 #app .badge { background: rgba(96, 165, 250, 0.16); color: #93c5fd; }
@@ -575,7 +577,7 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
     #app .tower { overflow: visible; }
     #app .cards { overflow: visible; }
     #app .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    #app .lane { grid-template-columns: 1fr; }
+    #app .lane, #app .lane.no-specs { grid-template-columns: 1fr; }
     #app .lane-side { grid-column: auto; }
 }
 @media (max-height: 820px) {
