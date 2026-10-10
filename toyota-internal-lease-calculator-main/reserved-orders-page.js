@@ -530,6 +530,43 @@
     $('msg-copy').addEventListener('click', () => { const text = buildMessage(); if (text) navigator.clipboard.writeText(text).catch(() => {}); });
     $('msg-reset').addEventListener('click', () => { ['msg-customer', 'msg-phone', 'msg-note'].forEach((id) => { $(id).value = ''; }); paintMessage(); });
 
+    async function paintMyAlerts() {
+        const box = $('my-bo-alerts');
+        const session = readSession();
+        if (!box || !session) return;
+        const res = await fetch('/api/reserved-orders/my-bo-corrections?token=' + encodeURIComponent(session.token));
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.alerts || [];
+        box.innerHTML = items.map((item) => `<article class="my-alert">
+            <h3>BO Correction Required</h3>
+            <p><b>${esc(item.name)}</b> · ${esc(item.product || 'All cars')} · ${esc(item.column)}</p>
+            <p>Incorrect: ${esc(item.incorrectValue || 'blank')} · Correct: ${esc(item.correctValue || '—')} · Orders: ${item.affectedOrderCount}</p>
+            <p>${esc(item.message)}</p>
+            <p>Status: ${esc(item.status)}</p>
+            <button type="button" data-my-orders="${esc(item.ruleId)}">View My Orders</button>
+            <button type="button" data-my-status="viewed" data-rule="${esc(item.ruleId)}">Viewed</button>
+            <button type="button" data-my-status="in_progress" data-rule="${esc(item.ruleId)}">In Progress</button>
+            <button type="button" data-my-status="completed" data-rule="${esc(item.ruleId)}">Completed</button>
+            <div id="my-orders-${esc(item.ruleId)}"></div>
+        </article>`).join('');
+        box.querySelectorAll('[data-my-orders]').forEach((button) => button.addEventListener('click', () => {
+            const item = items.find((row) => row.ruleId === button.dataset.myOrders);
+            const target = document.getElementById('my-orders-' + item.ruleId);
+            target.innerHTML = `<table class="br-table"><thead><tr><th>Back Order Number</th><th>Product</th><th>Model Year</th><th>Current</th><th>Correct</th><th>Order Date</th><th></th></tr></thead><tbody>
+                ${(item.orders || []).map((order) => `<tr><td>${esc(order.boNumber)}</td><td>${esc(order.product)}</td><td>${esc(order.modelYear)}</td><td>${esc(order.currentValue)}</td><td>${esc(order.correctValue)}</td><td>${esc(order.orderDate)}</td><td><button type="button" data-order-done="${esc(item.ruleId)}" data-bo="${esc(order.boNumber)}">Completed</button></td></tr>`).join('')}
+            </tbody></table>`;
+            markAlert(item.ruleId, 'viewed');
+            target.querySelectorAll('[data-order-done]').forEach((done) => done.addEventListener('click', () => markAlert(done.dataset.orderDone, 'completed', done.dataset.bo)));
+        }));
+        box.querySelectorAll('[data-my-status]').forEach((button) => button.addEventListener('click', () => markAlert(button.dataset.rule, button.dataset.myStatus)));
+    }
+    async function markAlert(ruleId, status, boNumber) {
+        const session = readSession();
+        if (!session) return;
+        await fetch('/api/reserved-orders/my-bo-corrections/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: session.token, ruleId, status, boNumber }) });
+        paintMyAlerts();
+    }
     function openApp() {
         const session = readSession();
         if (!session || Date.now() - session.last >= IDLE_MS) return endSession('timeout');
@@ -542,6 +579,7 @@
         $('msg-advisor').value = session.name;
         loadLive();
         loadVehicles();
+        paintMyAlerts();
         if (clock) clearInterval(clock);
         clock = setInterval(tickTimers, 1000);
     }
@@ -550,7 +588,7 @@
         const socket = new WebSocket(`${protocol}//${location.host}`);
         socket.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') loadLive();
+            if (msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') { loadLive(); paintMyAlerts(); }
         });
     } catch (e) { /* polling remains */ }
     setInterval(() => { if (readSession()) loadLive(); }, 8000);

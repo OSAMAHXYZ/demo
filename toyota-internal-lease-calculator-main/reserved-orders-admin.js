@@ -145,6 +145,7 @@
     }
     function fillAlertFields() {
         const select = $('alert-field');
+        if (!select) return;
         const current = select.value;
         select.innerHTML = '<option value="">Choose a BO column</option>' + alertFields.map((field) => `<option value="${esc(field.name)}">${esc(field.name)}</option>`).join('');
         if (current) select.value = current;
@@ -172,6 +173,7 @@
         return `${rule.field} ${ALERT_OPS[rule.operator] || rule.operator} ${rule.operator === 'empty' || rule.operator === 'not_empty' ? '' : rule.value}`;
     }
     function renderAlerts() {
+        if (!$('alert-list')) return;
         $('alert-list').innerHTML = `<h2>Alerts employees can see</h2>` + (alerts.length ? alerts.map((rule) => `<article class="panel" style="margin-bottom:10px;">
             <b>${esc(rule.message)}</b>
             <p>${esc(alertRuleText(rule))}</p>
@@ -214,7 +216,7 @@
             alertFields = alertData.fields || [];
             alertProducts = alertData.products || [];
             fillAlertFields();
-            fillErrorAlertForm();
+            if ($('error-alert-type')) fillErrorAlertForm();
         } catch (e) { alerts = []; alertFields = []; }
         renderAll();
     }
@@ -287,7 +289,7 @@
             reader.readAsDataURL(file);
         });
     }
-    $('save-error-alert').addEventListener('click', async () => {
+    if ($('save-error-alert')) $('save-error-alert').addEventListener('click', async () => {
         $('error-alert-error').textContent = '';
         const errorId = $('error-alert-type').value;
         const message = $('error-alert-message').value.trim();
@@ -306,8 +308,8 @@
             $('error-alert-message').value = '';
         } catch (e) { if (e.message !== 'unauthorized') $('error-alert-error').textContent = e.message; }
     });
-    $('alert-field').addEventListener('change', fillAlertValues);
-    $('save-alert').addEventListener('click', async () => {
+    if ($('alert-field')) $('alert-field').addEventListener('change', fillAlertValues);
+    if ($('save-alert')) $('save-alert').addEventListener('click', async () => {
         $('alert-error').textContent = '';
         const field = $('alert-field').value;
         const message = $('alert-message').value.trim();
@@ -326,7 +328,7 @@
             $('alert-value').value = '';
         } catch (e) { if (e.message !== 'unauthorized') $('alert-error').textContent = e.message; }
     });
-    $('alert-list').addEventListener('click', async (event) => {
+    if ($('alert-list')) $('alert-list').addEventListener('click', async (event) => {
         const del = event.target.closest('[data-alert-del]');
         const off = event.target.closest('[data-alert-off]');
         if (!del && !off) return;

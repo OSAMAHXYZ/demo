@@ -755,6 +755,14 @@ function publicStaff(person) {
     };
 }
 
+function firstWorksheetTableFromBuffer(buffer) {
+    if (!buffer || !buffer.length) return { headers: [], rows: [], sheetName: '' };
+    const sheets = sheetGridsFromBuffer(buffer);
+    const first = sheets[0] || { name: '', grid: [] };
+    const table = rowsFromGrid(first.grid);
+    return { headers: table.headers, rows: table.rows, sheetName: first.name || '' };
+}
+
 function backOrderTableFromBuffer(buffer) {
     if (!buffer || !buffer.length) return { headers: [], rows: [] };
     const sheets = sheetGridsFromBuffer(buffer);
@@ -1048,6 +1056,18 @@ function attachReservedOrders(app, options) {
         return version;
     }
     ensureStaff();
+    const boRulesApi = require('./bo-error-rules').attachBoErrorRules(app, {
+        storeDir: options.storeDir,
+        requireAdmin,
+        audit,
+        sessionUser,
+        loadStaff,
+        loadAnalysisTable() {
+            if (typeof options.readAnalysisBackOrder === 'function') return options.readAnalysisBackOrder();
+            const table = loadBoTable();
+            return { headers: table.headers, rows: table.rows, fileName: '', updatedAt: '', sheetName: '' };
+        }
+    });
     function backOrderFromBuffer(buffer) {
         return backOrderTableFromBuffer(buffer);
     }
@@ -1087,6 +1107,7 @@ function attachReservedOrders(app, options) {
         }
         audit(names.req, { user: 'System', role: 'system', action: 'QUEUE_RECALCULATED', entity: 'queue', source: 'import', details: `Queue ranked for ${built.orders.length} orders` });
         notify();
+        if (boRulesApi) boRulesApi.reanalyzeActive(names.req, 'BO_FILE_UPDATED');
         return { ...built, version };
     }
 
@@ -1320,12 +1341,18 @@ function attachReservedOrders(app, options) {
 
     return {
         refreshFromBuffers(esalesBuffer, boBuffer, names) {
-            if (!esalesBuffer || !esalesBuffer.length) return null;
+            if (!esalesBuffer || !esalesBuffer.length) {
+                if (boRulesApi) boRulesApi.reanalyzeActive((names && names.req) || null, 'BO_FILE_UPDATED');
+                return null;
+            }
             const sheets = sheetGridsFromBuffer(esalesBuffer);
             const bo = backOrderFromBuffer(boBuffer);
             const meta = names || {};
             const rtlSheets = meta.rtlBuffer && meta.rtlBuffer.length ? sheetGridsFromBuffer(meta.rtlBuffer) : (meta.rtlSheets || []);
             return publish(sheets, bo, Object.assign({}, meta, { rtlSheets }));
+        },
+        reanalyzeActive(req) {
+            if (boRulesApi) boRulesApi.reanalyzeActive(req || null, 'BO_FILE_UPDATED');
         }
     };
 }
@@ -1343,6 +1370,7 @@ module.exports = {
     normalizeStatus,
     sheetGridsFromBuffer,
     backOrderTableFromBuffer,
+    firstWorksheetTableFromBuffer,
     calculateQueueNumber,
     getNextThreeOrders,
     buildReservedDataset,

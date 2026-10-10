@@ -83,60 +83,7 @@
                 </section>
             </section>
             <section id="panel-alerts" class="hidden">
-                <div class="admin-grid">
-                    <section class="panel">
-                        <h2>Alert employees about a BO error</h2>
-                        <p>Choose the back-order error and write the message. Employees see it at the bottom of Message Builder. Leave the car on All cars, or limit it to one model.</p>
-                        <div class="stack">
-                            <label class="field"><span>BO error</span><select id="error-alert-type"></select></label>
-                            <label class="field"><span>Car</span><select id="error-alert-car"><option value="">All cars</option></select></label>
-                            <label class="field"><span>Message shown to the employee</span><textarea id="error-alert-message" rows="3" placeholder="Write the alert employees should see"></textarea></label>
-                            <label class="field"><span>Style</span>
-                                <select id="error-alert-tone">
-                                    <option value="info">Info</option>
-                                    <option value="warning" selected>Warning</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                            </label>
-                            <label><input id="error-alert-active" type="checkbox" checked> Active</label>
-                            <button class="solid" id="save-error-alert" type="button">Send alert</button>
-                            <div class="err" id="error-alert-error"></div>
-                        </div>
-                    </section>
-                    <section class="panel" id="alert-list"></section>
-                </div>
-                <section class="panel" style="margin-top:12px;">
-                        <h2>Alert when a BO column matches</h2>
-                        <p>Columns come from the Back Order file pushed in Report Sheet admin. When an employee looks up a matching order, they see this message.</p>
-                        <div class="stack">
-                            <label class="field"><span>BO column</span><select id="alert-field"></select></label>
-                            <label class="field"><span>Condition</span>
-                                <select id="alert-operator">
-                                    <option value="equals">Equals</option>
-                                    <option value="not_equals">Does not equal</option>
-                                    <option value="contains">Contains</option>
-                                    <option value="not_contains">Does not contain</option>
-                                    <option value="gt">Greater than</option>
-                                    <option value="lt">Less than</option>
-                                    <option value="empty">Is empty</option>
-                                    <option value="not_empty">Is not empty</option>
-                                </select>
-                            </label>
-                            <label class="field"><span>Value</span><input id="alert-value" list="alert-values" placeholder="Value from the BO file"></label>
-                            <datalist id="alert-values"></datalist>
-                            <label class="field"><span>Message shown to the employee</span><textarea id="alert-message" rows="3" placeholder="Write the alert"></textarea></label>
-                            <label class="field"><span>Style</span>
-                                <select id="alert-tone">
-                                    <option value="info">Info</option>
-                                    <option value="warning" selected>Warning</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                            </label>
-                            <label><input id="alert-active" type="checkbox" checked> Active</label>
-                            <button class="solid" id="save-alert" type="button">Save alert</button>
-                            <div class="err" id="alert-error"></div>
-                        </div>
-                </section>
+                <div id="boe-rules-root"></div>
             </section>
             <section id="panel-archive" class="hidden">
                 <div class="panel" style="overflow:auto;"><table><thead><tr><th>Version</th><th>Date</th><th>Uploaded by</th><th>E-Sales</th><th>BO</th><th>Reserved</th><th>Matched</th><th>Unmatched</th><th></th></tr></thead><tbody id="archive-rows"></tbody></table></div>
@@ -164,5 +111,6 @@
         <aside id="drawer" class="drawer hidden"></aside>
     </div>
     <script src="reserved-orders-admin.js"></script>
+    <script src="bo-rules-ui.js"></script>
 </body>
 </html>

@@ -317,6 +317,26 @@ body.dash { min-height: 100vh; background: var(--bg); }
 #overlay-message .msg-alert.warning { background: #fffbeb; border-color: #fde68a; }
 #overlay-message .msg-alert.urgent { background: #fef2f2; border-color: #fecaca; }
 #overlay-message .msg-alerts .muted { color: #64748b; margin: 0; }
+.br-page { display: flex; flex-direction: column; gap: 12px; }
+.br-file, .br-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.br-file div, .br-kpis article { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.br-file b, .br-kpis span { display: block; color: var(--muted); font-size: 12px; }
+.br-kpis strong { font-size: 22px; }
+.br-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.br-head input, .br-form input, .br-form select, .br-form textarea, .br-wa textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.br-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.br-form .wide, .br-form .check { grid-column: 1 / -1; }
+.br-buttons { display: flex; gap: 8px; margin-top: 10px; }
+.br-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.br-table th, .br-table td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 6px; vertical-align: top; }
+.br-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.br-actions button, .br-table button, .br-buttons button, .br-wa button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 8px; }
+.br-flag { color: var(--bad); font-size: 12px; }
+.br-history { margin: 0; padding-left: 18px; }
+.my-alerts:empty { display: none; }
+.my-alert { background: #fff; border: 1px solid #fecaca; border-left: 4px solid var(--red); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+.my-alert h3 { margin: 0 0 6px; }
+@media (max-width: 900px) { .br-file, .br-kpis, .br-form { grid-template-columns: 1fr; } }
 .overlay-panel.navy { background: var(--navy); color: #fff; }
 #overlay-lookup.overlay {
     inset: 0;

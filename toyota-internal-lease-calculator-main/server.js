@@ -132,6 +132,7 @@ app.post('/api/delivery-note/generate', (req, res) => {
 const DATA_FILE = path.join(__dirname, 'admin-data.json');
 const QUEUE_LOG_FILE = path.join(__dirname, 'queue-log.json');
 const BO_DATA_FILE = path.join(__dirname, 'bo-data.json');
+let reservedOrdersHub = null;
 const BO_LOOKUP_STATS_FILE = path.join(__dirname, 'bo-lookup-stats.json');
 const DELIVERY_INVENTORY_FILE = path.join(__dirname, 'delivery-inventory-data.json');
 
@@ -1677,6 +1678,11 @@ app.post('/api/bo-data/upload', authenticateBackend, express.json({ limit: '100m
         };
 
         fs.writeFileSync(BO_DATA_FILE, JSON.stringify(payload, null, 2), 'utf8');
+        if (reservedOrdersHub && typeof reservedOrdersHub.reanalyzeActive === 'function') {
+            try { reservedOrdersHub.reanalyzeActive(req); } catch (reanalyzeError) {
+                console.error('BO error rules were not re-analyzed:', reanalyzeError.message);
+            }
+        }
         const skipped = workbook.SheetNames.slice(1);
         res.json({
             success: true,
@@ -5160,7 +5166,7 @@ app.delete('/api/delivery-coordinator/queue/:vin', (req, res) => {
 
 try {
     const reservedOrdersApi = require('./reserved-orders-core');
-    reservedOrdersApi.attachReservedOrders(app, {
+    reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
         storeDir: path.join(__dirname, '..', 'report-sheet-data'),
         adminPassword: BACKEND_PASSWORD,
         broadcast() {},
@@ -5171,6 +5177,21 @@ try {
                 return { headers: data.headers || [], rows: data.rows || [] };
             } catch (e) {
                 return { headers: [], rows: [] };
+            }
+        },
+        readAnalysisBackOrder() {
+            try {
+                if (!fs.existsSync(BO_DATA_FILE)) return { headers: [], rows: [], fileName: '', updatedAt: '', sheetName: '' };
+                const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
+                return {
+                    headers: data.headers || [],
+                    rows: data.rows || [],
+                    fileName: data.filename || '',
+                    updatedAt: data.uploadedAt || '',
+                    sheetName: data.sheetName || ''
+                };
+            } catch (e) {
+                return { headers: [], rows: [], fileName: '', updatedAt: '', sheetName: '' };
             }
         }
     });

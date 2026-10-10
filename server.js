@@ -7945,6 +7945,19 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+  },
+  readAnalysisBackOrder() {
+    const boPath = reportSheetFilePath('backorder');
+    if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [], fileName: '', updatedAt: '', sheetName: '' };
+    const stat = fs.statSync(boPath);
+    const table = reservedOrdersApi.firstWorksheetTableFromBuffer(fs.readFileSync(boPath));
+    return {
+      headers: table.headers,
+      rows: table.rows,
+      sheetName: table.sheetName || '',
+      fileName: path.basename(boPath),
+      updatedAt: stat.mtime.toISOString()
+    };
   }
 });
 
