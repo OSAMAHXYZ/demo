@@ -14963,7 +14963,7 @@
       lc300_nop_00_20: { id: "lc300_nop_00_20", label: `LC300 ${nop} = 00 or 20`, severity: "critical" },
       veloz_nop_s28: { id: "veloz_nop_s28", label: `VELOZ ${nop} = S28`, severity: "critical" },
       crown_qrs_20: { id: "crown_qrs_20", label: `CROWN ${qrs} = 20`, severity: "critical" },
-      bad_model_year: { id: "bad_model_year", label: "Model Year not 2026", severity: "warn" },
+      bad_model_year: { id: "bad_model_year", label: "Model Year = 2027", severity: "warn" },
     };
     const phoneLetter = boePhoneLetter();
     if (phoneLetter) {
@@ -15260,11 +15260,7 @@
           if (hit.length) pushErr("crown_qrs_20", hit);
         }
 
-        if (boeIsCorollaCross(product)) {
-          if (year !== "2026" && year !== "2025") {
-            pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
-          }
-        } else if (year !== "2026") {
+        if (year === "2027") {
           pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
         }
       }

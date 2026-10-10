@@ -45,12 +45,19 @@
             if (box) box.textContent = error.message === 'unauthorized' ? 'Sign in again to manage BO error rules.' : error.message;
         }
     }
+    function checkedValues(boxId) {
+        return [...document.querySelectorAll('#' + boxId + ' input:checked')].filter((input) => !input.hasAttribute('data-all-cars')).map((input) => input.value).filter(Boolean);
+    }
     function formRule() {
+        const products = checkedValues('br-products');
+        const columns = checkedValues('br-columns');
         return {
             id: editing && editing.id,
             name: document.getElementById('br-name').value.trim(),
-            product: document.getElementById('br-product').value,
-            column: document.getElementById('br-column').value,
+            products,
+            product: products.join(', '),
+            columns,
+            column: columns.join(', '),
             operator: document.getElementById('br-op').value,
             incorrectValues: document.getElementById('br-bad').value,
             correctValue: document.getElementById('br-good').value.trim(),
@@ -108,7 +115,7 @@
                 <article><span>Correct</span><strong>${esc(rule.correctValue || '—')}</strong></article>
                 <article><span>Analyzed</span><strong>${esc(stamp(rule.lastAnalysisAt))}</strong></article>
             </div>
-            ${rule.columnMissing ? '<p class="err">This column is not in the latest BO file. The rule is kept and will run again when the column returns.</p>' : ''}
+            ${rule.columnMissing ? `<p class="err">Some selected columns are not in the latest BO file${(rule.missingColumns || []).length ? ': ' + esc(rule.missingColumns.join(', ')) : ''}. The rule is kept, and the columns that are still there are checked.</p>` : ''}
             <p>The latest BO file has <b>${rule.affectedEmployees || 0}</b> employees and <b>${rule.affectedOrders || 0}</b> matching orders. Push sends each employee only their own count in Message Builder.</p>
             <table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Found in BO file</th><th>Message Builder</th><th></th></tr></thead><tbody>
                 ${employees.map((item) => `<tr>
@@ -150,8 +157,21 @@
                 <h2>${editing && editing.id ? 'Edit rule' : 'New error rule'}</h2>
                 <div class="br-form">
                     <label>Rule name<input id="br-name" value="${esc(selected.name || '')}"></label>
-                    <label>Car / product<input id="br-product" list="br-products" value="${esc(selected.product || '')}" placeholder="All cars, or pick one"><datalist id="br-products">${(pack.products || []).map((name) => `<option value="${esc(name)}"></option>`).join('')}</datalist></label>
-                    <label>BO column<input id="br-column" list="br-columns" value="${esc(selected.column || '')}" placeholder="Choose a column from the file"><datalist id="br-columns">${(file.headers || []).map((name) => `<option value="${esc(name)}"></option>`).join('')}</datalist></label>
+                    <div class="wide">
+                        <span>Cars / products</span>
+                        <input id="br-product-search" class="br-pick-search" placeholder="Search cars in the BO file">
+                        <div class="br-picks" id="br-products">
+                            <label><input type="checkbox" data-all-cars ${picked(selected, 'products', 'product').length ? '' : 'checked'}> All cars</label>
+                            ${(pack.products || []).map((name) => `<label><input type="checkbox" value="${esc(name)}" ${picked(selected, 'products', 'product').includes(name) ? 'checked' : ''}> ${esc(name)}</label>`).join('') || '<p>No products in the BO file yet.</p>'}
+                        </div>
+                    </div>
+                    <div class="wide">
+                        <span>BO columns to check</span>
+                        <input id="br-column-search" class="br-pick-search" placeholder="Search columns in the BO file">
+                        <div class="br-picks" id="br-columns">
+                            ${(file.headers || []).map((name) => `<label><input type="checkbox" value="${esc(name)}" ${picked(selected, 'columns', 'column').includes(name) ? 'checked' : ''}> ${esc(name)}</label>`).join('') || '<p>No columns in the BO file yet.</p>'}
+                        </div>
+                    </div>
                     <label>Condition<select id="br-op">${OPS.map(([id, label]) => `<option value="${id}"${op === id ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
                     <label id="br-bad-wrap">Incorrect value<input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2025 or Not_Confirmed. Separate several values with commas."></label>
                     <label>Correct value<input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
@@ -182,6 +202,17 @@
         paintPreview();
         bind();
     }
+    function picked(rule, plural, single) {
+        if (Array.isArray(rule[plural]) && rule[plural].length) return rule[plural];
+        return String(rule[single] || '').split(',').map((item) => item.trim()).filter(Boolean);
+    }
+    function filterPicks(boxId, query) {
+        const needle = query.trim().toLowerCase();
+        document.querySelectorAll('#' + boxId + ' label').forEach((label) => {
+            if (label.querySelector('[data-all-cars]')) return;
+            label.hidden = needle && !label.textContent.toLowerCase().includes(needle);
+        });
+    }
     function messageState(item) {
         if (item.salesmanId === 'UNASSIGNED') return 'No employee id';
         const row = ((detail && detail.delivery) || []).find((person) => person.salesmanId === item.salesmanId && person.salesmanName === item.salesmanName);
@@ -211,6 +242,16 @@
     }
     function bind() {
         document.getElementById('br-op').addEventListener('change', () => { document.getElementById('br-bad-wrap').hidden = !needsValue(document.getElementById('br-op').value); });
+        document.getElementById('br-product-search').addEventListener('input', (event) => filterPicks('br-products', event.target.value));
+        document.getElementById('br-column-search').addEventListener('input', (event) => filterPicks('br-columns', event.target.value));
+        document.getElementById('br-products').addEventListener('change', (event) => {
+            const all = document.querySelector('#br-products [data-all-cars]');
+            if (event.target === all && all.checked) document.querySelectorAll('#br-products input[value]').forEach((input) => { input.checked = false; });
+            if (event.target !== all && event.target.checked && all) all.checked = false;
+            if (![...document.querySelectorAll('#br-products input[value]')].some((input) => input.checked) && all) all.checked = true;
+            paintPreview();
+        });
+        document.getElementById('br-columns').addEventListener('change', paintPreview);
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
         document.getElementById('br-cancel').addEventListener('click', () => { editing = null; render(); });
         document.getElementById('br-message').addEventListener('input', paintPreview);

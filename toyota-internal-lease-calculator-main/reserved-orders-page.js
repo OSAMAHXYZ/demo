@@ -31,7 +31,7 @@
         return end ? end.getTime() - Date.now() : null;
     }
     function formatRemain(ms) {
-        if (ms == null) return 'NO ASSIGN DATE';
+        if (ms == null) return 'No Assignment Date';
         if (ms <= 0) return 'EXPIRED';
         const total = Math.floor(ms / 1000);
         return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
@@ -46,6 +46,17 @@
     function isCompleted(order) { return order.status === 'تم الفوترة'; }
     function isCancelled(order) { return order.status === 'الغاء'; }
     function isActive(order) { return !isExpired(order) && !isCompleted(order) && !isCancelled(order); }
+    function isSoon(order) {
+        if (!isActive(order)) return false;
+        const ms = remainingMs(order);
+        return ms != null && ms > 0 && ms <= 6 * 3600000;
+    }
+    function hasNoAssign(order) { return remainingMs(order) == null; }
+    function queueLabel(n) {
+        if (n == null || n === '') return '#—';
+        const num = Number(n);
+        return '#' + (Number.isFinite(num) ? pad(num) : n);
+    }
     function badge(status) {
         if (status === 'تم الفوترة') return 'done';
         if (status === 'الغاء') return 'cancel';
@@ -136,21 +147,31 @@
         const status = $('filter-status');
         const advisor = $('filter-advisor');
         const queue = $('filter-queue');
-        const keep = [status.value, advisor.value, queue.value];
-        status.innerHTML = '<option value="">All</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+        const product = $('filter-product');
+        const area = $('filter-area');
+        const keep = [status.value, advisor.value, queue.value, product.value, area.value];
+        status.innerHTML = '<option value="">All statuses</option>' + STATUSES.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
         const advisors = Array.from(new Set(orders.map((order) => order.salesAdvisor).filter((name) => name && name !== 'UNASSIGNED'))).sort();
         const unassigned = orders.some((order) => order.salesAdvisor === 'UNASSIGNED') ? '<option value="UNASSIGNED">UNASSIGNED</option>' : '';
-        advisor.innerHTML = '<option value="">All</option>' + advisors.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + unassigned;
+        advisor.innerHTML = '<option value="">All advisors</option>' + advisors.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('') + unassigned;
         const queues = Array.from(new Set(orders.map((order) => order.queueNumber).filter((n) => n != null))).sort((a, b) => a - b);
-        queue.innerHTML = '<option value="">All</option>' + queues.map((n) => `<option value="${n}">#${n}</option>`).join('');
+        queue.innerHTML = '<option value="">All queues</option>' + queues.map((n) => `<option value="${n}">${queueLabel(n)}</option>`).join('');
+        const products = Array.from(new Set(orders.map((order) => order.vehicle).filter((name) => name && name !== '—'))).sort();
+        product.innerHTML = '<option value="">All cars</option>' + products.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
+        const areas = Array.from(new Set(orders.map((order) => order.searchArea).filter((name) => name && name !== '—'))).sort();
+        area.innerHTML = '<option value="">All areas</option>' + areas.map((item) => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
         restoreSelect(status, keep[0]);
         restoreSelect(advisor, keep[1]);
         restoreSelect(queue, keep[2]);
+        restoreSelect(product, keep[3]);
+        restoreSelect(area, keep[4]);
     }
     function visibleOrders() {
         const q = $('search').value.trim().toLowerCase();
         const status = chosen('filter-status');
         const payment = chosen('filter-payment');
+        const product = chosen('filter-product');
+        const area = chosen('filter-area');
         const advisor = chosen('filter-advisor');
         const queue = chosen('filter-queue');
         const state = chosen('filter-state');
@@ -159,10 +180,14 @@
             if (q && ![order.vin, order.orderNumber, order.customerName, order.salesAdvisor].join(' ').toLowerCase().includes(q)) return false;
             if (status && order.status !== status) return false;
             if (payment && order.paymentKind !== payment) return false;
+            if (product && order.vehicle !== product) return false;
+            if (area && order.searchArea !== area) return false;
             if (advisor && order.salesAdvisor !== advisor) return false;
             if (queue && String(order.queueNumber) !== queue) return false;
             if (state === 'expired' && !isExpired(order)) return false;
             if (state === 'active' && !isActive(order)) return false;
+            if (state === 'soon' && !isSoon(order)) return false;
+            if (state === 'nodate' && !hasNoAssign(order)) return false;
             return true;
         });
         list.sort((a, b) => {
@@ -174,45 +199,57 @@
         });
         return list;
     }
+    function activeKpi() {
+        const extras = $('search').value.trim() || chosen('filter-payment') || chosen('filter-product') || chosen('filter-area') || chosen('filter-advisor') || chosen('filter-queue');
+        if (extras) return '';
+        const status = chosen('filter-status');
+        const state = chosen('filter-state');
+        if (!status && !state) return 'total';
+        if (!status && state === 'active') return 'active';
+        if (!status && state === 'expired') return 'expired';
+        if (!status && state === 'soon') return 'soon';
+        if (status === 'تم الفوترة' && !state) return 'completed';
+        return '';
+    }
+    function clearFilters() {
+        ['search', 'filter-status', 'filter-payment', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'filter-state'].forEach((id) => { $(id).value = ''; });
+        $('sort').value = 'queue-asc';
+    }
+    function applyKpi(kind) {
+        clearFilters();
+        if (kind === 'active') $('filter-state').value = 'active';
+        if (kind === 'expired') $('filter-state').value = 'expired';
+        if (kind === 'completed') $('filter-status').value = 'تم الفوترة';
+        if (kind === 'soon') $('filter-state').value = 'soon';
+        render();
+    }
     function render() {
         const list = visibleOrders();
-        const expired = orders.filter(isExpired).length;
-        const soon = orders.filter((order) => isActive(order) && (remainingMs(order) || 0) > 0 && remainingMs(order) <= 6 * 3600000).length;
+        const soon = orders.filter(isSoon).length;
+        const activeKey = activeKpi();
         $('kpis').innerHTML = [
-            ['Total reserved', orders.length, ''],
-            ['Active orders', orders.filter(isActive).length, 'ok'],
-            ['Expired', expired, 'bad'],
-            ['Completed / invoiced', orders.filter(isCompleted).length, 'ok'],
-            ['Approaching deadline', soon, 'warn']
-        ].map(([label, value, cls]) => `<article class="kpi ${cls}"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        const leaders = queueLeaderHtml();
-        $('cards').innerHTML = list.length ? list.map((order) => cardHtml(order, leaders)).join('') : '<div class="empty">No reserved orders match this view.</div>';
-    }
-    function queueLeaderHtml() {
-        const found = new Map();
-        orders.forEach((item) => {
-            const n = Number(item.queueNumber);
-            if ((n === 1 || n === 2 || n === 3) && !found.has(n)) found.set(n, item);
-        });
-        return [1, 2, 3].map((n) => {
-            const item = found.get(n);
-            const advisor = !item ? '—' : (item.salesAdvisor || 'UNASSIGNED');
-            return `<b>#${n} ${esc(advisor)}</b>`;
-        }).join('');
+            ['total', 'Total Reserved', orders.length, ''],
+            ['active', 'Active Orders', orders.filter(isActive).length, 'ok'],
+            ['expired', 'Expired', orders.filter(isExpired).length, 'bad'],
+            ['completed', 'Completed / Invoiced', orders.filter(isCompleted).length, 'info'],
+            ['soon', 'Approaching Deadline', soon, 'warn']
+        ].map(([key, label, value, cls]) => `<button type="button" class="kpi ${cls}${activeKey === key ? ' on' : ''}" data-kpi="${key}"><em>${label}</em><strong>${value}</strong></button>`).join('');
+        $('cards').innerHTML = list.length ? list.map((order) => cardHtml(order)).join('') : '<div class="empty">No reserved orders match this view.</div>';
     }
     function retailMatch(value) {
         const text = String(value || '').trim().toLowerCase();
         return text === 'rtlesal' || text.includes('retail electronic sales');
     }
-    function ageFlag(days) {
-        if (days == null || days === '' || Number.isNaN(Number(days))) return '<span class="flag">Age —</span>';
+    function ageValue(days) {
+        if (days == null || days === '' || Number.isNaN(Number(days))) return '<span class="flag">—</span>';
         const n = Number(days);
         const tone = n <= 5 ? 'good' : n === 6 ? 'warn' : 'bad';
-        return `<span class="flag ${tone}">Age ${n}d</span>`;
+        return `<span class="flag ${tone}">${n}d</span>`;
     }
-    function stockFlag(label, value) {
+    function toneValue(value) {
         const shown = value && value !== '—' ? value : '—';
-        return `<span class="flag ${retailMatch(shown) ? 'good' : 'bad'}">${label} ${esc(shown)}</span>`;
+        if (shown === '—') return '<span class="flag">—</span>';
+        return `<span class="flag ${retailMatch(shown) ? 'good' : 'bad'}">${esc(shown)}</span>`;
     }
     function fieldTone(label, value) {
         const name = String(label || '').toLowerCase();
@@ -225,28 +262,80 @@
         }
         return '';
     }
-    function excelFieldsHtml(order) {
-        const fields = Array.isArray(order.fields) ? order.fields : [];
-        if (!fields.length) return '';
-        return `<div class="excel-row">${fields.map((field) => {
-            const tone = fieldTone(field.label, field.value);
-            return `<div class="excel-field${tone ? ' ' + tone : ''}"><span>${esc(field.label)}</span><b>${esc(field.value || '—')}</b></div>`;
-        }).join('')}</div>`;
+    function sourceFields(order) {
+        return Array.isArray(order.fields) ? order.fields : [];
     }
-    function cardHtml(order, leaders) {
+    function sfxValue(order) {
+        const hit = sourceFields(order).find((field) => /suffix|\bsfx\b/i.test(String(field.label || '')));
+        const value = hit && hit.value && hit.value !== '—' ? hit.value : '';
+        return value || '—';
+    }
+    function productName(order) {
+        const vehicle = String(order.vehicle || '').trim();
+        const sfx = sfxValue(order);
+        if (sfx !== '—' && vehicle.endsWith(' ' + sfx)) return vehicle.slice(0, -(sfx.length + 1)).trim() || vehicle;
+        return vehicle || '—';
+    }
+    function meta(label, valueHtml) {
+        return `<div class="meta"><span>${esc(label)}</span><b dir="auto">${valueHtml}</b></div>`;
+    }
+    function aheadHtml(order) {
+        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
+        if (!ahead.length) return '<span class="ahead-empty">No orders ahead</span>';
+        return `<div class="ahead-list">${ahead.map((item) => `<b title="${esc(item.salesAdvisor || 'UNASSIGNED')}">${queueLabel(item.queueNumber)} ${esc(item.salesAdvisor || 'UNASSIGNED')}</b>`).join('')}</div>`;
+    }
+    function excelFieldsHtml(order) {
+        const fields = sourceFields(order);
+        const body = fields.length
+            ? fields.map((field) => {
+                const tone = fieldTone(field.label, field.value);
+                const shown = field.value || '—';
+                return `<div class="excel-field${tone ? ' ' + tone : ''}"><span title="${esc(field.label)}">${esc(field.label)}</span><b dir="auto" title="${esc(shown)}">${esc(shown)}</b></div>`;
+            }).join('')
+            : '<div class="excel-field"><span>Source</span><b>—</b></div>';
+        return `<div class="excel-row hidden">${body}</div>`;
+    }
+    function cardHtml(order) {
         const ms = remainingMs(order);
         const hours = order.paymentHours || 48;
         const img = carImage(order.vehicle);
+        const assigned = order.salesAdvisor && order.salesAdvisor !== 'UNASSIGNED';
+        const orderLabel = order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER';
+        const vin = show(order.vin, 'VIN NOT FOUND');
+        const colors = `${order.exterior || '—'} / ${order.interior || '—'}`;
         return `<article class="order-block${isExpired(order) ? ' expired' : ''}">
             <div class="lane${isExpired(order) ? ' expired' : ''}" data-key="${esc(order.key)}">
-            <div class="lane-id"><div class="qmark">#${order.queueNumber == null ? '—' : order.queueNumber}</div>${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none'">` : ''}</div>
-            <div><b>${esc(order.orderNumber && order.orderNumber !== 'NO ORDER' ? 'ORDER #' + order.orderNumber : '#NO ORDER')}</b><span class="vin-line"><span class="muted">VIN ${esc(show(order.vin, 'VIN NOT FOUND'))}</span>${ageFlag(order.allocationAging)}</span><span class="muted">${esc(order.customerName || '—')}</span></div>
-            <div><b>${esc(order.vehicle || '—')}</b><span class="muted">${esc(order.modelYear || '—')}</span><span class="muted">${esc(order.exterior || '—')} / ${esc(order.interior || '—')}</span>${stockFlag('Area', order.searchArea)}${stockFlag('Share', order.shareLevel)}</div>
-            <div><b>${esc(show(order.salesAdvisor, 'UNASSIGNED'))}</b><span class="muted">${esc(show(order.paymentLabel, 'UNKNOWN'))}</span><span class="muted">${esc(order.assignDisplay || 'NO ASSIGN DATE')}</span></div>
-            <div class="queue-top"><span class="muted">Ahead</span>${leaders}</div>
-            <div><div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${formatRemain(ms)}</div><span class="muted">${hours} HOURS</span></div>
-            <div><span class="badge ${badge(order.status)}">${esc(order.status || 'محجوز')}</span><div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div></div>
+            <div class="lane-id">
+                <div class="qmark">${queueLabel(order.queueNumber)}</div>
+                <div class="thumb">${img ? `<img class="car" src="${img}" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="thumb-fallback" hidden>${esc((productName(order) || '?').slice(0, 1))}</span>` : `<span class="thumb-fallback">${esc((productName(order) || '?').slice(0, 1))}</span>`}</div>
+                <b dir="auto" title="${esc(orderLabel)}">${esc(orderLabel)}</b>
+                <span class="muted" dir="auto" title="${esc(vin)}">VIN ${esc(vin)}</span>
+                <span class="muted" dir="auto" title="${esc(order.customerName || '—')}">${esc(order.customerName || '—')}</span>
             </div>
+            <div class="lane-mid">
+                ${meta('Product', esc(productName(order)))}
+                ${meta('SFX', esc(sfxValue(order)))}
+                ${meta('Model year', esc(order.modelYear || '—'))}
+                ${meta('Reservation age', ageValue(order.allocationAging))}
+                ${meta('Area', toneValue(order.searchArea))}
+                ${meta('Share level', toneValue(order.shareLevel))}
+                ${meta('Colors', esc(colors))}
+            </div>
+            <div class="lane-assign">
+                <span class="assign-pill ${assigned ? 'on' : 'off'}">${assigned ? 'Assigned' : 'Unassigned'}</span>
+                ${meta('Advisor', esc(show(order.salesAdvisor, 'UNASSIGNED')))}
+                ${meta('Assignment date', esc(order.assignDisplay || 'No Assignment Date'))}
+                ${meta('Payment', esc(show(order.paymentLabel, 'UNKNOWN')))}
+                <div class="meta ahead-meta"><span>Upcoming queue</span>${aheadHtml(order)}</div>
+            </div>
+            <div class="lane-side">
+                <div class="timer ${timerClass(ms)}" data-deadline="${esc(order.deadline || '')}">${ms == null ? 'No Assignment Date' : formatRemain(ms)}</div>
+                <span class="muted">${hours} HOURS</span>
+                <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
+                <div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>
+            </div>
+            </div>
+            <button class="bo-toggle" type="button" aria-expanded="false">View Full BO Details</button>
             ${excelFieldsHtml(order)}
         </article>`;
     }
@@ -258,7 +347,10 @@
             el.textContent = formatRemain(ms);
             el.className = `timer ${timerClass(ms)}`;
             const card = el.closest('.lane');
-            if (card) card.classList.toggle('expired', ms != null && ms <= 0);
+            const expired = ms != null && ms <= 0;
+            if (card) card.classList.toggle('expired', expired);
+            const block = el.closest('.order-block');
+            if (block) block.classList.toggle('expired', expired);
         });
     }
     async function changeStatus(key, status) {
@@ -431,6 +523,7 @@
             } catch (e) { products = []; }
         }
         const source = products.length ? products.map((item) => [item.product, item.rowCount, item.suffixes || []]) : CARS.map(([name]) => [name, 0, []]);
+        if (!$('vehicles')) return;
         $('vehicles').innerHTML = source.map(([name, count, suffixes]) => {
             const img = carImage(name);
             const suffixCount = Array.isArray(suffixes) ? suffixes.length : 0;
@@ -537,9 +630,24 @@
         if (!card) return;
         changeStatus(card.dataset.key, select.value);
     });
-    ['search', 'filter-status', 'filter-payment', 'filter-advisor', 'filter-queue', 'filter-state', 'sort'].forEach((id) => {
+    ['search', 'filter-status', 'filter-payment', 'filter-product', 'filter-area', 'filter-advisor', 'filter-queue', 'filter-state', 'sort'].forEach((id) => {
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
         $(id).addEventListener('change', render);
+    });
+    $('filter-clear').addEventListener('click', () => { clearFilters(); render(); });
+    $('filter-refresh').addEventListener('click', () => { loadLive.last = ''; loadLive(); });
+    $('kpis').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-kpi]');
+        if (button) applyKpi(button.dataset.kpi);
+    });
+    $('cards').addEventListener('click', (event) => {
+        const toggle = event.target.closest('.bo-toggle');
+        if (!toggle) return;
+        const row = toggle.nextElementSibling;
+        if (!row || !row.classList.contains('excel-row')) return;
+        const collapsed = row.classList.toggle('hidden');
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggle.textContent = collapsed ? 'View Full BO Details' : 'Hide Full BO Details';
     });
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
     if ($('lookup-form')) $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });

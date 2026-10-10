@@ -63,53 +63,72 @@ function conditionMatches(operator, cell, expected) {
     return false;
 }
 
+function chosenList(rule, plural, single) {
+    if (Array.isArray(rule && rule[plural]) && rule[plural].length) return rule[plural].map(cellString).filter(Boolean);
+    return cellString(rule && rule[single]).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 function analyzeTable(table, rule) {
     const headers = table.headers || [];
     const rows = table.rows || [];
-    const column = findHeader(headers, [rule.column]);
+    const requestedColumns = chosenList(rule, 'columns', 'column');
+    const resolved = requestedColumns.map((name) => ({ name, header: findHeader(headers, [name]) }));
+    const present = resolved.filter((item) => item.header);
+    const missingColumns = resolved.filter((item) => !item.header).map((item) => item.name);
     const productHeader = findHeader(headers, ['Product', 'Car', 'Vehicle', 'Model']);
     const salesmanIdHeader = findHeader(headers, ['Salesman Id', 'Salesman ID', 'SalesmanID']);
     const salesmanNameHeader = findHeader(headers, ['Salesman Name', 'Salesman']);
     const orderHeader = findHeader(headers, ['Back Order Number', 'BO Number', 'Order Number']);
     const yearHeader = findHeader(headers, ['Model Year']);
     const dateHeader = findHeader(headers, ['Order Date']);
-    if (!column) {
-        return { ok: false, columnMissing: true, employees: [], employeeCount: 0, orderCount: 0, headers };
+    if (!present.length) {
+        return { ok: false, columnMissing: true, missingColumns, employees: [], employeeCount: 0, orderCount: 0, headers };
     }
-    const wantedProduct = fold(rule.product);
+    const wantedProducts = chosenList(rule, 'products', 'product').map(fold).filter(Boolean);
     const groups = new Map();
-    const seenOrders = new Set();
     rows.forEach((row) => {
-        if (wantedProduct && productHeader) {
+        if (wantedProducts.length && productHeader) {
             const product = fold(row[productHeader]);
-            if (product !== wantedProduct && !product.includes(wantedProduct) && !wantedProduct.includes(product)) return;
+            const matchesCar = wantedProducts.some((wanted) => product === wanted || product.includes(wanted) || wanted.includes(product));
+            if (!matchesCar) return;
         }
-        if (!conditionMatches(rule.operator, row[column], rule.incorrectValues)) return;
+        const hits = present.filter((item) => conditionMatches(rule.operator, row[item.header], rule.incorrectValues));
+        if (!hits.length) return;
         const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
         const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
-        const boNumber = cellString(orderHeader ? row[orderHeader] : '') || '';
+        const boNumber = cellString(orderHeader ? row[orderHeader] : '') || '—';
         const personKey = `${salesmanId}\u0001${fold(salesmanName)}`;
-        const orderKey = `${personKey}\u0001${boNumber || JSON.stringify(row).slice(0, 80)}`;
-        if (seenOrders.has(orderKey)) return;
-        seenOrders.add(orderKey);
         if (!groups.has(personKey)) groups.set(personKey, { salesmanId, salesmanName, orders: [] });
         const group = groups.get(personKey);
         if (salesmanName && salesmanName !== 'Unassigned') group.salesmanName = salesmanName;
-        group.orders.push({
-            boNumber: boNumber || '—',
-            product: cellString(productHeader ? row[productHeader] : ''),
-            modelYear: cellString(yearHeader ? row[yearHeader] : ''),
-            orderDate: cellString(dateHeader ? row[dateHeader] : ''),
-            column: column,
-            currentValue: cellString(row[column]),
-            correctValue: cellString(rule.correctValue)
+        let order = group.orders.find((item) => item.boNumber === boNumber);
+        if (!order) {
+            order = {
+                boNumber,
+                product: cellString(productHeader ? row[productHeader] : ''),
+                modelYear: cellString(yearHeader ? row[yearHeader] : ''),
+                orderDate: cellString(dateHeader ? row[dateHeader] : ''),
+                column: '',
+                currentValue: '',
+                correctValue: cellString(rule.correctValue),
+                hits: []
+            };
+            group.orders.push(order);
+        }
+        hits.forEach((hit) => {
+            if (order.hits.some((item) => item.column === hit.header)) return;
+            order.hits.push({ column: hit.header, currentValue: cellString(row[hit.header]) });
         });
+        order.column = order.hits.map((item) => item.column).join(', ');
+        order.currentValue = order.hits.map((item) => `${item.column}: ${item.currentValue}`).join('; ');
     });
     const employees = Array.from(groups.values()).sort((a, b) => b.orders.length - a.orders.length || a.salesmanName.localeCompare(b.salesmanName));
+    employees.forEach((person) => person.orders.forEach((order) => { delete order.hits; }));
     return {
         ok: true,
-        columnMissing: false,
-        column,
+        columnMissing: missingColumns.length > 0,
+        missingColumns,
+        column: present.map((item) => item.header).join(', '),
         employees,
         employeeCount: employees.filter((item) => item.salesmanId !== 'UNASSIGNED').length,
         orderCount: employees.reduce((sum, item) => sum + item.orders.length, 0),
@@ -148,12 +167,16 @@ function attachBoErrorRules(app, deps) {
     function cleanRule(raw, previous) {
         const operator = OPERATORS.includes(raw.operator) ? raw.operator : 'equals';
         const incorrectValues = NEEDS_VALUE.has(operator) ? splitValues(raw.incorrectValues != null ? raw.incorrectValues : raw.incorrectValue) : [];
+        const products = chosenList(raw, 'products', 'product');
+        const columns = chosenList(raw, 'columns', 'column');
         const now = new Date().toISOString();
         return {
             id: (previous && previous.id) || cellString(raw.id) || newId('rule'),
             name: cellString(raw.name) || 'BO error',
-            product: cellString(raw.product),
-            column: cellString(raw.column),
+            product: products.join(', '),
+            products,
+            column: columns.join(', '),
+            columns,
             operator,
             incorrectValues,
             correctValue: cellString(raw.correctValue),
@@ -165,6 +188,7 @@ function attachBoErrorRules(app, deps) {
             updatedAt: now,
             lastAnalysisAt: (previous && previous.lastAnalysisAt) || '',
             columnMissing: !!(previous && previous.columnMissing),
+            missingColumns: (previous && previous.missingColumns) || [],
             affectedEmployees: previous ? previous.affectedEmployees || 0 : 0,
             affectedOrders: previous ? previous.affectedOrders || 0 : 0,
             notificationStatus: (previous && previous.notificationStatus) || 'not_pushed',
@@ -173,8 +197,12 @@ function attachBoErrorRules(app, deps) {
     }
     function validate(rule, headers) {
         if (!rule.name) return 'Enter a rule name.';
-        if (!rule.column) return 'Choose a BO column.';
-        if (headers.length && !findHeader(headers, [rule.column])) return `The column "${rule.column}" is not in the latest BO file. The rule can be saved, but it cannot be analyzed until that column is present.`;
+        const columns = chosenList(rule, 'columns', 'column');
+        if (!columns.length) return 'Choose at least one BO column.';
+        if (headers.length) {
+            const missing = columns.filter((name) => !findHeader(headers, [name]));
+            if (missing.length === columns.length) return `Those columns are not in the latest BO file: ${missing.join(', ')}. The rule can be saved, but it cannot be analyzed until a column is present.`;
+        }
         if (NEEDS_VALUE.has(rule.operator) && !rule.incorrectValues.length) return 'Enter the incorrect value.';
         if (!rule.message) return 'Write the message employees will see.';
         return '';
@@ -204,6 +232,7 @@ function attachBoErrorRules(app, deps) {
         const now = new Date().toISOString();
         rule.lastAnalysisAt = now;
         rule.columnMissing = !!result.columnMissing;
+        rule.missingColumns = result.missingColumns || [];
         rule.affectedEmployees = result.employeeCount || 0;
         rule.affectedOrders = result.orderCount || 0;
         rule.current = {

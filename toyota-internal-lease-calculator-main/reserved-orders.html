@@ -46,30 +46,36 @@
         <main class="tower">
             <section id="my-bo-alerts" class="my-alerts"></section>
             <section class="kpis" id="kpis"></section>
-            <div class="toolbar">
-                <input class="search" id="search" type="search" placeholder="Search VIN, order, customer, advisor">
-                <select id="filter-status"><option value="">All</option></select>
-                <select id="filter-payment">
-                    <option value="">All</option>
+            <div class="toolbar" id="order-toolbar">
+                <input class="search" id="search" type="search" placeholder="Search VIN, order, customer, advisor" aria-label="Search VIN, order number, customer, or advisor">
+                <select id="filter-status" aria-label="Status"><option value="">All statuses</option></select>
+                <select id="filter-product" aria-label="Car"><option value="">All cars</option></select>
+                <select id="filter-area" aria-label="Area"><option value="">All areas</option></select>
+                <select id="filter-advisor" aria-label="Advisor"><option value="">All advisors</option></select>
+                <select id="filter-state" aria-label="Deadline">
+                    <option value="">All deadlines</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                    <option value="soon">Approaching deadline</option>
+                    <option value="nodate">No assignment date</option>
+                </select>
+                <select id="filter-payment" aria-label="Payment">
+                    <option value="">All payments</option>
                     <option value="cash">Cash</option>
                     <option value="bank">Bank</option>
                     <option value="other">Other</option>
                     <option value="unknown">Unknown</option>
                 </select>
-                <select id="filter-advisor"><option value="">All</option></select>
-                <select id="filter-queue"><option value="">All</option></select>
-                <select id="filter-state">
-                    <option value="">All</option>
-                    <option value="expired">Expired</option>
-                    <option value="active">Active</option>
-                </select>
-                <select id="sort">
+                <select id="filter-queue" aria-label="Queue number"><option value="">All queues</option></select>
+                <select id="sort" aria-label="Queue sorting">
                     <option value="queue-asc">Queue ascending</option>
                     <option value="queue-desc">Queue descending</option>
                     <option value="assign-asc">Oldest assignment</option>
                     <option value="assign-desc">Newest assignment</option>
                     <option value="remaining">Remaining time</option>
                 </select>
+                <button class="ghost" id="filter-clear" type="button">Clear</button>
+                <button class="solid" id="filter-refresh" type="button">Refresh</button>
             </div>
             <section class="cards" id="cards"></section>
         </main>
