@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --toyota-red: #eb0a1e;
   --toyota-red-dark: #c40718;
   --toyota-black: #111111;
@@ -45,7 +45,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Page hero ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Page hero ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .page-hero {
   position: relative;
   overflow: hidden;
@@ -143,7 +143,7 @@ body {
   box-sizing: border-box;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Top bar ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Top bar ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 header.top {
   display: flex;
   flex-wrap: wrap;
@@ -274,7 +274,7 @@ button:disabled {
   border-color: #efc4ca;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Admin nav ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Admin nav ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .admin-bar {
   display: flex;
   flex-wrap: wrap;
@@ -296,7 +296,7 @@ button:disabled {
   font-weight: 500;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Upload slots ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Upload slots ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .grid-5 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -378,7 +378,7 @@ button:disabled {
   font-weight: 600;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Banners ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Banners ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .banner {
   display: none;
   margin: 0 0 16px;
@@ -425,7 +425,7 @@ button:disabled {
   }
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Stock KPIs / charts ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Stock KPIs / charts ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -492,7 +492,7 @@ button:disabled {
   height: min(720px, max(320px, 36px * 12));
 }
 
-/* Power BIÃÂ¢ÃÂÃÂstyle sales page */
+/* Power BIÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â“style sales page */
 .pbi-page {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1698,7 +1698,7 @@ body.pbi-wide-open {
     #fff;
 }
 
-/* âââ BO Dashboard Â· executive scroll layout âââ */
+/* Ã¢Â€Â”Ã¢Â€Â”Ã¢Â€Â” BO Dashboard Ã‚Â· executive scroll layout Ã¢Â€Â”Ã¢Â€Â”Ã¢Â€Â” */
 .bo-dash {
   display: flex;
   flex-direction: column;
@@ -2926,12 +2926,12 @@ body.pbi-wide-open {
 }
 
 .pbi-tables summary::before {
-  content: "ÃÂ¢ÃÂÃÂ¸ ";
+  content: "ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â–ÃƒÂ‚Ã‚Â¸ ";
   color: var(--muted);
 }
 
 .pbi-tables[open] summary::before {
-  content: "ÃÂ¢ÃÂÃÂ¾ ";
+  content: "ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â–ÃƒÂ‚Ã‚Â¾ ";
 }
 
 @media (max-width: 1100px) {
@@ -2988,7 +2988,7 @@ body.pbi-wide-open {
   height: 240px;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Tabs ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Tabs ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -3053,7 +3053,7 @@ body.pbi-wide-open {
   box-shadow: var(--shadow);
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Toolbar / forms ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Toolbar / forms ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -3089,7 +3089,7 @@ body.pbi-wide-open {
   box-shadow: 0 0 0 3px rgba(77, 163, 224, 0.18);
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generic table ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Generic table ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .table-wrap {
   overflow: auto;
   max-height: 540px;
@@ -3173,7 +3173,7 @@ tr.emp-row:hover td {
   font-weight: 500;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Targets ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Targets ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .target-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -3380,7 +3380,7 @@ footer.page-foot {
   font-weight: 500;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Employee drawer ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Employee drawer ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .drawer-backdrop {
   display: none;
   position: fixed;
@@ -3628,7 +3628,7 @@ footer.page-foot {
   word-break: break-word;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Sales Report (BI cards) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Sales Report (BI cards) ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .xl-sheet {
   background: transparent;
   border: none;
@@ -4014,7 +4014,7 @@ footer.page-foot {
   }
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Admin page (match Live Sales Dashboard chrome) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Admin page (match Live Sales Dashboard chrome) ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 body.admin-page .admin-kpis {
   margin-bottom: 14px;
 }
@@ -4161,7 +4161,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   }
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Daily target pace ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Daily target pace ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .pbi-daily-target {
   margin-top: 0;
 }
@@ -4270,7 +4270,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   color: #b91c1c;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Allocation plan (Admin) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” Allocation plan (Admin) ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .admin-allocation-card {
   overflow: hidden;
 }
@@ -4423,7 +4423,7 @@ body.admin-page #panel-allocation:not([hidden]) {
   font-weight: 800;
 }
 
-/* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ BO & Allocation & Stock dashboard ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
+/* ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” BO & Allocation & Stock dashboard ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â”ÃƒÂƒÃ‚Â¢ÃƒÂ‚Ã‚Â€ÃƒÂ‚Ã‚Â” */
 .bas-dash {
   gap: 18px;
 }
@@ -5795,7 +5795,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   }
 }
 
-/* ÃÂÃÂÃÂ Inventory Command Center / Summary ÃÂÃÂÃÂ */
+/* ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— Inventory Command Center / Summary ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— */
 .icc-hero {
   display: flex;
   flex-wrap: wrap;
@@ -6101,7 +6101,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 /* =========================================================
-   Live app CRM shell (UI only Ã¢ÂÂ report-sheet/index.html)
+   Live app CRM shell (UI only ÃƒÂ¢Ã‚Â€Ã‚Â” report-sheet/index.html)
    Mockup-aligned SaaS: light gray canvas, blue accents, soft cards
    ========================================================= */
 .live-app {
@@ -6528,7 +6528,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   }
 }
 
-/* ÃÂÃÂ Tighter charts (all dashboards) ÃÂÃÂ */
+/* ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— Tighter charts (all dashboards) ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— */
 .live-app .chart-box {
   min-height: 180px;
   height: auto;
@@ -6595,7 +6595,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   color: #94a3b8;
 }
 
-/* ÃÂÃÂ Dark edition ÃÂÃÂ */
+/* ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— Dark edition ÃƒÂ‚Ã‚Â—ÃƒÂ‚Ã‚Â— */
 .live-app.theme-dark {
   --crm-bg: #0f172a;
   --crm-sidebar: #111827;
@@ -7035,7 +7035,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   padding: 10px 14px 20px !important;
 }
 
-/* Ã¢ÂÂÃ¢ÂÂ Density: kill empty stretch / loose gaps Ã¢ÂÂÃ¢ÂÂ */
+/* ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ Density: kill empty stretch / loose gaps ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ */
 .live-app .pbi-visuals,
 .live-app .sr-charts,
 .live-app .charts,
@@ -7202,7 +7202,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   padding: 10px 12px !important;
 }
 
-/* Default only Ã¢ÂÂ JS sets inline height from label count so names never overlap */
+/* Default only ÃƒÂ¢Ã‚Â€Ã‚Â” JS sets inline height from label count so names never overlap */
 .live-app .chart-box,
 .live-app .chart-box.pbi-box {
   min-height: 180px;
@@ -7280,7 +7280,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 /* =========================================================
-   TOYOTA figures theme Ã¢ÂÂ brand-first, simple numbers
+   TOYOTA figures theme ÃƒÂ¢Ã‚Â€Ã‚Â” brand-first, simple numbers
    ========================================================= */
 .live-app.toyota-theme {
   --crm-bg: #f2f2f3;
@@ -7372,7 +7372,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   letter-spacing: 0.14em;
 }
 
-/* Kill the old white #panel-tabs card Ã¢ÂÂ it made white labels invisible */
+/* Kill the old white #panel-tabs card ÃƒÂ¢Ã‚Â€Ã‚Â” it made white labels invisible */
 .live-app.toyota-theme #panel-tabs,
 .live-app.toyota-theme .sidebar-tabs.tabs {
   background: transparent !important;
@@ -7725,7 +7725,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 }
 
 
-/* Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ Inventory Command Center Ã¯Â¿Â½ premium one-page redesign Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ */
+/* ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ Inventory Command Center ÃƒÂ¯Ã‚Â¿Ã‚Â½ premium one-page redesign ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ */
 .icc-command-center {
   display: flex;
   flex-direction: column;
@@ -7976,7 +7976,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ Allocation Control Tower Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ */
+/* ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ Allocation Control Tower ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ */
 .act-tower { display: flex; flex-direction: column; gap: 12px; }
 .act-header {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 20px;
@@ -8382,7 +8382,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 .live-app.toyota-theme.theme-dark .act-supply-rest-name,
 .live-app.toyota-theme.theme-dark .act-sort-lab select { color: #fff !important; }
 .live-app.toyota-theme.theme-dark .act-alert-tabs--wide { background: #111 !important; }
-/* Ã¢ÂÂÃ¢ÂÂ Sales Report ÃÂ· compact interactive pulse Ã¢ÂÂÃ¢ÂÂ */
+/* ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ Sales Report ÃƒÂ‚Ã‚Â· compact interactive pulse ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ */
 .sr-panel { display: flex; flex-direction: column; gap: 10px; }
 .sr-hero {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
@@ -8806,7 +8806,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   background: #141414 !important;
   border-color: rgba(255,255,255,.08) !important;
 }
-/* Ã¢ÂÂÃ¢ÂÂ Sales Dashboard mockup (sr25) Ã¢ÂÂÃ¢ÂÂ */
+/* ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ Sales Dashboard mockup (sr25) ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ */
 .sr-hidden-fields,
 .sr-hidden-charts {
   position: absolute !important;
@@ -9676,7 +9676,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   background: #141414 !important;
   border-color: rgba(255,255,255,.08) !important;
 }
-/* Ã¢ÂÂÃ¢ÂÂ Employee Sales Schedule mockup (sr28) Ã¢ÂÂÃ¢ÂÂ */
+/* ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ Employee Sales Schedule mockup (sr28) ÃƒÂ¢Ã‚Â”Ã‚Â€ÃƒÂ¢Ã‚Â”Ã‚Â€ */
 .sr-fold--schedule > .sr-fold-body {
   padding: 12px;
   background: #f5f7fb;
@@ -10143,7 +10143,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
 .sr-schedule #sr-diag-banner,
 .sr-sched-info { display: none !important; }
 
-/* ÂÂ Reserved Vehicles Tracker ÂÂ */
+/* Ã‚Â—Ã‚Â— Reserved Vehicles Tracker Ã‚Â—Ã‚Â— */
 .rv-dash { display: flex; flex-direction: column; gap: 14px; }
 .rv-head {
   display: flex;
@@ -10417,7 +10417,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   .rv-head-actions input[type="search"] { flex: 1; min-width: 0; }
 }
 
-/* ââ Summary Â· Delivered vs Proforma (Sales Performance) ââ */
+/* Ã¢Â”Â€Ã¢Â”Â€ Summary Ã‚Â· Delivered vs Proforma (Sales Performance) Ã¢Â”Â€Ã¢Â”Â€ */
 .dvp-summary {
   display: flex;
   flex-direction: column;
@@ -10549,7 +10549,7 @@ button.bas-day-ops-metric.bad { border-top: 3px solid #eb0a1e; }
   min-width: 0;
 }
 
-/* Channel cards â 4 across */
+/* Channel cards Ã¢Â€Â” 4 across */
 .dvp-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -11412,7 +11412,7 @@ button.dvp-total-card:focus-visible {
   border-radius: 14px;
   background: #fff;
 }
-/* Full list on page scroll â no inner max-height box */
+/* Full list on page scroll Ã¢Â€Â” no inner max-height box */
 #boe-table-wrap.table-wrap,
 #boe-table-wrap.aa-table-wrap {
   max-height: none;
@@ -11521,7 +11521,7 @@ button.dvp-total-card:focus-visible {
   font: inherit;
 }
 
-/* ï¿½ï¿½ï¿½ Plan Tracker ï¿½ï¿½ï¿½ */
+/* Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ Plan Tracker Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ */
 .pt-dash { display: flex; flex-direction: column; gap: 14px; }
 .pt-header { margin-bottom: 4px; }
 .pt-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -11678,7 +11678,7 @@ button.pt-linknum {
 .pt-schedule-card .bas-retail-head { margin-bottom: 8px; }
 .pt-schedule-card .bas-month-table-wrap { max-height: 420px; }
 
-/* Back Order Control Center — one viewport on desktop */
+/* Back Order Control Center â€” one viewport on desktop */
 .live-app .app-content:has(#bo-dash.bo-tower:not([hidden])) {
   overflow: hidden;
   padding-bottom: 0;
@@ -11871,108 +11871,180 @@ button.pt-linknum {
   #bo-dash.bo-tower .bo-row-critical { grid-template-columns: 1fr; }
 }
 
-/* Allocation Control Tower — one viewport, same data */
+/* Allocation Control Tower â€” one viewport beside the app navigation. Layout only. */
+body.alloc-mode.live-app {
+  overflow: hidden;
+}
 body.alloc-mode.live-app .app-content {
   overflow: hidden;
-  padding: 8px 12px;
+  padding: 0;
   height: calc(100dvh - var(--topbar-h));
   max-height: calc(100dvh - var(--topbar-h));
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 body.alloc-mode.live-app #dashboard,
 body.alloc-mode.live-app #dashboard.show {
-  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   margin: 0;
+  overflow: hidden;
   animation: none;
 }
 body.alloc-mode.live-app .page-foot { display: none; }
 body.alloc-mode #panel-boallocstock {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  position: fixed;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 8px;
   overflow: hidden;
+  background:
+    radial-gradient(900px 420px at 80% -10%, rgba(59, 130, 246, 0.1), transparent 60%),
+    radial-gradient(700px 380px at 0% 100%, rgba(235, 10, 30, 0.06), transparent 55%),
+    #070d18;
+  color: #e8eef7;
 }
+body.alloc-mode.sidebar-collapsed #panel-boallocstock { left: var(--sidebar-w-collapsed); }
+body.alloc-mode #bas-dash.act-tower[hidden] { display: none !important; }
 body.alloc-mode #bas-dash.act-tower {
-  flex: 1 1 auto;
-  min-height: 0;
   height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: auto auto auto minmax(0, 1.05fr) minmax(0, 0.72fr) minmax(118px, 0.62fr) minmax(132px, 0.78fr);
   gap: 6px;
   overflow: hidden;
+  background: transparent;
+}
+body.alloc-mode .act-charts,
+body.alloc-mode .act-main-grid,
+body.alloc-mode .act-secondary-grid,
+body.alloc-mode .act-ops-grid,
+body.alloc-mode .act-details-block { display: contents; }
+body.alloc-mode .act-header,
+body.alloc-mode .act-filter-bar,
+body.alloc-mode #bas-kpis.act-kpi-row { grid-column: 1 / -1; }
+body.alloc-mode .act-supply-card,
+body.alloc-mode .act-hero-quad,
+body.alloc-mode .act-hero-donut { grid-column: span 4; grid-row: 4; }
+body.alloc-mode .act-secondary-grid > .act-card,
+body.alloc-mode .act-ops-grid > .act-card:not(.act-alerts-card) { grid-column: span 2; grid-row: 5; }
+body.alloc-mode .bas-section-all { grid-column: 1 / 8; grid-row: 6; }
+body.alloc-mode .bas-section-conf { grid-column: 8 / -1; grid-row: 6; }
+body.alloc-mode .bas-section-alloc { grid-column: 1 / 5; grid-row: 7; }
+body.alloc-mode .act-alerts-card { grid-column: 5 / 9; grid-row: 7; }
+body.alloc-mode .bas-section-month { grid-column: 9 / -1; grid-row: 7; }
+
+body.alloc-mode .act-header,
+body.alloc-mode .act-card,
+body.alloc-mode details.bas-section-card {
+  background: #101a2b;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+  box-shadow: none;
 }
 body.alloc-mode .act-header {
-  padding: 8px 12px;
+  padding: 6px 10px;
   gap: 8px;
   align-items: center;
   flex-wrap: nowrap;
+  border-radius: 12px;
 }
-body.alloc-mode .act-header-mark { width: 34px; height: 34px; border-radius: 8px; }
-body.alloc-mode .act-logo { width: 26px; }
-body.alloc-mode .act-eyebrow { margin: 0; }
-body.alloc-mode .act-title { font-size: 1.02rem; margin: 0; }
-body.alloc-mode .act-sub { display: none; }
-body.alloc-mode .act-filter-bar {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 6px;
-  padding: 6px 8px;
-}
-body.alloc-mode .act-filter-bar select,
-body.alloc-mode .act-filter-bar input,
-body.alloc-mode .act-filter-bar .btn {
-  height: 30px;
-  font-size: 12px;
-  flex: 0 1 150px;
-  min-width: 108px;
-}
-body.alloc-mode .act-kpi-row { gap: 6px; }
-body.alloc-mode #bas-kpis .bo-kpi { padding: 8px 10px; }
-body.alloc-mode #bas-kpis .bo-kpi .val { font-size: 1.25rem; }
-body.alloc-mode .act-charts {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 0.9fr);
-  gap: 6px;
-  overflow: hidden;
-}
-body.alloc-mode .act-charts .act-main-grid,
-body.alloc-mode .act-charts .act-secondary-grid,
-body.alloc-mode .act-charts .act-ops-grid {
-  min-height: 0;
-  height: 100%;
-  gap: 6px;
-}
-body.alloc-mode .act-charts .act-card {
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  padding: 8px 10px;
-}
-body.alloc-mode .act-charts .pbi-viz-head { margin-bottom: 4px; }
-body.alloc-mode .act-charts .pbi-viz-head h2 { font-size: .92rem; margin: 0; }
-body.alloc-mode .act-charts .pbi-viz-head .hint {
+body.alloc-mode .act-header-mark { width: 32px; height: 32px; border-radius: 8px; }
+body.alloc-mode .act-logo { width: 24px; }
+body.alloc-mode .act-eyebrow { margin: 0; color: #eb0a1e; font-size: 10px; }
+body.alloc-mode .act-title { font-size: 1rem; margin: 0; color: #fff; }
+body.alloc-mode .act-sub {
   display: block;
+  margin: 0;
+  font-size: 11px;
+  color: #8d9bb0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-body.alloc-mode.live-app .act-charts .chart-box.act-chart-box,
-body.alloc-mode.live-app .act-charts .act-chart-box--bars,
-body.alloc-mode.live-app .act-charts .act-chart-box--quad,
-body.alloc-mode.live-app .act-charts .act-chart-box--donut,
-body.alloc-mode.live-app .act-charts .act-chart-box--daily,
-body.alloc-mode.live-app .act-charts .act-chart-box--month,
-body.alloc-mode.live-app .act-charts .act-chart-box--res,
-body.alloc-mode.live-app .act-charts .act-chart-box--top {
+body.alloc-mode .act-refresh-stamp .lab { color: #8d9bb0; }
+body.alloc-mode .act-refresh-stamp strong { color: #fff; font-size: 12px; }
+body.alloc-mode .act-filter-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  overflow: hidden;
+  background: #101a2b;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+}
+body.alloc-mode .act-filter-bar > select,
+body.alloc-mode .act-filter-bar > input,
+body.alloc-mode .act-filter-bar > .btn,
+body.alloc-mode .act-filter-bar > .bas-filter-label,
+body.alloc-mode .act-filter-bar > .bas-date-hint,
+body.alloc-mode #bas-toolbar select,
+body.alloc-mode #bas-date-preset {
+  flex: 1 1 72px;
+  min-width: 0 !important;
+  width: auto;
+  max-width: none;
+  height: 28px;
+  font-size: 11px;
+}
+body.alloc-mode #bas-search { flex: 1.5 1 120px; min-width: 96px !important; }
+body.alloc-mode #bas-toolbar > .bas-filter-label { flex: 1.2 1 110px; min-width: 96px; }
+body.alloc-mode #bas-date-apply,
+body.alloc-mode #bas-clear-filters { flex: 0 0 auto; width: auto; }
+body.alloc-mode .act-filter-bar select,
+body.alloc-mode .act-filter-bar input {
+  background: #0c1422;
+  color: #e8eef7;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+}
+body.alloc-mode #bas-kpis.act-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+body.alloc-mode #bas-kpis .bo-kpi {
+  padding: 6px 8px;
+  min-width: 0;
+  background: #101a2b;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+}
+body.alloc-mode #bas-kpis .bo-kpi .val { font-size: 1.15rem; color: #fff; }
+body.alloc-mode #bas-kpis .bo-kpi .lab,
+body.alloc-mode #bas-kpis .bo-kpi .sub { color: #8d9bb0; }
+
+body.alloc-mode .act-charts .act-card,
+body.alloc-mode .act-alerts-card,
+body.alloc-mode details.bas-section-card {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 12px;
+}
+body.alloc-mode .act-charts .pbi-viz-head,
+body.alloc-mode .bas-section-head { margin: 0 0 4px; }
+body.alloc-mode .act-charts .pbi-viz-head h2,
+body.alloc-mode .bas-section-head h2,
+body.alloc-mode .bas-section-head h3 { font-size: 12px; margin: 0; color: #fff; }
+body.alloc-mode .hint { color: #8d9bb0; font-size: 10px; }
+body.alloc-mode.live-app .act-chart-box,
+body.alloc-mode.live-app .act-chart-box--bars,
+body.alloc-mode.live-app .act-chart-box--quad,
+body.alloc-mode.live-app .act-chart-box--donut,
+body.alloc-mode.live-app .act-chart-box--daily,
+body.alloc-mode.live-app .act-chart-box--month,
+body.alloc-mode.live-app .act-chart-box--res,
+body.alloc-mode.live-app .act-chart-box--top {
   flex: 1 1 auto !important;
   width: 100%;
   height: auto !important;
@@ -11982,49 +12054,84 @@ body.alloc-mode.live-app .act-charts .act-chart-box--top {
 }
 body.alloc-mode .act-supply-layout,
 body.alloc-mode .act-daily-wrap,
-body.alloc-mode .act-res-chart-scroll {
+body.alloc-mode .act-res-chart-scroll,
+body.alloc-mode .act-supply-chart { flex: 1 1 auto; min-height: 0; max-height: none; overflow: hidden; }
+body.alloc-mode .act-supply-insight { overflow: auto; background: #0c1422; color: #e8eef7; }
+body.alloc-mode .act-supply-product,
+body.alloc-mode .act-supply-metrics dd { color: #fff; }
+body.alloc-mode .act-donut-mini {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+body.alloc-mode .act-mini { padding: 4px; background: #0c1422; }
+body.alloc-mode .act-mini strong { font-size: 0.85rem; color: #fff; }
+body.alloc-mode .act-daily-side,
+body.alloc-mode .act-res-chip,
+body.alloc-mode .act-monthly-kpis { background: transparent; }
+body.alloc-mode .act-alert-table,
+body.alloc-mode details.bas-section-card > .bas-section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+body.alloc-mode .bas-section-head { cursor: pointer; }
+body.alloc-mode .bas-table-wrap,
+body.alloc-mode .bas-month-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  overflow: hidden;
-}
-body.alloc-mode .act-supply-insight { overflow: auto; }
-body.alloc-mode .act-alert-table { flex: 1 1 auto; max-height: none; min-height: 0; }
-body.alloc-mode .act-donut-mini { display: none; }
-body.alloc-mode .act-monthly-kpis,
-body.alloc-mode .act-res-kpis { margin-top: 4px; }
-body.alloc-mode .act-details-block {
-  flex: 0 1 30%;
-  min-height: 118px;
-  max-height: 34%;
   overflow: auto;
 }
-body.alloc-mode .act-details-block .bas-section-card { margin: 0 0 6px; }
-@media (max-width: 980px) {
+body.alloc-mode .bas-table { font-size: 11px; }
+body.alloc-mode .bas-table th,
+body.alloc-mode .bas-table td { padding: 3px 6px; }
+body.alloc-mode .act-alert-tab { padding: 3px 8px; font-size: 11px; }
+body.alloc-mode .bas-section-badge { width: 18px; height: 18px; font-size: 10px; }
+body.alloc-mode #bas-empty,
+body.alloc-mode #bas-empty h2,
+body.alloc-mode #bas-empty p,
+body.alloc-mode #bas-empty li { color: #e8eef7; }
+
+@media (max-width: 1100px) {
+  body.alloc-mode.live-app { overflow: auto; }
   body.alloc-mode.live-app .app-content,
   body.alloc-mode.live-app #dashboard,
-  body.alloc-mode.live-app #dashboard.show,
-  body.alloc-mode #panel-boallocstock,
+  body.alloc-mode.live-app #dashboard.show { height: auto; max-height: none; overflow: visible; }
+  body.alloc-mode #panel-boallocstock {
+    position: static;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    height: auto;
+    overflow: visible;
+    padding: 8px;
+  }
   body.alloc-mode #bas-dash.act-tower {
     height: auto;
-    max-height: none;
-    overflow: visible;
-    display: block;
-  }
-  body.alloc-mode .act-charts {
     display: flex;
     flex-direction: column;
     overflow: visible;
+    grid-template-rows: none;
   }
-  body.alloc-mode .act-charts .act-card { height: auto; }
-  body.alloc-mode.live-app .act-charts .act-chart-box--bars,
-  body.alloc-mode.live-app .act-charts .act-chart-box--quad,
-  body.alloc-mode.live-app .act-charts .act-chart-box--top { height: 240px !important; min-height: 240px !important; }
-  body.alloc-mode.live-app .act-charts .act-chart-box--donut,
-  body.alloc-mode.live-app .act-charts .act-chart-box--daily,
-  body.alloc-mode.live-app .act-charts .act-chart-box--month,
-  body.alloc-mode.live-app .act-charts .act-chart-box--res { height: 200px !important; min-height: 200px !important; }
-  body.alloc-mode .act-details-block { max-height: none; overflow: visible; }
-  body.alloc-mode .act-filter-bar { flex-wrap: wrap; }
-  body.alloc-mode .act-sub { display: block; }
+  body.alloc-mode .act-charts,
+  body.alloc-mode .act-main-grid,
+  body.alloc-mode .act-secondary-grid,
+  body.alloc-mode .act-ops-grid,
+  body.alloc-mode .act-details-block { display: flex; flex-direction: column; gap: 8px; }
+  body.alloc-mode .act-card,
+  body.alloc-mode details.bas-section-card,
+  body.alloc-mode .act-alerts-card { height: auto; grid-column: auto; grid-row: auto; }
+  body.alloc-mode.live-app .act-chart-box--bars,
+  body.alloc-mode.live-app .act-chart-box--quad,
+  body.alloc-mode.live-app .act-chart-box--top { height: 200px !important; min-height: 200px !important; }
+  body.alloc-mode.live-app .act-chart-box--donut,
+  body.alloc-mode.live-app .act-chart-box--daily,
+  body.alloc-mode.live-app .act-chart-box--month,
+  body.alloc-mode.live-app .act-chart-box--res { height: 160px !important; min-height: 160px !important; }
+  body.alloc-mode .act-filter-bar { flex-wrap: wrap; overflow: visible; }
+  body.alloc-mode #bas-kpis.act-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
