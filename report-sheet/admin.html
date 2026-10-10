@@ -62,6 +62,93 @@
     .eom-dialog input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; }
     .eom-dialog .eom-err { color: #e11d48; font-size: 13px; min-height: 18px; }
     .eom-dialog .eom-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+    body.admin-page #allocation-plan-wrap {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+    }
+    body.admin-page .allocation-plan-table {
+      background: #fff;
+      color: #0f172a;
+    }
+    body.admin-page .allocation-plan-table .alloc-head-title th {
+      background: #0f172a !important;
+      color: #fff !important;
+      font-size: 15px !important;
+      letter-spacing: 0.16em !important;
+    }
+    body.admin-page .allocation-plan-table .alloc-head-cols th {
+      background: #1e293b !important;
+      color: #f8fafc !important;
+      font-size: 12px !important;
+      letter-spacing: 0.06em !important;
+    }
+    body.admin-page .allocation-plan-table td {
+      color: #0f172a !important;
+      background: #fff;
+      font-size: 13.5px;
+    }
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td { background: #f8fbff; }
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td { background: #fffdf6; }
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td { background: #f6fdf9; }
+    body.admin-page .allocation-plan-table td.alloc-seg {
+      font-size: 14px !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.08em;
+      text-align: center;
+      vertical-align: top !important;
+    }
+    body.admin-page .allocation-plan-table td.alloc-seg span {
+      position: sticky;
+      top: 78px;
+      display: inline-block;
+      padding: 8px 0;
+    }
+    body.admin-page .allocation-plan-table tr.alloc-band-pc > td.alloc-seg {
+      background: #1d4ed8 !important;
+      color: #fff !important;
+    }
+    body.admin-page .allocation-plan-table tr.alloc-band-cv > td.alloc-seg {
+      background: #b45309 !important;
+      color: #fff !important;
+    }
+    body.admin-page .allocation-plan-table tr.alloc-band-suv > td.alloc-seg {
+      background: #047857 !important;
+      color: #fff !important;
+    }
+    body.admin-page .allocation-plan-table td.alloc-product {
+      color: #0f172a !important;
+      font-weight: 700 !important;
+    }
+    body.admin-page .allocation-plan-table .alloc-sfx input,
+    body.admin-page .allocation-plan-table .alloc-esales input {
+      background: #fff !important;
+      color: #0f172a !important;
+      border: 1.5px solid #64748b !important;
+      font-weight: 800 !important;
+      font-size: 14px !important;
+    }
+    body.admin-page .allocation-plan-table .alloc-esales input {
+      border-color: #1d4ed8 !important;
+      color: #1e3a8a !important;
+    }
+    body.admin-page .allocation-plan-table tr.is-product-total > td {
+      background: #dbeafe !important;
+      color: #1e3a8a !important;
+    }
+    body.admin-page .allocation-plan-table tr.is-seg-total > td {
+      background: #e2e8f0 !important;
+      color: #0f172a !important;
+      font-weight: 800 !important;
+    }
+    body.admin-page .allocation-plan-table tr.is-grand-total > td,
+    body.admin-page .allocation-plan-table tr.is-grand-total > td.alloc-seg {
+      background: #0f172a !important;
+      color: #fff !important;
+    }
+    body.admin-page .allocation-plan-table tbody tr.is-leaf:hover > td:not(.alloc-seg) {
+      background: #fff7ed !important;
+    }
   </style>
 </head>
 <body class="live-app admin-page toyota-theme">
@@ -551,11 +638,12 @@
           const isLeaf = r.kind === "leaf";
           const cls = [
             "alloc-row",
+            "alloc-band-" + String(r.seg || "").toLowerCase(),
             isLeaf ? "is-leaf" : "is-total",
             r.kind === "product-total" ? "is-product-total" : "",
             r.kind === "seg-total" ? "is-seg-total" : "",
           ].filter(Boolean).join(" ");
-          const segTd = bi === 0 ? `<td class="alloc-seg" rowspan="${rowspan}">${escapeHtml(r.seg)}</td>` : "";
+          const segTd = bi === 0 ? `<td class="alloc-seg" rowspan="${rowspan}"><span>${escapeHtml(r.seg)}</span></td>` : "";
           let productTd = "";
           if (!isLeaf) {
             productTd = `<td class="alloc-product alloc-total-label">${escapeHtml(r.product)}</td>`;

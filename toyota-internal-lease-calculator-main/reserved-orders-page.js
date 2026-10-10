@@ -476,7 +476,10 @@
         $('overlay-lookup').classList.toggle('hidden', name !== 'lookup');
         $('overlay-message').classList.toggle('hidden', name !== 'message');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
-        if (name === 'lookup') { loadVehicles(); loadAlertRules(); }
+        if (name === 'lookup') {
+            const frame = $('bo-lookup-frame');
+            if (frame && !frame.getAttribute('src')) frame.src = 'bo-hub/bo-order-lookup.html';
+        }
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
     }
     $('login-form').addEventListener('submit', async (event) => {
@@ -517,8 +520,8 @@
         $(id).addEventListener('change', render);
     });
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
-    $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
-    $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });
+    if ($('lookup-form')) $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
+    if ($('vehicles')) $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });
     ['msg-customer', 'msg-advisor', 'msg-phone', 'msg-type', 'msg-lang', 'msg-note', 'msg-model'].forEach((id) => $(id).addEventListener('input', paintMessage));
     $('msg-car').addEventListener('change', fillModels);
     $('msg-wa').addEventListener('click', () => {

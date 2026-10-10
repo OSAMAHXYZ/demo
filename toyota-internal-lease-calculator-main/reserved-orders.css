@@ -342,12 +342,18 @@ body.dash { min-height: 100vh; background: var(--bg); }
     inset: 0;
     z-index: 60;
     padding: 0;
-    background:
-        radial-gradient(1200px 600px at 10% -5%, rgba(255, 59, 74, 0.14), transparent 55%),
-        radial-gradient(900px 500px at 95% 5%, rgba(56, 189, 248, 0.08), transparent 50%),
-        linear-gradient(180deg, #050810 0%, #070b14 100%);
+    display: flex;
+    flex-direction: column;
+    background: #070b14;
     color: #e8ecf4;
-    overflow: auto;
+    overflow: hidden;
+}
+#overlay-lookup .bo-lookup-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: #070b14;
 }
 #overlay-lookup .bo-look-nav {
     position: sticky; top: 0; z-index: 2;

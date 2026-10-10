@@ -75,31 +75,11 @@
         </main>
 
         <div id="overlay-lookup" class="overlay hidden">
-            <div class="bo-look">
-                <div class="bo-look-nav">
-                    <strong>BO Order Lookup</strong>
-                    <button class="bo-look-close" type="button" data-view="orders">Close</button>
-                </div>
-                <div class="bo-look-wrap">
-                    <section class="bo-hero">
-                        <div class="bo-eyebrow">BO Lookup · Live Queue Insights</div>
-                        <h2>BO Order Lookup</h2>
-                        <p>Search uses the Back Order, E-Sales, and RTL files from the latest Report Sheet push.</p>
-                        <form class="bo-hero-search" id="lookup-form">
-                            <input id="lookup-q" placeholder="Enter order number or VIN">
-                            <button type="submit">Search</button>
-                        </form>
-                    </section>
-                    <div id="lookup-alerts"></div>
-                    <div id="lookup-result"></div>
-                    <section class="bo-card">
-                        <h3>Choose a vehicle</h3>
-                        <p class="bo-sub">Pick a car to see the suffix breakdown from the latest back order file.</p>
-                        <div class="product-grid" id="vehicles"></div>
-                        <div id="vehicle-detail"></div>
-                    </section>
-                </div>
+            <div class="bo-look-nav">
+                <strong>BO Order Lookup</strong>
+                <button class="bo-look-close" type="button" data-view="orders">Close</button>
             </div>
+            <iframe class="bo-lookup-frame" id="bo-lookup-frame" title="BO Order Lookup"></iframe>
         </div>
 
         <div id="overlay-message" class="overlay hidden">
