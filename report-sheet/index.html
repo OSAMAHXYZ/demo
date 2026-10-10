@@ -21817,15 +21817,27 @@
       navBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!navMenu.hidden) { closeNav(); return; }
-        navMenu.innerHTML = visiblePanels().map((p) =>
-          `<button type="button" role="menuitem" class="sr-nav-item${p.id === activePanel ? " is-active" : ""}" data-nav-panel="${escapeHtml(p.id)}">${escapeHtml(p.label)}</button>`
-        ).join("") + `<div class="sr-nav-sep"></div>
+        const ytdOpen = document.getElementById("panel-salesreport")?.dataset.srSheet === "ytd";
+        const ytdItem = `<button type="button" role="menuitem" class="sr-nav-item${ytdOpen ? " is-active" : ""}" data-nav-ytd="1">YTD Sales</button>`;
+        const panelItems = visiblePanels().flatMap((p) => {
+          const item = `<button type="button" role="menuitem" class="sr-nav-item${p.id === activePanel && !(p.id === "salesreport" && ytdOpen) ? " is-active" : ""}" data-nav-panel="${escapeHtml(p.id)}">${escapeHtml(p.label)}</button>`;
+          return p.id === "salesreport" ? [item, ytdItem] : [item];
+        });
+        if (!panelItems.includes(ytdItem)) panelItems.unshift(ytdItem);
+        navMenu.innerHTML = panelItems.join("") + `<div class="sr-nav-sep"></div>
           <a class="sr-nav-item" role="menuitem" href="admin.html">Admin Push</a>
           <a class="sr-nav-item" role="menuitem" href="data-uploader.html">Data Uploader</a>`;
         navMenu.hidden = false;
         navBtn.setAttribute("aria-expanded", "true");
       });
       navMenu.addEventListener("click", (e) => {
+        if (e.target.closest("[data-nav-ytd]")) {
+          e.stopPropagation();
+          closeNav();
+          if (activePanel !== "salesreport") switchPanel("salesreport");
+          setSrSheet("ytd");
+          return;
+        }
         const item = e.target.closest("[data-nav-panel]");
         if (!item) return;
         closeNav();
