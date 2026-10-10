@@ -249,6 +249,7 @@
             <button type="button" class="btn-ghost sr-clear-sel" id="sr-clear-sel" hidden>Clear selection</button>
             <button type="button" class="sr-tool-btn" data-sr-sheet="pace" title="Daily target pace">Pace</button>
             <button type="button" class="sr-tool-btn" data-sr-sheet="schedule" title="Employee sales schedule &amp; targets">Schedule</button>
+            <button type="button" class="sr-tool-btn" data-sr-sheet="ytd" title="Year-to-date sales, employee targets, and reconciliation">YTD Sales</button>
             <button type="button" class="sr-export-btn" id="sr-csv-btn">
               <span aria-hidden="true">↑</span> Export
             </button>
@@ -574,6 +575,31 @@
                     </div>
                     <div id="sr-detail-body"></div>
                   </div>
+                </section>
+              </div>
+            </details>
+
+            <details class="sr-fold sr-fold--ytd" id="sr-ytd-fold">
+              <summary class="sr-fold-summary">
+                <span>YTD Sales</span>
+                <span class="sr-fold-chev" aria-hidden="true">▾</span>
+                <button type="button" class="sr-sheet-close" data-sr-sheet-close title="Close (Esc)" aria-label="Close">×</button>
+              </summary>
+              <div class="sr-fold-body">
+                <section class="ytd-sheet" id="ytd-sheet" aria-label="YTD Sales">
+                  <header class="ytd-head">
+                    <div>
+                      <h3 class="ytd-title">YTD Sales</h3>
+                      <p class="ytd-sub">Employee targets and invoice sales from Sales Raw. The existing report stays beside them for comparison.</p>
+                    </div>
+                    <label class="ytd-year">
+                      <span>Year</span>
+                      <select id="ytd-year" aria-label="YTD year"></select>
+                    </label>
+                  </header>
+                  <div class="ytd-annual" id="ytd-annual"></div>
+                  <div class="ytd-months" id="ytd-months"></div>
+                  <div class="ytd-detail" id="ytd-detail" hidden></div>
                 </section>
               </div>
             </details>
@@ -4267,11 +4293,75 @@
     }).filter((r) => r.orderNumber || r.vin);
   }
 
+  /** First worksheet only. Invoice Date is found by header, never by column V. */
+  function ytdInvoiceRows(workbook) {
+    window._ytdInvoiceRows = [];
+    window._ytdInvoiceMeta = { sheet: "", invoiceHeader: "", qtyHeader: "", idHeader: "", nameHeader: "" };
+    const names = (workbook && workbook.SheetNames) || [];
+    const sheetName = names[0];
+    if (!sheetName || !workbook.Sheets[sheetName]) return;
+    const matrix = sheetMatrixFromColA(workbook.Sheets[sheetName]);
+    if (!matrix.length) return;
+    let headerIdx = 0;
+    let bestHits = -1;
+    const scanLimit = Math.min(matrix.length, 40);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const cells = (matrix[i] || []).map((c) => normHeader(c));
+      const hits = ["invoice date", "sales qty", "salesman", "advisor"].filter((m) => cells.some((c) => c === m || c.includes(m))).length;
+      if (hits > bestHits) { bestHits = hits; headerIdx = i; }
+    }
+    const headers = (matrix[headerIdx] || []).map((h, i) => cellToString(h).trim() || `Column ${i + 1}`);
+    const findHeader = (test) => headers.findIndex((h) => test(normHeader(h)));
+    const invoiceIdx = findHeader((n) => n === "invoice date" || n === "inv date" || (n.includes("invoice") && n.includes("date")));
+    const qtyIdx = findHeader((n) => n === "sales qty" || n === "sales quantity" || n === "qty" || n.includes("sales qty"));
+    const nameIdx = findHeader((n) => n === "salesman name" || n === "salesman" || n === "advisor" || n === "employee name" || n === "consultant");
+    const idIdx = findHeader((n) => n.includes("employee id") || n === "emp id" || n.includes("salesman id") || n.includes("salesman code") || n === "staff id");
+    const vinIdx = findHeader((n) => n === "vin" || n === "chassis" || n.includes("vehicle identification"));
+    const idxName = nameIdx >= 0 ? nameIdx : colLetterToIndex("A");
+    const idxReport = colLetterToIndex("V");
+    const rows = [];
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (line.every((c) => cellToString(c).trim() === "")) continue;
+      const rawName = cellToString(line[idxName]).trim();
+      if (!rawName) continue;
+      const invoice = invoiceIdx >= 0 ? parseDate(line[invoiceIdx]) : null;
+      const qtyRaw = qtyIdx >= 0 ? line[qtyIdx] : null;
+      const qtyNum = qtyRaw == null || String(qtyRaw).trim() === "" ? null : Number(String(qtyRaw).replace(/,/g, "").trim());
+      const qty = Number.isFinite(qtyNum) ? qtyNum : null;
+      let reason = "";
+      if (invoiceIdx < 0) reason = "Invoice Date column was not found";
+      else if (!invoice) reason = "Blank or invalid Invoice Date";
+      else if (qtyIdx < 0) reason = "Sales Qty column was not found";
+      else if (qty == null) reason = "Missing Sales Qty";
+      rows.push({
+        name: resolveSalesmanName(rawName) || rawName,
+        id: idIdx >= 0 ? cellToString(line[idIdx]).trim() : "",
+        invoice,
+        qty,
+        reason,
+        reportDate: parseDate(line[idxReport]),
+        vin: vinIdx >= 0 ? cellToString(line[vinIdx]).trim() : "",
+      });
+    }
+    window._ytdInvoiceRows = rows;
+    window._ytdInvoiceMeta = {
+      sheet: sheetName,
+      invoiceHeader: invoiceIdx >= 0 ? headers[invoiceIdx] : "",
+      qtyHeader: qtyIdx >= 0 ? headers[qtyIdx] : "",
+      idHeader: idIdx >= 0 ? headers[idIdx] : "",
+      nameHeader: headers[idxName] || "",
+    };
+  }
+
   function rowsForSlot(id, workbook) {
     if (id === "backorder") return backorderRows(workbook);
     if (id === "cancelled") return cancelledBoRows(workbook);
     if (id === "accessories") return accessoriesRows(workbook);
-    if (id === "sales") return salesRawRows(workbook);
+    if (id === "sales") {
+      ytdInvoiceRows(workbook);
+      return salesRawRows(workbook);
+    }
     if (id === "central") return esalesAvailableStockRows(workbook);
     return sheetRows(workbook, workbook.SheetNames[0]);
   }
@@ -8884,6 +8974,7 @@
     window._data = fresh;
     window._srRowsByKey = Object.fromEntries((fresh.salesReport.rows || []).map((r) => [r._key, r]));
     renderSalesReportKpis(fresh.salesReport);
+    if (document.getElementById("panel-salesreport")?.dataset.srSheet === "ytd") renderYtdSales();
     syncSrDateControls(fresh.salesReport);
     refreshSalesSelection();
   }
@@ -9024,12 +9115,286 @@
   function setSrSheet(name) {
     const panel = document.getElementById("panel-salesreport");
     if (!panel) return;
-    const next = name === "pace" || name === "schedule" ? name : "";
+    const next = name === "pace" || name === "schedule" || name === "ytd" ? name : "";
     if (next) panel.dataset.srSheet = next;
     else delete panel.dataset.srSheet;
-    const fold = next === "pace" ? $("#sr-pace-fold") : next === "schedule" ? $("#sr-emp-fold") : null;
+    const fold = next === "pace" ? $("#sr-pace-fold") : next === "schedule" ? $("#sr-emp-fold") : next === "ytd" ? $("#sr-ytd-fold") : null;
     if (fold) fold.open = true;
+    if (next === "ytd") renderYtdSales();
     document.querySelectorAll("[data-sr-sheet]").forEach((b) => b.classList.toggle("is-active", b.dataset.srSheet === next));
+  }
+
+  const YTD_TARGET_KEY = "ytd-employee-targets";
+  let ytdTargets = { months: {} };
+  let ytdYear = new Date().getFullYear();
+  let ytdOpenMonth = "";
+  let ytdInspect = false;
+  let ytdTargetsLoaded = false;
+
+  function ytdLoadLocal() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(YTD_TARGET_KEY) || "{}");
+      return raw && raw.months && typeof raw.months === "object" ? { months: raw.months } : { months: {} };
+    } catch (e) {
+      return { months: {} };
+    }
+  }
+
+  function ytdSaveLocal() {
+    try { localStorage.setItem(YTD_TARGET_KEY, JSON.stringify(ytdTargets)); } catch (e) { /* ignore quota */ }
+  }
+
+  async function ytdEnsureTargets() {
+    if (ytdTargetsLoaded) return;
+    ytdTargets = ytdLoadLocal();
+    try {
+      const res = await fetch("/api/report-sheet/ytd-targets", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        const serverMonths = data && data.months && typeof data.months === "object" ? data.months : null;
+        const serverHas = serverMonths && Object.keys(serverMonths).length;
+        const localHas = Object.keys(ytdTargets.months || {}).length;
+        if (serverMonths && (serverHas || !localHas)) {
+          ytdTargets = { months: serverMonths };
+          ytdSaveLocal();
+        }
+      }
+    } catch (e) { /* keep the local copy */ }
+    ytdTargetsLoaded = true;
+  }
+
+  function ytdMonthKey(year, monthIndex) {
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  }
+
+  function ytdAch(actual, target) {
+    const t = Number(target);
+    const a = Number(actual);
+    if (!Number.isFinite(t) || t <= 0 || !Number.isFinite(a)) return null;
+    const pct = (a / t) * 100;
+    return Number.isFinite(pct) ? pct : null;
+  }
+
+  function ytdPctText(pct) {
+    return pct == null ? "—" : `${pct.toFixed(1)}%`;
+  }
+
+  function ytdStatus(pct, hasTarget) {
+    if (!hasTarget) return { label: "No target", cls: "is-none" };
+    if (pct >= 100) return { label: "Above target", cls: "is-above" };
+    if (pct >= 80) return { label: "On track", cls: "is-on" };
+    return { label: "Below target", cls: "is-below" };
+  }
+
+  function ytdBuild() {
+    const rows = window._ytdInvoiceRows || [];
+    const months = {};
+    for (let i = 0; i < 12; i += 1) {
+      const key = ytdMonthKey(ytdYear, i);
+      months[key] = { key, month: i, actual: 0, report: 0, flagged: 0, employees: new Map(), records: [], flaggedRows: [] };
+    }
+    rows.forEach((row) => {
+      if (row.reportDate instanceof Date && row.reportDate.getFullYear() === ytdYear) {
+        const bucket = months[ytdMonthKey(ytdYear, row.reportDate.getMonth())];
+        if (bucket) bucket.report += 1;
+      }
+      if (!(row.invoice instanceof Date) || row.invoice.getFullYear() !== ytdYear) {
+        if (row.reason && (!row.invoice || row.reason.indexOf("Invoice") >= 0)) {
+          const stamp = row.reportDate instanceof Date && row.reportDate.getFullYear() === ytdYear
+            ? months[ytdMonthKey(ytdYear, row.reportDate.getMonth())]
+            : null;
+          if (stamp) {
+            stamp.flagged += 1;
+            if (stamp.flaggedRows.length < 200) stamp.flaggedRows.push(row);
+          }
+        }
+        return;
+      }
+      const bucket = months[ytdMonthKey(ytdYear, row.invoice.getMonth())];
+      if (!bucket) return;
+      if (row.reason || row.qty == null) {
+        bucket.flagged += 1;
+        if (bucket.flaggedRows.length < 200) bucket.flaggedRows.push(row);
+        return;
+      }
+      bucket.actual += row.qty;
+      const key = nameKey(row.name) || String(row.name || "").toLowerCase();
+      if (!bucket.employees.has(key)) bucket.employees.set(key, { key, name: row.name, id: row.id || "", actual: 0 });
+      const emp = bucket.employees.get(key);
+      if (row.id && !emp.id) emp.id = row.id;
+      emp.actual += row.qty;
+      if (bucket.records.length < 400) bucket.records.push(row);
+    });
+    const roster = ((window._data && window._data.salesReport && window._data.salesReport.rows) || []);
+    Object.values(months).forEach((bucket) => {
+      const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
+      Object.keys(saved).forEach((key) => {
+        if (bucket.employees.has(key)) return;
+        const row = saved[key] || {};
+        bucket.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0 });
+      });
+      roster.forEach((person) => {
+        const name = person["Sales Employee"] || person.salesman || "";
+        const key = person._key || nameKey(name);
+        if (!key || bucket.employees.has(key)) return;
+        bucket.employees.set(key, { key, name, id: person.salesmanCode || "", actual: 0 });
+      });
+    });
+    return months;
+  }
+
+  function ytdEmployeeRows(bucket) {
+    const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
+    return [...bucket.employees.values()].map((emp) => {
+      const stored = saved[emp.key];
+      const target = stored && Number.isFinite(Number(stored.target)) ? Number(stored.target) : null;
+      return { ...emp, target, ach: ytdAch(emp.actual, target) };
+    }).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+
+  function ytdMonthTotals(bucket) {
+    const people = ytdEmployeeRows(bucket);
+    const target = people.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
+    const hasTarget = people.some((emp) => emp.target != null && emp.target > 0);
+    return { people, target, actual: bucket.actual, ach: ytdAch(bucket.actual, hasTarget ? target : 0), hasTarget };
+  }
+
+  function paintYtd() {
+    const yearEl = $("#ytd-year");
+    const monthsEl = $("#ytd-months");
+    const annualEl = $("#ytd-annual");
+    if (!yearEl || !monthsEl || !annualEl) return;
+    const years = new Set([new Date().getFullYear(), ytdYear]);
+    (window._ytdInvoiceRows || []).forEach((row) => {
+      if (row.invoice instanceof Date) years.add(row.invoice.getFullYear());
+    });
+    yearEl.innerHTML = [...years].sort((a, b) => b - a).map((year) => `<option value="${year}"${year === ytdYear ? " selected" : ""}>${year}</option>`).join("");
+    const months = ytdBuild();
+    window._ytdMonths = months;
+    let yearActual = 0;
+    let yearTarget = 0;
+    let yearReport = 0;
+    monthsEl.innerHTML = Object.values(months).map((bucket) => {
+      const totals = ytdMonthTotals(bucket);
+      yearActual += totals.actual;
+      yearReport += bucket.report;
+      if (totals.hasTarget) yearTarget += totals.target;
+      const status = ytdStatus(totals.ach, totals.hasTarget);
+      const gap = totals.hasTarget ? totals.target - totals.actual : null;
+      const gapText = gap == null ? "Set employee targets" : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
+      const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
+      const diff = totals.actual - bucket.report;
+      const matched = Math.abs(diff) < 0.001;
+      const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
+      return `<button type="button" class="ytd-card${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
+        <div class="ytd-card-top"><strong>${label} ${ytdYear}</strong><span class="ytd-status ${status.cls}">${status.label}</span></div>
+        <div class="ytd-card-metrics">
+          <span><em>Target</em><b>${totals.hasTarget ? formatNumber(totals.target) : "—"}</b></span>
+          <span><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
+          <span><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
+        </div>
+        <div class="ytd-bar" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></div>
+        <div class="ytd-card-foot"><span>${gapText}</span><span class="ytd-recon ${matched ? "is-match" : "is-miss"}">${matched ? "Match" : "Mismatch"} ${diff > 0 ? "+" : ""}${formatNumber(diff)}</span></div>
+      </button>`;
+    }).join("");
+    const excluded = (window._ytdInvoiceRows || []).filter((row) => row.reason).length;
+    const yearAch = ytdAch(yearActual, yearTarget);
+    const yearStatus = ytdStatus(yearAch, yearTarget > 0);
+    annualEl.innerHTML = `<div><span>Annual target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong></div>
+      <div><span>Annual actual</span><strong>${formatNumber(yearActual)}</strong></div>
+      <div><span>Annual Ach%</span><strong>${ytdPctText(yearAch)}</strong></div>
+      <div><span>Report actual</span><strong>${formatNumber(yearReport)}</strong></div>
+      <div><span>Status</span><strong class="ytd-status ${yearStatus.cls}">${yearStatus.label}</strong></div>
+      ${excluded ? `<div><span>Excluded rows</span><strong>${formatNumber(excluded)}</strong></div>` : ""}`;
+    paintYtdDetail();
+  }
+
+  function paintYtdDetail() {
+    const el = $("#ytd-detail");
+    if (!el) return;
+    const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
+    if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
+    const totals = ytdMonthTotals(bucket);
+    const diff = totals.actual - bucket.report;
+    const matched = Math.abs(diff) < 0.001;
+    const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+    const meta = window._ytdInvoiceMeta || {};
+    const rows = totals.people.map((emp) => `<tr>
+      <td>${escapeHtml(emp.name || "—")}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
+      <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
+      <td>${formatNumber(emp.actual)}</td>
+      <td>${ytdPctText(emp.ach)}</td>
+    </tr>`).join("");
+    const inspectRows = ytdInspect ? `
+      <div class="ytd-inspect">
+        <h4>Sales Raw records · ${escapeHtml(meta.invoiceHeader || "Invoice Date")} · ${escapeHtml(meta.sheet || "first worksheet")}</h4>
+        <table><thead><tr><th>Employee</th><th>Invoice date</th><th>Sales Qty</th><th>VIN</th></tr></thead><tbody>
+          ${bucket.records.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(formatRvDate ? formatRvDate(row.invoice) : row.invoice.toLocaleDateString("en-GB"))}</td><td>${formatNumber(row.qty)}</td><td>${escapeHtml(row.vin || "—")}</td></tr>`).join("") || `<tr><td colspan="4">No invoice rows in this month.</td></tr>`}
+        </tbody></table>
+        <h4>Needs review · blank invoice date or missing Sales Qty</h4>
+        <table><thead><tr><th>Employee</th><th>Reason</th></tr></thead><tbody>
+          ${bucket.flaggedRows.map((row) => `<tr><td>${escapeHtml(row.name || "—")}</td><td>${escapeHtml(row.reason || "Excluded")}</td></tr>`).join("") || `<tr><td colspan="2">None</td></tr>`}
+        </tbody></table>
+      </div>` : "";
+    el.hidden = false;
+    el.innerHTML = `<div class="ytd-detail-head">
+        <div><h3>${label}</h3><p>Monthly target is the sum of the employee targets below. Actual sales are the sum of Sales Qty.</p></div>
+        <button type="button" class="ytd-text-btn" data-ytd-close>Close month</button>
+      </div>
+      <div class="ytd-recon-line ${matched ? "is-match" : "is-miss"}">
+        <span>Report actual <b>${formatNumber(bucket.report)}</b></span>
+        <span>Sales Raw actual <b>${formatNumber(totals.actual)}</b></span>
+        <span>Difference <b>${diff > 0 ? "+" : ""}${formatNumber(diff)}</b></span>
+        <span>${matched ? "Match" : "Mismatch"}</span>
+        <button type="button" class="ytd-text-btn" data-ytd-inspect>${ytdInspect ? "Hide records" : "Inspect records"}</button>
+      </div>
+      <p class="ytd-save" id="ytd-save-note">Targets stay saved when Sales Raw is refreshed.</p>
+      <div class="ytd-table-wrap"><table class="ytd-table">
+        <thead><tr><th>Employee</th><th>Monthly Target</th><th>Actual Sales</th><th>Ach%</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="4">No employees for this month.</td></tr>`}</tbody>
+        <tfoot><tr><td>Month total</td><td>${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}</td><td>${ytdPctText(totals.ach)}</td></tr></tfoot>
+      </table></div>
+      ${bucket.flagged && !ytdInspect ? `<p class="ytd-flag">${formatNumber(bucket.flagged)} row${bucket.flagged === 1 ? "" : "s"} excluded and flagged for review.</p>` : ""}
+      ${inspectRows}`;
+  }
+
+  async function renderYtdSales() {
+    await ytdEnsureTargets();
+    paintYtd();
+  }
+
+  function ytdWriteMonth(month, employees) {
+    if (!ytdTargets.months) ytdTargets.months = {};
+    ytdTargets.months[month] = employees;
+    ytdSaveLocal();
+    const note = $("#ytd-save-note");
+    if (note) note.textContent = "Saving targets…";
+    fetch("/api/report-sheet/ytd-targets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month, employees }),
+    }).then((res) => {
+      if (note) note.textContent = res.ok ? "Targets saved for this month." : "Saved on this browser. The server did not accept the update.";
+    }).catch(() => {
+      if (note) note.textContent = "Saved on this browser. The server was not reachable.";
+    });
+  }
+
+  function ytdOnTargetInput(input) {
+    if (!ytdOpenMonth) return;
+    const saved = { ...((ytdTargets.months && ytdTargets.months[ytdOpenMonth]) || {}) };
+    const key = input.dataset.ytdTarget;
+    const raw = String(input.value || "").trim();
+    if (raw === "") delete saved[key];
+    else {
+      const target = Number(raw);
+      if (!Number.isFinite(target) || target < 0) return;
+      saved[key] = { name: input.dataset.ytdName || "", id: input.dataset.ytdId || "", target };
+    }
+    ytdWriteMonth(ytdOpenMonth, saved);
+    paintYtd();
+    const again = document.querySelector(`[data-ytd-target="${CSS.escape(key)}"]`);
+    if (again) { again.focus(); const end = again.value.length; again.setSelectionRange(end, end); }
   }
 
   function renderSrLastUpdated() {
@@ -21398,6 +21763,25 @@
     });
     const schedCharts = $("#sr-sched-charts");
     if (schedCharts) schedCharts.addEventListener("click", () => setSrSheet(""));
+    panel.addEventListener("click", (e) => {
+      const month = e.target.closest("[data-ytd-month]");
+      if (month) {
+        ytdOpenMonth = ytdOpenMonth === month.dataset.ytdMonth ? "" : month.dataset.ytdMonth;
+        ytdInspect = false;
+        paintYtd();
+        return;
+      }
+      if (e.target.closest("[data-ytd-close]")) { ytdOpenMonth = ""; ytdInspect = false; paintYtd(); }
+      if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); }
+    });
+    panel.addEventListener("change", (e) => {
+      if (e.target.id === "ytd-year") {
+        ytdYear = Number(e.target.value) || new Date().getFullYear();
+        ytdOpenMonth = "";
+        paintYtd();
+      }
+      if (e.target.matches("[data-ytd-target]")) ytdOnTargetInput(e.target);
+    });
 
     const refresh = $("#sr-refresh-btn");
     if (refresh) {

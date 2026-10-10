@@ -666,7 +666,8 @@ body.sr-mode #panel-salesreport {
   display: block; position: fixed; inset: 0; z-index: 1450; background: rgba(2, 6, 14, 0.66); backdrop-filter: blur(3px);
 }
 #panel-salesreport[data-sr-sheet="pace"] #sr-pace-fold,
-#panel-salesreport[data-sr-sheet="schedule"] #sr-emp-fold {
+#panel-salesreport[data-sr-sheet="schedule"] #sr-emp-fold,
+#panel-salesreport[data-sr-sheet="ytd"] #sr-ytd-fold {
   display: flex; flex-direction: column;
   position: fixed; z-index: 1460;
   inset: clamp(14px, 3vh, 40px) clamp(14px, 2.6vw, 56px);
@@ -688,6 +689,45 @@ body.sr-mode #panel-salesreport {
 }
 #panel-salesreport[data-sr-sheet] .sr-sheet-close:hover { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
 #panel-salesreport[data-sr-sheet] .sr-fold-body { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px; }
+#panel-salesreport .ytd-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 12px; }
+#panel-salesreport .ytd-title { margin: 0; font-size: 20px; }
+#panel-salesreport .ytd-sub { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+#panel-salesreport .ytd-year { display: grid; gap: 4px; font-size: 12px; color: #64748b; }
+#panel-salesreport .ytd-year select { height: 34px; border: 1px solid #dbe3ee; border-radius: 8px; padding: 0 8px; background: #fff; }
+#panel-salesreport .ytd-annual { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+#panel-salesreport .ytd-annual div { background: #fff; border: 1px solid #e5eaf2; border-radius: 10px; padding: 8px 10px; }
+#panel-salesreport .ytd-annual span { display: block; color: #64748b; font-size: 11px; }
+#panel-salesreport .ytd-annual strong { font-size: 16px; }
+#panel-salesreport .ytd-months { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+#panel-salesreport .ytd-card { text-align: left; background: #fff; border: 1px solid #e5eaf2; border-radius: 12px; padding: 10px; cursor: pointer; color: inherit; }
+#panel-salesreport .ytd-card.is-open { border-color: #eb0a1e; box-shadow: 0 0 0 1px #eb0a1e; }
+#panel-salesreport .ytd-card-top, #panel-salesreport .ytd-card-foot, #panel-salesreport .ytd-card-metrics { display: flex; justify-content: space-between; gap: 8px; }
+#panel-salesreport .ytd-card-metrics { margin: 8px 0; }
+#panel-salesreport .ytd-card-metrics span { display: grid; }
+#panel-salesreport .ytd-card-metrics em { font-style: normal; color: #64748b; font-size: 10px; }
+#panel-salesreport .ytd-bar { height: 6px; border-radius: 99px; background: #e8eef6; overflow: hidden; }
+#panel-salesreport .ytd-bar i { display: block; height: 100%; background: #157f3d; }
+#panel-salesreport .ytd-card-foot { margin-top: 8px; color: #64748b; font-size: 11px; }
+#panel-salesreport .ytd-status.is-above, #panel-salesreport .ytd-recon.is-match { color: #157f3d; }
+#panel-salesreport .ytd-status.is-on { color: #b45309; }
+#panel-salesreport .ytd-status.is-below, #panel-salesreport .ytd-recon.is-miss { color: #b91c1c; }
+#panel-salesreport .ytd-status.is-none { color: #64748b; }
+#panel-salesreport .ytd-detail { margin-top: 12px; background: #fff; border: 1px solid #e5eaf2; border-radius: 12px; padding: 12px; }
+#panel-salesreport .ytd-detail-head, #panel-salesreport .ytd-recon-line { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+#panel-salesreport .ytd-detail h3 { margin: 0; }
+#panel-salesreport .ytd-detail p { margin: 4px 0 0; color: #64748b; font-size: 12px; }
+#panel-salesreport .ytd-recon-line { margin: 10px 0; padding: 8px 10px; border-radius: 8px; background: #f8fafc; font-size: 13px; }
+#panel-salesreport .ytd-table-wrap, #panel-salesreport .ytd-inspect { overflow: auto; max-height: 360px; }
+#panel-salesreport .ytd-table, #panel-salesreport .ytd-inspect table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#panel-salesreport .ytd-table th, #panel-salesreport .ytd-table td, #panel-salesreport .ytd-inspect th, #panel-salesreport .ytd-inspect td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; text-align: left; }
+#panel-salesreport .ytd-table td:not(:first-child), #panel-salesreport .ytd-table th:not(:first-child) { text-align: right; }
+#panel-salesreport .ytd-table input { width: 110px; height: 30px; border: 1px solid #dbe3ee; border-radius: 7px; padding: 0 8px; text-align: right; }
+#panel-salesreport .ytd-table small { display: block; color: #94a3b8; }
+#panel-salesreport .ytd-text-btn { border: 1px solid #dbe3ee; background: #fff; border-radius: 8px; height: 30px; padding: 0 10px; cursor: pointer; }
+#panel-salesreport .ytd-flag { color: #b45309; }
+@media (max-width: 1100px) {
+  #panel-salesreport .ytd-months, #panel-salesreport .ytd-annual { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 #panel-salesreport[data-sr-sheet] .sr-sched-foot { display: none; }
 
 /* ---------- Height steps (1080 → 900 → 768) ---------- */

@@ -4742,6 +4742,59 @@ app.post('/api/report-sheet/gec-control', (req, res) => {
   }
 });
 
+const YTD_TARGETS_FILE = path.join(REPORT_SHEET_DIR, 'ytd-employee-targets.json');
+
+function loadYtdTargets() {
+  try {
+    if (!fs.existsSync(YTD_TARGETS_FILE)) return { months: {} };
+    const data = JSON.parse(fs.readFileSync(YTD_TARGETS_FILE, 'utf8'));
+    if (!data || typeof data !== 'object' || !data.months || typeof data.months !== 'object') return { months: {} };
+    return { months: data.months };
+  } catch (err) {
+    return { months: {} };
+  }
+}
+
+/** Employee monthly targets for YTD Sales. Sales Raw uploads never write this file. */
+app.get('/api/report-sheet/ytd-targets', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json(loadYtdTargets());
+});
+
+app.post('/api/report-sheet/ytd-targets', (req, res) => {
+  try {
+    const month = String((req.body && req.body.month) || '');
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Month must be YYYY-MM' });
+    }
+    const incoming = req.body && req.body.employees;
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      return res.status(400).json({ error: 'employees object required' });
+    }
+    const next = {};
+    Object.keys(incoming).forEach((key) => {
+      const row = incoming[key] || {};
+      const target = Number(row.target);
+      if (!Number.isFinite(target) || target < 0) return;
+      const safeKey = String(key).slice(0, 160);
+      if (!safeKey) return;
+      next[safeKey] = {
+        name: String(row.name || '').slice(0, 160),
+        id: String(row.id || '').slice(0, 40),
+        target,
+      };
+    });
+    const store = loadYtdTargets();
+    store.months[month] = next;
+    fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
+    fs.writeFileSync(YTD_TARGETS_FILE, JSON.stringify(store));
+    return res.json({ ok: true, month, employees: next });
+  } catch (err) {
+    console.error('[report-sheet/ytd-targets]', err);
+    return res.status(500).json({ error: err.message || 'Save failed' });
+  }
+});
+
 app.get('/api/report-sheet/file/:slot', (req, res) => {
   const fp = reportSheetFilePath(req.params.slot);
   if (!fp || !fs.existsSync(fp)) {
