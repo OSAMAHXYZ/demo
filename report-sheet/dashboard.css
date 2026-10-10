@@ -12117,6 +12117,231 @@ body.alloc-mode #bas-empty h2,
 body.alloc-mode #bas-empty p,
 body.alloc-mode #bas-empty li { color: #e8eef7; }
 
+/* Wide keeps the same row height and spans the details grid. Siblings move onto the row above. */
+body.alloc-mode .act-details-block:has(> .act-alerts-card.is-row-wide) > .bas-section-all {
+  grid-column: 1 / 5;
+  grid-row: 1;
+}
+body.alloc-mode .act-details-block:has(> .act-alerts-card.is-row-wide) > .bas-section-conf {
+  grid-column: 5 / 8;
+  grid-row: 1;
+}
+body.alloc-mode .act-details-block:has(> .act-alerts-card.is-row-wide) > .bas-section-alloc {
+  grid-column: 8 / 11;
+  grid-row: 1;
+}
+body.alloc-mode .act-details-block:has(> .act-alerts-card.is-row-wide) > .bas-section-month {
+  grid-column: 11 / -1;
+  grid-row: 1;
+}
+body.alloc-mode .act-details-block:has(> .act-alerts-card.is-row-wide) > .act-alerts-card {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+body.alloc-mode .act-details-block .bas-section-card,
+body.alloc-mode .act-details-block > .act-alerts-card { margin: 0; }
+body.alloc-mode details.bas-section-card,
+body.alloc-mode details.bas-section-card[open] { padding: 6px 8px; }
+body.alloc-mode details.bas-section-card > summary.bas-section-head,
+body.alloc-mode details.bas-section-card[open] > summary.bas-section-head {
+  display: block;
+  margin: 0 0 4px;
+  padding: 4px 8px;
+  background: #0c1628;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  color: #f8fafc;
+}
+body.alloc-mode details.bas-section-card > summary.bas-section-head:hover {
+  background: #132033;
+}
+body.alloc-mode .bas-section-head .pbi-viz-head,
+body.alloc-mode .bas-section-head-inner .pbi-viz-head {
+  align-items: flex-start;
+  text-align: left;
+}
+body.alloc-mode .bas-section-head .pbi-viz-head h2,
+body.alloc-mode details.bas-section-card > summary .pbi-viz-head h2 {
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+}
+body.alloc-mode .bas-section-head .hint {
+  display: block;
+  color: #93a4ba;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+body.alloc-mode .bas-section-badge,
+body.alloc-mode .bas-section-badge.is-teal,
+body.alloc-mode .bas-section-badge.is-violet {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: #152238;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #dbe7f5;
+}
+body.alloc-mode .bas-fold-chev { color: #93a4ba; }
+body.alloc-mode .bas-section-all,
+body.alloc-mode .bas-section-conf,
+body.alloc-mode .bas-section-month,
+body.alloc-mode .bas-section-alloc { border-top: 0; }
+body.alloc-mode .act-charts .pbi-viz-head h2 { color: #f8fafc; font-weight: 700; }
+body.alloc-mode .pbi-expand {
+  background: rgba(235, 10, 30, 0.14);
+  border-color: rgba(235, 10, 30, 0.55);
+  color: #ffb4bc;
+  padding: 2px 8px;
+}
+body.alloc-mode .pbi-expand:hover,
+body.alloc-mode .act-alerts-card.is-row-wide .pbi-expand {
+  background: #eb0a1e;
+  border-color: #eb0a1e;
+  color: #fff;
+}
+body.alloc-mode .act-alert-tabs { margin-bottom: 4px; }
+body.alloc-mode .act-alert-tab {
+  background: #0c1422;
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #c5d0de;
+}
+body.alloc-mode .act-alert-tab.active {
+  background: #eb0a1e;
+  border-color: #eb0a1e;
+  color: #fff;
+}
+body.alloc-mode .act-alert-table { max-height: none; }
+body.alloc-mode .act-res-chip,
+body.alloc-mode .act-mini,
+body.alloc-mode .act-supply-insight {
+  background: #0c1422;
+  border-color: rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+}
+body.alloc-mode .act-res-chip .lab,
+body.alloc-mode .act-res-chip strong { color: #e8eef7; }
+body.alloc-mode .btn,
+body.alloc-mode .act-filter-bar .btn {
+  background: #152238;
+  color: #e8eef7;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+}
+body.alloc-mode #bas-kpis .bo-kpi { border-top: 2px solid #3b82f6; }
+body.alloc-mode #bas-kpis .bo-kpi .val { font-size: 1.05rem; line-height: 1.1; }
+body.alloc-mode .bas-kpi-row-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 4px;
+  margin: 0 0 6px;
+}
+body.alloc-mode .bas-kpi-row-compact .bo-kpi,
+body.alloc-mode .bas-dash .bo-kpi {
+  background: #0c1422;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+  padding: 4px 6px;
+  min-height: 0;
+  box-shadow: none;
+}
+body.alloc-mode .bas-kpi-row-compact .bo-kpi .val,
+body.alloc-mode .bas-dash .bo-kpi .val { color: #fff; font-size: 0.95rem; }
+body.alloc-mode .bas-kpi-row-compact .bo-kpi .lab,
+body.alloc-mode .bas-kpi-row-compact .bo-kpi .sub,
+body.alloc-mode .bas-dash .bo-kpi .lab,
+body.alloc-mode .bas-dash .bo-kpi .sub { color: #93a4ba; }
+body.alloc-mode .bas-table-filters,
+body.alloc-mode .bas-insights-panel,
+body.alloc-mode .bas-insights-nested,
+body.alloc-mode .bas-result-chip,
+body.alloc-mode .bas-retail-total-card,
+body.alloc-mode .bas-mini-section,
+body.alloc-mode .bas-mini-ok,
+body.alloc-mode .bas-mini-change,
+body.alloc-mode .bas-mini-late,
+body.alloc-mode .bas-day-panel,
+body.alloc-mode .bas-retail-panel,
+body.alloc-mode .bas-usage-panel,
+body.alloc-mode .bas-free-stock-panel,
+body.alloc-mode .bas-res-move-panel {
+  background: #0c1422;
+  border-color: rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+}
+body.alloc-mode .bas-table-filters,
+body.alloc-mode .bas-alloc-toolbar,
+body.alloc-mode .bas-insights-nested,
+body.alloc-mode .bas-retail-head,
+body.alloc-mode .bas-mini-section { padding: 6px; margin-bottom: 6px; }
+body.alloc-mode .bas-filter-label,
+body.alloc-mode .bas-retail-title h3,
+body.alloc-mode .bas-subhead,
+body.alloc-mode .bas-insights-heading,
+body.alloc-mode .bas-day-panel-label,
+body.alloc-mode .bas-retail-total-lab,
+body.alloc-mode .bas-result-lab { color: #93a4ba; }
+body.alloc-mode .bas-retail-total-val,
+body.alloc-mode .bas-result-chip strong { color: #fff; }
+body.alloc-mode .bas-filter-label select,
+body.alloc-mode .bas-alloc-toolbar input,
+body.alloc-mode .bas-alloc-toolbar select {
+  background: #101a2b;
+  color: #e8eef7;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  min-width: 0;
+}
+body.alloc-mode .bas-section-all .bas-table-wrap,
+body.alloc-mode .bas-section-conf .bas-table-wrap,
+body.alloc-mode .bas-section-alloc .bas-table-wrap,
+body.alloc-mode .bas-section-month .bas-table-wrap,
+body.alloc-mode #bas-table.bas-table-wrap,
+body.alloc-mode #bas-conf-table.bas-table-wrap,
+body.alloc-mode #bas-alloc-table.bas-table-wrap,
+body.alloc-mode .bas-month-table-wrap,
+body.alloc-mode .bas-mini-section .bas-table-wrap {
+  max-height: none;
+  overflow: auto;
+  background: #0b1220;
+  border-color: rgba(148, 163, 184, 0.16);
+}
+body.alloc-mode .bas-table { color: #e8eef7; }
+body.alloc-mode .bas-table thead th {
+  background: #152033;
+  color: #9fb0c6;
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.2);
+}
+body.alloc-mode .bas-table th,
+body.alloc-mode .bas-table td {
+  border-bottom-color: rgba(148, 163, 184, 0.12);
+  color: #e8eef7;
+}
+body.alloc-mode .bas-table tbody tr:nth-child(even):not(.bas-row-below):not(.bas-row-above):not(.bas-row-total) {
+  background: rgba(255, 255, 255, 0.03);
+}
+body.alloc-mode .bas-table tbody tr:hover { background: rgba(59, 130, 246, 0.1); }
+body.alloc-mode .bas-table tr.bas-row-below { background: rgba(235, 10, 30, 0.12); }
+body.alloc-mode .bas-table tr.bas-row-above { background: rgba(16, 185, 129, 0.12); }
+body.alloc-mode .bas-table tr.bas-row-below:hover { background: rgba(235, 10, 30, 0.2); }
+body.alloc-mode .bas-table tr.bas-row-above:hover { background: rgba(16, 185, 129, 0.2); }
+body.alloc-mode .bas-month-grid .bas-row-total td {
+  background: #152033;
+  color: #f8fafc;
+  border-top-color: rgba(148, 163, 184, 0.28);
+}
+body.alloc-mode .bas-gap-neg { color: #fb7185; }
+body.alloc-mode .bas-gap-pos { color: #34d399; }
+body.alloc-mode .bas-foot,
+body.alloc-mode .foot { color: #93a4ba; }
+body.alloc-mode .badge.ok { background: rgba(16, 185, 129, 0.16) !important; color: #6ee7b7 !important; }
+body.alloc-mode .badge.warn { background: rgba(245, 158, 11, 0.16) !important; color: #fcd34d !important; }
+body.alloc-mode .badge.bad { background: rgba(235, 10, 30, 0.16) !important; color: #fda4af !important; }
+body.alloc-mode .badge.na { background: rgba(148, 163, 184, 0.16) !important; color: #cbd5e1 !important; }
+
 @media (max-width: 1100px) {
   body.alloc-mode.live-app { overflow: auto; }
   body.alloc-mode.live-app .app-content,

@@ -23,7 +23,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261010alloc4" />
+  <link rel="stylesheet" href="dashboard.css?v=20261010alloc5" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -33,6 +33,7 @@
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261009boe2" />
+  <link rel="stylesheet" href="alloc-tower.css?v=20261010alloc5" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -12068,37 +12069,12 @@
   }
 
   function openWideActAlerts() {
-    const metrics = actTowerCache;
-    if (!metrics) return;
-    hideWidePerfExtra();
-    hideWideCancelExtra();
-    hideWideTableMode();
-
-    const wrap = $("#pbi-wide-table-wrap");
-    const dest = $("#pbi-wide-table");
-    const body = $("#pbi-wide-body");
-    const nums = $("#pbi-wide-numbers");
-    const totals = $("#pbi-wide-totals");
-    if (nums) nums.hidden = true;
-    if (totals) totals.hidden = true;
-    if (body) body.hidden = true;
-    const modal = document.querySelector(".pbi-wide-modal");
-    if (modal) {
-      modal.classList.remove("pbi-wide-modal--perf", "pbi-wide-modal--cancel", "pbi-wide-modal--bo", "pbi-wide-modal--accessories");
-      modal.classList.add("pbi-wide-modal--table", "pbi-wide-modal--act-alerts");
-    }
-    if (dest && wrap) {
-      fillWideActAlerts();
-      wrap.hidden = false;
-      wrap.classList.remove("pbi-wide-table-wrap--with-chart");
-    }
-    const backdrop = $("#pbi-wide-backdrop");
-    if (backdrop) {
-      backdrop.hidden = false;
-      backdrop.removeAttribute("hidden");
-      backdrop.classList.add("show");
-    }
-    document.body.classList.add("pbi-wide-open");
+    const card = document.querySelector("#panel-boallocstock .act-alerts-card");
+    if (!card) return;
+    const wide = card.classList.toggle("is-row-wide");
+    const btn = $("#act-alert-wide");
+    if (btn) btn.setAttribute("aria-pressed", wide ? "true" : "false");
+    if (actTowerCache) renderActAlertTable(actTowerCache);
   }
 
   function renderActAlertTable(metrics) {
@@ -12108,7 +12084,8 @@
     document.querySelectorAll("#act-alert-tabs .act-alert-tab").forEach((b) => {
       b.classList.toggle("active", b.getAttribute("data-act-alert") === tab);
     });
-    el.innerHTML = buildActAlertTableHtml(metrics, tab, tab === "late" ? 20 : 15);
+    const wide = !!document.querySelector("#panel-boallocstock .act-alerts-card.is-row-wide");
+    el.innerHTML = buildActAlertTableHtml(metrics, tab, wide ? 0 : (tab === "late" ? 20 : 15));
     const modal = document.querySelector(".pbi-wide-modal");
     if (modal && modal.classList.contains("pbi-wide-modal--act-alerts") && $("#pbi-wide-backdrop") && $("#pbi-wide-backdrop").classList.contains("show")) {
       fillWideActAlerts();

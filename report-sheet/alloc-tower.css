@@ -1,0 +1,186 @@
+/* Allocation Control Tower skin. Loads after the shared skins so it can
+   win their !important rules without changing other dashboards. */
+
+body.alloc-mode.live-app {
+  overflow: hidden !important;
+  height: 100dvh !important;
+}
+body.alloc-mode.live-app.toyota-theme .app-frame,
+body.alloc-mode.live-app.toyota-theme .app-main,
+body.alloc-mode.live-app.toyota-theme .app-content,
+body.alloc-mode.live-app.toyota-theme #dashboard,
+body.alloc-mode.live-app.toyota-theme #dashboard.show {
+  overflow: hidden !important;
+  height: calc(100dvh - var(--topbar-h));
+  max-height: calc(100dvh - var(--topbar-h));
+}
+body.alloc-mode.live-app.toyota-theme .app-frame,
+body.alloc-mode.live-app.toyota-theme .app-main {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+body.alloc-mode #panel-boallocstock .card,
+body.alloc-mode #panel-boallocstock .act-card,
+body.alloc-mode #panel-boallocstock details.bas-section-card,
+body.alloc-mode #panel-boallocstock .bo-kpi,
+body.alloc-mode #panel-boallocstock .act-header,
+body.alloc-mode #panel-boallocstock .act-filter-bar {
+  background: #101a2b !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: none !important;
+  color: #e8eef7 !important;
+}
+body.alloc-mode #panel-boallocstock .bo-kpi {
+  border-radius: 10px !important;
+  border-top: 2px solid #3b82f6 !important;
+  transform: none !important;
+}
+body.alloc-mode #panel-boallocstock .bo-kpi .val { color: #fff !important; font-size: 1.05rem !important; }
+body.alloc-mode #panel-boallocstock .bo-kpi .lab,
+body.alloc-mode #panel-boallocstock .bo-kpi .sub { color: #93a4ba !important; }
+
+body.alloc-mode #panel-boallocstock .pbi-viz-head h2,
+body.alloc-mode #panel-boallocstock .card h2,
+body.alloc-mode #panel-boallocstock .bas-section-head h2,
+body.alloc-mode #panel-boallocstock .bas-section-head h3,
+body.alloc-mode #panel-boallocstock .bas-retail-title h3,
+body.alloc-mode #panel-boallocstock .bas-subhead {
+  color: #f8fafc !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+body.alloc-mode #panel-boallocstock .hint,
+body.alloc-mode #panel-boallocstock .foot,
+body.alloc-mode #panel-boallocstock .bas-foot {
+  color: #93a4ba !important;
+  font-size: 10px !important;
+}
+
+body.alloc-mode #panel-boallocstock .act-details-block {
+  overflow: hidden !important;
+}
+body.alloc-mode #panel-boallocstock details.bas-section-card,
+body.alloc-mode #panel-boallocstock details.bas-section-card[open] {
+  overflow: hidden !important;
+  height: 100%;
+  min-height: 0;
+  display: flex !important;
+  flex-direction: column;
+  padding: 6px 8px !important;
+  margin: 0 !important;
+}
+body.alloc-mode #panel-boallocstock details.bas-section-card > summary.bas-section-head,
+body.alloc-mode #panel-boallocstock details.bas-section-card[open] > summary.bas-section-head {
+  flex: 0 0 auto;
+  display: block;
+  margin: 0 0 4px !important;
+  padding: 4px 8px !important;
+  background: #0c1628 !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 8px !important;
+  color: #f8fafc !important;
+}
+body.alloc-mode #panel-boallocstock details.bas-section-card:not([open]) {
+  height: auto !important;
+  align-self: start;
+}
+body.alloc-mode #panel-boallocstock details.bas-section-card::details-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+body.alloc-mode #panel-boallocstock details.bas-section-card > .bas-section-body {
+  min-height: 0;
+  overflow: visible;
+}
+body.alloc-mode #panel-boallocstock .bas-section-all .bas-table-wrap,
+body.alloc-mode #panel-boallocstock .bas-section-conf .bas-table-wrap,
+body.alloc-mode #panel-boallocstock .bas-section-alloc .bas-table-wrap,
+body.alloc-mode #panel-boallocstock .bas-section-month .bas-table-wrap,
+body.alloc-mode #panel-boallocstock .bas-table-wrap,
+body.alloc-mode #panel-boallocstock .act-alert-table {
+  max-height: none !important;
+  overflow: auto !important;
+  background: #0b1220 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+body.alloc-mode #panel-boallocstock .bas-table-filters {
+  padding: 2px 4px !important;
+  margin: 0 0 4px !important;
+}
+body.alloc-mode #panel-boallocstock .bas-table th,
+body.alloc-mode #panel-boallocstock .bas-table td {
+  padding: 3px 6px !important;
+}
+body.alloc-mode #panel-boallocstock .bas-table thead th {
+  background: #152033 !important;
+  color: #9fb0c6 !important;
+}
+body.alloc-mode #panel-boallocstock .bas-table td {
+  color: #e8eef7 !important;
+  background: transparent;
+}
+body.alloc-mode #panel-boallocstock .bas-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+body.alloc-mode #panel-boallocstock .bas-gap-neg { color: #fb7185 !important; }
+body.alloc-mode #panel-boallocstock .bas-gap-pos { color: #34d399 !important; }
+
+body.alloc-mode #panel-boallocstock .bas-table-filters,
+body.alloc-mode #panel-boallocstock .bas-insights-panel,
+body.alloc-mode #panel-boallocstock .bas-insights-nested,
+body.alloc-mode #panel-boallocstock .bas-result-chip,
+body.alloc-mode #panel-boallocstock .bas-retail-total-card,
+body.alloc-mode #panel-boallocstock .bas-mini-section,
+body.alloc-mode #panel-boallocstock .bas-day-panel,
+body.alloc-mode #panel-boallocstock .bas-retail-panel,
+body.alloc-mode #panel-boallocstock .bas-usage-panel,
+body.alloc-mode #panel-boallocstock .bas-free-stock-panel,
+body.alloc-mode #panel-boallocstock .bas-res-move-panel {
+  background: #0c1422 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  color: #e8eef7 !important;
+}
+body.alloc-mode #panel-boallocstock .bas-filter-label select,
+body.alloc-mode #panel-boallocstock .bas-alloc-toolbar input,
+body.alloc-mode #panel-boallocstock .bas-alloc-toolbar select,
+body.alloc-mode #panel-boallocstock .act-filter-bar select,
+body.alloc-mode #panel-boallocstock .act-filter-bar input {
+  background: #0c1422 !important;
+  color: #e8eef7 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+body.alloc-mode #panel-boallocstock .pbi-expand {
+  background: rgba(235, 10, 30, 0.16) !important;
+  border-color: rgba(235, 10, 30, 0.55) !important;
+  color: #ffb4bc !important;
+}
+body.alloc-mode #panel-boallocstock .act-alerts-card.is-row-wide .pbi-expand,
+body.alloc-mode #panel-boallocstock .pbi-expand:hover {
+  background: #eb0a1e !important;
+  color: #fff !important;
+}
+body.alloc-mode #panel-boallocstock .act-alert-tab {
+  background: #0c1422 !important;
+  color: #d5deea !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+body.alloc-mode #panel-boallocstock .act-alert-tab.active {
+  background: #eb0a1e !important;
+  border-color: #eb0a1e !important;
+  color: #fff !important;
+}
+
+@media (max-width: 1100px) {
+  body.alloc-mode.live-app { overflow: auto !important; height: auto !important; }
+  body.alloc-mode.live-app.toyota-theme .app-content,
+  body.alloc-mode.live-app.toyota-theme #dashboard,
+  body.alloc-mode.live-app.toyota-theme #dashboard.show {
+    overflow: visible !important;
+    height: auto;
+    max-height: none;
+  }
+  body.alloc-mode #panel-boallocstock details.bas-section-card { height: auto; }
+}

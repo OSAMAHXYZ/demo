@@ -5,21 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reserved Orders</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
 </head>
 <body>
-    <section id="login" class="login-screen">
-        <form class="login-card" id="login-form">
-            <img src="images/logo/toyota.png" alt="Toyota" onerror="this.style.display='none'">
-            <p class="login-kicker">Sales CRM</p>
-            <h1>Reserved Orders</h1>
-            <label class="field"><span>Employee</span><select id="employee-name" required></select></label>
-            <label class="field"><span>Employee ID / Password</span><input id="employee-id" type="password" autocomplete="current-password" required></label>
-            <div class="err" id="login-error"></div>
-            <button class="solid" type="submit">Login</button>
-            <p class="login-note">Session expires after 3 minutes of inactivity.</p>
-        </form>
+    <section id="login" class="login-split">
+        <div class="login-brand">
+            <div class="brand-lockup">
+                <img src="images/logo/toyota.png" alt="" onerror="this.style.display='none'">
+                <div>
+                    <strong>TOYOTA</strong>
+                    <span>Digital Retail</span>
+                </div>
+            </div>
+            <div>
+                <h1>Reserved Orders</h1>
+                <p>Track assigned vehicles, reservation timers, and back-order matching for the showroom team.</p>
+            </div>
+            <div>Abdul Latif Jameel Motors · Internal</div>
+        </div>
+        <div class="login-panel">
+            <form class="login-card" id="login-form">
+                <h2>Sign in</h2>
+                <p class="sub">Choose your name, then enter your employee number.</p>
+                <label class="field" for="employee-name"><span>Your name</span><select id="employee-name" required></select></label>
+                <label class="field" for="employee-id"><span>Employee number</span>
+                    <span class="pass-row">
+                        <input id="employee-id" type="password" autocomplete="current-password" placeholder="Employee ID" required>
+                        <button type="button" class="login-ghost" id="toggle-pass">Show</button>
+                    </span>
+                </label>
+                <div class="err" id="login-error"></div>
+                <button class="solid" type="submit">Login</button>
+                <p class="login-note">Session expires after 3 minutes of inactivity.</p>
+            </form>
+        </div>
     </section>
 
     <div id="app" class="hidden tower-app">

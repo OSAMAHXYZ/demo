@@ -49,22 +49,36 @@
         return [...document.querySelectorAll('#' + boxId + ' input:checked')].filter((input) => !input.hasAttribute('data-all-cars')).map((input) => input.value).filter(Boolean);
     }
     function formRule() {
-        const products = checkedValues('br-products');
-        const columns = checkedValues('br-columns');
+        const car = document.getElementById('br-car').value;
+        const column = document.getElementById('br-column').value;
+        const incorrectValues = document.getElementById('br-bad').value;
+        const several = incorrectValues.split(/[\n,;|]/).map((item) => item.trim()).filter(Boolean);
         return {
             id: editing && editing.id,
-            name: document.getElementById('br-name').value.trim(),
-            products,
-            product: products.join(', '),
-            columns,
-            column: columns.join(', '),
-            operator: document.getElementById('br-op').value,
-            incorrectValues: document.getElementById('br-bad').value,
+            name: document.getElementById('br-name').value.trim() || `${car || 'All cars'} · ${column || 'column'}`,
+            products: car ? [car] : [],
+            product: car,
+            columns: column ? [column] : [],
+            column,
+            operator: several.length > 1 ? 'in_list' : 'equals',
+            incorrectValues,
             correctValue: document.getElementById('br-good').value.trim(),
             message: document.getElementById('br-message').value.trim(),
             whatsappMessage: document.getElementById('br-wa').value.trim(),
             active: document.getElementById('br-active').checked
         };
+    }
+    function fileAnalysis() {
+        const people = pack.people || [];
+        const file = pack.file || {};
+        if (!file.rowCount) return '<section class="panel"><h2>Submitted BO file</h2><p class="muted">No Back Order file yet. Upload it on Data push, then open this tab again.</p></section>';
+        return `<section class="panel">
+            <h2>Submitted BO file</h2>
+            <p>${esc(file.fileName || 'Back Order file')} · ${file.rowCount} rows · ${people.length} names</p>
+            <div style="overflow:auto"><table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Rows under this name</th><th>Cars in the file</th></tr></thead><tbody>
+                ${people.map((person) => `<tr><td>${esc(person.salesmanName)}</td><td>${esc(person.salesmanId)}</td><td>${person.orders}</td><td>${esc(person.cars || '—')}</td></tr>`).join('') || '<tr><td colspan="4">The file has rows, but no salesman name column was found.</td></tr>'}
+            </tbody></table></div>
+        </section>`;
     }
     function summaryCards() {
         const rules = pack.rules.filter((rule) => !rule.archived);
@@ -140,7 +154,6 @@
     function render() {
         const file = pack.file || {};
         const selected = editing || {};
-        const op = selected.operator || 'equals';
         root.innerHTML = `<div class="br-page">
             <section class="panel br-file">
                 <div><b>BO file</b><span>${esc(file.fileName || 'No Back Order file yet')}</span></div>
@@ -148,42 +161,29 @@
                 <div><b>Rows</b><span>${file.rowCount || 0}</span></div>
                 <div><b>Updated</b><span>${esc(stamp(file.updatedAt))}</span></div>
             </section>
+            ${fileAnalysis()}
             ${summaryCards()}
             <section class="panel">
                 <div class="br-head"><h2>Error rules</h2><input id="br-search" placeholder="Search rules" value="${esc(q)}"></div>
                 ${ruleRows()}
             </section>
             <section class="panel">
-                <h2>${editing && editing.id ? 'Edit rule' : 'New error rule'}</h2>
+                <h2>${editing && editing.id ? 'Edit rule' : 'Check the BO file'}</h2>
+                <p class="muted">Choose the car, the column that has the error, the wrong value or values, and the correction. Push sends the message only to employees who have that error under their name.</p>
                 <div class="br-form">
-                    <label>Rule name<input id="br-name" value="${esc(selected.name || '')}"></label>
-                    <div class="wide">
-                        <span>Cars / products</span>
-                        <input id="br-product-search" class="br-pick-search" placeholder="Search cars in the BO file">
-                        <div class="br-picks" id="br-products">
-                            <label><input type="checkbox" data-all-cars ${picked(selected, 'products', 'product').length ? '' : 'checked'}> All cars</label>
-                            ${(pack.products || []).map((name) => `<label><input type="checkbox" value="${esc(name)}" ${picked(selected, 'products', 'product').includes(name) ? 'checked' : ''}> ${esc(name)}</label>`).join('') || '<p>No products in the BO file yet.</p>'}
-                        </div>
-                    </div>
-                    <div class="wide">
-                        <span>BO columns to check</span>
-                        <input id="br-column-search" class="br-pick-search" placeholder="Search columns in the BO file">
-                        <div class="br-picks" id="br-columns">
-                            ${(file.headers || []).map((name) => `<label><input type="checkbox" value="${esc(name)}" ${picked(selected, 'columns', 'column').includes(name) ? 'checked' : ''}> ${esc(name)}</label>`).join('') || '<p>No columns in the BO file yet.</p>'}
-                        </div>
-                    </div>
-                    <label>Condition<select id="br-op">${OPS.map(([id, label]) => `<option value="${id}"${op === id ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
-                    <label id="br-bad-wrap">Incorrect value<input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2025 or Not_Confirmed. Separate several values with commas."></label>
-                    <label>Correct value<input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
-                    <label class="wide">Employee message<textarea id="br-message" rows="3">${esc(selected.message || 'Hello {employeeName}, the BO file shows {affectedOrderCount} {product} orders where {columnName} is {incorrectValue}. Please change it to {correctValue}.')}</textarea></label>
+                    <label>Rule name<input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional"></label>
+                    <label>Car<select id="br-car"><option value="">All cars</option>${(pack.products || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'products', 'product')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label>Column with the error<select id="br-column"><option value="">Choose a column</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'columns', 'column')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label>Error value or values<input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2027 or Not_Confirmed. Separate several values with commas."></label>
+                    <label>Correction<input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
+                    <label class="wide">Message<textarea id="br-message" rows="3">${esc(selected.message || 'Hello {employeeName}, you have {affectedOrderCount} {product} back orders under your name where {columnName} is {incorrectValue}. Please change it to {correctValue}.{orderDateLine}')}</textarea></label>
                     <p class="wide" id="br-preview"></p>
                     <label class="wide">WhatsApp message<textarea id="br-wa" rows="3">${esc(selected.whatsappMessage || '')}</textarea></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
                 </div>
                 <div class="br-buttons">
-                    <button class="solid" id="br-save" type="button">Save rule</button>
-                    <button id="br-run" type="button">Analyze BO file</button>
-                    <button class="solid" id="br-save-run" type="button">Save and analyze</button>
+                    <button class="solid" id="br-push" type="button">Push</button>
+                    <button id="br-save-run" type="button">Analyze only</button>
                     <button id="br-cancel" type="button">Cancel</button>
                 </div>
                 <div class="err" id="br-error"></div>
@@ -195,8 +195,6 @@
                 <ul class="br-history">${(pack.history || []).slice(0, 12).map((item) => `<li>${esc(stamp(item.analyzedAt))} · ${esc(item.reason)} · ${item.employeeCount} employees · ${item.orderCount} orders</li>`).join('') || '<li>Analyses appear here and stay after the next BO upload.</li>'}</ul>
             </section>
         </div>`;
-        const bad = document.getElementById('br-bad-wrap');
-        if (bad) bad.hidden = !needsValue(document.getElementById('br-op').value);
         const note = document.getElementById('br-note');
         if (note) note.textContent = notice;
         paintPreview();
@@ -237,29 +235,20 @@
             .replaceAll('{columnName}', rule.column || '')
             .replaceAll('{incorrectValue}', rule.incorrectValues || 'blank')
             .replaceAll('{correctValue}', rule.correctValue || '—')
-            .replaceAll('{affectedOrderCount}', String(sample.orders.length));
+            .replaceAll('{affectedOrderCount}', String(sample.orders.length))
+            .replaceAll('{orderDateLine}', sample.orders.some((order) => order.orderDate) ? ' Deadline: ' + [...new Set(sample.orders.map((order) => order.orderDate).filter(Boolean))].join(', ') + '.' : '');
         box.textContent = `BO file example for ${sample.salesmanName}: ${sample.orders.length} found. ${text}`;
     }
     function bind() {
-        document.getElementById('br-op').addEventListener('change', () => { document.getElementById('br-bad-wrap').hidden = !needsValue(document.getElementById('br-op').value); });
-        document.getElementById('br-product-search').addEventListener('input', (event) => filterPicks('br-products', event.target.value));
-        document.getElementById('br-column-search').addEventListener('input', (event) => filterPicks('br-columns', event.target.value));
-        document.getElementById('br-products').addEventListener('change', (event) => {
-            const all = document.querySelector('#br-products [data-all-cars]');
-            if (event.target === all && all.checked) document.querySelectorAll('#br-products input[value]').forEach((input) => { input.checked = false; });
-            if (event.target !== all && event.target.checked && all) all.checked = false;
-            if (![...document.querySelectorAll('#br-products input[value]')].some((input) => input.checked) && all) all.checked = true;
-            paintPreview();
+        ['br-car', 'br-column', 'br-bad', 'br-good'].forEach((id) => {
+            const field = document.getElementById(id);
+            if (field) field.addEventListener('input', paintPreview);
+            if (field) field.addEventListener('change', paintPreview);
         });
-        document.getElementById('br-columns').addEventListener('change', paintPreview);
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
         document.getElementById('br-cancel').addEventListener('click', () => { editing = null; render(); });
         document.getElementById('br-message').addEventListener('input', paintPreview);
-        document.getElementById('br-save').addEventListener('click', () => save(false));
-        document.getElementById('br-run').addEventListener('click', () => {
-            if (editing && editing.id) run(editing.id);
-            else save(true);
-        });
+        document.getElementById('br-push').addEventListener('click', () => pushDraft(false));
         document.getElementById('br-save-run').addEventListener('click', () => save(true));
         root.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => openRule(button.dataset.open)));
         root.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => { const rule = pack.rules.find((item) => item.id === button.dataset.edit); editing = rule || null; render(); }));
@@ -268,6 +257,31 @@
         root.querySelectorAll('[data-archive]').forEach((button) => button.addEventListener('click', () => archive(button.dataset.archive)));
         root.querySelectorAll('[data-orders]').forEach((button) => button.addEventListener('click', () => showOrders(button.dataset.orders, button.dataset.name)));
         root.querySelectorAll('[data-wa]').forEach((button) => button.addEventListener('click', () => sendWhatsApp(button.dataset.wa, button.dataset.name, 'prepared')));
+    }
+    async function pushDraft(confirmRepublish) {
+        const error = document.getElementById('br-error');
+        error.textContent = '';
+        try {
+            const saved = await api('/api/reserved-orders/bo-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), rule: formRule(), analyze: true }) });
+            const rule = saved.rule || {};
+            if (!rule.affectedEmployees) {
+                error.textContent = saved.warning || 'No employee in the BO file has this error under their name.';
+                editing = null;
+                await load(rule.id);
+                return;
+            }
+            if (!confirmRepublish) {
+                const ok = window.confirm(`Push to Message Builder for ${rule.affectedEmployees} employees (${rule.affectedOrders} orders under their names)?`);
+                if (!ok) { await load(rule.id); return; }
+            }
+            await api('/api/reserved-orders/bo-rules/' + encodeURIComponent(rule.id) + '/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: password(), confirmRepublish }) });
+            notice = 'Pushed. Each employee sees this in Message Builder only when the BO row is under their name.';
+            editing = null;
+            await load(rule.id);
+        } catch (e) {
+            if (e.needsConfirm && window.confirm(e.message)) return pushDraft(true);
+            if (e.message !== 'unauthorized') error.textContent = e.message;
+        }
     }
     async function save(analyze) {
         const error = document.getElementById('br-error');

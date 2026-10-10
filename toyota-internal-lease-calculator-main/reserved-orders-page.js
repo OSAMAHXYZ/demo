@@ -483,14 +483,39 @@
             box.innerHTML = '<p class="muted">No messages from admin yet.</p>';
             return;
         }
-        box.innerHTML = items.map((item) => `<article class="msg-alert ${item.sentAt ? 'sent' : 'warning'}">
+        box.innerHTML = items.map((item) => {
+            const dated = hasMessageDate(item.message);
+            return `<article class="msg-alert ${item.sentAt ? 'sent' : 'warning'}">
             <small>${esc(item.name)} · ${esc(item.product || 'All cars')} · ${esc(item.column)}</small>
-            <p><b>${item.affectedOrderCount}</b> found for you in the BO file. Change ${esc(item.incorrectValue || 'blank')} to ${esc(item.correctValue || '—')}.</p>
+            <p><b>${item.affectedOrderCount}</b> found under your name in the BO file. Change ${esc(item.incorrectValue || 'blank')} to ${esc(item.correctValue || '—')}.</p>
             <textarea data-admin-msg="${esc(item.ruleId)}" rows="3">${esc(item.message)}</textarea>
+            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" data-shift="-1" data-rule="${esc(item.ruleId)}">−</button><button type="button" data-shift="1" data-rule="${esc(item.ruleId)}">+</button></div>` : ''}
             <p>${item.sentAt ? 'Sent' : 'Not sent yet'}</p>
             <button type="button" data-send-admin="${esc(item.ruleId)}">${item.sentAt ? 'Send again' : 'Send'}</button>
-        </article>`).join('');
+        </article>`;
+        }).join('');
         box.querySelectorAll('[data-send-admin]').forEach((button) => button.addEventListener('click', () => sendAdminMessage(button.dataset.sendAdmin)));
+        box.querySelectorAll('[data-shift]').forEach((button) => button.addEventListener('click', () => {
+            const field = box.querySelector(`[data-admin-msg="${CSS.escape(button.dataset.rule)}"]`);
+            if (!field) return;
+            field.value = shiftMessageDates(field.value, Number(button.dataset.shift) || 0);
+        }));
+    }
+    function hasMessageDate(text) {
+        return /\b\d{1,2}[./]\d{1,2}[./]\d{4}\b|\b\d{4}-\d{2}-\d{2}\b/.test(String(text || ''));
+    }
+    function shiftMessageDates(text, delta) {
+        return String(text || '').replace(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b|\b(\d{4})-(\d{2})-(\d{2})\b/g, (match, day, month, year, isoYear, isoMonth, isoDay) => {
+            const date = year
+                ? new Date(Number(year), Number(month) - 1, Number(day))
+                : new Date(Number(isoYear), Number(isoMonth) - 1, Number(isoDay));
+            if (Number.isNaN(date.getTime())) return match;
+            date.setDate(date.getDate() + delta);
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const yyyy = String(date.getFullYear());
+            return year ? `${dd}.${mm}.${yyyy}` : `${yyyy}-${mm}-${dd}`;
+        });
     }
     async function sendAdminMessage(ruleId) {
         const session = readSession();
@@ -691,6 +716,13 @@
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
     }
+    const togglePass = $('toggle-pass');
+    if (togglePass) togglePass.addEventListener('click', () => {
+        const input = $('employee-id');
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        togglePass.textContent = show ? 'Hide' : 'Show';
+    });
     $('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         $('login-error').textContent = '';

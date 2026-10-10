@@ -144,6 +144,27 @@ function fillMessage(template, bag) {
     return String(template || '').replace(/\{(\w+)\}/g, (all, key) => (bag[key] == null ? all : String(bag[key])));
 }
 
+function orderDateLine(orders) {
+    const seen = [];
+    (orders || []).forEach((order) => {
+        const value = cellString(order.orderDate);
+        if (value && !seen.includes(value)) seen.push(value);
+    });
+    return seen.length ? ` Deadline: ${seen.join(', ')}.` : '';
+}
+
+function messageBag(rule, person, orders) {
+    return {
+        employeeName: person.salesmanName || person.name || '',
+        product: rule.product || 'all cars',
+        columnName: rule.column,
+        incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
+        correctValue: rule.correctValue || '—',
+        affectedOrderCount: (orders || []).length,
+        orderDateLine: orderDateLine(orders)
+    };
+}
+
 function attachBoErrorRules(app, deps) {
     const file = path.join(deps.storeDir, 'bo-error-rules.json');
     function loadStore() {
@@ -301,6 +322,28 @@ function attachBoErrorRules(app, deps) {
             if (name && !products.includes(name) && products.length < 200) products.push(name);
         });
         products.sort((a, b) => a.localeCompare(b));
+        const salesmanIdHeader = findHeader(table.headers, ['Salesman Id', 'Salesman ID', 'SalesmanID']);
+        const salesmanNameHeader = findHeader(table.headers, ['Salesman Name', 'Salesman']);
+        const peopleMap = new Map();
+        (table.rows || []).forEach((row) => {
+            const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
+            const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
+            const product = cellString(productHeader ? row[productHeader] : '');
+            const key = `${salesmanId}\u0001${fold(salesmanName)}`;
+            if (!peopleMap.has(key)) peopleMap.set(key, { salesmanId, salesmanName, orders: 0, cars: {} });
+            const person = peopleMap.get(key);
+            person.orders += 1;
+            if (product) person.cars[product] = (person.cars[product] || 0) + 1;
+        });
+        const people = Array.from(peopleMap.values())
+            .sort((a, b) => b.orders - a.orders || a.salesmanName.localeCompare(b.salesmanName))
+            .slice(0, 80)
+            .map((person) => ({
+                salesmanId: person.salesmanId,
+                salesmanName: person.salesmanName,
+                orders: person.orders,
+                cars: Object.entries(person.cars).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => `${name} (${count})`).join(', ')
+            }));
         res.json({
             file: {
                 fileName: table.fileName || '',
@@ -309,6 +352,7 @@ function attachBoErrorRules(app, deps) {
                 rowCount: (table.rows || []).length,
                 headers: table.headers || []
             },
+            people,
             products,
             rules: store.rules.map(publicRule),
             history: store.history.slice(-80).reverse(),
@@ -435,14 +479,7 @@ function attachBoErrorRules(app, deps) {
         if (!employee) return res.status(404).json({ error: 'That employee is not in the current analysis.' });
         const staff = deps.loadStaff().find((person) => String(person.id) === salesmanId && person.phone);
         const phone = cellString(staff && staff.phone);
-        const message = fillMessage(cellString(req.body?.message) || rule.whatsappMessage || rule.message, {
-            employeeName: employee.salesmanName,
-            product: rule.product || 'all cars',
-            columnName: rule.column,
-            incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
-            correctValue: rule.correctValue || '—',
-            affectedOrderCount: employee.orders.length
-        });
+        const message = fillMessage(cellString(req.body?.message) || rule.whatsappMessage || rule.message, messageBag(rule, employee, employee.orders));
         const action = ['prepared', 'opened', 'marked_sent'].includes(req.body?.action) ? req.body.action : 'prepared';
         const entry = {
             id: newId('wa'),
@@ -482,14 +519,7 @@ function attachBoErrorRules(app, deps) {
                 column: rule.column,
                 incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
                 correctValue: rule.correctValue,
-                message: fillMessage(rule.message, {
-                    employeeName: user.name,
-                    product: rule.product || 'all cars',
-                    columnName: rule.column,
-                    incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
-                    correctValue: rule.correctValue || '—',
-                    affectedOrderCount: mine.orders.length
-                }),
+                message: fillMessage(rule.message, messageBag(rule, { name: user.name, salesmanName: user.name }, mine.orders)),
                 affectedOrderCount: mine.orders.length,
                 status: state.status || 'new',
                 sentAt: state.sentAt || '',
