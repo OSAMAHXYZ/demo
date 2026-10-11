@@ -965,6 +965,7 @@ const SEEDED_EMPLOYEES = [
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
     const alertsFile = path.join(options.storeDir, 'reserved-orders-alerts.json');
+    const marketingFile = path.join(options.storeDir, 'reserved-orders-marketing.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
     const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
@@ -1057,6 +1058,49 @@ function attachReservedOrders(app, options) {
         if (op === 'lt') return na < nb;
         return false;
     }
+    function loadMarketing() {
+        const data = readJson(marketingFile, []);
+        return Array.isArray(data) ? data : [];
+    }
+    function saveMarketing(data) {
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(marketingFile, JSON.stringify(data, null, 2), 'utf8');
+    }
+    function marketingOrderHeader(headers) {
+        const list = headers || [];
+        const folded = list.map((header) => cleanText(header).toLowerCase());
+        const exact = ['back order number', 'bo number', 'order number', 'backorder number', 'رقم الطلب'];
+        for (let i = 0; i < exact.length; i++) {
+            const index = folded.indexOf(exact[i]);
+            if (index >= 0) return list[index];
+        }
+        const index = folded.findIndex((name) => /(back\s*order(\s*number|\s*no)?|\bbo\s*(number|no)\b|order\s*(number|no)|رقم الطلب)/.test(name) && !/date/.test(name));
+        return index >= 0 ? list[index] : '';
+    }
+    function marketingOrder(query) {
+        const token = cleanText(query).replace(/\s+/g, '').toLowerCase();
+        if (!token) return null;
+        const table = loadBoTable();
+        const headers = table.headers || [];
+        const orderHeader = marketingOrderHeader(headers);
+        if (!orderHeader) return { missingColumn: true };
+        const row = (table.rows || []).find((item) => cleanText(item[orderHeader]).replace(/\s+/g, '').toLowerCase() === token);
+        if (!row) return null;
+        const fields = [];
+        headers.forEach((header) => {
+            const label = cleanText(header);
+            if (!label) return;
+            const value = cleanText(row[header]);
+            if (!value) return;
+            fields.push({ label, value: value.slice(0, 180) });
+        });
+        const productHeader = headers.find((header) => /^product$/i.test(cleanText(header))) || headers.find((header) => /product|vehicle/i.test(cleanText(header)) && !/year/i.test(cleanText(header)));
+        return {
+            orderNumber: cleanText(row[orderHeader]),
+            product: productHeader ? cleanText(row[productHeader]) : '',
+            fields: fields.slice(0, 36)
+        };
+    }
     function findPushedRow(query) {
         const q = cleanText(query).toLowerCase();
         const vin = normalizeVin(query);
@@ -1118,6 +1162,22 @@ function attachReservedOrders(app, options) {
         });
         saveStaff(staff);
         return staff;
+    }
+    function personKey(value) {
+        return cleanText(value).replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+    function responsibleAdvisor(order) {
+        const fields = Array.isArray(order && order.fields) ? order.fields : [];
+        const fromColumn = fields.find((field) => String(field && field.col || '').toUpperCase() === 'T');
+        const text = cleanText(fromColumn && fromColumn.value) || cleanText(order && order.salesAdvisor);
+        if (!text || text === '—' || /^(unassigned|salesman name)$/i.test(text)) return '';
+        return text;
+    }
+    function advisorOwnsOrder(user, order) {
+        const advisor = personKey(responsibleAdvisor(order));
+        if (!user || !advisor) return false;
+        if (personKey(user.name) === advisor) return true;
+        return personKey(user.employeeNumber) === advisor;
     }
     function sessionUser(token) {
         const session = sessions.get(String(token || ''));
@@ -1302,6 +1362,23 @@ function attachReservedOrders(app, options) {
         const live = loadLive();
         const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
         if (!order) return res.status(404).json({ error: 'Order not found.' });
+        if (!advisorOwnsOrder(user, order)) {
+            audit(req, {
+                user: user.name,
+                employeeNumber: user.employeeNumber,
+                recordId: user.recordId,
+                role: user.role,
+                action: 'STATUS_CHANGE_DENIED',
+                entity: 'order',
+                vin: order.vin,
+                orderNumber: order.orderNumber,
+                oldValue: order.status || '',
+                newValue: rawStatus,
+                source: 'employee',
+                details: `Only ${responsibleAdvisor(order) || 'the assigned advisor'} can update this order`
+            });
+            return res.status(403).json({ error: 'Only the advisor responsible for this order can update it.' });
+        }
         const now = new Date();
         const oldStatus = order.status || '';
         order.status = normalizeStatus(rawStatus);
@@ -1479,6 +1556,74 @@ function attachReservedOrders(app, options) {
         saveStaff(staff);
         audit(req, { user: 'Admin', role: 'admin', action, entity: 'employee', oldValue, newValue: `${name} / ${id} / ${role} / ${active ? 'active' : 'inactive'}`, source: 'admin' });
         res.json({ ok: true, staff: staff.map(publicStaff) });
+    });
+    app.get('/api/reserved-orders/marketing/lookup', (req, res) => {
+        const user = sessionUser(req.query?.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const query = cleanText(req.query?.q);
+        if (!query) return res.status(400).json({ error: 'Enter the order number.' });
+        const found = marketingOrder(query);
+        if (found && found.missingColumn) return res.status(400).json({ error: 'The BO file has no order-number column.' });
+        if (!found) return res.json({ found: false });
+        res.json({ found: true, order: found });
+    });
+    app.post('/api/reserved-orders/marketing', (req, res) => {
+        const user = sessionUser(req.body?.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const found = marketingOrder(req.body?.orderNumber);
+        if (!found || found.missingColumn) {
+            return res.status(400).json({ error: found && found.missingColumn ? 'The BO file has no order-number column.' : 'This order number is not in the BO file.' });
+        }
+        const store = loadMarketing();
+        const token = found.orderNumber.replace(/\s+/g, '').toLowerCase();
+        const index = store.findIndex((item) => item.recordId === user.recordId && String(item.orderNumber || '').replace(/\s+/g, '').toLowerCase() === token);
+        const now = new Date();
+        const entry = index >= 0 ? store[index] : { id: `mkt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}` };
+        if (index >= 0) store.splice(index, 1);
+        entry.orderNumber = found.orderNumber;
+        entry.advisorName = user.name;
+        entry.employeeNumber = user.employeeNumber;
+        entry.recordId = user.recordId;
+        entry.product = found.product || '';
+        entry.at = now.toISOString();
+        entry.display = displayStamp(now);
+        store.push(entry);
+        saveMarketing(store.slice(-500));
+        audit(req, {
+            user: user.name,
+            employeeNumber: user.employeeNumber,
+            recordId: user.recordId,
+            role: user.role,
+            action: 'MARKETING_SENT',
+            entity: 'marketing',
+            orderNumber: found.orderNumber,
+            source: 'employee',
+            details: `${user.name} sent order ${found.orderNumber}`
+        });
+        notify();
+        res.json({
+            ok: true,
+            request: {
+                orderNumber: entry.orderNumber,
+                advisorName: entry.advisorName,
+                employeeNumber: entry.employeeNumber,
+                product: entry.product,
+                at: entry.at,
+                display: entry.display
+            }
+        });
+    });
+    app.get('/api/reserved-orders/marketing', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const requests = loadMarketing().slice().reverse().map((item) => ({
+            orderNumber: item.orderNumber || '',
+            advisorName: item.advisorName || '',
+            employeeNumber: item.employeeNumber || '',
+            product: item.product || '',
+            at: item.at || '',
+            display: item.display || ''
+        }));
+        res.json({ requests });
     });
 
     return {

@@ -195,3 +195,249 @@ body.alloc-mode #panel-boallocstock .act-main-grid {
   }
   body.alloc-mode #panel-boallocstock details.bas-section-card { height: auto; }
 }
+
+/* Matching VINs full-screen workspace. Other tower panels stay in the page and return on Collapse. */
+#bas-alloc-section .mv-wide-bar { display: none; }
+#bas-alloc-section .mv-detail { display: none; }
+#bas-alloc-section .mv-split { min-width: 0; min-height: 0; }
+#bas-alloc-section .mv-table-col { min-width: 0; min-height: 0; }
+#bas-alloc-section .bas-vin {
+  font-family: ui-monospace, Consolas, "Segoe UI Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  user-select: text;
+  color: #F1F5F9;
+}
+#bas-alloc-section .mv-copy {
+  margin-left: 6px;
+  border: 1px solid #2A3B53;
+  background: #17263B;
+  color: #A9B9D0;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+#bas-alloc-section .mv-pick {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  border: 1px solid #8295B1;
+}
+#bas-alloc-section tr.is-selected .mv-pick { background: #3B82F6; border-color: #3B82F6; }
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table { min-width: 1480px; }
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #17263B !important;
+  color: #A9B9D0 !important;
+  font-size: 11px !important;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table td {
+  color: #F1F5F9 !important;
+  background: #111C2E !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table tbody tr:nth-child(even) td {
+  background: #0E1828 !important;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table tbody tr:hover td {
+  background: #1A2942 !important;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table tbody tr.is-selected td {
+  background: #1C3050 !important;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .bas-alloc-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 #3B82F6;
+}
+body.alloc-mode #panel-boallocstock #bas-alloc-section .badge.ok { background: rgba(16, 185, 129, 0.18) !important; color: #10B981 !important; }
+body.alloc-mode #panel-boallocstock #bas-alloc-section .badge.warn { background: rgba(245, 158, 11, 0.18) !important; color: #F59E0B !important; }
+body.alloc-mode #panel-boallocstock #bas-alloc-section .badge.bad { background: rgba(235, 10, 30, 0.2) !important; color: #FCA5A5 !important; }
+
+body.alloc-mode.act-match-wide #panel-boallocstock {
+  background: #080F1C !important;
+}
+body.alloc-mode.act-match-wide #bas-dash.act-tower {
+  background: #080F1C !important;
+}
+body.alloc-mode.act-match-wide #panel-boallocstock .act-charts,
+body.alloc-mode.act-match-wide #panel-boallocstock .act-details-block > :not(#bas-alloc-section) {
+  display: none !important;
+}
+body.alloc-mode.act-match-wide #panel-boallocstock .act-details-block {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section,
+body.alloc-mode.act-match-wide #bas-alloc-section[open] {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #111C2E !important;
+  border-color: #2A3B53 !important;
+  color: #F1F5F9 !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section > summary { display: none !important; }
+body.alloc-mode.act-match-wide #bas-alloc-section::details-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section > .bas-section-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  gap: 6px;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-wide-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-wide-title h2 {
+  margin: 0;
+  color: #F1F5F9 !important;
+  font-size: 16px !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-wide-title .hint { color: #A9B9D0 !important; }
+body.alloc-mode.act-match-wide #bas-alloc-collapse {
+  background: #EB0A1E !important;
+  border-color: #EB0A1E !important;
+  color: #fff !important;
+  font-weight: 800;
+}
+body.alloc-mode.act-match-wide #bas-kpis.act-kpi-row,
+body.alloc-mode.act-match-wide #bas-alloc-kpis {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  flex: 0 0 auto;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .bas-alloc-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin: 0;
+  background: #17263B !important;
+  border: 1px solid #2A3B53 !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .bas-alloc-toolbar input,
+body.alloc-mode.act-match-wide #bas-alloc-section .bas-alloc-toolbar select {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 32px;
+  background: #080F1C !important;
+  color: #F1F5F9 !important;
+  border: 1px solid #2A3B53 !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-table-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section #bas-alloc-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto !important;
+  background: #111C2E !important;
+  border: 1px solid #2A3B53 !important;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #17263B;
+  border: 1px solid #2A3B53;
+  border-radius: 10px;
+  padding: 10px;
+  color: #F1F5F9;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail-empty {
+  margin: 0;
+  color: #A9B9D0;
+  font-size: 13px;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail-head strong { font-size: 14px; color: #F1F5F9; }
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail-head span { color: #A9B9D0; font-size: 12px; }
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-detail-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-tab {
+  border: 1px solid #2A3B53;
+  background: #111C2E;
+  color: #A9B9D0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-tab.is-on {
+  background: #EB0A1E;
+  border-color: #EB0A1E;
+  color: #fff;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-field {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid #2A3B53;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-field span {
+  color: #8295B1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section .mv-field b {
+  color: #F1F5F9;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body.alloc-mode.act-match-wide #bas-alloc-section #bas-alloc-foot { flex: 0 0 auto; margin: 0; color: #8295B1 !important; }
+
+@media (max-width: 1100px) {
+  body.alloc-mode.act-match-wide.live-app { overflow: hidden !important; height: 100dvh !important; }
+  body.alloc-mode.act-match-wide #bas-kpis.act-kpi-row,
+  body.alloc-mode.act-match-wide #bas-alloc-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.alloc-mode.act-match-wide #bas-alloc-section .mv-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 1fr) minmax(150px, 34%);
+  }
+}

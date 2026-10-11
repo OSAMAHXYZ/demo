@@ -1245,14 +1245,41 @@
       'lite ace':        ['lite ace'],
       'liteace':         ['lite ace'],
       'hiace bus':       ['hiace bus'],
-      'hiace van':       ['hiace van']
+      'hiace van':       ['hiace van'],
+      'lexus':           ['lexus'],
+      'lexus es':        ['lexus es'],
+      'es':              ['lexus es'],
+      'lexus is':        ['lexus is'],
+      'is':              ['lexus is'],
+      'lexus nx':        ['lexus nx'],
+      'nx':              ['lexus nx'],
+      'lexus rx':        ['lexus rx'],
+      'rx':              ['lexus rx'],
+      'lexus ux':        ['lexus ux'],
+      'ux':              ['lexus ux']
     };
+
+    function lexusImageBasename(productName) {
+      const compact = String(productName || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (!compact) return '';
+      const hasLexus = /\blexus\b/.test(compact);
+      const models = ['es', 'is', 'nx', 'rx', 'ux'];
+      for (let i = 0; i < models.length; i += 1) {
+        const model = models[i];
+        const word = new RegExp('\\b' + model + '\\b');
+        if ((hasLexus && word.test(compact)) || compact === model || compact.startsWith(model + ' ')) {
+          return 'lexus ' + model;
+        }
+      }
+      return hasLexus ? 'lexus' : '';
+    }
 
     function productImageCandidates(productName) {
       const lower = String(productName || '').toLowerCase().trim();
       const noSpace = lower.replace(/\s+/g, '');
       const slug = productSlug(productName);
-      const aliasNames = productImageAliases[lower] || [];
+      const lexusBase = lexusImageBasename(productName);
+      const aliasNames = (lexusBase ? [lexusBase] : []).concat(productImageAliases[lower] || []);
       const exts = ['png', 'jpg', 'jpeg', 'webp'];
       const candidates = new Set();
 

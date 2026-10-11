@@ -35,6 +35,7 @@
             <nav class="admin-nav" id="admin-nav">
                 <button class="ghost active" type="button" data-panel="overview">Overview</button>
                 <button class="ghost" type="button" data-panel="orders">Orders</button>
+                <button class="ghost" type="button" data-panel="marketing">طلبات التسويق</button>
                 <button class="ghost" type="button" data-panel="sheet">Live sheet</button>
                 <button class="ghost" type="button" data-panel="employees">Employees</button>
                 <button class="ghost" type="button" data-panel="push">Data push</button>
@@ -56,6 +57,16 @@
                     <select id="admin-expired"><option value="">All timers</option><option value="expired">Expired only</option></select>
                 </div>
                 <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
+            </section>
+            <section id="panel-marketing" class="hidden">
+                <section class="panel" style="overflow:auto;">
+                    <h2 dir="rtl">طلبات التسويق</h2>
+                    <p>Each row is an order an advisor checked in the BO file and sent here.</p>
+                    <table>
+                        <thead><tr><th>Order number</th><th>Advisor who sent it</th><th>Employee ID</th><th>Car</th><th>Sent</th></tr></thead>
+                        <tbody id="marketing-rows"></tbody>
+                    </table>
+                </section>
             </section>
             <section id="panel-sheet" class="hidden">
                 <div class="toolbar">

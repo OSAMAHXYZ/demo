@@ -54,6 +54,7 @@
             <nav class="jump">
                 <button type="button" class="nav-on" data-view="inbox">Messages</button>
                 <button type="button" data-view="orders">Reserved Orders</button>
+                <button type="button" data-view="marketing">طلبات التسويق</button>
                 <a href="bo-order-lookup.html">BO Lookup</a>
                 <a href="detailed-calculations.html">Detailed Calculator</a>
                 <button type="button" data-view="message">Message Builder</button>
@@ -118,6 +119,18 @@
             </div>
             <section class="cards" id="cards"></section>
             </div>
+            <section id="marketing-board" class="marketing-board hidden">
+                <header class="mc-head">
+                    <p>Toyota · ALJ · Sales CRM</p>
+                    <h1 dir="rtl">طلبات التسويق</h1>
+                </header>
+                <form id="marketing-form" class="marketing-form">
+                    <label class="field"><span>Order number</span><input id="marketing-order" inputmode="numeric" placeholder="Order number from the BO file" required></label>
+                    <button class="solid" type="submit">Check BO file</button>
+                </form>
+                <p class="marketing-note" id="marketing-note">Enter the order number. If it is in the BO file, you can send it to admin.</p>
+                <div id="marketing-result"></div>
+            </section>
         </main>
 
         <div id="overlay-message" class="overlay hidden">

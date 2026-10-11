@@ -27,6 +27,7 @@
         ['phone_empty', 'Phone is empty']
     ];
     let editing = '';
+    let marketingRequests = [];
     const ALERT_OPS = { equals: 'equals', not_equals: 'does not equal', contains: 'contains', not_contains: 'does not contain', gt: 'greater than', lt: 'less than', empty: 'is empty', not_empty: 'is not empty' };
 
     const $ = (id) => document.getElementById(id);
@@ -226,7 +227,14 @@
         const rows = orders.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
         box.innerHTML = rows.length ? `<table><thead><tr>${cols.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((order) => `<tr>${cols.map((label) => `<td>${esc(sheetValue(order, label))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="empty">No live rows yet. Push Stock E-Sales to fill this sheet.</p>';
     }
-    function renderAll() { renderOverview(); renderOrders(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); }
+    function renderMarketing() {
+        const body = $('marketing-rows');
+        if (!body) return;
+        body.innerHTML = marketingRequests.length
+            ? marketingRequests.map((item) => `<tr><td>${esc(item.orderNumber)}</td><td>${esc(item.advisorName)}</td><td>${esc(item.employeeNumber)}</td><td>${esc(item.product || '—')}</td><td>${esc(item.display || item.at || '')}</td></tr>`).join('')
+            : '<tr><td colspan="5">No marketing orders sent yet.</td></tr>';
+    }
+    function renderAll() { renderOverview(); renderOrders(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); }
 
     async function refresh() {
         const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
@@ -251,6 +259,13 @@
         const selected = $('audit-action').value;
         $('audit-action').innerHTML = '<option value="">Action</option>' + actions.map((item) => `<option>${esc(item)}</option>`).join('');
         $('audit-action').value = selected;
+        try {
+            const marketing = await api('/api/reserved-orders/marketing?password=' + encodeURIComponent(password()));
+            marketingRequests = marketing.requests || [];
+        } catch (e) {
+            if (e.message === 'unauthorized') throw e;
+            marketingRequests = [];
+        }
         try {
             const alertData = await api('/api/reserved-orders/alerts?password=' + encodeURIComponent(password()));
             alerts = alertData.alerts || [];

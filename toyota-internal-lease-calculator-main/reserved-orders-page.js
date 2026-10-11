@@ -391,6 +391,17 @@
         const date = parseLocal(value);
         return date ? date.toLocaleString() : '';
     }
+    function personKey(value) {
+        return String(value || '').replace(/\u00a0/g, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+    function canUpdateOrder(order) {
+        const session = readSession();
+        if (!session || !order) return false;
+        const advisor = personKey(columnText(order, 'T') || order.salesAdvisor);
+        if (!advisor || advisor === 'unassigned') return false;
+        if (personKey(session.name) === advisor) return true;
+        return personKey(session.employeeNumber) === advisor;
+    }
     function cardHtml(order) {
         const deadline = columnDeadline(order);
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
@@ -419,7 +430,7 @@
             meta('Share level', toneValue(share, String(share).trim().toLowerCase().includes('retail electronic sales')), share),
             meta('Colors', esc(colors), colors)
         ].join('');
-        return `<article class="order-block${isExpired(order) ? ' expired' : ''}">
+        return `<article class="order-block${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}">
             <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
             <div class="lane-id">
                 <div class="qmark">${queueLabel(order.queueNumber)}</div>
@@ -443,7 +454,9 @@
                     <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
                     <small>${esc(order.statusChangedBy || 'No update yet')}${order.statusChangedAt ? ' · ' + esc(statusWhen(order.statusChangedAt)) : ''}</small>
                 </div>
-                <div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>
+                ${canUpdateOrder(order)
+                    ? `<div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>`
+                    : '<p class="status-lock">Only the assigned advisor can update</p>'}
             </div>
             </div>
             <button class="bo-toggle" type="button" aria-expanded="false">View Full BO Details</button>
@@ -476,6 +489,11 @@
         touch();
         loadLive.last = '';
         await loadLive();
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            const note = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
+            if (note) note.textContent = data.error || 'Only the assigned advisor can update this order.';
+        }
     }
 
     async function loadAlertRules() {
@@ -742,11 +760,59 @@
         $('overlay-message').classList.toggle('hidden', name !== 'message');
         const center = $('mc-center');
         const board = $('order-board');
-        if (center) center.classList.toggle('hidden', name === 'orders');
+        const marketing = $('marketing-board');
+        if (center) center.classList.toggle('hidden', name === 'orders' || name === 'marketing');
         if (board) board.classList.toggle('hidden', name !== 'orders');
+        if (marketing) marketing.classList.toggle('hidden', name !== 'marketing');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
         if (name === 'inbox') paintMyAlerts();
+    }
+    let marketingHit = null;
+    function paintMarketing(order) {
+        const box = $('marketing-result');
+        if (!box) return;
+        if (!order) { box.innerHTML = ''; return; }
+        const fields = (order.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b title="${esc(field.value)}">${esc(field.value)}</b></div>`).join('');
+        box.innerHTML = `<article class="marketing-card">
+            <h2>Order ${esc(order.orderNumber)}</h2>
+            <div class="marketing-fields">${fields || '<div><span>BO file</span><b>No other values on this row</b></div>'}</div>
+            <button class="solid" id="marketing-send" type="button">Send to admin</button>
+        </article>`;
+        $('marketing-send').addEventListener('click', sendMarketing);
+    }
+    async function checkMarketing(event) {
+        event.preventDefault();
+        const session = readSession();
+        if (!session) return endSession('logout');
+        const note = $('marketing-note');
+        const query = $('marketing-order').value.trim();
+        marketingHit = null;
+        paintMarketing(null);
+        note.textContent = 'Checking the BO file…';
+        const res = await fetch('/api/reserved-orders/marketing/lookup?token=' + encodeURIComponent(session.token) + '&q=' + encodeURIComponent(query));
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) return endSession('logout');
+        touch();
+        if (!res.ok) { note.textContent = data.error || 'Could not check the BO file.'; return; }
+        if (!data.found) { note.textContent = 'This order number is not in the BO file.'; return; }
+        marketingHit = data.order;
+        note.textContent = 'This order is in the BO file. Send it to admin if it is the right one.';
+        paintMarketing(data.order);
+    }
+    async function sendMarketing() {
+        const session = readSession();
+        if (!session || !marketingHit) return;
+        const note = $('marketing-note');
+        const res = await fetch('/api/reserved-orders/marketing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: session.token, orderNumber: marketingHit.orderNumber })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) return endSession('logout');
+        touch();
+        note.textContent = res.ok ? `Sent to admin. ${data.request && data.request.advisorName ? data.request.advisorName + ' · ' : ''}${marketingHit.orderNumber}` : (data.error || 'Could not send this order.');
     }
     const togglePass = $('toggle-pass');
     if (togglePass) togglePass.addEventListener('click', () => {
@@ -815,6 +881,13 @@
         toggle.textContent = collapsed ? 'View Full BO Details' : 'Hide Full BO Details';
     });
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
+    if ($('marketing-form')) $('marketing-form').addEventListener('submit', checkMarketing);
+    if ($('marketing-order')) $('marketing-order').addEventListener('input', () => {
+        marketingHit = null;
+        paintMarketing(null);
+        const note = $('marketing-note');
+        if (note) note.textContent = 'Enter the order number. If it is in the BO file, you can send it to admin.';
+    });
     if ($('lookup-form')) $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
     if ($('vehicles')) $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });
     ['msg-customer', 'msg-advisor', 'msg-phone', 'msg-type', 'msg-lang', 'msg-note', 'msg-model'].forEach((id) => $(id).addEventListener('input', paintMessage));

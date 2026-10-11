@@ -296,6 +296,16 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
     overflow: hidden;
 }
 #app .kpis { display: none; }
+#app .marketing-board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+#app .marketing-form { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+#app .marketing-form .field { min-width: min(360px, 100%); }
+#app .marketing-note { margin: 0; color: #93a0b8; }
+#app .marketing-card { background: #121a2c; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 14px; display: grid; gap: 12px; }
+#app .marketing-card h2 { margin: 0; font-size: 22px; }
+#app .marketing-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+#app .marketing-fields div { background: #0e1628; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+#app .marketing-fields span { display: block; color: #8ea0bb; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+#app .marketing-fields b { display: block; margin-top: 2px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #app .mc-center { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 #app .mc-head p { margin: 0; color: #93a0b8; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; }
 #app .mc-head h1 { margin: 2px 0 0; color: #f8fbff; font-size: 28px; letter-spacing: -0.03em; }
@@ -382,6 +392,38 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
     flex: 0 0 auto;
 }
 #app .order-block.expired { box-shadow: inset 3px 0 0 #fb7185; }
+#app .order-block.cancelled {
+    background: #7f1d1d;
+    border-color: #EB0A1E;
+    box-shadow: 0 0 0 1px rgba(235, 10, 30, 0.55), 0 10px 28px rgba(127, 29, 29, 0.45);
+    color: #fff;
+}
+#app .order-block.cancelled .lane,
+#app .order-block.cancelled .excel-row,
+#app .order-block.cancelled .bo-toggle { color: #fff; }
+#app .order-block.cancelled .excel-row,
+#app .order-block.cancelled .bo-toggle,
+#app .order-block.cancelled .thumb,
+#app .order-block.cancelled .status-row select {
+    background: #5c1018;
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+#app .order-block.cancelled .lane .muted,
+#app .order-block.cancelled .meta > span,
+#app .order-block.cancelled .excel-field span,
+#app .order-block.cancelled .status-lock,
+#app .order-block.cancelled .status-glow small,
+#app .order-block.cancelled .ahead-empty { color: #fecaca; }
+#app .order-block.cancelled .meta > b,
+#app .order-block.cancelled .lane-id > b,
+#app .order-block.cancelled .excel-field b,
+#app .order-block.cancelled .ahead-list b { color: #fff; }
+#app .order-block.cancelled .badge.cancel {
+    background: #EB0A1E;
+    color: #fff;
+    box-shadow: 0 0 18px rgba(255, 90, 100, 0.9);
+}
 #app .lane.no-specs { grid-template-columns: 168px minmax(280px, 1fr) 228px; }
 #app .lane {
     display: grid;
@@ -490,6 +532,7 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 .excel-live td { border: 1px solid #d4d4d4; padding: 4px 8px; color: #1a1a1a; background: #fff; white-space: nowrap; }
 .excel-live tbody tr:nth-child(even) td { background: #f3f8f4; }
 .excel-live .sheet-note { margin: 0 0 8px; color: #4b5563; }
+#app .status-lock { margin: 0; color: #93a0b8; font-size: 11px; font-weight: 700; }
 #app .status-row { margin-top: 0; width: 100%; }
 #app .status-row select {
     width: 100%; padding: 6px 8px; border-radius: 8px;
