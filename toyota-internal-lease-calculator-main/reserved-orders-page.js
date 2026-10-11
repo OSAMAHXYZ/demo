@@ -13,6 +13,11 @@
     let orders = [];
     let carsData = {};
     let alertRules = [];
+    let boAlerts = [];
+    let mcKey = '';
+    let mcQuery = '';
+    let mcNotice = '';
+    const mcDrafts = {};
     let searchTimer = null;
     let clock = null;
 
@@ -491,10 +496,12 @@
             <textarea data-admin-msg="${esc(item.ruleId)}" rows="3">${esc(item.message)}</textarea>
             ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" data-shift="-1" data-rule="${esc(item.ruleId)}">−</button><button type="button" data-shift="1" data-rule="${esc(item.ruleId)}">+</button></div>` : ''}
             <p>${item.sentAt ? 'Sent' : 'Not sent yet'}</p>
-            <button type="button" data-send-admin="${esc(item.ruleId)}">${item.sentAt ? 'Send again' : 'Send'}</button>
+            <button type="button" data-open-wa="${esc(item.ruleId)}">Open WhatsApp</button>
+            <button type="button" data-confirm-sent="${esc(item.ruleId)}">${item.sentAt ? 'Sent again' : 'Mark as sent'}</button>
         </article>`;
         }).join('');
-        box.querySelectorAll('[data-send-admin]').forEach((button) => button.addEventListener('click', () => sendAdminMessage(button.dataset.sendAdmin)));
+        box.querySelectorAll('[data-open-wa]').forEach((button) => button.addEventListener('click', () => openWhatsApp(messageText(button.dataset.openWa))));
+        box.querySelectorAll('[data-confirm-sent]').forEach((button) => button.addEventListener('click', () => confirmSent(button.dataset.confirmSent, '', messageText(button.dataset.confirmSent))));
         box.querySelectorAll('[data-shift]').forEach((button) => button.addEventListener('click', () => {
             const field = box.querySelector(`[data-admin-msg="${CSS.escape(button.dataset.rule)}"]`);
             if (!field) return;
@@ -517,19 +524,27 @@
             return year ? `${dd}.${mm}.${yyyy}` : `${yyyy}-${mm}-${dd}`;
         });
     }
-    async function sendAdminMessage(ruleId) {
+    function messageText(ruleId) {
+        const field = document.querySelector(`#mc-work [data-admin-msg="${CSS.escape(ruleId)}"]`)
+            || document.querySelector(`[data-admin-msg="${CSS.escape(ruleId)}"]`);
+        return field ? field.value.trim() : '';
+    }
+    function openWhatsApp(text) {
+        if (!text) return;
+        const number = phone($('msg-phone') ? $('msg-phone').value : '');
+        window.open((number ? `https://wa.me/${number}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
+    }
+    async function confirmSent(ruleId, boNumber, text) {
         const session = readSession();
-        const field = document.querySelector(`[data-admin-msg="${CSS.escape(ruleId)}"]`);
-        const text = field ? field.value.trim() : '';
         if (!session || !text) return;
         const res = await fetch('/api/reserved-orders/my-bo-corrections/sent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: session.token, ruleId, message: text })
+            body: JSON.stringify({ token: session.token, ruleId, boNumber, message: text })
         });
         if (!res.ok) return;
-        const number = phone($('msg-phone').value);
-        window.open((number ? `https://wa.me/${number}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
+        delete mcDrafts[ruleId + '::' + boNumber];
+        await paintMyAlerts();
         paintMessageAlerts();
     }
     function alertMatches(rule, bag) {
@@ -715,8 +730,13 @@
 
     function showView(name) {
         $('overlay-message').classList.toggle('hidden', name !== 'message');
+        const center = $('mc-center');
+        const board = $('order-board');
+        if (center) center.classList.toggle('hidden', name === 'orders');
+        if (board) board.classList.toggle('hidden', name !== 'orders');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
+        if (name === 'inbox') paintMyAlerts();
     }
     const togglePass = $('toggle-pass');
     if (togglePass) togglePass.addEventListener('click', () => {
@@ -762,6 +782,13 @@
         $(id).addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 120); });
         $(id).addEventListener('change', render);
     });
+    const mcSearch = $('mc-search');
+    if (mcSearch) mcSearch.addEventListener('input', () => {
+        const current = document.querySelector('#mc-work [data-admin-msg]');
+        if (current) mcDrafts[current.dataset.draftKey] = current.value;
+        mcQuery = mcSearch.value;
+        paintMessageCenter();
+    });
     $('filter-clear').addEventListener('click', () => { clearFilters(); render(); });
     $('filter-refresh').addEventListener('click', () => { loadLive.last = ''; loadLive(); });
     $('kpis').addEventListener('click', (event) => {
@@ -791,36 +818,149 @@
     $('msg-copy').addEventListener('click', () => { const text = buildMessage(); if (text) navigator.clipboard.writeText(text).catch(() => {}); });
     $('msg-reset').addEventListener('click', () => { ['msg-customer', 'msg-phone', 'msg-note'].forEach((id) => { $(id).value = ''; }); paintMessage(); });
 
+    function mcRows() {
+        const rows = [];
+        boAlerts.forEach((item) => {
+            (item.orders || []).forEach((order) => {
+                const reserved = dataOrders().find((row) => String(row.orderNumber) === String(order.boNumber));
+                rows.push({
+                    key: item.ruleId + '::' + order.boNumber,
+                    ruleId: item.ruleId,
+                    alert: item,
+                    order,
+                    vin: reserved && reserved.vin ? reserved.vin : ''
+                });
+            });
+        });
+        return rows;
+    }
+    function mcStatus(row) {
+        const status = row.order.status || 'new';
+        if (status === 'completed') return { label: 'Sent', cls: 'is-sent' };
+        if (status === 'in_progress') return { label: 'In progress', cls: 'is-progress' };
+        if (status === 'viewed') return { label: 'Viewed', cls: 'is-viewed' };
+        return { label: 'Needs action', cls: 'is-need' };
+    }
+    function mcSoon(order) {
+        const match = String(order.orderDate || '').match(/(\d{1,2})[./](\d{1,2})[./](\d{4})|(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return false;
+        const date = match[3]
+            ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]))
+            : new Date(Number(match[4]), Number(match[5]) - 1, Number(match[6]));
+        const days = (date.getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000;
+        return days <= 3;
+    }
+    function paintMessageCenter() {
+        const summary = $('mc-summary');
+        const list = $('mc-orders');
+        if (!summary || !list) return;
+        const rows = mcRows();
+        const needle = mcQuery.trim().toLowerCase();
+        const visible = rows.filter((row) => {
+            const blob = [row.order.boNumber, row.order.product, row.vin, row.alert.column, row.alert.name, row.alert.message].join(' ').toLowerCase();
+            return !needle || blob.includes(needle);
+        });
+        const need = rows.filter((row) => mcStatus(row).cls === 'is-need' || mcStatus(row).cls === 'is-viewed').length;
+        const sent = rows.filter((row) => mcStatus(row).cls === 'is-sent').length;
+        const soon = rows.filter((row) => mcSoon(row.order) && mcStatus(row).cls !== 'is-sent').length;
+        summary.innerHTML = `
+            <article class="is-need"><span>Needs action</span><strong>${need}</strong></article>
+            <article class="is-sent"><span>Sent messages</span><strong>${sent}</strong></article>
+            <article class="is-soon"><span>Approaching deadlines</span><strong>${soon}</strong></article>`;
+        if (!rows.length) {
+            list.innerHTML = '<p class="mc-empty">No messages for your orders yet.</p>';
+            $('mc-work').innerHTML = '<p class="mc-empty">When an alert is pushed for your name, the orders appear here.</p>';
+            return;
+        }
+        if (!visible.some((row) => row.key === mcKey)) mcKey = (visible[0] && visible[0].key) || '';
+        list.innerHTML = visible.map((row) => {
+            const state = mcStatus(row);
+            return `<button type="button" class="mc-card${row.key === mcKey ? ' is-on' : ''}" data-mc="${esc(row.key)}">
+                <b>${esc(row.order.product || row.alert.product || 'Vehicle')}</b>
+                <span>Order ${esc(row.order.boNumber || '—')}</span>
+                <span>${row.vin ? 'VIN ' + esc(row.vin) : esc(row.alert.column || 'Error')}</span>
+                <span class="${mcSoon(row.order) && state.cls !== 'is-sent' ? 'is-soon' : ''}">${esc(row.order.orderDate || 'No BO date')}</span>
+                <em class="${state.cls}">${state.label}</em>
+            </button>`;
+        }).join('') || '<p class="mc-empty">No orders match this search.</p>';
+        list.querySelectorAll('[data-mc]').forEach((button) => button.addEventListener('click', () => {
+            const current = document.querySelector('#mc-work [data-admin-msg]');
+            if (current) mcDrafts[current.dataset.draftKey] = current.value;
+            mcKey = button.dataset.mc;
+            paintMessageCenter();
+        }));
+        paintMessageWork(rows.find((row) => row.key === mcKey));
+    }
+    function paintMessageWork(row) {
+        const work = $('mc-work');
+        if (!work) return;
+        if (!row) {
+            work.innerHTML = '<p class="mc-empty">Select an order to read and send its message.</p>';
+            return;
+        }
+        const state = mcStatus(row);
+        const draft = mcDrafts[row.key] != null ? mcDrafts[row.key] : row.alert.message;
+        const dated = hasMessageDate(draft);
+        const when = row.order.at ? new Date(row.order.at).toLocaleString() : '';
+        work.innerHTML = `<div class="mc-detail">
+            <div class="mc-detail-head">
+                <div>
+                    <h2>${esc(row.order.product || 'Order')} · ${esc(row.order.boNumber || '—')}</h2>
+                    <p>${row.vin ? 'VIN ' + esc(row.vin) + ' · ' : ''}${esc(row.alert.name && row.alert.name !== row.alert.column ? row.alert.name + ' · ' + (row.alert.column || 'Error') : (row.alert.column || row.alert.name || 'Error'))}</p>
+                </div>
+                <em class="${state.cls}">${state.label}</em>
+            </div>
+            <div class="mc-facts">
+                <span>Incorrect<b>${esc(row.alert.incorrectValue || 'blank')}</b></span>
+                <span>Correct<b>${esc(row.order.correctValue || row.alert.correctValue || '—')}</b></span>
+                <span>BO date<b>${esc(row.order.orderDate || '—')}</b></span>
+                <span>Saved<b>${esc(when || 'Not confirmed')}</b></span>
+            </div>
+            <label class="mc-editor"><span>Message</span>
+                <textarea id="mc-message" data-admin-msg="${esc(row.ruleId)}" data-draft-key="${esc(row.key)}" rows="5">${esc(draft)}</textarea>
+            </label>
+            ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" id="mc-minus">−1 day</button><button type="button" id="mc-plus">+1 day</button></div>` : '<p class="mc-note">This message has no date to adjust.</p>'}
+            <div class="mc-preview-box"><div class="wa-bubble" id="mc-preview"></div></div>
+            <div class="mc-actions">
+                <button type="button" class="ghost" id="mc-copy">Copy message</button>
+                <button type="button" class="ghost" id="mc-wa">Open WhatsApp</button>
+                <button type="button" class="solid" id="mc-sent">${state.cls === 'is-sent' ? 'Confirm sent again' : 'Mark as sent'}</button>
+            </div>
+            <p class="mc-note" id="mc-note">${esc(mcNotice || 'Opening WhatsApp does not mark the message as sent.')}</p>
+        </div>`;
+        const field = $('mc-message');
+        const paint = () => {
+            mcDrafts[row.key] = field.value;
+            $('mc-preview').textContent = field.value;
+        };
+        paint();
+        field.addEventListener('input', paint);
+        const shift = (delta) => { field.value = shiftMessageDates(field.value, delta); paint(); };
+        if ($('mc-minus')) $('mc-minus').addEventListener('click', () => shift(-1));
+        if ($('mc-plus')) $('mc-plus').addEventListener('click', () => shift(1));
+        mcNotice = '';
+        $('mc-copy').addEventListener('click', () => {
+            const done = () => { $('mc-note').textContent = 'Message copied.'; };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(field.value).then(done).catch(() => { field.focus(); field.select(); $('mc-note').textContent = 'Message selected. Press Ctrl+C to copy it.'; });
+            } else { field.focus(); field.select(); $('mc-note').textContent = 'Message selected. Press Ctrl+C to copy it.'; }
+        });
+        $('mc-wa').addEventListener('click', () => {
+            openWhatsApp(field.value.trim());
+            mcNotice = 'WhatsApp opened. Mark as sent only after you press Send there.';
+            if (row.order.status === 'new' || row.order.status === 'viewed') markAlert(row.ruleId, 'in_progress', row.order.boNumber);
+            else paintMessageCenter();
+        });
+        $('mc-sent').addEventListener('click', () => confirmSent(row.ruleId, row.order.boNumber, field.value.trim()));
+    }
     async function paintMyAlerts() {
-        const box = $('my-bo-alerts');
         const session = readSession();
-        if (!box || !session) return;
+        if (!session) return;
         const res = await fetch('/api/reserved-orders/my-bo-corrections?token=' + encodeURIComponent(session.token));
         if (!res.ok) return;
         const data = await res.json();
-        const items = data.alerts || [];
-        box.innerHTML = items.map((item) => `<article class="my-alert">
-            <h3>BO Correction Required</h3>
-            <p><b>${esc(item.name)}</b> · ${esc(item.product || 'All cars')} · ${esc(item.column)}</p>
-            <p>Incorrect: ${esc(item.incorrectValue || 'blank')} · Correct: ${esc(item.correctValue || '—')} · Orders: ${item.affectedOrderCount}</p>
-            <p>${esc(item.message)}</p>
-            <p>Status: ${esc(item.status)}</p>
-            <button type="button" data-my-orders="${esc(item.ruleId)}">View My Orders</button>
-            <button type="button" data-my-status="viewed" data-rule="${esc(item.ruleId)}">Viewed</button>
-            <button type="button" data-my-status="in_progress" data-rule="${esc(item.ruleId)}">In Progress</button>
-            <button type="button" data-my-status="completed" data-rule="${esc(item.ruleId)}">Completed</button>
-            <div id="my-orders-${esc(item.ruleId)}"></div>
-        </article>`).join('');
-        box.querySelectorAll('[data-my-orders]').forEach((button) => button.addEventListener('click', () => {
-            const item = items.find((row) => row.ruleId === button.dataset.myOrders);
-            const target = document.getElementById('my-orders-' + item.ruleId);
-            target.innerHTML = `<table class="br-table"><thead><tr><th>Back Order Number</th><th>Product</th><th>Model Year</th><th>Current</th><th>Correct</th><th>Order Date</th><th></th></tr></thead><tbody>
-                ${(item.orders || []).map((order) => `<tr><td>${esc(order.boNumber)}</td><td>${esc(order.product)}</td><td>${esc(order.modelYear)}</td><td>${esc(order.currentValue)}</td><td>${esc(order.correctValue)}</td><td>${esc(order.orderDate)}</td><td><button type="button" data-order-done="${esc(item.ruleId)}" data-bo="${esc(order.boNumber)}">Completed</button></td></tr>`).join('')}
-            </tbody></table>`;
-            markAlert(item.ruleId, 'viewed');
-            target.querySelectorAll('[data-order-done]').forEach((done) => done.addEventListener('click', () => markAlert(done.dataset.orderDone, 'completed', done.dataset.bo)));
-        }));
-        box.querySelectorAll('[data-my-status]').forEach((button) => button.addEventListener('click', () => markAlert(button.dataset.rule, button.dataset.myStatus)));
+        boAlerts = data.alerts || [];
+        paintMessageCenter();
     }
     async function markAlert(ruleId, status, boNumber) {
         const session = readSession();
@@ -834,7 +974,7 @@
         $('login').classList.add('hidden');
         $('app').classList.remove('hidden');
         document.body.classList.add('dash');
-        showView('orders');
+        showView('inbox');
         $('who').textContent = session.name;
         $('who-id').textContent = 'ID: ' + session.employeeNumber;
         $('msg-advisor').value = session.name;

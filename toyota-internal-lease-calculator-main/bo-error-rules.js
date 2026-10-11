@@ -107,7 +107,7 @@ function analyzeTable(table, rule) {
                 boNumber,
                 product: cellString(productHeader ? row[productHeader] : ''),
                 modelYear: cellString(yearHeader ? row[yearHeader] : ''),
-                orderDate: cellString(dateHeader ? row[dateHeader] : ''),
+                orderDate: shiftDateText(dateHeader ? row[dateHeader] : '', 0),
                 column: '',
                 currentValue: '',
                 correctValue: cellString(rule.correctValue),
@@ -144,16 +144,58 @@ function fillMessage(template, bag) {
     return String(template || '').replace(/\{(\w+)\}/g, (all, key) => (bag[key] == null ? all : String(bag[key])));
 }
 
-function orderDateLine(orders) {
+function parseBoDate(value) {
+    const text = cellString(value);
+    const local = text.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+    if (local) return new Date(Number(local[3]), Number(local[2]) - 1, Number(local[1]));
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    const serial = Number(text);
+    if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+        const utc = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+        return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+    }
+    return null;
+}
+
+function formatBoDate(date) {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    return `${dd}.${mm}.${date.getFullYear()}`;
+}
+
+function shiftDateText(value, days) {
+    const date = parseBoDate(value);
+    if (!date || Number.isNaN(date.getTime())) return cellString(value);
+    const shown = new Date(date.getFullYear(), date.getMonth(), date.getDate() + (Number(days) || 0));
+    return formatBoDate(shown);
+}
+
+function deadlineDays(rule) {
+    const days = Number(rule && rule.deadlineDays);
+    return [0, 1, 2, 5].includes(days) ? days : 0;
+}
+
+function uniqueDates(orders, days) {
     const seen = [];
     (orders || []).forEach((order) => {
-        const value = cellString(order.orderDate);
+        const raw = cellString(order.orderDate);
+        if (!raw) return;
+        const value = shiftDateText(raw, days);
         if (value && !seen.includes(value)) seen.push(value);
     });
+    return seen;
+}
+
+function orderDateLine(orders, days) {
+    const seen = uniqueDates(orders, days);
     return seen.length ? ` Deadline: ${seen.join(', ')}.` : '';
 }
 
 function messageBag(rule, person, orders) {
+    const days = deadlineDays(rule);
+    const dates = uniqueDates(orders, 0);
+    const deadlines = uniqueDates(orders, days);
     return {
         employeeName: person.salesmanName || person.name || '',
         product: rule.product || 'all cars',
@@ -161,7 +203,9 @@ function messageBag(rule, person, orders) {
         incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
         correctValue: rule.correctValue || '—',
         affectedOrderCount: (orders || []).length,
-        orderDateLine: orderDateLine(orders)
+        orderDate: dates.join(', '),
+        deadline: deadlines.join(', '),
+        orderDateLine: deadlines.length ? ` Deadline: ${deadlines.join(', ')}.` : ''
     };
 }
 
@@ -203,6 +247,7 @@ function attachBoErrorRules(app, deps) {
             correctValue: cellString(raw.correctValue),
             message: cellString(raw.message),
             whatsappMessage: cellString(raw.whatsappMessage),
+            deadlineDays: deadlineDays(raw),
             active: raw.active !== false,
             archived: !!(previous && previous.archived),
             createdAt: (previous && previous.createdAt) || now,
@@ -525,7 +570,8 @@ function attachBoErrorRules(app, deps) {
                 sentAt: state.sentAt || '',
                 orders: mine.orders.map((order) => ({
                     ...order,
-                    status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new'
+                    status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new',
+                    at: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].at) || ''
                 }))
             });
         });
@@ -575,10 +621,21 @@ function attachBoErrorRules(app, deps) {
         if (!mine) return res.status(403).json({ error: 'This message is not yours.' });
         const key = statusKey(rule.id, mine);
         const state = store.statuses[key] || { status: 'new', at: '', orders: {} };
+        if (!state.orders) state.orders = {};
         const now = new Date().toISOString();
+        const boNumber = cellString(req.body?.boNumber);
+        if (boNumber) {
+            if (!mine.orders.some((order) => order.boNumber === boNumber)) return res.status(403).json({ error: 'That order is not in your list.' });
+            state.orders[boNumber] = { status: 'completed', at: now };
+        } else {
+            mine.orders.forEach((order) => {
+                state.orders[order.boNumber] = { status: 'completed', at: now };
+            });
+        }
+        const allDone = mine.orders.every((order) => state.orders[order.boNumber] && state.orders[order.boNumber].status === 'completed');
         state.sentAt = now;
         state.sentMessage = cellString(req.body?.message);
-        state.status = 'completed';
+        state.status = allDone ? 'completed' : 'in_progress';
         state.at = now;
         store.statuses[key] = state;
         saveStore(store);

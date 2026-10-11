@@ -9,7 +9,7 @@
     let notice = '';
     let messageTarget = 'br-message';
     const DEFAULT_MESSAGE = 'Hello {employeeName}, you have {affectedOrderCount} {product} back orders under your name where {columnName} is {incorrectValue}. Please change it to {correctValue}.{orderDateLine}';
-    const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'orderDateLine'];
+    const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'orderDate', 'deadline', 'orderDateLine'];
     const OPS = [
         ['equals', 'Equals'],
         ['not_equals', 'Does not equal'],
@@ -51,16 +51,26 @@
     function checkedValues(boxId) {
         return [...document.querySelectorAll('#' + boxId + ' input:checked')].filter((input) => !input.hasAttribute('data-all-cars')).map((input) => input.value).filter(Boolean);
     }
+    function selectedCars() {
+        const all = document.getElementById('br-all-cars');
+        if (!all || all.checked) return [];
+        return checkedValues('br-cars');
+    }
+    function deadlineChoice() {
+        const days = Number(document.getElementById('br-deadline') && document.getElementById('br-deadline').value);
+        return [0, 1, 2, 5].includes(days) ? days : 0;
+    }
     function formRule() {
-        const car = document.getElementById('br-car').value;
+        const cars = selectedCars();
         const column = document.getElementById('br-column').value;
         const incorrectValues = document.getElementById('br-bad').value;
         const several = incorrectValues.split(/[\n,;|]/).map((item) => item.trim()).filter(Boolean);
+        const carLabel = cars.length ? cars.join(', ') : 'All cars';
         return {
             id: editing && editing.id,
-            name: document.getElementById('br-name').value.trim() || `${car || 'All cars'} · ${column || 'column'}`,
-            products: car ? [car] : [],
-            product: car,
+            name: document.getElementById('br-name').value.trim() || `${carLabel} · ${column || 'column'}`,
+            products: cars,
+            product: cars.join(', '),
             columns: column ? [column] : [],
             column,
             operator: several.length > 1 ? 'in_list' : 'equals',
@@ -68,6 +78,7 @@
             correctValue: document.getElementById('br-good').value.trim(),
             message: document.getElementById('br-message').value.trim(),
             whatsappMessage: document.getElementById('br-wa').value.trim(),
+            deadlineDays: deadlineChoice(),
             active: document.getElementById('br-active').checked
         };
     }
@@ -176,10 +187,20 @@
                 <p class="muted">Choose the car, the column that has the error, the wrong value or values, and the correction. Push sends the message only to employees who have that error under their name.</p>
                 <div class="br-form">
                     <label><span>Rule name</span><input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional"></label>
-                    <label><span>Car</span><select id="br-car"><option value="">All cars</option>${(pack.products || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'products', 'product')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <div class="br-cars">
+                        <span>Cars</span>
+                        <label class="check"><input id="br-all-cars" type="checkbox" data-all-cars ${picked(selected, 'products', 'product').length ? '' : 'checked'}> All cars</label>
+                        <div class="br-picks" id="br-cars">${(pack.products || []).map((name) => `<label><input type="checkbox" value="${esc(name)}"${picked(selected, 'products', 'product').includes(name) ? ' checked' : ''}>${esc(name)}</label>`).join('') || '<p class="muted">Upload a BO file to list the cars.</p>'}</div>
+                    </div>
                     <label><span>Column with the error</span><select id="br-column"><option value="">Choose a column</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'columns', 'column')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
                     <label><span>Incorrect value or values</span><input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2027 or Not_Confirmed. Separate several with commas."></label>
                     <label><span>Correct value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
+                    <label><span>Deadline from the BO date</span><select id="br-deadline">
+                        <option value="0"${Number(selected.deadlineDays) === 0 ? ' selected' : ''}>Same as the BO date</option>
+                        <option value="1"${Number(selected.deadlineDays) === 1 ? ' selected' : ''}>BO date + 1 day</option>
+                        <option value="2"${Number(selected.deadlineDays) === 2 ? ' selected' : ''}>BO date + 2 days</option>
+                        <option value="5"${Number(selected.deadlineDays) === 5 ? ' selected' : ''}>BO date + 5 days</option>
+                    </select></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
                     <div class="br-msg wide">
                         <h3>Error notification</h3>
@@ -198,7 +219,7 @@
                         <div class="br-preview-box">
                             <div class="br-bubble" id="br-preview"></div>
                         </div>
-                        <p class="muted">The bubble uses example values so you can read the message. Analyze and Push still fill each employee's real name, order count, and dates.</p>
+                        <p class="muted">{orderDate} is the Order Date from the BO file. {deadline} is that date plus the days selected above. Analyze and Push fill each employee's real name, count, and dates.</p>
                     </div>
                 </div>
                 <div class="br-buttons">
@@ -245,19 +266,30 @@
     function fillTemplate(template, bag) {
         return String(template || '').replace(/\{(\w+)\}/g, (all, key) => (bag[key] == null ? all : String(bag[key])));
     }
+    function previewDate(days) {
+        const date = new Date(2026, 9, 1 + (Number(days) || 0));
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        return `${dd}.${mm}.${date.getFullYear()}`;
+    }
     function exampleBag() {
         const value = (id) => {
             const field = document.getElementById(id);
             return field ? field.value.trim() : '';
         };
+        const cars = selectedCars();
+        const days = deadlineChoice();
+        const deadline = previewDate(days);
         return {
             employeeName: 'Ahmed Al Harbi',
-            product: value('br-car') || 'Land Cruiser',
+            product: cars.join(', ') || 'Land Cruiser',
             columnName: value('br-column') || 'Model Year',
             incorrectValue: value('br-bad') || '2027',
             correctValue: value('br-good') || '2026',
             affectedOrderCount: '3',
-            orderDateLine: ' Deadline: 01.10.2026.'
+            orderDate: '01.10.2026',
+            deadline,
+            orderDateLine: ` Deadline: ${deadline}.`
         };
     }
     function paintPreview() {
@@ -290,11 +322,24 @@
         paintPreview();
     }
     function bind() {
-        ['br-car', 'br-column', 'br-bad', 'br-good'].forEach((id) => {
+        ['br-column', 'br-bad', 'br-good', 'br-deadline'].forEach((id) => {
             const field = document.getElementById(id);
             if (field) field.addEventListener('input', paintPreview);
             if (field) field.addEventListener('change', paintPreview);
         });
+        const allCars = document.getElementById('br-all-cars');
+        const carBox = document.getElementById('br-cars');
+        if (allCars && carBox) {
+            allCars.addEventListener('change', () => {
+                if (allCars.checked) carBox.querySelectorAll('input').forEach((input) => { input.checked = false; });
+                paintPreview();
+            });
+            carBox.addEventListener('change', () => {
+                const any = [...carBox.querySelectorAll('input')].some((input) => input.checked);
+                allCars.checked = !any;
+                paintPreview();
+            });
+        }
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
         document.getElementById('br-cancel').addEventListener('click', () => { editing = null; render(); });
         ['br-message', 'br-wa'].forEach((id) => {

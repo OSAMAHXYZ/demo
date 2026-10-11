@@ -52,7 +52,8 @@
                 </div>
             </div>
             <nav class="jump">
-                <button type="button" class="nav-on" data-view="orders">Reserved Orders</button>
+                <button type="button" class="nav-on" data-view="inbox">Messages</button>
+                <button type="button" data-view="orders">Reserved Orders</button>
                 <a href="bo-order-lookup.html">BO Lookup</a>
                 <a href="detailed-calculations.html">Detailed Calculator</a>
                 <button type="button" data-view="message">Message Builder</button>
@@ -65,8 +66,25 @@
         </header>
 
         <main class="tower">
-            <section id="my-bo-alerts" class="my-alerts"></section>
+            <section class="mc-center" id="mc-center">
+                <header class="mc-head">
+                    <p>Toyota · ALJ · Sales CRM</p>
+                    <h1>Messages for My Orders</h1>
+                </header>
+                <section class="mc-summary" id="mc-summary" aria-label="Message summary"></section>
+                <div class="mc-workspace">
+                    <section class="mc-list">
+                        <input id="mc-search" type="search" placeholder="Search order, VIN, car, or error" aria-label="Search my order messages">
+                        <div class="mc-scroll" id="mc-orders"></div>
+                    </section>
+                    <section class="mc-work" id="mc-work">
+                        <p class="mc-empty">Select an order to read and send its message.</p>
+                    </section>
+                </div>
+            </section>
+            <section id="my-bo-alerts" class="my-alerts" hidden></section>
             <section class="kpis" id="kpis"></section>
+            <div id="order-board" class="hidden">
             <div class="toolbar" id="order-toolbar">
                 <input class="search" id="search" type="search" placeholder="Search VIN, order, customer, advisor" aria-label="Search VIN, order number, customer, or advisor">
                 <select id="filter-status" aria-label="Status"><option value="">All statuses</option></select>
@@ -99,11 +117,12 @@
                 <button class="solid" id="filter-refresh" type="button">Refresh</button>
             </div>
             <section class="cards" id="cards"></section>
+            </div>
         </main>
 
         <div id="overlay-message" class="overlay hidden">
             <section class="overlay-panel">
-                <div class="overlay-head"><h2>Message Builder</h2><button class="ghost" type="button" data-view="orders">Close</button></div>
+                <div class="overlay-head"><h2>Message Builder</h2><button class="ghost" type="button" data-view="inbox">Close</button></div>
                 <div class="message-grid">
                     <div>
                         <div class="facts">
