@@ -503,6 +503,7 @@
       align-self: center;
     }
     details.panel[open] .summary-chevron { color: var(--sky); }
+    .panel.lexus { border-color: rgba(56, 189, 248, 0.35); }
 
     @media (max-width: 900px) {
       body { padding: 80px 14px 40px; }
@@ -527,13 +528,15 @@
     <header class="hero">
       <div class="hero-eyebrow">Admin · Daily BO Sync</div>
       <h1>BO Data Admin</h1>
-      <p class="hero-sub">Upload today’s Excel, review queue totals by combination, then check a new-customer queue.</p>
+      <p class="hero-sub">Upload today’s Excel, review queue totals by combination, then check a new-customer queue. Lexus uses its own file and does not change the Toyota BO.</p>
       <nav class="section-jump" aria-label="Jump to section">
         <a href="#section-upload">1 · Upload</a>
         <a href="#section-stats">2 · Stats</a>
         <a href="#section-combos">3 · Combinations</a>
         <a href="#section-queue">4 · Queue check</a>
         <a href="#section-preview">5 · Preview</a>
+        <a href="#section-lexus-upload">Lexus upload</a>
+        <a href="#section-lexus-combos">Lexus queues</a>
       </nav>
     </header>
 
@@ -671,6 +674,97 @@
             <table id="previewTable" style="display:none;">
               <thead id="previewThead"></thead>
               <tbody id="previewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <section class="panel lexus" id="section-lexus-upload">
+      <div class="panel-head">
+        <div class="panel-step sky">L</div>
+        <div class="panel-titles">
+          <h2 class="panel-title">Upload Lexus BO Excel</h2>
+          <p class="panel-sub">Same first-sheet rules as the Toyota file. Stored separately, so Lexus queues do not mix with Toyota.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="lexusFileInput">Lexus BO Excel File (.xlsx / .xls)</label>
+            <input id="lexusFileInput" type="file" accept=".xlsx,.xls" />
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="lexusUploadBtn" type="button">Upload Lexus BO Excel</button>
+        </div>
+        <div id="lexusStatus" class="status"></div>
+        <div id="lexusMetaChips" class="meta-chips" hidden></div>
+        <div id="lexusMeta" class="meta"></div>
+      </div>
+    </section>
+
+    <section class="panel lexus" id="section-lexus-combos">
+      <div class="panel-head">
+        <div class="panel-step sky">L</div>
+        <div class="panel-titles">
+          <h2 class="panel-title">Lexus combination queue totals</h2>
+          <p class="panel-sub">Product → Suffix, Exterior/Interior · QUEUE = unique Lexus BO count. <strong>*</strong> means any color.</p>
+        </div>
+        <div class="panel-actions">
+          <button id="lexusComboRefreshBtn" type="button" class="secondary">Refresh</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="combo-toolbar">
+          <input id="lexusComboFilter" type="text" placeholder="Filter Lexus product, suffix, or color…" />
+        </div>
+        <div id="lexusComboMeta" class="combo-meta">Loading Lexus combinations…</div>
+        <div id="lexusComboList" class="combo-list">
+          <div class="combo-empty">No Lexus combinations loaded yet.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel lexus" id="section-lexus-queue">
+      <div class="panel-head">
+        <div class="panel-step sky">L</div>
+        <div class="panel-titles">
+          <h2 class="panel-title">Lexus queue check</h2>
+          <p class="panel-sub">Estimate a Lexus queue from the Lexus BO file only.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="queue-check-grid">
+          <input id="lexusProduct" type="text" placeholder="Product" />
+          <input id="lexusSuffix" type="text" placeholder="Suffix" />
+          <input id="lexusExterior" type="text" placeholder="Exterior color" />
+          <input id="lexusInterior" type="text" placeholder="Interior color" />
+        </div>
+        <div class="btn-row">
+          <button id="lexusQueueCheckBtn" type="button" class="secondary">Search Lexus queue number</button>
+        </div>
+        <div id="lexusQueueCheckResult" class="queue-check-result">Choose Product, Suffix, Exterior, Interior — then search the Lexus file.</div>
+      </div>
+    </section>
+
+    <details class="panel lexus" id="section-lexus-preview">
+      <summary class="panel-head">
+        <div class="panel-step muted">L</div>
+        <div class="panel-titles">
+          <h2 class="panel-title">Lexus Excel preview</h2>
+          <p class="panel-sub">Raw rows from the Lexus file.</p>
+        </div>
+        <span class="summary-chevron">Show / hide</span>
+      </summary>
+      <div class="panel-body" style="padding-top:0;">
+        <div class="box" style="margin-top:0;">
+          <div class="box-head" id="lexusPreviewHead">Lexus Excel Preview</div>
+          <div class="preview-scroll">
+            <div id="lexusPreviewEmpty" class="empty-preview">No Lexus preview yet.</div>
+            <table id="lexusPreviewTable" style="display:none;">
+              <thead id="lexusPreviewThead"></thead>
+              <tbody id="lexusPreviewTbody"></tbody>
             </table>
           </div>
         </div>
@@ -1053,9 +1147,200 @@
       }
     });
 
+    const lexusStatusEl = document.getElementById('lexusStatus');
+    const lexusMetaEl = document.getElementById('lexusMeta');
+    const lexusMetaChipsEl = document.getElementById('lexusMetaChips');
+    const lexusComboMetaEl = document.getElementById('lexusComboMeta');
+    const lexusComboListEl = document.getElementById('lexusComboList');
+    const lexusComboFilterEl = document.getElementById('lexusComboFilter');
+    const lexusQueueCheckResultEl = document.getElementById('lexusQueueCheckResult');
+    let lexusComboProducts = [];
+
+    function setLexusStatus(msg, cls) {
+      lexusStatusEl.textContent = msg;
+      lexusStatusEl.className = `status ${cls || ''}`;
+    }
+
+    function renderLexusMeta(data) {
+      if (!data || !data.exists) {
+        lexusMetaChipsEl.hidden = true;
+        lexusMetaChipsEl.innerHTML = '';
+        lexusMetaEl.textContent = 'No Lexus BO file uploaded yet.';
+        return;
+      }
+      const uploaded = data.uploadedAt ? new Date(data.uploadedAt).toLocaleString() : '—';
+      lexusMetaChipsEl.hidden = false;
+      lexusMetaChipsEl.innerHTML =
+        `<span class="chip"><strong>File</strong> ${esc(data.filename || '—')}</span>` +
+        `<span class="chip"><strong>Rows</strong> ${esc(data.rowCount ?? '—')}</span>` +
+        `<span class="chip"><strong>Sheet</strong> ${esc(data.sheetName || '—')}</span>` +
+        `<span class="chip"><strong>Uploaded</strong> ${esc(uploaded)}</span>`;
+      lexusMetaEl.textContent = 'Lexus file only. Toyota BO is unchanged.';
+    }
+
+    function renderLexusCombos() {
+      const q = String(lexusComboFilterEl.value || '').trim().toLowerCase();
+      const filtered = lexusComboProducts
+        .map((p) => {
+          const combos = (p.combinations || []).filter((c) => {
+            if (!q) return true;
+            return `${p.product} ${c.suffix} ${c.exterior} ${c.interior}`.toLowerCase().includes(q);
+          });
+          return { ...p, combinations: combos };
+        })
+        .filter((p) => p.combinations.length > 0);
+      if (!filtered.length) {
+        lexusComboListEl.innerHTML = `<div class="combo-empty">${lexusComboProducts.length ? 'No Lexus combinations match this filter.' : 'No combinations found in the Lexus BO file.'}</div>`;
+        return;
+      }
+      lexusComboListEl.innerHTML = filtered.map((p, idx) => {
+        const lines = p.combinations.map((c) =>
+          `<div class="combo-line"><span>${esc(c.suffix)}, ${esc(c.exterior)}/${esc(c.interior)}</span><span class="combo-queue">QUEUE = ${esc(c.queue)}</span></div>`
+        ).join('');
+        const openClass = !q && idx === 0 ? ' open' : (q ? ' open' : '');
+        return `<div class="combo-product${openClass}"><button type="button" class="combo-product-head"><span>${esc(p.product)}</span><span class="combo-count">${p.combinations.length} combo${p.combinations.length === 1 ? '' : 's'} · ${esc(p.orderCount)} order${p.orderCount === 1 ? '' : 's'}</span></button><div class="combo-product-body">${lines}</div></div>`;
+      }).join('');
+    }
+
+    async function loadLexusCombinations() {
+      lexusComboMetaEl.textContent = 'Loading Lexus combinations…';
+      try {
+        const res = await fetch('/api/bo-data/queue-combinations?brand=lexus');
+        const data = await res.json();
+        if (!res.ok) {
+          lexusComboProducts = [];
+          lexusComboMetaEl.textContent = data.error || 'No Lexus BO data uploaded yet.';
+          lexusComboListEl.innerHTML = `<div class="combo-empty">${esc(data.error || 'Upload a Lexus BO Excel file first.')}</div>`;
+          return;
+        }
+        lexusComboProducts = Array.isArray(data.products) ? data.products : [];
+        const src = data.source || {};
+        const uploaded = src.uploadedAt ? new Date(src.uploadedAt).toLocaleString() : '—';
+        lexusComboMetaEl.textContent = `${data.totalCombinations || 0} Lexus combinations across ${data.totalProducts || 0} products` + (src.filename ? ` · ${src.filename}` : '') + ` · Uploaded ${uploaded}`;
+        renderLexusCombos();
+      } catch (e) {
+        lexusComboProducts = [];
+        lexusComboMetaEl.textContent = `Failed to load Lexus combinations: ${e.message || 'Try again.'}`;
+        lexusComboListEl.innerHTML = '<div class="combo-empty">Failed to load Lexus combinations.</div>';
+      }
+    }
+
+    async function loadLexusMeta() {
+      try {
+        const res = await fetch('/api/bo-data/meta?brand=lexus');
+        renderLexusMeta(await res.json());
+      } catch (e) {
+        lexusMetaChipsEl.hidden = true;
+        lexusMetaEl.textContent = 'Unable to load the Lexus BO upload.';
+      }
+    }
+
+    async function loadLexusPreview() {
+      const head = document.getElementById('lexusPreviewHead');
+      const empty = document.getElementById('lexusPreviewEmpty');
+      const table = document.getElementById('lexusPreviewTable');
+      try {
+        const res = await fetch('/api/bo-data/preview?brand=lexus&limit=200');
+        if (!res.ok) {
+          head.textContent = 'Lexus Excel Preview';
+          empty.style.display = 'block';
+          empty.textContent = 'No Lexus BO data available yet.';
+          table.style.display = 'none';
+          return;
+        }
+        const data = await res.json();
+        const rows = data.rows || [];
+        if (!rows.length) {
+          head.textContent = 'Lexus Excel Preview';
+          empty.style.display = 'block';
+          table.style.display = 'none';
+          return;
+        }
+        const keys = (data.headers && data.headers.length) ? data.headers : Object.keys(rows[0] || {});
+        head.textContent = `Lexus Excel Preview (${data.previewCount || rows.length} of ${data.rowCount || rows.length} rows)`;
+        document.getElementById('lexusPreviewThead').innerHTML = `<tr>${keys.map((k) => `<th>${esc(k)}</th>`).join('')}</tr>`;
+        document.getElementById('lexusPreviewTbody').innerHTML = rows.map((row) =>
+          `<tr>${keys.map((k) => `<td>${row[k] === null || row[k] === undefined || row[k] === '' ? '-' : esc(String(row[k]))}</td>`).join('')}</tr>`
+        ).join('');
+        empty.style.display = 'none';
+        table.style.display = 'table';
+      } catch (e) {
+        head.textContent = 'Lexus Excel Preview';
+        empty.style.display = 'block';
+        empty.textContent = 'Failed to load the Lexus preview.';
+        table.style.display = 'none';
+      }
+    }
+
+    document.getElementById('lexusUploadBtn').addEventListener('click', async () => {
+      const password = document.getElementById('passwordInput').value.trim();
+      const file = document.getElementById('lexusFileInput').files[0];
+      if (!password) { setLexusStatus('Enter the admin password in the Toyota upload section.', 'err'); return; }
+      if (!file) { setLexusStatus('Select a Lexus Excel file first.', 'err'); return; }
+      try {
+        setLexusStatus('Uploading Lexus file...', '');
+        const fileData = await readFileAsDataURL(file);
+        const res = await fetch('/api/bo-data/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, filename: file.name, fileData, brand: 'lexus' })
+        });
+        const data = await res.json();
+        if (!res.ok) { setLexusStatus(data?.error || `Upload failed (${res.status}).`, 'err'); return; }
+        setLexusStatus(`Lexus upload successful: ${data.meta.rowCount} rows from ${data.meta.sheetName}.`, 'ok');
+        await loadLexusMeta();
+        await loadLexusPreview();
+        await loadLexusCombinations();
+      } catch (e) {
+        setLexusStatus(`Upload failed: ${e.message || 'Please try again.'}`, 'err');
+      }
+    });
+
+    document.getElementById('lexusComboRefreshBtn').addEventListener('click', loadLexusCombinations);
+    lexusComboFilterEl.addEventListener('input', renderLexusCombos);
+    lexusComboListEl.addEventListener('click', (e) => {
+      const head = e.target.closest('.combo-product-head');
+      const block = head && head.closest('.combo-product');
+      if (block) block.classList.toggle('open');
+    });
+
+    document.getElementById('lexusQueueCheckBtn').addEventListener('click', async () => {
+      const product = document.getElementById('lexusProduct').value.trim();
+      const suffix = document.getElementById('lexusSuffix').value.trim();
+      const exteriorColor = document.getElementById('lexusExterior').value.trim();
+      const interiorColor = document.getElementById('lexusInterior').value.trim();
+      if (!product || !suffix || !exteriorColor || !interiorColor) {
+        lexusQueueCheckResultEl.textContent = 'Please fill Product, Suffix, Exterior Color, and Interior Color.';
+        return;
+      }
+      lexusQueueCheckResultEl.textContent = 'Calculating Lexus queue number...';
+      try {
+        const qs = new URLSearchParams({ brand: 'lexus', product, suffix, exteriorColor, interiorColor });
+        const res = await fetch(`/api/bo-data/new-customer-queue?${qs.toString()}`);
+        const data = await res.json();
+        if (!res.ok) { lexusQueueCheckResultEl.textContent = data.error || `Failed (${res.status})`; return; }
+        if (data.wildcard) {
+          const list = Array.isArray(data.possibilities) ? data.possibilities : [];
+          if (!list.length) {
+            lexusQueueCheckResultEl.innerHTML = `<div class="qc-empty">No Ext/Int combinations found in the Lexus file for this Product+Suffix.</div>`;
+            return;
+          }
+          const rowsHtml = list.map((p) => `<tr><td>${esc(p.exteriorColor)}</td><td>${esc(p.interiorColor)}</td><td class="qc-rank">${p.matchingTotal}</td></tr>`).join('');
+          lexusQueueCheckResultEl.innerHTML = `<div class="qc-summary">${list.length} Lexus queue${list.length === 1 ? '' : 's'} for ${esc(product)} + ${esc(suffix)}.</div><table class="qc-table"><thead><tr><th>Exterior Color</th><th>Interior Color</th><th>Matching reservations</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+          return;
+        }
+        lexusQueueCheckResultEl.textContent = `Lexus matching reservations: ${data.matchingTotal != null ? data.matchingTotal : data.queueSizeBeforeAdding} | Rule: ${data.rule}`;
+      } catch (e) {
+        lexusQueueCheckResultEl.textContent = `Failed to calculate Lexus queue number: ${e.message || 'Try again.'}`;
+      }
+    });
+
     loadMeta();
     loadPreview();
     loadQueueCombinations();
+    loadLexusMeta();
+    loadLexusPreview();
+    loadLexusCombinations();
   </script>
 </body>
 </html>

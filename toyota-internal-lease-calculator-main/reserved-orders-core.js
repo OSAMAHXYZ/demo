@@ -561,6 +561,27 @@ function getNextThreeOrders(order, allOrders) {
         }));
 }
 
+function orderTokens(order) {
+    const tokens = new Set();
+    if (!order) return tokens;
+    if (order.key) tokens.add(String(order.key));
+    const vin = normalizeVin(order.vin);
+    if (vin && vin !== 'VIN NOT FOUND') tokens.add(`vin:${vin}`);
+    const orderNo = cleanText(order.orderNumber).toLowerCase();
+    if (orderNo && orderNo !== 'no order') tokens.add(`order:${orderNo}`);
+    return tokens;
+}
+
+function pushedOrderMatches(order, pushed) {
+    const tokens = orderTokens(order);
+    if (!tokens.size) return false;
+    return (pushed || []).some((item) => {
+        const other = orderTokens(item);
+        for (const token of tokens) if (other.has(token)) return true;
+        return false;
+    });
+}
+
 function applyQueue(orders) {
     const list = orders.map((order) => ({ ...order, queueNumber: calculateQueueNumber(order, orders) }));
     return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
@@ -1184,19 +1205,19 @@ function attachReservedOrders(app, options) {
             rtlByVin: indexRtlAging(names.rtlSheets || [])
         });
         if (!built.ok) return built;
+        const previousOrders = previous || loadLive().orders || [];
+        const kept = previousOrders.filter((order) => order && !pushedOrderMatches(order, built.orders));
+        const orders = applyQueue(built.orders.concat(kept));
         const live = {
             updatedAt: new Date().toISOString(),
             esalesName: names.esalesName || '',
             boName: names.boName || '',
-            report: built.report,
-            orders: built.orders
+            report: Object.assign({}, built.report, { keptOrders: kept.length, orderCount: orders.length }),
+            orders
         };
-        const previousOrders = previous || loadLive().orders || [];
         const previousKeys = new Set(previousOrders.map((order) => order.key));
-        const nextKeys = new Set(built.orders.map((order) => order.key));
         const created = built.orders.filter((order) => !previousKeys.has(order.key)).length;
         const updated = built.orders.length - created;
-        const removed = previousOrders.filter((order) => !nextKeys.has(order.key)).length;
         saveLive(live);
         const version = writeArchive(live, names.actor || { name: 'Admin Push' });
         audit(names.req, {
@@ -1207,7 +1228,7 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed}`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, kept ${kept.length}`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });

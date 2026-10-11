@@ -132,6 +132,7 @@ app.post('/api/delivery-note/generate', (req, res) => {
 const DATA_FILE = path.join(__dirname, 'admin-data.json');
 const QUEUE_LOG_FILE = path.join(__dirname, 'queue-log.json');
 const BO_DATA_FILE = path.join(__dirname, 'bo-data.json');
+const LEXUS_BO_DATA_FILE = path.join(__dirname, 'bo-data-lexus.json');
 let reservedOrdersHub = null;
 const BO_LOOKUP_STATS_FILE = path.join(__dirname, 'bo-lookup-stats.json');
 const DELIVERY_INVENTORY_FILE = path.join(__dirname, 'delivery-inventory-data.json');
@@ -1636,80 +1637,97 @@ function aggregateBoProductCounts(rows, headers) {
         .sort((a, b) => b.count - a.count || String(a.product).localeCompare(String(b.product)));
 }
 
-// Upload BO data Excel daily (admin only, accepts base64 data URL)
-app.post('/api/bo-data/upload', authenticateBackend, express.json({ limit: '100mb' }), (req, res) => {
-    try {
-        const { fileData, filename } = req.body;
-        if (!fileData) {
-            return res.status(400).json({ error: 'fileData is required' });
-        }
+function boBrand(value) {
+    return String(value || '').toLowerCase() === 'lexus' ? 'lexus' : 'toyota';
+}
 
-        const base64Data = fileData.startsWith('data:') ? fileData.split(',')[1] : fileData;
-        const fileBuffer = Buffer.from(base64Data, 'base64');
-        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+function boDataPath(brand) {
+    return boBrand(brand) === 'lexus' ? LEXUS_BO_DATA_FILE : BO_DATA_FILE;
+}
 
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-            return res.status(400).json({ error: 'Excel file has no sheets' });
-        }
+function readBoDataFile(brand) {
+    const file = boDataPath(brand);
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
 
-        // BO lookup uses the first sheet only (skip Fleet and any other sheets).
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        if (!worksheet) {
-            return res.status(400).json({ error: 'First sheet is empty or unreadable' });
-        }
-
-        const parsedSheet = parseSheetWithDetectedHeader(worksheet);
-        const rows = (parsedSheet.rows || []).map((row) => ({ ...row, __sourceSheet: sheetName }));
-        const headersSet = new Set();
-        rows.forEach((row) => Object.keys(row).forEach((key) => headersSet.add(key)));
-        const headers = Array.from(headersSet);
-        const uniqueSheets = [sheetName];
-        const sheetStats = [{ sheetName, rowCount: rows.length }];
-
-        const payload = {
+function parseBoUpload(fileData, filename, fallbackName) {
+    if (!fileData) {
+        const error = new Error('fileData is required');
+        error.status = 400;
+        throw error;
+    }
+    const base64Data = fileData.startsWith('data:') ? fileData.split(',')[1] : fileData;
+    const workbook = XLSX.read(Buffer.from(base64Data, 'base64'), { type: 'buffer' });
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        const error = new Error('Excel file has no sheets');
+        error.status = 400;
+        throw error;
+    }
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+        const error = new Error('First sheet is empty or unreadable');
+        error.status = 400;
+        throw error;
+    }
+    const parsedSheet = parseSheetWithDetectedHeader(worksheet);
+    const rows = (parsedSheet.rows || []).map((row) => ({ ...row, __sourceSheet: sheetName }));
+    const headersSet = new Set();
+    rows.forEach((row) => Object.keys(row).forEach((key) => headersSet.add(key)));
+    return {
+        payload: {
             uploadedAt: new Date().toISOString(),
-            filename: filename || 'bo-data.xlsx',
+            filename: filename || fallbackName,
             sheetName,
-            sheets: sheetStats,
-            headers,
+            sheets: [{ sheetName, rowCount: rows.length }],
+            headers: Array.from(headersSet),
             rowCount: rows.length,
             rows
-        };
+        },
+        skippedSheets: workbook.SheetNames.slice(1)
+    };
+}
 
-        fs.writeFileSync(BO_DATA_FILE, JSON.stringify(payload, null, 2), 'utf8');
-        if (reservedOrdersHub && typeof reservedOrdersHub.reanalyzeActive === 'function') {
+// Upload BO data Excel daily (admin only, accepts base64 data URL). brand=lexus stores a separate file.
+app.post('/api/bo-data/upload', authenticateBackend, express.json({ limit: '100mb' }), (req, res) => {
+    try {
+        const brand = boBrand(req.body?.brand);
+        const parsed = parseBoUpload(req.body?.fileData, req.body?.filename, brand === 'lexus' ? 'lexus-bo.xlsx' : 'bo-data.xlsx');
+        fs.writeFileSync(boDataPath(brand), JSON.stringify(parsed.payload, null, 2), 'utf8');
+        if (brand !== 'lexus' && reservedOrdersHub && typeof reservedOrdersHub.reanalyzeActive === 'function') {
             try { reservedOrdersHub.reanalyzeActive(req); } catch (reanalyzeError) {
                 console.error('BO error rules were not re-analyzed:', reanalyzeError.message);
             }
         }
-        const skipped = workbook.SheetNames.slice(1);
+        const label = brand === 'lexus' ? 'Lexus BO' : 'BO';
         res.json({
             success: true,
-            message: `BO data uploaded: first sheet "${sheetName}", ${payload.rowCount} rows.`,
+            brand,
+            message: `${label} data uploaded: first sheet "${parsed.payload.sheetName}", ${parsed.payload.rowCount} rows.`,
             meta: {
-                filename: payload.filename,
-                sheetName: payload.sheetName,
-                sheets: payload.sheets,
-                rowCount: payload.rowCount,
-                uploadedAt: payload.uploadedAt,
-                mergedSheets: uniqueSheets,
-                skippedSheets: skipped
+                filename: parsed.payload.filename,
+                sheetName: parsed.payload.sheetName,
+                sheets: parsed.payload.sheets,
+                rowCount: parsed.payload.rowCount,
+                uploadedAt: parsed.payload.uploadedAt,
+                mergedSheets: [parsed.payload.sheetName],
+                skippedSheets: parsed.skippedSheets
             }
         });
     } catch (error) {
         console.error('Error uploading BO data Excel:', error);
-        res.status(500).json({ error: 'Failed to upload BO data: ' + error.message });
+        res.status(error.status || 500).json({ error: 'Failed to upload BO data: ' + error.message });
     }
 });
 
 // BO data meta for UI checks
 app.get('/api/bo-data/meta', (req, res) => {
     try {
-        if (!fs.existsSync(BO_DATA_FILE)) {
-            return res.json({ exists: false });
+        const data = readBoDataFile(req.query?.brand);
+        if (!data) {
+            return res.json({ exists: false, brand: boBrand(req.query?.brand) });
         }
-        const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
         res.json({
             exists: true,
             filename: data.filename || '',
@@ -1727,10 +1745,10 @@ app.get('/api/bo-data/meta', (req, res) => {
 // BO data preview rows for admin page
 app.get('/api/bo-data/preview', (req, res) => {
     try {
-        if (!fs.existsSync(BO_DATA_FILE)) {
-            return res.status(404).json({ error: 'No BO data uploaded yet' });
+        const data = readBoDataFile(req.query?.brand);
+        if (!data) {
+            return res.status(404).json({ error: boBrand(req.query?.brand) === 'lexus' ? 'No Lexus BO data uploaded yet' : 'No BO data uploaded yet' });
         }
-        const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
         const rows = Array.isArray(data.rows) ? data.rows : [];
         const headers = Array.isArray(data.headers) ? data.headers : [];
         const requestedLimit = parseInt(req.query.limit, 10);
@@ -1857,10 +1875,10 @@ app.get('/api/bo-data/admin-stats', (req, res) => {
 // All Product × Suffix × Ext × Int queue sizes from latest BO upload
 app.get('/api/bo-data/queue-combinations', (req, res) => {
     try {
-        if (!fs.existsSync(BO_DATA_FILE)) {
-            return res.status(404).json({ error: 'No BO data uploaded yet' });
+        const data = readBoDataFile(req.query?.brand);
+        if (!data) {
+            return res.status(404).json({ error: boBrand(req.query?.brand) === 'lexus' ? 'No Lexus BO data uploaded yet' : 'No BO data uploaded yet' });
         }
-        const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
         const lookup = BoOrderLookup.fromBoData(data);
         res.json({
             ...lookup.buildAllQueueCombinations(),
@@ -1879,8 +1897,9 @@ app.get('/api/bo-data/queue-combinations', (req, res) => {
 // Admin helper: estimate queue number for a new customer by Product+Suffix+Ext/Int pair.
 app.get('/api/bo-data/new-customer-queue', (req, res) => {
     try {
-        if (!fs.existsSync(BO_DATA_FILE)) {
-            return res.status(404).json({ error: 'No BO data uploaded yet' });
+        const dataFile = readBoDataFile(req.query?.brand);
+        if (!dataFile) {
+            return res.status(404).json({ error: boBrand(req.query?.brand) === 'lexus' ? 'No Lexus BO data uploaded yet' : 'No BO data uploaded yet' });
         }
 
         const productInput = String(req.query?.product || '').trim();
@@ -1893,7 +1912,7 @@ app.get('/api/bo-data/new-customer-queue', (req, res) => {
             return res.status(400).json({ error: 'product, suffix, exteriorColor, and interiorColor are required' });
         }
 
-        const data = JSON.parse(fs.readFileSync(BO_DATA_FILE, 'utf8'));
+        const data = dataFile;
         const lookup = BoOrderLookup.fromBoData(data);
         res.json(lookup.computeNewCustomerQueue({
             product: productInput,

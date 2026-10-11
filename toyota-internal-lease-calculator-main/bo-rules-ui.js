@@ -56,6 +56,10 @@
         if (!all || all.checked) return [];
         return checkedValues('br-cars');
     }
+    function dateSource() {
+        const field = document.getElementById('br-date-source');
+        return field && field.value === 'fixed' ? 'fixed' : 'column';
+    }
     function deadlineChoice() {
         const days = Number(document.getElementById('br-deadline') && document.getElementById('br-deadline').value);
         return [0, 1, 2, 5].includes(days) ? days : 0;
@@ -79,6 +83,9 @@
             message: document.getElementById('br-message').value.trim(),
             whatsappMessage: document.getElementById('br-wa').value.trim(),
             deadlineDays: deadlineChoice(),
+            deadlineSource: dateSource(),
+            deadlineColumn: dateSource() === 'column' ? (document.getElementById('br-date-column') ? document.getElementById('br-date-column').value : '') : '',
+            deadlineDate: dateSource() === 'fixed' ? (document.getElementById('br-date-fixed') ? document.getElementById('br-date-fixed').value : '') : '',
             active: document.getElementById('br-active').checked
         };
     }
@@ -99,17 +106,19 @@
         const employees = rules.reduce((sum, rule) => sum + (rule.affectedEmployees || 0), 0);
         const orders = rules.reduce((sum, rule) => sum + (rule.affectedOrders || 0), 0);
         const pending = rules.filter((rule) => rule.notificationStatus !== 'pushed' && rule.affectedEmployees).length;
+        const sent = rules.reduce((sum, rule) => sum + (rule.sentOrders || 0), 0);
         return `<div class="br-kpis">
             <article><span>Active rules</span><strong>${rules.filter((rule) => rule.active).length}</strong></article>
             <article><span>Affected employees</span><strong>${employees}</strong></article>
             <article><span>Affected orders</span><strong>${orders}</strong></article>
+            <article><span>Messages sent</span><strong>${sent} / ${orders}</strong></article>
             <article><span>Pending notifications</span><strong>${pending}</strong></article>
         </div>`;
     }
     function ruleRows() {
         const rows = pack.rules.filter((rule) => !q || JSON.stringify(rule).toLowerCase().includes(q));
         if (!rows.length) return '<p class="muted">No rules yet. Save one from the form.</p>';
-        return `<div class="br-scroll br-rules-scroll"><table class="br-table"><thead><tr><th>Rule</th><th>Product</th><th>BO column</th><th>Incorrect</th><th>Correct</th><th>Employees</th><th>Orders</th><th>Status</th><th></th></tr></thead><tbody>
+        return `<div class="br-scroll br-rules-scroll"><table class="br-table"><thead><tr><th>Rule</th><th>Product</th><th>BO column</th><th>Incorrect</th><th>Correct</th><th>Employees</th><th>Orders</th><th>Message sent</th><th>Status</th><th></th></tr></thead><tbody>
             ${rows.map((rule) => `<tr class="${rule.archived ? 'is-archived' : (rule.active ? 'is-active' : 'is-inactive')}">
                 <td><b>${esc(rule.name)}</b>${rule.columnMissing ? '<div class="br-flag">Column missing in latest file</div>' : ''}</td>
                 <td>${esc(rule.product || 'All cars')}</td>
@@ -118,6 +127,7 @@
                 <td>${esc(rule.correctValue || '—')}</td>
                 <td>${rule.affectedEmployees || 0}</td>
                 <td>${rule.affectedOrders || 0}</td>
+                <td>${sentLabel(rule)}</td>
                 <td><span class="br-pill ${rule.archived ? 'arch' : (rule.active ? 'on' : 'off')}">${rule.archived ? 'Archived' : (rule.active ? 'Active' : 'Inactive')}</span><div class="br-sub">${esc(rule.notificationStatus || 'not_pushed')}</div></td>
                 <td class="br-actions">
                     <button type="button" data-open="${esc(rule.id)}">View</button>
@@ -145,7 +155,7 @@
             </div>
             ${rule.columnMissing ? `<p class="err">Some selected columns are not in the latest BO file${(rule.missingColumns || []).length ? ': ' + esc(rule.missingColumns.join(', ')) : ''}. The rule is kept, and the columns that are still there are checked.</p>` : ''}
             <p>The latest BO file has <b>${rule.affectedEmployees || 0}</b> employees and <b>${rule.affectedOrders || 0}</b> matching orders. Push sends each employee only their own count in Message Builder.</p>
-            <table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Found in BO file</th><th>Message Builder</th><th></th></tr></thead><tbody>
+            <table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Found in BO file</th><th>Message sent</th><th></th></tr></thead><tbody>
                 ${employees.map((item) => `<tr>
                     <td>${esc(item.salesmanName)}</td>
                     <td>${esc(item.salesmanId)}</td>
@@ -195,11 +205,17 @@
                     <label><span>Column with the error</span><select id="br-column"><option value="">Choose a column</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'columns', 'column')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
                     <label><span>Incorrect value or values</span><input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2027 or Not_Confirmed. Separate several with commas."></label>
                     <label><span>Correct value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
-                    <label><span>Deadline from the BO date</span><select id="br-deadline">
-                        <option value="0"${Number(selected.deadlineDays) === 0 ? ' selected' : ''}>Same as the BO date</option>
-                        <option value="1"${Number(selected.deadlineDays) === 1 ? ' selected' : ''}>BO date + 1 day</option>
-                        <option value="2"${Number(selected.deadlineDays) === 2 ? ' selected' : ''}>BO date + 2 days</option>
-                        <option value="5"${Number(selected.deadlineDays) === 5 ? ' selected' : ''}>BO date + 5 days</option>
+                    <label><span>Deadline date</span><select id="br-date-source">
+                        <option value="column"${selected.deadlineSource === 'fixed' ? '' : ' selected'}>From a column in the BO file</option>
+                        <option value="fixed"${selected.deadlineSource === 'fixed' ? ' selected' : ''}>A specific date</option>
+                    </select></label>
+                    <label id="br-date-column-wrap"${selected.deadlineSource === 'fixed' ? ' hidden' : ''}><span>BO date column</span><select id="br-date-column"><option value="">Order Date</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${selected.deadlineColumn === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label id="br-date-fixed-wrap"${selected.deadlineSource === 'fixed' ? '' : ' hidden'}><span>Specific date</span><input id="br-date-fixed" type="date" value="${esc(selected.deadlineDate || '')}"></label>
+                    <label><span>Days to add</span><select id="br-deadline">
+                        <option value="0"${Number(selected.deadlineDays) === 0 ? ' selected' : ''}>Same day</option>
+                        <option value="1"${Number(selected.deadlineDays) === 1 ? ' selected' : ''}>+ 1 day</option>
+                        <option value="2"${Number(selected.deadlineDays) === 2 ? ' selected' : ''}>+ 2 days</option>
+                        <option value="5"${Number(selected.deadlineDays) === 5 ? ' selected' : ''}>+ 5 days</option>
                     </select></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
                     <div class="br-msg wide">
@@ -219,7 +235,7 @@
                         <div class="br-preview-box">
                             <div class="br-bubble" id="br-preview"></div>
                         </div>
-                        <p class="muted">{orderDate} is the Order Date from the BO file. {deadline} is that date plus the days selected above. Analyze and Push fill each employee's real name, count, and dates.</p>
+                        <p class="muted">{orderDate} stays the Order Date from the BO file. {deadline} uses the column you pick, or the calendar date, plus the days selected above.</p>
                     </div>
                 </div>
                 <div class="br-buttons">
@@ -256,18 +272,36 @@
             label.hidden = needle && !label.textContent.toLowerCase().includes(needle);
         });
     }
+    function sentLabel(rule) {
+        const total = rule.affectedOrders || 0;
+        const sent = rule.sentOrders || 0;
+        if (rule.notificationStatus !== 'pushed') return '<span class="br-pill off">Not pushed</span>';
+        if (!total) return '<span class="br-pill off">No orders</span>';
+        if (sent >= total) return `<span class="br-pill sent">Sent</span><div class="br-sub">${sent} of ${total}</div>`;
+        if (sent > 0) return `<span class="br-pill part">${sent} of ${total} sent</span>`;
+        return `<span class="br-pill wait">Not sent</span><div class="br-sub">0 of ${total}</div>`;
+    }
     function messageState(item) {
-        if (item.salesmanId === 'UNASSIGNED') return 'No employee id';
+        if (item.salesmanId === 'UNASSIGNED') return '<span class="br-pill off">No employee id</span>';
         const row = ((detail && detail.delivery) || []).find((person) => person.salesmanId === item.salesmanId && person.salesmanName === item.salesmanName);
-        if (row && row.sentAt) return 'Sent · ' + stamp(row.sentAt);
-        if (row && row.status === 'waiting') return 'Waiting in Message Builder';
-        return 'Not pushed';
+        if (!row || row.status === 'not_pushed') return '<span class="br-pill off">Not pushed</span>';
+        if (row.status === 'sent') return `<span class="br-pill sent">Sent</span><div class="br-sub">${esc(stamp(row.sentAt))}</div>`;
+        if (row.status === 'partial') return `<span class="br-pill part">Sent ${row.sentOrders} of ${row.orderCount}</span><div class="br-sub">${esc(stamp(row.sentAt))}</div>`;
+        return `<span class="br-pill wait">Not sent</span><div class="br-sub">${row.orderCount || 0} order${row.orderCount === 1 ? '' : 's'}</div>`;
     }
     function fillTemplate(template, bag) {
         return String(template || '').replace(/\{(\w+)\}/g, (all, key) => (bag[key] == null ? all : String(bag[key])));
     }
     function previewDate(days) {
         const date = new Date(2026, 9, 1 + (Number(days) || 0));
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        return `${dd}.${mm}.${date.getFullYear()}`;
+    }
+    function previewFromIso(value, days) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return previewDate(days);
+        const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + (Number(days) || 0));
         const dd = String(date.getDate()).padStart(2, '0');
         const mm = String(date.getMonth() + 1).padStart(2, '0');
         return `${dd}.${mm}.${date.getFullYear()}`;
@@ -279,7 +313,9 @@
         };
         const cars = selectedCars();
         const days = deadlineChoice();
-        const deadline = previewDate(days);
+        const fixed = dateSource() === 'fixed';
+        const pickedDate = value('br-date-fixed');
+        const deadline = fixed ? previewFromIso(pickedDate, days) : previewDate(days);
         return {
             employeeName: 'Ahmed Al Harbi',
             product: cars.join(', ') || 'Land Cruiser',
@@ -322,10 +358,18 @@
         paintPreview();
     }
     function bind() {
-        ['br-column', 'br-bad', 'br-good', 'br-deadline'].forEach((id) => {
+        ['br-column', 'br-bad', 'br-good', 'br-deadline', 'br-date-source', 'br-date-column', 'br-date-fixed'].forEach((id) => {
             const field = document.getElementById(id);
             if (field) field.addEventListener('input', paintPreview);
             if (field) field.addEventListener('change', paintPreview);
+        });
+        const dateSourceField = document.getElementById('br-date-source');
+        if (dateSourceField) dateSourceField.addEventListener('change', () => {
+            const fixed = dateSourceField.value === 'fixed';
+            const columnWrap = document.getElementById('br-date-column-wrap');
+            const fixedWrap = document.getElementById('br-date-fixed-wrap');
+            if (columnWrap) columnWrap.hidden = fixed;
+            if (fixedWrap) fixedWrap.hidden = !fixed;
         });
         const allCars = document.getElementById('br-all-cars');
         const carBox = document.getElementById('br-cars');
@@ -444,8 +488,14 @@
         const box = document.getElementById('br-orders');
         const employee = ((detail.rule.current && detail.rule.current.employees) || []).find((item) => item.salesmanId === salesmanId && item.salesmanName === salesmanName);
         if (!box || !employee) return;
-        box.innerHTML = `<h3>${esc(employee.salesmanName)} · ${esc(employee.salesmanId)}</h3><table class="br-table"><thead><tr><th>Back Order Number</th><th>Product</th><th>Model Year</th><th>Order Date</th><th>Current value</th><th>Correct value</th></tr></thead><tbody>
-            ${employee.orders.map((order) => `<tr><td>${esc(order.boNumber)}</td><td>${esc(order.product)}</td><td>${esc(order.modelYear)}</td><td>${esc(order.orderDate)}</td><td>${esc(order.currentValue)}</td><td>${esc(order.correctValue)}</td></tr>`).join('')}
+        const delivery = ((detail && detail.delivery) || []).find((person) => person.salesmanId === salesmanId && person.salesmanName === salesmanName);
+        const sentCell = (order) => {
+            const hit = delivery && (delivery.orders || []).find((row) => row.boNumber === order.boNumber);
+            if (hit && hit.sent) return `<span class="br-pill sent">Sent</span><div class="br-sub">${esc(stamp(hit.sentAt))}</div>`;
+            return '<span class="br-pill wait">Not sent</span>';
+        };
+        box.innerHTML = `<h3>${esc(employee.salesmanName)} · ${esc(employee.salesmanId)}</h3><table class="br-table"><thead><tr><th>Back Order Number</th><th>Product</th><th>Model Year</th><th>Order Date</th><th>Current value</th><th>Correct value</th><th>Message sent</th></tr></thead><tbody>
+            ${employee.orders.map((order) => `<tr><td>${esc(order.boNumber)}</td><td>${esc(order.product)}</td><td>${esc(order.modelYear)}</td><td>${esc(order.orderDate)}</td><td>${esc(order.currentValue)}</td><td>${esc(order.correctValue)}</td><td>${sentCell(order)}</td></tr>`).join('')}
         </tbody></table>`;
     }
     async function sendWhatsApp(salesmanId, salesmanName, action) {

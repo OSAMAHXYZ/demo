@@ -387,6 +387,10 @@
             : '<div class="excel-field"><span>Source</span><b>No values on this order</b></div>';
         return `<div class="excel-row hidden">${body}</div>`;
     }
+    function statusWhen(value) {
+        const date = parseLocal(value);
+        return date ? date.toLocaleString() : '';
+    }
     function cardHtml(order) {
         const deadline = columnDeadline(order);
         const ms = remainingMs(deadline ? Object.assign({}, order, { deadline }) : order);
@@ -435,7 +439,10 @@
             <div class="lane-side">
                 <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(assignedOn || '')}">${esc(timerLabel(assignedOn, ms))}</div>
                 <span class="muted">${hours} HOURS</span>
-                <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
+                <div class="status-glow">
+                    <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
+                    <small>${esc(order.statusChangedBy || 'No update yet')}${order.statusChangedAt ? ' · ' + esc(statusWhen(order.statusChangedAt)) : ''}</small>
+                </div>
                 <div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>
             </div>
             </div>
@@ -529,10 +536,11 @@
             || document.querySelector(`[data-admin-msg="${CSS.escape(ruleId)}"]`);
         return field ? field.value.trim() : '';
     }
-    function openWhatsApp(text) {
-        if (!text) return;
-        const number = phone($('msg-phone') ? $('msg-phone').value : '');
-        window.open((number ? `https://wa.me/${number}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
+    function openWhatsApp(text, number) {
+        if (!text) return '';
+        const digits = phone(number != null ? number : ($('msg-phone') ? $('msg-phone').value : ''));
+        window.open((digits ? `https://wa.me/${digits}?text=` : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank', 'noopener');
+        return digits;
     }
     async function confirmSent(ruleId, boNumber, text) {
         const session = readSession();
@@ -915,6 +923,7 @@
                 <span>Correct<b>${esc(row.order.correctValue || row.alert.correctValue || '—')}</b></span>
                 <span>BO date<b>${esc(row.order.orderDate || '—')}</b></span>
                 <span>Saved<b>${esc(when || 'Not confirmed')}</b></span>
+                <span>WhatsApp<b>${esc(phone(row.order.phone) || 'No number in the BO file')}</b></span>
             </div>
             <label class="mc-editor"><span>Message</span>
                 <textarea id="mc-message" data-admin-msg="${esc(row.ruleId)}" data-draft-key="${esc(row.key)}" rows="5">${esc(draft)}</textarea>
@@ -922,8 +931,8 @@
             ${dated ? `<div class="date-step"><span>Deadline</span><button type="button" id="mc-minus">−1 day</button><button type="button" id="mc-plus">+1 day</button></div>` : '<p class="mc-note">This message has no date to adjust.</p>'}
             <div class="mc-preview-box"><div class="wa-bubble" id="mc-preview"></div></div>
             <div class="mc-actions">
+                <button type="button" id="mc-wa">Open WhatsApp</button>
                 <button type="button" class="ghost" id="mc-copy">Copy message</button>
-                <button type="button" class="ghost" id="mc-wa">Open WhatsApp</button>
                 <button type="button" class="solid" id="mc-sent">${state.cls === 'is-sent' ? 'Confirm sent again' : 'Mark as sent'}</button>
             </div>
             <p class="mc-note" id="mc-note">${esc(mcNotice || 'Opening WhatsApp does not mark the message as sent.')}</p>
@@ -946,8 +955,10 @@
             } else { field.focus(); field.select(); $('mc-note').textContent = 'Message selected. Press Ctrl+C to copy it.'; }
         });
         $('mc-wa').addEventListener('click', () => {
-            openWhatsApp(field.value.trim());
-            mcNotice = 'WhatsApp opened. Mark as sent only after you press Send there.';
+            const digits = openWhatsApp(field.value.trim(), row.order.phone);
+            mcNotice = digits
+                ? `WhatsApp opened for ${digits}. Mark as sent only after you press Send there.`
+                : 'This order has no phone in the BO file. WhatsApp opened without a number.';
             if (row.order.status === 'new' || row.order.status === 'viewed') markAlert(row.ruleId, 'in_progress', row.order.boNumber);
             else paintMessageCenter();
         });

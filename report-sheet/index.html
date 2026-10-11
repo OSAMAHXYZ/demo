@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261011ytd8" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261011ytd9" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261010alloc8" />
   <style>
     body.delivery-mode .app-frame {
@@ -9213,17 +9213,36 @@
     return { label: "Below target", cls: "is-below" };
   }
 
+  function ytdCleanVin(vin) {
+    return String(vin || "").replace(/\s+/g, "").toUpperCase();
+  }
+
+  function ytdIsUnassigned(name) {
+    const loose = normalizeNameLoose(name);
+    return loose === "not assigned" || loose === "unassigned" || nameKey(name) === nameKey("Not assigned");
+  }
+
   function ytdBuild() {
     const rows = window._ytdInvoiceRows || [];
     const months = {};
     for (let i = 0; i < 12; i += 1) {
       const key = ytdMonthKey(ytdYear, i);
-      months[key] = { key, month: i, actual: 0, report: 0, flagged: 0, employees: new Map(), records: [], flaggedRows: [] };
+      months[key] = {
+        key, month: i, actual: 0, unassigned: 0, report: 0, reportUnassigned: 0,
+        flagged: 0, employees: new Map(), records: [], flaggedRows: [],
+        actualVins: new Set(), reportVins: new Set(),
+      };
     }
-    rows.forEach((row) => {
+    rows.forEach((row, index) => {
+      const vin = ytdCleanVin(row.vin);
       if (row.reportDate instanceof Date && row.reportDate.getFullYear() === ytdYear) {
         const bucket = months[ytdMonthKey(ytdYear, row.reportDate.getMonth())];
-        if (bucket) bucket.report += 1;
+        const token = vin || `blank-report:${index}`;
+        if (bucket && !bucket.reportVins.has(token)) {
+          bucket.reportVins.add(token);
+          if (ytdIsUnassigned(row.name)) bucket.reportUnassigned += 1;
+          else bucket.report += 1;
+        }
       }
       if (!(row.invoice instanceof Date) || row.invoice.getFullYear() !== ytdYear) {
         if (row.reason && (!row.invoice || row.reason.indexOf("Invoice") >= 0)) {
@@ -9244,9 +9263,14 @@
         if (bucket.flaggedRows.length < 200) bucket.flaggedRows.push(row);
         return;
       }
-      bucket.actual += row.qty;
+      const token = vin || `blank-actual:${index}`;
+      if (bucket.actualVins.has(token)) return;
+      bucket.actualVins.add(token);
+      const unassigned = ytdIsUnassigned(row.name);
+      if (unassigned) bucket.unassigned += row.qty;
+      else bucket.actual += row.qty;
       const key = nameKey(row.name) || String(row.name || "").toLowerCase();
-      if (!bucket.employees.has(key)) bucket.employees.set(key, { key, name: row.name, id: row.id || "", actual: 0 });
+      if (!bucket.employees.has(key)) bucket.employees.set(key, { key, name: row.name, id: row.id || "", actual: 0, aside: unassigned });
       const emp = bucket.employees.get(key);
       if (row.id && !emp.id) emp.id = row.id;
       emp.actual += row.qty;
@@ -9283,7 +9307,7 @@
     const people = ytdEmployeeRows(bucket);
     const target = people.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
     const hasTarget = people.some((emp) => emp.target != null && emp.target > 0);
-    return { people, target, actual: bucket.actual, ach: ytdAch(bucket.actual, hasTarget ? target : 0), hasTarget };
+    return { people, target, actual: bucket.actual, unassigned: bucket.unassigned || 0, ach: ytdAch(bucket.actual, hasTarget ? target : 0), hasTarget };
   }
 
   function paintYtd() {
@@ -9306,11 +9330,13 @@
     const months = ytdBuild();
     window._ytdMonths = months;
     let yearActual = 0;
+    let yearUnassigned = 0;
     let yearTarget = 0;
     let yearReport = 0;
     monthsEl.innerHTML = Object.values(months).map((bucket) => {
       const totals = ytdMonthTotals(bucket);
       yearActual += totals.actual;
+      yearUnassigned += totals.unassigned;
       yearReport += bucket.report;
       if (totals.hasTarget) yearTarget += totals.target;
       const status = ytdStatus(totals.ach, totals.hasTarget);
@@ -9320,10 +9346,13 @@
       const diff = totals.actual - bucket.report;
       const matched = Math.abs(diff) < 0.001;
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
+      const today = new Date();
+      const isPast = ytdYear < today.getFullYear() || (ytdYear === today.getFullYear() && bucket.month < today.getMonth());
       const reconCls = matched ? "is-match" : "is-miss";
       const reconText = matched ? "Match" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
       const barCls = !matched ? "is-miss" : (totals.hasTarget && totals.ach != null && totals.ach >= 100) ? "is-hit" : "is-normal";
-      return `<article class="ytd-card ${status.cls} ${reconCls}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
+      const aside = totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : "";
+      return `<article class="ytd-card ${status.cls} ${reconCls}${isPast ? " is-past" : ""}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
         <div class="ytd-card-top">
           <div class="ytd-card-name"><strong>${label}</strong><small>${ytdYear}</small></div>
           <div class="ytd-badges">
@@ -9334,7 +9363,7 @@
         </div>
         <div class="ytd-card-metrics">
           <span><em>Target</em><b>${totals.hasTarget ? formatNumber(totals.target) : "—"}</b></span>
-          <span><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
+          <span><em>Actual</em><b>${formatNumber(totals.actual)}</b>${aside}</span>
           <span><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
         <div class="ytd-bar ${barCls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></div>
@@ -9346,7 +9375,7 @@
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
     annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly employee targets" : "No employee targets yet"}</em></article>
-      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Sales Qty by invoice date</em></article>
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Unique VINs by invoice date${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
       <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b></b></span><span>Annual Ach%</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
       <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Existing Sales Report count</em></article>
       <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank invoice date or missing qty</em></article>`;
@@ -9366,7 +9395,7 @@
     const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
     const meta = window._ytdInvoiceMeta || {};
     const rows = totals.people.map((emp) => `<tr>
-      <td>${escapeHtml(emp.name || "—")}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
+      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
       <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
       <td>${formatNumber(emp.actual)}</td>
       <td>${ytdPctText(emp.ach)}</td>
@@ -9400,7 +9429,7 @@
       <div class="ytd-table-wrap"><table class="ytd-table">
         <thead><tr><th>Employee</th><th>Monthly Target</th><th>Actual Sales</th><th>Ach%</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="4">No employees for this month.</td></tr>`}</tbody>
-        <tfoot><tr><td>Month total</td><td>${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}</td><td>${ytdPctText(totals.ach)}</td></tr></tfoot>
+        <tfoot><tr><td>Month total</td><td>${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td>${ytdPctText(totals.ach)}</td></tr></tfoot>
       </table></div>
       ${bucket.flagged && !ytdInspect ? `<p class="ytd-flag">${formatNumber(bucket.flagged)} row${bucket.flagged === 1 ? "" : "s"} excluded and flagged for review.</p>` : ""}
       ${inspectRows}`;

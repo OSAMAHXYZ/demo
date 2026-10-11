@@ -31,6 +31,15 @@ function headerKey(value) {
     return fold(value);
 }
 
+function findPhoneHeader(headers) {
+    return (headers || []).find((header) => {
+        const text = headerKey(header).replace(/[._\-/#]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!text || text.includes('ship')) return false;
+        if (/^(phone|phone no|phone number|mobile|mobile no|mobile number|contact|contact number|contact no|customer phone|customer mobile|tel|telephone|cell|cell phone)$/.test(text)) return true;
+        return text.includes('phone') || text.includes('mobile') || text.includes('جوال') || text.includes('هاتف') || text.includes('موبايل');
+    }) || '';
+}
+
 function findHeader(headers, aliases) {
     const list = headers || [];
     const wanted = (aliases || []).map(headerKey);
@@ -80,7 +89,8 @@ function analyzeTable(table, rule) {
     const salesmanNameHeader = findHeader(headers, ['Salesman Name', 'Salesman']);
     const orderHeader = findHeader(headers, ['Back Order Number', 'BO Number', 'Order Number']);
     const yearHeader = findHeader(headers, ['Model Year']);
-    const dateHeader = findHeader(headers, ['Order Date']);
+    const dateHeader = deadlineDateHeader(headers, rule);
+    const phoneHeader = findPhoneHeader(headers);
     if (!present.length) {
         return { ok: false, columnMissing: true, missingColumns, employees: [], employeeCount: 0, orderCount: 0, headers };
     }
@@ -108,12 +118,15 @@ function analyzeTable(table, rule) {
                 product: cellString(productHeader ? row[productHeader] : ''),
                 modelYear: cellString(yearHeader ? row[yearHeader] : ''),
                 orderDate: shiftDateText(dateHeader ? row[dateHeader] : '', 0),
+                phone: phoneHeader ? cellString(row[phoneHeader]) : '',
                 column: '',
                 currentValue: '',
                 correctValue: cellString(rule.correctValue),
                 hits: []
             };
             group.orders.push(order);
+        } else if (!order.phone && phoneHeader) {
+            order.phone = cellString(row[phoneHeader]);
         }
         hits.forEach((hit) => {
             if (order.hits.some((item) => item.column === hit.header)) return;
@@ -176,6 +189,16 @@ function deadlineDays(rule) {
     return [0, 1, 2, 5].includes(days) ? days : 0;
 }
 
+function deadlineDateHeader(headers, rule) {
+    if (rule && rule.deadlineSource === 'fixed') return findHeader(headers, ['Order Date']);
+    const named = cellString(rule && rule.deadlineColumn);
+    if (named) {
+        const exact = findHeader(headers, [named]);
+        if (exact) return exact;
+    }
+    return findHeader(headers, ['Order Date']);
+}
+
 function uniqueDates(orders, days) {
     const seen = [];
     (orders || []).forEach((order) => {
@@ -192,10 +215,17 @@ function orderDateLine(orders, days) {
     return seen.length ? ` Deadline: ${seen.join(', ')}.` : '';
 }
 
+function fixedDeadline(rule, days) {
+    const raw = cellString(rule && rule.deadlineDate);
+    if (!raw) return [];
+    const value = shiftDateText(raw, days);
+    return value ? [value] : [];
+}
+
 function messageBag(rule, person, orders) {
     const days = deadlineDays(rule);
     const dates = uniqueDates(orders, 0);
-    const deadlines = uniqueDates(orders, days);
+    const deadlines = rule && rule.deadlineSource === 'fixed' ? fixedDeadline(rule, days) : uniqueDates(orders, days);
     return {
         employeeName: person.salesmanName || person.name || '',
         product: rule.product || 'all cars',
@@ -248,6 +278,9 @@ function attachBoErrorRules(app, deps) {
             message: cellString(raw.message),
             whatsappMessage: cellString(raw.whatsappMessage),
             deadlineDays: deadlineDays(raw),
+            deadlineSource: raw.deadlineSource === 'fixed' ? 'fixed' : 'column',
+            deadlineColumn: raw.deadlineSource === 'fixed' ? '' : cellString(raw.deadlineColumn),
+            deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(cellString(raw.deadlineDate)) ? cellString(raw.deadlineDate) : '',
             active: raw.active !== false,
             archived: !!(previous && previous.archived),
             createdAt: (previous && previous.createdAt) || now,
@@ -355,6 +388,46 @@ function attachBoErrorRules(app, deps) {
         const salesmanName = typeof item === 'string' ? '' : fold(item.salesmanName);
         return `${ruleId}\u0001${salesmanId}\u0001${salesmanName}`;
     }
+    function orderSendState(state, order) {
+        const cell = state && state.orders && state.orders[order.boNumber];
+        if (cell && cell.status === 'completed') return { sent: true, sentAt: cell.at || state.sentAt || '' };
+        const tracked = state && state.orders && Object.keys(state.orders).length;
+        if (!tracked && state && state.sentAt && state.status === 'completed') return { sent: true, sentAt: state.sentAt };
+        return { sent: false, sentAt: '' };
+    }
+    function employeeSendState(store, rule, item) {
+        const state = (store.statuses && store.statuses[statusKey(rule.id, item)]) || {};
+        const orders = (item.orders || []).map((order) => ({
+            boNumber: order.boNumber,
+            ...orderSendState(state, order)
+        }));
+        const sentOrders = orders.filter((order) => order.sent).length;
+        let status = 'not_pushed';
+        if (item.salesmanId === 'UNASSIGNED') status = 'unassigned';
+        else if (orders.length && sentOrders === orders.length) status = 'sent';
+        else if (sentOrders) status = 'partial';
+        else if (rule.notificationStatus === 'pushed') status = 'not_sent';
+        return {
+            salesmanId: item.salesmanId,
+            salesmanName: item.salesmanName,
+            orderCount: orders.length,
+            sentOrders,
+            sentAt: sentOrders ? (state.sentAt || (orders.find((order) => order.sentAt) || {}).sentAt || '') : '',
+            status,
+            orders
+        };
+    }
+    function sentTotals(store, rule) {
+        const employees = ((rule.current && rule.current.employees) || []).filter((item) => item.salesmanId !== 'UNASSIGNED');
+        let sentOrders = 0;
+        let sentEmployees = 0;
+        employees.forEach((item) => {
+            const row = employeeSendState(store, rule, item);
+            sentOrders += row.sentOrders;
+            if (row.status === 'sent') sentEmployees += 1;
+        });
+        return { sentOrders, sentEmployees, trackedEmployees: employees.length };
+    }
 
     app.get('/api/reserved-orders/bo-rules', (req, res) => {
         if (!deps.requireAdmin(req, res)) return;
@@ -399,7 +472,7 @@ function attachBoErrorRules(app, deps) {
             },
             people,
             products,
-            rules: store.rules.map(publicRule),
+            rules: store.rules.map((rule) => Object.assign(publicRule(rule), sentTotals(store, rule))),
             history: store.history.slice(-80).reverse(),
             whatsapp: store.whatsapp.slice(-80).reverse()
         });
@@ -412,16 +485,7 @@ function attachBoErrorRules(app, deps) {
         if (!rule) return res.status(404).json({ error: 'Rule not found.' });
         res.json({
             rule,
-            delivery: ((rule.current && rule.current.employees) || []).map((item) => {
-                const state = store.statuses[statusKey(rule.id, item)] || {};
-                return {
-                    salesmanId: item.salesmanId,
-                    salesmanName: item.salesmanName,
-                    orderCount: (item.orders || []).length,
-                    sentAt: state.sentAt || '',
-                    status: state.sentAt ? 'sent' : (rule.notificationStatus === 'pushed' ? 'waiting' : 'not_pushed')
-                };
-            }),
+            delivery: ((rule.current && rule.current.employees) || []).map((item) => employeeSendState(store, rule, item)),
             history: store.history.filter((item) => item.ruleId === rule.id).slice(-30).reverse(),
             publications: store.publications.filter((item) => item.ruleId === rule.id).slice(-20).reverse(),
             whatsapp: store.whatsapp.filter((item) => item.ruleId === rule.id).slice(-40).reverse()
@@ -547,6 +611,19 @@ function attachBoErrorRules(app, deps) {
         const user = deps.sessionUser(req.query?.token);
         if (!user) return res.status(401).json({ error: 'Sign in again.' });
         const store = loadStore();
+        const phones = new Map();
+        if (typeof deps.loadAnalysisTable === 'function') {
+            const table = deps.loadAnalysisTable() || {};
+            const phoneHeader = findPhoneHeader(table.headers);
+            const orderHeader = findHeader(table.headers, ['Back Order Number', 'BO Number', 'Order Number']);
+            if (phoneHeader && orderHeader) {
+                (table.rows || []).forEach((row) => {
+                    const number = cellString(row[orderHeader]);
+                    const value = cellString(row[phoneHeader]);
+                    if (number && value && !phones.has(number)) phones.set(number, value);
+                });
+            }
+        }
         const cards = [];
         store.publications.forEach((publication) => {
             const rule = store.rules.find((item) => item.id === publication.ruleId);
@@ -571,7 +648,8 @@ function attachBoErrorRules(app, deps) {
                 orders: mine.orders.map((order) => ({
                     ...order,
                     status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new',
-                    at: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].at) || ''
+                    at: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].at) || '',
+                    phone: order.phone || phones.get(String(order.boNumber)) || ''
                 }))
             });
         });

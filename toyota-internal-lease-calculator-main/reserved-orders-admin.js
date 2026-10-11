@@ -191,7 +191,42 @@
         alerts = data.alerts || [];
         renderAlerts();
     }
-    function renderAll() { renderOverview(); renderOrders(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); }
+    function sheetColumns(list) {
+        const cols = [];
+        const seen = new Set();
+        function add(label) {
+            const name = String(label || '').trim();
+            if (!name || seen.has(name)) return;
+            seen.add(name);
+            cols.push(name);
+        }
+        ['Queue', 'Status', 'Updated by', 'Updated at'].forEach(add);
+        list.forEach((order) => (order.fields || []).forEach((field) => add(field.label || field.col)));
+        if (cols.length === 4) ['Order', 'VIN', 'Advisor', 'Payment', 'Deadline'].forEach(add);
+        return cols;
+    }
+    function sheetValue(order, label) {
+        if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
+        if (label === 'Status') return order.status || '';
+        if (label === 'Updated by') return order.statusChangedBy || '';
+        if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
+        if (label === 'Order') return order.orderNumber || '';
+        if (label === 'VIN') return order.vin || '';
+        if (label === 'Advisor') return order.salesAdvisor || '';
+        if (label === 'Payment') return order.paymentLabel || '';
+        if (label === 'Deadline') return order.deadline || '';
+        const field = (order.fields || []).find((item) => (item.label || item.col) === label);
+        return field && field.value != null ? String(field.value) : '';
+    }
+    function renderSheet() {
+        const box = $('live-sheet');
+        if (!box) return;
+        const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
+        const cols = sheetColumns(orders);
+        const rows = orders.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
+        box.innerHTML = rows.length ? `<table><thead><tr>${cols.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((order) => `<tr>${cols.map((label) => `<td>${esc(sheetValue(order, label))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="empty">No live rows yet. Push Stock E-Sales to fill this sheet.</p>';
+    }
+    function renderAll() { renderOverview(); renderOrders(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); }
 
     async function refresh() {
         const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
@@ -366,5 +401,14 @@
             cell.textContent = `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
         });
     }, 1000);
+    if ($('sheet-search')) $('sheet-search').addEventListener('input', renderSheet);
+    try {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${location.host}`);
+        socket.addEventListener('message', (event) => {
+            const msg = JSON.parse(event.data);
+            if ((msg.type === 'reserved_orders_updated' || msg.type === 'report_sheet_updated') && password()) refresh().catch(() => {});
+        });
+    } catch (e) { /* the sheet still refreshes on the next manual open */ }
     if (password()) refresh().then(showApp).catch(() => {});
 })();
