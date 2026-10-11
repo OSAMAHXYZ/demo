@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261011ytd2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261011ytd7" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261010alloc8" />
   <style>
     body.delivery-mode .app-frame {
@@ -596,8 +596,34 @@
     </div>
 
     <div class="panel-section ytd-dash" id="panel-ytdsales" style="display:none">
+      <header class="ytd-top">
+        <div class="ytd-brand">
+          <img src="../images/logo/toyota.png" alt="" width="28" height="28" onerror="this.style.display='none'" />
+          <div>
+            <strong>TOYOTA</strong>
+            <span>ALJ · Report Sheet</span>
+          </div>
+        </div>
+        <nav class="ytd-tabs" aria-label="Sales Report navigation">
+          <button type="button" data-ytd-go="salesreport">Sales Report</button>
+          <button type="button" class="is-active" data-ytd-go="ytdsales">YTD Sales</button>
+          <button type="button" data-ytd-go="boerrors">BO Errors</button>
+          <button type="button" data-ytd-go="boallocstock">Allocation</button>
+          <button type="button" data-ytd-go="plantracker">Plan Tracker</button>
+          <button type="button" data-ytd-go="gec">GEC</button>
+          <button type="button" data-ytd-go="bodashboard">BO Dashboard</button>
+          <button type="button" data-ytd-go="reservedvehicles">Reserved</button>
+        </nav>
+        <div class="ytd-top-actions">
+          <span class="ytd-live"><i></i>LIVE</span>
+          <span class="ytd-updated"><span>Last Updated</span><strong id="ytd-updated">—</strong></span>
+          <button type="button" id="ytd-clear">Clear</button>
+          <button type="button" id="ytd-refresh">Refresh</button>
+          <button type="button" class="ytd-exit" id="ytd-exit">Exit</button>
+        </div>
+      </header>
       <section class="ytd-sheet" id="ytd-sheet" aria-label="YTD Sales">
-        <header class="ytd-head">
+        <header class="ytd-hero">
           <div>
             <p class="ytd-kicker">Toyota · ALJ · Digital Retail</p>
             <h2 class="ytd-title">YTD Sales</h2>
@@ -610,8 +636,8 @@
         </header>
         <div class="ytd-annual" id="ytd-annual"></div>
         <div class="ytd-months" id="ytd-months"></div>
-        <div class="ytd-detail" id="ytd-detail" hidden></div>
       </section>
+      <div class="ytd-detail" id="ytd-detail" hidden></div>
     </div>
 
     <!-- PANEL: BO Dashboard (executive) -->
@@ -9270,6 +9296,13 @@
       if (row.invoice instanceof Date) years.add(row.invoice.getFullYear());
     });
     yearEl.innerHTML = [...years].sort((a, b) => b - a).map((year) => `<option value="${year}"${year === ytdYear ? " selected" : ""}>${year}</option>`).join("");
+    const updated = $("#ytd-updated");
+    if (updated && typeof Store !== "undefined" && Store.readDataPushStamp) {
+      const at = Number(Store.readDataPushStamp().at) || 0;
+      updated.textContent = at
+        ? new Date(at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : "—";
+    }
     const months = ytdBuild();
     window._ytdMonths = months;
     let yearActual = 0;
@@ -9287,26 +9320,36 @@
       const diff = totals.actual - bucket.report;
       const matched = Math.abs(diff) < 0.001;
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
-      return `<button type="button" class="ytd-card ${status.cls}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
-        <div class="ytd-card-top"><strong>${label} ${ytdYear}</strong><span class="ytd-status ${status.cls}">${status.label}</span></div>
+      const reconCls = matched ? "is-match" : "is-miss";
+      const reconText = matched ? "Match" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
+      const barCls = !matched ? "is-miss" : (totals.hasTarget && totals.ach != null && totals.ach >= 100) ? "is-hit" : "is-normal";
+      return `<article class="ytd-card ${status.cls} ${reconCls}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
+        <div class="ytd-card-top">
+          <div class="ytd-card-name"><strong>${label}</strong><small>${ytdYear}</small></div>
+          <div class="ytd-badges">
+            <span class="ytd-status ${status.cls}">${status.label}</span>
+            <span class="ytd-recon ${reconCls}">${reconText}</span>
+            <span class="ytd-open" aria-hidden="true">›</span>
+          </div>
+        </div>
         <div class="ytd-card-metrics">
           <span><em>Target</em><b>${totals.hasTarget ? formatNumber(totals.target) : "—"}</b></span>
           <span><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
           <span><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
-        <div class="ytd-bar" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></div>
-        <div class="ytd-card-foot"><span>${gapText}</span><span class="ytd-recon ${matched ? "is-match" : "is-miss"}">${matched ? "Match" : "Mismatch"} ${diff > 0 ? "+" : ""}${formatNumber(diff)}</span></div>
-      </button>`;
+        <div class="ytd-bar ${barCls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></div>
+        <p class="ytd-gap">${gapText}</p>
+        <button type="button" class="ytd-set" data-ytd-set="${bucket.key}">Set Employee Targets</button>
+      </article>`;
     }).join("");
     const excluded = (window._ytdInvoiceRows || []).filter((row) => row.reason).length;
     const yearAch = ytdAch(yearActual, yearTarget);
-    const yearStatus = ytdStatus(yearAch, yearTarget > 0);
-    annualEl.innerHTML = `<div><span>Annual target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong></div>
-      <div><span>Annual actual</span><strong>${formatNumber(yearActual)}</strong></div>
-      <div><span>Annual Ach%</span><strong>${ytdPctText(yearAch)}</strong></div>
-      <div><span>Report actual</span><strong>${formatNumber(yearReport)}</strong></div>
-      <div><span>Status</span><strong class="ytd-status ${yearStatus.cls}">${yearStatus.label}</strong></div>
-      ${excluded ? `<div><span>Excluded rows</span><strong>${formatNumber(excluded)}</strong></div>` : ""}`;
+    const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly employee targets" : "No employee targets yet"}</em></article>
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Sales Qty by invoice date</em></article>
+      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b></b></span><span>Annual Ach%</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Existing Sales Report count</em></article>
+      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank invoice date or missing qty</em></article>`;
     paintYtdDetail();
   }
 
@@ -9314,6 +9357,8 @@
     const el = $("#ytd-detail");
     if (!el) return;
     const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
+    const panel = $("#panel-ytdsales");
+    if (panel) panel.classList.toggle("is-detail-open", !!bucket);
     if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
     const totals = ytdMonthTotals(bucket);
     const diff = totals.actual - bucket.report;
@@ -9339,7 +9384,9 @@
       </div>` : "";
     el.hidden = false;
     el.innerHTML = `<div class="ytd-detail-head">
-        <div><h3>${label}</h3><p>Monthly target is the sum of the employee targets below. Actual sales are the sum of Sales Qty.</p></div>
+        <div><h3>${label}</h3><p>Monthly target is the sum of the employee targets below. Actual sales are the sum of Sales Qty.</p>
+          <div class="ytd-badges"><span class="ytd-status ${ytdStatus(totals.ach, totals.hasTarget).cls}">${ytdStatus(totals.ach, totals.hasTarget).label}</span><span class="ytd-recon ${matched ? "is-match" : "is-miss"}">${matched ? "Match" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`}</span></div>
+        </div>
         <button type="button" class="ytd-text-btn" data-ytd-close>Close month</button>
       </div>
       <div class="ytd-recon-line ${matched ? "is-match" : "is-miss"}">
@@ -21769,9 +21816,20 @@
     const ytdPanel = $("#panel-ytdsales");
     if (ytdPanel) {
       ytdPanel.addEventListener("click", (e) => {
+        const go = e.target.closest("[data-ytd-go]");
+        if (go && go.dataset.ytdGo && go.dataset.ytdGo !== "ytdsales") {
+          switchPanel(go.dataset.ytdGo);
+          return;
+        }
+        if (e.target.closest("#ytd-exit")) {
+          switchPanel("salesreport");
+          return;
+        }
+        const setBtn = e.target.closest("[data-ytd-set]");
         const month = e.target.closest("[data-ytd-month]");
-        if (month) {
-          ytdOpenMonth = ytdOpenMonth === month.dataset.ytdMonth ? "" : month.dataset.ytdMonth;
+        if (setBtn || month) {
+          const key = setBtn ? setBtn.dataset.ytdSet : month.dataset.ytdMonth;
+          ytdOpenMonth = !setBtn && ytdOpenMonth === key ? "" : key;
           ytdInspect = false;
           paintYtd();
           return;
@@ -21779,6 +21837,23 @@
         if (e.target.closest("[data-ytd-close]")) { ytdOpenMonth = ""; ytdInspect = false; paintYtd(); }
         if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); }
       });
+      const ytdRefresh = $("#ytd-refresh");
+      if (ytdRefresh) {
+        ytdRefresh.addEventListener("click", () => {
+          Promise.resolve(refreshFromAdmin("YTD refreshed", { force: true }))
+            .catch(() => {})
+            .finally(() => renderYtdSales());
+        });
+      }
+      const ytdClear = $("#ytd-clear");
+      if (ytdClear) {
+        ytdClear.addEventListener("click", () => {
+          ytdYear = new Date().getFullYear();
+          ytdOpenMonth = "";
+          ytdInspect = false;
+          paintYtd();
+        });
+      }
       ytdPanel.addEventListener("change", (e) => {
         if (e.target.id === "ytd-year") {
           ytdYear = Number(e.target.value) || new Date().getFullYear();
