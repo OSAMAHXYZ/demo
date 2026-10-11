@@ -1004,13 +1004,26 @@
       }
     }
 
-    function readFileAsDataURL(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+    async function uploadBoFile(file, brand) {
+      const password = document.getElementById('passwordInput').value.trim();
+      const res = await fetch('/api/bo-data/upload?brand=' + encodeURIComponent(brand || 'toyota'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'x-bo-password': password,
+          'x-filename': encodeURIComponent(file.name)
+        },
+        body: file
       });
+      const raw = await res.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+      if (!res.ok) {
+        const error = new Error((data && data.error) || `Upload failed (${res.status}).`);
+        error.status = res.status;
+        throw error;
+      }
+      return data;
     }
 
     document.getElementById('uploadBtn').addEventListener('click', async () => {
@@ -1027,28 +1040,7 @@
 
       try {
         setStatus('Uploading and processing file...', '');
-        const fileData = await readFileAsDataURL(file);
-        const res = await fetch('/api/bo-data/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            password,
-            filename: file.name,
-            fileData
-          })
-        });
-        let data = null;
-        try {
-          data = await res.json();
-        } catch (jsonError) {
-          const rawText = await res.text();
-          throw new Error(rawText || 'Unexpected non-JSON server response');
-        }
-        if (!res.ok) {
-          setStatus(data?.error || `Upload failed (${res.status}).`, 'err');
-          return;
-        }
-
+        const data = await uploadBoFile(file, 'toyota');
         const sheetsText = (data.meta.sheets || []).map(s => `${s.sheetName} (${s.rowCount})`).join(', ');
         setStatus(`Upload successful: ${data.meta.rowCount} rows from first sheet: ${sheetsText}.`, 'ok');
         await loadMeta();
@@ -1056,7 +1048,7 @@
         await loadAdminStats();
         await loadQueueCombinations();
       } catch (e) {
-        setStatus(`Upload failed: ${e.message || 'Please try again.'}`, 'err');
+        setStatus(e.message || 'Upload failed.', 'err');
       }
     });
 
@@ -1279,14 +1271,7 @@
       if (!file) { setLexusStatus('Select a Lexus Excel file first.', 'err'); return; }
       try {
         setLexusStatus('Uploading Lexus file...', '');
-        const fileData = await readFileAsDataURL(file);
-        const res = await fetch('/api/bo-data/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password, filename: file.name, fileData, brand: 'lexus' })
-        });
-        const data = await res.json();
-        if (!res.ok) { setLexusStatus(data?.error || `Upload failed (${res.status}).`, 'err'); return; }
+        const data = await uploadBoFile(file, 'lexus');
         setLexusStatus(`Lexus upload successful: ${data.meta.rowCount} rows from ${data.meta.sheetName}.`, 'ok');
         await loadLexusMeta();
         await loadLexusPreview();

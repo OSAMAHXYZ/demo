@@ -8043,6 +8043,18 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   }
 });
 
+require('./toyota-internal-lease-calculator-main/bo-data-api').attachBoDataApi(app, {
+  XLSX,
+  express,
+  dir: path.join(PERSISTENT_ROOT, 'bo-data'),
+  password: END_OF_MONTH_PASSWORD,
+  onToyotaUploaded(req) {
+    if (reservedOrdersHub && typeof reservedOrdersHub.reanalyzeActive === 'function') {
+      reservedOrdersHub.reanalyzeActive(req);
+    }
+  }
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
