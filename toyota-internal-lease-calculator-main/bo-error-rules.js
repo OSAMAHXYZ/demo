@@ -1,8 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
-const OPERATORS = ['equals', 'not_equals', 'contains', 'not_contains', 'empty', 'not_empty', 'in_list', 'not_in_list'];
-const NEEDS_VALUE = new Set(['equals', 'not_equals', 'contains', 'not_contains', 'in_list', 'not_in_list']);
+const OPERATORS = ['equals', 'not_equals', 'contains', 'not_contains', 'empty', 'not_empty', 'gt', 'lt', 'in_list', 'not_in_list'];
+const NEEDS_VALUE = new Set(['equals', 'not_equals', 'contains', 'not_contains', 'gt', 'lt', 'in_list', 'not_in_list']);
+const OPERATOR_TEXT = {
+    equals: 'equals',
+    not_equals: 'does not equal',
+    contains: 'contains',
+    not_contains: 'does not contain',
+    empty: 'is empty',
+    not_empty: 'is not empty',
+    gt: 'is greater than',
+    lt: 'is less than',
+    in_list: 'is one of',
+    not_in_list: 'is not one of'
+};
 
 function readJson(file, fallback) {
     try {
@@ -69,7 +81,59 @@ function conditionMatches(operator, cell, expected) {
     if (operator === 'not_contains') return list.length ? list.every((item) => !fold(item) || !folded.includes(fold(item))) : false;
     if (operator === 'in_list') return list.some((item) => valuesMatch(text, item));
     if (operator === 'not_in_list') return folded !== '' && list.length ? list.every((item) => !valuesMatch(text, item)) : false;
+    if (operator === 'gt' || operator === 'lt') {
+        if (!text) return false;
+        return list.some((item) => {
+            const gap = compareRank(text, item);
+            return operator === 'gt' ? gap > 0 : gap < 0;
+        });
+    }
     return false;
+}
+
+function compareRank(left, right) {
+    const leftNum = Number(String(left).replace(/,/g, ''));
+    const rightNum = Number(String(right).replace(/,/g, ''));
+    if (String(left).trim() !== '' && Number.isFinite(leftNum) && Number.isFinite(rightNum)) return leftNum - rightNum;
+    const leftDate = parseBoDate(left);
+    const rightDate = parseBoDate(right);
+    if (leftDate && rightDate) return leftDate.getTime() - rightDate.getTime();
+    return fold(left).localeCompare(fold(right));
+}
+
+function ruleConditions(rule) {
+    if (Array.isArray(rule && rule.conditions) && rule.conditions.length) {
+        return rule.conditions.map((item) => {
+            const operator = OPERATORS.includes(item.operator) ? item.operator : 'equals';
+            return {
+                column: cellString(item.column),
+                operator,
+                values: NEEDS_VALUE.has(operator) ? splitValues(item.values != null ? item.values : item.value) : []
+            };
+        }).filter((item) => item.column);
+    }
+    const operator = OPERATORS.includes(rule && rule.operator) ? rule.operator : 'equals';
+    const values = NEEDS_VALUE.has(operator) ? splitValues(rule && rule.incorrectValues) : [];
+    return chosenList(rule, 'columns', 'column').map((column) => ({ column, operator, values }));
+}
+
+function ruleMatchMode(rule) {
+    if (rule && (rule.matchMode === 'any' || rule.matchMode === 'all')) return rule.matchMode;
+    return chosenList(rule, 'columns', 'column').length > 1 && !(rule && Array.isArray(rule.conditions) && rule.conditions.length) ? 'any' : 'all';
+}
+
+function describeCondition(cond) {
+    const column = cellString(cond && cond.column) || 'column';
+    const operator = OPERATOR_TEXT[cond && cond.operator] || 'equals';
+    if (cond && (cond.operator === 'empty' || cond.operator === 'not_empty')) return `${column} ${operator}`;
+    const values = splitValues(cond && cond.values).join(', ') || 'blank';
+    return `${column} ${operator} ${values}`;
+}
+
+function describeRule(rule) {
+    const list = ruleConditions(rule);
+    if (!list.length) return 'no condition is set';
+    return list.map(describeCondition).join(ruleMatchMode(rule) === 'any' ? ' or ' : ' and ');
 }
 
 function chosenList(rule, plural, single) {
@@ -80,10 +144,9 @@ function chosenList(rule, plural, single) {
 function analyzeTable(table, rule) {
     const headers = table.headers || [];
     const rows = table.rows || [];
-    const requestedColumns = chosenList(rule, 'columns', 'column');
-    const resolved = requestedColumns.map((name) => ({ name, header: findHeader(headers, [name]) }));
-    const present = resolved.filter((item) => item.header);
-    const missingColumns = resolved.filter((item) => !item.header).map((item) => item.name);
+    const conditions = ruleConditions(rule).map((item) => ({ ...item, header: findHeader(headers, [item.column]) }));
+    const missingColumns = conditions.filter((item) => !item.header).map((item) => item.column);
+    const mode = ruleMatchMode(rule);
     const productHeader = findHeader(headers, ['Product', 'Car', 'Vehicle', 'Model']);
     const salesmanIdHeader = findHeader(headers, ['Salesman Id', 'Salesman ID', 'SalesmanID']);
     const salesmanNameHeader = findHeader(headers, ['Salesman Name', 'Salesman']);
@@ -91,22 +154,71 @@ function analyzeTable(table, rule) {
     const yearHeader = findHeader(headers, ['Model Year']);
     const dateHeader = deadlineDateHeader(headers, rule);
     const phoneHeader = findPhoneHeader(headers);
-    if (!present.length) {
-        return { ok: false, columnMissing: true, missingColumns, employees: [], employeeCount: 0, orderCount: 0, headers };
-    }
+    const empty = {
+        ok: false,
+        columnMissing: true,
+        missingColumns,
+        employees: [],
+        employeeCount: 0,
+        orderCount: 0,
+        headers,
+        totalRows: rows.length,
+        excludedCount: rows.length,
+        matchedSample: [],
+        excludedSample: [],
+        conditionText: describeRule(rule)
+    };
+    if (!conditions.length || missingColumns.length === conditions.length) return empty;
     const wantedProducts = chosenList(rule, 'products', 'product').map(fold).filter(Boolean);
     const groups = new Map();
+    const matchedSample = [];
+    const excludedSample = [];
+    const seenExcluded = new Set();
+    let excludedCount = 0;
     rows.forEach((row) => {
-        if (wantedProducts.length && productHeader) {
-            const product = fold(row[productHeader]);
-            const matchesCar = wantedProducts.some((wanted) => product === wanted || product.includes(wanted) || wanted.includes(product));
-            if (!matchesCar) return;
-        }
-        const hits = present.filter((item) => conditionMatches(rule.operator, row[item.header], rule.incorrectValues));
-        if (!hits.length) return;
+        const product = cellString(productHeader ? row[productHeader] : '');
         const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
         const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
         const boNumber = cellString(orderHeader ? row[orderHeader] : '') || '—';
+        let carFail = '';
+        if (wantedProducts.length && productHeader) {
+            const foldedProduct = fold(product);
+            const matchesCar = wantedProducts.some((wanted) => foldedProduct === wanted || foldedProduct.includes(wanted) || wanted.includes(foldedProduct));
+            if (!matchesCar) carFail = `Car is ${product || 'blank'}; needed ${chosenList(rule, 'products', 'product').join(' or ')}`;
+        }
+        const checks = conditions.map((item) => {
+            if (!item.header) return { pass: false, header: '', value: '', reason: `Column ${item.column} is not in the BO file` };
+            const value = cellString(row[item.header]);
+            const pass = conditionMatches(item.operator, row[item.header], item.values);
+            return {
+                pass,
+                header: item.header,
+                value,
+                reason: pass ? '' : `${item.column} is ${value || 'blank'}; needed ${describeCondition(item)}`
+            };
+        });
+        const pass = !carFail && (mode === 'any' ? checks.some((item) => item.pass) : checks.every((item) => item.pass));
+        if (!pass) {
+            excludedCount += 1;
+            if (excludedSample.length < 8 && !seenExcluded.has(boNumber)) {
+                seenExcluded.add(boNumber);
+                const failed = checks.find((item) => !item.pass);
+                const reason = carFail || (mode === 'any'
+                    ? `None of the conditions matched. ${checks.map((item) => item.reason).filter(Boolean).join(' ')}`
+                    : (failed && failed.reason) || 'Condition did not match');
+                excludedSample.push({ boNumber, product, salesmanName, reason });
+            }
+            return;
+        }
+        const hits = checks.filter((item) => item.pass && item.header);
+        if (matchedSample.length < 8 && !matchedSample.some((item) => item.boNumber === boNumber)) {
+            matchedSample.push({
+                boNumber,
+                product,
+                salesmanName,
+                values: hits.map((item) => `${item.header}: ${item.value || 'blank'}`).join('; ')
+            });
+        }
         const personKey = `${salesmanId}\u0001${fold(salesmanName)}`;
         if (!groups.has(personKey)) groups.set(personKey, { salesmanId, salesmanName, orders: [] });
         const group = groups.get(personKey);
@@ -115,7 +227,7 @@ function analyzeTable(table, rule) {
         if (!order) {
             order = {
                 boNumber,
-                product: cellString(productHeader ? row[productHeader] : ''),
+                product,
                 modelYear: cellString(yearHeader ? row[yearHeader] : ''),
                 orderDate: shiftDateText(dateHeader ? row[dateHeader] : '', 0),
                 phone: phoneHeader ? cellString(row[phoneHeader]) : '',
@@ -130,7 +242,7 @@ function analyzeTable(table, rule) {
         }
         hits.forEach((hit) => {
             if (order.hits.some((item) => item.column === hit.header)) return;
-            order.hits.push({ column: hit.header, currentValue: cellString(row[hit.header]) });
+            order.hits.push({ column: hit.header, currentValue: hit.value });
         });
         order.column = order.hits.map((item) => item.column).join(', ');
         order.currentValue = order.hits.map((item) => `${item.column}: ${item.currentValue}`).join('; ');
@@ -141,11 +253,16 @@ function analyzeTable(table, rule) {
         ok: true,
         columnMissing: missingColumns.length > 0,
         missingColumns,
-        column: present.map((item) => item.header).join(', '),
+        column: conditions.map((item) => item.header || item.column).join(', '),
         employees,
         employeeCount: employees.filter((item) => item.salesmanId !== 'UNASSIGNED').length,
         orderCount: employees.reduce((sum, item) => sum + item.orders.length, 0),
-        headers
+        headers,
+        totalRows: rows.length,
+        excludedCount,
+        matchedSample,
+        excludedSample,
+        conditionText: describeRule(rule)
     };
 }
 
@@ -210,9 +327,12 @@ function uniqueDates(orders, days) {
     return seen;
 }
 
-function orderDateLine(orders, days) {
-    const seen = uniqueDates(orders, days);
-    return seen.length ? ` Deadline: ${seen.join(', ')}.` : '';
+function orderRecordLines(orders) {
+    return (orders || []).map((order) => {
+        const number = cellString(order.boNumber) || 'No order number';
+        const date = cellString(order.orderDate);
+        return date ? `${number} · ${date}` : `${number} · No date in the BO file`;
+    }).join('\n');
 }
 
 function fixedDeadline(rule, days) {
@@ -226,16 +346,20 @@ function messageBag(rule, person, orders) {
     const days = deadlineDays(rule);
     const dates = uniqueDates(orders, 0);
     const deadlines = rule && rule.deadlineSource === 'fixed' ? fixedDeadline(rule, days) : uniqueDates(orders, days);
+    const lines = orderRecordLines(orders);
+    const deadlineText = deadlines.length ? `Deadline: ${deadlines.join(', ')}.` : 'No deadline date in the BO file.';
     return {
         employeeName: person.salesmanName || person.name || '',
         product: rule.product || 'all cars',
         columnName: rule.column,
         incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
         correctValue: rule.correctValue || '—',
+        conditionText: describeRule(rule),
         affectedOrderCount: (orders || []).length,
-        orderDate: dates.join(', '),
-        deadline: deadlines.join(', '),
-        orderDateLine: deadlines.length ? ` Deadline: ${deadlines.join(', ')}.` : ''
+        orderDate: dates.join(', ') || 'No date in the BO file',
+        deadline: deadlines.join(', ') || 'No deadline date',
+        orderLines: lines,
+        orderDateLine: lines ? `\n${deadlineText}\n${lines}` : `\n${deadlineText}`
     };
 }
 
@@ -260,10 +384,12 @@ function attachBoErrorRules(app, deps) {
         return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     }
     function cleanRule(raw, previous) {
-        const operator = OPERATORS.includes(raw.operator) ? raw.operator : 'equals';
-        const incorrectValues = NEEDS_VALUE.has(operator) ? splitValues(raw.incorrectValues != null ? raw.incorrectValues : raw.incorrectValue) : [];
+        const conditions = ruleConditions(raw);
+        const first = conditions[0] || { column: '', operator: 'equals', values: [] };
+        const operator = first.operator;
+        const incorrectValues = first.values || [];
         const products = chosenList(raw, 'products', 'product');
-        const columns = chosenList(raw, 'columns', 'column');
+        const columns = conditions.map((item) => item.column);
         const now = new Date().toISOString();
         return {
             id: (previous && previous.id) || cellString(raw.id) || newId('rule'),
@@ -274,6 +400,8 @@ function attachBoErrorRules(app, deps) {
             columns,
             operator,
             incorrectValues,
+            conditions,
+            matchMode: raw.matchMode === 'any' ? 'any' : (raw.matchMode === 'all' ? 'all' : ruleMatchMode(raw)),
             correctValue: cellString(raw.correctValue),
             message: cellString(raw.message),
             whatsappMessage: cellString(raw.whatsappMessage),
@@ -296,13 +424,14 @@ function attachBoErrorRules(app, deps) {
     }
     function validate(rule, headers) {
         if (!rule.name) return 'Enter a rule name.';
-        const columns = chosenList(rule, 'columns', 'column');
-        if (!columns.length) return 'Choose at least one BO column.';
+        const conditions = ruleConditions(rule);
+        if (!conditions.length) return 'Choose at least one BO column.';
         if (headers.length) {
-            const missing = columns.filter((name) => !findHeader(headers, [name]));
-            if (missing.length === columns.length) return `Those columns are not in the latest BO file: ${missing.join(', ')}. The rule can be saved, but it cannot be analyzed until a column is present.`;
+            const missing = conditions.filter((item) => !findHeader(headers, [item.column]));
+            if (missing.length === conditions.length) return `Those columns are not in the latest BO file: ${missing.map((item) => item.column).join(', ')}. The rule can be saved, but it cannot be analyzed until a column is present.`;
         }
-        if (NEEDS_VALUE.has(rule.operator) && !rule.incorrectValues.length) return 'Enter the incorrect value.';
+        const missingValue = conditions.find((item) => NEEDS_VALUE.has(item.operator) && !(item.values || []).length);
+        if (missingValue) return `Enter the value for ${missingValue.column}.`;
         if (!rule.message) return 'Write the message employees will see.';
         return '';
     }
@@ -339,7 +468,12 @@ function attachBoErrorRules(app, deps) {
             fileName: table.fileName || '',
             fileStamp: table.updatedAt || '',
             columnMissing: !!result.columnMissing,
-            employees: result.employees || []
+            employees: result.employees || [],
+            matchedSample: result.matchedSample || [],
+            excludedSample: result.excludedSample || [],
+            excludedCount: result.excludedCount || 0,
+            conditionText: result.conditionText || '',
+            totalRows: result.totalRows || 0
         };
         store.history.push({
             id: newId('an'),
@@ -475,6 +609,29 @@ function attachBoErrorRules(app, deps) {
             rules: store.rules.map((rule) => Object.assign(publicRule(rule), sentTotals(store, rule))),
             history: store.history.slice(-80).reverse(),
             whatsapp: store.whatsapp.slice(-80).reverse()
+        });
+    });
+
+    app.post('/api/reserved-orders/bo-rules/test', (req, res) => {
+        if (!deps.requireAdmin(req, res)) return;
+        const table = deps.loadAnalysisTable() || { headers: [], rows: [] };
+        const rule = cleanRule(req.body?.rule || {}, null);
+        const problem = validate(rule, table.headers || []);
+        const hard = problem && !problem.includes('cannot be analyzed');
+        if (hard) return res.status(400).json({ error: problem });
+        const result = analyzeTable(table, rule);
+        res.json({
+            ok: true,
+            warning: problem || '',
+            conditionText: result.conditionText,
+            employeeCount: result.employeeCount,
+            orderCount: result.orderCount,
+            totalRows: result.totalRows,
+            excludedCount: result.excludedCount,
+            matchedSample: result.matchedSample,
+            excludedSample: result.excludedSample,
+            columnMissing: result.columnMissing,
+            missingColumns: result.missingColumns
         });
     });
 
@@ -724,4 +881,4 @@ function attachBoErrorRules(app, deps) {
     return { reanalyzeActive, analyzeTable };
 }
 
-module.exports = { attachBoErrorRules, analyzeTable, cellString, conditionMatches };
+module.exports = { attachBoErrorRules, analyzeTable, cellString, conditionMatches, messageBag, fillMessage };
