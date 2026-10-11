@@ -464,6 +464,35 @@ function broadcastReservedOrdersUpdate(updatedAt) {
     }
   }
 }
+function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, boName }) {
+  ensureReportSheetDirs();
+  const meta = loadReportSheetMeta();
+  const fileNames = { ...(meta.fileNames || {}) };
+  const slots = new Set(Array.isArray(meta.slots) ? meta.slots : []);
+  if (esalesBuffer && esalesBuffer.length) {
+    fs.writeFileSync(reportSheetFilePath('central'), esalesBuffer);
+    fileNames.central = String(esalesName || fileNames.central || 'Stock E-Sales');
+    slots.add('central');
+  }
+  if (boBuffer && boBuffer.length) {
+    fs.writeFileSync(reportSheetFilePath('backorder'), boBuffer);
+    fileNames.backorder = String(boName || fileNames.backorder || 'Back Order');
+    slots.add('backorder');
+  }
+  const at = Date.now();
+  const next = {
+    ...meta,
+    at,
+    slots: REPORT_SLOT_IDS.filter((id) => slots.has(id)),
+    hasSales: slots.has('sales'),
+    hasCancelled: slots.has('cancelled'),
+    fileNames
+  };
+  saveReportSheetMeta(next);
+  broadcastReportSheetUpdate(at);
+  return { at, central: fileNames.central || '', backorder: fileNames.backorder || '' };
+}
+
 function refreshReservedOrdersFromAdminPush(fileNames) {
   if (!reservedOrdersHub) return null;
   const esalesPath = reportSheetFilePath('central');
@@ -7995,6 +8024,9 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+  },
+  onSourceFiles(files) {
+    return saveReservedFilesToReportSheet(files || {});
   },
   readAnalysisBackOrder() {
     const boPath = reportSheetFilePath('backorder');

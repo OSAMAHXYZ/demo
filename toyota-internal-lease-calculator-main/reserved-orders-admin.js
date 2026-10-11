@@ -200,6 +200,12 @@
         archive = data.archive || [];
         report = data.report || {};
         $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
+        const source = $('push-source');
+        if (source) {
+            source.textContent = data.esalesName || data.boName
+                ? `Live files: Stock E-Sales ${data.esalesName || '—'} · Back Order ${data.boName || '—'}`
+                : 'No Stock E-Sales or Back Order pushed yet.';
+        }
         const status = $('admin-status');
         const current = status.value;
         status.innerHTML = '<option value="">Status</option>' + STATUSES.map((item) => `<option>${esc(item)}</option>`).join('');
@@ -344,7 +350,8 @@
         try {
             const body = { password: password(), esalesBase64: await fileToBase64(esales), esalesName: esales.name };
             if (bo) { body.boBase64 = await fileToBase64(bo); body.boName = bo.name; }
-            await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const pushed = await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if ($('push-report') && pushed.reportSheet) $('push-report').textContent = 'Report Sheet admin now has these files too.';
             await refresh();
             showPanel('overview');
         } catch (e) { if (e.message !== 'unauthorized') $('push-error').textContent = e.message; }

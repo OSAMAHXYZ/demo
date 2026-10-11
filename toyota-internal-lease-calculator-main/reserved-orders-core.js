@@ -1316,9 +1316,11 @@ function attachReservedOrders(app, options) {
         try {
             if (!requireAdmin(req, res)) return;
             if (!req.body?.esalesBase64) return res.status(400).json({ error: 'Upload the E-Sales file first.' });
-            const sheets = sheetGridsFromBuffer(Buffer.from(String(req.body.esalesBase64), 'base64'));
-            const bo = req.body.boBase64
-                ? backOrderFromBuffer(Buffer.from(String(req.body.boBase64), 'base64'))
+            const esalesBuffer = Buffer.from(String(req.body.esalesBase64), 'base64');
+            const boBuffer = req.body.boBase64 ? Buffer.from(String(req.body.boBase64), 'base64') : null;
+            const sheets = sheetGridsFromBuffer(esalesBuffer);
+            const bo = boBuffer
+                ? backOrderFromBuffer(boBuffer)
                 : (typeof options.readStoredBackOrder === 'function' ? options.readStoredBackOrder() : { headers: [], rows: [] });
             const built = publish(sheets, bo, {
                 esalesName: req.body.esalesName,
@@ -1328,7 +1330,16 @@ function attachReservedOrders(app, options) {
                 actor: { name: 'Admin' }
             });
             if (!built.ok) return res.status(400).json({ error: built.error, report: built.report });
-            res.json({ ok: true, updatedAt: loadLive().updatedAt, report: built.report });
+            let reportSheet = null;
+            if (typeof options.onSourceFiles === 'function') {
+                reportSheet = options.onSourceFiles({
+                    esalesBuffer,
+                    esalesName: req.body.esalesName,
+                    boBuffer,
+                    boName: req.body.boName || ''
+                });
+            }
+            res.json({ ok: true, updatedAt: loadLive().updatedAt, report: built.report, reportSheet });
         } catch (e) {
             res.status(500).json({ error: e.message || 'Could not read the Excel file.' });
         }

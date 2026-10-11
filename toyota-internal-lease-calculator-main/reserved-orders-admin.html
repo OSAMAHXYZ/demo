@@ -75,8 +75,10 @@
             <section id="panel-push" class="hidden">
                 <section class="panel stack">
                     <h2>Push live</h2>
-                    <label>E-Sales Excel<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
-                    <label>Back Order file<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <p>Stock E-Sales and Back Order are shared with the <a href="../report-sheet/admin.html">Report Sheet admin</a>. Pushing them here updates reserved orders and the report dashboard. Pushing those same two files there updates this page.</p>
+                    <p id="push-source"></p>
+                    <label>Stock E-Sales<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <label>Back Order<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <button class="solid" id="push-live" type="button">PUSH LIVE</button>
                     <div class="err" id="push-error"></div>
                     <div id="push-report"></div>
