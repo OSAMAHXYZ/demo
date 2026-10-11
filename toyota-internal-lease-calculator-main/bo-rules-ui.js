@@ -7,6 +7,9 @@
     let editing = null;
     let q = '';
     let notice = '';
+    let messageTarget = 'br-message';
+    const DEFAULT_MESSAGE = 'Hello {employeeName}, you have {affectedOrderCount} {product} back orders under your name where {columnName} is {incorrectValue}. Please change it to {correctValue}.{orderDateLine}';
+    const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'orderDateLine'];
     const OPS = [
         ['equals', 'Equals'],
         ['not_equals', 'Does not equal'],
@@ -71,11 +74,11 @@
     function fileAnalysis() {
         const people = pack.people || [];
         const file = pack.file || {};
-        if (!file.rowCount) return '<section class="panel"><h2>Submitted BO file</h2><p class="muted">No Back Order file yet. Upload it on Data push, then open this tab again.</p></section>';
-        return `<section class="panel">
+        if (!file.rowCount) return '<section class="panel br-submit"><h2>Submitted BO file</h2><p class="muted">No Back Order file yet. Upload it on Data push, then open this tab again.</p></section>';
+        return `<section class="panel br-submit">
             <h2>Submitted BO file</h2>
-            <p>${esc(file.fileName || 'Back Order file')} · ${file.rowCount} rows · ${people.length} names</p>
-            <div style="overflow:auto"><table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Rows under this name</th><th>Cars in the file</th></tr></thead><tbody>
+            <p class="muted">${esc(file.fileName || 'Back Order file')} · ${file.rowCount} rows · ${people.length} names. Upload a replacement on Data push, then return here.</p>
+            <div class="br-scroll"><table class="br-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Rows under this name</th><th>Cars in the file</th></tr></thead><tbody>
                 ${people.map((person) => `<tr><td>${esc(person.salesmanName)}</td><td>${esc(person.salesmanId)}</td><td>${person.orders}</td><td>${esc(person.cars || '—')}</td></tr>`).join('') || '<tr><td colspan="4">The file has rows, but no salesman name column was found.</td></tr>'}
             </tbody></table></div>
         </section>`;
@@ -95,8 +98,8 @@
     function ruleRows() {
         const rows = pack.rules.filter((rule) => !q || JSON.stringify(rule).toLowerCase().includes(q));
         if (!rows.length) return '<p class="muted">No rules yet. Save one from the form.</p>';
-        return `<table class="br-table"><thead><tr><th>Rule</th><th>Product</th><th>BO column</th><th>Incorrect</th><th>Correct</th><th>Employees</th><th>Orders</th><th>Status</th><th></th></tr></thead><tbody>
-            ${rows.map((rule) => `<tr>
+        return `<div class="br-scroll br-rules-scroll"><table class="br-table"><thead><tr><th>Rule</th><th>Product</th><th>BO column</th><th>Incorrect</th><th>Correct</th><th>Employees</th><th>Orders</th><th>Status</th><th></th></tr></thead><tbody>
+            ${rows.map((rule) => `<tr class="${rule.archived ? 'is-archived' : (rule.active ? 'is-active' : 'is-inactive')}">
                 <td><b>${esc(rule.name)}</b>${rule.columnMissing ? '<div class="br-flag">Column missing in latest file</div>' : ''}</td>
                 <td>${esc(rule.product || 'All cars')}</td>
                 <td>${esc(rule.column)}</td>
@@ -104,7 +107,7 @@
                 <td>${esc(rule.correctValue || '—')}</td>
                 <td>${rule.affectedEmployees || 0}</td>
                 <td>${rule.affectedOrders || 0}</td>
-                <td>${rule.archived ? 'Archived' : (rule.active ? 'Active' : 'Inactive')}<br>${esc(rule.notificationStatus || 'not_pushed')}</td>
+                <td><span class="br-pill ${rule.archived ? 'arch' : (rule.active ? 'on' : 'off')}">${rule.archived ? 'Archived' : (rule.active ? 'Active' : 'Inactive')}</span><div class="br-sub">${esc(rule.notificationStatus || 'not_pushed')}</div></td>
                 <td class="br-actions">
                     <button type="button" data-open="${esc(rule.id)}">View</button>
                     <button type="button" data-edit="${esc(rule.id)}">Edit</button>
@@ -113,7 +116,7 @@
                     <button type="button" data-archive="${esc(rule.id)}">${rule.archived ? 'Restore' : 'Archive'}</button>
                 </td>
             </tr>`).join('')}
-        </tbody></table>`;
+        </tbody></table></div>`;
     }
     function detailHtml() {
         if (!detail || !detail.rule) return '';
@@ -163,32 +166,53 @@
             </section>
             ${fileAnalysis()}
             ${summaryCards()}
-            <section class="panel">
+            <div class="br-workspace">
+            <section class="panel br-rules-panel">
                 <div class="br-head"><h2>Error rules</h2><input id="br-search" placeholder="Search rules" value="${esc(q)}"></div>
                 ${ruleRows()}
             </section>
-            <section class="panel">
-                <h2>${editing && editing.id ? 'Edit rule' : 'Check the BO file'}</h2>
+            <section class="panel br-editor">
+                <h2>${editing && editing.id ? 'Edit error rule' : 'Add error rule'}</h2>
                 <p class="muted">Choose the car, the column that has the error, the wrong value or values, and the correction. Push sends the message only to employees who have that error under their name.</p>
                 <div class="br-form">
-                    <label>Rule name<input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional"></label>
-                    <label>Car<select id="br-car"><option value="">All cars</option>${(pack.products || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'products', 'product')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
-                    <label>Column with the error<select id="br-column"><option value="">Choose a column</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'columns', 'column')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
-                    <label>Error value or values<input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2027 or Not_Confirmed. Separate several values with commas."></label>
-                    <label>Correction<input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
-                    <label class="wide">Message<textarea id="br-message" rows="3">${esc(selected.message || 'Hello {employeeName}, you have {affectedOrderCount} {product} back orders under your name where {columnName} is {incorrectValue}. Please change it to {correctValue}.{orderDateLine}')}</textarea></label>
-                    <p class="wide" id="br-preview"></p>
-                    <label class="wide">WhatsApp message<textarea id="br-wa" rows="3">${esc(selected.whatsappMessage || '')}</textarea></label>
+                    <label><span>Rule name</span><input id="br-name" value="${esc(selected.name || '')}" placeholder="Optional"></label>
+                    <label><span>Car</span><select id="br-car"><option value="">All cars</option>${(pack.products || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'products', 'product')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label><span>Column with the error</span><select id="br-column"><option value="">Choose a column</option>${(file.headers || []).map((name) => `<option value="${esc(name)}"${picked(selected, 'columns', 'column')[0] === name ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+                    <label><span>Incorrect value or values</span><input id="br-bad" value="${esc((selected.incorrectValues || []).join(', '))}" placeholder="2027 or Not_Confirmed. Separate several with commas."></label>
+                    <label><span>Correct value</span><input id="br-good" value="${esc(selected.correctValue || '')}" placeholder="The value employees should use"></label>
                     <label class="check"><input id="br-active" type="checkbox" ${selected.active === false ? '' : 'checked'}> Active</label>
+                    <div class="br-msg wide">
+                        <h3>Error notification</h3>
+                        <label><span>Message template</span><textarea id="br-message" rows="4">${esc(selected.message || DEFAULT_MESSAGE)}</textarea></label>
+                        <label><span>WhatsApp message</span><textarea id="br-wa" rows="3" placeholder="Optional. Leave blank to use the message template.">${esc(selected.whatsappMessage || '')}</textarea></label>
+                        <label><span>Language</span><select id="br-lang"><option value="en">English</option><option value="ar">Arabic</option></select></label>
+                        <p class="muted">Language only sets the preview direction. It is not saved on the rule.</p>
+                        <div>
+                            <span class="br-label">Available placeholders</span>
+                            <div class="br-chips">${PLACEHOLDERS.map((key) => `<button type="button" data-token="{${key}}">{${key}}</button>`).join('')}</div>
+                        </div>
+                        <div>
+                            <span class="br-label" id="br-preview-caption">Message template</span>
+                            <div class="br-template" id="br-template"></div>
+                        </div>
+                        <div class="br-preview-box">
+                            <div class="br-bubble" id="br-preview"></div>
+                        </div>
+                        <p class="muted">The bubble uses example values so you can read the message. Analyze and Push still fill each employee's real name, order count, and dates.</p>
+                    </div>
                 </div>
                 <div class="br-buttons">
                     <button class="solid" id="br-push" type="button">Push</button>
                     <button id="br-save-run" type="button">Analyze only</button>
+                    <button id="br-show-preview" type="button">Preview message</button>
+                    <button id="br-copy" type="button">Copy message template</button>
+                    <button id="br-reset" type="button">Reset unsaved edits</button>
                     <button id="br-cancel" type="button">Cancel</button>
                 </div>
                 <div class="err" id="br-error"></div>
                 <p id="br-note"></p>
             </section>
+            </div>
             ${detailHtml()}
             <section class="panel">
                 <h2>Alert history</h2>
@@ -218,26 +242,52 @@
         if (row && row.status === 'waiting') return 'Waiting in Message Builder';
         return 'Not pushed';
     }
+    function fillTemplate(template, bag) {
+        return String(template || '').replace(/\{(\w+)\}/g, (all, key) => (bag[key] == null ? all : String(bag[key])));
+    }
+    function exampleBag() {
+        const value = (id) => {
+            const field = document.getElementById(id);
+            return field ? field.value.trim() : '';
+        };
+        return {
+            employeeName: 'Ahmed Al Harbi',
+            product: value('br-car') || 'Land Cruiser',
+            columnName: value('br-column') || 'Model Year',
+            incorrectValue: value('br-bad') || '2027',
+            correctValue: value('br-good') || '2026',
+            affectedOrderCount: '3',
+            orderDateLine: ' Deadline: 01.10.2026.'
+        };
+    }
     function paintPreview() {
-        const box = document.getElementById('br-preview');
-        const field = document.getElementById('br-message');
-        if (!box || !field) return;
-        const people = (detail && detail.rule && detail.rule.current && detail.rule.current.employees) || [];
-        const sample = people.find((item) => item.salesmanId !== 'UNASSIGNED');
-        if (!sample) {
-            box.textContent = 'Analyze the BO file to see how many orders each employee has. {employeeName} and {affectedOrderCount} are filled separately for each person.';
-            return;
-        }
-        const rule = formRule();
-        const text = field.value
-            .replaceAll('{employeeName}', sample.salesmanName)
-            .replaceAll('{product}', rule.product || 'all cars')
-            .replaceAll('{columnName}', rule.column || '')
-            .replaceAll('{incorrectValue}', rule.incorrectValues || 'blank')
-            .replaceAll('{correctValue}', rule.correctValue || '—')
-            .replaceAll('{affectedOrderCount}', String(sample.orders.length))
-            .replaceAll('{orderDateLine}', sample.orders.some((order) => order.orderDate) ? ' Deadline: ' + [...new Set(sample.orders.map((order) => order.orderDate).filter(Boolean))].join(', ') + '.' : '');
-        box.textContent = `BO file example for ${sample.salesmanName}: ${sample.orders.length} found. ${text}`;
+        const bubble = document.getElementById('br-preview');
+        const templateBox = document.getElementById('br-template');
+        const message = document.getElementById('br-message');
+        const wa = document.getElementById('br-wa');
+        const lang = document.getElementById('br-lang');
+        const caption = document.getElementById('br-preview-caption');
+        if (!bubble || !message) return;
+        const usingWhatsApp = !!(wa && wa.value.trim());
+        const source = usingWhatsApp ? wa.value : message.value;
+        if (caption) caption.textContent = usingWhatsApp ? 'WhatsApp message template' : 'Message template';
+        if (templateBox) templateBox.textContent = source;
+        bubble.textContent = fillTemplate(source, exampleBag());
+        const arabic = !!(lang && lang.value === 'ar');
+        bubble.classList.toggle('ar', arabic);
+        message.classList.toggle('ar', arabic);
+        if (wa) wa.classList.toggle('ar', arabic);
+    }
+    function insertToken(token) {
+        const field = document.getElementById(messageTarget) || document.getElementById('br-message');
+        if (!field) return;
+        const start = field.selectionStart == null ? field.value.length : field.selectionStart;
+        const end = field.selectionEnd == null ? start : field.selectionEnd;
+        field.value = field.value.slice(0, start) + token + field.value.slice(end);
+        const caret = start + token.length;
+        field.focus();
+        field.setSelectionRange(caret, caret);
+        paintPreview();
     }
     function bind() {
         ['br-car', 'br-column', 'br-bad', 'br-good'].forEach((id) => {
@@ -247,7 +297,33 @@
         });
         document.getElementById('br-search').addEventListener('input', (event) => { q = event.target.value.trim().toLowerCase(); render(); });
         document.getElementById('br-cancel').addEventListener('click', () => { editing = null; render(); });
-        document.getElementById('br-message').addEventListener('input', paintPreview);
+        ['br-message', 'br-wa'].forEach((id) => {
+            const field = document.getElementById(id);
+            if (!field) return;
+            field.addEventListener('focus', () => { messageTarget = id; });
+            field.addEventListener('input', paintPreview);
+        });
+        const lang = document.getElementById('br-lang');
+        if (lang) lang.addEventListener('change', paintPreview);
+        root.querySelectorAll('[data-token]').forEach((button) => button.addEventListener('click', () => insertToken(button.dataset.token)));
+        document.getElementById('br-show-preview').addEventListener('click', () => {
+            paintPreview();
+            const box = root.querySelector('.br-preview-box');
+            if (box) box.scrollIntoView({ block: 'nearest' });
+        });
+        document.getElementById('br-copy').addEventListener('click', async () => {
+            const field = document.getElementById('br-message');
+            const text = field ? field.value : '';
+            const noteBox = document.getElementById('br-note');
+            try {
+                await navigator.clipboard.writeText(text);
+                if (noteBox) noteBox.textContent = 'Message template copied.';
+            } catch (e) {
+                if (field) { field.focus(); field.select(); }
+                if (noteBox) noteBox.textContent = 'Select the template and copy it manually.';
+            }
+        });
+        document.getElementById('br-reset').addEventListener('click', () => { notice = ''; render(); });
         document.getElementById('br-push').addEventListener('click', () => pushDraft(false));
         document.getElementById('br-save-run').addEventListener('click', () => save(true));
         root.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', () => openRule(button.dataset.open)));

@@ -686,7 +686,9 @@
     }
     function paintMessage() {
         const text = buildMessage();
-        $('msg-preview').textContent = text || 'Select a car and model to generate the message.';
+        const preview = $('msg-preview');
+        preview.textContent = text || 'Select a car and model to generate the message.';
+        preview.classList.toggle('ar', $('msg-lang').value === 'ar' || $('msg-lang').value === 'both');
         const car = $('msg-car').value;
         const img = carImage(car);
         $('msg-preview-car').innerHTML = car ? `${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}<div><strong>Toyota ${esc(car)}</strong></div>` : '';
