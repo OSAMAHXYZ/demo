@@ -582,6 +582,13 @@ function pushedOrderMatches(order, pushed) {
     });
 }
 
+function reconcileLiveOrders(previousOrders, builtOrders) {
+    const previous = previousOrders || [];
+    const built = builtOrders || [];
+    const removed = previous.filter((order) => order && !pushedOrderMatches(order, built));
+    return { orders: built, removed };
+}
+
 function applyQueue(orders) {
     const list = orders.map((order) => ({ ...order, queueNumber: calculateQueueNumber(order, orders) }));
     return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
@@ -1268,13 +1275,14 @@ function attachReservedOrders(app, options) {
         });
         if (!built.ok) return built;
         const previousOrders = previous || loadLive().orders || [];
-        const kept = previousOrders.filter((order) => order && !pushedOrderMatches(order, built.orders));
-        const orders = applyQueue(built.orders.concat(kept));
+        const reconciled = reconcileLiveOrders(previousOrders, built.orders);
+        const removed = reconciled.removed;
+        const orders = applyQueue(reconciled.orders);
         const live = {
             updatedAt: new Date().toISOString(),
             esalesName: names.esalesName || '',
             boName: names.boName || '',
-            report: Object.assign({}, built.report, { keptOrders: kept.length, orderCount: orders.length }),
+            report: Object.assign({}, built.report, { removedOrders: removed.length, keptOrders: 0, orderCount: orders.length }),
             orders
         };
         const previousKeys = new Set(previousOrders.map((order) => order.key));
@@ -1290,10 +1298,14 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, kept ${kept.length}`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
+        }
+        if (removed.length) {
+            const sample = removed.map((order) => order.vin && order.vin !== 'VIN NOT FOUND' ? order.vin : (order.orderNumber || order.key)).filter(Boolean).slice(0, 30);
+            audit(names.req, { user: 'System', role: 'system', action: 'ORDER_REMOVED', entity: 'order', source: 'import', details: `${removed.length} VIN(s) removed because they are not in the latest push${sample.length ? ': ' + sample.join(', ') : ''}` });
         }
         audit(names.req, { user: 'System', role: 'system', action: 'QUEUE_RECALCULATED', entity: 'queue', source: 'import', details: `Queue ranked for ${built.orders.length} orders` });
         notify();
@@ -1723,6 +1735,7 @@ module.exports = {
     calculateQueueNumber,
     getNextThreeOrders,
     buildReservedDataset,
+    reconcileLiveOrders,
     publicOrder,
     attachReservedOrders
 };
