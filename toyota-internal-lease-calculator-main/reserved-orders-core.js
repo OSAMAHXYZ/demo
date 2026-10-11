@@ -914,9 +914,11 @@ function rowsFromGrid(grid) {
         if (/vin|order|payment|advisor|customer/.test(joined)) { headerIdx = r; break; }
     }
     const headers = (source[headerIdx] || []).map((header, index) => cleanText(header) || `Column_${index + 1}`);
+    const whatsappCol = columnIndex('X');
     const rows = source.slice(headerIdx + 1).filter((row) => (row || []).some((cell) => cleanText(cell))).map((row) => {
         const obj = {};
         headers.forEach((header, index) => { obj[header] = row[index] ?? ''; });
+        Object.defineProperty(obj, '__whatsapp', { value: row[whatsappCol] ?? '', enumerable: false });
         return obj;
     });
     return { headers, rows };

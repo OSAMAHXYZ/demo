@@ -43,13 +43,9 @@ function headerKey(value) {
     return fold(value);
 }
 
-function findPhoneHeader(headers) {
-    return (headers || []).find((header) => {
-        const text = headerKey(header).replace(/[._\-/#]/g, ' ').replace(/\s+/g, ' ').trim();
-        if (!text || text.includes('ship')) return false;
-        if (/^(phone|phone no|phone number|mobile|mobile no|mobile number|contact|contact number|contact no|customer phone|customer mobile|tel|telephone|cell|cell phone)$/.test(text)) return true;
-        return text.includes('phone') || text.includes('mobile') || text.includes('جوال') || text.includes('هاتف') || text.includes('موبايل');
-    }) || '';
+function whatsappFromRow(row) {
+    if (!row || !Object.prototype.hasOwnProperty.call(row, '__whatsapp')) return '';
+    return cellString(row.__whatsapp);
 }
 
 function findHeader(headers, aliases) {
@@ -178,7 +174,6 @@ function analyzeTable(table, rule) {
     const yearHeader = findHeader(headers, ['Model Year']);
     const orderDateHeader = mappedHeader(headers, fieldMap.orderDate, ['Order Date']);
     const deadlineHeader = deadlineDateHeader(headers, rule);
-    const phoneHeader = findPhoneHeader(headers);
     const mappingWarnings = [];
     if (fieldMap.orderNumber && !orderHeader) mappingWarnings.push(`Order number column "${fieldMap.orderNumber}" is not in the BO file.`);
     if (fieldMap.orderDate && !orderDateHeader) mappingWarnings.push(`Order date column "${fieldMap.orderDate}" is not in the BO file.`);
@@ -266,15 +261,16 @@ function analyzeTable(table, rule) {
                 orderDate: rowOrderDate,
                 deadlineRaw: rowDeadline,
                 incorrectValue: '',
-                phone: phoneHeader ? cellString(row[phoneHeader]) : '',
+                phone: whatsappFromRow(row),
                 column: '',
                 currentValue: '',
                 correctValue: cellString(rule.correctValue),
                 hits: []
             };
             group.orders.push(order);
-        } else if (!order.phone && phoneHeader) {
-            order.phone = cellString(row[phoneHeader]);
+        } else if (!order.phone) {
+            const nextPhone = whatsappFromRow(row);
+            if (nextPhone) order.phone = nextPhone;
         }
         hits.forEach((hit) => {
             if (order.hits.some((item) => item.column === hit.header)) return;
@@ -831,18 +827,19 @@ function attachBoErrorRules(app, deps) {
         const user = deps.sessionUser(req.query?.token);
         if (!user) return res.status(401).json({ error: 'Sign in again.' });
         const store = loadStore();
-        const phones = new Map();
-        if (typeof deps.loadAnalysisTable === 'function') {
-            const table = deps.loadAnalysisTable() || {};
-            const phoneHeader = findPhoneHeader(table.headers);
-            const orderHeader = findHeader(table.headers, ['Back Order Number', 'BO Number', 'Order Number']);
-            if (phoneHeader && orderHeader) {
-                (table.rows || []).forEach((row) => {
-                    const number = cellString(row[orderHeader]);
-                    const value = cellString(row[phoneHeader]);
-                    if (number && value && !phones.has(number)) phones.set(number, value);
-                });
-            }
+        const table = typeof deps.loadAnalysisTable === 'function' ? (deps.loadAnalysisTable() || {}) : {};
+        const phoneMaps = new Map();
+        function phonesFor(orderHeader) {
+            if (!orderHeader) return new Map();
+            if (phoneMaps.has(orderHeader)) return phoneMaps.get(orderHeader);
+            const map = new Map();
+            (table.rows || []).forEach((row) => {
+                const number = cellString(row[orderHeader]);
+                const value = whatsappFromRow(row);
+                if (number && value && !map.has(number)) map.set(number, value);
+            });
+            phoneMaps.set(orderHeader, map);
+            return map;
         }
         const cards = [];
         store.publications.forEach((publication) => {
@@ -851,6 +848,8 @@ function attachBoErrorRules(app, deps) {
             const latest = rule.current && rule.current.employees;
             const mine = (latest || publication.employees || []).find((item) => employeeCanSee(user, item));
             if (!mine) return;
+            const orderHeader = mappedHeader(table.headers, rule.fieldMap && rule.fieldMap.orderNumber, ['Back Order Number', 'BO Number', 'Order Number']);
+            const phones = phonesFor(orderHeader);
             const key = statusKey(rule.id, mine);
             const state = store.statuses[key] || { status: 'new', at: publication.publishedAt, orders: {} };
             cards.push({
@@ -869,7 +868,7 @@ function attachBoErrorRules(app, deps) {
                     ...order,
                     status: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].status) || 'new',
                     at: (state.orders && state.orders[order.boNumber] && state.orders[order.boNumber].at) || '',
-                    phone: order.phone || phones.get(String(order.boNumber)) || ''
+                    phone: phones.get(cellString(order.boNumber)) || order.phone || ''
                 }))
             });
         });

@@ -729,10 +729,12 @@
         paintMessage();
     }
     function phone(raw) {
-        const digits = String(raw || '').replace(/\D/g, '');
+        let digits = String(raw || '').replace(/\D/g, '');
         if (!digits) return '';
+        if (digits.startsWith('00')) digits = digits.slice(2);
         if (digits.startsWith('0')) return '966' + digits.slice(1);
         if (digits.startsWith('966')) return digits;
+        if (digits.length === 9 && digits.startsWith('5')) return '966' + digits;
         return digits;
     }
 
@@ -923,7 +925,7 @@
                 <span>Correct<b>${esc(row.order.correctValue || row.alert.correctValue || '—')}</b></span>
                 <span>BO date<b>${esc(row.order.orderDate || '—')}</b></span>
                 <span>Saved<b>${esc(when || 'Not confirmed')}</b></span>
-                <span>WhatsApp<b>${esc(phone(row.order.phone) || 'No number in the BO file')}</b></span>
+                <span>WhatsApp<b>${esc(phone(row.order.phone) || 'No number in column X')}</b></span>
             </div>
             <label class="mc-editor"><span>Message</span>
                 <textarea id="mc-message" data-admin-msg="${esc(row.ruleId)}" data-draft-key="${esc(row.key)}" rows="5">${esc(draft)}</textarea>
@@ -958,7 +960,7 @@
             const digits = openWhatsApp(field.value.trim(), row.order.phone);
             mcNotice = digits
                 ? `WhatsApp opened for ${digits}. Mark as sent only after you press Send there.`
-                : 'This order has no phone in the BO file. WhatsApp opened without a number.';
+                : 'This order has no number in column X. WhatsApp opened without a number.';
             if (row.order.status === 'new' || row.order.status === 'viewed') markAlert(row.ruleId, 'in_progress', row.order.boNumber);
             else paintMessageCenter();
         });
