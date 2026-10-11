@@ -11,7 +11,7 @@
     let previewKey = '';
     let lastTest = null;
     const DEFAULT_MESSAGE = 'Hello {employeeName},\n\nYou have {affectedOrderCount} {product} back orders under your name where {conditionText}.\n\nPlease update it to {correctValue} for the affected orders below:\n{orderDateLine}\n\nOnly the orders listed above match this condition.';
-    const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'conditionText', 'orderDate', 'deadline', 'orderDateLine', 'orderLines'];
+    const PLACEHOLDERS = ['employeeName', 'affectedOrderCount', 'product', 'columnName', 'incorrectValue', 'correctValue', 'conditionText', 'orderNumber', 'orderDate', 'deadline', 'orderDateLine', 'orderLines'];
     const OPS = [
         ['equals', 'Equals'],
         ['not_equals', 'Does not equal'],
@@ -79,10 +79,13 @@
         if (!columns.length) return [{ column: '', operator: 'equals', values: [] }];
         return columns.map((column) => ({ column, operator: rule.operator || 'equals', values: rule.incorrectValues || [] }));
     }
-    function columnOptions(selectedName) {
+    function columnOptions(selectedName, blankLabel) {
         const headers = (pack.file && pack.file.headers) || [];
         const names = headers.includes(selectedName) || !selectedName ? headers : headers.concat(selectedName);
-        return `<option value="">Choose a column</option>${names.map((name) => `<option value="${esc(name)}"${name === selectedName ? ' selected' : ''}>${esc(name)}</option>`).join('')}`;
+        return `<option value="">${esc(blankLabel || 'Choose a column')}</option>${names.map((name) => `<option value="${esc(name)}"${name === selectedName ? ' selected' : ''}>${esc(name)}</option>`).join('')}`;
+    }
+    function mapValue(rule, key) {
+        return rule.fieldMap && rule.fieldMap[key] ? rule.fieldMap[key] : '';
     }
     function conditionRow(cond) {
         const op = cond.operator || 'equals';
@@ -135,6 +138,11 @@
             deadlineSource: dateSource(),
             deadlineColumn: dateSource() === 'column' ? (document.getElementById('br-date-column') ? document.getElementById('br-date-column').value : '') : '',
             deadlineDate: dateSource() === 'fixed' ? (document.getElementById('br-date-fixed') ? document.getElementById('br-date-fixed').value : '') : '',
+            fieldMap: {
+                orderNumber: document.getElementById('br-map-order') ? document.getElementById('br-map-order').value : '',
+                orderDate: document.getElementById('br-map-date') ? document.getElementById('br-map-date').value : '',
+                product: document.getElementById('br-map-product') ? document.getElementById('br-map-product').value : ''
+            },
             active: document.getElementById('br-active').checked
         };
     }
@@ -266,6 +274,12 @@
                             <span class="br-label">Available placeholders</span>
                             <div class="br-chips">${PLACEHOLDERS.map((key) => `<button type="button" data-token="{${key}}">{${key}}</button>`).join('')}</div>
                         </div>
+                        <div class="br-maps">
+                            <label><span>Order number column</span><select id="br-map-order">${columnOptions(mapValue(selected, 'orderNumber'), 'Usual order column')}</select></label>
+                            <label><span>Order date column</span><select id="br-map-date">${columnOptions(mapValue(selected, 'orderDate'), 'Usual date column')}</select></label>
+                            <label><span>Product column</span><select id="br-map-product">${columnOptions(mapValue(selected, 'product'), 'Usual product column')}</select></label>
+                        </div>
+                        <p class="muted">Incorrect value uses the error column. Correction uses the correction value. Employee name uses the salesman on the row. Deadline uses the deadline settings. Each order number stays with the date from that same row.</p>
                         <div>
                             <span class="br-label" id="br-preview-caption">Message template</span>
                             <div class="br-template" id="br-template"></div>
@@ -360,29 +374,27 @@
     }
     function realBag(rule, person, orders) {
         const days = [0, 1, 2, 5].includes(Number(rule.deadlineDays)) ? Number(rule.deadlineDays) : 0;
-        const dates = [];
-        (orders || []).forEach((order) => {
-            const raw = String(order.orderDate || '').trim();
-            if (raw && !dates.includes(raw)) dates.push(raw);
-        });
         const deadlines = [];
         if (rule.deadlineSource === 'fixed') {
             const value = shiftClient(rule.deadlineDate, days);
             if (value) deadlines.push(value);
         } else {
             (orders || []).forEach((order) => {
-                const raw = String(order.orderDate || '').trim();
-                if (!raw) return;
+                const raw = String(order.deadlineRaw || '').trim();
+                if (!raw || !parseClientDate(raw)) return;
                 const value = shiftClient(raw, days);
                 if (value && !deadlines.includes(value)) deadlines.push(value);
             });
         }
         const mode = rule.matchMode === 'any' ? 'any' : 'all';
         const described = describeConditions((rule.conditions && rule.conditions.length ? rule.conditions : [{ column: rule.column, operator: rule.operator || 'equals', values: rule.incorrectValues }]).filter((item) => item.column), mode);
+        const column = rule.column || 'Value';
+        const correct = rule.correctValue || '—';
         const lines = (orders || []).map((order) => {
-            const number = order.boNumber || 'No order number';
-            const date = String(order.orderDate || '').trim();
-            return date ? `${number} · ${date}` : `${number} · No date in the BO file`;
+            const number = order.boNumber || 'Order number unavailable';
+            const date = String(order.orderDate || '').trim() || 'Date unavailable';
+            const incorrect = order.incorrectValue || order.currentValue || 'blank';
+            return `- Order ${number} — Order Date: ${date} — ${column}: ${incorrect} → ${correct}`;
         }).join('\n');
         const deadlineText = deadlines.length ? `Deadline: ${deadlines.join(', ')}.` : 'No deadline date in the BO file.';
         const several = Array.isArray(rule.incorrectValues) ? rule.incorrectValues : String(rule.incorrectValues || '').split(/[\n,;|]/).map((item) => item.trim()).filter(Boolean);
@@ -394,7 +406,8 @@
             correctValue: rule.correctValue || '—',
             conditionText: described,
             affectedOrderCount: (orders || []).length,
-            orderDate: dates.join(', ') || 'No date in the BO file',
+            orderNumber: (orders || []).map((order) => order.boNumber || 'Order number unavailable').join('\n'),
+            orderDate: (orders || []).map((order) => String(order.orderDate || '').trim() || 'Date unavailable').join('\n'),
             deadline: deadlines.join(', ') || 'No deadline date',
             orderLines: lines,
             orderDateLine: lines ? `\n${deadlineText}\n${lines}` : `\n${deadlineText}`
@@ -440,6 +453,7 @@
             conditionText: describeConditions(list, mode),
             correctValue: value('br-good') || 'the correction',
             affectedOrderCount: '3',
+            orderNumber: 'Example order',
             orderDate: '01.10.2026',
             deadline,
             orderLines: 'Example order · 01.10.2026',
@@ -478,13 +492,17 @@
         const send = document.getElementById('br-push');
         if (send) send.disabled = !!(data && data.orderCount === 0);
         if (!box || !data) return;
-        const matched = (data.matchedSample || []).map((row) => `<tr><td>${esc(row.boNumber)}</td><td>${esc(row.salesmanName)}</td><td>${esc(row.product)}</td><td>${esc(row.values)}</td></tr>`).join('');
+        const matched = (data.matchedSample || []).map((row) => `<tr><td>${esc(row.salesmanName)}</td><td>${esc(row.boNumber)}</td><td>${esc(row.orderDate || 'Date unavailable')}</td><td>${esc(row.incorrectValue || row.values)}</td><td>${esc(row.product)}</td></tr>`).join('');
         const excluded = (data.excludedSample || []).map((row) => `<tr><td>${esc(row.boNumber)}</td><td>${esc(row.salesmanName)}</td><td>${esc(row.product)}</td><td>${esc(row.reason)}</td></tr>`).join('');
-        box.innerHTML = `<p>${data.orderCount || 0} matching orders · ${data.employeeCount || 0} employees · ${data.excludedCount || 0} rows excluded · ${data.totalRows || 0} rows in the file.</p>
+        const previews = (data.previews || []).map((item) => `<article class="br-preview-card"><b>${esc(item.salesmanName)} · ${esc(item.salesmanId)}</b><div class="br-bubble">${esc(item.message)}</div></article>`).join('');
+        const warnings = (data.mappingWarnings || []).map((item) => `<p class="err">${esc(item)}</p>`).join('');
+        box.innerHTML = `${warnings}<p>${data.orderCount || 0} matching orders · ${data.employeeCount || 0} employees · ${data.excludedCount || 0} rows excluded · ${data.totalRows || 0} rows in the file. This test does not send a message.</p>
             <p>Condition: ${esc(data.conditionText || '')}</p>
             ${data.orderCount ? '' : '<p class="err">No rows match. Send stays off until a test finds at least one order.</p>'}
             <h3>Matching records</h3>
-            <table class="br-table"><thead><tr><th>Order</th><th>Employee</th><th>Car</th><th>Values</th></tr></thead><tbody>${matched || '<tr><td colspan="4">No matching rows.</td></tr>'}</tbody></table>
+            <table class="br-table"><thead><tr><th>Employee</th><th>Order number</th><th>Order date</th><th>Incorrect value</th><th>Product</th></tr></thead><tbody>${matched || '<tr><td colspan="5">No matching rows.</td></tr>'}</tbody></table>
+            <h3>Rendered messages</h3>
+            ${previews || '<p class="muted">No employee message to preview.</p>'}
             <h3>Excluded records</h3>
             <table class="br-table"><thead><tr><th>Order</th><th>Employee</th><th>Car</th><th>Why excluded</th></tr></thead><tbody>${excluded || '<tr><td colspan="4">No excluded sample.</td></tr>'}</tbody></table>`;
     }
@@ -530,10 +548,13 @@
         paintPreview();
     }
     function bind() {
-        ['br-good', 'br-deadline', 'br-date-source', 'br-date-column', 'br-date-fixed', 'br-match'].forEach((id) => {
+        ['br-good', 'br-deadline', 'br-date-source', 'br-date-column', 'br-date-fixed', 'br-match', 'br-map-order', 'br-map-date', 'br-map-product'].forEach((id) => {
             const field = document.getElementById(id);
             if (field) field.addEventListener('input', paintPreview);
-            if (field) field.addEventListener('change', paintPreview);
+            if (field) field.addEventListener('change', () => {
+                if (id.indexOf('br-map') === 0) lastTest = null;
+                paintPreview();
+            });
         });
         const dateSourceField = document.getElementById('br-date-source');
         if (dateSourceField) dateSourceField.addEventListener('change', () => {

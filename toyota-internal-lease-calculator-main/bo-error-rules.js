@@ -136,6 +136,29 @@ function describeRule(rule) {
     return list.map(describeCondition).join(ruleMatchMode(rule) === 'any' ? ' or ' : ' and ');
 }
 
+function cleanFieldMap(raw) {
+    const map = raw && raw.fieldMap && typeof raw.fieldMap === 'object' ? raw.fieldMap : {};
+    return {
+        orderNumber: cellString(map.orderNumber),
+        orderDate: cellString(map.orderDate),
+        product: cellString(map.product)
+    };
+}
+
+function mappedHeader(headers, chosen, aliases) {
+    const named = cellString(chosen);
+    if (named) return findHeader(headers, [named]) || '';
+    return findHeader(headers, aliases);
+}
+
+function displayOrderDate(value) {
+    const text = cellString(value);
+    if (!text) return 'Date unavailable';
+    const date = parseBoDate(text);
+    if (!date || Number.isNaN(date.getTime())) return 'Date unavailable';
+    return formatBoDate(date);
+}
+
 function chosenList(rule, plural, single) {
     if (Array.isArray(rule && rule[plural]) && rule[plural].length) return rule[plural].map(cellString).filter(Boolean);
     return cellString(rule && rule[single]).split(',').map((item) => item.trim()).filter(Boolean);
@@ -147,13 +170,19 @@ function analyzeTable(table, rule) {
     const conditions = ruleConditions(rule).map((item) => ({ ...item, header: findHeader(headers, [item.column]) }));
     const missingColumns = conditions.filter((item) => !item.header).map((item) => item.column);
     const mode = ruleMatchMode(rule);
-    const productHeader = findHeader(headers, ['Product', 'Car', 'Vehicle', 'Model']);
+    const fieldMap = cleanFieldMap(rule);
+    const productHeader = mappedHeader(headers, fieldMap.product, ['Product', 'Car', 'Vehicle', 'Model']);
     const salesmanIdHeader = findHeader(headers, ['Salesman Id', 'Salesman ID', 'SalesmanID']);
     const salesmanNameHeader = findHeader(headers, ['Salesman Name', 'Salesman']);
-    const orderHeader = findHeader(headers, ['Back Order Number', 'BO Number', 'Order Number']);
+    const orderHeader = mappedHeader(headers, fieldMap.orderNumber, ['Back Order Number', 'BO Number', 'Order Number']);
     const yearHeader = findHeader(headers, ['Model Year']);
-    const dateHeader = deadlineDateHeader(headers, rule);
+    const orderDateHeader = mappedHeader(headers, fieldMap.orderDate, ['Order Date']);
+    const deadlineHeader = deadlineDateHeader(headers, rule);
     const phoneHeader = findPhoneHeader(headers);
+    const mappingWarnings = [];
+    if (fieldMap.orderNumber && !orderHeader) mappingWarnings.push(`Order number column "${fieldMap.orderNumber}" is not in the BO file.`);
+    if (fieldMap.orderDate && !orderDateHeader) mappingWarnings.push(`Order date column "${fieldMap.orderDate}" is not in the BO file.`);
+    if (fieldMap.product && !productHeader) mappingWarnings.push(`Product column "${fieldMap.product}" is not in the BO file.`);
     const empty = {
         ok: false,
         columnMissing: true,
@@ -166,7 +195,8 @@ function analyzeTable(table, rule) {
         excludedCount: rows.length,
         matchedSample: [],
         excludedSample: [],
-        conditionText: describeRule(rule)
+        conditionText: describeRule(rule),
+        mappingWarnings
     };
     if (!conditions.length || missingColumns.length === conditions.length) return empty;
     const wantedProducts = chosenList(rule, 'products', 'product').map(fold).filter(Boolean);
@@ -179,7 +209,9 @@ function analyzeTable(table, rule) {
         const product = cellString(productHeader ? row[productHeader] : '');
         const salesmanId = cellString(salesmanIdHeader ? row[salesmanIdHeader] : '') || 'UNASSIGNED';
         const salesmanName = cellString(salesmanNameHeader ? row[salesmanNameHeader] : '') || 'Unassigned';
-        const boNumber = cellString(orderHeader ? row[orderHeader] : '') || '—';
+        const boNumber = cellString(orderHeader ? row[orderHeader] : '') || 'Order number unavailable';
+        const rowOrderDate = displayOrderDate(orderDateHeader ? row[orderDateHeader] : '');
+        const rowDeadline = deadlineHeader ? cellString(row[deadlineHeader]) : '';
         let carFail = '';
         if (wantedProducts.length && productHeader) {
             const foldedProduct = fold(product);
@@ -214,8 +246,10 @@ function analyzeTable(table, rule) {
         if (matchedSample.length < 8 && !matchedSample.some((item) => item.boNumber === boNumber)) {
             matchedSample.push({
                 boNumber,
+                orderDate: rowOrderDate,
                 product,
                 salesmanName,
+                incorrectValue: hits.map((item) => item.value || 'blank').join(', '),
                 values: hits.map((item) => `${item.header}: ${item.value || 'blank'}`).join('; ')
             });
         }
@@ -229,7 +263,9 @@ function analyzeTable(table, rule) {
                 boNumber,
                 product,
                 modelYear: cellString(yearHeader ? row[yearHeader] : ''),
-                orderDate: shiftDateText(dateHeader ? row[dateHeader] : '', 0),
+                orderDate: rowOrderDate,
+                deadlineRaw: rowDeadline,
+                incorrectValue: '',
                 phone: phoneHeader ? cellString(row[phoneHeader]) : '',
                 column: '',
                 currentValue: '',
@@ -246,6 +282,7 @@ function analyzeTable(table, rule) {
         });
         order.column = order.hits.map((item) => item.column).join(', ');
         order.currentValue = order.hits.map((item) => `${item.column}: ${item.currentValue}`).join('; ');
+        order.incorrectValue = order.hits.map((item) => item.currentValue || 'blank').join(', ');
     });
     const employees = Array.from(groups.values()).sort((a, b) => b.orders.length - a.orders.length || a.salesmanName.localeCompare(b.salesmanName));
     employees.forEach((person) => person.orders.forEach((order) => { delete order.hits; }));
@@ -262,7 +299,8 @@ function analyzeTable(table, rule) {
         excludedCount,
         matchedSample,
         excludedSample,
-        conditionText: describeRule(rule)
+        conditionText: describeRule(rule),
+        mappingWarnings
     };
 }
 
@@ -319,19 +357,22 @@ function deadlineDateHeader(headers, rule) {
 function uniqueDates(orders, days) {
     const seen = [];
     (orders || []).forEach((order) => {
-        const raw = cellString(order.orderDate);
-        if (!raw) return;
+        const raw = cellString(order.deadlineRaw != null ? order.deadlineRaw : '');
+        if (!raw || !parseBoDate(raw)) return;
         const value = shiftDateText(raw, days);
         if (value && !seen.includes(value)) seen.push(value);
     });
     return seen;
 }
 
-function orderRecordLines(orders) {
+function orderRecordLines(orders, rule) {
+    const column = cellString(rule && rule.column) || 'Value';
+    const correct = cellString(rule && rule.correctValue) || '—';
     return (orders || []).map((order) => {
-        const number = cellString(order.boNumber) || 'No order number';
-        const date = cellString(order.orderDate);
-        return date ? `${number} · ${date}` : `${number} · No date in the BO file`;
+        const number = cellString(order.boNumber) || 'Order number unavailable';
+        const date = cellString(order.orderDate) || 'Date unavailable';
+        const incorrect = cellString(order.incorrectValue) || cellString(order.currentValue) || 'blank';
+        return `- Order ${number} — Order Date: ${date} — ${column}: ${incorrect} → ${correct}`;
     }).join('\n');
 }
 
@@ -344,19 +385,27 @@ function fixedDeadline(rule, days) {
 
 function messageBag(rule, person, orders) {
     const days = deadlineDays(rule);
-    const dates = uniqueDates(orders, 0);
     const deadlines = rule && rule.deadlineSource === 'fixed' ? fixedDeadline(rule, days) : uniqueDates(orders, days);
-    const lines = orderRecordLines(orders);
+    const lines = orderRecordLines(orders, rule);
     const deadlineText = deadlines.length ? `Deadline: ${deadlines.join(', ')}.` : 'No deadline date in the BO file.';
+    const products = [];
+    const incorrects = [];
+    (orders || []).forEach((order) => {
+        const name = cellString(order.product);
+        const wrong = cellString(order.incorrectValue);
+        if (name && !products.includes(name)) products.push(name);
+        if (wrong && !incorrects.includes(wrong)) incorrects.push(wrong);
+    });
     return {
         employeeName: person.salesmanName || person.name || '',
-        product: rule.product || 'all cars',
+        product: products.join(', ') || rule.product || 'all cars',
         columnName: rule.column,
-        incorrectValue: (rule.incorrectValues || []).join(', ') || 'blank',
+        incorrectValue: incorrects.join(', ') || (rule.incorrectValues || []).join(', ') || 'blank',
         correctValue: rule.correctValue || '—',
         conditionText: describeRule(rule),
         affectedOrderCount: (orders || []).length,
-        orderDate: dates.join(', ') || 'No date in the BO file',
+        orderNumber: (orders || []).map((order) => cellString(order.boNumber) || 'Order number unavailable').join('\n'),
+        orderDate: (orders || []).map((order) => cellString(order.orderDate) || 'Date unavailable').join('\n'),
         deadline: deadlines.join(', ') || 'No deadline date',
         orderLines: lines,
         orderDateLine: lines ? `\n${deadlineText}\n${lines}` : `\n${deadlineText}`
@@ -409,6 +458,7 @@ function attachBoErrorRules(app, deps) {
             deadlineSource: raw.deadlineSource === 'fixed' ? 'fixed' : 'column',
             deadlineColumn: raw.deadlineSource === 'fixed' ? '' : cellString(raw.deadlineColumn),
             deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(cellString(raw.deadlineDate)) ? cellString(raw.deadlineDate) : '',
+            fieldMap: cleanFieldMap(raw),
             active: raw.active !== false,
             archived: !!(previous && previous.archived),
             createdAt: (previous && previous.createdAt) || now,
@@ -631,7 +681,20 @@ function attachBoErrorRules(app, deps) {
             matchedSample: result.matchedSample,
             excludedSample: result.excludedSample,
             columnMissing: result.columnMissing,
-            missingColumns: result.missingColumns
+            missingColumns: result.missingColumns,
+            mappingWarnings: result.mappingWarnings || [],
+            previews: (result.employees || []).filter((item) => item.salesmanId !== 'UNASSIGNED').slice(0, 8).map((person) => ({
+                salesmanId: person.salesmanId,
+                salesmanName: person.salesmanName,
+                orders: (person.orders || []).map((order) => ({
+                    boNumber: order.boNumber,
+                    orderDate: order.orderDate,
+                    product: order.product,
+                    incorrectValue: order.incorrectValue,
+                    correctValue: order.correctValue
+                })),
+                message: fillMessage(rule.message, messageBag(rule, person, person.orders))
+            }))
         });
     });
 
