@@ -767,6 +767,7 @@
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
         if (name === 'inbox') paintMyAlerts();
+        if (name === 'marketing') loadMyMarketing();
     }
     let marketingHit = null;
     function paintMarketing(order) {
@@ -789,6 +790,7 @@
         const query = $('marketing-order').value.trim();
         marketingHit = null;
         paintMarketing(null);
+        note.classList.remove('is-thanks', 'is-cancel');
         note.textContent = 'Checking the BO file…';
         const res = await fetch('/api/reserved-orders/marketing/lookup?token=' + encodeURIComponent(session.token) + '&q=' + encodeURIComponent(query));
         const data = await res.json().catch(() => ({}));
@@ -812,7 +814,74 @@
         const data = await res.json().catch(() => ({}));
         if (res.status === 401) return endSession('logout');
         touch();
-        note.textContent = res.ok ? `Sent to admin. ${data.request && data.request.advisorName ? data.request.advisorName + ' · ' : ''}${marketingHit.orderNumber}` : (data.error || 'Could not send this order.');
+        if (!res.ok) {
+            note.classList.remove('is-thanks');
+            note.textContent = data.error || 'Could not send this order.';
+            return;
+        }
+        const sentNumber = marketingHit.orderNumber;
+        marketingHit = null;
+        const input = $('marketing-order');
+        if (input) input.value = '';
+        const box = $('marketing-result');
+        if (box) box.innerHTML = `<article class="marketing-card marketing-thanks"><h2>Thank you</h2><p>Order ${esc(sentNumber)} was sent to admin. Enter another order number.</p></article>`;
+        note.classList.add('is-thanks');
+        note.textContent = `Thank you. Order ${sentNumber} was sent to admin. You can enter another order number.`;
+        loadMyMarketing();
+    }
+    function paintMyMarketing(requests) {
+        const list = $('marketing-sent-list');
+        if (!list) return;
+        const rows = Array.isArray(requests) ? requests : [];
+        list.innerHTML = rows.length
+            ? rows.map((item) => {
+                const fields = (item.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b title="${esc(field.value)}">${esc(field.value)}</b></div>`).join('');
+                const cancelled = item.cancelled === true;
+                return `<article class="marketing-card${cancelled ? ' is-cancelled' : ''}">
+                    <h2>Order ${esc(item.orderNumber)}</h2>
+                    <p class="marketing-sent-meta">Sent ${esc(item.display || item.at || '—')}${item.product ? ' · ' + esc(item.product) : ''}${cancelled ? `<span class="marketing-cancel-label">Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}</p>
+                    <div class="marketing-fields">${fields || '<div><span>BO file</span><b>No other values saved for this order</b></div>'}</div>
+                    ${cancelled ? '' : `<button class="ghost" type="button" data-cancel="${esc(item.id)}" data-order="${esc(item.orderNumber)}">Cancel</button>`}
+                </article>`;
+            }).join('')
+            : '<p class="marketing-note">You have not sent any orders yet.</p>';
+    }
+    async function loadMyMarketing() {
+        const session = readSession();
+        const list = $('marketing-sent-list');
+        if (!session || !list) return;
+        const res = await fetch('/api/reserved-orders/marketing/mine?token=' + encodeURIComponent(session.token));
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) return endSession('logout');
+        if (!res.ok) return;
+        paintMyMarketing(data.requests || []);
+    }
+    async function cancelMarketing(id, orderNumber) {
+        const session = readSession();
+        if (!session || (!id && !orderNumber)) return;
+        const note = $('marketing-note');
+        const res = await fetch('/api/reserved-orders/marketing/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: session.token, id, orderNumber })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) return endSession('logout');
+        touch();
+        if (!res.ok) {
+            if (note) {
+                note.classList.remove('is-thanks', 'is-cancel');
+                note.textContent = data.error || 'Could not cancel this order.';
+            }
+            loadMyMarketing();
+            return;
+        }
+        if (note) {
+            note.classList.remove('is-thanks');
+            note.classList.add('is-cancel');
+            note.textContent = `Order ${orderNumber || ''} was cancelled. Admin will see it as cancelled.`;
+        }
+        loadMyMarketing();
     }
     const togglePass = $('toggle-pass');
     if (togglePass) togglePass.addEventListener('click', () => {
@@ -882,11 +951,20 @@
     });
     document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
     if ($('marketing-form')) $('marketing-form').addEventListener('submit', checkMarketing);
+    if ($('marketing-sent-list')) $('marketing-sent-list').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-cancel]');
+        if (!button || button.disabled) return;
+        button.disabled = true;
+        cancelMarketing(button.dataset.cancel, button.dataset.order);
+    });
     if ($('marketing-order')) $('marketing-order').addEventListener('input', () => {
         marketingHit = null;
         paintMarketing(null);
         const note = $('marketing-note');
-        if (note) note.textContent = 'Enter the order number. If it is in the BO file, you can send it to admin.';
+        if (note) {
+            note.classList.remove('is-thanks', 'is-cancel');
+            note.textContent = 'Enter the order number. If it is in the BO file, you can send it to admin.';
+        }
     });
     if ($('lookup-form')) $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); lookup($('lookup-q').value.trim()); });
     if ($('vehicles')) $('vehicles').addEventListener('click', (event) => { const button = event.target.closest('.vehicle'); if (button) showVehicle(button); });

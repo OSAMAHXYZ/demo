@@ -231,8 +231,20 @@
         const body = $('marketing-rows');
         if (!body) return;
         body.innerHTML = marketingRequests.length
-            ? marketingRequests.map((item) => `<tr><td>${esc(item.orderNumber)}</td><td>${esc(item.advisorName)}</td><td>${esc(item.employeeNumber)}</td><td>${esc(item.product || '—')}</td><td>${esc(item.display || item.at || '')}</td></tr>`).join('')
-            : '<tr><td colspan="5">No marketing orders sent yet.</td></tr>';
+            ? marketingRequests.map((item) => {
+                const fields = (item.fields || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
+                return `<article class="mkt-card${item.cancelled ? ' is-cancelled' : ''}">
+                    <header>
+                        <b>Order ${esc(item.orderNumber)}</b>
+                        ${item.cancelled ? `<span class="mkt-cancel">Cancelled${item.cancelledDisplay ? ' ' + esc(item.cancelledDisplay) : ''}</span>` : ''}
+                        <span>Advisor ${esc(item.advisorName || '—')}</span>
+                        <span>Employee ID ${esc(item.employeeNumber || '—')}</span>
+                        <span>Sent ${esc(item.display || item.at || '—')}</span>
+                    </header>
+                    <div class="mkt-fields">${fields || '<div><span>BO file</span><b>No other values on this row</b></div>'}</div>
+                </article>`;
+            }).join('')
+            : '<p class="empty">No marketing orders sent yet.</p>';
     }
     function renderAll() { renderOverview(); renderOrders(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); }
 

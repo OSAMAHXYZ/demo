@@ -1077,14 +1077,14 @@ function attachReservedOrders(app, options) {
         const index = folded.findIndex((name) => /(back\s*order(\s*number|\s*no)?|\bbo\s*(number|no)\b|order\s*(number|no)|رقم الطلب)/.test(name) && !/date/.test(name));
         return index >= 0 ? list[index] : '';
     }
-    function marketingOrder(query) {
+    function marketingOrder(query, table) {
         const token = cleanText(query).replace(/\s+/g, '').toLowerCase();
         if (!token) return null;
-        const table = loadBoTable();
-        const headers = table.headers || [];
+        const source = table || loadBoTable();
+        const headers = source.headers || [];
         const orderHeader = marketingOrderHeader(headers);
         if (!orderHeader) return { missingColumn: true };
-        const row = (table.rows || []).find((item) => cleanText(item[orderHeader]).replace(/\s+/g, '').toLowerCase() === token);
+        const row = (source.rows || []).find((item) => cleanText(item[orderHeader]).replace(/\s+/g, '').toLowerCase() === token);
         if (!row) return null;
         const fields = [];
         headers.forEach((header) => {
@@ -1092,13 +1092,13 @@ function attachReservedOrders(app, options) {
             if (!label) return;
             const value = cleanText(row[header]);
             if (!value) return;
-            fields.push({ label, value: value.slice(0, 180) });
+            fields.push({ label, value: value.slice(0, 2000) });
         });
         const productHeader = headers.find((header) => /^product$/i.test(cleanText(header))) || headers.find((header) => /product|vehicle/i.test(cleanText(header)) && !/year/i.test(cleanText(header)));
         return {
             orderNumber: cleanText(row[orderHeader]),
             product: productHeader ? cleanText(row[productHeader]) : '',
-            fields: fields.slice(0, 36)
+            fields
         };
     }
     function findPushedRow(query) {
@@ -1557,6 +1557,28 @@ function attachReservedOrders(app, options) {
         audit(req, { user: 'Admin', role: 'admin', action, entity: 'employee', oldValue, newValue: `${name} / ${id} / ${role} / ${active ? 'active' : 'inactive'}`, source: 'admin' });
         res.json({ ok: true, staff: staff.map(publicStaff) });
     });
+    function publicMarketing(item, live) {
+        let fields = Array.isArray(item.fields) ? item.fields : [];
+        if (!fields.length && live && item.orderNumber) {
+            const found = marketingOrder(item.orderNumber, live);
+            if (found && !found.missingColumn && Array.isArray(found.fields)) fields = found.fields;
+        }
+        return {
+            orderNumber: item.orderNumber || '',
+            advisorName: item.advisorName || '',
+            employeeNumber: item.employeeNumber || '',
+            product: item.product || '',
+            at: item.at || '',
+            display: item.display || '',
+            id: item.id || '',
+            cancelled: item.cancelled === true,
+            cancelledDisplay: item.cancelledDisplay || '',
+            fields: fields.map((field) => ({
+                label: cleanText(field && field.label).slice(0, 120),
+                value: cleanText(field && field.value).slice(0, 2000)
+            })).filter((field) => field.label && field.value)
+        };
+    }
     app.get('/api/reserved-orders/marketing/lookup', (req, res) => {
         const user = sessionUser(req.query?.token);
         if (!user) return res.status(401).json({ error: 'Sign in again.' });
@@ -1585,8 +1607,12 @@ function attachReservedOrders(app, options) {
         entry.employeeNumber = user.employeeNumber;
         entry.recordId = user.recordId;
         entry.product = found.product || '';
+        entry.fields = found.fields || [];
         entry.at = now.toISOString();
         entry.display = displayStamp(now);
+        entry.cancelled = false;
+        entry.cancelledAt = '';
+        entry.cancelledDisplay = '';
         store.push(entry);
         saveMarketing(store.slice(-500));
         audit(req, {
@@ -1613,17 +1639,53 @@ function attachReservedOrders(app, options) {
             }
         });
     });
+    app.post('/api/reserved-orders/marketing/cancel', (req, res) => {
+        const user = sessionUser(req.body?.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const id = cleanText(req.body?.id);
+        const orderToken = cleanText(req.body?.orderNumber).replace(/\s+/g, '').toLowerCase();
+        if (!id && !orderToken) return res.status(400).json({ error: 'Choose an order to cancel.' });
+        const store = loadMarketing();
+        const index = store.findIndex((item) => {
+            if (item.recordId !== user.recordId) return false;
+            if (id && item.id === id) return true;
+            return !id && orderToken && String(item.orderNumber || '').replace(/\s+/g, '').toLowerCase() === orderToken;
+        });
+        if (index < 0) return res.status(404).json({ error: 'That order is not in your sent list.' });
+        const entry = store[index];
+        if (entry.cancelled !== true) {
+            const now = new Date();
+            entry.cancelled = true;
+            entry.cancelledAt = now.toISOString();
+            entry.cancelledDisplay = displayStamp(now);
+            saveMarketing(store);
+            audit(req, {
+                user: user.name,
+                employeeNumber: user.employeeNumber,
+                recordId: user.recordId,
+                role: user.role,
+                action: 'MARKETING_CANCELLED',
+                entity: 'marketing',
+                orderNumber: entry.orderNumber,
+                source: 'employee',
+                details: `${user.name} cancelled order ${entry.orderNumber}`
+            });
+            notify();
+        }
+        res.json({ ok: true, request: publicMarketing(entry, null) });
+    });
+    app.get('/api/reserved-orders/marketing/mine', (req, res) => {
+        const user = sessionUser(req.query?.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const mine = loadMarketing().filter((item) => item.recordId === user.recordId).reverse();
+        const live = mine.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+        res.json({ requests: mine.map((item) => publicMarketing(item, live)) });
+    });
     app.get('/api/reserved-orders/marketing', (req, res) => {
         if (!requireAdmin(req, res)) return;
-        const requests = loadMarketing().slice().reverse().map((item) => ({
-            orderNumber: item.orderNumber || '',
-            advisorName: item.advisorName || '',
-            employeeNumber: item.employeeNumber || '',
-            product: item.product || '',
-            at: item.at || '',
-            display: item.display || ''
-        }));
-        res.json({ requests });
+        const store = loadMarketing().slice().reverse();
+        const live = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+        res.json({ requests: store.map((item) => publicMarketing(item, live)) });
     });
 
     return {

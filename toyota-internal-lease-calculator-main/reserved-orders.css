@@ -306,6 +306,28 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 #app .marketing-fields div { background: #0e1628; border-radius: 10px; padding: 8px 10px; min-width: 0; }
 #app .marketing-fields span { display: block; color: #8ea0bb; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
 #app .marketing-fields b { display: block; margin-top: 2px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#app .marketing-note.is-thanks { color: #86efac; font-weight: 700; }
+#app .marketing-note.is-cancel { color: #fecaca; font-weight: 700; }
+#app .marketing-thanks { border-color: rgba(16, 185, 129, 0.55); }
+#app .marketing-thanks p { margin: 0; color: #d1fae5; }
+#app .marketing-sent { display: grid; gap: 10px; }
+#app .marketing-sent h2 { margin: 8px 0 0; font-size: 16px; color: #f8fbff; }
+#app .marketing-sent-meta { margin: 0; color: #93a0b8; font-size: 12px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#app .marketing-sent .marketing-fields b { white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere; }
+#app .marketing-card.is-cancelled { border-color: #EB0A1E; }
+#app .marketing-cancel-label { color: #fff; background: #EB0A1E; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+#app .marketing-card .ghost { justify-self: start; }
+#admin-app .mkt-card.is-cancelled { border-color: #EB0A1E; background: #fff5f5; }
+#admin-app .mkt-cancel { background: #EB0A1E; color: #fff; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+#admin-app .marketing-admin { overflow: auto; }
+#admin-app .mkt-card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 12px; background: #fff; }
+#admin-app .mkt-card header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 10px; }
+#admin-app .mkt-card header b { font-size: 16px; }
+#admin-app .mkt-card header span { color: var(--muted); font-size: 13px; font-weight: 650; }
+#admin-app .mkt-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+#admin-app .mkt-fields div { background: #f6f7fa; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+#admin-app .mkt-fields span { display: block; color: #667085; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+#admin-app .mkt-fields b { display: block; margin-top: 2px; font-size: 13px; font-weight: 650; white-space: normal; overflow-wrap: anywhere; }
 #app .mc-center { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 #app .mc-head p { margin: 0; color: #93a0b8; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; }
 #app .mc-head h1 { margin: 2px 0 0; color: #f8fbff; font-size: 28px; letter-spacing: -0.03em; }
