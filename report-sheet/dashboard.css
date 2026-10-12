@@ -12540,3 +12540,123 @@ body.alloc-mode .badge.na { background: rgba(148, 163, 184, 0.16) !important; co
   body.alloc-mode .act-filter-bar { flex-wrap: wrap; overflow: visible; }
   body.alloc-mode #bas-kpis.act-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+body.rv-mode #panel-reservedvehicles {
+  position: fixed;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: block !important;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px 12px;
+  background:
+    radial-gradient(900px 420px at 8% -10%, rgba(59, 130, 246, 0.16), transparent 55%),
+    radial-gradient(700px 360px at 100% 0%, rgba(235, 10, 30, 0.08), transparent 50%),
+    #060a12;
+}
+body.rv-mode.sidebar-collapsed #panel-reservedvehicles { left: var(--sidebar-w-collapsed); }
+body.live-app.toyota-theme.rv-mode.sidebar-collapsed .app-sidebar { width: var(--sidebar-w-collapsed) !important; }
+body.rv-mode .app-content,
+body.rv-mode #dashboard,
+body.rv-mode #dashboard.show {
+  animation: none !important;
+  transform: none !important;
+}
+body.rv-mode .rv-dash { gap: 8px; color: #e8eef7; min-height: 0; }
+body.rv-mode .rv-title { color: #fff; font-size: 18px; }
+body.rv-mode .rv-sub,
+body.rv-mode .rv-board-h p,
+body.rv-mode .rv-updated { color: #8d9bb0; }
+body.rv-mode .rv-head,
+body.rv-mode .rv-controls,
+body.rv-mode .rv-board-card,
+body.rv-mode .rv-audit {
+  background: #0c1422;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+body.rv-mode .rv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+body.rv-mode .rv-head-actions,
+body.rv-mode .rv-controls { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+body.rv-mode .rv-controls label { display: flex; flex-direction: column; gap: 3px; color: #8d9bb0; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+body.rv-mode .rv-head input,
+body.rv-mode .rv-controls input,
+body.rv-mode .rv-controls select,
+body.rv-mode .rv-board-card input {
+  height: 32px;
+  background: #101a2b !important;
+  color: #e8eef7 !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  border-radius: 8px;
+}
+body.rv-mode #rv-search { min-width: 220px; }
+body.rv-mode #rv-kpis { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+body.rv-mode #rv-kpis .bo-kpi {
+  background: #0c1422 !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  border-left: 2px solid #3b82f6 !important;
+  border-radius: 12px;
+  color: #e8eef7 !important;
+}
+body.rv-mode #rv-kpis .val { color: #fff !important; font-size: 26px !important; }
+body.rv-mode #rv-kpis .lab { color: #8d9bb0 !important; }
+body.rv-mode .rv-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(180px, 0.42fr) minmax(260px, 0.78fr);
+  gap: 8px;
+  min-width: 0;
+}
+body.rv-mode .rv-board-card { min-width: 0; max-height: 320px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+body.rv-mode .rv-live-table,
+body.rv-mode .rv-table-wrap,
+body.rv-mode .rv-mkt-list,
+body.rv-mode .rv-history-list,
+body.rv-mode .rv-audit-table {
+  min-height: 0;
+  overflow: auto;
+  background: #0b1220 !important;
+  color: #e8eef7;
+}
+body.rv-mode .rv-table-wrap,
+body.rv-mode .rv-live-table,
+body.rv-mode .rv-mkt-list,
+body.rv-mode .rv-history-list { max-height: 230px; }
+body.rv-mode .rv-audit-table { max-height: 180px; }
+body.rv-mode #rv-dash.is-snapshot .rv-table-wrap { display: none !important; }
+body.rv-mode #rv-dash:not(.is-snapshot) #rv-live-table:empty { display: none; }
+body.rv-mode .rv-live-table table,
+body.rv-mode .rv-history-list table,
+body.rv-mode .rv-audit-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+body.live-app.toyota-theme.rv-mode .rv-live-table th,
+body.live-app.toyota-theme.rv-mode .rv-history-list th,
+body.live-app.toyota-theme.rv-mode .rv-audit-table th,
+body.live-app.toyota-theme.rv-mode .rv-table th {
+  background: #101a2b !important;
+  color: #8d9bb0 !important;
+}
+body.live-app.toyota-theme.rv-mode .rv-live-table td,
+body.live-app.toyota-theme.rv-mode .rv-history-list td,
+body.live-app.toyota-theme.rv-mode .rv-audit-table td,
+body.live-app.toyota-theme.rv-mode .rv-table td {
+  background: #0c1422 !important;
+  color: #e8eef7 !important;
+}
+body.rv-mode .rv-move-new { color: #34d399; font-weight: 800; }
+body.rv-mode .rv-move-reassigned { color: #c4b5fd; font-weight: 800; }
+body.rv-mode .rv-move-removed { color: #ff3b4e; font-weight: 800; }
+body.rv-mode .rv-move-unchanged { color: #8d9bb0; font-weight: 800; }
+body.rv-mode .rv-move-ambiguous { color: #f59e0b; font-weight: 800; }
+body.rv-mode .rv-live-dot { color: #34d399; font-size: 12px; font-weight: 800; }
+body.rv-mode .rv-banner { margin: 0; background: #101a2b; color: #e8eef7; border-radius: 8px; padding: 8px 10px; }
+body.rv-mode .rv-pager { display: flex; justify-content: flex-end; gap: 8px; align-items: center; color: #8d9bb0; font-size: 12px; padding-top: 4px; }
+body.rv-mode #rv-refresh,
+body.rv-mode #rv-compare { height: 32px; }
+@media (max-width: 1100px) {
+  body.rv-mode #panel-reservedvehicles { left: 0; }
+  body.rv-mode .rv-board,
+  body.rv-mode #rv-kpis { grid-template-columns: 1fr; }
+}

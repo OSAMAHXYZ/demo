@@ -24,7 +24,7 @@
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261013rv1" />
+  <link rel="stylesheet" href="dashboard.css?v=20261013rv2" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -1054,50 +1054,81 @@
           <div class="rv-head">
             <div>
               <h2 class="rv-title">Reserved Vehicles Tracker</h2>
-              <p class="rv-sub" id="rv-live-hint">E-Sales المحجوز · BO queue · Sales Raw proforma</p>
+              <p class="rv-sub" id="rv-live-hint">E-Sales المحجوز · BO queue · Sales Raw column V</p>
             </div>
             <div class="rv-head-actions">
-              <select id="rv-filter-status" title="Filter VIN status">
-                <option value="">All statuses</option>
-                <option value="proforma">Has Proforma</option>
-                <option value="noproforma">No Proforma</option>
-                <option value="delivered">Delivered</option>
-                <option value="rtl">RTL Stock</option>
-                <option value="missing">Not found</option>
-                <option value="queue">In BO queue</option>
-                <option value="noqueue">Not in BO file</option>
-              </select>
-              <input id="rv-search" type="search" placeholder="Search order / VIN / product…" />
+              <span class="rv-live-dot" id="rv-live-dot">Live</span>
+              <span class="rv-updated" id="rv-updated">No push yet</span>
+              <input id="rv-search" type="search" placeholder="Search order, VIN, product, advisor…" />
+              <button type="button" class="btn" id="rv-refresh">Refresh</button>
               <button type="button" id="rv-excel-btn" class="btn-primary">Export Excel</button>
             </div>
           </div>
+          <div class="rv-controls">
+            <label>Push<select id="rv-push"><option value="">Current live sheet</option></select></label>
+            <label>Compare from<select id="rv-push-from"><option value="">Earlier push</option></select></label>
+            <label>Compare to<select id="rv-push-to"><option value="">Later push</option></select></label>
+            <label>From<input id="rv-date-from" type="date" /></label>
+            <label>To<input id="rv-date-to" type="date" /></label>
+            <button type="button" class="btn" id="rv-compare">Compare Pushes</button>
+            <select id="rv-filter-status" title="Filter VIN status">
+              <option value="">All statuses</option>
+              <option value="proforma">Has Proforma</option>
+              <option value="noproforma">No Proforma</option>
+              <option value="delivered">Delivered</option>
+              <option value="rtl">RTL Stock</option>
+              <option value="missing">Not found</option>
+              <option value="queue">In BO queue</option>
+              <option value="noqueue">Not in BO file</option>
+            </select>
+          </div>
+          <p class="rv-banner" id="rv-snapshot-banner" hidden></p>
+          <p class="rv-banner" id="rv-compare-result" hidden></p>
           <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
           <div class="bo-kpis" id="rv-kpis"></div>
-          <section class="rv-board" id="rv-board" aria-label="Live sheet and marketing requests">
-            <article class="rv-board-card">
+          <section class="rv-board" id="rv-board" aria-label="Live sheet, marketing orders, and VIN assignment history">
+            <article class="rv-board-card rv-live-card">
               <header class="rv-board-h">
                 <div>
                   <h3>Live sheet</h3>
                   <p id="rv-live-meta">Loading the reserved-orders live sheet…</p>
                 </div>
               </header>
-              <div class="rv-live-kpis" id="rv-live-kpis"></div>
-              <div class="rv-pay" id="rv-live-pay"></div>
               <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
               <div class="rv-live-table" id="rv-live-table"></div>
+              <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
+              <p class="foot" id="rv-table-foot"></p>
             </article>
-            <article class="rv-board-card">
+            <article class="rv-board-card rv-mkt-card-wrap">
               <header class="rv-board-h">
                 <div>
                   <h3 dir="rtl">طلبات التسويق</h3>
                   <p id="rv-mkt-count">Orders advisors sent from the BO file</p>
                 </div>
               </header>
+              <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
               <div class="rv-mkt-list" id="rv-mkt-rows"></div>
             </article>
+            <article class="rv-board-card rv-history-card">
+              <header class="rv-board-h">
+                <div>
+                  <h3>VIN Assignment History</h3>
+                  <p id="rv-history-count">Changes versus the previous push</p>
+                </div>
+              </header>
+              <input id="rv-history-search" type="search" placeholder="Search VIN or employee" aria-label="Search assignment history" />
+              <div class="rv-history-list" id="rv-history"></div>
+            </article>
           </section>
-          <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
-          <p class="foot" id="rv-table-foot"></p>
+          <section class="rv-audit" id="rv-audit-card">
+            <header class="rv-board-h">
+              <div>
+                <h3>Push Snapshot / VIN Movement Audit</h3>
+                <p id="rv-audit-count">Each Admin Push keeps its own snapshot</p>
+              </div>
+            </header>
+            <div class="rv-audit-table" id="rv-audit"></div>
+          </section>
         </div>
       </div>
 
@@ -7973,6 +8004,7 @@
     document.body.classList.toggle("bo-dash-mode", panelId === "bodashboard");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
     document.body.classList.toggle("cp-mode", panelId === "contact");
+    document.body.classList.toggle("rv-mode", panelId === "reservedvehicles");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
     PANEL_DEFS.forEach((p) => {
@@ -20733,94 +20765,253 @@
     });
   }
 
-  let rvBoardOrders = [];
+  let rvBoardOrders = {};
+  let rvSnapshotVersion = "";
+  let rvHistoryPage = 1;
+  let rvAuditPage = 1;
+
+  function rvColumnVStatus(vin) {
+    if (!vin || typeof findSalesRawDetailForVin !== "function") return { label: "Unknown", cls: "na" };
+    const sales = findSalesRawDetailForVin(vin);
+    if (!sales) return { label: "Not Found", cls: "bad" };
+    const raw = sales.deliveryDate || sales.delivered || "";
+    if (String(raw).trim() && String(raw).trim() !== "—" && String(raw).trim() !== "NA") return { label: "Delivered", cls: "ok" };
+    return { label: "Proforma", cls: "warn" };
+  }
+
+  function rvCsv(rows) {
+    const header = ["Queue", "Order", "VIN", "Advisor", "Payment", "Reservation status", "Sales Raw"];
+    const lines = [header.join(",")].concat(rows.map((row) => header.map((key) => `"${String(row[key] == null ? "" : row[key]).replace(/"/g, '""')}"`).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = rvSnapshotVersion ? `reserved-snapshot-${rvSnapshotVersion}.csv` : "reserved-live-sheet.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
 
   function paintRvLiveSheet(needle) {
     const meta = $("#rv-live-meta");
-    const kpis = $("#rv-live-kpis");
-    const pay = $("#rv-live-pay");
     const table = $("#rv-live-table");
     const mkt = $("#rv-mkt-rows");
     const mktCount = $("#rv-mkt-count");
-    if (!table || !mkt) return;
-    const q = String(needle || "").trim().toLowerCase();
-    const report = rvBoardOrders.report || {};
-    const orders = rvBoardOrders.orders || [];
-    const requests = rvBoardOrders.requests || [];
-    if (meta) {
-      const when = rvBoardOrders.updatedAt ? new Date(rvBoardOrders.updatedAt).toLocaleString() : "No live push yet";
-      meta.textContent = `${when} · ${rvBoardOrders.esalesName || "Stock E-Sales"} · ${rvBoardOrders.boName || "Back Order"}`;
+    const history = $("#rv-history");
+    const audit = $("#rv-audit");
+    if (!mkt || !history || !audit) return;
+    const data = rvBoardOrders || {};
+    const viewing = data.viewing || rvSnapshotVersion || "";
+    const dash = $("#rv-dash");
+    if (dash) dash.classList.toggle("is-snapshot", !!viewing);
+    const banner = $("#rv-snapshot-banner");
+    if (banner) {
+      if (viewing) {
+        banner.hidden = false;
+        banner.innerHTML = `Viewing snapshot ${escapeHtml(viewing)} · ${escapeHtml(data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "saved push")} · Sales Raw status uses the current Sales Raw file. <button type="button" class="btn" id="rv-back-live">Back to current live sheet</button>`;
+        const back = $("#rv-back-live");
+        if (back) back.addEventListener("click", () => { rvSnapshotVersion = ""; const sel = $("#rv-push"); if (sel) sel.value = ""; loadRvBoard(true); });
+      } else banner.hidden = true;
     }
-    const statusMap = new Map();
-    orders.forEach((order) => {
-      const key = order.status || "—";
-      statusMap.set(key, (statusMap.get(key) || 0) + 1);
+    const updated = $("#rv-updated");
+    if (updated) updated.textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No push yet";
+    if (meta) meta.textContent = `${data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "No live push yet"} · ${data.esalesName || "Stock E-Sales"} · ${data.boName || "Back Order"}`;
+    const pushes = data.pushes || [];
+    ["rv-push", "rv-push-from", "rv-push-to"].forEach((id, index) => {
+      const sel = $("#" + id);
+      if (!sel) return;
+      const current = sel.value;
+      const first = index === 0 ? `<option value="">Current live sheet</option>` : `<option value="">${index === 1 ? "Earlier push" : "Later push"}</option>`;
+      sel.innerHTML = first + pushes.slice().reverse().map((item) => `<option value="${escapeHtml(item.version)}">${escapeHtml(item.display || item.at || item.version)} · ${escapeHtml(item.uploadedBy || "Admin")}</option>`).join("");
+      if ([...sel.options].some((opt) => opt.value === current)) sel.value = current;
+      if (id === "rv-push" && viewing) sel.value = viewing;
     });
-    if (kpis) {
-      const cards = [
-        ["Orders", orders.length],
-        ["Reserved VINs", report.reservedVinCount || 0],
-        ["Matched", report.matchedOrders || 0],
-        ["Unmatched", report.unmatchedVins || 0],
-      ];
-      kpis.innerHTML = cards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`).join("");
-    }
-    if (pay) {
-      const mix = report.paymentBreakdown || {};
-      pay.innerHTML = ["cash", "bank", "other", "unknown"].map((key) => `<i>${escapeHtml(key)} ${escapeHtml(String(mix[key] || 0))}</i>`).join("")
-        + [...statusMap.entries()].slice(0, 6).map(([label, count]) => `<i>${escapeHtml(label)} ${escapeHtml(String(count))}</i>`).join("");
-    }
-    const shown = orders.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.status, order.paymentLabel, order.vehicle].join(" ").toLowerCase().includes(q));
-    table.innerHTML = shown.length
-      ? `<table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th></tr></thead><tbody>${shown.slice(0, 400).map((order) => `<tr>
-          <td>${order.queueNumber == null ? "—" : escapeHtml(String(order.queueNumber))}</td>
-          <td>${escapeHtml(order.orderNumber || "—")}</td>
-          <td>${escapeHtml(order.vin || "—")}</td>
-          <td>${escapeHtml(order.salesAdvisor || "—")}</td>
-          <td>${escapeHtml(order.paymentLabel || "—")}</td>
-          <td>${escapeHtml(order.status || "—")}</td>
-        </tr>`).join("")}</tbody></table>${shown.length > 400 ? `<p class="foot">Showing 400 of ${shown.length}</p>` : ""}`
-      : `<p class="foot">No live rows yet. Push Stock E-Sales to fill this sheet.</p>`;
+    const q = String(needle || "").trim().toLowerCase();
+    const orders = data.orders || [];
+    if (viewing && table) {
+      const shown = orders.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.status, order.paymentLabel, order.vehicle].join(" ").toLowerCase().includes(q));
+      table.innerHTML = shown.length
+        ? `<table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Reservation</th><th>Sales Raw</th></tr></thead><tbody>${shown.slice(0, 200).map((order) => {
+            const sales = rvColumnVStatus(order.vin);
+            return `<tr>
+              <td>${order.queueNumber == null ? "—" : escapeHtml(String(order.queueNumber))}</td>
+              <td>${escapeHtml(order.orderNumber || "—")}</td>
+              <td>${escapeHtml(order.vin || "—")}</td>
+              <td>${escapeHtml(order.salesAdvisor || "—")}</td>
+              <td>${escapeHtml(order.paymentLabel || "—")}</td>
+              <td>${escapeHtml(order.status || "—")}</td>
+              <td>${escapeHtml(sales.label)}</td>
+            </tr>`;
+          }).join("")}</tbody></table>`
+        : `<p class="foot">This snapshot has no rows.</p>`;
+      const kpis = $("#rv-kpis");
+      if (kpis) {
+        const vins = new Set(orders.map((order) => String(order.vin || "").trim().toUpperCase()).filter(Boolean));
+        const sales = orders.map((order) => rvColumnVStatus(order.vin));
+        const counts = (data.movement && data.movement.counts) || {};
+        const cards = [
+          ["Reserved VINs", vins.size],
+          ["In Queue", orders.filter((order) => order.queueNumber != null).length],
+          ["Delivered", sales.filter((item) => item.label === "Delivered").length],
+          ["Proforma", sales.filter((item) => item.label === "Proforma").length],
+          ["Matched", (data.report && data.report.matchedOrders) || 0],
+          ["Reassigned VINs", counts.reassigned || 0],
+        ];
+        kpis.innerHTML = cards.map(([label, value]) => `<div class="bo-kpi"><div class="lab">${escapeHtml(label)}</div><div class="val">${escapeHtml(String(value))}</div></div>`).join("");
+      }
+    } else if (table) table.innerHTML = "";
+    const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
+    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.employeeNumber} ${(item.fields || []).map((field) => field.value).join(" ")}`.toLowerCase().includes(mktQuery));
     const openCount = requests.filter((item) => !item.cancelled).length;
     if (mktCount) mktCount.textContent = requests.length ? `${openCount} open · ${requests.length - openCount} cancelled` : "Orders advisors sent from the BO file";
     mkt.innerHTML = requests.length
-      ? requests.map((item) => {
-          const fields = (item.fields || []).map((field) => `<div><span>${escapeHtml(field.label)}</span><b>${escapeHtml(field.value)}</b></div>`).join("");
+      ? requests.slice(0, 40).map((item) => {
+          const vinField = (item.fields || []).find((field) => /vin/i.test(field.label));
           return `<article class="rv-mkt-card${item.cancelled ? " is-cancelled" : ""}">
             <header>
-              <b>Order ${escapeHtml(item.orderNumber || "—")}</b>
-              ${item.cancelled ? `<span class="rv-mkt-cancel">Cancelled${item.cancelledDisplay ? " " + escapeHtml(item.cancelledDisplay) : ""}</span>` : ""}
-              <span>${escapeHtml(item.advisorName || "—")}</span>
-              <span>ID ${escapeHtml(item.employeeNumber || "—")}</span>
-              <span>${escapeHtml(item.display || item.at || "—")}</span>
+              <b>${escapeHtml(item.orderNumber || "—")}</b>
+              ${item.cancelled ? `<span class="rv-mkt-cancel">Cancelled</span>` : ""}
             </header>
-            <div class="rv-mkt-fields">${fields || "<div><span>BO file</span><b>No other values on this row</b></div>"}</div>
+            <div class="rv-mkt-fields">
+              <div><span>VIN</span><b>${escapeHtml(vinField ? vinField.value : "—")}</b></div>
+              <div><span>Advisor</span><b>${escapeHtml(item.advisorName || "—")}</b></div>
+              <div><span>Sent</span><b>${escapeHtml(item.display || item.at || "—")}</b></div>
+            </div>
           </article>`;
         }).join("")
       : `<p class="foot">No marketing orders sent yet.</p>`;
+    const historyQuery = String(($("#rv-history-search") || {}).value || "").trim().toLowerCase();
+    const movements = ((data.movement && data.movement.rows) || []).filter((row) => !historyQuery || `${row.vin} ${row.previousEmployee} ${row.currentEmployee} ${row.status}`.toLowerCase().includes(historyQuery));
+    const historyCount = $("#rv-history-count");
+    const counts = (data.movement && data.movement.counts) || {};
+    if (historyCount) historyCount.textContent = data.movement ? `${counts.new || 0} new · ${counts.reassigned || 0} reassigned · ${counts.removed || 0} removed${counts.first ? " · first push" : ""}` : "Changes versus the previous push";
+    const pageSize = 8;
+    const pages = Math.max(1, Math.ceil(movements.length / pageSize));
+    if (rvHistoryPage > pages) rvHistoryPage = pages;
+    const slice = movements.slice((rvHistoryPage - 1) * pageSize, rvHistoryPage * pageSize);
+    history.innerHTML = slice.length
+      ? `<table><thead><tr><th>VIN</th><th>Previous</th><th>Current</th><th>Status</th></tr></thead><tbody>${slice.map((row) => `<tr>
+          <td>${escapeHtml(row.vin || "—")}</td>
+          <td>${escapeHtml(row.previousEmployee || "—")}</td>
+          <td>${escapeHtml(row.currentEmployee || "—")}</td>
+          <td><span class="rv-move rv-move-${escapeHtml(String(row.status || "").toLowerCase())}">${escapeHtml(row.status || "—")}</span></td>
+        </tr>`).join("")}</tbody></table>
+        <div class="rv-pager"><button type="button" data-rv-hist="-1" ${rvHistoryPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvHistoryPage} / ${pages}</span><button type="button" data-rv-hist="1" ${rvHistoryPage >= pages ? "disabled" : ""}>Next</button></div>`
+      : `<p class="foot">${data._error || "No VIN movement for this push yet."}</p>`;
+    const fromDate = ($("#rv-date-from") || {}).value || "";
+    const toDate = ($("#rv-date-to") || {}).value || "";
+    const auditRows = pushes.filter((item) => {
+      const day = String(item.at || "").slice(0, 10);
+      if (fromDate && day && day < fromDate) return false;
+      if (toDate && day && day > toDate) return false;
+      return true;
+    }).slice().reverse();
+    const auditPages = Math.max(1, Math.ceil(auditRows.length / 6));
+    if (rvAuditPage > auditPages) rvAuditPage = auditPages;
+    const auditSlice = auditRows.slice((rvAuditPage - 1) * 6, rvAuditPage * 6);
+    const auditCount = $("#rv-audit-count");
+    if (auditCount) auditCount.textContent = `${pushes.length} stored snapshot${pushes.length === 1 ? "" : "s"} · same-day pushes stay separate`;
+    audit.innerHTML = auditSlice.length
+      ? `<table><thead><tr><th>Push time</th><th>Push ID</th><th>Pushed by</th><th>VINs</th><th>New</th><th>Reassigned</th><th>Removed</th><th>Unchanged</th><th></th></tr></thead><tbody>${auditSlice.map((item) => {
+          const move = item.movement || {};
+          return `<tr>
+            <td>${escapeHtml(item.display || item.at || "—")}</td>
+            <td>${escapeHtml(item.version || "—")}</td>
+            <td>${escapeHtml(item.uploadedBy || "—")}</td>
+            <td>${escapeHtml(String(item.totalVins || 0))}</td>
+            <td>${escapeHtml(String(move.new || 0))}</td>
+            <td>${escapeHtml(String(move.reassigned || 0))}</td>
+            <td>${escapeHtml(String(move.removed || 0))}</td>
+            <td>${escapeHtml(String(move.unchanged || 0))}</td>
+            <td><button type="button" class="btn" data-rv-view="${escapeHtml(item.version)}">View Snapshot</button></td>
+          </tr>`;
+        }).join("")}</tbody></table>
+        <div class="rv-pager"><button type="button" data-rv-audit="-1" ${rvAuditPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvAuditPage} / ${auditPages}</span><button type="button" data-rv-audit="1" ${rvAuditPage >= auditPages ? "disabled" : ""}>Next</button></div>`
+      : `<p class="foot">No push snapshots stored yet. The next Admin Push saves one.</p>`;
+  }
+
+  function bindRvBoardControls() {
+    const root = $("#rv-dash");
+    if (!root || root.dataset.rvBound) return;
+    root.dataset.rvBound = "1";
+    root.addEventListener("click", (e) => {
+      const view = e.target.closest("[data-rv-view]");
+      if (view) {
+        rvSnapshotVersion = view.getAttribute("data-rv-view") || "";
+        loadRvBoard(true);
+        return;
+      }
+      const hist = e.target.closest("[data-rv-hist]");
+      if (hist) { rvHistoryPage += Number(hist.getAttribute("data-rv-hist")) || 0; paintRvLiveSheet(($("#rv-live-search") || {}).value || ""); return; }
+      const auditBtn = e.target.closest("[data-rv-audit]");
+      if (auditBtn) { rvAuditPage += Number(auditBtn.getAttribute("data-rv-audit")) || 0; paintRvLiveSheet(($("#rv-live-search") || {}).value || ""); }
+    });
+    const search = $("#rv-live-search");
+    if (search) search.addEventListener("input", () => paintRvLiveSheet(search.value));
+    const mktSearch = $("#rv-mkt-search");
+    if (mktSearch) mktSearch.addEventListener("input", () => paintRvLiveSheet(search ? search.value : ""));
+    const historySearch = $("#rv-history-search");
+    if (historySearch) historySearch.addEventListener("input", () => { rvHistoryPage = 1; paintRvLiveSheet(search ? search.value : ""); });
+    const push = $("#rv-push");
+    if (push) push.addEventListener("change", () => { rvSnapshotVersion = push.value || ""; rvHistoryPage = 1; loadRvBoard(true); });
+    ["rv-date-from", "rv-date-to"].forEach((id) => {
+      const input = $("#" + id);
+      if (input) input.addEventListener("change", () => { rvAuditPage = 1; paintRvLiveSheet(search ? search.value : ""); });
+    });
+    const compare = $("#rv-compare");
+    if (compare) compare.addEventListener("click", async () => {
+      const from = ($("#rv-push-from") || {}).value || "";
+      const to = ($("#rv-push-to") || {}).value || "";
+      const box = $("#rv-compare-result");
+      if (!from || !to || from === to) {
+        if (box) { box.hidden = false; box.textContent = "Choose two different saved pushes to compare."; }
+        return;
+      }
+      try {
+        const res = await fetch(`/api/reserved-orders/board?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || "Compare failed");
+        const counts = (payload.movement && payload.movement.counts) || {};
+        if (box) {
+          box.hidden = false;
+          box.textContent = `Added ${counts.new || 0} · removed ${counts.removed || 0} · reassigned ${counts.reassigned || 0} · unchanged ${counts.unchanged || 0}`;
+        }
+        rvBoardOrders = Object.assign({}, rvBoardOrders, { movement: payload.movement });
+        rvHistoryPage = 1;
+        paintRvLiveSheet(search ? search.value : "");
+      } catch (err) {
+        if (box) { box.hidden = false; box.textContent = err.message || "The snapshots could not be compared."; }
+      }
+    });
+    const refresh = $("#rv-refresh");
+    if (refresh) refresh.addEventListener("click", () => { const btn = $("#run-btn"); if (btn) btn.click(); });
   }
 
   async function loadRvBoard(force) {
+    bindRvBoardControls();
     const search = $("#rv-live-search");
-    if (search && !search.dataset.bound) {
-      search.dataset.bound = "1";
-      search.addEventListener("input", () => paintRvLiveSheet(search.value));
-    }
-    if (!force && rvBoardOrders._loaded) {
+    if (!force && rvBoardOrders._loaded && (rvBoardOrders.viewing || "") === rvSnapshotVersion) {
       paintRvLiveSheet(search ? search.value : "");
       return;
     }
     try {
-      const res = await fetch("/api/reserved-orders/board");
-      if (!res.ok) throw new Error("board");
-      rvBoardOrders = await res.json();
+      const params = new URLSearchParams();
+      if (rvSnapshotVersion) params.set("version", rvSnapshotVersion);
+      const res = await fetch(`/api/reserved-orders/board?${params.toString()}`);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "board");
+      rvBoardOrders = payload;
       rvBoardOrders._loaded = true;
     } catch (err) {
-      rvBoardOrders = { orders: [], requests: [], report: {}, _loaded: false };
+      rvBoardOrders = { orders: [], requests: [], pushes: [], movement: { counts: {}, rows: [] }, report: {}, _loaded: false, _error: err.message || "Live sheet is not available from this server yet." };
       const meta = $("#rv-live-meta");
-      if (meta) meta.textContent = "Live sheet is not available from this server yet.";
+      if (meta) meta.textContent = rvBoardOrders._error;
     }
     paintRvLiveSheet(search ? search.value : "");
+    if (rvSnapshotVersion && activePanel === "reservedvehicles") {
+      const empty = $("#rv-empty");
+      const dash = $("#rv-dash");
+      if (empty) { empty.hidden = true; empty.style.display = "none"; }
+      if (dash) dash.hidden = false;
+    }
   }
 
   function renderReservedVehiclesTracker() {
@@ -20834,6 +21025,13 @@
     if (!empty || !dash || !wrap) return;
 
     if (!hasReservedVehiclesInputs()) {
+      if (rvSnapshotVersion) {
+        empty.hidden = true;
+        empty.style.display = "none";
+        dash.hidden = false;
+        loadRvBoard(false);
+        return;
+      }
       empty.hidden = false;
       empty.style.display = "";
       dash.hidden = true;
@@ -20844,6 +21042,7 @@
     empty.style.display = "none";
     dash.hidden = false;
     loadRvBoard(false);
+    if (rvSnapshotVersion) return;
 
     const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
     const sheetNames = Array.isArray(slots.central.sheetNames) ? slots.central.sheetNames : [];
@@ -20877,12 +21076,12 @@
 
     if (kpis) {
       kpis.innerHTML = [
-        ["Reserved", allRows.length, "ok"],
-        ["In queue", withQueue, "ok"],
-        ["Proforma", withProforma, withProforma ? "warn" : "ok"],
-        ["No Proforma", noProforma, noProforma ? "bad" : "ok"],
-        ["Delivered", delivered, "ok"],
-        ["RTL / Not found", withRtl + missing, missing ? "warn" : "ok"],
+        ["Reserved VINs", new Set(allRows.map((r) => String(r.vin || "").trim().toUpperCase()).filter(Boolean)).size, "tone-blue"],
+        ["In Queue", withQueue, "tone-blue"],
+        ["Delivered", allRows.filter((r) => rvColumnVStatus(r.vin).label === "Delivered").length, "tone-green"],
+        ["Proforma", allRows.filter((r) => rvColumnVStatus(r.vin).label === "Proforma").length, "tone-amber"],
+        ["Matched", allRows.filter((r) => { const s = rvColumnVStatus(r.vin).label; return s === "Delivered" || s === "Proforma"; }).length, "tone-violet"],
+        ["Reassigned VINs", (rvBoardOrders.movement && rvBoardOrders.movement.counts && rvBoardOrders.movement.counts.reassigned) || 0, "tone-red"],
       ].map(([label, value, status]) => `
         <div class="bo-kpi ${status}">
           <div class="lab">${escapeHtml(label)}</div>
@@ -20968,6 +21167,7 @@
         <td>
           <span class="rv-status rv-status-${escapeHtml(r.status.cls)}">${escapeHtml(r.status.label)}</span>
           <div class="rv-muted">${escapeHtml(r.status.detail || "")}</div>
+          <div class="rv-sales-raw">Sales Raw <span class="rv-status rv-status-${escapeHtml(rvColumnVStatus(r.vin).cls)}">${escapeHtml(rvColumnVStatus(r.vin).label)}</span></div>
         </td>
       </tr>`;
     }).join("");
@@ -21152,6 +21352,22 @@
   }
 
   function exportReservedVehiclesExcel() {
+    if (rvSnapshotVersion && rvBoardOrders && Array.isArray(rvBoardOrders.orders)) {
+      rvCsv(rvBoardOrders.orders.map((order) => {
+        const sales = rvColumnVStatus(order.vin);
+        return {
+          Queue: order.queueNumber == null ? "" : order.queueNumber,
+          Order: order.orderNumber || "",
+          VIN: order.vin || "",
+          Advisor: order.salesAdvisor || "",
+          Payment: order.paymentLabel || "",
+          "Reservation status": order.status || "",
+          "Sales Raw": sales.label,
+        };
+      }));
+      setStatus(`Snapshot ${rvSnapshotVersion} exported`, "ok");
+      return;
+    }
     if (!hasReservedVehiclesInputs()) {
       setStatus("No reserved sheet data to export", "busy");
       return;

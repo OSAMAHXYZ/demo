@@ -1228,12 +1228,70 @@ function attachReservedOrders(app, options) {
             return [];
         }
     }
-    function writeArchive(live, actor) {
+    function vinMovementKey(order) {
+        const vin = normalizeVin(order && order.vin);
+        if (vin && vin !== 'VINNOTFOUND' && vin !== 'VIN NOT FOUND') return `vin:${vin}`;
+        const orderNo = cleanText(order && order.orderNumber).toLowerCase();
+        return orderNo ? `order:${orderNo}` : '';
+    }
+    function employeeLabel(order) {
+        const name = cleanText(order && order.salesAdvisor);
+        return name && name !== 'UNASSIGNED' ? name : '';
+    }
+    function compareVinMovement(previousOrders, nextOrders) {
+        const first = !previousOrders || !previousOrders.length;
+        const group = (orders) => {
+            const map = new Map();
+            (orders || []).forEach((order) => {
+                const key = vinMovementKey(order);
+                if (!key) return;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(order);
+            });
+            return map;
+        };
+        const prev = group(previousOrders);
+        const next = group(nextOrders);
+        const rows = [];
+        new Set([...prev.keys(), ...next.keys()]).forEach((key) => {
+            const before = prev.get(key) || [];
+            const after = next.get(key) || [];
+            const beforeKeys = [...new Set(before.map((order) => personKey(employeeLabel(order))).filter(Boolean))];
+            const afterKeys = [...new Set(after.map((order) => personKey(employeeLabel(order))).filter(Boolean))];
+            const sample = after[0] || before[0] || {};
+            let status = 'UNCHANGED';
+            if (!before.length) status = 'NEW';
+            else if (!after.length) status = 'REMOVED';
+            else if (beforeKeys.length > 1 || afterKeys.length > 1) status = 'AMBIGUOUS';
+            else if ((beforeKeys[0] || '') !== (afterKeys[0] || '')) status = 'REASSIGNED';
+            if (first && after.length) status = 'NEW';
+            rows.push({
+                vin: sample.vin || '',
+                orderNumber: sample.orderNumber || '',
+                vehicle: sample.vehicle || '',
+                previousEmployee: before.length ? (before.map(employeeLabel).filter(Boolean).filter((name, index, list) => list.indexOf(name) === index).join(', ') || '—') : '—',
+                currentEmployee: after.length ? (after.map(employeeLabel).filter(Boolean).filter((name, index, list) => list.indexOf(name) === index).join(', ') || '—') : '—',
+                status,
+                at: ''
+            });
+        });
+        const counts = { new: 0, reassigned: 0, removed: 0, unchanged: 0, ambiguous: 0, first };
+        rows.forEach((row) => {
+            const key = row.status === 'NEW' ? 'new' : row.status === 'REASSIGNED' ? 'reassigned' : row.status === 'REMOVED' ? 'removed' : row.status === 'AMBIGUOUS' ? 'ambiguous' : 'unchanged';
+            counts[key] += 1;
+        });
+        return { counts, rows };
+    }
+    function writeArchive(live, actor, previousOrders) {
         fs.mkdirSync(archiveDir, { recursive: true });
         const version = `v-${Date.now()}`;
-        fs.writeFileSync(path.join(archiveDir, `${version}.json`), JSON.stringify(live), 'utf8');
+        const movement = compareVinMovement(previousOrders, live.orders || []);
+        movement.rows.forEach((row) => { row.at = live.updatedAt || ''; });
+        const stored = Object.assign({}, live, { pushId: version, movement });
+        fs.writeFileSync(path.join(archiveDir, `${version}.json`), JSON.stringify(stored));
         const indexFile = path.join(archiveDir, 'index.json');
         const index = readJson(indexFile, []);
+        const vins = new Set((live.orders || []).map((order) => normalizeVin(order.vin)).filter((vin) => vin && vin !== 'VINNOTFOUND'));
         index.push({
             version,
             at: live.updatedAt,
@@ -1243,8 +1301,11 @@ function attachReservedOrders(app, options) {
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             reservedOrders: (live.report && live.report.reservedVinCount) || (live.orders || []).length,
+            totalVins: vins.size,
             matched: (live.report && live.report.matchedOrders) || 0,
-            unmatched: (live.report && live.report.unmatchedVins) || 0
+            unmatched: (live.report && live.report.unmatchedVins) || 0,
+            movement: movement.counts,
+            note: ''
         });
         fs.writeFileSync(indexFile, JSON.stringify(index, null, 2), 'utf8');
         return version;
@@ -1289,7 +1350,7 @@ function attachReservedOrders(app, options) {
         const created = built.orders.filter((order) => !previousKeys.has(order.key)).length;
         const updated = built.orders.length - created;
         saveLive(live);
-        const version = writeArchive(live, names.actor || { name: 'Admin Push' });
+        const version = writeArchive(live, names.actor || { name: 'Admin Push' }, previousOrders);
         audit(names.req, {
             user: (names.actor && names.actor.name) || 'Admin',
             employeeNumber: (names.actor && names.actor.employeeNumber) || '',
@@ -1699,9 +1760,8 @@ function attachReservedOrders(app, options) {
         const live = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
         res.json({ requests: store.map((item) => publicMarketing(item, live)) });
     });
-    app.get('/api/reserved-orders/board', (_req, res) => {
-        const live = loadLive();
-        const orders = (live.orders || []).map((order) => ({
+    function compactBoardOrder(order) {
+        return {
             queueNumber: order.queueNumber == null ? null : order.queueNumber,
             orderNumber: order.orderNumber || '',
             vin: order.vin || '',
@@ -1709,16 +1769,87 @@ function attachReservedOrders(app, options) {
             paymentLabel: order.paymentLabel || '',
             status: order.status || '',
             vehicle: order.vehicle || ''
+        };
+    }
+    function archiveIndex() {
+        const index = readJson(path.join(archiveDir, 'index.json'), []);
+        return Array.isArray(index) ? index : [];
+    }
+    function loadArchiveVersion(version) {
+        const safe = String(version || '').replace(/[^a-zA-Z0-9_-]/g, '');
+        if (!safe.startsWith('v-')) return null;
+        return readJson(path.join(archiveDir, `${safe}.json`), null);
+    }
+    function movementForVersion(version) {
+        const index = archiveIndex();
+        const at = index.findIndex((item) => item.version === version);
+        const current = loadArchiveVersion(version);
+        if (!current) return null;
+        if (current.movement && Array.isArray(current.movement.rows)) return current.movement;
+        const previous = at > 0 ? loadArchiveVersion(index[at - 1].version) : { orders: [] };
+        const movement = compareVinMovement(at > 0 ? (previous && previous.orders) : [], current.orders || []);
+        movement.rows.forEach((row) => { row.at = current.updatedAt || ''; });
+        return movement;
+    }
+    app.get('/api/reserved-orders/board', (req, res) => {
+        const version = String(req.query.version || '');
+        const from = String(req.query.from || '');
+        const to = String(req.query.to || '');
+        const pushes = archiveIndex().map((item) => ({
+            version: item.version,
+            at: item.at || '',
+            display: item.display || '',
+            uploadedBy: item.uploadedBy || '',
+            esalesName: item.esalesName || '',
+            boName: item.boName || '',
+            totalVins: item.totalVins || item.reservedOrders || 0,
+            matched: item.matched || 0,
+            movement: item.movement || null,
+            note: item.note || ''
         }));
+        if (from && to) {
+            const older = loadArchiveVersion(from);
+            const newer = loadArchiveVersion(to);
+            if (!older || !newer) return res.status(404).json({ error: 'One of the selected snapshots could not be loaded.' });
+            const movement = compareVinMovement(older.orders || [], newer.orders || []);
+            movement.counts.first = false;
+            return res.json({ compare: true, from, to, movement });
+        }
+        if (version) {
+            const saved = loadArchiveVersion(version);
+            if (!saved) return res.status(404).json({ error: 'That push snapshot could not be loaded.' });
+            const movement = movementForVersion(version) || { counts: {}, rows: [] };
+            const store = loadMarketing().slice().reverse();
+            const bo = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+            return res.json({
+                viewing: version,
+                updatedAt: saved.updatedAt || '',
+                esalesName: saved.esalesName || '',
+                boName: saved.boName || '',
+                report: saved.report || {},
+                orders: (saved.orders || []).map(compactBoardOrder),
+                requests: store.map((item) => publicMarketing(item, bo)),
+                pushes,
+                movement,
+                retained: pushes.length
+            });
+        }
+        const live = loadLive();
+        const latest = pushes.length ? pushes[pushes.length - 1] : null;
+        const movement = latest && latest.version ? (movementForVersion(latest.version) || { counts: {}, rows: [] }) : { counts: { new: 0, reassigned: 0, removed: 0, unchanged: 0, ambiguous: 0, first: true }, rows: [] };
         const store = loadMarketing().slice().reverse();
         const bo = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
         res.json({
+            viewing: '',
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
-            orders,
-            requests: store.map((item) => publicMarketing(item, bo))
+            orders: (live.orders || []).map(compactBoardOrder),
+            requests: store.map((item) => publicMarketing(item, bo)),
+            pushes,
+            movement,
+            retained: pushes.length
         });
     });
 
