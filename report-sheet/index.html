@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261012ytd4" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261013ytd5" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261011mv1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261012cp9" />
   <style>
@@ -640,6 +640,13 @@
         </header>
         <div class="ytd-annual" id="ytd-annual"></div>
         <div class="ytd-months" id="ytd-months"></div>
+        <section class="ytd-trend" aria-label="Monthly sales chart">
+          <div class="ytd-trend-head">
+            <h3>Monthly sales</h3>
+            <span>Invoice actual, Sales Report, and unassigned records</span>
+          </div>
+          <div class="ytd-trend-canvas"><canvas id="ytd-month-chart"></canvas></div>
+        </section>
       </section>
       <div class="ytd-detail" id="ytd-detail" hidden></div>
     </div>
@@ -9193,6 +9200,7 @@
   let ytdDirtyMonths = new Set();
   let ytdSaveMessage = { text: "Targets are stored on the server for each employee and month.", cls: "" };
   const ytdSaveChain = new Map();
+  let ytdMonthChart = null;
 
   function ytdLoadLocal() {
     try {
@@ -9424,7 +9432,76 @@
       <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ annual target" : "Needs a target"}</em></article>
       <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Sales Report count</em></article>
       <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank date or missing qty</em></article>`;
+    paintYtdChart(Object.values(months));
     paintYtdDetail();
+  }
+
+  function paintYtdChart(buckets) {
+    const canvas = document.getElementById("ytd-month-chart");
+    if (!canvas || typeof Chart === "undefined") return;
+    if (ytdMonthChart) {
+      ytdMonthChart.destroy();
+      ytdMonthChart = null;
+    }
+    const labels = buckets.map((bucket) => new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" }));
+    const totals = buckets.map((bucket) => ytdMonthTotals(bucket));
+    const datasets = [
+      { label: "Actual", data: buckets.map((bucket) => bucket.actual), backgroundColor: "rgba(52, 211, 153, 0.88)", borderRadius: 4, maxBarThickness: 16 },
+      { label: "Report", data: buckets.map((bucket) => bucket.report), backgroundColor: "rgba(139, 92, 246, 0.82)", borderRadius: 4, maxBarThickness: 16 },
+    ];
+    if (buckets.some((bucket) => bucket.unassigned > 0)) {
+      datasets.push({ label: "Not assigned", data: buckets.map((bucket) => bucket.unassigned || 0), backgroundColor: "rgba(245, 158, 11, 0.88)", borderRadius: 4, maxBarThickness: 16 });
+    }
+    if (totals.some((row) => row.hasTarget)) {
+      datasets.push({
+        type: "line",
+        label: "Target",
+        data: totals.map((row) => (row.hasTarget ? row.target : null)),
+        borderColor: "#4f9dff",
+        backgroundColor: "#4f9dff",
+        tension: 0.25,
+        spanGaps: false,
+        pointRadius: 3,
+        borderWidth: 2,
+      });
+    }
+    ytdMonthChart = new Chart(canvas, {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        onClick(evt, elements) {
+          if (!elements.length) return;
+          const card = document.querySelectorAll("#ytd-months [data-ytd-month]")[elements[0].index];
+          if (card) card.click();
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            align: "end",
+            labels: { color: "#8d9bb0", boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11, family: "Manrope, Inter, sans-serif" } },
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const value = ctx.parsed.y;
+                return value == null ? `${ctx.dataset.label}: —` : `${ctx.dataset.label}: ${formatNumber(value)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#8d9bb0", font: { size: 11 } } },
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(148, 163, 184, 0.12)" },
+            ticks: { color: "#8d9bb0", font: { size: 11 }, callback: (value) => formatNumber(value) },
+          },
+        },
+      },
+    });
   }
 
   function ytdRowState(emp) {
