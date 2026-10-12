@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261012ytd" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261012ytd4" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261011mv1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261012cp9" />
   <style>
@@ -9250,7 +9250,7 @@
   }
 
   function ytdStatus(pct, hasTarget) {
-    if (!hasTarget) return { label: "No target", cls: "is-none" };
+    if (!hasTarget) return { label: "No Target", cls: "is-none" };
     if (pct >= 100) return { label: "Above target", cls: "is-above" };
     if (pct >= 80) return { label: "On track", cls: "is-on" };
     return { label: "Below target", cls: "is-below" };
@@ -9393,7 +9393,10 @@
       const isPast = ytdYear < today.getFullYear() || (ytdYear === today.getFullYear() && bucket.month < today.getMonth());
       const reconCls = matched ? "is-match" : "is-miss";
       const reconText = matched ? "Match" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
-      const barCls = !matched ? "is-miss" : (totals.hasTarget && totals.ach != null && totals.ach >= 100) ? "is-hit" : "is-normal";
+      const barCls = totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss";
+      const progress = totals.hasTarget
+        ? `<div class="ytd-progress"><div class="ytd-bar ${barCls}" role="img" aria-label="Achievement ${ytdPctText(totals.ach)}"><i style="width:${width.toFixed(1)}%"></i></div><p class="ytd-gap">${gapText}</p></div>`
+        : "";
       const aside = totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : "";
       return `<article class="ytd-card ${status.cls} ${reconCls}${isPast ? " is-past" : ""}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
         <div class="ytd-card-top">
@@ -9401,28 +9404,26 @@
           <div class="ytd-badges">
             <span class="ytd-status ${status.cls}">${status.label}</span>
             <span class="ytd-recon ${reconCls}">${reconText}</span>
-            <span class="ytd-open" aria-hidden="true">›</span>
           </div>
         </div>
         <div class="ytd-card-metrics">
-          <span><em>Target</em><b>${totals.hasTarget ? formatNumber(totals.target) : "—"}</b></span>
-          <span><em>Actual</em><b>${formatNumber(totals.actual)}</b>${aside}</span>
-          <span><em>Report</em><b>${formatNumber(bucket.report)}</b></span>
-          <span><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
+          <span class="is-target"><em>Target</em><b class="${totals.hasTarget ? "" : "is-empty"}">${totals.hasTarget ? formatNumber(totals.target) : "No Target"}</b></span>
+          <span class="is-actual"><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
+          <span class="is-report"><em>Report</em><b>${formatNumber(bucket.report)}</b></span>
+          <span class="is-ach"><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
-        <div class="ytd-bar ${barCls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></div>
-        <p class="ytd-gap">${gapText}</p>
-        <button type="button" class="ytd-set" data-ytd-set="${bucket.key}">Open month</button>
+        ${progress}
+        <div class="ytd-card-foot">${aside}<button type="button" class="ytd-set" data-ytd-set="${bucket.key}">Open month</button></div>
       </article>`;
     }).join("");
     const excluded = (window._ytdInvoiceRows || []).filter((row) => row.reason).length;
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
-    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly employee targets" : "No employee targets yet"}</em></article>
-      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Unique VINs by invoice date${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
-      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b></b></span><span>Annual Ach%</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
-      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Existing Sales Report count</em></article>
-      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank invoice date or missing qty</em></article>`;
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly targets" : "No employee targets yet"}</em></article>
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Invoice sales${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
+      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ annual target" : "Needs a target"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Sales Report count</em></article>
+      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank date or missing qty</em></article>`;
     paintYtdDetail();
   }
 
@@ -9452,8 +9453,8 @@
       <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
       <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
       <td>${formatNumber(emp.actual)}</td>
-      <td data-ytd-ach="${escapeHtml(emp.key)}">${ytdPctText(emp.ach)}</td>
-      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${state.status.label}</span></td>
+      <td data-ytd-ach="${escapeHtml(emp.key)}">${ytdAchMarkup(emp)}</td>
+      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
     </tr>`;
     }).join("");
     const inspectRows = ytdInspect ? `
@@ -9469,33 +9470,48 @@
       </div>` : "";
     el.hidden = false;
     el.innerHTML = `<div class="ytd-detail-head">
-        <div>
+        <div class="ytd-detail-title">
           <h3>${label}</h3>
-          <p>Employee targets for this month. Actual sales stay on the Sales Raw invoice rows.</p>
-          <div class="ytd-badges"><span class="ytd-status ${monthStatus.cls}" data-ytd-sum="pace">${monthStatus.label}</span><span class="ytd-recon ${matched ? "is-match" : "is-miss"}" data-ytd-sum="match">${matched ? "Match" : "Mismatch"}</span></div>
+          <span class="ytd-recon ${matched ? "is-match" : "is-miss"}" data-ytd-sum="match">${matched ? "Match" : "Mismatch"}</span>
+          <span class="ytd-status ${monthStatus.cls}" data-ytd-sum="pace" hidden>${monthStatus.label}</span>
         </div>
         <div class="ytd-detail-actions">
-          <button type="button" class="ytd-text-btn" data-ytd-inspect>${ytdInspect ? "Hide records" : "Inspect records"}</button>
+          <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Inspect records"}</button>
           <button type="button" class="ytd-save-btn" id="ytd-save-btn">Save targets</button>
           <button type="button" class="ytd-text-btn" data-ytd-close>Close</button>
         </div>
       </div>
       <div class="ytd-month-kpis">
-        <article><span>Monthly target</span><strong data-ytd-sum="target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
-        <article><span>Actual sales</span><strong data-ytd-sum="actual">${formatNumber(totals.actual)}</strong></article>
-        <article><span>Report actual</span><strong data-ytd-sum="report">${formatNumber(bucket.report)}</strong></article>
-        <article class="${matched ? "is-match" : "is-miss"}"><span>Difference</span><strong data-ytd-sum="diff">${diff > 0 ? "+" : ""}${formatNumber(diff)}</strong></article>
-        <article><span>Achievement</span><strong data-ytd-sum="ach">${ytdPctText(totals.ach)}</strong></article>
-        <article class="${matched ? "is-match" : "is-miss"}"><span>Status</span><strong data-ytd-sum="status">${matched ? "Match" : "Mismatch"}</strong></article>
+        <article class="is-target"><span>Monthly Target</span><strong data-ytd-sum="target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
+        <article class="is-actual"><span>Actual Sales</span><strong data-ytd-sum="actual">${formatNumber(totals.actual)}</strong></article>
+        <article class="is-report"><span>Report Actual</span><strong data-ytd-sum="report">${formatNumber(bucket.report)}</strong></article>
+        <article class="is-diff ${matched ? "is-match" : "is-miss"}"><span>Difference</span><strong data-ytd-sum="diff">${diff > 0 ? "+" : ""}${formatNumber(diff)}</strong></article>
+        <article class="is-pace ${monthStatus.cls}"><span>Achievement %</span><strong data-ytd-sum="ach">${ytdPctText(totals.ach)}</strong></article>
+        <article class="is-status ${matched ? "is-match" : "is-miss"}"><span>Reconciliation Status</span><strong data-ytd-sum="status">${matched ? "Match" : "Mismatch"}</strong></article>
       </div>
       <p class="ytd-save${ytdSaveMessage.cls ? " " + ytdSaveMessage.cls : ""}" id="ytd-save-note">${escapeHtml(ytdSaveMessage.text)}</p>
       <div class="ytd-table-wrap"><table class="ytd-table">
-        <thead><tr><th>Employee</th><th>Monthly Target</th><th>Actual Sales</th><th>Ach%</th><th>Status</th></tr></thead>
+        <thead><tr><th>Employee</th><th>Monthly Target</th><th>Actual Sales</th><th>Achievement %</th><th>Status</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="5">No employees for this month.</td></tr>`}</tbody>
         <tfoot><tr><td>Month total</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td data-ytd-sum="foot-ach">${ytdPctText(totals.ach)}</td><td></td></tr></tfoot>
       </table></div>
       ${bucket.flagged && !ytdInspect ? `<p class="ytd-flag">${formatNumber(bucket.flagged)} row${bucket.flagged === 1 ? "" : "s"} excluded and flagged for review.</p>` : ""}
       ${inspectRows}`;
+  }
+
+  function ytdDetailStatusText(status) {
+    if (status.cls === "is-on") return "On Track";
+    if (status.cls === "is-below") return "Below Target";
+    if (status.cls === "is-above") return "Above Target";
+    return status.label;
+  }
+
+  function ytdAchMarkup(emp) {
+    const text = ytdPctText(emp.ach);
+    if (emp.ach == null) return `<div class="ytd-ach"><span class="ytd-ach-num">${text}</span></div>`;
+    const width = Math.max(0, Math.min(100, emp.ach));
+    const cls = emp.ach >= 100 ? "is-hit" : emp.ach >= 80 ? "is-on" : "is-miss";
+    return `<div class="ytd-ach"><span class="ytd-ach-num">${text}</span><span class="ytd-ach-track ${cls}" aria-hidden="true"><i style="width:${width.toFixed(1)}%"></i></span></div>`;
   }
 
   function ytdSyncOpenNumbers() {
@@ -9519,13 +9535,27 @@
     set("pace", monthStatus.label);
     set("foot-target", totals.hasTarget ? formatNumber(totals.target) : "—");
     set("foot-ach", ytdPctText(totals.ach));
+    const match = document.querySelector('#ytd-detail [data-ytd-sum="match"]');
+    if (match) match.className = `ytd-recon ${matched ? "is-match" : "is-miss"}`;
+    const pace = document.querySelector('#ytd-detail [data-ytd-sum="pace"]');
+    if (pace) pace.className = `ytd-status ${monthStatus.cls}`;
+    ["diff", "status"].forEach((name) => {
+      const card = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
+      const article = card && card.closest("article");
+      if (!article) return;
+      article.classList.toggle("is-match", matched);
+      article.classList.toggle("is-miss", !matched);
+    });
+    const paceCard = document.querySelector('#ytd-detail [data-ytd-sum="ach"]');
+    const paceArticle = paceCard && paceCard.closest("article");
+    if (paceArticle) paceArticle.className = `is-pace ${monthStatus.cls}`;
     totals.people.forEach((emp) => {
       const state = ytdRowState(emp);
       const ach = document.querySelector(`#ytd-detail [data-ytd-ach="${CSS.escape(emp.key)}"]`);
       const flag = document.querySelector(`#ytd-detail [data-ytd-flag="${CSS.escape(emp.key)}"]`);
       const row = document.querySelector(`#ytd-detail [data-ytd-row="${CSS.escape(emp.key)}"]`);
-      if (ach) ach.textContent = ytdPctText(emp.ach);
-      if (flag) flag.innerHTML = `<span class="ytd-status ${state.status.cls}">${state.status.label}</span>`;
+      if (ach) ach.innerHTML = ytdAchMarkup(emp);
+      if (flag) flag.innerHTML = `<span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span>`;
       if (row) row.className = state.cls;
     });
   }
