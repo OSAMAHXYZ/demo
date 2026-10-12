@@ -3056,3 +3056,290 @@ body.boe-mode #panel-boerrors .boe-kpis,
   #panel-boerrors .boe-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* BO Dashboard — same dark cockpit as Sales Report, kept beside the sidebar. */
+body.bo-dash-mode.live-app {
+  overflow: hidden;
+}
+body.bo-dash-mode.live-app #dashboard,
+body.bo-dash-mode.live-app #dashboard.show,
+body.bo-dash-mode.live-app .app-content,
+body.bo-dash-mode.live-app .app-main {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+body.bo-dash-mode .page-foot { display: none; }
+body.bo-dash-mode #panel-bodashboard {
+  position: fixed;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: hidden;
+  animation: none !important;
+  transform: none !important;
+  color: #e8eef7;
+  background:
+    radial-gradient(900px 420px at 88% -8%, rgba(59, 130, 246, 0.16), transparent 58%),
+    radial-gradient(640px 360px at 0% 100%, rgba(235, 10, 30, 0.07), transparent 55%),
+    #060a12;
+}
+body.bo-dash-mode.sidebar-collapsed #panel-bodashboard { left: var(--sidebar-w-collapsed); }
+body.live-app.toyota-theme.bo-dash-mode.sidebar-collapsed .app-sidebar {
+  width: var(--sidebar-w-collapsed) !important;
+}
+body.bo-dash-mode #bo-empty {
+  background: #0c1422;
+  color: #e8eef7;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+}
+body.bo-dash-mode #bo-empty ol { color: #c7d2e0; }
+body.bo-dash-mode #bo-dash.bo-tower {
+  height: 100%;
+  max-height: 100%;
+  display: flex !important;
+  flex-direction: column;
+  background: transparent;
+  color: #e8eef7;
+  gap: 8px;
+  overflow: hidden;
+}
+body.bo-dash-mode #bo-dash .bo-fit-main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1.35 1 0;
+  min-height: 0;
+  gap: 8px;
+}
+body.bo-dash-mode #bo-dash .bo-row-ops,
+body.bo-dash-mode #bo-dash .bo-row-critical {
+  flex: 0.72 1 0;
+  min-height: 0;
+}
+body.bo-dash-mode #bo-dash .bo-dash-subtitle { display: none; }
+body.bo-dash-mode #bo-dash .bo-dash-eyebrow {
+  margin: 0;
+  color: #eb0a1e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.bo-dash-mode #bo-dash .bo-dash-title {
+  margin: 0;
+  color: #e8eef7;
+  font-size: 18px;
+  line-height: 1.1;
+}
+body.bo-dash-mode #bo-dash .bo-dash-meta,
+body.bo-dash-mode #bo-dash .bo-source-line,
+body.bo-dash-mode #bo-dash .bo-dash-daterange,
+body.bo-dash-mode #bo-dash .bo-dash-updated { color: #8d9bb0; }
+body.bo-dash-mode #bo-dash .bo-dash-updated strong,
+body.bo-dash-mode #bo-dash .bo-source-line strong { color: #e8eef7; }
+body.bo-dash-mode #bo-dash .bo-live-dot {
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+body.bo-dash-mode #bo-dash .bo-date-presets {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+}
+body.bo-dash-mode #bo-dash .bo-date-presets button {
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8d9bb0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+  cursor: pointer;
+}
+body.bo-dash-mode #bo-dash .bo-date-presets button.is-on {
+  background: #3b82f6;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.35);
+}
+body.bo-dash-mode #bo-dash .bo-date-custom {
+  color: #8d9bb0;
+  font-size: 11px;
+  font-weight: 700;
+}
+body.bo-dash-mode #bo-dash .bo-date-custom input,
+body.bo-dash-mode #bo-dash .bo-toolbar select,
+body.bo-dash-mode #bo-dash .bo-toolbar input {
+  height: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 8px;
+  background: #101a2b !important;
+  color: #e8eef7 !important;
+}
+body.bo-dash-mode #bo-dash .btn,
+body.bo-dash-mode #bo-dash .bo-view-all,
+body.bo-dash-mode #bo-dash .pbi-expand {
+  background: #101a2b !important;
+  color: #e8eef7 !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  border-radius: 8px;
+}
+body.bo-dash-mode #bo-dash .bo-btn-export {
+  background: #3b82f6 !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.28) !important;
+}
+body.bo-dash-mode #bo-dash .bo-toolbar {
+  flex-wrap: nowrap;
+  background: #0c1422 !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  box-shadow: none !important;
+  padding: 6px 8px !important;
+}
+body.bo-dash-mode #bo-dash .bo-chips:empty,
+body.bo-dash-mode #bo-dash .bo-attention:empty { display: none; }
+body.bo-dash-mode #bo-dash .bo-insights,
+body.bo-dash-mode #bo-dash .pbi-box,
+body.bo-dash-mode #bo-dash .chart-box,
+body.bo-dash-mode #bo-dash .bo-chart-sm {
+  min-height: 0 !important;
+}
+body.bo-dash-mode #bo-dash .bo-chip {
+  background: #152033;
+  color: #c7d2e0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+body.bo-dash-mode #bo-dash .bo-kpis { gap: 8px; }
+body.bo-dash-mode #bo-dash .bo-kpi {
+  position: relative;
+  min-height: 0 !important;
+  padding: 8px 10px 8px 12px !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  border-left: 2px solid #4f9dff !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, #121b2c, #0c1422) !important;
+  color: #e8eef7 !important;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18) !important;
+}
+body.bo-dash-mode #bo-dash .bo-kpi.tone-green,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-teal { border-left-color: #34d399 !important; }
+body.bo-dash-mode #bo-dash .bo-kpi.tone-orange,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-red,
+body.bo-dash-mode #bo-dash .bo-kpi.tone-rose { border-left-color: #ff3b4e !important; }
+body.bo-dash-mode #bo-dash .bo-kpi.tone-slate { border-left-color: #f59e0b !important; }
+body.bo-dash-mode #bo-dash .bo-kpi .lab { color: #8d9bb0; }
+body.bo-dash-mode #bo-dash .bo-kpi .val {
+  color: #f8fbff !important;
+  font-size: clamp(1.15rem, 1.4vw, 1.45rem) !important;
+}
+body.bo-dash-mode #bo-dash .bo-kpi .sub { color: #8d9bb0 !important; }
+body.bo-dash-mode #bo-dash .bo-kpi-icon {
+  background: rgba(79, 157, 255, 0.12);
+  color: #4f9dff;
+}
+body.bo-dash-mode #bo-dash .tone-green .bo-kpi-icon,
+body.bo-dash-mode #bo-dash .tone-teal .bo-kpi-icon { background: rgba(52, 211, 153, 0.12); color: #34d399; }
+body.bo-dash-mode #bo-dash .tone-orange .bo-kpi-icon,
+body.bo-dash-mode #bo-dash .tone-red .bo-kpi-icon,
+body.bo-dash-mode #bo-dash .tone-rose .bo-kpi-icon { background: rgba(255, 59, 78, 0.12); color: #ff3b4e; }
+body.bo-dash-mode #bo-dash .card,
+body.bo-dash-mode #bo-dash .bo-modal-card,
+body.bo-dash-mode #bo-dash .bo-drawer {
+  background: linear-gradient(180deg, #101a2b, #0c1422) !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  border-radius: 12px !important;
+  color: #e8eef7 !important;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22) !important;
+}
+body.bo-dash-mode #bo-dash .pbi-viz-head h2,
+body.bo-dash-mode #bo-dash .bo-insights-head h2,
+body.bo-dash-mode #bo-dash .bo-model-panel-head h2,
+body.bo-dash-mode #bo-dash .bo-subhead { color: #e8eef7; }
+body.bo-dash-mode #bo-dash .hint,
+body.bo-dash-mode #bo-dash .foot,
+body.bo-dash-mode #bo-dash .bo-insight-list { color: #8d9bb0; }
+body.bo-dash-mode #bo-dash .bo-insights-icon {
+  background: rgba(79, 157, 255, 0.12);
+  color: #4f9dff;
+}
+body.bo-dash-mode #bo-dash .bo-status-legend { color: #c7d2e0; }
+body.bo-dash-mode #bo-dash .bo-status-legend .ok { background: #34d399; }
+body.bo-dash-mode #bo-dash .bo-status-legend .bad { background: #ff3b4e; }
+body.bo-dash-mode #bo-dash .bo-donut-center,
+body.bo-dash-mode #bo-dash .bo-donut-center strong { color: #e8eef7; }
+body.live-app.toyota-theme.bo-dash-mode #bo-dash .table-wrap {
+  background: transparent !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash table {
+  background: transparent !important;
+  color: #e8eef7;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #162033 !important;
+  color: #8d9bb0 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.16) !important;
+}
+body.live-app.toyota-theme.bo-dash-mode #bo-dash td {
+  color: #e8eef7 !important;
+  background: transparent !important;
+  border-bottom-color: rgba(148, 163, 184, 0.12) !important;
+}
+body.bo-dash-mode #bo-dash .bo-table tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.025) !important; }
+body.bo-dash-mode #bo-dash .bo-table tbody tr:hover td { background: rgba(79, 157, 255, 0.08) !important; }
+body.bo-dash-mode #bo-dash .bo-link { color: #7eb6ff; }
+body.bo-dash-mode #bo-dash .heat-ok { background: rgba(52, 211, 153, 0.16); color: #34d399; }
+body.bo-dash-mode #bo-dash .heat-mid { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
+body.bo-dash-mode #bo-dash .heat-bad { background: rgba(255, 59, 78, 0.16); color: #ff8b96; }
+body.bo-dash-mode #bo-dash .bo-strat {
+  background: #101a2b;
+  border-color: rgba(148, 163, 184, 0.16);
+  color: #e8eef7;
+  box-shadow: none;
+}
+body.bo-dash-mode #bo-dash .bo-strat.risk {
+  border-color: rgba(255, 59, 78, 0.45);
+  background: linear-gradient(180deg, #1a1420, #120e16);
+}
+body.bo-dash-mode #bo-dash .bo-strat-metrics span { color: #8d9bb0; }
+body.bo-dash-mode #bo-dash .bo-attention {
+  background: #101a2b;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  color: #e8eef7;
+}
+body.bo-dash-mode #bo-dash .bo-quality-list { color: #c7d2e0; }
+body.bo-dash-mode #bo-dash .bo-modal { background: rgba(6, 10, 18, 0.72); }
+body.bo-dash-mode #bo-dash .bo-record-list div { border-bottom-color: rgba(148, 163, 184, 0.14); }
+body.bo-dash-mode #bo-dash .bo-record-list dt,
+body.bo-dash-mode #bo-dash .bo-col-toggles { color: #8d9bb0; }
+@media (max-width: 1280px) {
+  body.bo-dash-mode #bo-dash .bo-dash-daterange,
+  body.bo-dash-mode #bo-dash .bo-source-line { display: none; }
+}
+@media (max-width: 1100px) {
+  body.bo-dash-mode #panel-bodashboard { overflow: auto; }
+  body.bo-dash-mode #bo-dash.bo-tower {
+    height: auto;
+    max-height: none;
+    display: flex;
+    overflow: visible;
+  }
+  body.bo-dash-mode #bo-dash .bo-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.bo-dash-mode #bo-dash .bo-row-insights,
+  body.bo-dash-mode #bo-dash .bo-row-main,
+  body.bo-dash-mode #bo-dash .bo-row-ops,
+  body.bo-dash-mode #bo-dash .bo-row-critical { grid-template-columns: 1fr; }
+  body.bo-dash-mode #bo-dash .bo-fit-main { display: flex; flex-direction: column; gap: 8px; }
+}
+

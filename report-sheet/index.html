@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261013ytd5" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261013bo5" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261011mv1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261012cp9" />
   <style>
@@ -671,7 +671,7 @@
           <header class="bo-dash-header bo-tower-head">
             <div class="bo-dash-brand">
               <p class="bo-dash-eyebrow">Toyota · ALJ · Digital Retail</p>
-              <h1 class="bo-dash-title">Back Order Control Center</h1>
+              <h1 class="bo-dash-title">BO Dashboard</h1>
               <p class="bo-dash-subtitle">Back Order Performance &amp; Analysis</p>
             </div>
             <div class="bo-dash-meta">
@@ -6078,6 +6078,7 @@
     const opts = extra || {};
     const horizontal = !!opts.horizontal;
     const cockpit = !!canvas.closest("#panel-salesreport")
+      || !!canvas.closest("#bo-dash")
       || (document.body.classList.contains("sr-mode") && !!canvas.closest(".pbi-wide-modal"));
     const tickColor = cockpit ? "#8d9bb0" : "#6b7280";
     const gridColor = cockpit ? "rgba(148, 163, 184, 0.10)" : "rgba(17, 17, 17, 0.06)";
@@ -7938,6 +7939,7 @@
     document.body.classList.toggle("pt-wide-mode", panelId === "plantracker");
     document.body.classList.toggle("boe-mode", panelId === "boerrors");
     document.body.classList.toggle("alloc-mode", panelId === "boallocstock");
+    document.body.classList.toggle("bo-dash-mode", panelId === "bodashboard");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
     document.body.classList.toggle("cp-mode", panelId === "contact");
     if (panelId !== "salesreport") setSrSheet("");
@@ -11767,7 +11769,7 @@
     const allProducts = aggs.slice();
     upsertChart("chart-bo-top5", "bar", top5.map((a) => a.product), top5.map((a) => a.total), {
       horizontal: true,
-      backgroundColor: top5.map((_, i) => i === 0 ? "rgba(235, 10, 30, 0.92)" : "rgba(148, 163, 184, 0.85)"),
+      backgroundColor: top5.map((_, i) => i === 0 ? "rgba(79, 157, 255, 0.95)" : "rgba(59, 130, 246, 0.62)"),
       _wide: {
         labels: allProducts.map((a) => a.product),
         values: null,
@@ -11790,7 +11792,7 @@
       {
         legend: false,
         cutout: "70%",
-        backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+        backgroundColor: ["rgba(52, 211, 153, 0.92)", "rgba(235, 10, 30, 0.9)"],
         _wide: {
           labels: [
             `Confirmed ${confPct}%`,
@@ -11801,7 +11803,7 @@
           extra: {
             legend: true,
             cutout: "62%",
-            backgroundColor: ["rgba(15, 118, 110, 0.92)", "rgba(235, 10, 30, 0.9)"],
+            backgroundColor: ["rgba(52, 211, 153, 0.92)", "rgba(235, 10, 30, 0.9)"],
           },
         },
       }
