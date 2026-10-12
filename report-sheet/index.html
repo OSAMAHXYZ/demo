@@ -33,8 +33,8 @@
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261013bo5" />
-  <link rel="stylesheet" href="alloc-tower.css?v=20261011mv1" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
+  <link rel="stylesheet" href="alloc-tower.css?v=20261013alloc4" />
   <link rel="stylesheet" href="contact-performance.css?v=20261012cp9" />
   <style>
     body.delivery-mode .app-frame {
@@ -981,6 +981,11 @@
               <input id="boe-search" type="search" placeholder="Search product, VIN, salesman, or BO number..." />
               <kbd>Ctrl K</kbd>
             </label>
+            <input id="boe-employee-find" type="search" placeholder="Search employee..." aria-label="Search employee" />
+            <select id="boe-filter-employee" title="Filter by employee" aria-label="Filter BO errors by employee">
+              <option value="">All employees</option>
+            </select>
+            <button type="button" id="boe-employee-clear" class="btn">Clear</button>
             <button type="button" id="boe-excel-btn" class="btn-primary">Export Excel</button>
           </div>
           <div class="boe-kpis" id="boe-kpis"></div>
@@ -989,13 +994,6 @@
               <div>
                 <h2>Filter by employee</h2>
                 <span class="hint">All employees</span>
-              </div>
-              <div class="boe-employee-actions">
-                <input id="boe-employee-find" type="search" placeholder="Search employee..." aria-label="Search employee" />
-                <select id="boe-filter-employee" title="Filter by employee" aria-label="Filter BO errors by employee">
-                  <option value="">All employees</option>
-                </select>
-                <button type="button" id="boe-employee-clear" class="btn">Clear</button>
               </div>
             </div>
             <div class="boe-employee-chips" id="boe-employee-chips" aria-label="Employees with errors"></div>
@@ -5890,6 +5888,16 @@
     const box = canvas.closest(".chart-box");
     const scroll = canvas.closest(".chart-scroll");
     if (!box) return;
+    if (canvas.closest("#bo-dash")) {
+      box.style.height = "";
+      box.style.minHeight = "";
+      delete canvas.dataset.fitRowPx;
+      if (scroll) {
+        scroll.classList.remove("is-scroll");
+        scroll.style.maxHeight = "";
+      }
+      return;
+    }
     if (horizontal && labelCount > 1) {
       const series = Math.max(1, Number(seriesCount) || 1);
       const perf = canvasId === "chart-sr-perf";
@@ -8208,8 +8216,11 @@
       }
     }
 
-    document.querySelectorAll(".sr-date-custom, .bas-date-custom").forEach((el) => {
+    document.querySelectorAll(".sr-date-custom").forEach((el) => {
       el.style.display = custom ? "" : "none";
+    });
+    document.querySelectorAll(".bas-date-custom").forEach((el) => {
+      el.style.display = custom ? "inline-flex" : "none";
     });
   }
 
@@ -11284,16 +11295,16 @@
       <button type="button" class="bo-strat bo-strat--compact ${c.m.confirmPct < 0.4 && c.m.total ? "risk" : ""}" data-bo-product="${escapeHtml(c.sampleProduct)}">
         <div class="bo-strat-identity">
           ${img
-            ? `<img class="bo-strat-thumb" src="${escapeHtml(img)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+            ? `<img class="bo-strat-thumb" src="${escapeHtml(img)}" alt="" data-fallback="${escapeHtml(c.label.slice(0, 1))}" loading="lazy" onerror="var s=document.createElement('span');s.className='bo-strat-placeholder';s.textContent=this.getAttribute('data-fallback')||'';this.replaceWith(s)" />`
             : `<span class="bo-strat-placeholder">${escapeHtml(c.label.slice(0, 1))}</span>`}
           <span class="bo-strat-name">${escapeHtml(c.label)}</span>
         </div>
         <div class="bo-strat-metrics">
           <div><span>Total</span><b>${formatNumber(c.m.total)}</b></div>
           <div><span>Confirmed</span><b>${formatNumber(c.m.confirmed)}</b></div>
-          <div><span>Not Conf.</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
+          <div><span>Not confirmed</span><b>${formatNumber(c.m.notConfirmed)}</b></div>
           <div><span>Conf. %</span><b>${(c.m.confirmPct * 100).toFixed(1)}%</b></div>
-          <div class="bo-strat-aging"><span>Avg Aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
+          <div><span>Avg aging</span><b>${formatNumber(c.m.avgAging)}d</b></div>
         </div>
       </button>`;
     }).join("");
@@ -12271,11 +12282,11 @@
     }
 
     const cards = [
-      { label: "Total Allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan", icon: "▣" },
-      { label: "Matched Back Orders", val: formatNumber(totalBo), sub: boSub, icon: "▤" },
-      { label: "Available Stock", val: formatNumber(totalStock), sub: "RTL + Central", icon: "◈" },
-      { label: "Total Back Orders", val: totalDemand != null ? formatNumber(totalDemand) : formatNumber(totalBo), sub: totalDemand != null ? "Customer demand · BO file" : "Matched demand", icon: "▦" },
-      { label: "Overall Gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad", icon: "⇄" },
+      { label: "Total Allocation", val: formatNumber(totalAlloc), sub: "E-Sales plan", icon: "▣", tone: "tone-blue" },
+      { label: "Matched Back Orders", val: formatNumber(totalBo), sub: boSub, icon: "▤", tone: "tone-green" },
+      { label: "Available Stock", val: formatNumber(totalStock), sub: "RTL + Central", icon: "◈", tone: "tone-blue" },
+      { label: "Total Back Orders", val: totalDemand != null ? formatNumber(totalDemand) : formatNumber(totalBo), sub: totalDemand != null ? "Customer demand · BO file" : "Matched demand", icon: "▦", tone: "tone-amber" },
+      { label: "Overall Gap", val: basFormatGap(totalGap), sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation", cls: totalGap <= 0 ? "ok" : "bad", tone: totalGap <= 0 ? "tone-green" : "tone-red", icon: "⇄" },
       {
         label: "Received from RTL",
         val: resReceived != null ? formatNumber(resReceived) : "N/A",
@@ -12285,11 +12296,12 @@
             : "RES · schedule")
           : "Upload RTL schedule",
         cls: resReceived ? "ok" : "",
+        tone: resReceived ? "tone-green" : "tone-violet",
         icon: "↓",
       },
     ];
     el.innerHTML = cards.map((k) => `
-      <article class="bo-kpi act-kpi${k.cls ? " " + k.cls : ""}">
+      <article class="bo-kpi act-kpi${k.tone ? " " + k.tone : ""}${k.cls ? " " + k.cls : ""}">
         <div class="act-kpi-icon" aria-hidden="true">${k.icon}</div>
         <div class="lbl">${k.label}</div>
         <div class="val">${k.val}</div>
@@ -12932,21 +12944,21 @@
             ctx.fillRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
           });
           ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = "rgba(17,17,17,0.35)";
+          ctx.strokeStyle = "rgba(232,238,247,0.35)";
           ctx.beginPath();
           ctx.moveTo(xSplit, top); ctx.lineTo(xSplit, bottom);
           ctx.moveTo(left, ySplit); ctx.lineTo(right, ySplit);
           ctx.stroke();
           ctx.setLineDash([]);
-          ctx.font = "700 9px Outfit, sans-serif";
-          ctx.fillStyle = "rgba(235,10,30,0.55)";
-          ctx.fillText("HIGH DEMAND / LOW ALLOC", left + 6, top + 12);
-          ctx.fillStyle = "rgba(13,148,136,0.55)";
-          ctx.fillText("HIGH DEMAND / HIGH ALLOC", xSplit + 6, top + 12);
-          ctx.fillStyle = "rgba(245,158,11,0.65)";
-          ctx.fillText("LOW / LOW · MONITOR", left + 6, ySplit + 14);
-          ctx.fillStyle = "rgba(37,99,235,0.55)";
-          ctx.fillText("LOW / HIGH · SURPLUS", xSplit + 6, ySplit + 14);
+          ctx.font = "700 10px Manrope, sans-serif";
+          ctx.fillStyle = "rgba(255,59,78,0.8)";
+          ctx.fillText("HIGH DEMAND / LOW ALLOC", left + 6, top + 14);
+          ctx.fillStyle = "rgba(52,211,153,0.85)";
+          ctx.fillText("HIGH DEMAND / HIGH ALLOC", xSplit + 6, top + 14);
+          ctx.fillStyle = "rgba(245,158,11,0.9)";
+          ctx.fillText("LOW / LOW · MONITOR", left + 6, ySplit + 16);
+          ctx.fillStyle = "rgba(79,157,255,0.9)";
+          ctx.fillText("LOW / HIGH · SURPLUS", xSplit + 6, ySplit + 16);
           ctx.restore();
         },
       };
@@ -12957,30 +12969,37 @@
           const meta = chart.getDatasetMeta(0);
           if (!meta || !meta.data) return;
           ctx.save();
+          const drawn = [];
           meta.data.forEach((el, i) => {
             const pt = points[i];
             if (!pt) return;
             const { x, y } = el.getProps(["x", "y"], true);
+            const crowded = drawn.some((d) => Math.hypot(d.x - x, d.y - y) < 40);
+            if (crowded) {
+              ctx.beginPath();
+              ctx.fillStyle = "#4f9dff";
+              ctx.arc(x, y, 4, 0, Math.PI * 2);
+              ctx.fill();
+              return;
+            }
+            drawn.push({ x, y });
             const file = typeof resolveCarImageFile === "function" ? resolveCarImageFile(pt.product) : "";
             const key = file || `__none__:${String(pt.product || "").toLowerCase()}`;
             const img = (typeof carImageCache !== "undefined" && carImageCache.get) ? carImageCache.get(key) : null;
-            const size = 34;
+            const size = 26;
             if (img && img.complete && img.naturalWidth) {
               ctx.drawImage(img, x - size / 2, y - size / 2 - 2, size, size);
             } else {
               ctx.beginPath();
               ctx.fillStyle = "#eb0a1e";
-              ctx.arc(x, y, 6, 0, Math.PI * 2);
+              ctx.arc(x, y, 5, 0, Math.PI * 2);
               ctx.fill();
             }
             ctx.textAlign = "center";
-            ctx.font = "700 9px Outfit, sans-serif";
-            ctx.fillStyle = "#111";
-            const short = pt.product.length > 14 ? pt.product.slice(0, 12) + "…" : pt.product;
-            ctx.fillText(short, x, y + size / 2 + 2);
-            ctx.font = "600 8px Space Grotesk, sans-serif";
-            ctx.fillStyle = "#6b7280";
-            ctx.fillText(`${pt.meta.boCount} BO · ${(pt.x).toFixed(1)} cov`, x, y + size / 2 + 13);
+            ctx.font = "700 10px Manrope, sans-serif";
+            ctx.fillStyle = "#e8eef7";
+            const short = pt.product.length > 12 ? pt.product.slice(0, 10) + "…" : pt.product;
+            ctx.fillText(short, x, y + size / 2 + 8);
           });
           ctx.restore();
         },
@@ -13000,6 +13019,9 @@
           parsing: false,
           layout: { padding: { top: 16, bottom: 28, left: 4, right: 8 } },
           plugins: { legend: { display: false }, tooltip: {
+            backgroundColor: "#101a2b",
+            titleColor: "#f8fbff",
+            bodyColor: "#e8eef7",
             callbacks: {
               label(ctx) {
                 const p = ctx.raw && ctx.raw.meta;
@@ -13009,8 +13031,18 @@
             },
           } },
           scales: {
-            x: { title: { display: true, text: "Allocation Coverage (Alloc ÷ BO)", font: { weight: "700" } }, min: 0, suggestedMax: 2.2, beginAtZero: true },
-            y: { title: { display: true, text: "Back Order Demand", font: { weight: "700" } }, beginAtZero: true },
+            x: {
+              title: { display: true, text: "Allocation Coverage (Alloc ÷ BO)", color: "#8d9bb0", font: { weight: "700", size: 11 } },
+              min: 0, suggestedMax: 2.2, beginAtZero: true,
+              ticks: { color: "#8d9bb0", font: { size: 11 } },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
+            y: {
+              title: { display: true, text: "Back Order Demand", color: "#8d9bb0", font: { weight: "700", size: 11 } },
+              beginAtZero: true,
+              ticks: { color: "#8d9bb0", font: { size: 11 } },
+              grid: { color: "rgba(148,163,184,0.12)" },
+            },
           },
           onClick(evt, els) {
             if (!els.length) return;
@@ -13036,7 +13068,7 @@
           labels: ["Below Plan", "Above Plan", "On Track"],
           datasets: [{
             data: donutData,
-            backgroundColor: ["#eb0a1e", "#0f766e", "#2563eb"],
+            backgroundColor: ["#ff3b4e", "#34d399", "#3b82f6"],
             borderWidth: 0,
           }],
         },
@@ -13045,7 +13077,7 @@
           maintainAspectRatio: false,
           cutout: "68%",
           plugins: {
-            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 }, color: "#e8eef7" } },
             tooltip: {
               callbacks: {
                 label(ctx) {
@@ -13293,12 +13325,21 @@
             scales: {
               x: {
                 beginAtZero: true,
-                grid: { color: "rgba(148,163,184,0.25)" },
-                ticks: { maxTicksLimit: 6, font: { size: 10 } },
+                grid: { color: "rgba(148,163,184,0.16)" },
+                ticks: { maxTicksLimit: 6, font: { size: 11 }, color: "#8d9bb0" },
               },
               y: {
                 grid: { display: false },
-                ticks: { font: { size: 11, weight: "600" }, autoSkip: false },
+                ticks: {
+                  font: { size: 11, weight: "600" },
+                  color: "#e8eef7",
+                  autoSkip: false,
+                  callback(value) {
+                    const label = this.getLabelForValue(value);
+                    const text = String(label || "");
+                    return text.length > 16 ? text.slice(0, 14) + "…" : text;
+                  },
+                },
               },
             },
             onClick(evt, els) {
@@ -13317,9 +13358,9 @@
         if (typeof console !== "undefined" && console.error) console.error("[ACT top chart]", id, err);
       }
     };
-    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(235,10,30,0.8)", "act-top-fallback-bo");
-    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(96,165,250,0.85)", "act-top-fallback-stock");
-    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(235,10,30,0.8)" : "rgba(15,118,110,0.8)"), "act-top-fallback-gap");
+    makeTop("chart-act-top-bo", topBo, "boCount", "rgba(255,59,78,0.88)", "act-top-fallback-bo");
+    makeTop("chart-act-top-stock", topStock, "stockCount", "rgba(79,157,255,0.9)", "act-top-fallback-stock");
+    makeTop("chart-act-top-gap", topGap, "gap", (r) => (r.gap > 0 ? "rgba(255,59,78,0.9)" : "rgba(52,211,153,0.9)"), "act-top-fallback-gap");
 
     renderActAlertTable(metrics);
   }
