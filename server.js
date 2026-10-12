@@ -8055,6 +8055,20 @@ require('./toyota-internal-lease-calculator-main/bo-data-api').attachBoDataApi(a
   }
 });
 
+require('./contact-performance-api').attachContactPerformance(app, {
+  dir: path.join(PERSISTENT_ROOT, 'contact-performance'),
+  password: END_OF_MONTH_PASSWORD,
+  XLSX,
+  broadcast(at) {
+    const payload = JSON.stringify({ type: 'contact_performance_updated', at: at || Date.now() });
+    for (const client of wsClients) {
+      if (client.readyState === 1) {
+        try { client.send(payload); } catch { /* ignore */ }
+      }
+    }
+  }
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 

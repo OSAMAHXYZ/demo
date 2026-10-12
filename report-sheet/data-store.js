@@ -459,6 +459,8 @@
             }
           } else if (msg.type === "gec_control_updated") {
             checkMeta("GEC CONTROL");
+          } else if (msg.type === "contact_performance_updated") {
+            window.dispatchEvent(new CustomEvent("contact-performance-updated", { detail: msg }));
           }
         } catch {
           /* ignore */

@@ -19,6 +19,7 @@
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261011pt1"></script>
+  <script src="contact-performance.js?v=20261012cp1"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -34,6 +35,7 @@
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261011pt2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261011mv1" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261012cp3" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -170,6 +172,8 @@
 
       <!-- PANEL: GEC Control Center (full-viewport overlay, see gec-dashboard.css) -->
       <div class="panel-section" id="panel-gec" style="display:none"><div id="gec-host"></div></div>
+
+      <div class="panel-section" id="panel-contact" style="display:none"><div id="contact-performance-host"></div></div>
 
       <!-- PANEL: Delivery · view of delivery-transformation/admin.html -->
       <div class="panel-section" id="panel-delivery" style="display:none">
@@ -7202,6 +7206,7 @@
     { id: "salesreport", label: "Sales Dashboard" },
     { id: "ytdsales", label: "YTD Sales" },
     { id: "gec", label: "GEC Dashboard" },
+    { id: "contact", label: "Contact Performance" },
     { id: "delivery", label: "Delivery" },
     { id: "lexus", label: "Lexus Tracker" },
     { id: "b2c", label: "B2C Tracker" },
@@ -7905,7 +7910,7 @@
     if (activePanel === "boerrors" && panelId !== "boerrors") {
       const boeWrap = document.getElementById("boe-table-wrap");
       if (boeWrap) boeWrap.textContent = "";
-      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker"];
+      const keepsDashboard = ["delivery", "gec", "lexus", "b2c", "summary", "plantracker", "contact"];
       if (!window._data && typeof hasAnyPushedFiles === "function" && !hasAnyPushedFiles() && !keepsDashboard.includes(panelId)) {
         const dash = $("#dashboard");
         const wait = $("#wait-section");
@@ -7927,6 +7932,7 @@
     document.body.classList.toggle("boe-mode", panelId === "boerrors");
     document.body.classList.toggle("alloc-mode", panelId === "boallocstock");
     document.body.classList.toggle("delivery-mode", panelId === "delivery");
+    document.body.classList.toggle("cp-mode", panelId === "contact");
     if (panelId !== "salesreport") setSrSheet("");
     if (globalDateStale && panelId !== "summary") rebuildForGlobalDate();
     PANEL_DEFS.forEach((p) => {
@@ -7938,6 +7944,7 @@
       salesreport: "▣",
       ytdsales: "Y",
       gec: "✦",
+      contact: "☎",
       delivery: "D",
       lexus: "L",
       b2c: "T",
@@ -8001,6 +8008,16 @@
       if (wait) wait.style.display = "";
     }
     if (panelId === "gec") renderGecPanel();
+    if (panelId === "contact") {
+      const dash = $("#dashboard");
+      const wait = $("#wait-section");
+      if (dash) {
+        dash.classList.add("show");
+        dash.style.display = "";
+      }
+      if (wait) wait.style.display = "none";
+      if (window.ContactPerformance) window.ContactPerformance.mount(document.getElementById("contact-performance-host"));
+    }
     if (panelId === "lexus" && window.LexusTracker) {
       const lxHost = $("#lexus-tracker-host");
       if (lxHost.parentNode !== document.body) document.body.appendChild(lxHost);
