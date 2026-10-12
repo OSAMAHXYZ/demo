@@ -6,6 +6,8 @@ const crypto = require('crypto');
 
 const MAX_BYTES = 30 * 1024 * 1024;
 const MAX_ROWS = 100000;
+const MATCH_COL = 2;
+const EXPORT_STATUS_COL = 6;
 const CONTACTED = new Set(['contacted', 'contact done', 'reached', 'successfully contacted', 'contact successful']);
 const NOT_CONTACTED = new Set(['not contacted', 'not contact', 'no contact', 'uncontacted', 'not yet contacted']);
 const IN_PROGRESS = new Set(['in progress', 'inprogress', 'pending', 'follow up', 'followup', 'attempting', 'callback', 'call back', 'scheduled', 'working', 'open']);
@@ -71,8 +73,8 @@ function normalizeId(value, cell) {
 function classifyContactStatus(raw) {
   const compact = normHeader(raw).replace(/[_-]+/g, ' ');
   if (!compact) return 'missing';
-  if (NOT_CONTACTED.has(compact) || /^not[\s-]+contacted$/.test(compact)) return 'not_contacted';
-  if (CONTACTED.has(compact) || (/^contacted\b/.test(compact) && !/^not\b/.test(compact))) return 'contacted';
+  if (NOT_CONTACTED.has(compact) || /not[\s-]+contact/.test(compact) || compact.includes('no contact') || compact.includes('not reached') || compact.includes('uncontact')) return 'not_contacted';
+  if (CONTACTED.has(compact) || compact.includes('contacted') || compact === 'contact' || (compact.includes('reached') && !compact.includes('not'))) return 'contacted';
   if (IN_PROGRESS.has(compact)) return 'in_progress';
   return 'unknown';
 }
@@ -212,7 +214,7 @@ function sheetMatrix(ws, XLSX) {
   for (let r = range.s.r; r <= range.e.r; r += 1) {
     const row = [];
     let any = false;
-    for (let c = range.s.c; c <= range.e.c; c += 1) {
+    for (let c = 0; c <= range.e.c; c += 1) {
       const cell = ws[XLSX.utils.encode_cell({ r, c })] || null;
       if (cell && cell.v != null && cell.v !== '') any = true;
       row.push(cell);
@@ -296,18 +298,33 @@ function parseTable(buffer, filename, role, XLSX) {
   const ws = opened.wb.Sheets[picked.name];
   const matrix = sheetMatrix(ws, XLSX);
   const fields = role === 'contact' ? CONTACT_FIELDS : CRM_FIELDS;
-  const required = role === 'contact' ? fields.leadNumber : fields.transactionNo;
-  const located = locateHeader(matrix, required);
-  const label = role === 'contact' ? 'Lead Number' : 'Transaction No.';
+  const idKey = role === 'contact' ? 'leadNumber' : 'transactionNo';
+  const aliases = Object.keys(fields).reduce((list, key) => list.concat(fields[key]), []);
+  const located = locateHeader(matrix, aliases);
   if (!located) {
-    return { errors: [`Required column missing: ${label}`], warnings, rows: [], sheetName: picked.name };
+    return { errors: ['No header row was found, so column C could not be matched.'], warnings, rows: [], sheetName: picked.name };
   }
   const columns = {};
   Object.keys(fields).forEach((key) => {
     columns[key] = findColumn(located.labels, fields[key]);
   });
-  if (role === 'contact' && columns.status < 0) {
-    return { errors: ['Required column missing: Status'], warnings, rows: [], sheetName: picked.name, columns };
+  const namedCol = columns[idKey];
+  columns[idKey] = MATCH_COL;
+  const columnCHeader = located.labels[MATCH_COL] || '';
+  if (namedCol >= 0 && namedCol !== MATCH_COL) {
+    warnings.push(`The named identifier is not in column C. Matching uses column C${columnCHeader ? ` ("${columnCHeader}")` : ''}.`);
+  } else if (!columnCHeader) {
+    warnings.push('Column C has no header. Its values are still used as the match key.');
+  }
+  if (role === 'contact') {
+    const namedStatus = columns.status;
+    columns.status = EXPORT_STATUS_COL;
+    const statusHeader = located.labels[EXPORT_STATUS_COL] || '';
+    if (namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
+      warnings.push(`Contact status is read from column G${statusHeader ? ` ("${statusHeader}")` : ''}, not the other status column.`);
+    } else if (!statusHeader) {
+      warnings.push('Column G has no header. Its values are still used as the contact status.');
+    }
   }
   if (role === 'contact' && columns.employeeName < 0) warnings.push('Column not found: Employee Responsible. Matched leads use the CRM employee when that column is present.');
   ['initialContact', 'createdDate', 'source', 'centre', 'leadType'].forEach((key) => {
@@ -370,9 +387,7 @@ function parseTable(buffer, filename, role, XLSX) {
   const withKey = rows.filter((row) => row.key).length;
   if (!withKey) {
     return {
-      errors: [role === 'contact'
-        ? 'The contact-tracking file contains no valid Lead Number values. Publication has been blocked.'
-        : 'The CRM export contains no valid transaction identifiers. Publication has been blocked.'],
+      errors: [`Column C in the ${role === 'contact' ? 'contact-tracking file' : 'CRM export'} has no values to match. Publication has been blocked.`],
       warnings,
       rows: [],
       sheetName: picked.name,
@@ -528,7 +543,7 @@ function buildDataset(contactParsed, crmParsed) {
         createdDisplay: '',
         createdSort: 0,
         telephone: crm.telephone || '',
-        fields: { Note: 'This Transaction No. matches more than one contact row and those rows do not agree, so it was not matched.' },
+        fields: { Note: 'This column C value matches more than one contact row and those rows do not agree, so it was not matched.' },
       });
       return;
     }
@@ -718,20 +733,24 @@ function summarize(dataset, query) {
   const universe = crmScoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only');
   const matchedRows = universe.filter((record) => record.matchKind === 'matched');
   const contacted = matchedRows.filter((record) => record.bucket === 'contacted').length;
+  const exportContacted = (dataset.records || []).filter((record) => (record.matchKind === 'matched' || record.matchKind === 'contact_only') && record.bucket === 'contacted').length;
+  const exportNotContacted = (dataset.records || []).filter((record) => (record.matchKind === 'matched' || record.matchKind === 'contact_only') && record.bucket === 'not_contacted').length;
   const notContacted = matchedRows.filter((record) => record.bucket === 'not_contacted').length;
   const inProgress = matchedRows.filter((record) => record.bucket === 'in_progress').length;
   const unknown = matchedRows.filter((record) => record.bucket === 'unknown' || record.bucket === 'missing').length;
   const unmatched = universe.filter((record) => record.matchKind === 'crm_only').length;
   const distribution = [
-    { key: 'contacted', label: 'Contacted', count: contacted },
-    { key: 'not_contacted', label: 'Not Contacted', count: notContacted },
+    { key: 'contacted', label: 'Contacted', count: exportContacted, crmPct: true },
+    { key: 'not_contacted', label: 'Not Contacted', count: exportNotContacted, crmPct: true },
     { key: 'in_progress', label: 'In Progress', count: inProgress },
     { key: 'unknown', label: 'Unknown/Missing Status', count: unknown },
     { key: 'unmatched', label: 'Unmatched — No Contact Record', count: unmatched },
   ];
   const distTotal = distribution.reduce((sum, item) => sum + item.count, 0);
   distribution.forEach((item) => {
-    item.pct = distTotal ? Math.round((item.count / distTotal) * 1000) / 10 : 0;
+    if (item.crmPct) item.pct = rate(item.count, universe.length) || 0;
+    else item.pct = distTotal ? Math.round((item.count / distTotal) * 1000) / 10 : 0;
+    delete item.crmPct;
   });
   const crmCounts = new Map();
   scoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only').forEach((record) => {
@@ -743,7 +762,7 @@ function summarize(dataset, query) {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   const byEmployee = new Map();
-  matchedRows.forEach((record) => {
+  universe.forEach((record) => {
     const key = record.employeeKey || 'name:unassigned';
     if (!byEmployee.has(key)) {
       byEmployee.set(key, {
@@ -757,8 +776,9 @@ function summarize(dataset, query) {
       });
     }
     const row = byEmployee.get(key);
-    row.names.push(record.employeeName);
-    if (!row.number && record.employeeNumber) row.number = record.employeeNumber;
+    if (record.employeeName) row.names.push(record.employeeName);
+    if (record.employeeNumber) row.number = record.employeeNumber;
+    if (record.matchKind !== 'matched') return;
     row.matched += 1;
     if (record.bucket === 'contacted') row.contacted += 1;
     else if (record.bucket === 'not_contacted') row.notContacted += 1;
@@ -775,16 +795,16 @@ function summarize(dataset, query) {
     contactRate: rate(row.contacted, row.matched),
     ach: null,
   }));
-  employees.sort((a, b) => (b.contactRate || -1) - (a.contactRate || -1) || b.contacted - a.contacted || a.name.localeCompare(b.name));
+  employees.sort((a, b) => (b.contactRate == null ? -1 : b.contactRate) - (a.contactRate == null ? -1 : a.contactRate) || b.matched - a.matched || b.contacted - a.contacted || a.name.localeCompare(b.name));
   employees.forEach((row, index) => { row.rank = index + 1; });
 
   const optionUniverse = optionScoped.filter((record) => record.matchKind === 'matched' || record.matchKind === 'crm_only');
   const optionMatched = optionUniverse.filter((record) => record.matchKind === 'matched');
   const optionEmployees = new Map();
-  optionMatched.forEach((record) => {
+  optionUniverse.forEach((record) => {
     const key = record.employeeKey || 'name:unassigned';
     if (!optionEmployees.has(key)) optionEmployees.set(key, { key, names: [], number: record.employeeNumber || '' });
-    optionEmployees.get(key).names.push(record.employeeName);
+    if (record.employeeName) optionEmployees.get(key).names.push(record.employeeName);
     if (record.employeeNumber) optionEmployees.get(key).number = record.employeeNumber;
   });
   const options = {
@@ -808,6 +828,10 @@ function summarize(dataset, query) {
       inProgress,
       unknown,
       contactRate: rate(contacted, matchedRows.length),
+      exportContacted,
+      contactedOfCrm: rate(exportContacted, universe.length),
+      exportNotContacted,
+      notContactedOfCrm: rate(exportNotContacted, universe.length),
     },
     distribution,
     crmBars,

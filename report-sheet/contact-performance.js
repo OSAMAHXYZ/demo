@@ -2,11 +2,11 @@
   "use strict";
 
   const COLORS = {
-    contacted: "#16803D",
-    not_contacted: "#D92D20",
-    in_progress: "#D97706",
+    contacted: "#16A34A",
+    not_contacted: "#DC2626",
+    in_progress: "#F59E0B",
     unknown: "#98A2B3",
-    unmatched: "#2563EB",
+    unmatched: "#7C3AED",
   };
   const CONTACT_OPTIONS = [
     ["", "All CRM leads"],
@@ -104,7 +104,13 @@
         </section>
       </div>
       <section class="cp-card cp-employees">
-        <h3>Employee performance</h3>
+        <div class="cp-section-head">
+          <h3>Employee performance</h3>
+          <span class="cp-count" id="cp-emp-count">0 employees</span>
+          <input id="cp-emp-search" type="search" placeholder="Search name or employee number" aria-label="Search employees" />
+          <button type="button" class="cp-btn" id="cp-emp-all">All employees</button>
+          <button type="button" class="cp-btn" id="cp-emp-expand">View all employees</button>
+        </div>
         <div class="cp-table-wrap" id="cp-emp-wrap"></div>
       </section>
       <section class="cp-card cp-leads">
@@ -126,6 +132,7 @@
       activeId: "",
       empSort: "rank",
       empDir: "asc",
+      empQuery: "",
       charts: [],
     };
     const userCard = document.querySelector(".sidebar-user-meta strong");
@@ -237,7 +244,9 @@
         periods.map((item) => `<option value="${esc(item.id)}"${item.id === state.publication ? " selected" : ""}>${esc(periodLabel(item.period))}</option>`).join("")
         || `<option value="">No period</option>`
       }</select></label>`);
-      if ((options.employees || []).length) parts.push(fieldSelect("employee", "Employee", options.employees, state.filters.employee));
+      if ((options.employees || []).length) {
+        parts.push(fieldSelect("employee", "Employee", [{ key: "", label: "All employees" }].concat(options.employees), state.filters.employee));
+      }
       if (columns.centre && (options.centres || []).length) parts.push(fieldSelect("centre", "Centre", options.centres, state.filters.centre));
       if (columns.source && (options.sources || []).length) parts.push(fieldSelect("source", "Lead source", options.sources, state.filters.source));
       if (columns.leadType && (options.leadTypes || []).length) parts.push(fieldSelect("leadType", "Lead type", options.leadTypes, state.filters.leadType));
@@ -269,12 +278,12 @@
     function renderKpis() {
       const kpis = (state.summary && state.summary.kpis) || {};
       const cards = [
-        ["", "Total CRM Leads", fmt(kpis.totalCrm), "Unique CRM transaction numbers", ""],
-        ["matched", "Matched Leads", fmt(kpis.matched), "Lead Number = Transaction No.", "info"],
-        ["contacted", "Contacted Leads", fmt(kpis.contacted), "Matched and contacted", "ok"],
-        ["not_contacted", "Not Contacted Leads", fmt(kpis.notContacted), "Matched and not contacted", "bad"],
-        ["in_progress", "In Progress Leads", fmt(kpis.inProgress), "Matched and in progress", "wait"],
-        ["contacted", "Contact Rate", pct(kpis.contactRate), "Contacted ÷ matched leads", ""],
+        ["", "Total CRM Leads", fmt(kpis.totalCrm), "Unique transactions", ""],
+        ["matched", "Matched Leads", fmt(kpis.matched), "Column C in both files", "info"],
+        ["contacted", "Contacted Leads", fmt(kpis.exportContacted), `${pct(kpis.contactedOfCrm)} of CRM total`, "ok"],
+        ["not_contacted", "Not Contacted Leads", fmt(kpis.exportNotContacted), `${pct(kpis.notContactedOfCrm)} of CRM total`, "bad"],
+        ["in_progress", "In Progress Leads", fmt(kpis.inProgress), "Matched, in progress", "wait"],
+        ["contacted", "Contact Rate", pct(kpis.contactRate), "Contacted ÷ matched", ""],
       ];
       host.querySelector("#cp-kpis").innerHTML = cards.map((card, index) => {
         const on = index < 5 && state.filters.contact === card[0] && card[0] !== "";
@@ -291,12 +300,17 @@
       const summary = state.summary || {};
       const distribution = summary.distribution || [];
       const legend = host.querySelector("#cp-donut-legend");
-      legend.innerHTML = distribution.map((item) => `<li><button type="button" data-contact="${esc(item.key)}">
+      legend.innerHTML = distribution.map((item) => {
+        const share = item.key === "contacted" || item.key === "not_contacted"
+          ? `${Number(item.pct || 0).toFixed(1)}% of CRM`
+          : `${Number(item.pct || 0).toFixed(1)}%`;
+        return `<li><button type="button" data-contact="${esc(item.key)}">
         <i class="sw" style="background:${COLORS[item.key] || "#98A2B3"}"></i>
         <span>${esc(item.label)}</span>
         <b>${fmt(item.count)}</b>
-        <span class="muted">${Number(item.pct || 0).toFixed(1)}%</span>
-      </button></li>`).join("") || `<li class="cp-empty">No records</li>`;
+        <span class="muted">${esc(share)}</span>
+      </button></li>`;
+      }).join("") || `<li class="cp-empty">No records</li>`;
       if (global.Chart) {
         const donut = host.querySelector("#cp-donut");
         state.charts.push(new global.Chart(donut, {
@@ -326,7 +340,7 @@
           type: "bar",
           data: {
             labels: bars.map((item) => item.label),
-            datasets: [{ data: bars.map((item) => item.count), backgroundColor: "#2563EB", borderRadius: 4, maxBarThickness: 16 }],
+            datasets: [{ data: bars.map((item) => item.count), backgroundColor: "#3563E9", borderRadius: 4, maxBarThickness: 16 }],
           },
           options: {
             indexAxis: "y",
@@ -349,17 +363,21 @@
     }
 
     function renderEmployees() {
-      const rows = ((state.summary && state.summary.employees) || []).slice();
+      const all = ((state.summary && state.summary.employees) || []).slice();
+      const q = String(state.empQuery || "").trim().toLowerCase();
+      const rows = (q ? all.filter((row) => `${row.name} ${row.number || ""}`.toLowerCase().includes(q)) : all).slice();
       const dir = state.empDir === "asc" ? 1 : -1;
       rows.sort((a, b) => {
         const key = state.empSort;
-        const av = a[key];
-        const bv = b[key];
+        const av = key === "contactRate" && a.contactRate == null ? -1 : a[key];
+        const bv = key === "contactRate" && b.contactRate == null ? -1 : b[key];
         if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
         return String(av || "").localeCompare(String(bv || "")) * dir;
       });
+      const count = host.querySelector("#cp-emp-count");
+      if (count) count.textContent = `Showing ${fmt(rows.length)} of ${fmt(all.length)} employees`;
       const head = (key, label) => `<th><button type="button" data-emp-sort="${esc(key)}">${esc(label)}</button></th>`;
-      const body = rows.length ? rows.map((row) => `<tr class="is-pick" data-employee="${esc(row.key)}">
+      const body = rows.length ? rows.map((row) => `<tr class="is-pick${state.filters.employee === row.key ? " is-on" : ""}" data-employee="${esc(row.key)}">
         <td class="num">${row.rank}</td>
         <td title="${esc(row.name)}">${esc(row.name)}</td>
         <td>${esc(row.number || "—")}</td>
@@ -369,8 +387,8 @@
         <td class="num">${fmt(row.inProgress)}</td>
         <td class="num">${esc(pct(row.contactRate))}</td>
         <td>N/A</td>
-        <td><span class="cp-meter" title="Contact rate"><span style="width:${Math.max(0, Math.min(100, row.contactRate || 0))}%"></span></span>${esc(pct(row.contactRate))}</td>
-      </tr>`).join("") : `<tr><td colspan="10"><div class="cp-empty">No matched leads for the current filters.</div></td></tr>`;
+        <td><span class="cp-meter" title="Contact rate from matched leads"><span style="width:${Math.max(0, Math.min(100, row.contactRate || 0))}%"></span></span>${esc(pct(row.contactRate))} <span class="cp-vol">${fmt(row.matched)} leads</span></td>
+      </tr>`).join("") : `<tr><td colspan="10"><div class="cp-empty">${all.length ? "No employees match that search." : "No employees for the current filters."}</div></td></tr>`;
       host.querySelector("#cp-emp-wrap").innerHTML = `<table class="cp-table">
         <thead><tr>
           ${head("rank", "Rank")}${head("name", "Employee")}${head("number", "Employee no.")}
@@ -465,12 +483,30 @@
       }
       if (event.target.closest("#cp-reset")) {
         state.filters = { employee: "", centre: "", source: "", leadType: "", contact: "", crm: "", q: "" };
+        state.empQuery = "";
+        const search = host.querySelector("#cp-emp-search");
+        if (search) search.value = "";
         state.page = 1;
         loadAll();
         return;
       }
       if (event.target.closest("#cp-refresh")) {
         loadAll();
+        return;
+      }
+      if (event.target.closest("#cp-emp-all")) {
+        state.filters.employee = "";
+        state.empQuery = "";
+        const search = host.querySelector("#cp-emp-search");
+        if (search) search.value = "";
+        state.page = 1;
+        loadAll();
+        return;
+      }
+      if (event.target.closest("#cp-emp-expand")) {
+        const app = host.querySelector(".cp-app");
+        const open = app.classList.toggle("is-roster");
+        event.target.closest("#cp-emp-expand").textContent = open ? "Back to dashboard" : "View all employees";
         return;
       }
       const kpi = event.target.closest("[data-kpi]");
@@ -515,6 +551,11 @@
       }
       const lead = event.target.closest("[data-lead]");
       if (lead) openLead(lead.getAttribute("data-lead"));
+    });
+
+    host.querySelector("#cp-emp-search").addEventListener("input", (event) => {
+      state.empQuery = event.target.value;
+      renderEmployees();
     });
 
     async function openLead(id) {

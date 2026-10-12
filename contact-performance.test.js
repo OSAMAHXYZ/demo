@@ -19,35 +19,36 @@ function workbook(sheetName, rows) {
 
 function contactFile() {
   return workbook('Export', [
-    ['Lead Number', 'Initial Contact', 'Employee Responsible', 'Created Date', 'Status', 'Source', 'Centre Name', 'Lead Type'],
-    ['00123', 'Yes', 'Sara Nasser', '01.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['00123', 'Yes', 'Sara Nasser', '02.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['200', 'No', 'Ali', '03.10.2026', 'Not Contacted', 'Walk-in', 'Riyadh', 'Used'],
-    ['200', 'No', 'Omar', '03.10.2026', 'Contacted', 'Walk-in', 'Riyadh', 'Used'],
-    ['300', 'Yes', 'Ali M', '04.10.2026', 'In Progress', 'Web', 'Jeddah', 'New'],
-    ['400', '', 'Nora', '05.10.2026', 'Mystery', 'Event', 'Dammam', 'Fleet'],
-    ['500', 'Yes', 'Hadi', 'not-a-date', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['', 'Yes', 'Blank', '06.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
-    ['700', 'Yes', 'Contact Only', '07.10.2026', 'Not Contacted', 'Web', 'Jeddah', 'New'],
+    ['Lead Number', 'Ignore', 'Lead Number', 'Initial Contact', 'Employee Responsible', 'Created Date', 'Status', 'Source', 'Centre Name', 'Lead Type'],
+    ['NOT-THIS', '', '00123', 'Yes', 'Sara Nasser', '01.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
+    ['NOT-THIS', '', '00123', 'Yes', 'Sara Nasser', '02.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
+    ['NOT-THIS', '', '200', 'No', 'Ali', '03.10.2026', 'Not Contacted', 'Walk-in', 'Riyadh', 'Used'],
+    ['NOT-THIS', '', '200', 'No', 'Omar', '03.10.2026', 'Contacted', 'Walk-in', 'Riyadh', 'Used'],
+    ['NOT-THIS', '', '300', 'Yes', 'Ali M', '04.10.2026', 'In Progress', 'Web', 'Jeddah', 'New'],
+    ['NOT-THIS', '', '400', '', 'Nora', '05.10.2026', 'Mystery', 'Event', 'Dammam', 'Fleet'],
+    ['NOT-THIS', '', '500', 'Yes', 'Hadi', 'not-a-date', 'Contacted', 'Web', 'Jeddah', 'New'],
+    ['NOT-THIS', '', '', 'Yes', 'Blank', '06.10.2026', 'Contacted', 'Web', 'Jeddah', 'New'],
+    ['NOT-THIS', '', '700', 'Yes', 'Contact Only', '07.10.2026', 'Not Contacted', 'Web', 'Jeddah', 'New'],
   ]);
 }
 
 function crmCsv() {
   const lines = [
-    ['Transaction No.', 'Prospect', 'Model', 'Status', 'Employee Responsible', 'Telephone', 'Employee Number', 'Centre'].join('\t'),
-    ['00123', 'Prospect A', 'Camry', 'Open', 'Sara Nasser', '0550000001', '1001', 'Jeddah'].join('\t'),
-    ['200', 'Prospect B', 'Hilux', 'Won', 'Ali Saleh', '0550000002', '2002', 'Riyadh'].join('\t'),
-    ['300', 'Prospect C', 'Yaris', 'Open', 'Ali M', '0550000003', '3003', 'Jeddah'].join('\t'),
-    ['400', 'Prospect D', 'Raize', 'Lost', 'Nora', '0550000004', '4004', 'Dammam'].join('\t'),
-    ['500', 'Prospect E', 'Corolla', 'Open', 'Hadi', '0550000005', '5005', 'Jeddah'].join('\t'),
-    ['800', 'Prospect F', 'Fortuner', 'Open', 'Unmatched Person', '0550000006', '8008', 'Jeddah'].join('\t'),
-    ['', 'No Id', 'Camry', 'Open', 'Nobody', '0550000007', '1', 'Jeddah'].join('\t'),
+    ['Transaction No.', 'Ignore', 'Transaction No.', 'Prospect', 'Model', 'Status', 'Employee Responsible', 'Telephone', 'Employee Number', 'Centre'].join('\t'),
+    ['NOT-THIS', '', '00123', 'Prospect A', 'Camry', 'Open', 'Sara Nasser', '0550000001', '1001', 'Jeddah'].join('\t'),
+    ['NOT-THIS', '', '200', 'Prospect B', 'Hilux', 'Won', 'Ali Saleh', '0550000002', '2002', 'Riyadh'].join('\t'),
+    ['NOT-THIS', '', '300', 'Prospect C', 'Yaris', 'Open', 'Ali M', '0550000003', '3003', 'Jeddah'].join('\t'),
+    ['NOT-THIS', '', '400', 'Prospect D', 'Raize', 'Lost', 'Nora', '0550000004', '4004', 'Dammam'].join('\t'),
+    ['NOT-THIS', '', '500', 'Prospect E', 'Corolla', 'Open', 'Hadi', '0550000005', '5005', 'Jeddah'].join('\t'),
+    ['NOT-THIS', '', '800', 'Prospect F', 'Fortuner', 'Open', 'Unmatched Person', '0550000006', '8008', 'Jeddah'].join('\t'),
+    ['NOT-THIS', '', '', 'No Id', 'Camry', 'Open', 'Nobody', '0550000007', '1', 'Jeddah'].join('\t'),
   ];
   return Buffer.from(lines.join('\n'), 'utf8');
 }
 
 async function main() {
-  assert(api.classifyContactStatus('Not Contacted') === 'not_contacted', 'not contacted');
+  assert(api.classifyContactStatus('Not Contacted Yet') === 'not_contacted', 'not contacted phrase');
+  assert(api.classifyContactStatus('Customer Contacted') === 'contacted', 'contacted phrase');
   assert(api.classifyContactStatus('Mystery') === 'unknown', 'unknown stays unknown');
   assert(api.classifyContactStatus('') === 'missing', 'blank is missing');
   assert(api.normalizeId('00123') === '00123', 'leading zeros stay on text');
@@ -58,6 +59,7 @@ async function main() {
   assert(!crm.errors.length, crm.errors.join('; '));
   const lead123 = contact.rows.find((row) => row.leadNumber === '00123');
   assert(lead123, 'parsed lead 00123');
+  assert(!contact.rows.some((row) => row.leadNumber === 'NOT-THIS'), 'column A is not the match key');
   const dataset = api.buildDataset(contact, crm);
   assert(!dataset.errors.length, dataset.errors.join('; '));
   const rec = dataset.reconciliation;
@@ -78,6 +80,14 @@ async function main() {
   assert(summary.kpis.totalCrm === 5, `total crm ${summary.kpis.totalCrm}`);
   assert(summary.kpis.matched === 4, 'kpi matched');
   assert(summary.kpis.contacted === 2, `contacted ${summary.kpis.contacted}`);
+  assert(contact.columns.status === 6, 'contact status is export column G');
+  assert(summary.kpis.exportContacted === 2, `export contacted ${summary.kpis.exportContacted}`);
+  assert(summary.kpis.contactedOfCrm === 40, `contacted share ${summary.kpis.contactedOfCrm}`);
+  const contactedSlice = summary.distribution.find((item) => item.key === 'contacted');
+  const notContactedSlice = summary.distribution.find((item) => item.key === 'not_contacted');
+  assert(contactedSlice.count === 2 && contactedSlice.pct === 40, 'chart shows export contacted');
+  assert(notContactedSlice.count === 1 && notContactedSlice.pct === 20, 'chart shows export not contacted');
+  assert(summary.kpis.notContactedOfCrm === 20, `not contacted share ${summary.kpis.notContactedOfCrm}`);
   assert(summary.kpis.notContacted === 0, 'unknown is not not-contacted');
   assert(summary.kpis.inProgress === 1, 'in progress');
   assert(summary.kpis.contactRate === 50, `rate ${summary.kpis.contactRate}`);
@@ -96,7 +106,7 @@ async function main() {
   const bad = api.parseTable(badBuf, 'bad.xlsx', 'contact', XLSX);
   assert(bad.errors.some((line) => /Export worksheet/.test(line)), 'unexpected sheet blocks');
   const noTxn = api.parseTable(Buffer.from('Prospect,Status\nA,Open\n', 'utf8'), 'crm.csv', 'crm', XLSX);
-  assert(noTxn.errors.some((line) => /Transaction No/.test(line)), 'missing transaction column');
+  assert(noTxn.errors.some((line) => /Column C/.test(line)), 'missing column C blocks');
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-test-'));
   const routes = [];
