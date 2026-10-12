@@ -348,8 +348,8 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { precision: 0, color: "#667085" }, grid: { color: "#E4E7EC" } },
-              y: { ticks: { color: "#172B4D", font: { size: 11 }, autoSkip: false }, grid: { display: false } },
+              x: { ticks: { precision: 0, color: "#8d9bb0" }, grid: { color: "rgba(148, 163, 184, 0.16)" } },
+              y: { ticks: { color: "#e8eef7", font: { size: 11 }, autoSkip: false }, grid: { display: false } },
             },
             onClick: (_evt, elements) => {
               if (!elements.length) return;

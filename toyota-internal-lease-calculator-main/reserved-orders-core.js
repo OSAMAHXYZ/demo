@@ -1699,6 +1699,28 @@ function attachReservedOrders(app, options) {
         const live = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
         res.json({ requests: store.map((item) => publicMarketing(item, live)) });
     });
+    app.get('/api/reserved-orders/board', (_req, res) => {
+        const live = loadLive();
+        const orders = (live.orders || []).map((order) => ({
+            queueNumber: order.queueNumber == null ? null : order.queueNumber,
+            orderNumber: order.orderNumber || '',
+            vin: order.vin || '',
+            salesAdvisor: order.salesAdvisor || '',
+            paymentLabel: order.paymentLabel || '',
+            status: order.status || '',
+            vehicle: order.vehicle || ''
+        }));
+        const store = loadMarketing().slice().reverse();
+        const bo = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+        res.json({
+            updatedAt: live.updatedAt || '',
+            esalesName: live.esalesName || '',
+            boName: live.boName || '',
+            report: live.report || {},
+            orders,
+            requests: store.map((item) => publicMarketing(item, bo))
+        });
+    });
 
     return {
         refreshFromBuffers(esalesBuffer, boBuffer, names) {

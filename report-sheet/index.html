@@ -19,12 +19,12 @@
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261011pt1"></script>
-  <script src="contact-performance.js?v=20261012cp8"></script>
+  <script src="contact-performance.js?v=20261013cp10"></script>
   <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
   <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261010alloc8" />
+  <link rel="stylesheet" href="dashboard.css?v=20261013rv1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
@@ -34,8 +34,8 @@
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
-  <link rel="stylesheet" href="alloc-tower.css?v=20261013alloc4" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261012cp9" />
+  <link rel="stylesheet" href="alloc-tower.css?v=20261013alloc6" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261013cp11" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -1073,6 +1073,29 @@
           </div>
           <div class="rv-sheets" id="rv-sheets" aria-label="Stock E-Sales workbook sheets"></div>
           <div class="bo-kpis" id="rv-kpis"></div>
+          <section class="rv-board" id="rv-board" aria-label="Live sheet and marketing requests">
+            <article class="rv-board-card">
+              <header class="rv-board-h">
+                <div>
+                  <h3>Live sheet</h3>
+                  <p id="rv-live-meta">Loading the reserved-orders live sheet…</p>
+                </div>
+              </header>
+              <div class="rv-live-kpis" id="rv-live-kpis"></div>
+              <div class="rv-pay" id="rv-live-pay"></div>
+              <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
+              <div class="rv-live-table" id="rv-live-table"></div>
+            </article>
+            <article class="rv-board-card">
+              <header class="rv-board-h">
+                <div>
+                  <h3 dir="rtl">طلبات التسويق</h3>
+                  <p id="rv-mkt-count">Orders advisors sent from the BO file</p>
+                </div>
+              </header>
+              <div class="rv-mkt-list" id="rv-mkt-rows"></div>
+            </article>
+          </section>
           <div class="table-wrap rv-table-wrap" id="rv-table-wrap"></div>
           <p class="foot" id="rv-table-foot"></p>
         </div>
@@ -7273,7 +7296,7 @@
 
   function visiblePanels() {
     return PANEL_DEFS.filter((p) => {
-      if (p.id === "stockdashboard") return false; // hidden from nav; panel code kept
+      if (p.id === "stockdashboard" || p.id === "dashboard") return false; // hidden from nav; panel code kept
       if (p.id === "salesreport") return hasSalesReportInputs();
       if (p.id === "summary") return hasSummaryInputs();
       if (p.id === "reservedvehicles") return true;
@@ -7281,7 +7304,7 @@
       if (p.id === "gec") return true;
       if (p.id === "delivery") return true;
       if (p.id === "boerrors") return true;
-      // BO + Allocation + Stock & BO Dashboard always visible — empty state when files missing
+      // BO + Allocation always visible — empty state when files missing
       return true;
     });
   }
@@ -18357,18 +18380,29 @@
       ${Object.entries(panes).map(([id, html]) => `<div class="mv-pane" data-mv-pane="${id}"${tab === id ? "" : " hidden"}>${html}</div>`).join("")}`;
   }
 
-  function setMatchWide(on) {
-    const section = $("#bas-alloc-section");
-    if (!section) return;
-    section.classList.toggle("is-match-wide", !!on);
-    document.body.classList.toggle("act-match-wide", !!on);
-    if (on) section.open = true;
-    const btn = $("#bas-alloc-wide");
-    if (btn) {
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-      btn.textContent = on ? "Wide" : "Wide";
+  function setAllocPanelWide(section) {
+    document.querySelectorAll("#panel-boallocstock details.bas-section-card").forEach((el) => {
+      const wasWide = el.classList.contains("is-section-wide");
+      el.classList.remove("is-section-wide");
+      if (section !== el && el.classList.contains("is-match-wide")) el.classList.remove("is-match-wide");
+      if (!section && wasWide) el.open = false;
+    });
+    const on = !!section;
+    document.body.classList.toggle("act-section-wide", on);
+    const match = !!(section && section.id === "bas-alloc-section");
+    document.body.classList.toggle("act-match-wide", match);
+    if (section) {
+      section.classList.add("is-section-wide");
+      section.classList.toggle("is-match-wide", match);
+      section.open = true;
     }
+    const btn = $("#bas-alloc-wide");
+    if (btn) btn.setAttribute("aria-pressed", match ? "true" : "false");
     requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  }
+
+  function setMatchWide(on) {
+    setAllocPanelWide(on ? $("#bas-alloc-section") : null);
   }
 
   function renderBasAllocatedVehicles(d) {
@@ -20699,6 +20733,96 @@
     });
   }
 
+  let rvBoardOrders = [];
+
+  function paintRvLiveSheet(needle) {
+    const meta = $("#rv-live-meta");
+    const kpis = $("#rv-live-kpis");
+    const pay = $("#rv-live-pay");
+    const table = $("#rv-live-table");
+    const mkt = $("#rv-mkt-rows");
+    const mktCount = $("#rv-mkt-count");
+    if (!table || !mkt) return;
+    const q = String(needle || "").trim().toLowerCase();
+    const report = rvBoardOrders.report || {};
+    const orders = rvBoardOrders.orders || [];
+    const requests = rvBoardOrders.requests || [];
+    if (meta) {
+      const when = rvBoardOrders.updatedAt ? new Date(rvBoardOrders.updatedAt).toLocaleString() : "No live push yet";
+      meta.textContent = `${when} · ${rvBoardOrders.esalesName || "Stock E-Sales"} · ${rvBoardOrders.boName || "Back Order"}`;
+    }
+    const statusMap = new Map();
+    orders.forEach((order) => {
+      const key = order.status || "—";
+      statusMap.set(key, (statusMap.get(key) || 0) + 1);
+    });
+    if (kpis) {
+      const cards = [
+        ["Orders", orders.length],
+        ["Reserved VINs", report.reservedVinCount || 0],
+        ["Matched", report.matchedOrders || 0],
+        ["Unmatched", report.unmatchedVins || 0],
+      ];
+      kpis.innerHTML = cards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`).join("");
+    }
+    if (pay) {
+      const mix = report.paymentBreakdown || {};
+      pay.innerHTML = ["cash", "bank", "other", "unknown"].map((key) => `<i>${escapeHtml(key)} ${escapeHtml(String(mix[key] || 0))}</i>`).join("")
+        + [...statusMap.entries()].slice(0, 6).map(([label, count]) => `<i>${escapeHtml(label)} ${escapeHtml(String(count))}</i>`).join("");
+    }
+    const shown = orders.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.status, order.paymentLabel, order.vehicle].join(" ").toLowerCase().includes(q));
+    table.innerHTML = shown.length
+      ? `<table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th></tr></thead><tbody>${shown.slice(0, 400).map((order) => `<tr>
+          <td>${order.queueNumber == null ? "—" : escapeHtml(String(order.queueNumber))}</td>
+          <td>${escapeHtml(order.orderNumber || "—")}</td>
+          <td>${escapeHtml(order.vin || "—")}</td>
+          <td>${escapeHtml(order.salesAdvisor || "—")}</td>
+          <td>${escapeHtml(order.paymentLabel || "—")}</td>
+          <td>${escapeHtml(order.status || "—")}</td>
+        </tr>`).join("")}</tbody></table>${shown.length > 400 ? `<p class="foot">Showing 400 of ${shown.length}</p>` : ""}`
+      : `<p class="foot">No live rows yet. Push Stock E-Sales to fill this sheet.</p>`;
+    const openCount = requests.filter((item) => !item.cancelled).length;
+    if (mktCount) mktCount.textContent = requests.length ? `${openCount} open · ${requests.length - openCount} cancelled` : "Orders advisors sent from the BO file";
+    mkt.innerHTML = requests.length
+      ? requests.map((item) => {
+          const fields = (item.fields || []).map((field) => `<div><span>${escapeHtml(field.label)}</span><b>${escapeHtml(field.value)}</b></div>`).join("");
+          return `<article class="rv-mkt-card${item.cancelled ? " is-cancelled" : ""}">
+            <header>
+              <b>Order ${escapeHtml(item.orderNumber || "—")}</b>
+              ${item.cancelled ? `<span class="rv-mkt-cancel">Cancelled${item.cancelledDisplay ? " " + escapeHtml(item.cancelledDisplay) : ""}</span>` : ""}
+              <span>${escapeHtml(item.advisorName || "—")}</span>
+              <span>ID ${escapeHtml(item.employeeNumber || "—")}</span>
+              <span>${escapeHtml(item.display || item.at || "—")}</span>
+            </header>
+            <div class="rv-mkt-fields">${fields || "<div><span>BO file</span><b>No other values on this row</b></div>"}</div>
+          </article>`;
+        }).join("")
+      : `<p class="foot">No marketing orders sent yet.</p>`;
+  }
+
+  async function loadRvBoard(force) {
+    const search = $("#rv-live-search");
+    if (search && !search.dataset.bound) {
+      search.dataset.bound = "1";
+      search.addEventListener("input", () => paintRvLiveSheet(search.value));
+    }
+    if (!force && rvBoardOrders._loaded) {
+      paintRvLiveSheet(search ? search.value : "");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reserved-orders/board");
+      if (!res.ok) throw new Error("board");
+      rvBoardOrders = await res.json();
+      rvBoardOrders._loaded = true;
+    } catch (err) {
+      rvBoardOrders = { orders: [], requests: [], report: {}, _loaded: false };
+      const meta = $("#rv-live-meta");
+      if (meta) meta.textContent = "Live sheet is not available from this server yet.";
+    }
+    paintRvLiveSheet(search ? search.value : "");
+  }
+
   function renderReservedVehiclesTracker() {
     const empty = $("#rv-empty");
     const dash = $("#rv-dash");
@@ -20719,6 +20843,7 @@
     empty.hidden = true;
     empty.style.display = "none";
     dash.hidden = false;
+    loadRvBoard(false);
 
     const sheetName = slots.central.reservedSheet || "E-Sales المحجوز";
     const sheetNames = Array.isArray(slots.central.sheetNames) ? slots.central.sheetNames : [];
@@ -21429,7 +21554,7 @@
     else if (activePanel === "summary" && hasSummaryInputs()) activePanel = "summary";
     else if (hasSalesReportInputs()) activePanel = "salesreport";
     else if (hasBackOrder()) activePanel = "bodashboard";
-    else activePanel = "dashboard"; // stock-only (or no preferred inputs) → Stock & BO Dashboard, not Stock Dashboard
+    else activePanel = "bodashboard"; // stock-only (or no preferred inputs) → BO Dashboard
     if (activePanel === "dashboard") view.tab = pickDefaultStockTab(d);
     switchPanel(activePanel);
 
@@ -21447,7 +21572,10 @@
       else if (activePanel === "stockdashboard") {
         if (stockDashRenderedFor !== d) { stockDashRenderedFor = d; renderStockDashboard(); }
       }
-      else if (activePanel === "reservedvehicles") renderReservedVehiclesTracker();
+      else if (activePanel === "reservedvehicles") {
+        rvBoardOrders = {};
+        renderReservedVehiclesTracker();
+      }
       else ensureMainDashboard();
       if (activePanel !== "salesreport") {
         if (hasSalesReportInputs()) {
@@ -22725,8 +22853,8 @@
   if (actDrawerBackdrop) actDrawerBackdrop.addEventListener("click", closeActDrawer);
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (document.body.classList.contains("act-match-wide")) {
-      setMatchWide(false);
+    if (document.body.classList.contains("act-section-wide") || document.body.classList.contains("act-match-wide")) {
+      setAllocPanelWide(null);
       return;
     }
     const drawer = $("#act-drawer");
@@ -22764,6 +22892,14 @@
       refreshBasFromFilters();
     });
   }
+  document.querySelectorAll("#panel-boallocstock details.bas-section-card > summary.bas-section-head").forEach((summary) => {
+    summary.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select, label")) return;
+      e.preventDefault();
+      const details = summary.parentElement;
+      setAllocPanelWide(details.classList.contains("is-section-wide") ? null : details);
+    });
+  });
   const basAllocWide = $("#bas-alloc-wide");
   if (basAllocWide) {
     basAllocWide.addEventListener("click", (e) => {
