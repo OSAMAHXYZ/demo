@@ -80,6 +80,19 @@
     return null;
   }
 
+  /** A merged month title often sits only in the first cell. Carry it across the Sales / Target / Ach% columns. */
+  function carryMonth(line) {
+    let last = "";
+    return (line || []).map((cell) => {
+      const text = str(cell);
+      if (monthIndex(text) >= 0 && !metricOf(text)) {
+        last = text;
+        return text;
+      }
+      return text || last;
+    });
+  }
+
   function findHeader(matrix) {
     let best = { idx: 0, score: -1 };
     const limit = Math.min(matrix.length, 30);
@@ -101,13 +114,13 @@
     if (!rows.length) return { ok: false, error: "The sheet is empty", warnings, months: {} };
     const headerIdx = findHeader(rows);
     const header = rows[headerIdx] || [];
-    const parent = headerIdx > 0 ? rows[headerIdx - 1] || [] : [];
+    const parent = headerIdx > 0 ? carryMonth(rows[headerIdx - 1] || []) : [];
     const cols = [];
     header.forEach((cell, i) => {
       const own = norm(cell);
       const above = norm(parent[i]);
       const combined = `${above} ${own}`.trim();
-      const month = monthIndex(combined);
+      const month = monthIndex(above) >= 0 ? monthIndex(above) : monthIndex(combined);
       const metric = metricOf(own) || metricOf(combined);
       if (month >= 0 && metric) cols.push({ i, month, metric });
     });

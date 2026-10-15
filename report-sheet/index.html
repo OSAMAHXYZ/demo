@@ -20,7 +20,7 @@
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261011pt1"></script>
   <script src="contact-performance.js?v=20261013cp10"></script>
-  <script src="ytd-history.js?v=20261015ytd1"></script>
+  <script src="ytd-history.js?v=20261015ytd2"></script>
   <script src="lexus-control/lexus-core.js?v=20261015lx1"></script>
   <script src="lexus-control/lexus-tracker.js?v=20261015lx1"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -634,8 +634,11 @@
             <h2 class="ytd-title">YTD Sales</h2>
             <p class="ytd-sub" id="ytd-sub">Employee targets and invoice sales from Sales Raw. The Sales Report stays beside them and is not added to the invoice total.</p>
           </div>
-          <button type="button" id="ytd-import">Import report</button>
-          <input id="ytd-import-file" type="file" accept=".xlsx,.xls,.xlsm" hidden />
+          <div class="ytd-import">
+            <button type="button" id="ytd-import">Import report</button>
+            <p id="ytd-import-note" class="ytd-sub"></p>
+            <input id="ytd-import-file" type="file" accept=".xlsx,.xls,.xlsm" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0" />
+          </div>
           <label class="ytd-year">
             <span>Year</span>
             <select id="ytd-year" aria-label="YTD year"></select>
@@ -9291,10 +9294,12 @@
 
   function ytdSetSaveNote(text, cls) {
     ytdSaveMessage = { text, cls: cls || "" };
-    const note = $("#ytd-save-note");
-    if (!note) return;
-    note.textContent = text;
-    note.className = "ytd-save" + (cls ? " " + cls : "");
+    ["ytd-save-note", "ytd-import-note"].forEach((id) => {
+      const note = document.getElementById(id);
+      if (!note) return;
+      note.textContent = text;
+      note.className = "ytd-sub" + (cls ? " " + cls : "");
+    });
   }
 
   async function ytdEnsureTargets(force) {
@@ -9816,18 +9821,28 @@
     URL.revokeObjectURL(a.href);
   }
 
+  function ytdFileBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result || "");
+        const split = text.indexOf(",");
+        resolve(split >= 0 ? text.slice(split + 1) : text);
+      };
+      reader.onerror = () => reject(new Error("Could not read that file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function ytdImportReport(file, password) {
-    const buf = await file.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    const base64 = await ytdFileBase64(file);
     const res = await fetch("/api/report-sheet/ytd-history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, fileName: file.name, base64: btoa(binary) }),
+      body: JSON.stringify({ password, fileName: file.name, base64 }),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 404) throw new Error("Import is not available on this server yet. Refresh the page after the update is deployed.");
     if (!res.ok) throw new Error(data.error || "Import failed. Nothing was saved.");
     ytdHistory = data.latest || null;
     ytdTargetsLoaded = false;
@@ -22733,22 +22748,24 @@
             .catch((err) => ytdSetSaveNote(err.message || "That snapshot could not be loaded.", "is-err"));
           return;
         }
-        if (e.target.closest("#ytd-import")) {
-          const file = $("#ytd-import-file");
-          if (file) file.click();
-        }
       });
+      const ytdImport = $("#ytd-import");
       const ytdFile = $("#ytd-import-file");
-      if (ytdFile) {
+      if (ytdImport && ytdFile) {
+        ytdImport.addEventListener("click", () => ytdFile.click());
         ytdFile.addEventListener("change", () => {
           const file = ytdFile.files && ytdFile.files[0];
           ytdFile.value = "";
           if (!file) return;
           const password = window.prompt("Admin password");
-          if (!password) return;
+          if (!password) {
+            ytdSetSaveNote("Import cancelled. The admin password is required.", "is-err");
+            return;
+          }
           ytdSetSaveNote("Importing the Sales Report…", "is-wait");
           ytdImportReport(file, password).then((data) => {
-            ytdSetSaveNote(data.duplicate ? "This report was already imported." : "Sales Report imported.", data.duplicate ? "" : "is-ok");
+            const count = data.latest && data.latest.months ? Object.keys(data.latest.months).length : 0;
+            ytdSetSaveNote(data.duplicate ? "This report was already imported." : `Sales Report imported · ${count} month${count === 1 ? "" : "s"}.`, data.duplicate ? "" : "is-ok");
           }).catch((err) => ytdSetSaveNote(err.message || "Import failed. Nothing was saved.", "is-err"));
         });
       }

@@ -71,6 +71,19 @@ const aliOct = oct.find((r) => r.id === "48476");
 assert(aliOct && aliOct.report === 2 && aliOct.raw === 1, "october report and raw stay separate");
 assert(aliOct.raw + aliOct.report === 3, "values are not added into one actual");
 
+const grouped = Y.parsePerformance([
+  ["Employee Number", "Salesman Name", "Sales", "Target", "Ach%", "Sales", "Target", "Ach%"],
+  ["7", "Grouped Header", 1, 2, 50, 3, 4, 75],
+], {});
+assert(!grouped.ok, "a header row without month names is not enough");
+const carried = Y.parsePerformance([
+  ["", "", "January", "", "", "October", "", ""],
+  ["Employee Number", "Salesman Name", "Sales", "Target", "Ach%", "Sales", "Target", "Ach%"],
+  ["7", "Grouped Header", 1, 2, 50, 3, 4, 75],
+], { year: 2026 });
+assert(carried.ok && carried.months["2026-01"].employees[0].sales === 1, "january carried across merged header");
+assert(carried.months["2026-01"].employees[0].target === 2, "january target carried");
+assert(carried.months["2026-10"].employees[0].sales === 3, "october carried");
 const empty = Y.parsePerformance([["Hello"]], {});
 assert(!empty.ok && /header/i.test(empty.error), "missing headers reported");
 

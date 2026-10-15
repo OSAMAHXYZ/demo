@@ -4839,7 +4839,17 @@ function readJsonFile(fp, fallback) {
 
 function ytdSheetMatrix(sheet) {
   if (!sheet || !sheet['!ref']) return [];
-  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+  (sheet['!merges'] || []).forEach((merge) => {
+    const value = rows[merge.s.r] && rows[merge.s.r][merge.s.c];
+    for (let r = merge.s.r; r <= merge.e.r; r += 1) {
+      if (!rows[r]) rows[r] = [];
+      for (let c = merge.s.c; c <= merge.e.c; c += 1) {
+        if (rows[r][c] == null || rows[r][c] === '') rows[r][c] = value == null ? '' : value;
+      }
+    }
+  });
+  return rows;
 }
 
 function ytdCellDate(v) {
@@ -4995,12 +5005,27 @@ app.post('/api/report-sheet/ytd-history', (req, res) => {
     const existing = store.imports.find((row) => row.hash === hash);
     if (existing) return res.json({ ok: true, duplicate: true, latest: existing });
     const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
-    const sheetName = (wb.SheetNames || []).find((n) => /salesman\s*performance/i.test(n));
-    if (!sheetName) {
-      return res.status(400).json({ error: `No sheet named Salesman Performance. Found: ${(wb.SheetNames || []).join(', ') || 'none'}` });
+    const names = wb.SheetNames || [];
+    const ordered = [
+      ...names.filter((n) => /salesman/i.test(n) && /perform/i.test(n)),
+      ...names,
+    ];
+    let parsed = null;
+    let sheetName = '';
+    ordered.forEach((name) => {
+      if (parsed && parsed.ok) return;
+      const attempt = YtdHistory.parsePerformance(ytdSheetMatrix(wb.Sheets[name]), { sheet: name });
+      if (attempt.ok) {
+        parsed = attempt;
+        sheetName = name;
+      } else if (!parsed) parsed = attempt;
+    });
+    if (!parsed || !parsed.ok) {
+      return res.status(400).json({
+        error: `${(parsed && parsed.error) || 'Could not read the workbook'}. Sheets found: ${names.join(', ') || 'none'}`,
+        warnings: parsed && parsed.warnings,
+      });
     }
-    const parsed = YtdHistory.parsePerformance(ytdSheetMatrix(wb.Sheets[sheetName]), { sheet: sheetName });
-    if (!parsed.ok) return res.status(400).json({ error: parsed.error, warnings: parsed.warnings });
     const at = Date.now();
     const record = {
       id: `hist-${at}-${hash.slice(0, 8)}`,
