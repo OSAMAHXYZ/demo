@@ -294,6 +294,62 @@ button, input { font: inherit; color: inherit; }
 .lxc-dialog-btn.is-primary:hover:not(:disabled) { background: #15803d; }
 .lxc-dialog-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* ---------- Control tower ---------- */
+.lxc-nav {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+}
+.lxc-nav button {
+  flex: none; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid #2a2a2e;
+  background: #141416; color: #d6d3cc; font: inherit; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; cursor: pointer;
+}
+.lxc-nav button.is-on { background: #c4a574; color: #14120e; border-color: #c4a574; }
+.lxc > .lxc-tower { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.lxc-tower {
+  background: #0e0e11; color: #f4f1ea; border-radius: 16px; padding: 14px;
+  border: 1px solid #2a2a2e;
+}
+.lxc-tower-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.lxc-tower-head h2 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
+.lxc-tower-head p { margin: 4px 0 0; color: #b7b2a8; font-size: 12px; max-width: 720px; }
+.lxc-tower-tools { display: flex; gap: 8px; align-items: center; }
+.lxc-tower-tools input {
+  height: 32px; width: 220px; border-radius: 8px; border: 1px solid #3a3a40; background: #17171b; color: #fff; padding: 0 10px;
+}
+.lxc-kpis-dark { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.lxc-k { background: #17171b; border: 1px solid #2c2c32; border-radius: 12px; padding: 10px 12px; text-align: left; color: inherit; cursor: pointer; }
+.lxc-k b { display: block; font-size: 22px; color: #f7f4ee; }
+.lxc-k small { color: #b7b2a8; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.lxc-k em { display: block; margin-top: 4px; color: #8d887e; font-style: normal; font-size: 11px; }
+.lxc-k.is-bad b { color: #f87171; }
+.lxc-k.is-ok b { color: #34d399; }
+.lxc-k.is-wait b { color: #fbbf24; }
+.lxc-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr); gap: 10px; }
+.lxc-panel { background: #141418; border: 1px solid #2c2c32; border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.lxc-panel h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #c4a574; }
+.lxc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lxc-table th, .lxc-table td { padding: 6px 8px; border-bottom: 1px solid #2a2a30; text-align: left; vertical-align: top; }
+.lxc-table th { color: #b7b2a8; font-weight: 650; position: sticky; top: 0; background: #141418; }
+.lxc-table tr { cursor: pointer; }
+.lxc-table tr:hover td { background: #1c1c22; }
+.lxc-badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+.lxc-badge.ok { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; }
+.lxc-badge.wait { background: rgba(251, 191, 36, 0.15); color: #fcd34d; }
+.lxc-badge.bad { background: rgba(248, 113, 113, 0.15); color: #fca5a5; }
+.lxc-badge.muted { background: #222228; color: #c8c2b8; }
+.lxc-note { color: #b7b2a8; font-size: 12px; line-height: 1.45; }
+.lxc-note li { margin: 4px 0; }
+.lxc-pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 8px; color: #b7b2a8; }
+.lxc-pager button { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid #3a3a40; background: #17171b; color: #fff; cursor: pointer; }
+.lxc-drawer { margin-top: 10px; background: #17171b; border: 1px solid #c4a574; border-radius: 12px; padding: 12px; }
+.lxc-drawer h3 { margin: 0 0 6px; }
+.lxc-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 12px; }
+.lxc-fields div { min-width: 0; }
+.lxc-fields small { display: block; color: #8d887e; }
+.lxc-fields b { font-weight: 600; word-break: break-word; }
+@media (max-width: 1100px) {
+  .lxc-kpis-dark, .lxc-split, .lxc-fields { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 1400px) {
   .lxc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .lxc-legend { display: none; }

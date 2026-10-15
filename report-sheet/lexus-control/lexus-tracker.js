@@ -408,6 +408,10 @@
     const d = state.data;
     el("live").classList.toggle("is-off", !state.serverOk);
     el("updated").textContent = d && d.at ? Core().fmtAt(d.at) : "—";
+    if (state.model && state.model.ready && d && d.b2c && Core().buildControlTower) {
+      const tower = Core().buildControlTower(state.model, d.b2c);
+      el("updated").title = `${tower.sheets.length} worksheet(s) in this push · ${tower.missing.length} expected sheet(s) not in the file · open Lexus Controller for the control tower`;
+    }
     const empty = el("empty");
     if (!state.model || !state.model.ready) {
       empty.hidden = false;

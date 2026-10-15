@@ -7,11 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="lexus-controller.css?v=20260930lx7" />
+  <link rel="stylesheet" href="lexus-controller.css?v=20261015lx1" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="../data-store.js?v=20260930lx1"></script>
   <script src="../lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="lexus-core.js?v=20260930lx6"></script>
+  <script src="lexus-core.js?v=20261015lx1"></script>
 </head>
 <body>
   <div class="lxc">
@@ -20,7 +20,7 @@
         <span class="lxc-mark" aria-hidden="true">L</span>
         <div>
           <strong>LEXUS CONTROLLER</strong>
-          <span>B2C ORDERS · FOLLOW-UP</span>
+          <span>B2C OPERATIONS · CONTROL TOWER</span>
         </div>
       </div>
       <div class="lxc-source" id="lxc-source">Waiting for the Admin Push…</div>
@@ -50,6 +50,21 @@
         <span><i class="lg-due"></i>Follow-up due (24 h)</span>
       </span>
     </div>
+
+    <nav class="lxc-nav" id="lxc-nav" aria-label="Control tower pages">
+      <button type="button" class="is-on" data-page="sheet">Sheet</button>
+      <button type="button" data-page="overview">Overview</button>
+      <button type="button" data-page="bo">Back orders</button>
+      <button type="button" data-page="reserved">Reserved</button>
+      <button type="button" data-page="vsnd">VSND / Delivery</button>
+      <button type="button" data-page="follow">Follow-up</button>
+      <button type="button" data-page="visitors">GXC visitors</button>
+      <button type="button" data-page="recovery">Rejection</button>
+      <button type="button" data-page="allocation">Allocation</button>
+      <button type="button" data-page="quality">Data quality</button>
+    </nav>
+
+    <section class="lxc-tower" id="lxc-tower" hidden></section>
 
     <section class="lxc-book" id="lxc-book">
       <div class="lxc-formula">
@@ -90,6 +105,6 @@
     <div class="lxc-menu" id="lxc-menu" hidden></div>
     <div class="lxc-toast" id="lxc-toast" hidden></div>
   </div>
-  <script src="lexus-controller.js?v=20260930lx7"></script>
+  <script src="lexus-controller.js?v=20261015lx2"></script>
 </body>
 </html>

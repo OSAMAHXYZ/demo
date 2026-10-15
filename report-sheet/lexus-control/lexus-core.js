@@ -156,8 +156,9 @@
   function parseB2c(buffer, fileName) {
     const warnings = [];
     const wb = readWorkbook(buffer);
+    const sheets = inventoryWorkbook(wb);
     const sheetName = pickDetailsSheet(wb);
-    if (!sheetName) return { ok: false, error: "The workbook has no sheets", rows: [], headers: [], warnings };
+    if (!sheetName) return { ok: false, error: "The workbook has no sheets", rows: [], headers: [], warnings, sheets };
     if (!/details/i.test(sheetName)) warnings.push(`No sheet named "Details" · read "${sheetName}" instead`);
     const matrix = sheetMatrix(wb.Sheets[sheetName]);
 
@@ -168,7 +169,7 @@
       if (idx >= 0) { headerIdx = i; orderCol = idx; }
     }
     if (headerIdx < 0) {
-      return { ok: false, sheetName, error: `No "Order No" column found in sheet "${sheetName}"`, rows: [], headers: [], warnings };
+      return { ok: false, sheetName, error: `No "Order No" column found in sheet "${sheetName}"`, rows: [], headers: [], warnings, sheets };
     }
 
     const headerLine = matrix[headerIdx].line;
@@ -207,7 +208,7 @@
     }
     const dupCount = Object.values(dup).filter((n) => n > 1).length;
     if (dupCount) warnings.push(`${dupCount} order number(s) appear more than once · each row is tracked separately`);
-    return { ok: rows.length > 0, fileName: fileName || "", sheetName, headers, orderCol, statusCol, rows, warnings,
+    return { ok: rows.length > 0, fileName: fileName || "", sheetName, headers, orderCol, statusCol, rows, warnings, sheets,
       error: rows.length ? "" : `No orders under "Order No" in sheet "${sheetName}"` };
   }
 
@@ -582,6 +583,406 @@
     return "";
   }
 
+  // ---------- Workbook inventory + control tower (every worksheet, no invented history) ----------
+
+  const SHEET_CATALOG = [
+    { id: "bos", match: ["bo's", "bos"], role: "bo", label: "BO's" },
+    { id: "bo_l", match: ["bo_l", "bo l"], role: "bo", parallel: true, label: "BO_L" },
+    { id: "reserved", match: ["reserved"], role: "reserved", label: "Reserved" },
+    { id: "reserved_l", match: ["reserved_l", "reserved l"], role: "reserved", parallel: true, label: "Reserved_L" },
+    { id: "vsnd", match: ["vsnd"], role: "vsnd", label: "VSND" },
+    { id: "vsnd_l", match: ["vsnd_l", "vsnd l"], role: "vsnd", parallel: true, label: "VSND_L" },
+    { id: "delivered", match: ["delivered"], role: "delivered", label: "Delivered" },
+    { id: "delivered_l", match: ["delivered_l", "delivered l"], role: "delivered", parallel: true, label: "Delivered_L" },
+    { id: "rejected", match: ["rejectedbo", "rejected bo"], role: "rejected", label: "RejectedBO" },
+    { id: "recovery", match: ["cancelledpotential", "cancelled potential"], role: "recovery", label: "CancelledPotential" },
+    { id: "visitors", match: ["gxcvisitors", "gxc visitors"], role: "visitor", label: "GXCVisitors" },
+    { id: "switch", match: ["switch to 7022"], role: "switch", label: "SWITCH TO 7022" },
+    { id: "rav4bo", match: ["rav4 bo"], role: "allocation", label: "RAV4 BO" },
+    { id: "rav420", match: ["rav4 20"], role: "allocation", label: "RAV4 20" },
+    { id: "sheet8", match: ["sheet8"], role: "allocation", label: "Sheet8" },
+    { id: "gr86", match: ["gr86 ym26"], role: "allocation", label: "GR86 YM26" },
+    { id: "notes", match: ["notes"], role: "supporting", label: "notes" },
+    { id: "dashboard", match: ["alj - b2c operations dashboard", "alj – b2c operations dashboard"], role: "supporting", label: "ALJ – B2C Operations Dashboard" },
+  ];
+  for (let i = 1; i <= 7; i += 1) SHEET_CATALOG.push({ id: `sheet${i}`, match: [`sheet${i}`], role: "supporting", label: `Sheet${i}` });
+
+  const STAGE_RANK = { delivered: 4, vsnd: 3, reserved: 2, bo: 1 };
+  const LIFECYCLE_ROLES = new Set(["bo", "reserved", "vsnd", "delivered"]);
+
+  function normSheetName(name) {
+    return str(name).toLowerCase()
+      .replace(/[\u2018\u2019\u201B\u2032`]/g, "'")
+      .replace(/[–—]/g, "-")
+      .replace(/[_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function classifySheet(name) {
+    const n = normSheetName(name).replace(/ /g, "");
+    const spaced = normSheetName(name);
+    const hit = SHEET_CATALOG.find((s) => s.match.some((m) => m.replace(/ /g, "") === n || m === spaced));
+    if (hit) return hit;
+    if (/^details$/.test(spaced) || spaced.includes("details")) return { id: "details", role: "canonical", label: name, match: [] };
+    return { id: "unlisted", role: "unlisted", label: name, match: [] };
+  }
+
+  function headerScore(line) {
+    const cells = (line || []).map(normHeader).filter(Boolean);
+    if (cells.length < 2) return 0;
+    return cells.filter((c) => /order|vin|status|model|customer|date|pic|sales|phone|mobile|color|suffix|reason|plant|payment|contract|visitor|year/.test(c)).length;
+  }
+
+  function sheetHeader(sheet, range) {
+    let best = { idx: range.s.r, score: -1, line: [] };
+    const last = Math.min(range.e.r, range.s.r + 25);
+    for (let r = range.s.r; r <= last; r += 1) {
+      const line = [];
+      for (let c = range.s.c; c <= range.e.c; c += 1) {
+        const cell = sheet[global.XLSX.utils.encode_cell({ r, c })];
+        line.push(cell ? cell.v : "");
+      }
+      const score = headerScore(line);
+      if (score > best.score) best = { idx: r, score, line };
+    }
+    return best;
+  }
+
+  function findHeader(headers, re, not) {
+    const norms = headers.map(normHeader);
+    return norms.findIndex((h, i) => re.test(h) && !(not && not.test(h)) && h);
+  }
+
+  function normVin(v) {
+    const s = str(cellText(v)).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return s.length >= 6 ? s : "";
+  }
+
+  function normPhone(v) {
+    let d = str(cellText(v)).replace(/\D/g, "");
+    if (d.startsWith("00")) d = d.slice(2);
+    if (d.startsWith("966")) d = d.slice(3);
+    if (d.startsWith("0")) d = d.slice(1);
+    return d.length >= 9 ? d.slice(-9) : "";
+  }
+
+  function countFormulas(sheet) {
+    let n = 0;
+    Object.keys(sheet || {}).forEach((k) => { if (k[0] !== "!" && sheet[k] && sheet[k].f) n += 1; });
+    return n;
+  }
+
+  /** Every worksheet in the pushed Lexus B2C workbook. Records are extracted only where an order, VIN, or visitor column exists. */
+  function inventoryWorkbook(wb) {
+    const names = (wb && wb.SheetNames) || [];
+    const found = new Set();
+    const sheets = names.map((name) => {
+      const meta = classifySheet(name);
+      found.add(meta.id);
+      const sheet = wb.Sheets[name];
+      const ref = sheet && sheet["!ref"];
+      if (!ref) {
+        return { name, role: meta.role, catalogId: meta.id, parallel: !!meta.parallel, rows: 0, cols: 0, headers: [], dataRows: 0, formulas: 0, records: [], note: "Empty sheet" };
+      }
+      const range = global.XLSX.utils.decode_range(ref);
+      const formulas = countFormulas(sheet);
+      const header = sheetHeader(sheet, range);
+      const width = range.e.c - range.s.c + 1;
+      const seen = {};
+      const headers = Array.from({ length: width }, (_, i) => {
+        const h = str(cellText(header.line[i])) || `Column ${colLetter(range.s.c + i)}`;
+        seen[h] = (seen[h] || 0) + 1;
+        return seen[h] > 1 ? `${h} (${seen[h]})` : h;
+      });
+      const orderCol = findHeader(headers, /^order\s*(no|number|num|#)$|^order\s*no\b|\border\s*(no|number)\b/);
+      const vinCol = findHeader(headers, /\bvin\b|chassis/);
+      const phoneCol = findHeader(headers, /mobile|phone|whatsapp|جوال|هاتف/);
+      const statusCol = findHeader(headers, /status/, /date|time/);
+      const modelCol = findHeader(headers, /model|vehicle|product/, /year/);
+      const yearCol = findHeader(headers, /model\s*year|year/);
+      const picCol = findHeader(headers, /\bpic\b|person in charge/);
+      const salesCol = findHeader(headers, /sales\s*(man|person|consultant)|consultant|advisor/);
+      const reasonCol = findHeader(headers, /reject|reason|cancel reason/);
+      const recoverCol = findHeader(headers, /recover/);
+      const dateCol = findHeader(headers, /order\s*date|created|visit date|delivery date|^date$/);
+      const colorCol = findHeader(headers, /color|colour/);
+      const extract = meta.role !== "canonical" && meta.role !== "supporting" && (orderCol >= 0 || vinCol >= 0 || (meta.role === "visitor" && (phoneCol >= 0 || orderCol >= 0)));
+      const records = [];
+      let blankId = 0;
+      if (extract && header.score >= 2) {
+        const start = header.idx + 1;
+        const max = Math.min(range.e.r, start + 20000);
+        for (let r = start; r <= max; r += 1) {
+          const at = (c) => {
+            if (c < 0) return "";
+            const cell = sheet[global.XLSX.utils.encode_cell({ r, c: range.s.c + c })];
+            return cell ? cell.v : "";
+          };
+          const orderNo = orderCol >= 0 ? cellText(at(orderCol)) : "";
+          const orderK = orderCol >= 0 ? orderKey(at(orderCol)) : "";
+          const vin = normVin(at(vinCol));
+          const phone = normPhone(at(phoneCol));
+          if (!orderK && !vin && !phone) { blankId += 1; continue; }
+          if (orderK && normHeader(orderNo) === normHeader(headers[orderCol])) continue;
+          records.push({
+            sheet: name,
+            role: meta.role,
+            parallel: !!meta.parallel,
+            sheetRow: r + 1,
+            orderNo,
+            orderKey: orderK,
+            vin,
+            phone,
+            status: statusCol >= 0 ? cellText(at(statusCol)) : "",
+            model: modelCol >= 0 ? cellText(at(modelCol)) : "",
+            year: yearCol >= 0 ? cellText(at(yearCol)) : "",
+            pic: picCol >= 0 ? cellText(at(picCol)) : "",
+            salesman: salesCol >= 0 ? cellText(at(salesCol)) : "",
+            reason: reasonCol >= 0 ? cellText(at(reasonCol)) : "",
+            recovered: recoverCol >= 0 ? cellText(at(recoverCol)) : "",
+            date: dateCol >= 0 ? cellText(at(dateCol)) : "",
+            color: colorCol >= 0 ? cellText(at(colorCol)) : "",
+          });
+        }
+      }
+      return {
+        name,
+        role: meta.role,
+        catalogId: meta.id,
+        parallel: !!meta.parallel,
+        rows: range.e.r - range.s.r + 1,
+        cols: width,
+        headers: headers.filter((h) => !/^Column [A-Z]+$/.test(h)).slice(0, 24),
+        dataRows: Math.max(0, range.e.r - header.idx),
+        formulas,
+        headerRow: header.idx + 1,
+        orderCol, vinCol, phoneCol, dateCol, recoverCol,
+        records,
+        blankId,
+        truncated: extract && range.e.r > header.idx + 20000,
+        note: meta.parallel ? "Parallel _L sheet. Not treated as the live feed." : "",
+      };
+    });
+    const missing = SHEET_CATALOG.filter((s) => !found.has(s.id) && s.role !== "supporting").map((s) => s.label);
+    return { sheets, missing };
+  }
+
+  function dayKeyOf(text) {
+    const s = str(text);
+    if (!s) return "";
+    let m = s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/);
+    const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    if (m && MON[m[2].toLowerCase()]) return `${m[3]}-${String(MON[m[2].toLowerCase()]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+    m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+    m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+    if (m) {
+      let d = +m[1]; let mo = +m[2]; let y = +m[3] < 100 ? +m[3] + 2000 : +m[3];
+      if (mo > 12 && d <= 12) { const t = d; d = mo; mo = t; }
+      if (y > 1900 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+    return "";
+  }
+
+  function median(nums) {
+    if (!nums.length) return null;
+    const a = nums.slice().sort((x, y) => x - y);
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2);
+  }
+
+  /**
+   * Control-tower metrics from the Details orders plus any lifecycle sheets present in this push.
+   * Stage durations are omitted: the workbook does not store stage-entry timestamps.
+   */
+  function buildControlTower(model, b2c) {
+    const sheets = (b2c && b2c.sheets && b2c.sheets.sheets) || [];
+    const missing = (b2c && b2c.sheets && b2c.sheets.missing) || SHEET_CATALOG.filter((s) => s.role !== "supporting" && s.role !== "canonical").map((s) => s.label);
+    const orders = model && model.ready ? model.orders : [];
+    const headers = model && model.headers ? model.headers : [];
+    const vinIdx = vinColumn(headers);
+    const phoneIdx = findHeader(headers, /mobile|phone|whatsapp/);
+    const dateIdx = findHeader(headers, /order\s*date|created|^date$/, /delivery|follow|status/);
+    const modelIdx = findHeader(headers, /model|vehicle|product/, /year/);
+    const yearIdx = findHeader(headers, /model\s*year|\byear\b/);
+    const picIdx = findHeader(headers, /\bpic\b|person in charge/);
+    const salesIdx = findHeader(headers, /sales\s*(man|person|consultant)|consultant|advisor|salesman/);
+    const byOrder = new Map();
+    const byVin = new Map();
+    const byPhone = new Map();
+    orders.forEach((o) => {
+      const k = orderKey(o.orderNo);
+      if (k) {
+        const cur = byOrder.get(k) || [];
+        cur.push(o);
+        byOrder.set(k, cur);
+      }
+      if (vinIdx >= 0) {
+        const v = normVin(o.cells[vinIdx]);
+        if (v) {
+          const cur = byVin.get(v) || [];
+          cur.push(o);
+          byVin.set(v, cur);
+        }
+      }
+      if (phoneIdx >= 0) {
+        const p = normPhone(o.cells[phoneIdx]);
+        if (p) {
+          const cur = byPhone.get(p) || [];
+          cur.push(o);
+          byPhone.set(p, cur);
+        }
+      }
+    });
+
+    const linkOf = (rec) => {
+      if (rec.orderKey && byOrder.has(rec.orderKey)) {
+        const hits = byOrder.get(rec.orderKey);
+        return hits.length === 1 ? { match: "confirmed", key: hits[0].key } : { match: "conflict", keys: hits.map((h) => h.key) };
+      }
+      if (rec.vin && byVin.has(rec.vin)) {
+        const hits = byVin.get(rec.vin);
+        return hits.length === 1 ? { match: "confirmed", key: hits[0].key } : { match: "conflict", keys: hits.map((h) => h.key) };
+      }
+      if (!rec.orderKey && !rec.vin && rec.phone && byPhone.has(rec.phone)) {
+        const hits = byPhone.get(rec.phone);
+        return hits.length === 1 ? { match: "probable", key: hits[0].key } : { match: "conflict", keys: hits.map((h) => h.key) };
+      }
+      return { match: "unmatched", keys: [] };
+    };
+
+    const membership = new Map();
+    const exceptions = [];
+    const loose = [];
+    sheets.forEach((sh) => {
+      (sh.records || []).forEach((rec) => {
+        const link = linkOf(rec);
+        const row = { ...rec, match: link.match, orderKeys: link.keys || (link.key ? [link.key] : []) };
+        if (link.match === "confirmed" || link.match === "probable") {
+          const cur = membership.get(link.key) || [];
+          cur.push(row);
+          membership.set(link.key, cur);
+        } else {
+          loose.push(row);
+          if (link.match === "conflict") {
+            exceptions.push({ severity: "critical", sheet: rec.sheet, row: rec.sheetRow, problem: "More than one Details order matches this record", hint: "Review the order number and VIN. Nothing was merged.", ref: rec.orderNo || rec.vin || rec.phone });
+          } else if (LIFECYCLE_ROLES.has(rec.role) || rec.role === "rejected" || rec.role === "visitor" || rec.role === "allocation") {
+            exceptions.push({ severity: "warn", sheet: rec.sheet, row: rec.sheetRow, problem: "No Details order matches this record", hint: "Confirm the order number or VIN, or add the order on Details.", ref: rec.orderNo || rec.vin || rec.phone });
+          }
+        }
+      });
+      if (sh.truncated) exceptions.push({ severity: "warn", sheet: sh.name, row: "", problem: "Sheet has more than 20,000 data rows. Later rows were not matched.", hint: "Split the sheet or ask for a higher cap.", ref: sh.name });
+      if (sh.blankId) exceptions.push({ severity: "info", sheet: sh.name, row: "", problem: `${sh.blankId} row(s) have no order number, VIN, or phone`, hint: "Those rows stay on the source sheet and are not matched.", ref: "" });
+    });
+    missing.forEach((label) => {
+      exceptions.push({ severity: "info", sheet: label, row: "", problem: "Expected worksheet was not in this push", hint: "Metrics that need this sheet are left blank.", ref: label });
+    });
+
+    const enriched = orders.map((o) => {
+      const mem = membership.get(o.key) || [];
+      let stage = "";
+      let stageSheet = "";
+      mem.forEach((m) => {
+        const rank = STAGE_RANK[m.role] || 0;
+        if (rank && rank >= (STAGE_RANK[stage] || 0)) { stage = m.role; stageSheet = m.sheet; }
+      });
+      if (!stage) {
+        if (o.category === "delivered") { stage = "delivered"; stageSheet = "Details status"; }
+        else if (o.category === "cancelled") { stage = "cancelled"; stageSheet = "Details status"; }
+        else if (o.track && o.track.kind === "queue") { stage = "bo"; stageSheet = "Back Order lookup"; }
+        else { stage = "progress"; stageSheet = "Details"; }
+      }
+      const vin = vinIdx >= 0 ? normVin(o.cells[vinIdx]) : "";
+      const date = dateIdx >= 0 ? dayKeyOf(o.cells[dateIdx]) : "";
+      return { ...o, stage, stageSheet, membership: mem, vin, orderDate: date, modelName: modelIdx >= 0 ? str(o.cells[modelIdx]) : "", yearName: yearIdx >= 0 ? str(o.cells[yearIdx]) : "", pic: picIdx >= 0 ? str(o.cells[picIdx]) : "", salesman: salesIdx >= 0 ? str(o.cells[salesIdx]) : "" };
+    });
+
+    const dupKeys = new Set();
+    byOrder.forEach((list, key) => { if (list.length > 1) dupKeys.add(key); });
+    const unique = byOrder.size;
+    const stageCount = (role) => enriched.filter((o) => o.stage === role).length;
+    const hasSheet = (role) => sheets.some((s) => s.role === role);
+    const progress = enriched.filter((o) => o.category === "progress");
+    const contacted = progress.filter((o) => o.followUps.length);
+    const never = progress.filter((o) => !o.followUps.length);
+    const overdue = progress.filter((o) => o.due);
+    const soon = progress.filter((o) => !o.due && o.dueAt && o.dueAt > (model.now || Date.now()) && o.dueAt - (model.now || Date.now()) <= FOLLOW_UP_MS);
+    const ages = [];
+    const now = model && model.now ? model.now : Date.now();
+    progress.forEach((o) => {
+      if (!o.orderDate) return;
+      const t = Date.parse(o.orderDate);
+      if (!isNaN(t)) ages.push(Math.max(0, Math.round((now - t) / 86400000)));
+    });
+    const lifecycleRecs = [];
+    sheets.forEach((s) => { if (LIFECYCLE_ROLES.has(s.role)) lifecycleRecs.push(...(s.records || [])); });
+    const matchedLife = lifecycleRecs.filter((r) => {
+      const link = linkOf(r);
+      return link.match === "confirmed";
+    }).length;
+    const visitorSheet = sheets.find((s) => s.role === "visitor");
+    const visitors = visitorSheet ? visitorSheet.records || [] : [];
+    const visitorMatched = visitors.filter((r) => linkOf(r).match === "confirmed" || linkOf(r).match === "probable");
+    const rejectedSheet = sheets.find((s) => s.role === "rejected");
+    const recoverySheet = sheets.find((s) => s.role === "recovery");
+    const recovered = recoverySheet && recoverySheet.recoverCol >= 0
+      ? (recoverySheet.records || []).filter((r) => /^(y|yes|recovered|done|closed)$/i.test(str(r.recovered)))
+      : [];
+    const missingVin = vinIdx >= 0 ? enriched.filter((o) => !o.vin).length : null;
+    const deliveredDated = enriched.filter((o) => o.stage === "delivered" && (o.orderDate || (o.track && o.track.delivery)));
+
+    const kpi = (id, label, value, formula, source, limit) => ({ id, label, value, formula, source, limit: limit || "" });
+    const kpis = [
+      kpi("unique", "Unique orders", unique, "Distinct order numbers on Details", "Details", "Duplicate rows stay visible but count once"),
+      kpi("bo", "Active BO", hasSheet("bo") ? stageCount("bo") : (model && model.hasBo ? enriched.filter((o) => o.category === "progress" && o.track.kind === "queue").length : null), "Orders whose latest lifecycle sheet is BO, else Back Order queue matches", hasSheet("bo") ? "BO's / BO_L" : "Back Order file", hasSheet("bo") ? "" : "BO's sheet was not in this file"),
+      kpi("reserved", "Reserved", hasSheet("reserved") ? stageCount("reserved") : null, "Orders whose latest lifecycle sheet is Reserved", "Reserved / Reserved_L", hasSheet("reserved") ? "" : "Reserved sheet was not in this file"),
+      kpi("vsnd", "VSND", hasSheet("vsnd") ? stageCount("vsnd") : null, "Orders whose latest lifecycle sheet is VSND", "VSND / VSND_L", hasSheet("vsnd") ? "" : "VSND sheet was not in this file"),
+      kpi("delivered", "Delivered", stageCount("delivered"), "Latest stage Delivered, or Details status says delivered when no Delivered sheet matched", "Delivered sheet or Details status", "A delivery date is shown only when the source cell has one"),
+      kpi("rejected", "Rejected", rejectedSheet ? (rejectedSheet.records || []).length : null, "Rows on RejectedBO. Not treated as lost sales.", "RejectedBO", rejectedSheet ? "" : "RejectedBO was not in this file"),
+      kpi("recovery", "Recovery pool", recoverySheet ? (recoverySheet.records || []).length : null, "Rows on CancelledPotential", "CancelledPotential", recoverySheet ? "" : "CancelledPotential was not in this file"),
+      kpi("follow", "Need follow-up", model && model.summary ? model.summary.due : 0, "In progress, and 24 hours have passed since the last follow-up or first seen time", "Server follow-up history", ""),
+      kpi("overdue", "Overdue follow-up", overdue.length, "Same as follow-up due. Separate from never followed up.", "Server follow-up history", ""),
+      kpi("never", "Never followed up", never.length, "In progress and the follow-up list is empty", "Server follow-up history", ""),
+      kpi("quality", "Data exceptions", exceptions.filter((e) => e.severity !== "info").length, "Conflicts, unmatched lifecycle rows, and truncated sheets", "All worksheets in this push", ""),
+    ];
+    const rates = {
+      contact: progress.length ? contacted.length / progress.length : null,
+      sla: progress.length ? (progress.length - overdue.length) / progress.length : null,
+      reservation: null,
+      visitor: visitors.length ? visitorMatched.length / visitors.length : null,
+      orderToDelivery: unique ? stageCount("delivered") / unique : null,
+      rejection: rejectedSheet && unique ? (rejectedSheet.records || []).length / (unique + loose.filter((r) => r.role === "rejected").length) : null,
+      recovery: recoverySheet && recoverySheet.recoverCol >= 0 && (recoverySheet.records || []).length ? recovered.length / recoverySheet.records.length : null,
+      reconcile: lifecycleRecs.length ? matchedLife / lifecycleRecs.length : null,
+      duplicate: orders.length ? dupKeys.size / orders.length : null,
+      missingId: missingVin == null || !orders.length ? null : missingVin / orders.length,
+      agingAvg: ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : null,
+      agingMedian: median(ages),
+    };
+    return {
+      sheets, missing, orders: enriched, loose, exceptions, kpis, rates,
+      counts: {
+        rows: orders.length, unique, bo: stageCount("bo"), reserved: stageCount("reserved"), vsnd: stageCount("vsnd"),
+        delivered: stageCount("delivered"), cancelled: enriched.filter((o) => o.stage === "cancelled").length,
+        contacted: contacted.length, soon: soon.length, overdue: overdue.length, never: never.length,
+        visitors: visitors.length, visitorMatched: visitorMatched.length,
+        rejected: rejectedSheet ? (rejectedSheet.records || []).length : 0,
+        recovered: recovered.length,
+        deliveredDated: deliveredDated.length,
+      },
+      fields: { vinIdx, phoneIdx, dateIdx, modelIdx, yearIdx, picIdx, salesIdx },
+      limits: [
+        "Stage duration is not calculated. The sheets do not store when an order entered or left a stage.",
+        "_L sheets are listed beside the base sheet. They are not assumed to be the live feed.",
+        "Follow-up notes stay on /api/lexus-tracker and are not replaced by an Excel refresh.",
+        rates.reservation == null ? "Reservation completion is blank until Reserved has a signed or payment-complete column." : "",
+        rates.recovery == null ? "Verified recovery is blank until CancelledPotential has a Recovered column with Yes / Recovered." : "",
+        rates.agingAvg == null ? "Backlog age is blank until Details has an order-date column that parses." : "",
+      ].filter(Boolean),
+    };
+  }
+
   global.LexusCore = {
     SLOT,
     FOLLOW_UP_MS,
@@ -612,5 +1013,7 @@
     liveStatusOf,
     fetchLiveStatus,
     liveTone,
+    buildControlTower,
+    SHEET_CATALOG,
   };
 })(typeof window !== "undefined" ? window : globalThis);

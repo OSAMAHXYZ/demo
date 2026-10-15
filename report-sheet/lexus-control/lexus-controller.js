@@ -42,6 +42,11 @@
     filter: "all",
     search: "",
     editedOnly: false,
+    page: "sheet",
+    tower: null,
+    towerQ: "",
+    towerPage: 1,
+    drawerKey: "",
     pendingRender: false,
     serverOk: false,
     notifiedDue: 0,
@@ -141,6 +146,7 @@
     state.model = d && d.b2c && d.b2c.ok
       ? Core.buildModel({ b2c: d.b2c, bo: d.bo, sales: d.sales, state: state.tracker, now: Date.now() })
       : null;
+    state.tower = state.model && state.model.ready ? Core.buildControlTower(state.model, d.b2c) : null;
     const headers = state.model ? state.model.headers : [];
     state.cols = headers.map((h, i) => ({ kind: "file", idx: i, header: h, letter: Core.colLetter(i), editable: true }))
       .concat(SYS_COLS.map((s, i) => ({ kind: "sys", id: s.id, header: s.header, letter: Core.colLetter(headers.length + i), editable: !!s.editable })));
@@ -156,6 +162,7 @@
     renderFilters();
     renderAlert();
     renderGrid();
+    renderTower();
     $("lxc-export").disabled = !(state.model && state.model.ready);
   }
 
@@ -797,9 +804,138 @@
     } catch { /* ignore */ }
   }
 
+  // ---------- Control tower ----------
+
+  const PAGES = {
+    sheet: "Orders sheet",
+    overview: ["Executive overview", "Counts come from the Details orders and from lifecycle sheets when this push contains them."],
+    bo: ["Back order control", "BO's and BO_L when present. Otherwise the count is the existing Back Order queue match."],
+    reserved: ["Reserved order control", "Reserved and Reserved_L. A completion rate needs a signed or payment column, which this file may not have."],
+    vsnd: ["VSND and delivery", "VSND, VSND_L, Delivered and Delivered_L. Cycle time is omitted when the sheet has no stage dates."],
+    follow: ["Customer contact", "24-hour follow-up stored on the server. Never followed up is separate from overdue."],
+    visitors: ["GXC visitors", "GXCVisitors matched to Details by order number or VIN. Phone is only a probable match."],
+    recovery: ["Rejection and recovery", "RejectedBO and CancelledPotential. A row is recovered only when a Recovered column says so."],
+    allocation: ["Vehicle allocation", "RAV4 BO, RAV4 20, Sheet8 and GR86 YM26 stay separate from the main BO count."],
+    quality: ["Data quality", "Missing sheets, duplicate order numbers, conflicting matches and unmatched rows."],
+  };
+
+  function towerOrders() {
+    const t = state.tower;
+    if (!t) return [];
+    const q = state.towerQ.trim().toLowerCase();
+    const page = state.page;
+    return t.orders.filter((o) => {
+      if (page === "bo" && o.stage !== "bo") return false;
+      if (page === "reserved" && o.stage !== "reserved") return false;
+      if (page === "vsnd" && o.stage !== "vsnd" && o.stage !== "delivered") return false;
+      if (page === "follow" && o.category !== "progress") return false;
+      if (q) {
+        const blob = `${o.orderNo} ${o.vin} ${o.modelName} ${o.pic} ${o.salesman} ${o.statusText}`.toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function pageRows() {
+    const t = state.tower;
+    if (!t) return [];
+    if (state.page === "visitors" || state.page === "recovery" || state.page === "allocation" || state.page === "quality") {
+      const q = state.towerQ.trim().toLowerCase();
+      let rows = [];
+      if (state.page === "visitors") rows = t.loose.filter((r) => r.role === "visitor").concat(t.orders.flatMap((o) => o.membership.filter((m) => m.role === "visitor")));
+      else if (state.page === "recovery") rows = t.loose.filter((r) => r.role === "rejected" || r.role === "recovery").concat(t.orders.flatMap((o) => o.membership.filter((m) => m.role === "rejected" || m.role === "recovery")));
+      else if (state.page === "allocation") rows = t.loose.filter((r) => r.role === "allocation" || r.role === "switch").concat(t.orders.flatMap((o) => o.membership.filter((m) => m.role === "allocation" || m.role === "switch")));
+      else rows = t.exceptions;
+      if (!q) return rows;
+      return rows.filter((r) => JSON.stringify(r).toLowerCase().includes(q));
+    }
+    return towerOrders();
+  }
+
+  function badge(text, tone) {
+    return `<span class="lxc-badge ${tone}">${esc(text)}</span>`;
+  }
+
+  function renderTower() {
+    const host = $("lxc-tower");
+    const sheet = state.page === "sheet";
+    $("lxc-book").hidden = !sheet;
+    $("lxc-kpis").hidden = !sheet;
+    const toolbar = document.querySelector(".lxc-toolbar");
+    if (toolbar) toolbar.hidden = !sheet;
+    host.hidden = sheet;
+    document.querySelectorAll("#lxc-nav [data-page]").forEach((b) => b.classList.toggle("is-on", b.dataset.page === state.page));
+    if (sheet) return;
+    const t = state.tower;
+    const meta = PAGES[state.page] || PAGES.overview;
+    if (!t) {
+      host.innerHTML = `<div class="lxc-tower-head"><div><h2>${esc(meta[0])}</h2><p>Push a Lexus B2C workbook from Admin. This page stays empty until that file is on the server.</p></div></div>`;
+      return;
+    }
+    const rows = pageRows();
+    const pageSize = 12;
+    const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+    if (state.towerPage > pages) state.towerPage = pages;
+    const slice = rows.slice((state.towerPage - 1) * pageSize, state.towerPage * pageSize);
+    const c = t.counts;
+    const pct = (v) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
+    const cards = state.page === "overview" ? [
+      ["Unique orders", c.unique, "Distinct order numbers", ""],
+      ["Active BO", t.kpis.find((k) => k.id === "bo").value, "Latest stage or BO queue", ""],
+      ["Reserved", t.kpis.find((k) => k.id === "reserved").value, "Blank if the sheet is missing", ""],
+      ["VSND", t.kpis.find((k) => k.id === "vsnd").value, "Blank if the sheet is missing", ""],
+      ["Delivered", c.delivered, "Stage or Details status", "is-ok"],
+      ["Follow-up due", c.overdue, "24 h, in progress only", c.overdue ? "is-bad" : ""],
+    ] : [];
+    const cardHtml = cards.map(([lab, val, sub, tone]) => `<button type="button" class="lxc-k ${tone}" data-tower-jump="${lab}"><small>${esc(lab)}</small><b class="num">${val == null ? "—" : n(val)}</b><em>${esc(sub)}</em></button>`).join("");
+    const table = state.page === "quality"
+      ? `<table class="lxc-table"><thead><tr><th>Sheet</th><th>Row</th><th>Severity</th><th>Problem</th><th>What to do</th></tr></thead><tbody>${slice.map((r) => `<tr><td>${esc(r.sheet)}</td><td>${esc(r.row)}</td><td>${badge(r.severity, r.severity === "critical" ? "bad" : r.severity === "warn" ? "wait" : "muted")}</td><td>${esc(r.problem)}</td><td>${esc(r.hint)}</td></tr>`).join("") || `<tr><td colspan="5">No exceptions in this push.</td></tr>`}</tbody></table>`
+      : state.page === "visitors" || state.page === "recovery" || state.page === "allocation"
+        ? `<table class="lxc-table"><thead><tr><th>Sheet</th><th>Order</th><th>VIN</th><th>Model</th><th>Match</th><th>Status</th></tr></thead><tbody>${slice.map((r) => `<tr data-open-key="${esc((r.orderKeys && r.orderKeys[0]) || "")}"><td>${esc(r.sheet)}</td><td>${esc(r.orderNo || "—")}</td><td>${esc(r.vin || "—")}</td><td>${esc(r.model || r.reason || "—")}</td><td>${badge(r.match || "unmatched", r.match === "confirmed" ? "ok" : r.match === "conflict" ? "bad" : "wait")}</td><td>${esc(r.status || r.recovered || "—")}</td></tr>`).join("") || `<tr><td colspan="6">This push has no rows for this page. ${esc((t.missing || []).slice(0, 4).join(", ") || "")}</td></tr>`}</tbody></table>`
+        : `<table class="lxc-table"><thead><tr><th>Order</th><th>Stage</th><th>VIN</th><th>Model</th><th>PIC</th><th>Follow-up</th><th>Source</th></tr></thead><tbody>${slice.map((o) => `<tr data-open-key="${esc(o.key)}"><td>${esc(o.orderNo)}</td><td>${badge(o.stage, o.stage === "delivered" ? "ok" : o.due ? "bad" : "wait")}</td><td>${esc(o.vin || "—")}</td><td>${esc(o.modelName || "—")}</td><td>${esc(o.pic || o.salesman || "—")}</td><td>${o.category !== "progress" ? "—" : o.followUps.length ? (o.due ? "Overdue" : "Contacted") : "Never"}</td><td>${esc(o.stageSheet)}</td></tr>`).join("") || `<tr><td colspan="7">No orders for this filter.</td></tr>`}</tbody></table>`;
+    const drawer = state.drawerKey ? renderDrawer(t) : "";
+    const rateLine = state.page === "overview" ? `<ul class="lxc-note"><li>Contact completion ${pct(t.rates.contact)} of in-progress orders with at least one follow-up.</li><li>Follow-up SLA ${pct(t.rates.sla)}. Never followed up: ${n(c.never)}. Due within 24 h: ${n(c.soon)}.</li><li>Visitor conversion ${pct(t.rates.visitor)}. Order-to-delivery ${pct(t.rates.orderToDelivery)} of unique orders, not a dated cohort.</li><li>Reconciliation ${pct(t.rates.reconcile)}. Duplicate order-number rate ${pct(t.rates.duplicate)}. Missing VIN rate ${pct(t.rates.missingId)}.</li><li>Verified recovery ${pct(t.rates.recovery)}. Average backlog age ${t.rates.agingAvg == null ? "—" : `${n(t.rates.agingAvg)} days`}.</li>${t.limits.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
+    const sheetLine = state.page === "quality" || state.page === "overview" ? `<div class="lxc-panel"><h3>Worksheets in this push</h3><table class="lxc-table"><thead><tr><th>Sheet</th><th>Role</th><th>Rows</th><th>Matched rows</th></tr></thead><tbody>${t.sheets.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.role)}${s.parallel ? " · parallel" : ""}</td><td class="num">${n(s.dataRows)}</td><td class="num">${n((s.records || []).length)}</td></tr>`).join("") || "<tr><td colspan='4'>No sheets</td></tr>"}</tbody></table></div>` : "";
+    host.innerHTML = `<div class="lxc-tower-head"><div><h2>${esc(meta[0])}</h2><p>${esc(meta[1])}</p></div><div class="lxc-tower-tools"><input id="lxc-tower-q" type="search" placeholder="Order, VIN, model, PIC" value="${esc(state.towerQ)}" /></div></div>${cardHtml ? `<div class="lxc-kpis-dark">${cardHtml}</div>` : ""}<div class="lxc-split"><div class="lxc-panel"><h3>${n(rows.length)} records</h3>${table}<div class="lxc-pager"><button type="button" data-tower-page="-1">Prev</button><span>${state.towerPage} / ${pages}</span><button type="button" data-tower-page="1">Next</button></div>${drawer}</div><div>${rateLine}${sheetLine}<div class="lxc-panel"><h3>KPI rules</h3><ul class="lxc-note">${t.kpis.map((k) => `<li><b>${esc(k.label)}</b> ${k.value == null ? "—" : n(k.value)} · ${esc(k.formula)} · ${esc(k.source)}${k.limit ? ` · ${esc(k.limit)}` : ""}</li>`).join("")}</ul></div></div></div>`;
+    const q = $("lxc-tower-q");
+    if (q) q.addEventListener("input", (e) => {
+      state.towerQ = e.target.value;
+      state.towerPage = 1;
+      const pos = e.target.selectionStart;
+      renderTower();
+      const again = $("lxc-tower-q");
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch { /* ignore */ } }
+    });
+  }
+
+  function renderDrawer(t) {
+    const o = t.orders.find((x) => x.key === state.drawerKey);
+    if (!o) return `<div class="lxc-drawer"><p>That source row is not linked to a single Details order.</p><button type="button" data-close-drawer>Close</button></div>`;
+    const fields = state.model.headers.map((h, i) => `<div><small>${esc(h)}</small><b>${esc(o.cells[i] || "—")}</b></div>`).join("");
+    const hist = o.followUps.map((f) => `<li>${esc(Core.fmtAt(f.at))} · ${esc(f.by || "—")} · ${esc(f.note || "")}</li>`).join("") || "<li>No follow-up yet.</li>";
+    const mem = o.membership.map((m) => `<li>${esc(m.sheet)} · ${esc(m.role)} · ${esc(m.match)} · row ${esc(m.sheetRow)}</li>`).join("") || "<li>No other worksheet linked this order.</li>";
+    return `<div class="lxc-drawer"><h3>Order ${esc(o.orderNo)}</h3><p class="lxc-note">${esc(o.stage)} · ${esc(o.stageSheet)} · ${esc(o.statusText || "no status")}</p><div class="lxc-fields">${fields}</div><h3>Sheets</h3><ul class="lxc-note">${mem}</ul><h3>Follow-up</h3><ul class="lxc-note">${hist}</ul><button type="button" data-close-drawer>Close</button></div>`;
+  }
+
+  function exportTower() {
+    if (!window.XLSX || !state.tower) return;
+    const rows = pageRows();
+    const aoa = [["Order", "VIN", "Stage", "Sheet", "Model", "Status", "Match", "Follow-up"]];
+    rows.forEach((r) => {
+      if (r.orderNo != null && r.stage) aoa.push([r.orderNo, r.vin || "", r.stage, r.stageSheet || "", r.modelName || "", r.statusText || "", "", r.followUps ? (r.followUps.length ? "contacted" : "never") : ""]);
+      else aoa.push([r.orderNo || r.ref || "", r.vin || "", r.role || r.severity || "", r.sheet || "", r.model || "", r.status || r.problem || "", r.match || "", ""]);
+    });
+    const X = window.XLSX;
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(aoa), "Tower");
+    X.writeFile(wb, `Lexus-B2C-${state.page}.xlsx`);
+  }
+
   // ---------- Export ----------
 
   function exportExcel() {
+    if (state.page !== "sheet" && state.tower) return exportTower();
     if (!state.model || !state.model.ready || !window.XLSX) return;
     const X = window.XLSX;
     const headers = state.cols.map((c) => c.header);
@@ -885,6 +1021,33 @@
     $("lxc-edited").addEventListener("change", (e) => { state.editedOnly = e.target.checked; render(); });
     $("lxc-refresh").addEventListener("click", () => loadAll(true));
     $("lxc-export").addEventListener("click", exportExcel);
+    $("lxc-nav").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-page]");
+      if (!b) return;
+      state.page = b.dataset.page;
+      state.towerPage = 1;
+      state.drawerKey = "";
+      render();
+    });
+    $("lxc-tower").addEventListener("click", (e) => {
+      const pageBtn = e.target.closest("[data-tower-page]");
+      if (pageBtn) {
+        state.towerPage = Math.max(1, state.towerPage + Number(pageBtn.dataset.towerPage));
+        renderTower();
+        return;
+      }
+      if (e.target.closest("[data-close-drawer]")) { state.drawerKey = ""; renderTower(); return; }
+      const jump = e.target.closest("[data-tower-jump]");
+      if (jump) {
+        const lab = jump.dataset.towerJump;
+        state.page = /BO/.test(lab) ? "bo" : /Reserved/.test(lab) ? "reserved" : /VSND/.test(lab) ? "vsnd" : /Delivered/.test(lab) ? "vsnd" : /Follow/.test(lab) ? "follow" : "overview";
+        state.towerPage = 1;
+        render();
+        return;
+      }
+      const row = e.target.closest("[data-open-key]");
+      if (row && row.dataset.openKey) { state.drawerKey = row.dataset.openKey; renderTower(); }
+    });
 
     $("lxc-cf-clear").addEventListener("click", clearColFilters);
 
