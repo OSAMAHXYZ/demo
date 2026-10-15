@@ -4772,6 +4772,10 @@ app.post('/api/report-sheet/gec-control', (req, res) => {
 });
 
 const YTD_TARGETS_FILE = path.join(REPORT_SHEET_DIR, 'ytd-employee-targets.json');
+const YtdHistory = require('./report-sheet/ytd-history');
+const YTD_HISTORY_FILE = path.join(REPORT_SHEET_DIR, 'ytd-history.json');
+const YTD_SNAPSHOT_DIR = path.join(REPORT_SHEET_DIR, 'ytd-snapshots');
+const YTD_SNAPSHOT_INDEX = path.join(YTD_SNAPSHOT_DIR, 'index.json');
 
 function loadYtdTargets() {
   try {
@@ -4822,6 +4826,212 @@ app.post('/api/report-sheet/ytd-targets', (req, res) => {
     console.error('[report-sheet/ytd-targets]', err);
     return res.status(500).json({ error: err.message || 'Save failed' });
   }
+});
+
+function readJsonFile(fp, fallback) {
+  try {
+    if (!fs.existsSync(fp)) return fallback;
+    return JSON.parse(fs.readFileSync(fp, 'utf8'));
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function ytdSheetMatrix(sheet) {
+  if (!sheet || !sheet['!ref']) return [];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+}
+
+function ytdCellDate(v) {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    if (v.getUTCHours() === 0 && v.getUTCMinutes() === 0) return new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate());
+    return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  return null;
+}
+
+function ytdInvoiceRowsFromBuffer(buf) {
+  const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+  const sheetName = (wb.SheetNames || [])[0];
+  if (!sheetName) return { rows: [], error: 'Sales Raw has no sheets' };
+  const matrix = ytdSheetMatrix(wb.Sheets[sheetName]);
+  if (!matrix.length) return { rows: [], error: 'Sales Raw sheet is empty' };
+  let headerIdx = 0;
+  let best = -1;
+  for (let i = 0; i < Math.min(matrix.length, 40); i += 1) {
+    const cells = (matrix[i] || []).map((c) => String(c || '').trim().toLowerCase());
+    const hits = ['invoice date', 'sales qty', 'sales employee', 'vin'].filter((m) => cells.some((c) => c.includes(m))).length;
+    if (hits > best) { best = hits; headerIdx = i; }
+  }
+  const headers = (matrix[headerIdx] || []).map((h) => String(h || '').trim());
+  const find = (re) => headers.findIndex((h) => re.test(String(h).trim().toLowerCase()));
+  const invoiceIdx = find(/invoice date|inv date/);
+  const qtyIdx = find(/sales qty|sales quantity|^qty$/);
+  const nameIdx = find(/sales employee|salesman name|^salesman$|employee name/);
+  const idIdx = find(/employee id|emp id|salesman id|salesman code|staff id/);
+  const vinIdx = find(/\bvin\b|vin no|chassis/);
+  if (invoiceIdx < 0) return { rows: [], error: 'Invoice Date column was not found in Sales Raw' };
+  const rows = [];
+  for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+    const line = matrix[r] || [];
+    const name = nameIdx >= 0 ? String(line[nameIdx] || '').trim() : '';
+    if (!name) continue;
+    const qtyRaw = qtyIdx >= 0 ? line[qtyIdx] : null;
+    const qtyNum = qtyRaw == null || String(qtyRaw).trim() === '' ? null : Number(String(qtyRaw).replace(/,/g, ''));
+    let reason = '';
+    const invoice = ytdCellDate(line[invoiceIdx]);
+    if (!invoice) reason = 'Blank or invalid Invoice Date';
+    else if (qtyIdx < 0) reason = 'Sales Qty column was not found';
+    else if (!Number.isFinite(qtyNum)) reason = 'Missing Sales Qty';
+    rows.push({
+      name,
+      id: idIdx >= 0 ? String(line[idIdx] || '').trim() : '',
+      invoice,
+      qty: Number.isFinite(qtyNum) ? qtyNum : null,
+      reason,
+      vin: vinIdx >= 0 ? String(line[vinIdx] || '').trim() : '',
+    });
+  }
+  return { rows, sheet: sheetName, invoiceHeader: headers[invoiceIdx] || '' };
+}
+
+function loadYtdHistoryStore() {
+  const data = readJsonFile(YTD_HISTORY_FILE, { imports: [] });
+  return data && Array.isArray(data.imports) ? data : { imports: [] };
+}
+
+function loadYtdSnapshotIndex() {
+  const data = readJsonFile(YTD_SNAPSHOT_INDEX, []);
+  return Array.isArray(data) ? data : [];
+}
+
+function mergeHistoryTargets(parsed) {
+  const store = loadYtdTargets();
+  Object.keys(parsed.months || {}).forEach((month) => {
+    const dest = { ...(store.months[month] || {}) };
+    (parsed.months[month].employees || []).forEach((emp) => {
+      if (emp.target == null) return;
+      const key = emp.id || YtdHistory.looseName(emp.name);
+      if (!key || dest[key]) return;
+      dest[key] = { name: String(emp.name || '').slice(0, 160), id: String(emp.id || '').slice(0, 40), target: emp.target };
+    });
+    store.months[month] = dest;
+  });
+  fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
+  fs.writeFileSync(YTD_TARGETS_FILE, JSON.stringify(store));
+}
+
+function createYtdSnapshot(buf, fileName, at) {
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha1').update(buf).digest('hex');
+  fs.mkdirSync(YTD_SNAPSHOT_DIR, { recursive: true });
+  const index = loadYtdSnapshotIndex();
+  const prior = index.find((row) => row.hash === hash);
+  if (prior) return { ok: true, skipped: true, id: prior.id, at: prior.at };
+  const parsed = ytdInvoiceRowsFromBuffer(buf);
+  if (parsed.error) return { ok: false, error: parsed.error };
+  const history = loadYtdHistoryStore();
+  const latest = history.imports.length ? history.imports[history.imports.length - 1] : null;
+  const years = new Set();
+  parsed.rows.forEach((row) => { if (row.invoice) years.add(row.invoice.getFullYear()); });
+  if (latest && latest.asOf) years.add(Number(String(latest.asOf).slice(0, 4)));
+  const year = years.size ? Math.max(...years) : new Date(at).getFullYear();
+  const agg = YtdHistory.aggregateInvoices(parsed.rows, year);
+  const keys = new Set([...Object.keys(agg), ...Object.keys((latest && latest.months) || {})].filter((key) => key.startsWith(`${year}-`)));
+  const months = {};
+  keys.forEach((key) => {
+    const reportEmployees = latest && latest.months[key] ? latest.months[key].employees : [];
+    const rawMap = agg[key] ? agg[key].employees : new Map();
+    const partial = !!(latest && Array.isArray(latest.partialMonths) && latest.partialMonths.includes(key));
+    const employees = YtdHistory.reconcileMonth(reportEmployees, [...rawMap.values()], partial);
+    const reportValues = reportEmployees.filter((emp) => emp.sales != null);
+    months[key] = {
+      raw: agg[key] ? agg[key].raw : null,
+      unassigned: agg[key] ? agg[key].unassigned : 0,
+      flagged: agg[key] ? agg[key].flagged : 0,
+      report: reportValues.length ? reportValues.reduce((sum, emp) => sum + emp.sales, 0) : null,
+      partial,
+      status: YtdHistory.monthStatus(employees, partial),
+      employees,
+    };
+  });
+  const id = `ytd-${at}-${hash.slice(0, 8)}`;
+  const body = {
+    id, at, fileName: String(fileName || 'Sales Raw').slice(0, 180), hash, year,
+    invoiceHeader: parsed.invoiceHeader, sheet: parsed.sheet, historyId: latest ? latest.id : '',
+    calculation: 'ytd-history-1', months,
+  };
+  const fp = path.join(YTD_SNAPSHOT_DIR, `${id}.json`);
+  fs.writeFileSync(fp, JSON.stringify(body));
+  index.push({ id, at, fileName: body.fileName, hash, year, historyId: body.historyId });
+  fs.writeFileSync(YTD_SNAPSHOT_INDEX, JSON.stringify(index));
+  return { ok: true, id, at, year };
+}
+
+app.get('/api/report-sheet/ytd-history', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const store = loadYtdHistoryStore();
+  const latest = store.imports.length ? store.imports[store.imports.length - 1] : null;
+  return res.json({
+    count: store.imports.length,
+    latest,
+    imports: store.imports.map((row) => ({ id: row.id, at: row.at, fileName: row.fileName, asOf: row.asOf, partialMonths: row.partialMonths || [] })),
+  });
+});
+
+app.post('/api/report-sheet/ytd-history', (req, res) => {
+  try {
+    const body = req.body || {};
+    if (String(body.password || '') !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
+    const buf = Buffer.from(String(body.base64 || ''), 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'Upload the Toyota Sales Report workbook' });
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha1').update(buf).digest('hex');
+    const store = loadYtdHistoryStore();
+    const existing = store.imports.find((row) => row.hash === hash);
+    if (existing) return res.json({ ok: true, duplicate: true, latest: existing });
+    const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+    const sheetName = (wb.SheetNames || []).find((n) => /salesman\s*performance/i.test(n));
+    if (!sheetName) {
+      return res.status(400).json({ error: `No sheet named Salesman Performance. Found: ${(wb.SheetNames || []).join(', ') || 'none'}` });
+    }
+    const parsed = YtdHistory.parsePerformance(ytdSheetMatrix(wb.Sheets[sheetName]), { sheet: sheetName });
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error, warnings: parsed.warnings });
+    const at = Date.now();
+    const record = {
+      id: `hist-${at}-${hash.slice(0, 8)}`,
+      at,
+      hash,
+      fileName: String(body.fileName || 'Toyota Sales Report').slice(0, 180),
+      ...parsed,
+    };
+    store.imports.push(record);
+    fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
+    fs.writeFileSync(YTD_HISTORY_FILE, JSON.stringify(store));
+    mergeHistoryTargets(parsed);
+    return res.json({ ok: true, latest: record });
+  } catch (err) {
+    console.error('[report-sheet/ytd-history]', err);
+    return res.status(500).json({ error: err.message || 'Import failed. Nothing was saved.' });
+  }
+});
+
+app.get('/api/report-sheet/ytd-snapshots', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ snapshots: loadYtdSnapshotIndex() });
+});
+
+app.get('/api/report-sheet/ytd-snapshots/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^ytd-\d+-[a-f0-9]{8}$/.test(id)) return res.status(400).json({ error: 'Unknown snapshot' });
+  const fp = path.join(YTD_SNAPSHOT_DIR, `${id}.json`);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'That snapshot could not be loaded.' });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.sendFile(fp);
 });
 
 app.get('/api/report-sheet/file/:slot', (req, res) => {
@@ -5050,6 +5260,7 @@ app.post('/api/report-sheet/push', (req, res) => {
 
     const fileNames = { ...(prevMeta.fileNames || {}) };
     let rtlSnapshot = null;
+    let ytdPushSnapshot = null;
 
     for (const id of REPORT_SLOT_IDS) {
       const entry = filesIn[id];
@@ -5074,6 +5285,15 @@ app.post('/api/report-sheet/push', (req, res) => {
       fs.writeFileSync(fp, buf);
       fileNames[id] = name;
       slots.push(id);
+
+      if (id === 'sales') {
+        try {
+          ytdPushSnapshot = createYtdSnapshot(buf, name, at);
+        } catch (snapErr) {
+          console.error('[report-sheet/push] YTD snapshot', snapErr);
+          ytdPushSnapshot = { ok: false, error: snapErr.message || 'YTD snapshot was not saved' };
+        }
+      }
 
       if (id === 'rtl') {
         try {
@@ -5129,6 +5349,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       hasCancelled: meta.hasCancelled,
       lexusB2c: b2cMerge.lexusB2c,
       toyotaB2c: b2cMerge.toyotaB2c,
+      ytdSnapshot: ytdPushSnapshot,
       rtlDaily: rtlSnapshot
         ? {
           id: rtlSnapshot.id,

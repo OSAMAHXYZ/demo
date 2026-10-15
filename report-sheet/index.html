@@ -20,6 +20,7 @@
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261011pt1"></script>
   <script src="contact-performance.js?v=20261013cp10"></script>
+  <script src="ytd-history.js?v=20261015ytd1"></script>
   <script src="lexus-control/lexus-core.js?v=20261015lx1"></script>
   <script src="lexus-control/lexus-tracker.js?v=20261015lx1"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
@@ -631,8 +632,10 @@
           <div>
             <p class="ytd-kicker">Toyota · ALJ · Digital Retail</p>
             <h2 class="ytd-title">YTD Sales</h2>
-            <p class="ytd-sub">Employee targets and invoice sales from Sales Raw. The existing report stays beside them for comparison.</p>
+            <p class="ytd-sub" id="ytd-sub">Employee targets and invoice sales from Sales Raw. The Sales Report stays beside them and is not added to the invoice total.</p>
           </div>
+          <button type="button" id="ytd-import">Import report</button>
+          <input id="ytd-import-file" type="file" accept=".xlsx,.xls,.xlsm" hidden />
           <label class="ytd-year">
             <span>Year</span>
             <select id="ytd-year" aria-label="YTD year"></select>
@@ -9265,6 +9268,9 @@
   let ytdOpenMonth = "";
   let ytdInspect = false;
   let ytdTargetsLoaded = false;
+  let ytdHistory = null;
+  let ytdSnapshots = [];
+  let ytdSnapshotView = null;
   let ytdDirtyMonths = new Set();
   let ytdSaveMessage = { text: "Targets are stored on the server for each employee and month.", cls: "" };
   const ytdSaveChain = new Map();
@@ -9403,22 +9409,66 @@
         const row = saved[key] || {};
         bucket.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0 });
       });
-      roster.forEach((person) => {
+      if (!ytdHistory) roster.forEach((person) => {
         const name = person["Sales Employee"] || person.salesman || "";
         const key = person._key || nameKey(name);
         if (!key || bucket.employees.has(key)) return;
         bucket.employees.set(key, { key, name, id: person.salesmanCode || "", actual: 0 });
       });
     });
+    ytdApplyHistory(months);
     return months;
+  }
+
+  function ytdApplyHistory(months) {
+    if (!ytdHistory || !ytdHistory.months) return;
+    const partial = new Set(ytdHistory.partialMonths || []);
+    Object.values(months).forEach((bucket) => {
+      const src = ytdHistory.months[bucket.key];
+      bucket.history = true;
+      bucket.partial = partial.has(bucket.key);
+      bucket.reportAt = Number(ytdHistory.at) || 0;
+      bucket.reportFile = ytdHistory.fileName || "";
+      bucket.reportEmployees = src && Array.isArray(src.employees) ? src.employees : [];
+      const values = bucket.reportEmployees.filter((emp) => emp.sales != null);
+      bucket.report = values.length ? values.reduce((sum, emp) => sum + Number(emp.sales), 0) : null;
+    });
   }
 
   function ytdEmployeeRows(bucket) {
     const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
+    const targetFor = (key, id, fallback) => {
+      const stored = saved[key] || (id && saved[id]) || null;
+      if (stored && Number.isFinite(Number(stored.target))) return Number(stored.target);
+      return fallback == null ? null : fallback;
+    };
+    if (bucket.history && window.YtdHistory) {
+      const rawRows = [...bucket.employees.values()].map((emp) => ({
+        id: emp.id || "",
+        name: emp.name,
+        actual: emp.actual,
+        unassigned: !!emp.aside,
+        vins: [],
+      }));
+      const reconciled = window.YtdHistory.reconcileMonth(bucket.reportEmployees || [], rawRows, !!bucket.partial).map((emp) => {
+        const key = emp.id || nameKey(emp.name) || String(emp.name || "").toLowerCase();
+        const target = targetFor(key, emp.id, emp.target);
+        const actual = emp.raw == null ? null : emp.raw;
+        return { ...emp, key, name: emp.name, id: emp.id, actual, report: emp.report, target, ach: ytdAch(actual == null ? emp.report : actual, target), recon: emp.status, aside: emp.status === "Unassigned" };
+      });
+      const seen = new Set(reconciled.map((emp) => emp.key));
+      roster.forEach((person) => {
+        const name = person["Sales Employee"] || person.salesman || "";
+        const key = person._key || nameKey(name);
+        if (!key || seen.has(key)) return;
+        const target = targetFor(key, person.salesmanCode || "", null);
+        reconciled.push({ key, name, id: person.salesmanCode || "", plant: person.Plant || "", report: null, actual: 0, target, ach: ytdAch(0, target), recon: "Pending / incomplete source", aside: false, vins: [] });
+      });
+      return reconciled.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }
     return [...bucket.employees.values()].map((emp) => {
-      const stored = saved[emp.key];
-      const target = stored && Number.isFinite(Number(stored.target)) ? Number(stored.target) : null;
-      return { ...emp, target, ach: ytdAch(emp.actual, target) };
+      const target = targetFor(emp.key, emp.id, null);
+      return { ...emp, target, report: null, recon: "", ach: ytdAch(emp.actual, target) };
     }).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }
 
@@ -9456,19 +9506,19 @@
       const totals = ytdMonthTotals(bucket);
       yearActual += totals.actual;
       yearUnassigned += totals.unassigned;
-      yearReport += bucket.report;
+      if (bucket.report != null) yearReport += bucket.report;
       if (totals.hasTarget) yearTarget += totals.target;
       const status = ytdStatus(totals.ach, totals.hasTarget);
       const gap = totals.hasTarget ? totals.target - totals.actual : null;
       const gapText = gap == null ? "Set employee targets" : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
       const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
-      const diff = totals.actual - bucket.report;
-      const matched = Math.abs(diff) < 0.001;
+      const diff = bucket.report == null ? null : totals.actual - bucket.report;
+      const matched = diff != null && Math.abs(diff) < 0.001;
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
       const today = new Date();
       const isPast = ytdYear < today.getFullYear() || (ytdYear === today.getFullYear() && bucket.month < today.getMonth());
-      const reconCls = matched ? "is-match" : "is-miss";
-      const reconText = matched ? "Match" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
+      const reconCls = bucket.partial ? "is-none" : matched ? "is-match" : diff == null ? "is-none" : "is-miss";
+      const reconText = bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
       const barCls = totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss";
       const progress = totals.hasTarget
         ? `<div class="ytd-progress"><div class="ytd-bar ${barCls}" role="img" aria-label="Achievement ${ytdPctText(totals.ach)}"><i style="width:${width.toFixed(1)}%"></i></div><p class="ytd-gap">${gapText}</p></div>`
@@ -9484,7 +9534,7 @@
         </div>
         <div class="ytd-card-metrics">
           <span class="is-target"><em>Target</em><b class="${totals.hasTarget ? "" : "is-empty"}">${totals.hasTarget ? formatNumber(totals.target) : "No Target"}</b></span>
-          <span class="is-actual"><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
+          <span class="is-actual"><em>Raw</em><b>${formatNumber(totals.actual)}</b></span>
           <span class="is-report"><em>Report</em><b>${formatNumber(bucket.report)}</b></span>
           <span class="is-ach"><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
@@ -9496,10 +9546,10 @@
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
     annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly targets" : "No employee targets yet"}</em></article>
-      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Invoice sales${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
-      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ annual target" : "Needs a target"}</em></article>
-      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Report Actual</span><strong>${formatNumber(yearReport)}</strong><em>Sales Report count</em></article>
-      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Excluded Rows</span><strong>${formatNumber(excluded)}</strong><em>Blank date or missing qty</em></article>`;
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw invoice date${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
+      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Raw actual ÷ annual target" : "Needs a target"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Sales Report Actual</span><strong>${ytdHistory ? formatNumber(yearReport) : formatNumber(yearReport)}</strong><em>${ytdHistory ? "Imported Salesman Performance · not added to raw" : "Sales Raw report-date count"}</em></article>
+      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Unassigned / excluded</span><strong>${formatNumber(yearUnassigned)} / ${formatNumber(excluded)}</strong><em>Unassigned invoices · rows with a blank date or qty</em></article>`;
     paintYtdChart(Object.values(months));
     paintYtdDetail();
   }
@@ -9587,19 +9637,24 @@
     if (panel) panel.classList.toggle("is-detail-open", !!bucket);
     if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
     const totals = ytdMonthTotals(bucket);
-    const diff = totals.actual - bucket.report;
-    const matched = Math.abs(diff) < 0.001;
+    const diff = bucket.report == null ? null : totals.actual - bucket.report;
+    const matched = diff != null && Math.abs(diff) < 0.001;
     const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
     const meta = window._ytdInvoiceMeta || {};
     const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
     const rows = totals.people.map((emp) => {
       const state = ytdRowState(emp);
+      const gap = emp.report == null || emp.actual == null ? null : emp.actual - emp.report;
+      const recon = emp.recon || ytdDetailStatusText(state.status);
       return `<tr class="${state.cls}" data-ytd-row="${escapeHtml(emp.key)}">
-      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
-      <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
+      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.plant ? `<small>${escapeHtml(emp.plant)}</small>` : ""}</td>
+      <td>${escapeHtml(emp.id || "—")}</td>
+      <td>${formatNumber(emp.report)}</td>
       <td>${formatNumber(emp.actual)}</td>
+      <td>${gap == null ? "—" : `${gap > 0 ? "+" : ""}${formatNumber(gap)}`}</td>
+      <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
       <td data-ytd-ach="${escapeHtml(emp.key)}">${ytdAchMarkup(emp)}</td>
-      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
+      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${escapeHtml(recon)}</span></td>
     </tr>`;
     }).join("");
     const inspectRows = ytdInspect ? `
@@ -9622,6 +9677,7 @@
         </div>
         <div class="ytd-detail-actions">
           <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Inspect records"}</button>
+          <button type="button" class="ytd-text-btn" data-ytd-export>Export month</button>
           <button type="button" class="ytd-save-btn" id="ytd-save-btn">Save targets</button>
           <button type="button" class="ytd-text-btn" data-ytd-close>Close</button>
         </div>
@@ -9636,12 +9692,21 @@
       </div>
       <p class="ytd-save${ytdSaveMessage.cls ? " " + ytdSaveMessage.cls : ""}" id="ytd-save-note">${escapeHtml(ytdSaveMessage.text)}</p>
       <div class="ytd-table-wrap"><table class="ytd-table">
-        <thead><tr><th>Employee</th><th>Monthly Target</th><th>Actual Sales</th><th>Achievement %</th><th>Status</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="5">No employees for this month.</td></tr>`}</tbody>
-        <tfoot><tr><td>Month total</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td data-ytd-sum="foot-ach">${ytdPctText(totals.ach)}</td><td></td></tr></tfoot>
+        <thead><tr><th>Employee</th><th>ID</th><th>Report</th><th>Raw</th><th>Difference</th><th>Monthly Target</th><th>Achievement %</th><th>Status</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8">No employees for this month.</td></tr>`}</tbody>
+        <tfoot><tr><td>Month total</td><td></td><td>${formatNumber(bucket.report)}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td>${diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`}</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td data-ytd-sum="foot-ach">${ytdPctText(totals.ach)}</td><td></td></tr></tfoot>
       </table></div>
       ${bucket.flagged && !ytdInspect ? `<p class="ytd-flag">${formatNumber(bucket.flagged)} row${bucket.flagged === 1 ? "" : "s"} excluded and flagged for review.</p>` : ""}
-      ${inspectRows}`;
+      ${inspectRows}
+      ${ytdSnapshotHtml(bucket)}`;
+  }
+
+  function ytdSnapshotHtml(bucket) {
+    const rows = (ytdSnapshots || []).slice().reverse().slice(0, 12);
+    const list = rows.map((row) => `<li><button type="button" data-ytd-snap="${escapeHtml(row.id)}">${escapeHtml(new Date(row.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }))}</button> ${escapeHtml(row.fileName || "")}</li>`).join("") || "<li>No push snapshots yet. A snapshot is saved only when Admin Push stores Sales Raw.</li>";
+    const viewed = ytdSnapshotView && ytdSnapshotView.months && ytdSnapshotView.months[bucket.key];
+    const view = viewed ? `<p class="ytd-flag">Snapshot ${escapeHtml(ytdSnapshotView.id)} · ${escapeHtml(viewed.status || "")} · report ${formatNumber(viewed.report)} · raw ${formatNumber(viewed.raw)}</p>` : "";
+    return `<div class="ytd-inspect"><h4>Snapshot history</h4><ul>${list}</ul>${view}</div>`;
   }
 
   function ytdDetailStatusText(status) {
@@ -9663,8 +9728,8 @@
     const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
     if (!bucket) return;
     const totals = ytdMonthTotals(bucket);
-    const diff = totals.actual - bucket.report;
-    const matched = Math.abs(diff) < 0.001;
+    const diff = bucket.report == null ? null : totals.actual - bucket.report;
+    const matched = diff != null && Math.abs(diff) < 0.001;
     const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
     const set = (name, text) => {
       const node = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
@@ -9673,10 +9738,10 @@
     set("target", totals.hasTarget ? formatNumber(totals.target) : "—");
     set("actual", formatNumber(totals.actual));
     set("report", formatNumber(bucket.report));
-    set("diff", `${diff > 0 ? "+" : ""}${formatNumber(diff)}`);
+    set("diff", diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`);
     set("ach", ytdPctText(totals.ach));
-    set("status", matched ? "Match" : "Mismatch");
-    set("match", matched ? "Match" : "Mismatch");
+    set("status", bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : "Mismatch");
+    set("match", bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : "Mismatch");
     set("pace", monthStatus.label);
     set("foot-target", totals.hasTarget ? formatNumber(totals.target) : "—");
     set("foot-ach", ytdPctText(totals.ach));
@@ -9705,9 +9770,70 @@
     });
   }
 
+  async function ytdLoadServer() {
+    try {
+      const res = await fetch("/api/report-sheet/ytd-history", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        ytdHistory = data && data.latest ? data.latest : null;
+      }
+    } catch (e) { /* keep the last loaded import */ }
+    try {
+      const res = await fetch("/api/report-sheet/ytd-snapshots", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        ytdSnapshots = data && Array.isArray(data.snapshots) ? data.snapshots : [];
+      }
+    } catch (e) { /* history list stays as last loaded */ }
+    const sub = $("#ytd-sub");
+    if (sub && ytdHistory) {
+      const partial = (ytdHistory.partialMonths || []).join(", ");
+      sub.textContent = `Sales Report ${ytdHistory.fileName || ""} · as of ${ytdHistory.asOf || "—"}${partial ? ` · partial ${partial}` : ""}. Raw invoices are not added to the report.`;
+    }
+  }
+
   async function renderYtdSales() {
     await ytdEnsureTargets();
+    await ytdLoadServer();
     paintYtd();
+  }
+
+  function ytdExportMonth() {
+    const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
+    if (!bucket) return;
+    const people = ytdEmployeeRows(bucket);
+    const lines = [["Employee", "ID", "Plant", "Report", "Raw", "Difference", "Target", "Achievement", "Status"]];
+    people.forEach((emp) => {
+      const gap = emp.report == null || emp.actual == null ? "" : emp.actual - emp.report;
+      lines.push([emp.name || "", emp.id || "", emp.plant || "", emp.report == null ? "" : emp.report, emp.actual == null ? "" : emp.actual, gap, emp.target == null ? "" : emp.target, emp.ach == null ? "" : emp.ach.toFixed(1), emp.recon || ""]);
+    });
+    const csv = lines.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ytd-${bucket.key}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function ytdImportReport(file, password) {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    const res = await fetch("/api/report-sheet/ytd-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, fileName: file.name, base64: btoa(binary) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Import failed. Nothing was saved.");
+    ytdHistory = data.latest || null;
+    ytdTargetsLoaded = false;
+    await ytdEnsureTargets(true);
+    paintYtd();
+    return data;
   }
 
   function ytdRememberTarget(input) {
@@ -22593,8 +22719,39 @@
           });
           return;
         }
-        if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); }
+        if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); return; }
+        if (e.target.closest("[data-ytd-export]")) { ytdExportMonth(); return; }
+        const snap = e.target.closest("[data-ytd-snap]");
+        if (snap) {
+          fetch(`/api/report-sheet/ytd-snapshots/${encodeURIComponent(snap.dataset.ytdSnap)}`, { cache: "no-store" })
+            .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+            .then((out) => {
+              if (!out.ok) throw new Error(out.data.error || "That snapshot could not be loaded.");
+              ytdSnapshotView = out.data;
+              paintYtdDetail();
+            })
+            .catch((err) => ytdSetSaveNote(err.message || "That snapshot could not be loaded.", "is-err"));
+          return;
+        }
+        if (e.target.closest("#ytd-import")) {
+          const file = $("#ytd-import-file");
+          if (file) file.click();
+        }
       });
+      const ytdFile = $("#ytd-import-file");
+      if (ytdFile) {
+        ytdFile.addEventListener("change", () => {
+          const file = ytdFile.files && ytdFile.files[0];
+          ytdFile.value = "";
+          if (!file) return;
+          const password = window.prompt("Admin password");
+          if (!password) return;
+          ytdSetSaveNote("Importing the Sales Report…", "is-wait");
+          ytdImportReport(file, password).then((data) => {
+            ytdSetSaveNote(data.duplicate ? "This report was already imported." : "Sales Report imported.", data.duplicate ? "" : "is-ok");
+          }).catch((err) => ytdSetSaveNote(err.message || "Import failed. Nothing was saved.", "is-err"));
+        });
+      }
       const ytdRefresh = $("#ytd-refresh");
       if (ytdRefresh) {
         ytdRefresh.addEventListener("click", () => {
