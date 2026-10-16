@@ -185,7 +185,7 @@
         </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="contact" id="tab-contact">
           <span class="side-nav-icon" aria-hidden="true">☎</span>
-          <span class="side-nav-label">Data Management</span>
+          <span class="side-nav-label">CRM &amp; Contact</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -238,10 +238,6 @@
   <div class="shell">
     <div class="pbi-kpis admin-kpis" id="admin-kpis"></div>
 
-    <section class="admin-panel" id="panel-contact" hidden>
-      <div id="contact-admin-host"></div>
-    </section>
-
     <section class="admin-panel" id="panel-uploads">
       <div class="xl-toolbar admin-toolbar">
         <span class="hint" id="files-foot">Upload Sales Raw for Sales Report · other files optional.</span>
@@ -259,6 +255,15 @@
           <b>Sales Raw Data</b> is required · <b>Cancelled BOs</b> optional (all rows when Col I has a VIN · duplicates included).
         </p>
         <section class="grid-5" id="slots"></section>
+      </div>
+
+      <div class="card admin-section-card" id="contact-files">
+        <div class="pbi-viz-head">
+          <h2>CRM export and contact file</h2>
+          <span class="admin-section-tag">Contact Performance</span>
+        </div>
+        <p class="admin-lead">Add the contact file and the CRM export, then validate and publish. These files stay separate from Push to live.</p>
+        <div id="contact-admin-host"></div>
       </div>
     </section>
 
@@ -888,19 +893,23 @@
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
     const gec = $("#panel-gec");
-    const contact = $("#panel-contact");
+    const focusContact = which === "contact";
+    if (focusContact) which = "uploads";
     uploads.hidden = which !== "uploads";
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
-    if (contact) contact.hidden = which !== "contact";
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.adminPanel === which);
+      btn.classList.toggle("active", btn.dataset.adminPanel === (focusContact ? "contact" : which));
     });
     if (which === "allocation") renderAllocationPanel();
     if (which === "gec") { renderGecControl(); renderGecFound(); }
-    if (which === "contact" && window.ContactPerformance) {
+    if ((which === "uploads" || focusContact) && window.ContactPerformance) {
       window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));
+    }
+    if (focusContact) {
+      const card = document.getElementById("contact-files");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 
@@ -1451,6 +1460,11 @@
   });
 })();
 </script>
-<script src="contact-performance.js?v=20261013cp10"></script>
+<script src="contact-performance.js?v=20261016cp1"></script>
+<script>
+  if (window.ContactPerformance) {
+    window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));
+  }
+</script>
 </body>
 </html>

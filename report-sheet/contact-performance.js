@@ -627,9 +627,9 @@
       </section>
       <div class="cp-admin-grid">
         <section class="cp-card" id="cp-card-contact">
-          <h3>Contact Tracking File</h3>
+          <h3>Contact file</h3>
           <div class="cp-drop" data-drop="contact">
-            <b>Drop the Export workbook</b>
+            <b>Drop the contact file</b>
             <p>.xlsx with an Export worksheet</p>
             <button type="button" class="cp-btn" data-browse="contact">Browse files</button>
             <input id="cp-file-contact" type="file" accept=".xlsx,.xls,.csv,.txt" hidden />
@@ -637,7 +637,7 @@
           <div class="cp-filemeta" id="cp-meta-contact">No file selected.</div>
         </section>
         <section class="cp-card" id="cp-card-crm">
-          <h3>CRM Export File</h3>
+          <h3>CRM export</h3>
           <div class="cp-drop" data-drop="crm">
             <b>Drop the CRM export</b>
             <p>.xlsx, .csv, or .txt</p>
