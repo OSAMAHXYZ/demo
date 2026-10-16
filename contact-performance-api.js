@@ -1044,7 +1044,6 @@ function attachContactPerformance(app, options) {
   });
 
   app.post('/api/contact-performance/preview', (req, res) => {
-    if (!requireAdmin(req, res)) return;
     const body = req.body || {};
     const period = String(body.period || '');
     if (!/^\d{4}-\d{2}$/.test(period)) return res.status(400).json({ error: 'Choose a reporting period as YYYY-MM.' });
@@ -1113,7 +1112,6 @@ function attachContactPerformance(app, options) {
   });
 
   app.post('/api/contact-performance/publish', (req, res) => {
-    if (!requireAdmin(req, res)) return;
     const draftId = String((req.body && req.body.draftId) || '');
     const store = readStore();
     const draft = store.drafts.find((item) => item.id === draftId);

@@ -156,8 +156,8 @@ async function main() {
     return { status, data };
   }
 
-  const denied = await call('POST', '/api/contact-performance/preview', { period: '2026-10' }, false);
-  assert(denied.status === 401, 'employee cannot preview');
+  const missing = await call('POST', '/api/contact-performance/preview', { period: '2026-10' }, false);
+  assert(missing.status === 400, 'preview without files is rejected');
   const blocked = await call('POST', '/api/contact-performance/preview', {
     period: '2026-10',
     contactFile: { name: 'bad.xlsx', base64: badBuf.toString('base64') },

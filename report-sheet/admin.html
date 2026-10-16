@@ -262,7 +262,7 @@
           <h2>CRM export and contact file</h2>
           <span class="admin-section-tag">Contact Performance</span>
         </div>
-        <p class="admin-lead">Add the contact file and the CRM export, then validate and publish. These files stay separate from Push to live.</p>
+        <p class="admin-lead">Drop the contact file and the CRM export here, then click <b>Push to live</b>.</p>
         <div id="contact-admin-host"></div>
       </div>
     </section>
@@ -1200,10 +1200,23 @@
 
       renderTargetsPanel();
       renderAllocationPanel();
+      let contactResult = null;
+      let contactNote = "";
+      try {
+        if (window.ContactPerformance && window.ContactPerformance.publishDraft) {
+          contactResult = await window.ContactPerformance.publishDraft();
+          if (contactResult && contactResult.message) contactNote = ` · ${contactResult.message}`;
+        }
+      } catch (err) {
+        const detail = (err.payload && err.payload.errors && err.payload.errors[0]) || err.message || "Contact / CRM was not published.";
+        contactNote = ` · Contact / CRM not published: ${detail}`;
+        contactResult = { ok: false, message: detail };
+      }
       const slotCount = Object.keys(filesBySlot).length;
       if (!slotCount) {
-        if (pushedClear && server) setStatus("Live files cleared · settings pushed", "ok");
-        else setStatus("Pushed settings only — upload at least one Excel file, then Push again.", "err");
+        if (contactResult && contactResult.ok) setStatus(contactResult.message, "ok");
+        else if (pushedClear && server) setStatus(`Live files cleared · settings pushed${contactNote}`, contactResult && contactResult.ok === false ? "err" : "ok");
+        else setStatus(`Pushed settings only — upload at least one Excel file, then Push again.${contactNote}`, "err");
         return;
       }
       const srOk = dataStamp.hasSales;
@@ -1222,9 +1235,9 @@
       }).join("");
       setStatus(
         srOk
-          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}`
-          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}`,
-        server ? "ok" : "busy"
+          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}${contactNote}`
+          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}${contactNote}`,
+        contactResult && contactResult.ok === false ? "err" : (server ? "ok" : "busy")
       );
       // Open / focus the live dashboard so Push visibly loads the panels
       try {
@@ -1460,7 +1473,7 @@
   });
 })();
 </script>
-<script src="contact-performance.js?v=20261016cp1"></script>
+<script src="contact-performance.js?v=20261016cp2"></script>
 <script>
   if (window.ContactPerformance) {
     window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));

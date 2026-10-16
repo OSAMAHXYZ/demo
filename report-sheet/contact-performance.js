@@ -615,61 +615,34 @@
   function mountAdmin(host) {
     if (!host || host.dataset.cpAdmin === "1") return;
     host.dataset.cpAdmin = "1";
-    host.innerHTML = `<div class="cp-admin">
-      <section class="cp-card">
-        <h3>Data Management</h3>
-        <p class="cp-note">Upload the contact-tracking workbook and the CRM export, validate them, then publish. Choosing a file does not replace the live dataset.</p>
-        <div class="cp-filters" style="border:0;padding:8px 0 0">
-          <label class="cp-field"><span>Reporting period</span><input id="cp-period" type="month" /></label>
-          <label class="cp-field"><span>Published by</span><input id="cp-by" type="text" maxlength="80" placeholder="Administrator" /></label>
-          <label class="cp-field"><span>Admin password</span><input id="cp-pass" type="password" autocomplete="current-password" /></label>
-        </div>
-      </section>
-      <div class="cp-admin-grid">
-        <section class="cp-card" id="cp-card-contact">
-          <h3>Contact file</h3>
-          <div class="cp-drop" data-drop="contact">
-            <b>Drop the contact file</b>
-            <p>.xlsx with an Export worksheet</p>
-            <button type="button" class="cp-btn" data-browse="contact">Browse files</button>
-            <input id="cp-file-contact" type="file" accept=".xlsx,.xls,.csv,.txt" hidden />
-          </div>
-          <div class="cp-filemeta" id="cp-meta-contact">No file selected.</div>
-        </section>
-        <section class="cp-card" id="cp-card-crm">
-          <h3>CRM export</h3>
-          <div class="cp-drop" data-drop="crm">
-            <b>Drop the CRM export</b>
-            <p>.xlsx, .csv, or .txt</p>
-            <button type="button" class="cp-btn" data-browse="crm">Browse files</button>
-            <input id="cp-file-crm" type="file" accept=".xlsx,.xls,.csv,.txt" hidden />
-          </div>
-          <div class="cp-filemeta" id="cp-meta-crm">No file selected.</div>
-        </section>
-      </div>
-      <div class="cp-actions">
-        <button type="button" class="cp-btn" id="cp-validate">Validate files</button>
-        <button type="button" class="cp-btn primary" id="cp-publish" disabled>Publish dataset</button>
-        <button type="button" class="cp-btn ghost" id="cp-cancel" disabled>Cancel</button>
-      </div>
-      <div id="cp-result"></div>
-      <section class="cp-card">
-        <h3>Publication history</h3>
-        <div class="cp-history" id="cp-history"><div class="cp-empty">Enter the admin password and the history will load.</div></div>
-      </section>
-      <dialog class="cp-detail" id="cp-pub-dialog"><form method="dialog" id="cp-pub-body"></form></dialog>
-    </div>`;
+    host.innerHTML = `<section class="grid-5">
+      <label class="slot" id="cp-slot-contact">
+        <input id="cp-file-contact" type="file" accept=".xlsx,.xls,.csv,.txt" />
+        <div class="n">C</div>
+        <h3>Contact file</h3>
+        <p class="ar">Export worksheet</p>
+        <span class="meta" id="cp-meta-contact">Drop or click · .xlsx / .xls / .csv</span>
+      </label>
+      <label class="slot" id="cp-slot-crm">
+        <input id="cp-file-crm" type="file" accept=".xlsx,.xls,.csv,.txt" />
+        <div class="n">R</div>
+        <h3>CRM export</h3>
+        <p class="ar">CRM export file</p>
+        <span class="meta" id="cp-meta-crm">Drop or click · .xlsx / .xls / .csv</span>
+      </label>
+    </section>
+    <p class="hint" id="cp-result"></p>`;
 
     const files = { contact: null, crm: null };
-    let draftId = "";
-    const now = new Date();
-    host.querySelector("#cp-period").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    function password() {
-      return host.querySelector("#cp-pass").value;
-    }
-    function headers() {
-      return { "Content-Type": "application/json", "X-Admin-Password": password() };
+    function paint(kind) {
+      const file = files[kind];
+      const slot = host.querySelector(`#cp-slot-${kind}`);
+      const meta = host.querySelector(`#cp-meta-${kind}`);
+      slot.classList.toggle("loaded", !!file);
+      meta.innerHTML = file
+        ? `<b>${esc(file.name)}</b><br>${(file.size / 1024).toFixed(1)} KB <span class="pill slot-draft">Draft · not live</span>`
+        : "Drop or click · .xlsx / .xls / .csv";
     }
     function readFile(file) {
       return new Promise((resolve, reject) => {
@@ -684,230 +657,49 @@
       });
     }
     function setChosen(kind, file) {
-      files[kind] = file;
-      host.querySelector(`#cp-meta-${kind}`).textContent = file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB · not published` : "No file selected.";
+      files[kind] = file || null;
+      paint(kind);
+      host.querySelector("#cp-result").textContent = "";
     }
-    host.addEventListener("click", (event) => {
-      const browse = event.target.closest("[data-browse]");
-      if (browse) host.querySelector(`#cp-file-${browse.getAttribute("data-browse")}`).click();
-    });
     host.addEventListener("change", (event) => {
       if (event.target.id === "cp-file-contact" && event.target.files[0]) setChosen("contact", event.target.files[0]);
       if (event.target.id === "cp-file-crm" && event.target.files[0]) setChosen("crm", event.target.files[0]);
-      if (event.target.id === "cp-pass") loadHistory();
     });
-    host.querySelectorAll("[data-drop]").forEach((zone) => {
-      ["dragover", "dragleave", "drop"].forEach((name) => zone.addEventListener(name, (event) => {
-        event.preventDefault();
-        zone.classList.toggle("is-over", name === "dragover");
-        if (name === "drop" && event.dataTransfer.files[0]) setChosen(zone.getAttribute("data-drop"), event.dataTransfer.files[0]);
-      }));
-    });
-
-    function showResult(html) {
-      host.querySelector("#cp-result").innerHTML = html;
-    }
-
-    host.querySelector("#cp-validate").addEventListener("click", async () => {
-      const button = host.querySelector("#cp-validate");
+    async function publishDraft() {
+      const note = host.querySelector("#cp-result");
+      if (!files.contact && !files.crm) return null;
       if (!files.contact || !files.crm) {
-        showResult(`<div class="cp-banner bad">Select both the contact-tracking file and the CRM export.</div>`);
-        return;
+        const message = "Add both the contact file and the CRM export, then Push to live.";
+        note.textContent = message;
+        return { ok: false, message };
       }
-      if (!password()) {
-        showResult(`<div class="cp-banner bad">Enter the admin password. Employees cannot publish this dataset.</div>`);
-        return;
-      }
-      button.disabled = true;
-      button.textContent = "Validating…";
-      host.querySelector("#cp-publish").disabled = true;
-      try {
-        const contactFile = await readFile(files.contact);
-        const crmFile = await readFile(files.crm);
-        const result = await getJson("/api/contact-performance/preview", {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({
-            period: host.querySelector("#cp-period").value,
-            publishedBy: host.querySelector("#cp-by").value,
-            contactFile,
-            crmFile,
-          }),
-        });
-        draftId = result.draftId;
-        const rec = result.reconciliation || {};
-        const warnings = (result.warnings || []).map((item) => `<li>${esc(item)}</li>`).join("");
-        showResult(`<section class="cp-card">
-          <h3>Validation passed — not published yet</h3>
-          <p class="cp-note">Contact worksheet ${esc(result.contactSheet || "—")} · ${fmt(result.contactRows)} rows. CRM worksheet ${esc(result.crmSheet || "—")} · ${fmt(result.crmRows)} rows.</p>
-          <p class="cp-note">${esc(rec.equation || "")}. Contact-tracking only: ${fmt(rec.contactOnly)}. Duplicate keys left unmatched: ${fmt((rec.contactUnresolved || 0) + (rec.crmUnresolved || 0))}. Missing identifiers: ${fmt((rec.contactMissingId || 0) + (rec.crmMissingId || 0))}. Unknown contact status: ${fmt(rec.unknownStatus)}. Employee name mismatches: ${fmt(rec.employeeIssueCount)}.</p>
-          ${warnings ? `<div class="cp-banner wait"><b>Warnings</b><ul>${warnings}</ul></div>` : ""}
-        </section>`);
-        host.querySelector("#cp-publish").disabled = false;
-        host.querySelector("#cp-cancel").disabled = false;
-      } catch (err) {
-        draftId = "";
-        const errors = (err.payload && err.payload.errors) || [err.message];
-        showResult(`<div class="cp-banner bad"><b>Publication blocked.</b> The current dataset was not changed.<ul>${errors.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>`);
-      } finally {
-        button.disabled = false;
-        button.textContent = "Validate files";
-      }
-    });
-
-    host.querySelector("#cp-publish").addEventListener("click", async () => {
-      if (!draftId) return;
-      const period = host.querySelector("#cp-period").value;
-      if (!global.confirm(`Publish the validated dataset for ${periodLabel(period)}? The previous dataset for that period stays in history.`)) return;
-      const button = host.querySelector("#cp-publish");
-      button.disabled = true;
-      button.textContent = "Publishing…";
-      try {
-        const result = await getJson("/api/contact-performance/publish", {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ draftId }),
-        });
-        draftId = "";
-        files.contact = null;
-        files.crm = null;
-        host.querySelector("#cp-file-contact").value = "";
-        host.querySelector("#cp-file-crm").value = "";
-        setChosen("contact", null);
-        setChosen("crm", null);
-        showResult(`<div class="cp-banner">Published ${esc(periodLabel(result.period))} at ${esc(stamp(result.at))}.</div>`);
-        host.querySelector("#cp-cancel").disabled = true;
-        await loadHistory();
-      } catch (err) {
-        showResult(`<div class="cp-banner bad">${esc(err.message || "Publish failed. The previous dataset is still active.")}</div>`);
-        button.disabled = false;
-      } finally {
-        button.textContent = "Publish dataset";
-      }
-    });
-
-    host.querySelector("#cp-cancel").addEventListener("click", async () => {
-      if (!draftId) return;
-      if (!global.confirm("Cancel this preview? The published dataset will stay as it is.")) return;
-      try {
-        await getJson("/api/contact-performance/cancel", {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ draftId }),
-        });
-      } catch (err) { /* preview already gone */ }
-      draftId = "";
-      host.querySelector("#cp-publish").disabled = true;
-      host.querySelector("#cp-cancel").disabled = true;
-      showResult(`<div class="cp-banner">Preview cancelled. The live dataset was not changed.</div>`);
-    });
-
-    async function loadHistory() {
-      const box = host.querySelector("#cp-history");
-      if (!password()) {
-        box.innerHTML = `<div class="cp-empty">Enter the admin password to load publication history.</div>`;
-        return;
-      }
-      try {
-        const data = await getJson("/api/contact-performance/history", { headers: headers() });
-        const rows = data.publications || [];
-        if (!rows.length) {
-          box.innerHTML = `<div class="cp-empty">No dataset has been published yet.</div>`;
-          return;
-        }
-        box.innerHTML = `<table class="cp-table"><thead><tr>
-          <th>Period</th><th>Contact file</th><th>CRM file</th><th>Published</th><th>By</th>
-          <th>Matched</th><th>Unmatched</th><th>Duplicates</th><th>Status</th><th></th>
-        </tr></thead><tbody>${rows.map((row) => `<tr>
-          <td>${esc(periodLabel(row.period))}</td>
-          <td title="${esc(row.contactFile)}">${esc(row.contactFile)}</td>
-          <td title="${esc(row.crmFile)}">${esc(row.crmFile)}</td>
-          <td>${esc(stamp(row.at))}</td>
-          <td>${esc(row.by || "Administrator")}</td>
-          <td class="num">${fmt(row.counts && row.counts.matched)}</td>
-          <td class="num">${fmt(row.counts && row.counts.crmOnly)}</td>
-          <td class="num">${fmt(row.counts && row.counts.duplicates)}</td>
-          <td>${row.active ? "Active" : esc(row.status || "Published")}</td>
-          <td>
-            <button type="button" class="cp-btn" data-view="${esc(row.id)}">Details</button>
-            <button type="button" class="cp-btn" data-rollback="${esc(row.id)}" ${row.active ? "disabled" : ""}>Use this dataset</button>
-          </td>
-        </tr>`).join("")}</tbody></table>
-        <h3 style="margin:14px 0 6px;font-size:15px">Audit log</h3>
-        <table class="cp-table"><thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead><tbody>${
-          (data.audit || []).slice(0, 40).map((item) => `<tr><td>${esc(stamp(item.at))}</td><td>${esc(item.event)}</td><td>${esc(item.message)}</td></tr>`).join("")
-        }</tbody></table>`;
-      } catch (err) {
-        box.innerHTML = `<div class="cp-banner bad">${esc(err.message || "History could not be loaded.")}</div>`;
-      }
+      const now = new Date();
+      const period = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      const contactFile = await readFile(files.contact);
+      const crmFile = await readFile(files.crm);
+      const preview = await getJson("/api/contact-performance/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, publishedBy: "Administrator", contactFile, crmFile }),
+      });
+      await getJson("/api/contact-performance/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId: preview.draftId }),
+      });
+      host.querySelectorAll(".slot-draft").forEach((el) => el.remove());
+      note.textContent = "";
+      return { ok: true, message: "Contact file and CRM export are live for " + periodLabel(period) + "." };
     }
 
-    host.querySelector("#cp-history").addEventListener("click", async (event) => {
-      const view = event.target.closest("[data-view]");
-      const rollback = event.target.closest("[data-rollback]");
-      if (view) {
-        try {
-          const item = await getJson(`/api/contact-performance/publication/${encodeURIComponent(view.getAttribute("data-view"))}`, { headers: headers() });
-          const rec = item.reconciliation || {};
-          const body = host.querySelector("#cp-pub-body");
-          body.innerHTML = `<h3>${esc(periodLabel(item.period))}</h3>
-            <dl>
-              <dt>Contact file</dt><dd>${esc(item.contactFile)}</dd>
-              <dt>CRM file</dt><dd>${esc(item.crmFile)}</dd>
-              <dt>Worksheet</dt><dd>${esc(item.contactSheet || "—")}</dd>
-              <dt>Published</dt><dd>${esc(stamp(item.at))} · ${esc(item.by || "Administrator")}</dd>
-              <dt>Reconciliation</dt><dd>${esc(rec.equation || "—")}</dd>
-              <dt>Contact only</dt><dd>${fmt(rec.contactOnly)}</dd>
-              <dt>Missing identifiers</dt><dd>${fmt((rec.contactMissingId || 0) + (rec.crmMissingId || 0))}</dd>
-              <dt>Unresolved duplicates</dt><dd>${fmt((rec.contactUnresolved || 0) + (rec.crmUnresolved || 0))}</dd>
-              <dt>Unknown status</dt><dd>${fmt(rec.unknownStatus)}</dd>
-            </dl>
-            ${(item.warnings || []).length ? `<div class="cp-banner wait">${item.warnings.map((line) => `<div>${esc(line)}</div>`).join("")}</div>` : ""}
-            <div class="cp-actions" style="margin-top:12px">
-              <button type="button" class="cp-btn" data-download="${esc(item.id)}:contact">Download contact file</button>
-              <button type="button" class="cp-btn" data-download="${esc(item.id)}:crm">Download CRM file</button>
-              <button class="cp-btn" value="cancel">Close</button>
-            </div>`;
-          host.querySelector("#cp-pub-dialog").showModal();
-        } catch (err) {
-          showResult(`<div class="cp-banner bad">${esc(err.message)}</div>`);
-        }
-      }
-      if (rollback) {
-        const id = rollback.getAttribute("data-rollback");
-        if (!global.confirm("Make this published dataset the active one? Current figures stay in history.")) return;
-        try {
-          await getJson("/api/contact-performance/rollback", {
-            method: "POST",
-            headers: headers(),
-            body: JSON.stringify({ publicationId: id }),
-          });
-          await loadHistory();
-          showResult(`<div class="cp-banner">The selected dataset is now active.</div>`);
-        } catch (err) {
-          showResult(`<div class="cp-banner bad">${esc(err.message)}</div>`);
-        }
-      }
-    });
-
-    host.querySelector("#cp-pub-body").addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-download]");
-      if (!button) return;
-      const [id, which] = button.getAttribute("data-download").split(":");
-      const response = await fetch(`/api/contact-performance/source/${encodeURIComponent(id)}/${which}`, { headers: { "X-Admin-Password": password() } });
-      if (!response.ok) {
-        showResult(`<div class="cp-banner bad">The source file could not be downloaded.</div>`);
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = which === "crm" ? "crm-export" : "contact-tracking";
-      link.click();
-      URL.revokeObjectURL(url);
-    });
+    host.__cpPublish = publishDraft;
   }
 
-  global.ContactPerformance = { mount, mountAdmin };
+  function publishDraft() {
+    const host = document.getElementById("contact-admin-host");
+    if (!host || typeof host.__cpPublish !== "function") return null;
+    return host.__cpPublish();
+  }
+
+  global.ContactPerformance = { mount, mountAdmin, publishDraft };
 })(window);
