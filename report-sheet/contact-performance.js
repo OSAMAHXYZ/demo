@@ -103,6 +103,13 @@
           <div class="cp-chart-box" id="cp-bar-box"><canvas id="cp-bars"></canvas></div>
         </section>
       </div>
+      <section class="cp-card cp-advisors">
+        <div class="cp-section-head">
+          <h3>Advisor Contact Achievement</h3>
+          <span class="cp-count" id="cp-advisor-count">No leads</span>
+        </div>
+        <div class="cp-chart-box" id="cp-advisor-box"><div class="cp-empty">Waiting for the latest Admin Push.</div></div>
+      </section>
       <section class="cp-card cp-employees">
         <div class="cp-section-head">
           <h3>Employee performance</h3>
@@ -360,6 +367,94 @@
           },
         }));
       }
+      renderAdvisors();
+    }
+
+    function renderAdvisors() {
+      const rows = ((state.summary && state.summary.advisors) || []).slice();
+      const count = host.querySelector("#cp-advisor-count");
+      const leadTotal = rows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+      if (count) count.textContent = rows.length ? `${fmt(rows.length)} advisors · ${fmt(leadTotal)} valid leads` : "No leads";
+      const box = host.querySelector("#cp-advisor-box");
+      if (!box) return;
+      if (!rows.length || !global.Chart) {
+        box.style.height = "";
+        box.innerHTML = `<div class="cp-empty">${state.summary && !state.summary.empty && !global.Chart ? "The chart library did not load." : (state.summary && !state.summary.empty ? "No advisor leads for the current filters." : "Waiting for the latest Admin Push.")}</div>`;
+        return;
+      }
+      box.innerHTML = `<canvas id="cp-advisor-bars"></canvas>`;
+      box.style.height = `${Math.max(160, rows.length * 32 + 36)}px`;
+      const tick = document.body.classList.contains("cp-mode") ? "#e8eef7" : "#172b4d";
+      const achLabel = (row) => (row.ach == null || !Number.isFinite(Number(row.ach)) ? "N/A" : `${Number(row.ach).toFixed(1)}%`);
+      state.charts.push(new global.Chart(box.querySelector("#cp-advisor-bars"), {
+        type: "bar",
+        plugins: [{
+          id: "advisorAch",
+          afterDatasetsDraw(chart) {
+            const { ctx, chartArea } = chart;
+            const meta = chart.getDatasetMeta(0);
+            ctx.save();
+            ctx.fillStyle = tick;
+            ctx.font = "600 11px Manrope, Segoe UI, sans-serif";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            meta.data.forEach((bar, index) => {
+              ctx.fillText(achLabel(rows[index]), chartArea.right + 8, bar.y);
+            });
+            ctx.restore();
+          },
+        }],
+        data: {
+          labels: rows.map((row) => row.name),
+          datasets: [
+            { label: "Contacted", data: rows.map((row) => row.contacted), backgroundColor: COLORS.contacted, stack: "leads", maxBarThickness: 16 },
+            { label: "Not Contacted", data: rows.map((row) => row.notContacted), backgroundColor: COLORS.not_contacted, stack: "leads", maxBarThickness: 16 },
+            { label: "In Progress", data: rows.map((row) => row.inProgress), backgroundColor: COLORS.in_progress, stack: "leads", maxBarThickness: 16 },
+            { label: "Unknown", data: rows.map((row) => row.unknown), backgroundColor: COLORS.unknown, stack: "leads", maxBarThickness: 16 },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { right: 52 } },
+          plugins: {
+            legend: { position: "top", labels: { boxWidth: 10, color: tick, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                footer(items) {
+                  const row = rows[items[0].dataIndex];
+                  const share = (value) => (value == null || !Number.isFinite(Number(value)) ? "N/A" : `${Number(value).toFixed(1)}%`);
+                  return [
+                    `Total leads ${fmt(row.total)}`,
+                    `Contact ACH ${share(row.ach)}`,
+                    `Not Contacted ${share(row.notContactedPct)}`,
+                    `In Progress ${share(row.inProgressPct)}`,
+                  ];
+                },
+              },
+            },
+          },
+          scales: {
+            x: { stacked: true, ticks: { precision: 0, color: "#8d9bb0" }, grid: { color: "rgba(148, 163, 184, 0.16)" } },
+            y: {
+              stacked: true,
+              ticks: {
+                color: tick,
+                font: { size: 11 },
+                autoSkip: false,
+                callback(value, index) {
+                  const row = rows[index] || rows[value];
+                  const name = row ? row.name : "";
+                  const short = name.length > 22 ? `${name.slice(0, 21)}…` : name;
+                  return row ? `${short} · ${fmt(row.total)}` : "";
+                },
+              },
+              grid: { display: false },
+            },
+          },
+        },
+      }));
     }
 
     function renderEmployees() {

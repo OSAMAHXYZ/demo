@@ -568,6 +568,7 @@ function buildDataset(contactParsed, crmParsed) {
         employeeName,
         employeeNumber,
         employeeKey,
+        advisorName: contact.employeeName || employeeName,
         centre: crm.centre || contact.centre || '',
         leadSource: contact.source || '',
         leadType: contact.leadType || '',
@@ -620,6 +621,7 @@ function buildDataset(contactParsed, crmParsed) {
       employeeName: contact.employeeName || '',
       employeeNumber: '',
       employeeKey,
+      advisorName: contact.employeeName || '',
       centre: contact.centre || '',
       leadSource: contact.source || '',
       leadType: contact.leadType || '',
@@ -722,6 +724,53 @@ function passesContact(record, contact) {
 function rate(contacted, matched) {
   if (!matched) return null;
   return Math.round((contacted / matched) * 1000) / 10;
+}
+
+function advisorShare(part, total) {
+  if (!total) return null;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+function advisorAchievement(records, query) {
+  const seen = new Set();
+  const groups = new Map();
+  (records || []).forEach((record) => {
+    if (!passesScope(record, query) || !passesCrm(record, query)) return;
+    if (record.matchKind !== 'matched' && record.matchKind !== 'contact_only') return;
+    const lead = cleanId(record.leadNumber);
+    if (!lead) return;
+    if (seen.has(lead)) return;
+    const bucket = record.bucket === 'missing' ? 'unknown' : record.bucket;
+    if (bucket !== 'contacted' && bucket !== 'not_contacted' && bucket !== 'in_progress' && bucket !== 'unknown') return;
+    seen.add(lead);
+    const rawName = clip(record.advisorName || record.employeeName, 160);
+    const person = normName(rawName);
+    const key = person ? `name:${person}` : 'name:unassigned';
+    if (!groups.has(key)) {
+      groups.set(key, { key, names: [], contacted: 0, notContacted: 0, inProgress: 0, unknown: 0 });
+    }
+    const row = groups.get(key);
+    if (rawName) row.names.push(rawName);
+    if (bucket === 'contacted') row.contacted += 1;
+    else if (bucket === 'not_contacted') row.notContacted += 1;
+    else if (bucket === 'in_progress') row.inProgress += 1;
+    else row.unknown += 1;
+  });
+  return Array.from(groups.values()).map((row) => {
+    const total = row.contacted + row.notContacted + row.inProgress + row.unknown;
+    return {
+      key: row.key,
+      name: displayName(row.names) || 'Unassigned',
+      contacted: row.contacted,
+      notContacted: row.notContacted,
+      inProgress: row.inProgress,
+      unknown: row.unknown,
+      total,
+      ach: advisorShare(row.contacted, total),
+      notContactedPct: advisorShare(row.notContacted, total),
+      inProgressPct: advisorShare(row.inProgress, total),
+    };
+  }).sort((a, b) => (b.ach == null ? -1 : b.ach) - (a.ach == null ? -1 : a.ach) || b.total - a.total || a.name.localeCompare(b.name));
 }
 
 function summarize(dataset, query) {
@@ -836,6 +885,7 @@ function summarize(dataset, query) {
     distribution,
     crmBars,
     employees,
+    advisors: advisorAchievement(records, query),
     options,
     columns: dataset.columns || {},
     reconciliation: dataset.reconciliation || null,
@@ -1007,7 +1057,7 @@ function attachContactPerformance(app, options) {
     const store = readStore();
     const id = String(req.query.publication || store.byPeriod[req.query.period] || store.activeId || '');
     const dataset = loadDataset(id);
-    if (!dataset) return res.json({ empty: true, kpis: null, distribution: [], crmBars: [], employees: [], options: {}, reconciliation: null });
+    if (!dataset) return res.json({ empty: true, kpis: null, distribution: [], crmBars: [], employees: [], advisors: [], options: {}, reconciliation: null });
     const summary = summarize(dataset, readQuery(req));
     const pub = store.publications.find((item) => item.id === id) || null;
     res.setHeader('Cache-Control', 'no-store');

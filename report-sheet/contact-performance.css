@@ -28,7 +28,7 @@
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(150px, 1fr) minmax(160px, 1.1fr) minmax(140px, 0.95fr);
+  grid-template-rows: auto auto auto auto minmax(110px, 0.6fr) minmax(220px, 1.15fr) minmax(140px, 0.85fr) minmax(110px, 0.7fr);
   gap: 8px;
   padding: 8px 10px 10px;
   overflow: hidden;
@@ -39,6 +39,7 @@
 }
 .cp-app.is-roster .cp-kpis,
 .cp-app.is-roster .cp-charts,
+.cp-app.is-roster .cp-advisors,
 .cp-app.is-roster .cp-note,
 .cp-app.is-roster .cp-leads { display: none; }
 body.cp-mode { overflow: hidden !important; }
@@ -220,7 +221,7 @@ body.cp-mode #contact-performance-host { flex: 1; min-height: 0; min-width: 0; d
 .cp-section-head input { height: 30px; flex: 1 1 160px; max-width: 260px; }
 .cp-section-head .cp-btn { height: 30px; padding: 0 10px; flex: 0 0 auto; white-space: nowrap; }
 .cp-app:has(.cp-chips:not(:empty)) {
-  grid-template-rows: auto auto auto auto auto minmax(150px, 1fr) minmax(160px, 1.1fr) minmax(140px, 0.95fr);
+  grid-template-rows: auto auto auto auto auto minmax(110px, 0.6fr) minmax(220px, 1.15fr) minmax(140px, 0.85fr) minmax(110px, 0.7fr);
 }
 .cp-card h3 { margin: 0 0 6px; font-size: 15px; color: var(--cp-navy); }
 .cp-chart-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; min-height: 0; flex: 1; overflow: hidden; }
@@ -244,8 +245,11 @@ body.cp-mode #contact-performance-host { flex: 1; min-height: 0; min-width: 0; d
 }
 .cp-legend .sw { width: 8px; height: 8px; border-radius: 2px; }
 .cp-legend .muted { color: var(--cp-muted); }
+.cp-advisors,
 .cp-employees,
 .cp-leads { min-height: 0; }
+.cp-advisors { overflow: auto; }
+.cp-advisors .cp-chart-box { height: auto; min-height: 140px; overflow: visible; }
 .cp-employees .cp-table td,
 .cp-employees .cp-table th { height: 32px; padding: 4px 8px; max-width: none; }
 .cp-employees .cp-table td:nth-child(2) { max-width: 280px; }
@@ -351,11 +355,11 @@ body.cp-mode #contact-performance-host { flex: 1; min-height: 0; min-width: 0; d
   .cp-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cp-charts { grid-template-columns: 1fr; }
   .cp-chart-row { grid-template-columns: 180px 1fr; min-height: 140px; }
-  .cp-app { grid-template-rows: auto auto auto auto minmax(140px, 1fr) minmax(150px, 1.05fr) minmax(120px, 0.9fr); }
+  .cp-app { grid-template-rows: auto auto auto auto minmax(100px, 0.55fr) minmax(200px, 1.1fr) minmax(130px, 0.8fr) minmax(100px, 0.7fr); }
 }
 @media (max-height: 860px) {
   .cp-app {
-    grid-template-rows: auto auto auto auto minmax(110px, 1fr) minmax(130px, 1.05fr) minmax(100px, 0.9fr);
+    grid-template-rows: auto auto auto auto minmax(90px, 0.55fr) minmax(180px, 1.05fr) minmax(110px, 0.8fr) minmax(90px, 0.7fr);
   }
   .cp-header { min-height: 44px; padding: 6px 10px; }
   .cp-header h2 { font-size: 16px; }
