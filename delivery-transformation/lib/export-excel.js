@@ -38,8 +38,8 @@ function liveSheetRows(vehicles) {
       Employee: ops.assignedEmployeeName || '',
       Status: ops.opsStatus || '',
       VIN: v.vin || '',
-      Proforma: raw.proformaDate || '',
-      Order: raw.salesOrder || '',
+      'Proforma Date': raw.proformaDate || '',
+      'Sales Order': raw.salesOrder || '',
       Product: raw.product || '',
       'Sales Type': raw.salesType || '',
       Customer: raw.userName || '',
@@ -48,23 +48,22 @@ function liveSheetRows(vehicles) {
       'S/A': raw.salesAdvisor || '',
       'Guest Exp': ops.guestCenter || '',
       Appointment: ops.guestCollectAt || '',
-      'GT Loc': raw.gtLocation || '',
-      'Veh Loc': raw.vehicleLocation || '',
-      'إرسال الضيف': ops.guestSentDate || '',
-      'استلام التواقيع': ops.signatureReceivedDate || '',
-      'إرسال للحسابات': ops.accountsSentDate || '',
-      'موافقة الحسابات': ops.accountsApprovalDate || '',
+      'Appointment Note': ops.guestCollectNote || '',
+      'GT Location': raw.gtLocation || '',
+      'Vehicle Location': raw.vehicleLocation || '',
+      'تاريخ إرسال الضيف': ops.guestSentDate || '',
+      'تاريخ استلام التواقيع من الضيف': ops.signatureReceivedDate || '',
+      'تاريخ إرسال الملف للحسابات': ops.accountsSentDate || '',
+      'تاريخ موافقة الحسابات': ops.accountsApprovalDate || '',
       'VIN 1502': ops.vin1502 || '',
       'ملف المرور': ops.trafficFile || '',
       'Traffic Fees': ops.trafficFeesOps || '',
       Insurance: ops.insuranceOps || '',
-      'إصدار الاستمارة': ops.registrationIssueDate || '',
+      'تاريخ إصدار الاستمارة': ops.registrationIssueDate || '',
       'مدينة الترحيل': ops.transferCity || '',
       'الناقل': ops.carrier || '',
-      'ملاحظات': ops.notes || '',
-      'Lead Time (W)': raw.leadTime === 0 || raw.leadTime ? raw.leadTime : '',
-      Updated: String(ops.updatedAt || '').replace('T', ' ').slice(0, 19),
-      By: ops.updatedBy || '',
+      'الملاحظات': ops.notes || '',
+      'Lead Time': raw.leadTime === 0 || raw.leadTime ? raw.leadTime : '',
     };
   });
 }
@@ -80,9 +79,118 @@ function countMap(vehicles, pick) {
     .map(([name, count]) => ({ Name: name, Count: count }));
 }
 
-function buildLiveSheetWorkbook(vehicles) {
+function coordinatorDetailRows(prints) {
+  const rows = [];
+  (prints || []).forEach((p) => {
+    const vins = Array.isArray(p.vins) && p.vins.length ? p.vins : [{}];
+    vins.forEach((x) => {
+      const vin = x && typeof x === 'object' ? (x.vin || '') : (x || '');
+      rows.push({
+        Kind: p.kind === 'warehouse' ? 'Warehouse' : (p.label === 'داخلي' ? 'Internal' : 'Delivery note'),
+        Company: p.company || '',
+        City: p.city || '',
+        VIN: vin,
+        Product: (x && x.product) || '',
+        Customer: (x && x.customer) || '',
+        Plate: (x && (x.plate || x.plateNo)) || '',
+        Invoice: p.invoiceNumber || '',
+        Label: p.label || '',
+        'Printed by': p.printedBy || '',
+        At: p.at || '',
+        Note: p.note || p.notes || '',
+      });
+    });
+  });
+  return rows;
+}
+
+function printedVinRows(prints) {
+  const rows = [];
+  (prints || []).forEach((p) => {
+    const cars = p.snapshot && Array.isArray(p.snapshot.cars) ? p.snapshot.cars : [];
+    const vins = Array.isArray(p.vins) && p.vins.length ? p.vins : [{}];
+    vins.forEach((x) => {
+      const vin = x && typeof x === 'object' ? (x.vin || '') : (x || '');
+      const car = cars.find((c) => String((c && c.chassis) || '').trim().toUpperCase() === String(vin).trim().toUpperCase()) || {};
+      const kind = p.kind === 'warehouse'
+        ? 'Warehouse'
+        : (p.kind === 'display' ? (p.label === 'داخلي' ? 'Internal' : 'Display') : 'Delivery note');
+      rows.push({
+        'Print id': p.id || '',
+        Kind: kind,
+        Label: p.label || '',
+        Company: p.company || '',
+        City: p.city || '',
+        Invoice: p.invoiceNumber || '',
+        VIN: vin,
+        Product: (x && x.product) || car.model || '',
+        Customer: (x && x.customer) || '',
+        Plate: (x && (x.plate || x.plateNo)) || car.plate || '',
+        Remarks: (x && x.remarks) || car.remarks || '',
+        'Printed by': p.printedBy || '',
+        At: p.at || '',
+        Note: p.note || p.notes || '',
+      });
+    });
+  });
+  return rows;
+}
+
+function assignmentRows(vehicles, pending) {
+  const rows = [];
+  (vehicles || []).forEach((v) => {
+    const ops = v.ops || {};
+    const raw = v.raw || {};
+    rows.push({
+      Source: 'Live Sheet',
+      VIN: v.vin || '',
+      Employee: ops.assignedEmployeeName || '',
+      'Employee Id': ops.assignedEmployeeId || '',
+      Status: ops.opsStatus || '',
+      'Sales Type': raw.salesType || '',
+      'S/A': raw.salesAdvisor || '',
+      'Proforma Date': raw.proformaDate || '',
+      'Invoice Date': raw.invoiceDate || '',
+      Customer: raw.userName || '',
+      Product: raw.product || '',
+      'Assigned at': ops.assignedAt || '',
+      'Assigned by': ops.assignedBy || '',
+    });
+  });
+  const waiting = pending && typeof pending === 'object' ? Object.values(pending) : [];
+  waiting.forEach((p) => {
+    const raw = (p && p.raw) || {};
+    rows.push({
+      Source: 'Pending',
+      VIN: (p && p.vin) || raw.vin || '',
+      Employee: '',
+      'Employee Id': '',
+      Status: 'Pending',
+      'Sales Type': raw.salesType || '',
+      'S/A': raw.salesAdvisor || '',
+      'Proforma Date': raw.proformaDate || '',
+      'Invoice Date': raw.invoiceDate || '',
+      Customer: raw.userName || '',
+      Product: raw.product || '',
+      'Assigned at': '',
+      'Assigned by': (p && p.uploadedBy) || '',
+    });
+  });
+  return rows;
+}
+
+function buildLiveSheetWorkbook(vehicles, prints) {
   const wb = XLSX.utils.book_new();
   appendSheet(wb, 'Live Sheet', liveSheetRows(vehicles));
+  appendSheet(wb, 'Coordinator', coordinatorDetailRows(prints));
+  return wb;
+}
+
+function buildDataWorkbook(vehicles, prints, pending) {
+  const wb = XLSX.utils.book_new();
+  appendSheet(wb, 'Printed VINs', printedVinRows(prints));
+  appendSheet(wb, 'Live Sheet', liveSheetRows(vehicles));
+  appendSheet(wb, 'Assignments', assignmentRows(vehicles, pending));
   return wb;
 }
 
@@ -247,6 +355,10 @@ module.exports = {
   stamp,
   writeBuffer,
   appendSheet,
+  liveSheetRows,
+  printedVinRows,
+  assignmentRows,
   buildLiveSheetWorkbook,
+  buildDataWorkbook,
   buildAdminWorkbook,
 };

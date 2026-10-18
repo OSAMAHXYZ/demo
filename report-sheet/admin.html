@@ -1303,12 +1303,19 @@
         ytdResult = { ok: false, message: detail };
       }
       const extraFailed = (contactResult && contactResult.ok === false) || (ytdResult && ytdResult.ok === false);
+      const deliverySync = server && server.deliveryRtl;
+      const deliveryNote = deliverySync
+        ? (deliverySync.ok === false
+          ? ` · Delivery sync failed: ${deliverySync.error || deliverySync.message || "not confirmed"}`
+          : ` · Delivery sync ${deliverySync.uniqueVins || 0} VINs, matched ${deliverySync.matched || 0}, duplicates ${deliverySync.duplicates || 0}, rejected ${deliverySync.rejected || 0}${deliverySync.duplicate ? " (already applied)" : ""}`)
+        : "";
+      const deliveryFailed = !!(deliverySync && deliverySync.ok === false);
       const slotCount = Object.keys(filesBySlot).length;
       if (!slotCount) {
         if ((contactResult && contactResult.ok) || (ytdResult && ytdResult.ok)) {
-          setStatus(`${(contactResult && contactResult.message) || ""}${ytdNote}`.replace(/^\s*·\s*/, ""), extraFailed ? "err" : "ok");
-        } else if (pushedClear && server) setStatus(`Live files cleared · settings pushed${contactNote}${ytdNote}`, extraFailed ? "err" : "ok");
-        else setStatus(`Pushed settings only — upload at least one Excel file, then Push again.${contactNote}${ytdNote}`, "err");
+          setStatus(`${(contactResult && contactResult.message) || ""}${ytdNote}${deliveryNote}`.replace(/^\s*·\s*/, ""), (extraFailed || deliveryFailed) ? "err" : "ok");
+        } else if (pushedClear && server) setStatus(`Live files cleared · settings pushed${contactNote}${ytdNote}${deliveryNote}`, (extraFailed || deliveryFailed) ? "err" : "ok");
+        else setStatus(`Pushed settings only — upload at least one Excel file, then Push again.${contactNote}${ytdNote}${deliveryNote}`, "err");
         return;
       }
       const srOk = dataStamp.hasSales;
@@ -1327,9 +1334,9 @@
       }).join("");
       setStatus(
         srOk
-          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`
-          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`,
-        extraFailed ? "err" : (server ? "ok" : "busy")
+          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${deliveryNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`
+          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${deliveryNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`,
+        (extraFailed || deliveryFailed) ? "err" : (server ? "ok" : "busy")
       );
       // Open / focus the live dashboard so Push visibly loads the panels
       try {

@@ -342,6 +342,25 @@ table.data tr.mine:hover td { background: #d8f0e4; }
   border-color: #6d28d9;
 }
 
+.rtl-panel { margin-top: 22px; }
+.rtl-head h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.rtl-filters {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0;
+}
+.rtl-filters input, .rtl-filters select {
+  min-width: 140px; flex: 1 1 140px;
+  border: 1px solid #d5deea; border-radius: 10px; padding: 8px 10px; background: #fff;
+}
+.rtl-row { cursor: pointer; }
+.rtl-detail { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; margin: 12px 0; }
+.rtl-detail dt { color: var(--muted, #5f6d82); font-size: 0.75rem; }
+.rtl-detail dd { margin: 0; font-weight: 650; }
+.rtl-detail-card { width: min(640px, 100%); max-height: 86vh; overflow: auto; }
+@media (max-width: 720px) {
+  .rtl-detail { grid-template-columns: 1fr; }
+  .rtl-table { min-width: 760px; }
+}
+
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 400;
   padding: 10px 18px; border-radius: 999px; background: #047857; color: #fff;

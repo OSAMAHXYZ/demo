@@ -100,6 +100,55 @@
         </table>
       </div>
       <p class="empty hidden" id="empty">No VINs match this view.</p>
+
+      <section class="rtl-panel" id="rtl-panel">
+        <div class="rtl-head">
+          <div>
+            <h2>RTL inventory</h2>
+            <p class="hint" id="rtl-sync">Waiting for the next Admin Push to live.</p>
+          </div>
+        </div>
+        <div class="rtl-filters">
+          <input type="search" id="rtl-q" placeholder="VIN, model, employee, location" />
+          <select id="rtl-stock"><option value="">Stock status</option></select>
+          <select id="rtl-location"><option value="">Location</option></select>
+          <select id="rtl-city"><option value="">City</option></select>
+          <select id="rtl-company"><option value="">Company</option></select>
+          <select id="rtl-sales"><option value="">Proforma / invoice / delivered</option></select>
+          <input type="date" id="rtl-day" title="Snapshot or movement date" />
+        </div>
+        <div class="table-wrap">
+          <table class="data rtl-table">
+            <thead>
+              <tr>
+                <th>VIN</th>
+                <th>Model</th>
+                <th>Location</th>
+                <th>Employee</th>
+                <th>City</th>
+                <th>Company</th>
+                <th>Stock</th>
+                <th>Delivery note</th>
+                <th>Sales Raw</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="rtl-rows"></tbody>
+          </table>
+        </div>
+        <p class="empty hidden" id="rtl-empty">No RTL rows match these filters.</p>
+      </section>
+    </div>
+  </div>
+
+  <div class="label-modal hidden" id="rtl-detail" aria-hidden="true">
+    <div class="label-modal-card rtl-detail-card">
+      <h2 id="rtl-detail-title">VIN</h2>
+      <p class="hint" id="rtl-detail-reason"></p>
+      <dl class="rtl-detail" id="rtl-detail-body"></dl>
+      <div class="label-modal-actions">
+        <button type="button" class="btn" id="rtl-detail-close">Close</button>
+      </div>
     </div>
   </div>
 
@@ -117,6 +166,6 @@
   </div>
 
   <script src="shared.js?v=20261003scope2"></script>
-  <script src="inventory-managment.js?v=20261003scope2"></script>
+  <script src="inventory-managment.js?v=20261018rtl1"></script>
 </body>
 </html>

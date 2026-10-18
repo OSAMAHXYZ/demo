@@ -9,10 +9,9 @@
     meta: null,
     view: 'dashboard',
     monthFilter: '',
-    liveFilters: { q: '', employee: '', status: '', month: '', carrier: '' },
-    myFilters: { q: '', status: '', employee: '' },
+    liveFilters: { q: '', employee: [], status: [], month: '', carrier: [] },
+    myFilters: { q: '', status: [] },
     liveFingerprint: '',
-    myFingerprint: '',
     liveTimer: null,
     liveInFlight: false,
     guestTick: null,
@@ -22,13 +21,24 @@
     selInfo: {},
     rowIndex: {},
     liveOnlySelected: false,
-    allowReassign: false,
     liveCols: [],
     liveColFilters: {},
     liveSel: null,
     liveCopyFlash: false,
     liveCopyTimer: null,
   };
+
+  const sheetGrids = {
+    live: { prefix: 'live', cols: [], filters: {}, sel: null, copyFlash: false, cfNote: '', copyTimer: null },
+    my: { prefix: 'my', cols: [], filters: {}, sel: null, copyFlash: false, cfNote: '', copyTimer: null },
+  };
+  let grid = sheetGrids.live;
+  const gTable = () => $(`#${grid.prefix}-table`);
+  const gInfo = () => $(`#${grid.prefix}-copy-info`);
+  const gCopy = () => $(`#${grid.prefix}-copy-btn`);
+  const gVals = () => $(`#${grid.prefix}-copy-values`);
+  const gClear = () => $(`#${grid.prefix}-cf-clear`);
+  const gList = () => $(`#${grid.prefix}-cf-list`);
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -174,6 +184,8 @@
     if (v === 'PSFU') return 'row-status-psfu';
     if (v === 'تم التسليم') return 'row-status-delivered';
     if (v === 'جاهز للتسليم') return 'row-status-ready';
+    if (v === 'تسليم متقدم') return 'row-status-advance';
+    if (v === 'صادرة' || v === 'صادر') return 'row-status-issued';
     if (v === 'مرور') return 'row-status-traffic';
     if (v === 'رجوع مرور') return 'row-status-traffic-return';
     if (v === 'معلقة') return 'row-status-pending';
@@ -188,9 +200,11 @@
     if (v === 'PSFU') return `<span class="badge ok">${esc(v)}</span>`;
     if (v === 'تم التسليم') return `<span class="badge yellow">${esc(v)}</span>`;
     if (v === 'جاهز للتسليم') return `<span class="badge orange">${esc(v)}</span>`;
+    if (v === 'تسليم متقدم') return `<span class="badge st-advance">${esc(v)}</span>`;
+    if (v === 'صادرة' || v === 'صادر') return `<span class="badge st-issued">${esc(v)}</span>`;
     if (v === 'مرور') return `<span class="badge">${esc(v)}</span>`;
     if (v === 'رجوع مرور') return `<span class="badge purple">${esc(v)}</span>`;
-    if (v === 'معلقة') return `<span class="badge navy">${esc(v)}</span>`;
+    if (v === 'معلقة') return `<span class="badge st-hold">${esc(v)}</span>`;
     if (v === 'الغاء') return `<span class="badge bad">${esc(v)}</span>`;
     return `<span class="badge warn">${esc(v)}</span>`;
   }
@@ -231,13 +245,120 @@
     const common = `class="cell-edit" data-vin="${esc(vin)}" data-field="${esc(field)}"`;
     const options = (list, placeholder) => `<option value="">${placeholder}</option>${list.map((s) =>
       `<option value="${esc(s)}" ${v === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}`;
-    if (type === 'status') return `<select ${common}>${options(state.meta.statuses || [], '—')}</select>`;
+    if (type === 'status') return stickyControl(vin, 'opsStatus', v);
     if (type === 'yn') return `<select ${common}>${options(['Yes', 'No'], '—')}</select>`;
     if (type === 'date') return `<input type="date" ${common} value="${esc(v)}" />`;
-    if (type === 'city') return `<input list="edit-city-list" ${common} value="${esc(v)}" placeholder="City…" />`;
-    if (type === 'carrier') return `<select ${common}>${options(state.meta.carriers || [], '— الناقل —')}</select>`;
+    if (type === 'city') return `<input class="cell-edit city-find" data-vin="${esc(vin)}" data-field="${esc(field)}" value="${esc(v)}" placeholder="ابحث عن مدينة…" autocomplete="off" spellcheck="false" />`;
+    if (type === 'carrier') return stickyControl(vin, 'carrier', v);
     if (type === 'notes') return `<input type="text" ${common} value="${esc(v)}" placeholder="Notes…" style="min-width:140px" />`;
     return esc(v || '—');
+  }
+
+  /** Status and الناقل save on the first choice, then stay locked until a double-click. */
+  function stickyField(field) {
+    return field === 'carrier' || field === 'opsStatus';
+  }
+
+  function stickyMeta(field) {
+    if (field === 'opsStatus') {
+      return {
+        title: 'Double-click to change status',
+        placeholder: '—',
+        options: () => (state.meta && state.meta.statuses) || [],
+      };
+    }
+    return {
+      title: 'Double-click to reassign الناقل',
+      placeholder: '— الناقل —',
+      options: () => (state.meta && state.meta.carriers) || [],
+    };
+  }
+
+  function choiceOptionsHtml(field, selected, allowEmpty) {
+    const meta = stickyMeta(field);
+    const blank = allowEmpty ? `<option value="">${esc(meta.placeholder)}</option>` : '';
+    return `${blank}${meta.options().map((s) =>
+      `<option value="${esc(s)}" ${selected === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}`;
+  }
+
+  function stickyControl(vin, field, value) {
+    const v = String(value || '').trim();
+    const meta = stickyMeta(field);
+    if (v) {
+      const label = field === 'opsStatus' ? statusBadge(v) : esc(v);
+      return `<button type="button" class="choice-lock${field === 'carrier' ? ' is-carrier' : ''}" data-vin="${esc(vin)}" data-field="${esc(field)}" data-choice="${esc(v)}" title="${esc(meta.title)}">${label}</button>`;
+    }
+    return `<select class="cell-edit" data-vin="${esc(vin)}" data-field="${esc(field)}">${choiceOptionsHtml(field, '', true)}</select>`;
+  }
+
+  function paintStatusRow(el, value) {
+    const tr = el && el.closest ? el.closest('tr') : null;
+    if (!tr) return;
+    tr.className = tr.className.split(' ').filter((c) => !c.startsWith('row-status-')).join(' ');
+    const cls = statusRowClass(value);
+    if (cls) tr.classList.add(cls);
+  }
+
+  function lockChoiceEl(el, field, value) {
+    const key = field || el.dataset.field || el.dataset.ops;
+    const next = String(value || '').trim();
+    if (!next || !el || !el.parentNode || !stickyField(key)) return;
+    const meta = stickyMeta(key);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `choice-lock is-saved${key === 'carrier' ? ' is-carrier' : ''}`;
+    btn.dataset.vin = el.dataset.vin || '';
+    btn.dataset.field = key;
+    btn.dataset.choice = next;
+    btn.title = meta.title;
+    if (key === 'opsStatus') {
+      paintStatusRow(el, next);
+      btn.innerHTML = statusBadge(next);
+    } else {
+      btn.textContent = next;
+    }
+    el.replaceWith(btn);
+    bindChoiceLock(btn);
+    setTimeout(() => btn.classList.remove('is-saved'), 1200);
+  }
+
+  function openChoiceReassign(btn) {
+    const field = btn.dataset.field || '';
+    const current = String(btn.dataset.choice || '').trim();
+    const sel = document.createElement('select');
+    sel.className = 'cell-edit';
+    sel.dataset.vin = btn.dataset.vin || '';
+    sel.dataset.field = field;
+    sel.innerHTML = choiceOptionsHtml(field, current, false);
+    btn.replaceWith(sel);
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      const next = String(value || '').trim() || current;
+      if (next && next !== current && sel.dataset.vin) {
+        queueCellEdit(sel, { immediate: true });
+      }
+      if (sel.isConnected) lockChoiceEl(sel, field, next);
+    };
+    sel.addEventListener('change', () => finish(sel.value));
+    sel.addEventListener('blur', () => {
+      setTimeout(() => { if (!done) finish(current); }, 180);
+    });
+    sel.focus();
+    if (typeof sel.showPicker === 'function') {
+      try { sel.showPicker(); } catch { /* picker already opening */ }
+    }
+  }
+
+  function bindChoiceLock(btn) {
+    if (!btn || btn.dataset.lockBound) return;
+    btn.dataset.lockBound = '1';
+    btn.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openChoiceReassign(btn);
+    });
   }
 
   /** Coordinator printed with another company than the الناقل Hanouf / Rasha set — "from ← to" under the cell. */
@@ -258,14 +379,121 @@
     return esc(na(value));
   }
 
-  function ensureDatalists() {
-    if ($('#edit-city-list')) return;
-    const dl = document.createElement('datalist');
-    dl.id = 'edit-city-list';
-    dl.innerHTML = ((state.meta && state.meta.transferCities) || [])
-      .map((c) => `<option value="${esc(c)}"></option>`).join('');
-    document.body.appendChild(dl);
+  function cityNorm(s) {
+    return String(s || '').trim().toLowerCase()
+      .replace(/[أإآا]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ');
   }
+
+  function cityChoices(q) {
+    const all = (state.meta && state.meta.transferCities) || [];
+    const n = cityNorm(q);
+    const hits = n ? all.filter((c) => cityNorm(c).includes(n)) : all;
+    return hits.slice(0, 40);
+  }
+
+  function exactCity(q) {
+    const n = cityNorm(q);
+    if (!n) return '';
+    return ((state.meta && state.meta.transferCities) || []).find((c) => cityNorm(c) === n) || '';
+  }
+
+  let cityMenu = null;
+  let cityMenuInput = null;
+  let cityMenuIndex = 0;
+
+  function ensureCityMenu() {
+    if (cityMenu) return cityMenu;
+    cityMenu = document.createElement('div');
+    cityMenu.className = 'city-menu';
+    cityMenu.hidden = true;
+    cityMenu.addEventListener('mousedown', (e) => e.preventDefault());
+    cityMenu.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-city]');
+      if (!btn || !cityMenuInput) return;
+      chooseCity(cityMenuInput, btn.dataset.city);
+    });
+    document.body.appendChild(cityMenu);
+    return cityMenu;
+  }
+
+  function hideCityMenu() {
+    if (cityMenu) cityMenu.hidden = true;
+    cityMenuInput = null;
+  }
+
+  function chooseCity(input, city) {
+    input.value = city;
+    hideCityMenu();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function showCityMenu(input) {
+    const menu = ensureCityMenu();
+    cityMenuInput = input;
+    cityMenuIndex = 0;
+    const hits = cityChoices(input.value);
+    menu.innerHTML = hits.length
+      ? hits.map((c, i) => `<button type="button" class="${i === 0 ? 'is-on' : ''}" data-city="${esc(c)}">${esc(c)}</button>`).join('')
+      : '<p class="city-menu-empty">لا توجد مدينة</p>';
+    const r = input.getBoundingClientRect();
+    const width = Math.max(r.width, 200);
+    menu.hidden = false;
+    menu.style.width = `${width}px`;
+    const h = menu.offsetHeight || 220;
+    const below = r.bottom + 4;
+    const top = (below + h > window.innerHeight - 8 && r.top - h - 4 > 8) ? r.top - h - 4 : below;
+    menu.style.top = `${top}px`;
+    menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`;
+  }
+
+  function settleCityInput(el, saved) {
+    const match = exactCity(el.value);
+    if (match) {
+      el.value = match;
+      return match;
+    }
+    el.value = saved || '';
+    return '';
+  }
+
+  document.addEventListener('focusin', (e) => {
+    if (e.target.classList && e.target.classList.contains('city-find')) showCityMenu(e.target);
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.classList && e.target.classList.contains('city-find')) showCityMenu(e.target);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!cityMenuInput || e.target !== cityMenuInput || !cityMenu || cityMenu.hidden) return;
+    const buttons = [...cityMenu.querySelectorAll('button')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!buttons.length) return;
+      cityMenuIndex = e.key === 'ArrowDown'
+        ? Math.min(buttons.length - 1, cityMenuIndex + 1)
+        : Math.max(0, cityMenuIndex - 1);
+      buttons.forEach((b, i) => b.classList.toggle('is-on', i === cityMenuIndex));
+      buttons[cityMenuIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      const btn = buttons[cityMenuIndex];
+      if (btn) chooseCity(cityMenuInput, btn.dataset.city);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      hideCityMenu();
+    }
+  }, true);
+  document.addEventListener('focusout', (e) => {
+    if (!e.target.classList || !e.target.classList.contains('city-find')) return;
+    setTimeout(() => {
+      if (document.activeElement !== e.target) hideCityMenu();
+    }, 150);
+  });
 
   /** Pending entry edits — survive refresh/logout until the server acknowledges them */
   const pendingOps = new Map();
@@ -398,11 +626,23 @@
     }
   }
 
+  function savedOpsValue(vin, field) {
+    const row = state.rowIndex[vin];
+    if (!row || !row.ops || row.ops[field] == null) return '';
+    return String(row.ops[field]);
+  }
+
+  /** Blank input must not replace a value that is already on the VIN. */
+  function wouldClearSaved(vin, field, value) {
+    return !String(value || '').trim() && !!savedOpsValue(vin, field).trim();
+  }
+
   function queueCellEdit(el, { immediate = false } = {}) {
     const vin = el.dataset.vin;
     const field = el.dataset.field;
     if (!vin || !field) return;
     const value = el.value;
+    if (wouldClearSaved(vin, field, value)) return;
     markPending(vin, field, value);
     const key = pendKey(vin, field);
     if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
@@ -418,13 +658,17 @@
 
   async function flushPendingOps({ keepalive = false } = {}) {
     if (flushInFlight && !keepalive) return flushInFlight;
-    // Capture in-progress inputs before leaving
+    // Capture in-progress inputs before leaving. Never persist a blank الناقل.
     $$('.cell-edit').forEach((el) => {
-      if (el.dataset.vin && el.dataset.field) markPending(el.dataset.vin, el.dataset.field, el.value);
+      if (!el.dataset.vin || !el.dataset.field) return;
+      if (wouldClearSaved(el.dataset.vin, el.dataset.field, el.value)) return;
+      markPending(el.dataset.vin, el.dataset.field, el.value);
     });
     if (state._drawerVin) {
       $$('#vin-drawer [data-ops]').forEach((el) => {
-        if (el.dataset.ops) markPending(state._drawerVin, el.dataset.ops, el.value);
+        if (!el.dataset.ops) return;
+        if (wouldClearSaved(state._drawerVin, el.dataset.ops, el.value)) return;
+        markPending(state._drawerVin, el.dataset.ops, el.value);
       });
     }
     saveTimers.forEach((t) => clearTimeout(t));
@@ -472,7 +716,25 @@
   }
 
   function bindEditableCells(tableEl) {
+    $$('.choice-lock', tableEl).forEach(bindChoiceLock);
     $$('.cell-edit', tableEl).forEach((el) => {
+      if (stickyField(el.dataset.field)) {
+        el.addEventListener('change', () => {
+          const value = String(el.value || '').trim();
+          if (!value) return;
+          queueCellEdit(el, { immediate: true });
+          lockChoiceEl(el, el.dataset.field, value);
+        });
+        return;
+      }
+      if (el.classList.contains('city-find')) {
+        el.addEventListener('change', () => queueCellEdit(el, { immediate: true }));
+        el.addEventListener('blur', () => {
+          const match = settleCityInput(el, savedOpsValue(el.dataset.vin, el.dataset.field));
+          if (match) queueCellEdit(el, { immediate: true });
+        });
+        return;
+      }
       const tag = (el.tagName || '').toLowerCase();
       const type = (el.getAttribute('type') || '').toLowerCase();
       const isSelect = tag === 'select';
@@ -494,6 +756,7 @@
     return [
       { id: 'dashboard', label: 'Dashboard' },
       { id: 'live', label: 'Live Sheet' },
+      ...(state.user && state.user.id === 'hanouf' ? [{ id: 'mine', label: 'My VINs' }] : []),
       { id: 'my', label: isManager() ? 'All VINs' : 'My VINs' },
       ...(canUploadSalesRaw() ? [{
         id: 'assignment',
@@ -546,7 +809,7 @@
   function refreshViewSilent() {
     if (state.view === 'live') return loadLiveSheet({ silent: true });
     if (state.view === 'dashboard') return loadDashboard();
-    if (state.view === 'my') return loadMy({ silent: true });
+    if (state.view === 'my' || state.view === 'mine') return loadMy({ silent: true });
     if (state.view === 'appointment') return loadAppointments({ silent: true });
     return Promise.resolve();
   }
@@ -554,18 +817,20 @@
   function setView(view) {
     state.view = view;
     stopLivePoll();
-    $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${view}`));
+    const panel = view === 'mine' ? 'my' : view;
+    $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${panel}`));
     renderNav();
     const titles = {
       dashboard: ['Dashboard', 'Delivery Control Tower'],
       live: ['Live Sheet', 'All teammates’ schedules · Sales Type (cash / bank)'],
+      mine: ['My VINs', 'VIN numbers assigned to Hanouf'],
       my: isManager()
-        ? ['All VINs', 'Every VIN · filter columns and copy cells · saved data stays as it is']
-        : ['My VINs', 'Your schedule · filter columns and copy cells · saved data stays as it is'],
+        ? ['All VINs', 'Every VIN · edit · hand over to an employee']
+        : ['My VINs', 'Your schedule · edit your work'],
       assignment: ['Assignment', 'VIN numbers only · Proforma Date (column P) filled · Invoice Date (column V) empty · no duplicate VINs'],
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
-      upload: ['Upload VINs', `Delivery sheet · only Proforma Date in ${state.meta.currentMonth || 'this month'}`],
-      'sales-raw': ['Sales Raw', 'VINs already on the Live Sheet are left unchanged · new VINs go to Assignment'],
+      upload: ['Upload VINs', `Delivery sheet · ${state.meta.currentMonth || 'this month'} all VINs · ${state.meta.previousMonth || 'last month'} only فسح، الغاء، بطاقة، صادرة، مرور، رجوع مرور`],
+      'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · الغاء VINs stay on the sheet'],
       appointment: ['Appointment', 'Guest Exp = Yes · set date, time, and a timer for everyone'],
     };
     const t = titles[view] || ['Delivery Transformation', ''];
@@ -579,7 +844,7 @@
     try {
       if (state.view === 'dashboard') await loadDashboard();
       if (state.view === 'live') await loadLiveSheet();
-      if (state.view === 'my') await loadMy();
+      if (state.view === 'my' || state.view === 'mine') await loadMy();
       if (state.view === 'targets') await loadTargets();
       if (state.view === 'assignment') await loadAssignment();
       if (state.view === 'upload' || state.view === 'sales-raw') await loadImportPanels();
@@ -590,9 +855,18 @@
     }
   }
 
+  function filterList(v) {
+    if (Array.isArray(v)) return v.map((x) => String(x || '').trim()).filter(Boolean);
+    const s = String(v || '').trim();
+    return s ? [s] : [];
+  }
+
   async function fetchLive(params) {
     const qs = new URLSearchParams();
-    Object.entries(params || {}).forEach(([k, v]) => { if (v) qs.set(k, v); });
+    Object.entries(params || {}).forEach(([k, v]) => {
+      const joined = Array.isArray(v) ? v.filter(Boolean).join(',') : v;
+      if (joined) qs.set(k, joined);
+    });
     const data = await api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`);
     renderImports(data.imports);
     applyPendingToRows(data.rows || []);
@@ -663,7 +937,7 @@
     if (!el.dataset.wired) wireSelBar(el);
     if (!vins.length) {
       el.classList.remove('has-sel');
-      el.innerHTML = '<span class="hint">Tick ☐ next to a VIN to keep it here. The assigned name stays until you tick Change assign.</span>';
+      el.innerHTML = '<span class="hint">Tick ☐ next to any VIN to keep it here while you work · then assign, unassign or remove it.</span>';
       return;
     }
     el.classList.add('has-sel');
@@ -678,7 +952,6 @@
       <div class="sel-head">
         <strong>${vins.length}</strong> VIN(s) selected
         ${isLive ? `<label class="sel-only"><input type="checkbox" class="sel-only-cb" ${state.liveOnlySelected ? 'checked' : ''} /> Show only selected</label>` : ''}
-        <label class="sel-only"><input type="checkbox" class="sel-change-assign" ${state.allowReassign ? 'checked' : ''} /> Change assign</label>
         <button type="button" class="btn sel-clear">Clear</button>
       </div>
       <div class="sel-chips">${vins.map((vin) => {
@@ -690,13 +963,11 @@
         </span>`;
       }).join('')}</div>
       <div class="sel-actions">
-        <div class="sel-assign-box" ${state.allowReassign ? '' : 'hidden'}>
-          <span class="lbl">Assign to:</span>
-          ${meBtn}
-          ${others.map((n) => assignBtn(n, `→ ${n}`)).join('')}
-          <span class="sel-sep"></span>
-          <button type="button" class="btn sel-unassign">Unassign</button>
-        </div>
+        <span class="lbl">Assign to:</span>
+        ${meBtn}
+        ${others.map((n) => assignBtn(n, `→ ${n}`)).join('')}
+        <span class="sel-sep"></span>
+        <button type="button" class="btn sel-unassign">Unassign</button>
         <button type="button" class="btn sel-remove">Remove from sheet</button>
       </div>`;
   }
@@ -709,22 +980,11 @@
       if (b.classList.contains('sel-open')) openVin(b.dataset.vin).catch((err) => alert(err.message));
       else if (b.classList.contains('sel-x')) setSelected(b.dataset.vin, false);
       else if (b.classList.contains('sel-clear')) clearSelection();
-      else if (b.classList.contains('sel-assign')) {
-        if (!state.allowReassign) return;
-        selAction('assign', b.dataset.emp);
-      } else if (b.classList.contains('sel-unassign')) {
-        if (!state.allowReassign) return;
-        selAction('unassign');
-      }
+      else if (b.classList.contains('sel-assign')) selAction('assign', b.dataset.emp);
+      else if (b.classList.contains('sel-unassign')) selAction('unassign');
       else if (b.classList.contains('sel-remove')) selAction('remove');
     });
     el.addEventListener('change', (e) => {
-      if (e.target.classList.contains('sel-change-assign')) {
-        state.allowReassign = e.target.checked;
-        const box = $('.sel-assign-box', el);
-        if (box) box.hidden = !e.target.checked;
-        return;
-      }
       if (!e.target.classList.contains('sel-only-cb')) return;
       state.liveOnlySelected = e.target.checked;
       state.liveFingerprint = '';
@@ -735,7 +995,6 @@
   function clearSelection() {
     state.selected.clear();
     state.liveOnlySelected = false;
-    state.allowReassign = false;
     saveSelection();
     $$('tr.selected').forEach((tr) => tr.classList.remove('selected'));
     $$('input.sel-check').forEach((cb) => { cb.checked = false; });
@@ -794,35 +1053,14 @@
 
     $('#asg-actions').style.display = can && d.rows.length ? '' : 'none';
     const list = $('#asg-table');
-    const empOptions = (selectedId) => (d.employees || []).map((e) =>
-      `<option value="${esc(e.id)}"${e.id === selectedId ? ' selected' : ''}${e.onVacation ? ' disabled' : ''}>${esc(e.name)}${e.onVacation ? ' · vacation' : ''}</option>`).join('');
     list.innerHTML = d.rows.length
-      ? d.rows.map((r) => `<div class="asg-vin-row ${state.asgSel.has(r.vin) ? 'selected' : ''}">
-          <button type="button" class="asg-vin ${state.asgSel.has(r.vin) ? 'selected' : ''}" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>
-          <span class="asg-fixed-name">${esc(r.suggestedEmployeeName || '—')}</span>
-          ${can ? `<label class="asg-change"><input type="checkbox" class="asg-change-cb" data-vin="${esc(r.vin)}" /> Change assign</label>
-            <select class="asg-emp" data-vin="${esc(r.vin)}" hidden>
-              <option value="">Choose employee</option>${empOptions(r.suggestedEmployeeId)}
-            </select>` : ''}
-        </div>`).join('')
+      ? d.rows.map((r) => `<button type="button" class="asg-vin ${state.asgSel.has(r.vin) ? 'selected' : ''}" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`).join('')
       : '<p class="hint">No unique VINs with Proforma Date (column P) filled and Invoice Date (column V) empty.</p>';
     $$('.asg-vin', list).forEach((b) => b.addEventListener('click', () => {
       if (!can) return;
       if (state.asgSel.has(b.dataset.vin)) state.asgSel.delete(b.dataset.vin);
       else state.asgSel.add(b.dataset.vin);
       b.classList.toggle('selected');
-      const row = b.closest('.asg-vin-row');
-      if (row) row.classList.toggle('selected', state.asgSel.has(b.dataset.vin));
-    }));
-    $$('.asg-change-cb', list).forEach((cb) => cb.addEventListener('change', () => {
-      const sel = $(`.asg-emp[data-vin="${CSS.escape(cb.dataset.vin)}"]`, list);
-      if (sel) sel.hidden = !cb.checked;
-    }));
-    $$('.asg-emp', list).forEach((sel) => sel.addEventListener('change', () => {
-      if (!sel.value) return;
-      api('/assignment/employee', { method: 'POST', json: { vin: sel.dataset.vin, employeeId: sel.value } })
-        .then((res) => loadAssignment(res))
-        .catch((err) => alert(err.message || 'Could not change the assignment'));
     }));
     renderAssignmentBalance();
   }
@@ -948,6 +1186,8 @@
   async function loadImportPanels() {
     state.meta = await api('/meta');
     $('#upload-month').textContent = state.meta.currentMonth || 'this month';
+    const prevMonthEl = $('#upload-prev-month');
+    if (prevMonthEl) prevMonthEl.textContent = state.meta.previousMonth || 'last month';
     renderImports(state.meta.imports);
   }
 
@@ -982,7 +1222,9 @@
           <div><strong>${s.updatedOtherMonth || 0}</strong><span>Existing VINs refreshed · other month</span></div>
           <div><strong>${s.assigned}</strong><span>Assigned from PIC</span></div>
           <div><strong>${s.skippedVacation || 0}</strong><span>Not assigned · PIC on vacation</span></div>
-          <div><strong>${s.skippedOtherMonth}</strong><span>New VINs skipped · other month</span></div>
+          <div><strong>${s.keptLastMonth || 0}</strong><span>Last month kept · فسح / الغاء / بطاقة / صادرة / مرور / رجوع مرور</span></div>
+          <div><strong>${s.skippedLastMonthStatus || 0}</strong><span>Last month skipped · other status</span></div>
+          <div><strong>${s.skippedOtherMonth}</strong><span>Skipped · older than last month</span></div>
           <div><strong>${s.skippedNoDate}</strong><span>New VINs skipped · no proforma date</span></div>
         </div>
         <p class="hint" style="margin-top:8px">Upload only adds new VINs and fills in existing ones · nothing on the Live Sheet is removed or cleared.</p>`;
@@ -1003,7 +1245,8 @@
         <p><b>Sales Raw applied</b> · ${esc(s.sheet)} · ${esc(s.filename)}</p>
         <div class="summary-grid">
           <div><strong>${s.rows}</strong><span>Rows read</span></div>
-          <div><strong>${s.ignoredOnSheet || s.matched || 0}</strong><span>Already on Live Sheet · ignored</span></div>
+          <div><strong>${s.matched}</strong><span>VINs matched</span></div>
+          <div><strong>${s.updated}</strong><span>VINs with new details</span></div>
           <div><strong>${s.notOnSheet}</strong><span>Not on Live Sheet</span></div>
           <div><strong>${s.assignable || 0}</strong><span>To Assignment · P filled · V empty</span></div>
           <div><strong>${s.skippedInvoiced || 0}</strong><span>Skipped · has Invoice Date (V)</span></div>
@@ -1012,7 +1255,8 @@
         </div>
         ${s.assignable ? `<p style="margin-top:10px"><b>${s.assignable}</b> unique VIN(s) with Proforma Date and no Invoice Date
           ${isManager() ? 'are waiting for your confirmation.' : 'were sent to Hanouf to confirm the assignment.'}
-          <button type="button" class="btn" id="go-assignment">Open Assignment</button></p>` : ''}`;
+          <button type="button" class="btn" id="go-assignment">Open Assignment</button></p>` : ''}
+        <p class="hint" style="margin-top:8px">Existing VINs stay, including الغاء. Blank cells in the file do not clear saved values.</p>`;
       const go = $('#go-assignment');
       if (go) go.addEventListener('click', () => setView('assignment'));
       await loadImportPanels();
@@ -1109,9 +1353,9 @@
       if (!b.dataset.status) return;
       state.liveFilters = {
         ...state.liveFilters,
-        status: b.dataset.status,
+        status: [b.dataset.status],
         month: state.monthFilter || '',
-        employee: isManager() ? '' : state.user.name,
+        employee: isManager() ? [] : [state.user.name],
       };
       setView('live');
     }));
@@ -1157,7 +1401,7 @@
       ? `<div class="emp-card is-empty"><strong>Unassigned</strong><div class="emp-card-got"><b>${unassigned}</b><span>VIN(s)</span></div></div>`
       : '');
     $$('#dash-employees .emp-card[data-emp]').forEach((b) => b.addEventListener('click', () => {
-      state.liveFilters = { ...state.liveFilters, employee: b.dataset.emp, month: state.monthFilter || '', status: '' };
+      state.liveFilters = { ...state.liveFilters, employee: [b.dataset.emp], month: state.monthFilter || '', status: [] };
       setView('live');
     }));
   }
@@ -1168,6 +1412,7 @@
   }
 
   async function loadLiveSheet({ silent = false } = {}) {
+    grid = sheetGrids.live;
     if (silent && state.liveInFlight) return;
     state.liveInFlight = true;
     const f = state.liveFilters;
@@ -1184,34 +1429,18 @@
     const changed = fingerprint !== state.liveFingerprint;
     state.liveFingerprint = fingerprint;
 
-    const empSel = $('#live-employee');
-    if (empSel && !empSel.dataset.filled) {
-      empSel.innerHTML = `<option value="">All employees</option>${employeeNames().map((s) =>
-        `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
-      empSel.dataset.filled = '1';
-    }
-    if (empSel) empSel.value = f.employee || '';
-
-    const statusSel = $('#live-status');
-    if (statusSel && !statusSel.dataset.filled) {
-      statusSel.innerHTML = `<option value="">All statuses</option>${(state.meta.statuses || []).map((s) =>
-        `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
-      statusSel.dataset.filled = '1';
-    }
-    if (statusSel) statusSel.value = f.status || '';
-
     const monthInp = $('#live-month');
     if (monthInp && monthInp.value !== (f.month || '')) monthInp.value = f.month || '';
 
-    const carrierSel = $('#live-carrier');
-    if (carrierSel && document.activeElement !== carrierSel) {
-      const byCar = data.byCarrier || {};
-      const all = [...new Set([...(state.meta.carriers || []),
-        ...Object.keys(byCar).filter((k) => k && k !== '(empty)')])];
-      carrierSel.innerHTML = `<option value="">All الناقل</option>
-        <option value="__empty__"${f.carrier === '__empty__' ? ' selected' : ''}>بدون ناقل (فارغ)</option>
-        ${all.map((c) => `<option value="${esc(c)}"${f.carrier === c ? ' selected' : ''}>${esc(c)}${byCar[c] != null ? ` (${byCar[c]})` : ''}</option>`).join('')}`;
-    }
+    const byCar = data.byCarrier || {};
+    const carrierNames = [...new Set([...(state.meta.carriers || []),
+      ...Object.keys(byCar).filter((k) => k && k !== '(empty)')])];
+    paintMultiFilter('live-employee-filter', employeeNames().map((s) => ({ value: s, label: s })), f.employee, (value, on) => setFilterValue('employee', value, on));
+    paintMultiFilter('live-status-filter', (state.meta.statuses || []).map((s) => ({ value: s, label: s })), f.status, (value, on) => setFilterValue('status', value, on));
+    paintMultiFilter('live-carrier-filter', [
+      { value: '__empty__', label: 'بدون ناقل' },
+      ...carrierNames.map((c) => ({ value: c, label: c })),
+    ], f.carrier, (value, on) => setFilterValue('carrier', value, on));
 
     const chips = $('#live-chips');
     if (chips) {
@@ -1220,19 +1449,19 @@
       const byCar = data.byCarrier || {};
       chips.innerHTML = [
         `<span class="live-chip"><b>${data.total || 0}</b> VINs</span>`,
-        ...Object.keys(byEmp).map((k) => `<button type="button" class="live-chip emp-filter ${f.employee === k ? 'active' : ''}" data-emp="${esc(k)}">${esc(k)} <b>${byEmp[k]}</b></button>`),
+        ...Object.keys(byEmp).map((k) => `<button type="button" class="live-chip emp-filter ${filterList(f.employee).includes(k) ? 'active' : ''}" data-emp="${esc(k)}">${esc(k)} <b>${byEmp[k]}</b></button>`),
         ...Object.entries(byCar).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => {
           const key = k === '(empty)' ? '__empty__' : k;
-          return `<button type="button" class="live-chip carrier-filter ${f.carrier === key ? 'active' : ''}" data-carrier="${esc(key)}">${esc(k === '(empty)' ? 'بدون ناقل' : k)} <b>${n}</b></button>`;
+          return `<button type="button" class="live-chip carrier-filter ${filterList(f.carrier).includes(key) ? 'active' : ''}" data-carrier="${esc(key)}">${esc(k === '(empty)' ? 'بدون ناقل' : k)} <b>${n}</b></button>`;
         }),
         ...Object.entries(data.bySalesType || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) =>
           `<span class="live-chip">${esc(k)} <b>${n}</b></span>`),
         ...Object.keys(bySt).filter((k) => k !== '(blank)').slice(0, 8).map((k) =>
-          `<button type="button" class="live-chip status-filter ${f.status === k ? 'active' : ''}" data-status="${esc(k)}">${esc(k)} <b>${bySt[k]}</b></button>`),
+          `<button type="button" class="live-chip status-filter ${filterList(f.status).includes(k) ? 'active' : ''}" data-status="${esc(k)}">${esc(k)} <b>${bySt[k]}</b></button>`),
       ].join('');
       const toggle = (key, val) => {
-        state.liveFilters[key] = state.liveFilters[key] === val ? '' : val;
-        loadLiveSheet().catch((e) => alert(e.message));
+        const cur = filterList(state.liveFilters[key]);
+        setFilterValue(key, val, !cur.includes(val));
       };
       $$('.status-filter', chips).forEach((b) => b.addEventListener('click', () => toggle('status', b.dataset.status)));
       $$('.emp-filter', chips).forEach((b) => b.addEventListener('click', () => toggle('employee', b.dataset.emp)));
@@ -1242,7 +1471,7 @@
     const meta = $('#live-meta-text');
     if (meta) {
       const monthNote = f.month ? ` · ${f.month}` : ' · all months';
-      meta.textContent = `${data.total || 0} VINs${monthNote} · live · last sync ${new Date(data.at || Date.now()).toLocaleTimeString()}${changed && silent ? ' · updated' : ''}${grids.live.note || ''}`;
+      meta.textContent = `${data.total || 0} VINs${monthNote} · live · last sync ${new Date(data.at || Date.now()).toLocaleTimeString()}${changed && silent ? ' · updated' : ''}${grid.cfNote || ''}`;
     }
     const dot = $('#live-dot');
     if (dot) {
@@ -1257,7 +1486,6 @@
     // Never wipe mid-edit: keep typing / pending drafts on screen
     if (silent && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) return;
 
-    ensureDatalists();
     const cell = (r, field, type) => (r.canEdit && (field !== 'carrier' || canAssignCarrier())
       ? editableControl(r.vin, field, type, r.ops[field])
       : readOnlyValue(type, r.ops[field]));
@@ -1302,95 +1530,122 @@
     ];
 
     const shown = state.liveOnlySelected ? rows.filter((r) => state.selected.has(r.vin)) : rows;
-    const keepCf = active && active.classList && active.classList.contains('live-cf') && table.contains(active)
-      ? { key: active.dataset.cf, start: active.selectionStart, end: active.selectionEnd }
-      : null;
-    grids.live.cols = cols;
-    const cf = grids.live.filters;
+    if (silent && excelMenuOpen()) {
+      state.liveInFlight = false;
+      return;
+    }
+    grid.cols = cols;
+    state.liveCols = cols;
     const cfOn = activeLiveColRules().length;
     const frow = `<tr class="live-frow">${cols.map((c) => (c.key === 'num'
       ? `<th class="col-num">${cfOn ? '<button type="button" class="live-cf-x" data-cf-clear title="Clear column filters">✕</button>' : ''}</th>`
-      : `<th class="col-${c.key}${cf[c.key] ? ' is-on' : ''}"><input type="search" class="live-cf" data-cf="${esc(c.key)}" value="${esc(cf[c.key] || '')}" list="live-cf-list" placeholder="Filter…" autocomplete="off" spellcheck="false" title="${esc(`${colPlainLabel(c)}: ${LIVE_CF_HINT}`)}" aria-label="Filter ${esc(colPlainLabel(c))}" /></th>`)).join('')}</tr>`;
+      : colFilterButton(c))).join('')}</tr>`;
     table.innerHTML = `<thead><tr class="live-hrow">${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr>${frow}</thead>
       <tbody>${shown.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${isGuestYes(r) ? ' row-guest-exp' : ''}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
         `<td class="col-${c.key}">${c.html(r, i)}</td>`).join('')}</tr>`).join('')
         || `<tr><td colspan="${cols.length}">${state.liveOnlySelected ? 'None of the selected VINs match these filters.' : 'No VINs on the Live Sheet yet.'}</td></tr>`}</tbody>`;
-    $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+    $$('.vin-link', table).forEach((b) => b.addEventListener('dblclick', () => openVin(b.dataset.vin)));
     bindEditableCells(table);
     bindSelChecks(table, shown);
-    afterGridRender(grids.live, keepCf);
+    afterLiveRender(null);
   }
 
   // ——— Live Sheet · column filters (every user) ———
-  const LIVE_CF_HINT = 'text = contains · =text exact · !text excludes · empty / !empty';
+  const LIVE_CF_HINT = 'Tick one or more values in this column, like Excel';
 
-  function blankGrid(id) {
-    return {
-      id,
-      table: `#${id}-table`,
-      info: `#${id}-copy-info`,
-      copyBtn: `#${id}-copy-btn`,
-      valBtn: `#${id}-copy-values`,
-      clearBtn: `#${id}-cf-clear`,
-      list: `#${id}-cf-list`,
-      meta: id === 'live' ? '#live-meta-text' : '#my-pager',
-      cols: [],
-      filters: {},
-      sel: null,
-      copyFlash: false,
-      copyTimer: null,
-      note: '',
-    };
+  function cfPicked(key) {
+    const v = grid.filters && grid.filters[key];
+    if (Array.isArray(v)) return v.map((x) => String(x)).filter((x) => x !== '');
+    return [];
   }
 
-  const grids = { live: blankGrid('live'), my: blankGrid('my') };
+  function colFilterButton(c) {
+    const n = cfPicked(c.key).length;
+    const on = n ? ' is-on' : '';
+    return `<th class="col-${c.key}${on}"><button type="button" class="live-cf-btn${on}" data-cf="${esc(c.key)}" title="${esc(`${colPlainLabel(c)}: ${LIVE_CF_HINT}`)}">${n ? esc(String(n)) : '▾'}</button></th>`;
+  }
+
+  function excelMenuOpen() {
+    const menu = document.getElementById('excel-cf-menu');
+    return !!(menu && !menu.hidden);
+  }
 
   function colPlainLabel(c) {
     return c.key === 'num' ? '#' : c.label;
   }
 
-  function liveCfStoreKey(g) {
-    return `dt_${g.id}_colfilters_${state.user ? state.user.id : 'anon'}`;
+  function liveCfStoreKey() {
+    const who = state.user ? state.user.id : 'anon';
+    return `dt_${grid.prefix}_colfilters_${who}`;
   }
 
-  function loadLiveColFilters(g) {
-    const grid = g || grids.live;
+  function loadLiveColFilters() {
+    const who = state.user ? state.user.id : 'anon';
+    ['live', 'my'].forEach((prefix) => {
+      const g = sheetGrids[prefix];
     try {
-      grid.filters = JSON.parse(localStorage.getItem(liveCfStoreKey(grid)) || '{}') || {};
+        g.filters = JSON.parse(localStorage.getItem(`dt_${prefix}_colfilters_${who}`) || '{}') || {};
     } catch {
-      grid.filters = {};
+        g.filters = {};
     }
+    });
+    state.liveColFilters = sheetGrids.live.filters;
   }
 
-  function saveLiveColFilters(g) {
-    const grid = g || grids.live;
+  function saveLiveColFilters() {
     const clean = {};
-    Object.entries(grid.filters).forEach(([k, v]) => { if (String(v || '').trim()) clean[k] = v; });
+    Object.entries(grid.filters).forEach(([k, v]) => {
+      if (Array.isArray(v)) {
+        if (v.length) clean[k] = v;
+      } else if (String(v || '').trim()) clean[k] = v;
+    });
     grid.filters = clean;
+    if (grid.prefix === 'live') state.liveColFilters = clean;
     try {
-      if (Object.keys(clean).length) localStorage.setItem(liveCfStoreKey(grid), JSON.stringify(clean));
-      else localStorage.removeItem(liveCfStoreKey(grid));
+      const key = liveCfStoreKey();
+      if (Object.keys(clean).length) localStorage.setItem(key, JSON.stringify(clean));
+      else localStorage.removeItem(key);
     } catch {
       /* ignore quota */
     }
   }
 
-  function activeLiveColRules(g) {
-    const grid = g || grids.live;
+  function activeLiveColRules() {
     return Object.entries(grid.filters || {})
-      .map(([key, v]) => ({ key, rule: String(v || '').trim().toLowerCase() }))
-      .filter((x) => x.rule);
+      .map(([key, v]) => {
+        if (Array.isArray(v)) {
+          const values = v.map((x) => String(x)).filter((x) => x !== '');
+          return values.length ? { key, values } : null;
+        }
+        const rule = String(v || '').trim().toLowerCase();
+        return rule ? { key, rule } : null;
+      })
+      .filter(Boolean);
   }
 
   function liveCellText(td) {
     if (!td) return '';
-    const ctl = td.querySelector('select.cell-edit, input.cell-edit, textarea.cell-edit');
+    const ctl = td.querySelector('select.cell-edit, input.cell-edit, textarea.cell-edit, button.choice-lock, button.vin-link, a.phone-link');
     let s;
-    if (ctl) s = ctl.value;
+    if (ctl && ctl.matches('select, input, textarea')) s = ctl.value;
+    else if (ctl && ctl.matches('button.choice-lock')) s = ctl.dataset.choice || ctl.textContent;
+    else if (ctl) s = ctl.textContent;
     else if (td.classList.contains('col-num')) s = (td.querySelector('.sel-cell span') || td).textContent;
     else s = td.textContent;
     s = String(s || '').replace(/\s+/g, ' ').trim();
     return s === 'N/A' || s === '—' || s === '-' ? '' : s;
+  }
+
+  function matchLiveFilter(text, rule) {
+    if (rule.values) {
+      const t = String(text || '').trim().toLowerCase();
+      return rule.values.some((v) => {
+        const want = String(v).trim().toLowerCase();
+        if (want === '(blank)') return !t;
+        return t === want;
+      });
+    }
+    return matchLiveRule(text, rule.rule);
   }
 
   function matchLiveRule(text, rule) {
@@ -1405,39 +1660,36 @@
     return t.includes(rule);
   }
 
-  function liveDataRows(g) {
-    const grid = g || grids.live;
-    const table = $(grid.table);
+  function liveDataRows() {
+    const table = gTable();
     const body = table && table.tBodies[0];
     return body ? [...body.rows].filter((tr) => tr.dataset.vin) : [];
   }
 
-  function liveVisibleRows(g) {
-    return liveDataRows(g).filter((tr) => tr.style.display !== 'none');
+  function liveVisibleRows() {
+    return liveDataRows().filter((tr) => tr.style.display !== 'none');
   }
 
-  function liveColIndex(key, g) {
-    const grid = g || grids.live;
+  function liveColIndex(key) {
     return (grid.cols || []).findIndex((c) => c.key === key);
   }
 
-  function applyLiveColFilters(g) {
-    const grid = g || grids.live;
-    const rules = activeLiveColRules(grid)
-      .map((r) => ({ ...r, idx: liveColIndex(r.key, grid) }))
+  function applyLiveColFilters() {
+    const rules = activeLiveColRules()
+      .map((r) => ({ ...r, idx: liveColIndex(r.key) }))
       .filter((r) => r.idx >= 0);
     let visible = 0;
-    const all = liveDataRows(grid);
+    const all = liveDataRows();
     all.forEach((tr) => {
-      const ok = rules.every((r) => matchLiveRule(liveCellText(tr.cells[r.idx]), r.rule));
+      const ok = rules.every((r) => matchLiveFilter(liveCellText(tr.cells[r.idx]), r));
       tr.style.display = ok ? '' : 'none';
       if (ok) visible += 1;
     });
-    const table = $(grid.table);
+    const table = gTable();
     if (table) {
       $$('thead tr.live-frow th', table).forEach((th, i) => {
         const col = grid.cols && grid.cols[i];
-        if (col && col.key !== 'num') th.classList.toggle('is-on', !!String(grid.filters[col.key] || '').trim());
+        if (col && col.key !== 'num') th.classList.toggle('is-on', cfPicked(col.key).length > 0 || !!String(Array.isArray(grid.filters[col.key]) ? '' : (grid.filters[col.key] || '')).trim());
       });
       const corner = $('thead tr.live-frow th.col-num', table);
       if (corner) {
@@ -1446,54 +1698,106 @@
           : '';
       }
     }
-    const clearBtn = $(grid.clearBtn);
+    const clearBtn = gClear();
     if (clearBtn) {
       clearBtn.hidden = !rules.length;
       clearBtn.textContent = rules.length ? `Clear column filters (${rules.length})` : 'Clear column filters';
     }
-    grid.note = rules.length ? ` · ${visible} shown by column filters` : '';
-    const meta = $(grid.meta);
-    if (meta) meta.textContent = meta.textContent.replace(/ · \d+ shown by column filters$/, '') + grid.note;
+    grid.cfNote = rules.length ? ` · ${visible} shown by column filters` : '';
+    const meta = grid.prefix === 'live' ? $('#live-meta-text') : null;
+    if (meta) meta.textContent = meta.textContent.replace(/ · \d+ shown by column filters$/, '') + grid.cfNote;
     const sa = table && $('.sel-all', table);
     if (sa) {
-      const vis = liveVisibleRows(grid);
+      const vis = liveVisibleRows();
       sa.checked = vis.length > 0 && vis.every((tr) => state.selected.has(tr.dataset.vin));
     }
   }
 
-  function clearLiveColFilters(g) {
-    const grid = g || grids.live;
+  function clearLiveColFilters() {
     grid.filters = {};
-    saveLiveColFilters(grid);
-    $$('.live-cf', $(grid.table)).forEach((el) => { el.value = ''; });
-    applyLiveColFilters(grid);
-    paintLiveSel(grid);
+    closeExcelFilter();
+    saveLiveColFilters();
+    const table = gTable();
+    if (table) $$('.live-cf', table).forEach((el) => { el.value = ''; });
+    applyLiveColFilters();
+    paintLiveSel();
   }
 
-  function fillLiveCfList(key, g) {
-    const grid = g || grids.live;
-    const list = $(grid.list);
-    const idx = liveColIndex(key, grid);
-    if (!list || idx < 0) return;
-    const seen = new Map();
-    liveDataRows(grid).forEach((tr) => {
-      const t = liveCellText(tr.cells[idx]);
-      if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+  function ensureExcelMenu() {
+    let menu = document.getElementById('excel-cf-menu');
+    if (menu) return menu;
+    menu = document.createElement('div');
+    menu.id = 'excel-cf-menu';
+    menu.className = 'excel-cf';
+    menu.hidden = true;
+    menu.innerHTML = '<input type="search" class="excel-cf-q" placeholder="Search this list…" autocomplete="off" /><div class="excel-cf-list"></div>';
+    menu.addEventListener('input', (e) => {
+      const q = String(e.target.value || '').trim().toLowerCase();
+      if (!e.target.classList.contains('excel-cf-q')) return;
+      menu.querySelectorAll('.excel-cf-opt').forEach((row) => {
+        row.hidden = q ? !row.dataset.find.includes(q) : false;
+      });
     });
-    list.innerHTML = [...seen.values()].sort((a, b) => a.localeCompare(b)).slice(0, 200)
-      .map((v) => `<option value="${esc(v)}"></option>`).join('');
+    menu.addEventListener('change', (e) => {
+      const box = e.target.closest('input[type="checkbox"]');
+      if (!box || !menu.dataset.cf) return;
+      const cur = cfPicked(menu.dataset.cf).filter((x) => x.toLowerCase() !== box.value.toLowerCase());
+      if (box.checked) cur.push(box.dataset.label || box.value);
+      if (cur.length) grid.filters[menu.dataset.cf] = cur;
+      else delete grid.filters[menu.dataset.cf];
+      saveLiveColFilters();
+      applyLiveColFilters();
+      const btn = gTable() && gTable().querySelector(`.live-cf-btn[data-cf="${CSS.escape(menu.dataset.cf)}"]`);
+      if (btn) {
+        const n = cur.length;
+        btn.textContent = n ? String(n) : '▾';
+        btn.classList.toggle('is-on', n > 0);
+        if (btn.parentElement) btn.parentElement.classList.toggle('is-on', n > 0);
+      }
+    });
+    document.body.appendChild(menu);
+    return menu;
+  }
+
+  function openExcelFilter(btn) {
+    const table = btn.closest('table');
+    grid = table && table.id === 'my-table' ? sheetGrids.my : sheetGrids.live;
+    const key = btn.dataset.cf;
+    const idx = liveColIndex(key);
+    if (idx < 0) return;
+    const menu = ensureExcelMenu();
+    const seen = new Map();
+    liveDataRows().forEach((tr) => {
+      const t = liveCellText(tr.cells[idx]) || '(blank)';
+      if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+    });
+    const picked = new Set(cfPicked(key).map((v) => v.toLowerCase()));
+    const values = [...seen.values()].sort((a, b) => a.localeCompare(b));
+    menu.dataset.cf = key;
+    menu.querySelector('.excel-cf-q').value = '';
+    menu.querySelector('.excel-cf-list').innerHTML = values.map((v) => `<label class="excel-cf-opt" data-find="${esc(v.toLowerCase())}"><input type="checkbox" value="${esc(v)}" data-label="${esc(v)}" ${picked.has(v.toLowerCase()) ? 'checked' : ''} /> ${esc(v)}</label>`).join('')
+      || '<p class="excel-cf-empty">No values</p>';
+    const r = btn.getBoundingClientRect();
+    menu.hidden = false;
+    menu.style.top = `${Math.min(r.bottom + 4, window.innerHeight - 280)}px`;
+    menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 220))}px`;
+    menu.querySelector('.excel-cf-q').focus();
+  }
+
+  function closeExcelFilter() {
+    const menu = document.getElementById('excel-cf-menu');
+    if (menu) menu.hidden = true;
   }
 
   // ——— Live Sheet · cell selection + copy as table (every user) ———
-  function liveSelBounds(g) {
-    const grid = g || grids.live;
+  function liveSelBounds() {
     const s = grid.sel;
     if (!s) return null;
-    const rows = liveVisibleRows(grid);
+    const rows = liveVisibleRows();
     const r1 = rows.findIndex((tr) => tr.dataset.vin === s.anchor.vin);
     const r2 = rows.findIndex((tr) => tr.dataset.vin === s.focus.vin);
-    const c1 = liveColIndex(s.anchor.key, grid);
-    const c2 = liveColIndex(s.focus.key, grid);
+    const c1 = liveColIndex(s.anchor.key);
+    const c2 = liveColIndex(s.focus.key);
     if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) return null;
     return {
       rows: rows.slice(Math.min(r1, r2), Math.max(r1, r2) + 1),
@@ -1504,18 +1808,17 @@
     };
   }
 
-  function paintLiveSel(g) {
-    const grid = g || grids.live;
-    const table = $(grid.table);
+  function paintLiveSel() {
+    const table = gTable();
     if (!table) return;
     $$('td.is-range, td.is-sel', table).forEach((td) => td.classList.remove('is-range', 'is-sel'));
     $$('thead th.is-colsel', table).forEach((th) => th.classList.remove('is-colsel'));
-    const b = liveSelBounds(grid);
-    const info = $(grid.info);
-    const copyBtn = $(grid.copyBtn);
-    const valBtn = $(grid.valBtn);
+    const b = liveSelBounds();
+    const info = gInfo();
+    const copyBtn = gCopy();
+    const valBtn = gVals();
     if (!b) {
-      if (info && !grid.copyFlash) info.textContent = 'Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers';
+      if (info && !grid.copyFlash) info.textContent = 'Click a cell — VIN and entry boxes included — drag or Shift+click · Ctrl+C copies · double-click a VIN to open it';
       if (copyBtn) copyBtn.disabled = true;
       if (valBtn) valBtn.disabled = true;
       return;
@@ -1544,20 +1847,18 @@
     if (valBtn) valBtn.disabled = !multi;
   }
 
-  function setLiveSel(g, td, extend) {
-    const grid = g || grids.live;
+  function setLiveSel(td, extend) {
     const tr = td && td.parentElement;
     const col = grid.cols && grid.cols[td.cellIndex];
     if (!tr || !tr.dataset.vin || !col) return;
     const point = { vin: tr.dataset.vin, key: col.key };
     if (extend && grid.sel) grid.sel = { anchor: grid.sel.anchor, focus: point };
     else grid.sel = { anchor: point, focus: point };
-    paintLiveSel(grid);
+    paintLiveSel();
   }
 
-  function selectLiveColumn(g, idx, extend) {
-    const grid = g || grids.live;
-    const rows = liveVisibleRows(grid);
+  function selectLiveColumn(idx, extend) {
+    const rows = liveVisibleRows();
     const col = grid.cols && grid.cols[idx];
     if (!rows.length || !col) return;
     const startKey = extend && grid.sel ? grid.sel.anchor.key : col.key;
@@ -1565,20 +1866,21 @@
       anchor: { vin: rows[0].dataset.vin, key: startKey },
       focus: { vin: rows[rows.length - 1].dataset.vin, key: col.key },
     };
-    paintLiveSel(grid);
+    paintLiveSel();
   }
 
-  function buildLiveCopy(g, withHeaders) {
-    const grid = g || grids.live;
-    const b = liveSelBounds(grid);
-    if (!b) return null;
+  function buildLiveCopy(withHeaders) {
+    const b = liveSelBounds();
+    if (!b || !grid.cols) return null;
     const cols = grid.cols.slice(b.c1, b.c2 + 1);
     const cells = b.rows.map((tr) => cols.map((_c, i) => liveCellText(tr.cells[b.c1 + i])));
     const single = cells.length === 1 && cols.length === 1;
     const heads = withHeaders && !single ? cols.map(colPlainLabel) : null;
     const tsvRows = heads ? [heads, ...cells] : cells;
     const text = tsvRows.map((r) => r.map((v) => String(v).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n');
-    const asText = (v) => (/^0\d|^\d{11,}$/.test(v) ? ' style="mso-number-format:\'\\@\';border:1px solid #cbd5e1;padding:4px 8px"' : ' style="border:1px solid #cbd5e1;padding:4px 8px"');
+    const asText = (v) => (/^0\d|^\d{11,}$/.test(v) || (v.length >= 11 && /[A-Za-z]/.test(v) && /\d/.test(v))
+      ? ' style="mso-number-format:\'\\@\';border:1px solid #cbd5e1;padding:4px 8px"'
+      : ' style="border:1px solid #cbd5e1;padding:4px 8px"');
     const thStyle = 'background:#1e3a5f;color:#ffffff;font-weight:bold;border:1px solid #94a3b8;padding:5px 8px;text-align:left';
     const html = `<table border="1" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt">${
       heads ? `<thead><tr>${heads.map((h) => `<th style="${thStyle}">${esc(h)}</th>`).join('')}</tr></thead>` : ''
@@ -1587,50 +1889,77 @@
   }
 
   let livePendingCopy = null;
-  document.addEventListener('copy', (e) => {
-    if (!livePendingCopy) return;
-    e.clipboardData.setData('text/plain', livePendingCopy.text);
-    if (!livePendingCopy.single) e.clipboardData.setData('text/html', livePendingCopy.html);
-    e.preventDefault();
-  });
 
-  function copyLiveSelection(g, withHeaders = true) {
-    const grid = g || grids.live;
-    const payload = buildLiveCopy(grid, withHeaders);
-    if (!payload) return false;
-    livePendingCopy = payload;
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch { ok = false; }
-    livePendingCopy = null;
-    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(payload.text).catch(() => {});
-      ok = true;
-    }
-    const info = $(grid.info);
-    if (info) {
-      grid.copyFlash = true;
-      info.textContent = payload.single
-        ? 'Copied ✓'
-        : `Copied ✓ ${payload.rows} row(s) × ${payload.cols} column(s)${withHeaders ? ' as a table with headers' : ' · values only'} — paste into Excel, email or WhatsApp Web`;
-      info.classList.add('is-flash');
-      clearTimeout(grid.copyTimer);
-      grid.copyTimer = setTimeout(() => {
-        grid.copyFlash = false;
-        info.classList.remove('is-flash');
-        paintLiveSel(grid);
-      }, 2600);
-    }
-    return ok;
+  function flashLiveCopy(payload) {
+    const info = gInfo();
+    if (!info || !payload) return;
+    const painted = grid;
+    grid.copyFlash = true;
+    info.textContent = payload.single
+      ? 'Copied ✓'
+      : `Copied ✓ ${payload.rows} row(s) × ${payload.cols} column(s)${payload.withHeaders ? ' as a table with headers' : ' · values only'} — paste into Excel, email or WhatsApp Web`;
+    info.classList.add('is-flash');
+    clearTimeout(grid.copyTimer);
+    grid.copyTimer = setTimeout(() => {
+      painted.copyFlash = false;
+      info.classList.remove('is-flash');
+      const prev = grid;
+      grid = painted;
+      paintLiveSel();
+      grid = prev;
+    }, 2600);
   }
 
-  function afterGridRender(g, keepCf) {
-    const grid = g || grids.live;
-    const table = $(grid.table);
+  document.addEventListener('copy', (e) => {
+    if (!livePendingCopy || !e.clipboardData) return;
+    const payload = livePendingCopy;
+    e.clipboardData.setData('text/plain', payload.text);
+    if (!payload.single) e.clipboardData.setData('text/html', payload.html);
+    e.preventDefault();
+    livePendingCopy = null;
+    flashLiveCopy(payload);
+  });
+
+  function copyLiveSelection(withHeaders = true) {
+    const payload = buildLiveCopy(withHeaders);
+    if (!payload) return false;
+    payload.withHeaders = withHeaders;
+    livePendingCopy = payload;
+    const ta = document.createElement('textarea');
+    ta.value = payload.text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(ta);
+    const back = document.activeElement;
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    if (back && back.focus) {
+      try { back.focus({ preventScroll: true }); } catch { /* ignore */ }
+    }
+    if (ok) return true;
+    livePendingCopy = null;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload.text).then(() => flashLiveCopy(payload)).catch(() => {
+        const info = gInfo();
+        if (info) info.textContent = 'Copy failed — click a cell, then press Ctrl+C';
+      });
+      return true;
+    }
+    const info = gInfo();
+    if (info) info.textContent = 'Copy failed — click a cell, then press Ctrl+C';
+    return false;
+  }
+
+  function afterLiveRender(keepCf) {
+    const table = gTable();
     if (!table) return;
     const head = table.tHead && table.tHead.rows[0];
     if (head) table.style.setProperty('--live-ftop', `${head.offsetHeight || 30}px`);
-    applyLiveColFilters(grid);
-    paintLiveSel(grid);
+    applyLiveColFilters();
+    paintLiveSel();
     if (keepCf) {
       const el = $(`.live-cf[data-cf="${CSS.escape(keepCf.key)}"]`, table);
       if (el) {
@@ -1646,39 +1975,44 @@
     return tag === 'input' || tag === 'select' || tag === 'textarea' || el.isContentEditable;
   }
 
-  let gridKeysBound = false;
-
-  function bindLiveSheetGrid(g) {
-    const grid = g || grids.live;
-    const table = $(grid.table);
+  function bindLiveSheetGrid(prefix = 'live') {
+    const g = sheetGrids[prefix] || sheetGrids.live;
+    const table = $(`#${g.prefix}-table`);
     if (!table || table.dataset.gridBound) return;
     table.dataset.gridBound = '1';
+    const use = () => { grid = g; };
     let dragging = false;
     let dragMoved = false;
     let cfTimer = null;
 
     table.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
+      use();
       const th = e.target.closest('thead tr.live-hrow th');
       if (th && !e.target.closest('input, label')) {
         e.preventDefault();
-        selectLiveColumn(grid, th.cellIndex, e.shiftKey);
+        selectLiveColumn(th.cellIndex, e.shiftKey);
         return;
       }
       const td = e.target.closest('tbody td');
       if (!td || !td.parentElement.dataset.vin) return;
-      if (e.target.closest('input, select, textarea, label')) return;
-      const isLink = !!e.target.closest('a, button');
-      if (!isLink) {
-        e.preventDefault();
-        if (isTypingTarget(document.activeElement)) document.activeElement.blur();
-      }
-      setLiveSel(grid, td, e.shiftKey);
+      if (e.target.closest('.sel-check, .sel-all, label.sel-cell')) return;
+      const col = grid.cols && grid.cols[td.cellIndex];
+      const sameCell = !!(col && grid.sel
+        && grid.sel.anchor.key === col.key && grid.sel.focus.key === col.key
+        && grid.sel.anchor.vin === td.parentElement.dataset.vin
+        && grid.sel.focus.vin === td.parentElement.dataset.vin);
+      const control = e.target.closest('input.cell-edit, select.cell-edit, textarea.cell-edit');
+      if (control && sameCell && !e.shiftKey) return;
+      if (!e.target.closest('button, input.city-find')) e.preventDefault();
+      if (isTypingTarget(document.activeElement) && !e.target.closest('button, input.city-find')) document.activeElement.blur();
+      setLiveSel(td, e.shiftKey);
       dragging = true;
       dragMoved = false;
     });
     table.addEventListener('mouseover', (e) => {
       if (!dragging) return;
+      use();
       const td = e.target.closest('tbody td');
       if (!td || !td.parentElement.dataset.vin) return;
       const col = grid.cols && grid.cols[td.cellIndex];
@@ -1686,7 +2020,7 @@
       if (!col || !s) return;
       if (s.focus.vin === td.parentElement.dataset.vin && s.focus.key === col.key) return;
       dragMoved = true;
-      setLiveSel(grid, td, true);
+      setLiveSel(td, true);
     });
     document.addEventListener('mouseup', () => { dragging = false; });
     table.addEventListener('click', (e) => {
@@ -1695,48 +2029,68 @@
         e.stopPropagation();
       }
       dragMoved = false;
+      const cfBtn = e.target.closest('.live-cf-btn');
+      if (cfBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        use();
+        openExcelFilter(cfBtn);
+        return;
+      }
       const clr = e.target.closest('[data-cf-clear]');
-      if (clr) clearLiveColFilters(grid);
+      if (clr) {
+        use();
+        clearLiveColFilters();
+      }
     }, true);
 
     table.addEventListener('input', (e) => {
       const el = e.target.closest('.live-cf');
       if (!el) return;
+      use();
       grid.filters[el.dataset.cf] = el.value;
-      saveLiveColFilters(grid);
+      saveLiveColFilters();
       clearTimeout(cfTimer);
-      cfTimer = setTimeout(() => { applyLiveColFilters(grid); paintLiveSel(grid); }, 160);
+      cfTimer = setTimeout(() => {
+        use();
+        applyLiveColFilters();
+        paintLiveSel();
+      }, 160);
     });
     table.addEventListener('focusin', (e) => {
       const el = e.target.closest('.live-cf');
-      if (el) fillLiveCfList(el.dataset.cf, grid);
+      if (!el) return;
+      use();
+      fillLiveCfList(el.dataset.cf);
     });
 
-    if (!gridKeysBound) {
-      gridKeysBound = true;
-      document.addEventListener('keydown', (e) => {
-        const activeGrid = state.view === 'my' ? grids.my : (state.view === 'live' ? grids.live : null);
-        if (!activeGrid || !activeGrid.sel) return;
-        const active = document.activeElement;
-        if (isTypingTarget(active)) return;
-        if (document.querySelector('#vin-drawer-back.open')) return;
-        const k = String(e.key || '').toLowerCase();
-        if ((e.ctrlKey || e.metaKey) && k === 'c') {
-          e.preventDefault();
-          copyLiveSelection(activeGrid, true);
-        } else if (k === 'escape') {
-          activeGrid.sel = null;
-          paintLiveSel(activeGrid);
-        }
-      });
+    if (prefix === 'live') {
+    document.addEventListener('keydown', (e) => {
+        const onMy = state.view === 'my' || state.view === 'mine';
+        const onLive = state.view === 'live';
+        if (!onMy && !onLive) return;
+        grid = onMy ? sheetGrids.my : sheetGrids.live;
+        if (!grid.sel) return;
+      const active = document.activeElement;
+      if (isTypingTarget(active)) return;
+      if (document.querySelector('#vin-drawer-back.open')) return;
+      const k = String(e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'c') {
+        e.preventDefault();
+        copyLiveSelection(true);
+      } else if (k === 'escape') {
+          grid.sel = null;
+        paintLiveSel();
+      }
+    });
     }
 
-    const copyBtn = $(grid.copyBtn);
-    if (copyBtn) copyBtn.addEventListener('click', () => copyLiveSelection(grid, true));
-    const valBtn = $(grid.valBtn);
-    if (valBtn) valBtn.addEventListener('click', () => copyLiveSelection(grid, false));
-    const clearBtn = $(grid.clearBtn);
-    if (clearBtn) clearBtn.addEventListener('click', () => clearLiveColFilters(grid));
+    const copyBtn = $(`#${g.prefix}-copy-btn`);
+    if (copyBtn) copyBtn.addEventListener('click', () => { use(); copyLiveSelection(true); });
+    const valBtn = $(`#${g.prefix}-copy-values`);
+    if (valBtn) valBtn.addEventListener('click', () => { use(); copyLiveSelection(false); });
+    const clearBtn = $(`#${g.prefix}-cf-clear`);
+    if (clearBtn) clearBtn.addEventListener('click', () => { use(); clearLiveColFilters(); });
   }
 
   function bindSelChecks(table, rows) {
@@ -1767,82 +2121,88 @@
   }
 
   // ——— My VINs ———
-  function myEdit(r, field, type) {
-    return (r.canEdit && (field !== 'carrier' || canAssignCarrier()))
-      ? editableControl(r.vin, field, type, r.ops[field])
-      : readOnlyValue(type, r.ops[field]);
-  }
-
   function scheduleColumns() {
     return [
-      {
-        key: 'num',
-        label: '<input type="checkbox" class="checkbox sel-all" title="Select all shown" />',
-        raw: true,
-        html: (r, i) => `<label class="sel-cell"><input type="checkbox" class="checkbox sel-check" data-vin="${esc(r.vin)}" ${state.selected.has(r.vin) ? 'checked' : ''} /><span>${i + 1}</span></label>`,
-      },
-      { key: 'employee', label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` },
-      { key: 'status', label: 'Status', html: (r) => myEdit(r, 'opsStatus', 'status') },
-      { key: 'vin', label: 'VIN', html: (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>` },
-      { key: 'proforma', label: 'Proforma', html: (r) => esc(na(r.raw.proformaDate)) },
-      { key: 'order', label: 'Order', html: (r) => esc(na(r.raw.salesOrder)) },
-      { key: 'salestype', label: 'Sales Type', html: (r) => esc(na(r.raw.salesType)) },
-      { key: 'customer', label: 'Customer', html: (r) => esc(na(r.raw.userName)) },
-      { key: 'owner', label: 'Invoice Owner', html: (r) => esc(na(r.raw.invoiceOwner)) },
-      { key: 'phone', label: 'Phone', html: (r) => (r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A') },
-      { key: 'product', label: 'Product', html: (r) => esc(na(r.raw.product)) },
-      { key: 'sa', label: 'S/A', html: (r) => esc(na(r.raw.salesAdvisor)) },
-      { key: 'gt', label: 'GT Loc', html: (r) => esc(na(r.raw.gtLocation)) },
-      { key: 'veh', label: 'Veh Loc', html: (r) => esc(na(r.raw.vehicleLocation)) },
-      { key: 'guest', label: 'Guest Exp', html: (r) => myEdit(r, 'guestCenter', 'yn') },
-      { key: 'appt', label: 'Appointment', html: (r) => (isGuestYes(r) ? guestTimerHtml(r.ops) : '—') },
-      { key: 'guestsent', label: 'إرسال الضيف', html: (r) => myEdit(r, 'guestSentDate', 'date') },
-      { key: 'sig', label: 'استلام التواقيع', html: (r) => myEdit(r, 'signatureReceivedDate', 'date') },
-      { key: 'accsent', label: 'إرسال للحسابات', html: (r) => myEdit(r, 'accountsSentDate', 'date') },
-      { key: 'accok', label: 'موافقة الحسابات', html: (r) => myEdit(r, 'accountsApprovalDate', 'date') },
-      { key: 'vin1502', label: 'VIN 1502', html: (r) => myEdit(r, 'vin1502', 'yn') },
-      { key: 'traffic', label: 'ملف المرور', html: (r) => myEdit(r, 'trafficFile', 'yn') },
-      { key: 'fees', label: 'Traffic Fees', html: (r) => myEdit(r, 'trafficFeesOps', 'yn') },
-      { key: 'ins', label: 'Insurance', html: (r) => myEdit(r, 'insuranceOps', 'yn') },
-      { key: 'reg', label: 'إصدار الاستمارة', html: (r) => myEdit(r, 'registrationIssueDate', 'date') },
-      { key: 'city', label: 'مدينة الترحيل', html: (r) => myEdit(r, 'transferCity', 'city') },
-      { key: 'carrier', label: 'الناقل', html: (r) => myEdit(r, 'carrier', 'carrier') + carrierChangeNote(r.ops) },
-      { key: 'notes', label: 'ملاحظات', html: (r) => myEdit(r, 'notes', 'notes') },
-      { key: 'open', label: 'Open', html: (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>` },
+      ['Proforma', (r) => esc(na(r.raw.proformaDate))],
+      ['Order', (r) => esc(na(r.raw.salesOrder))],
+      ['VIN', (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>`],
+      ['Sales Type', (r) => esc(na(r.raw.salesType))],
+      ['Customer', (r) => esc(na(r.raw.userName))],
+      ['Invoice Owner', (r) => esc(na(r.raw.invoiceOwner))],
+      ['Phone', (r) => (r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A')],
+      ['Product', (r) => esc(na(r.raw.product))],
+      ['S/A', (r) => esc(na(r.raw.salesAdvisor))],
+      ['GT Loc', (r) => esc(na(r.raw.gtLocation))],
+      ['Veh Loc', (r) => esc(na(r.raw.vehicleLocation))],
+      ['Guest Exp', (r) => editableControl(r.vin, 'guestCenter', 'yn', r.ops.guestCenter)],
+      ['Appointment', (r) => (isGuestYes(r) ? guestTimerHtml(r.ops) : '—')],
+      ['Status', (r) => editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus)],
+      ['إرسال الضيف', (r) => editableControl(r.vin, 'guestSentDate', 'date', r.ops.guestSentDate)],
+      ['استلام التواقيع', (r) => editableControl(r.vin, 'signatureReceivedDate', 'date', r.ops.signatureReceivedDate)],
+      ['إرسال للحسابات', (r) => editableControl(r.vin, 'accountsSentDate', 'date', r.ops.accountsSentDate)],
+      ['موافقة الحسابات', (r) => editableControl(r.vin, 'accountsApprovalDate', 'date', r.ops.accountsApprovalDate)],
+      ['VIN 1502', (r) => editableControl(r.vin, 'vin1502', 'yn', r.ops.vin1502)],
+      ['ملف المرور', (r) => editableControl(r.vin, 'trafficFile', 'yn', r.ops.trafficFile)],
+      ['Traffic Fees', (r) => editableControl(r.vin, 'trafficFeesOps', 'yn', r.ops.trafficFeesOps)],
+      ['Insurance', (r) => editableControl(r.vin, 'insuranceOps', 'yn', r.ops.insuranceOps)],
+      ['إصدار الاستمارة', (r) => editableControl(r.vin, 'registrationIssueDate', 'date', r.ops.registrationIssueDate)],
+      ['مدينة الترحيل', (r) => editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity)],
+      ['الناقل', (r) => (canAssignCarrier()
+        ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier)
+        : readOnlyValue('carrier', r.ops.carrier)) + carrierChangeNote(r.ops)],
+      ['ملاحظات', (r) => editableControl(r.vin, 'notes', 'notes', r.ops.notes)],
+      ['Open', (r) => `<button type="button" class="btn vin-link" data-vin="${esc(r.vin)}">Full edit</button>`],
     ];
   }
 
+  function setFilterValue(key, value, on) {
+    const cur = filterList(state.liveFilters[key]).filter((x) => x !== value);
+    if (on) cur.push(value);
+    state.liveFilters[key] = cur;
+    loadLiveSheet().catch((e) => alert(e.message));
+  }
+
+  function paintMultiFilter(id, options, selected, onToggle) {
+    const root = document.getElementById(id);
+    if (!root) return;
+    const btn = root.querySelector('.multi-filter-btn');
+    const menu = root.querySelector('.multi-filter-menu');
+    const picked = filterList(selected);
+    if (btn) {
+      btn.textContent = picked.length ? picked.map((v) => {
+        const hit = options.find((o) => o.value === v);
+        return hit ? hit.label : v;
+      }).join(' · ') : (btn.dataset.empty || 'All');
+      btn.classList.toggle('is-on', picked.length > 0);
+    }
+    if (!menu || menu.dataset.open === '1') return;
+    menu.innerHTML = options.map((o) => `<label class="multi-filter-opt"><input type="checkbox" value="${esc(o.value)}" ${picked.includes(o.value) ? 'checked' : ''} /> ${esc(o.label)}</label>`).join('')
+      || '<span class="hint">No choices</span>';
+    menu.querySelectorAll('input').forEach((el) => {
+      el.addEventListener('change', () => onToggle(el.value, el.checked));
+    });
+  }
+
   async function loadMy({ silent = false } = {}) {
-    const statusSel = $('#my-status');
-    if (statusSel && !statusSel.dataset.filled) {
-      statusSel.innerHTML = `<option value="">All statuses</option>${(state.meta.statuses || []).map((s) =>
-        `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
-      statusSel.dataset.filled = '1';
-    }
-    const empSel = $('#my-employee');
-    if (empSel) {
-      empSel.hidden = !isManager();
-      if (isManager() && document.activeElement !== empSel) {
-        empSel.innerHTML = `<option value="">All employees</option>${employeeNames().map((s) =>
-          `<option value="${esc(s)}">${esc(s)}</option>`).join('')}`;
-        empSel.value = state.myFilters.employee || '';
-      }
-    }
+    paintMultiFilter('my-status-filter', (state.meta.statuses || []).map((s) => ({ value: s, label: s })), state.myFilters.status, (value, on) => {
+      const cur = filterList(state.myFilters.status).filter((x) => x !== value);
+      if (on) cur.push(value);
+      state.myFilters.status = cur;
+      loadMy().catch((e) => alert(e.message));
+    });
+    grid = sheetGrids.my;
     const data = await fetchLive({
       q: state.myFilters.q,
       status: state.myFilters.status,
-      employee: isManager() ? (state.myFilters.employee || '') : state.user.name,
+      employee: (state.view === 'mine' || !isManager()) ? state.user.name : '',
     });
     const table = $('#my-table');
-    const w = myWorkload(data.rows || []);
-    const rows = w.rows;
-    const fingerprint = liveFingerprint(rows);
-    const changed = fingerprint !== state.myFingerprint;
-    state.myFingerprint = fingerprint;
     const active = document.activeElement;
-    if (silent && table && active && active.classList && active.classList.contains('cell-edit') && table.contains(active)) {
+    if (silent && table && active && table.contains(active) && active.classList
+      && (active.classList.contains('cell-edit') || active.classList.contains('live-cf'))) {
       return;
     }
+    const w = myWorkload(data.rows || []);
     const typeKpis = Object.entries(w.bySalesType).sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([l, v]) => [l, v, 'info']);
     $('#my-kpis').innerHTML = [
@@ -1852,28 +2212,61 @@
       ['Progress %', `${w.progress}%`, 'info'],
       ...typeKpis,
     ].map(([l, v, c]) => `<article class="kpi ${c}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div></article>`).join('');
-    if (!changed && silent) return;
 
-    ensureDatalists();
-    const cols = scheduleColumns();
-    grids.my.cols = cols;
-    const cf = grids.my.filters;
-    const keepCf = active && active.classList && active.classList.contains('live-cf') && table.contains(active)
-      ? { key: active.dataset.cf, start: active.selectionStart, end: active.selectionEnd }
-      : null;
+    const cols = [
+      {
+        key: 'num',
+        label: '<input type="checkbox" class="checkbox sel-all" title="Select all shown" />',
+        raw: true,
+        html: (r, i) => `<label class="sel-cell"><input type="checkbox" class="checkbox sel-check" data-vin="${esc(r.vin)}" ${state.selected.has(r.vin) ? 'checked' : ''} /><span>${i + 1}</span></label>`,
+      },
+      { key: 'employee', label: 'Employee', html: (r) => `<b>${esc(na(r.ops.assignedEmployeeName))}</b>` },
+      { key: 'status', label: 'Status', html: (r) => (r.canEdit ? editableControl(r.vin, 'opsStatus', 'status', r.ops.opsStatus) : readOnlyValue('status', r.ops.opsStatus)) },
+      { key: 'vin', label: 'VIN', html: (r) => `<button type="button" class="vin-link" data-vin="${esc(r.vin)}">${esc(r.vin)}</button>` },
+      { key: 'proforma', label: 'Proforma', html: (r) => esc(na(r.raw.proformaDate)) },
+      { key: 'order', label: 'Order', html: (r) => esc(na(r.raw.salesOrder)) },
+      { key: 'product', label: 'Product', html: (r) => esc(na(r.raw.product)) },
+      { key: 'salestype', label: 'Sales Type', html: (r) => esc(na(r.raw.salesType)) },
+      { key: 'customer', label: 'Customer', html: (r) => `<span title="${esc(r.raw.userName || '')}">${esc(na(r.raw.userName))}</span>` },
+      { key: 'owner', label: 'Invoice Owner', html: (r) => `<span title="${esc(r.raw.invoiceOwner || '')}">${esc(na(r.raw.invoiceOwner))}</span>` },
+      { key: 'phone', label: 'Phone', html: (r) => (r.raw.phone ? `<a href="tel:${esc(r.raw.phone)}" class="phone-link">${esc(r.raw.phone)}</a>` : 'N/A') },
+      { key: 'sa', label: 'S/A', html: (r) => esc(na(r.raw.salesAdvisor)) },
+      { key: 'guest', label: 'Guest Exp', html: (r) => (r.canEdit ? editableControl(r.vin, 'guestCenter', 'yn', r.ops.guestCenter) : readOnlyValue('yn', r.ops.guestCenter)) },
+      { key: 'appt', label: 'Appointment', html: (r) => (isGuestYes(r) ? guestTimerHtml(r.ops) : '—') },
+      { key: 'gt', label: 'GT Loc', html: (r) => esc(na(r.raw.gtLocation)) },
+      { key: 'veh', label: 'Veh Loc', html: (r) => esc(na(r.raw.vehicleLocation)) },
+      { key: 'guestsent', label: 'إرسال الضيف', html: (r) => (r.canEdit ? editableControl(r.vin, 'guestSentDate', 'date', r.ops.guestSentDate) : readOnlyValue('date', r.ops.guestSentDate)) },
+      { key: 'sig', label: 'استلام التواقيع', html: (r) => (r.canEdit ? editableControl(r.vin, 'signatureReceivedDate', 'date', r.ops.signatureReceivedDate) : readOnlyValue('date', r.ops.signatureReceivedDate)) },
+      { key: 'accsent', label: 'إرسال للحسابات', html: (r) => (r.canEdit ? editableControl(r.vin, 'accountsSentDate', 'date', r.ops.accountsSentDate) : readOnlyValue('date', r.ops.accountsSentDate)) },
+      { key: 'accok', label: 'موافقة الحسابات', html: (r) => (r.canEdit ? editableControl(r.vin, 'accountsApprovalDate', 'date', r.ops.accountsApprovalDate) : readOnlyValue('date', r.ops.accountsApprovalDate)) },
+      { key: 'vin1502', label: 'VIN 1502', html: (r) => (r.canEdit ? editableControl(r.vin, 'vin1502', 'yn', r.ops.vin1502) : readOnlyValue('yn', r.ops.vin1502)) },
+      { key: 'traffic', label: 'ملف المرور', html: (r) => (r.canEdit ? editableControl(r.vin, 'trafficFile', 'yn', r.ops.trafficFile) : readOnlyValue('yn', r.ops.trafficFile)) },
+      { key: 'fees', label: 'Traffic Fees', html: (r) => (r.canEdit ? editableControl(r.vin, 'trafficFeesOps', 'yn', r.ops.trafficFeesOps) : readOnlyValue('yn', r.ops.trafficFeesOps)) },
+      { key: 'ins', label: 'Insurance', html: (r) => (r.canEdit ? editableControl(r.vin, 'insuranceOps', 'yn', r.ops.insuranceOps) : readOnlyValue('yn', r.ops.insuranceOps)) },
+      { key: 'reg', label: 'إصدار الاستمارة', html: (r) => (r.canEdit ? editableControl(r.vin, 'registrationIssueDate', 'date', r.ops.registrationIssueDate) : readOnlyValue('date', r.ops.registrationIssueDate)) },
+      { key: 'city', label: 'مدينة الترحيل', html: (r) => (r.canEdit ? editableControl(r.vin, 'transferCity', 'city', r.ops.transferCity) : readOnlyValue('city', r.ops.transferCity)) },
+      { key: 'carrier', label: 'الناقل', html: (r) => ((r.canEdit && canAssignCarrier()) ? editableControl(r.vin, 'carrier', 'carrier', r.ops.carrier) : readOnlyValue('carrier', r.ops.carrier)) + carrierChangeNote(r.ops) },
+      { key: 'notes', label: 'ملاحظات', html: (r) => (r.canEdit ? editableControl(r.vin, 'notes', 'notes', r.ops.notes) : readOnlyValue('notes', r.ops.notes)) },
+      { key: 'updated', label: 'Updated', html: (r) => esc((r.ops.updatedAt || '').replace('T', ' ').slice(0, 19) || '—') },
+      { key: 'by', label: 'By', html: (r) => esc(na(r.ops.updatedBy)) },
+    ];
+    if (silent && excelMenuOpen()) return;
+    grid.cols = cols;
+    const cfOn = activeLiveColRules().length;
     const frow = `<tr class="live-frow">${cols.map((c) => (c.key === 'num'
-      ? `<th class="col-num"></th>`
-      : `<th class="col-${c.key}${cf[c.key] ? ' is-on' : ''}"><input type="search" class="live-cf" data-cf="${esc(c.key)}" value="${esc(cf[c.key] || '')}" list="my-cf-list" placeholder="Filter…" autocomplete="off" spellcheck="false" title="${esc(`${colPlainLabel(c)}: ${LIVE_CF_HINT}`)}" aria-label="Filter ${esc(colPlainLabel(c))}" /></th>`)).join('')}</tr>`;
+      ? `<th class="col-num">${cfOn ? '<button type="button" class="live-cf-x" data-cf-clear title="Clear column filters">✕</button>' : ''}</th>`
+      : colFilterButton(c))).join('')}</tr>`;
+    const empty = isManager() && state.view !== 'mine' ? 'No VINs on the sheet yet.' : 'No VINs assigned to you yet.';
     table.innerHTML = `<thead><tr class="live-hrow">${cols.map((c) => `<th class="col-${c.key}">${c.raw ? c.label : esc(c.label)}</th>`).join('')}</tr>${frow}</thead>
-      <tbody>${rows.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${isGuestYes(r) ? ' row-guest-exp' : ''}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
+      <tbody>${w.rows.map((r, i) => `<tr class="${statusRowClass(r.ops.opsStatus)}${isGuestYes(r) ? ' row-guest-exp' : ''}${state.selected.has(r.vin) ? ' selected' : ''}" data-vin="${esc(r.vin)}">${cols.map((c) =>
         `<td class="col-${c.key}">${c.html(r, i)}</td>`).join('')}</tr>`).join('')
-        || `<tr><td colspan="${cols.length}">No VINs for this filter.</td></tr>`}</tbody>`;
-    $$('.vin-link', table).forEach((b) => b.addEventListener('click', () => openVin(b.dataset.vin)));
+        || `<tr><td colspan="${cols.length}">${empty}</td></tr>`}</tbody>`;
+    $$('.vin-link', table).forEach((b) => b.addEventListener('dblclick', () => openVin(b.dataset.vin)));
     bindEditableCells(table);
-    bindSelChecks(table, rows);
-    $('#my-pager').textContent = `${w.assigned} VIN(s) · all on this page`;
-    afterGridRender(grids.my, keepCf);
+    bindSelChecks(table, w.rows);
+    $('#my-pager').innerHTML = `<span>${w.assigned} VIN(s) · all on this page</span>`;
     renderSelBars();
+    afterLiveRender(null);
   }
 
   // ——— Appointment (Ruba · Guest Exp = Yes) ———
@@ -1975,8 +2368,6 @@
 
   // ——— VIN drawer ———
   function buildDrawerHtml(v, readOnly) {
-    const statuses = state.meta.statuses || [];
-    const cities = state.meta.transferCities || [];
     const ro = (label, val) => `<div class="field"><label>${esc(label)}</label><input value="${esc(na(val))}" readonly /></div>`;
     const yn = (key, label, val) => (readOnly ? ro(label, val)
       : `<div class="field"><label>${esc(label)}</label>
@@ -2028,18 +2419,23 @@
           ${dt('signatureReceivedDate', 'تاريخ استلام التواقيع من الضيف', v.ops.signatureReceivedDate)}
           ${dt('accountsSentDate', 'تاريخ إرسال الملف للحسابات', v.ops.accountsSentDate)}
           ${dt('accountsApprovalDate', 'تاريخ موافقة الحسابات', v.ops.accountsApprovalDate)}
-          ${sel('opsStatus', 'Status', statuses, v.ops.opsStatus, '—')}
+          ${readOnly
+            ? ro('Status', v.ops.opsStatus)
+            : `<div class="field"><label>Status</label>${String(v.ops.opsStatus || '').trim()
+              ? `${stickyControl(v.vin, 'opsStatus', v.ops.opsStatus)}<p class="hint">Set once. Double-click to change.</p>`
+              : `<select class="cell-edit" data-ops="opsStatus" data-field="opsStatus" data-vin="${esc(v.vin)}">${choiceOptionsHtml('opsStatus', '', true)}</select>`}</div>`}
           ${yn('vin1502', 'Current VIN 1502?', v.ops.vin1502)}
           ${yn('trafficFile', 'ملف المرور', v.ops.trafficFile)}
           ${yn('trafficFeesOps', 'Traffic Fees', v.ops.trafficFeesOps)}
           ${yn('insuranceOps', 'Insurance', v.ops.insuranceOps)}
           ${dt('registrationIssueDate', 'تاريخ إصدار الاستمارة', v.ops.registrationIssueDate)}
           ${readOnly ? ro('مدينة الترحيل', v.ops.transferCity) : `<div class="field"><label>مدينة الترحيل</label>
-            <input list="city-list" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="Search city…" />
-            <datalist id="city-list">${cities.map((c) => `<option value="${esc(c)}"></option>`).join('')}</datalist>
+            <input class="city-find" data-ops="transferCity" value="${esc(v.ops.transferCity || '')}" placeholder="ابحث عن مدينة…" autocomplete="off" spellcheck="false" />
           </div>`}
           ${canAssignCarrier()
-            ? sel('carrier', 'الناقل', (state.meta && state.meta.carriers) || [], v.ops.carrier, '— الناقل —')
+            ? `<div class="field"><label>الناقل</label>${String(v.ops.carrier || '').trim()
+              ? `${stickyControl(v.vin, 'carrier', v.ops.carrier)}<p class="hint">Assigned once. Double-click to reassign.</p>`
+              : `<select class="cell-edit" data-ops="carrier" data-field="carrier" data-vin="${esc(v.vin)}">${choiceOptionsHtml('carrier', '', true)}</select>`}</div>`
             : ro('الناقل', v.ops.carrier)}
           ${carrierChangeNote(v.ops)}
           ${readOnly
@@ -2073,6 +2469,7 @@
     async function savePatch(patch, el) {
       const field = Object.keys(patch)[0];
       const value = patch[field];
+      if (wouldClearSaved(vin, field, value)) return true;
       try {
         markPending(vin, field, value);
         await pushOpsPatch(vin, field, value);
@@ -2095,17 +2492,42 @@
           el.classList.add('is-saved');
           setTimeout(() => el.classList.remove('is-saved'), 1200);
         }
+        return true;
       } catch (err) {
         alert(err.message || 'Save failed — entry kept locally until it syncs');
+        return false;
       }
     }
+    $$('.choice-lock', drawer).forEach(bindChoiceLock);
     $$('[data-ops]', drawer).forEach((el) => {
       const tag = (el.tagName || '').toLowerCase();
       const type = (el.getAttribute('type') || '').toLowerCase();
       const instant = tag === 'select' || type === 'date';
+      if (el.classList.contains('city-find')) {
+        el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value }, el));
+        el.addEventListener('blur', () => {
+          const match = settleCityInput(el, String((v.ops && v.ops.transferCity) || ''));
+          if (match) savePatch({ [el.dataset.ops]: match }, el);
+        });
+        return;
+      }
+      if (stickyField(el.dataset.ops)) {
+        el.addEventListener('change', () => {
+          const value = String(el.value || '').trim();
+          if (!value) return;
+          const field = el.dataset.ops;
+          el.dataset.field = field;
+          el.dataset.vin = el.dataset.vin || vin;
+          savePatch({ [field]: value }, el).then((ok) => {
+            if (ok) lockChoiceEl(el, field, value);
+          });
+        });
+        return;
+      }
       el.addEventListener('change', () => savePatch({ [el.dataset.ops]: el.value }, el));
       if (!instant) {
         el.addEventListener('input', () => {
+          if (wouldClearSaved(vin, el.dataset.ops, el.value)) return;
           markPending(vin, el.dataset.ops, el.value);
           const key = pendKey(vin, el.dataset.ops);
           if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
@@ -2155,6 +2577,10 @@
     }
   }
 
+  async function extractLiveSheet() {
+    await downloadFile('/export/live-sheet', 'DT-Live-Sheet.xlsx');
+  }
+
   async function downloadMonthClose() {
     await downloadFile('/month-close/download', `DT-Month-Close.xlsx`);
     await refreshMonthClose();
@@ -2173,15 +2599,19 @@
     $('#login-screen').style.display = 'none';
     $('#app').classList.add('is-on');
     loadSelection();
-    loadLiveColFilters(grids.live);
-    loadLiveColFilters(grids.my);
-    bindLiveSheetGrid(grids.live);
-    bindLiveSheetGrid(grids.my);
+    loadLiveColFilters();
+    bindLiveSheetGrid('live');
+    bindLiveSheetGrid('my');
     loadDrafts();
     startGuestTick();
-    if (canEditAnyVin()) {
-      $('#live-edit-hint').textContent = `${state.user.name} can edit every VIN directly on this sheet.`;
-    }
+    const extractBtn = $('#extract-live');
+    if (extractBtn) extractBtn.hidden = !(state.user && state.user.id === 'hanouf');
+    const who = canEditAnyVin() ? 'every VIN' : 'your VINs';
+    const lockNote = canAssignCarrier()
+      ? ' Status and الناقل save on the first choice. Double-click either one to change it.'
+      : ' Status saves on the first choice. Double-click it to change.';
+    const hint = $('#live-edit-hint');
+    if (hint) hint.textContent = `${state.user.name} can edit ${who} directly on this sheet.${lockNote}`;
     loadAppointmentBadge().catch(() => {});
     setView('dashboard');
     flushPendingOps().catch(() => {});
@@ -2260,7 +2690,9 @@
   window.addEventListener('beforeunload', () => {
     // Capture + persist drafts synchronously; keepalive fetch runs in pagehide
     $$('.cell-edit').forEach((el) => {
-      if (el.dataset.vin && el.dataset.field) markPending(el.dataset.vin, el.dataset.field, el.value);
+      if (!el.dataset.vin || !el.dataset.field) return;
+      if (wouldClearSaved(el.dataset.vin, el.dataset.field, el.value)) return;
+      markPending(el.dataset.vin, el.dataset.field, el.value);
     });
     persistDrafts();
   });
@@ -2276,6 +2708,11 @@
     flushPendingOps().then(() => refreshView()).catch(() => refreshView());
     refreshMonthClose().catch(() => {});
   });
+  if ($('#extract-live')) {
+    $('#extract-live').addEventListener('click', () => {
+      extractLiveSheet().catch((err) => alert(err.message || 'Could not extract the Live Sheet'));
+    });
+  }
   if ($('#month-close-download')) {
     $('#month-close-download').addEventListener('click', () => {
       downloadMonthClose().catch((err) => alert(err.message || 'Download failed'));
@@ -2301,9 +2738,25 @@
     liveQTimer = setTimeout(() => { state.liveFilters.q = e.target.value.trim(); loadLiveSheet(); }, 250);
   });
   $('#live-month').addEventListener('change', (e) => { state.liveFilters.month = e.target.value; loadLiveSheet(); });
-  $('#live-employee').addEventListener('change', (e) => { state.liveFilters.employee = e.target.value; loadLiveSheet(); });
-  $('#live-status').addEventListener('change', (e) => { state.liveFilters.status = e.target.value; loadLiveSheet(); });
-  $('#live-carrier').addEventListener('change', (e) => { state.liveFilters.carrier = e.target.value; loadLiveSheet(); });
+  document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('.live-cf-btn, #excel-cf-menu')) closeExcelFilter();
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.live-cf-btn, #excel-cf-menu')) closeExcelFilter();
+    const btn = e.target.closest('.multi-filter-btn');
+    if (btn) {
+      const menu = btn.parentElement.querySelector('.multi-filter-menu');
+      const open = menu && menu.dataset.open === '1';
+      $$('.multi-filter-menu').forEach((m) => { m.hidden = true; m.dataset.open = ''; });
+      if (menu && !open) {
+        menu.hidden = false;
+        menu.dataset.open = '1';
+      }
+      return;
+    }
+    if (e.target.closest('.multi-filter')) return;
+    $$('.multi-filter-menu').forEach((m) => { m.hidden = true; m.dataset.open = ''; });
+  });
   $('#live-refresh').addEventListener('click', () => loadLiveSheet());
 
   let myQTimer;
@@ -2311,13 +2764,9 @@
     clearTimeout(myQTimer);
     myQTimer = setTimeout(() => { state.myFilters.q = e.target.value.trim(); loadMy(); }, 250);
   });
-  $('#my-employee').addEventListener('change', (e) => { state.myFilters.employee = e.target.value; loadMy(); });
-  $('#my-status').addEventListener('change', (e) => { state.myFilters.status = e.target.value; loadMy(); });
   $('#my-clear').addEventListener('click', () => {
-    state.myFilters = { q: '', status: '', employee: '' };
+    state.myFilters = { q: '', status: [] };
     $('#my-q').value = '';
-    $('#my-employee').value = '';
-    $('#my-status').value = '';
     loadMy();
   });
   const fail = (err) => alert(err.message || 'Failed');

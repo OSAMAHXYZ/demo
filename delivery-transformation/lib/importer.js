@@ -7,6 +7,7 @@ const {
   OPS_HEADER_MAP,
   RAW_COL,
 } = require('./constants');
+const { selectSalesRawItems } = require('./rtl-inventory');
 
 /** Date columns match headers exactly — "date" must not grab "Delivery Date" / "Proforma-Reg". */
 const EXACT_ONLY = new Set(['date', 'proformaDate']);
@@ -173,8 +174,10 @@ function opsFromRow(row, idx) {
   const ops = {};
   ['guestSentDate', 'signatureReceivedDate', 'accountsSentDate', 'accountsApprovalDate', 'registrationIssueDate']
     .forEach((f) => { ops[f] = normalizeDate(get(f)); });
-  ['vin1502', 'trafficFile', 'trafficFeesOps', 'insuranceOps']
+  ['vin1502', 'trafficFile', 'trafficFeesOps', 'insuranceOps', 'guestCenter']
     .forEach((f) => { ops[f] = normalizeYesNo(get(f)); });
+  ops.guestCollectAt = cellString(get('guestCollectAt'));
+  ops.guestCollectNote = cellString(get('guestCollectNote'));
   ops.opsStatus = normalizeStatus(get('opsStatus'));
   ops.notes = cellString(get('notes'));
   ops.transferCity = cellString(get('transferCity'));
@@ -188,7 +191,9 @@ function opsFromRow(row, idx) {
  */
 function parseDeliverySheet(buffer) {
   let best = { sheet: '', items: [] };
+  let liveSheet = null;
   readSheets(buffer).forEach(({ name, rows }) => {
+    if (/^(printed vins|assignments)$/i.test(String(name || '').trim())) return;
     const h = findHeaderRow(rows);
     if (h === -1) return;
     const headers = rows[h].map(cellString);
@@ -202,15 +207,18 @@ function parseDeliverySheet(buffer) {
       if (!looksLikeVin(vin)) return;
       items.push({ vin, raw: rawFromRow(row, rawIdx, HEADER_MAP), ops: opsFromRow(row, opsIdx) });
     });
-    if (items.length > best.items.length) best = { sheet: name, items };
+    const parsed = { sheet: name, items };
+    if (/live\s*sheet/i.test(name) && items.length) liveSheet = parsed;
+    if (items.length > best.items.length) best = parsed;
   });
-  return best;
+  return liveSheet || best;
 }
 
 /** Sales Raw → [{ vin, raw }] (header aliases, or the fixed A/B/C/K/N letter layout). */
 function parseSalesRaw(buffer) {
   let best = { sheet: '', layout: '', items: [], duplicates: 0 };
   readSheets(buffer).forEach(({ name, rows }) => {
+    if (/^(printed vins|assignments|live sheet)$/i.test(String(name || '').trim())) return;
     let items = [];
     let layout = '';
     if (isSalesRawLetterLayout(rows)) {
@@ -223,7 +231,10 @@ function parseSalesRaw(buffer) {
         Object.entries(RAW_COL).forEach(([field, col]) => {
           if (field === 'vin') return;
           if (field === 'phone') raw[field] = normalizePhone(row[col]);
-          else if (field === 'proformaDate' || field === 'invoiceDate') raw[field] = normalizeDate(row[col]);
+          else if (field === 'proformaDate' || field === 'invoiceDate') {
+            raw[field] = normalizeDate(row[col]);
+            if (field === 'proformaDate') raw.proformaInvalid = cellString(row[col]) !== '' && !raw[field];
+          }
           else if (field === 'leadTime') raw[field] = parseLeadTime(row[col]);
           else raw[field] = cellString(row[col]);
         });
@@ -241,30 +252,63 @@ function parseSalesRaw(buffer) {
         if (!looksLikeVin(vin)) return;
         const raw = rawFromRow(row, idx, HEADER_MAP);
         delete raw.pic;
-        if (idx.proformaDate == null) raw.proformaDate = normalizeDate(row[RAW_COL.proformaDate]);
+        if (idx.proformaDate != null) {
+          raw.proformaInvalid = cellString(row[idx.proformaDate]) !== '' && !raw.proformaDate;
+        }
+        if (idx.proformaDate == null) {
+          raw.proformaDate = normalizeDate(row[RAW_COL.proformaDate]);
+          raw.proformaInvalid = cellString(row[RAW_COL.proformaDate]) !== '' && !raw.proformaDate;
+        }
         if (idx.invoiceDate == null) raw.invoiceDate = normalizeDate(row[RAW_COL.invoiceDate]);
         if (idx.leadTime == null) raw.leadTime = parseLeadTime(row[RAW_COL.leadTime]);
         items.push({ vin, raw });
       });
     }
-    const unique = [];
-    const seen = new Set();
-    for (let i = items.length - 1; i >= 0; i -= 1) {
-      if (seen.has(items[i].vin)) continue;
-      seen.add(items[i].vin);
-      unique.push(items[i]);
+    const picked = selectSalesRawItems(items);
+    if (picked.items.length > best.items.length) {
+      best = {
+        sheet: name,
+        layout,
+        items: picked.items,
+        duplicates: picked.duplicates,
+        duplicatePicks: picked.duplicatePicks,
+        invalidDates: picked.invalid,
+      };
     }
-    unique.reverse();
-    const dupes = items.length - unique.length;
-    if (unique.length > best.items.length) best = { sheet: name, layout, items: unique, duplicates: dupes };
   });
   return best;
+}
+
+function readNamedSheet(wb, re) {
+  const name = (wb.SheetNames || []).find((n) => re.test(String(n || '').trim()));
+  if (!name) return null;
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '', raw: false });
+  return rows.filter((row) => Object.values(row).some((v) => String(v == null ? '' : v).trim() !== ''));
+}
+
+/** Printed VINs + Live Sheet + Assignments extract. Null when this is the full-data file. */
+function parseReadableWorkbook(buffer) {
+  if (!buffer || !buffer.length) return null;
+  let wb;
+  try {
+    wb = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  } catch {
+    return null;
+  }
+  if ((wb.SheetNames || []).some((n) => /^manifest$/i.test(String(n || '').trim()))) return null;
+  const live = readNamedSheet(wb, /^live sheet$/i);
+  const printed = readNamedSheet(wb, /^printed vins$/i);
+  const assignments = readNamedSheet(wb, /^assignments$/i);
+  if (!live && !printed && !assignments) return null;
+  return { live: live || [], printed: printed || [], assignments: assignments || [] };
 }
 
 module.exports = {
   normVin,
   normalizeDate,
+  normalizeStatus,
   parseLeadTime,
   parseDeliverySheet,
   parseSalesRaw,
+  parseReadableWorkbook,
 };

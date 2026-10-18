@@ -7,45 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css?v=20261005alerts" />
-  <script>
-    if (new URLSearchParams(location.search).get("view") === "1") {
-      document.documentElement.classList.add("dtx-view");
-    }
-  </script>
-  <style>
-    html.dtx-view .nav-links a,
-    html.dtx-view .tab-btn[data-tab="weights"],
-    html.dtx-view .tab-btn[data-tab="schedule"],
-    html.dtx-view .tab-btn[data-tab="vins"],
-    html.dtx-view #xls-live,
-    html.dtx-view #xls-admin,
-    html.dtx-view #xls-all,
-    html.dtx-view #xls-all-upload,
-    html.dtx-view #logout-btn,
-    html.dtx-view #who,
-    html.dtx-view #backup-card,
-    html.dtx-view #full-excel-card,
-    html.dtx-view #tab-weights,
-    html.dtx-view #tab-schedule,
-    html.dtx-view #tab-vins,
-    html.dtx-view #pdf-win,
-    html.dtx-view .pdf-add { display: none !important; }
-    html.dtx-view body.vsnd-screen .topnav .brand span { display: block; }
-    html.dtx-view .topnav {
-      background: #fff;
-      border-bottom: 1px solid #e6edf5;
-    }
-    html.dtx-view .tab-btn {
-      border-radius: 999px;
-      padding: 8px 16px;
-    }
-    html.dtx-view #collector-gate {
-      background:
-        radial-gradient(900px 420px at 10% -10%, rgba(235, 10, 30, 0.12), transparent 55%),
-        linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
-    }
-  </style>
+  <link rel="stylesheet" href="admin.css?v=20261010d" />
 </head>
 <body>
   <div class="collector-gate" id="collector-gate">
@@ -79,14 +41,18 @@
       <button type="button" class="tab-btn" data-tab="ops">Ops</button>
       <button type="button" class="tab-btn" data-tab="weights">KPI weights</button>
       <button type="button" class="tab-btn" data-tab="schedule">SLA</button>
+      <button type="button" class="tab-btn" data-tab="assign">Auto assign</button>
+      <button type="button" class="tab-btn" data-tab="give">Assignment</button>
       <button type="button" class="tab-btn" data-tab="vins">VIN tools</button>
+      <button type="button" class="tab-btn" data-tab="org">Cities &amp; Companies</button>
       <a href="coordinator.html">Coordinator</a>
       <a href="employee.html">Employee</a>
       <a href="inventory-managment.html">Inventory</a>
+      <button type="button" class="tab-btn" data-tab="org">Cities &amp; Companies</button>
       <a href="attendance.html" target="_blank" rel="noopener">Attendance</a>
     </nav>
     <div class="top-right">
-      <button type="button" class="btn" id="xls-live">Extract Live Sheet</button>
+      <button type="button" class="btn" id="xls-live">Extract printed + sheet + assignments</button>
       <button type="button" class="btn" id="xls-admin">Extract admin Excel</button>
       <button type="button" class="btn" id="xls-all">Extract all data</button>
       <button type="button" class="btn" id="xls-all-upload">Upload all data</button>
@@ -162,15 +128,15 @@
 
       <div class="vsnd-bottom-row">
         <div class="vsnd-panel" id="vsnd-fleet">
-          <h3>Schedule alerts <span class="hint" id="vsnd-alerts-meta" style="font-weight:600">· live from VSND</span></h3>
-          <div class="vsnd-panel-body vsnd-alerts-panel" id="vsnd-alerts-body">
+          <h3>Schedule alerts <span class="hint" id="vsnd-alerts-meta" style="font-weight:600">· live SLA</span></h3>
+          <div class="vsnd-panel-body" id="vsnd-alerts-body">
             <p class="chart-empty">No schedule alerts</p>
           </div>
         </div>
         <div class="vsnd-panel" id="vsnd-days-sales">
           <h3>
-            Printed cities <span class="hint" style="font-weight:600">· coordinator prints</span>
-            <button type="button" class="btn vsnd-wide-btn" id="vsnd-dts-more" title="Printed VINs by city">More Details</button>
+            Company / city <span class="hint" style="font-weight:600">· coordinator prints</span>
+            <button type="button" class="btn vsnd-wide-btn" id="vsnd-city-more" title="Open company cities">More</button>
           </h3>
           <div class="vsnd-panel-body" id="vsnd-aging-dist-body"></div>
         </div>
@@ -195,26 +161,27 @@
       <p class="sync-line">Live · last sync <span id="dash-sync">—</span></p>
 
       <div class="card backup-card" id="backup-card">
-        <h2>Data backup — employee + coordinator</h2>
-        <p class="hint">One snapshot is saved automatically every 6 hours. Restore replaces Live Sheet, Sales Raw, attendance, and prints on employee.html and coordinator.html with that last scan.</p>
+        <h2>Data backup — all program data</h2>
+        <p class="hint">A full snapshot is saved automatically every 10 minutes: Live Sheet, assignments, coordinator prints, attendance, audit, and settings. Download keeps that saved copy. Restore puts that copy back on employee.html and coordinator.html.</p>
         <div class="backup-meta" id="backup-meta">Last saved — · next scan —</div>
         <div class="toolbar" style="margin-top:10px">
           <button type="button" class="btn" id="backup-save">Save snapshot now</button>
+          <button type="button" class="btn" id="backup-download">Download saved snapshot</button>
           <button type="button" class="btn-primary" id="backup-restore">Restore last data</button>
           <span class="hint" id="backup-hint"></span>
         </div>
       </div>
 
       <div class="card" id="full-excel-card" style="margin-bottom:14px">
-        <h2>Excel — all data</h2>
+        <h2>Excel — printed VINs, Live Sheet, assignments</h2>
         <p class="hint">
-          Extract every Live Sheet VIN (vehicle fields and employee entries), pending assignment,
-          attendance, delivery-note print, audit row, target, vacation, SLA, KPI weight, company, and city.
-          Upload that same file to make employee.html and coordinator.html match it.
-          The other Excel buttons are reports and cannot be uploaded back.
+          Extract three sheets Excel can open: printed VIN details from the coordinator, the Live Sheet, and assignments
+          (who has each VIN, plus VINs still pending). Extract all data saves every record.
+          Upload either file and the system reads it. A blank cell does not clear a saved value.
         </p>
         <div class="toolbar" style="margin-top:10px">
-          <button type="button" class="btn-primary" id="xls-all-card">Extract all data</button>
+          <button type="button" class="btn-primary" id="xls-data">Extract printed + sheet + assignments</button>
+          <button type="button" class="btn" id="xls-all-card">Extract all data</button>
           <button type="button" class="btn" id="xls-all-pick">Upload Excel</button>
           <input type="file" id="xls-all-file" accept=".xlsx,.xls" hidden />
           <span class="hint" id="xls-all-hint"></span>
@@ -287,6 +254,72 @@
           <div class="ekpi-breakdown" id="ekpi-breakdown" hidden></div>
           <div class="ekpi-detail" id="ekpi-detail" hidden></div>
         </div>
+      </div>
+    </section>
+
+    <section class="panel-tab" id="tab-assign">
+      <section class="hero">
+        <h1>Auto assign</h1>
+        <p>Sales advisor rules run first. A sales advisor that is not listed goes only to Hanouf. Bank orders stay off the employees you block. Hanouf is not in the even split.</p>
+      </section>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Who can receive auto assign</h2>
+        <p class="hint">Only checked employees are used when VINs are split evenly. A sales advisor rule can still send VINs to someone who is not checked. Ruba stays off the even split and only receives the sales advisors listed below.</p>
+        <div id="aa-employees" class="aa-checks"></div>
+        <p class="hint" style="margin-top:10px">Only the listed sales advisors — leave the even split out:</p>
+        <div id="aa-only" class="aa-checks"></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Sales types auto assign may split</h2>
+        <p class="hint">Unchecked sales types stay unassigned unless a sales advisor rule matches.</p>
+        <div id="aa-types" class="aa-checks"></div>
+        <div class="toolbar" style="margin-top:10px">
+          <input id="aa-type-new" placeholder="Add a sales type…" />
+          <button type="button" class="btn" id="aa-type-add">Add</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Sales advisor → employee</h2>
+        <p class="hint">If the VIN’s S/A matches, it goes to that employee. A sales advisor that is not listed goes only to Hanouf.</p>
+        <div class="toolbar">
+          <input id="aa-advisor" list="aa-advisor-list" placeholder="Sales advisor" />
+          <datalist id="aa-advisor-list"></datalist>
+          <select id="aa-advisor-emp"></select>
+          <button type="button" class="btn" id="aa-advisor-add">Add rule</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="data">
+            <thead><tr><th>Sales advisor</th><th>Assign to</th><th></th></tr></thead>
+            <tbody id="aa-advisor-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Do not assign this sales type to</h2>
+        <p class="hint">A bank order is not given to a blocked employee, including the leftover employee. Other sales types are not affected.</p>
+        <div class="toolbar">
+          <input id="aa-ex-type" list="aa-type-list" placeholder="Sales type, e.g. bank" />
+          <datalist id="aa-type-list"></datalist>
+          <select id="aa-ex-emp"></select>
+          <button type="button" class="btn" id="aa-ex-add">Block</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="data">
+            <thead><tr><th>Sales type</th><th>Do not assign to</th><th></th></tr></thead>
+            <tbody id="aa-exclude-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>If still not assigned</h2>
+        <p class="hint">Hanouf receives every VIN whose sales advisor is not listed. If that sales type is blocked or she is on vacation, the even split runs, then this employee.</p>
+        <div class="toolbar">
+          <select id="aa-fallback"></select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn-primary" id="aa-save">Save auto assign</button>
+        <span class="hint" id="aa-hint"></span>
       </div>
     </section>
 
@@ -380,6 +413,38 @@
       </div>
     </section>
 
+    <section class="panel-tab" id="tab-give">
+      <section class="hero">
+        <h1>Assignment</h1>
+        <p>Type VIN numbers, choose an employee, and they are assigned immediately. Product, customer, sales type, and the other Sales Raw fields are copied onto the VIN, including one that is already assigned.</p>
+      </section>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Assign VINs</h2>
+        <form id="give-form" class="give-form">
+          <div class="field">
+            <label for="give-vins">VIN numbers</label>
+            <textarea id="give-vins" class="give-box" rows="6" placeholder="One VIN per line, or separated by commas" required></textarea>
+          </div>
+          <div class="field">
+            <label for="give-employee">Assign to</label>
+            <select id="give-employee" required></select>
+          </div>
+          <button type="submit" class="btn-primary" style="width:auto">Assign</button>
+          <span class="hint" id="give-hint"></span>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Waiting from Sales Raw</h2>
+        <p class="hint">Choosing an employee assigns that VIN immediately.</p>
+        <div class="table-wrap">
+          <table class="data" id="give-pending">
+            <thead><tr><th>VIN</th><th>Sales type</th><th>S/A</th><th>Proforma</th><th>Suggested</th><th>Assign to</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="panel-tab" id="tab-vins">
       <section class="hero">
         <h1>All delivery details</h1>
@@ -396,7 +461,7 @@
 
       <div class="card" style="margin-bottom:14px">
         <h2>Add VIN to Live Sheet</h2>
-        <p class="hint">New VINs appear for the coordinator and the assigned employee.</p>
+        <p class="hint">New VINs appear for the coordinator and the assigned employee. A last-month proforma date can be assigned here, and the VIN stays on the sheet.</p>
         <form id="add-form" class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin:0">
           <div class="field"><label>VIN *</label><input name="vin" required /></div>
           <div class="field"><label>Product</label><input name="product" /></div>
@@ -407,6 +472,7 @@
           <div class="field"><label>Phone</label><input name="phone" /></div>
           <div class="field"><label>GT Loc</label><input name="gtLocation" /></div>
           <div class="field"><label>Veh Loc</label><input name="vehicleLocation" /></div>
+          <div class="field"><label>Proforma date</label><input name="proformaDate" type="date" title="Use last month’s date when the VIN is from last month" /></div>
           <div class="field"><label>Employee</label><select name="assignedEmployeeId" id="add-employee"></select></div>
           <div class="field" style="align-self:end"><button type="submit" class="btn-primary" style="width:100%">Add VIN</button></div>
         </form>
@@ -416,6 +482,15 @@
         <h2>Live Sheet — full details</h2>
         <div class="toolbar">
           <input type="search" id="search" placeholder="Search VIN / order / product / employee…" />
+          <label class="month-filter-label">Month <input type="month" id="vin-month" title="Leave empty for every month, including last month" /></label>
+          <div class="multi-filter" id="vin-employee-filter">
+            <button type="button" class="multi-filter-btn" data-empty="All employees">All employees</button>
+            <div class="multi-filter-menu" hidden></div>
+          </div>
+          <div class="multi-filter" id="vin-status-filter">
+            <button type="button" class="multi-filter-btn" data-empty="All statuses">All statuses</button>
+            <div class="multi-filter-menu" hidden></div>
+          </div>
           <button type="button" class="btn" id="refresh-btn">Refresh</button>
           <span class="hint" id="live-meta"></span>
         </div>
@@ -425,6 +500,54 @@
       <div class="card">
         <h2>Audit log</h2>
         <div class="table-wrap" style="max-height:360px"><table class="data" id="audit-table"></table></div>
+      </div>
+    </section>
+
+    <section class="panel-tab" id="tab-org">
+      <section class="hero">
+        <h1>Cities &amp; Companies</h1>
+        <p>Organizational records only. Adding a city or company does not make a VIN eligible for Stock In.</p>
+      </section>
+      <p class="hint" id="org-msg"></p>
+      <div class="org-grid">
+        <form class="card" id="org-city-form">
+          <h2>City</h2>
+          <input type="hidden" name="id" />
+          <div class="field"><label>City name</label><input name="name" required /></div>
+          <div class="field"><label>Country</label><input name="country" value="Saudi Arabia" /></div>
+          <div class="field"><label>Status</label>
+            <select name="status"><option value="active">Active</option><option value="inactive">Inactive</option></select>
+          </div>
+          <button type="submit" class="btn-primary">Save city</button>
+        </form>
+        <form class="card" id="org-company-form">
+          <h2>Company</h2>
+          <input type="hidden" name="id" />
+          <div class="field"><label>Company name</label><input name="name" required /></div>
+          <div class="field"><label>Company code</label><input name="code" /></div>
+          <div class="field"><label>City</label><select name="cityId"><option value="">No city</option></select></div>
+          <div class="field"><label>Status</label>
+            <select name="status"><option value="active">Active</option><option value="inactive">Inactive</option></select>
+          </div>
+          <button type="submit" class="btn-primary">Save company</button>
+        </form>
+      </div>
+      <div class="toolbar" style="margin-top:12px">
+        <input type="search" id="org-q" placeholder="Search cities and companies" />
+        <select id="org-status">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <button type="button" class="btn" id="org-refresh">Refresh</button>
+      </div>
+      <div class="card">
+        <h2>Cities</h2>
+        <div class="table-wrap"><table class="data" id="org-cities"></table></div>
+      </div>
+      <div class="card">
+        <h2>Companies</h2>
+        <div class="table-wrap"><table class="data" id="org-companies"></table></div>
       </div>
     </section>
   </main>
@@ -465,7 +588,7 @@
   <script src="../scripts/muthakara-field-layout.js"></script>
   <script src="../scripts/check-note-field-layout.js"></script>
   <script src="shared.js?v=20261003scope2"></script>
-  <script src="live.js?v=20260923c14"></script>
-  <script src="admin.js?v=20261007view"></script>
+  <script src="live.js?v=20261010a"></script>
+  <script src="admin.js?v=20261010f"></script>
 </body>
 </html>

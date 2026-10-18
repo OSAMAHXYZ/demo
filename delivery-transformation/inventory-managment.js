@@ -15,6 +15,9 @@
     view: 'all',
     q: '',
     pool: [],
+    rtl: [],
+    org: { cities: [], companies: [] },
+    sync: null,
     selected: new Set(),
     poll: null,
     user: null,
@@ -121,6 +124,9 @@
 
   function applyPayload(data) {
     state.pool = data.pool || [];
+    state.rtl = (data.rtl && data.rtl.rows) || [];
+    state.sync = (data.rtl && data.rtl.sync) || null;
+    state.org = data.org || { cities: [], companies: [] };
     const keep = new Set(state.pool.map((r) => r.vin));
     state.selected.forEach((vin) => { if (!keep.has(vin)) state.selected.delete(vin); });
     const extras = isRuba()
@@ -137,6 +143,7 @@
       ...(data.users || []).map((u) => kpi(u.name, u.stockIn != null ? u.stockIn : (Array.isArray(u.stock) ? u.stock.length : (u.stock || 0)))),
     ].join('');
     render();
+    renderRtl();
   }
 
   function kpi(label, n) {
@@ -318,6 +325,104 @@
     noteGuestExp(data);
   }
 
+  function fillSelect(id, values, placeholder) {
+    const el = $(id);
+    if (!el) return;
+    const current = el.value;
+    const opts = [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    el.innerHTML = `<option value="">${esc(placeholder)}</option>`
+      + opts.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if (opts.includes(current)) el.value = current;
+  }
+
+  function rtlFiltered() {
+    const q = ($('rtl-q') && $('rtl-q').value || '').trim().toLowerCase();
+    const stock = ($('rtl-stock') && $('rtl-stock').value) || '';
+    const location = ($('rtl-location') && $('rtl-location').value) || '';
+    const city = ($('rtl-city') && $('rtl-city').value) || '';
+    const company = ($('rtl-company') && $('rtl-company').value) || '';
+    const sales = ($('rtl-sales') && $('rtl-sales').value) || '';
+    const day = ($('rtl-day') && $('rtl-day').value) || '';
+    return state.rtl.filter((r) => {
+      if (stock && r.stockStatus !== stock) return false;
+      if (location && r.location !== location) return false;
+      if (city && r.city !== city) return false;
+      if (company && r.company !== company) return false;
+      if (sales && r.salesRawStatus !== sales) return false;
+      if (day) {
+        const stamp = String(r.snapshotAt || r.movementAt || '').slice(0, 10);
+        if (stamp !== day) return false;
+      }
+      if (!q) return true;
+      const hay = [r.vin, r.product, r.specs, r.employee, r.location, r.city, r.company, r.stockStatus].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function renderRtl() {
+    const sync = $('rtl-sync');
+    if (sync) {
+      const last = state.sync;
+      sync.textContent = !last
+        ? 'Waiting for the next Admin Push to live.'
+        : (last.ok === false
+          ? `Sync failed: ${last.message || last.error || 'not confirmed'}`
+          : `Last sync ${last.at ? new Date(last.at).toLocaleString() : ''} · ${last.uniqueVins || 0} VINs · matched ${last.matched || 0} · duplicates ${last.duplicates || 0} · rejected ${last.rejected || 0}${last.duplicate ? ' · already applied' : ''}`);
+    }
+    fillSelect('rtl-stock', state.rtl.map((r) => r.stockStatus), 'Stock status');
+    fillSelect('rtl-location', state.rtl.map((r) => r.location), 'Location');
+    const cities = (state.org.cities || []).map((c) => c.name).concat(state.rtl.map((r) => r.city));
+    const companies = (state.org.companies || []).map((c) => c.name).concat(state.rtl.map((r) => r.company));
+    fillSelect('rtl-city', cities, 'City');
+    fillSelect('rtl-company', companies, 'Company');
+    fillSelect('rtl-sales', state.rtl.map((r) => r.salesRawStatus).filter((v) => v && v !== '—'), 'Proforma / invoice / delivered');
+    const rows = rtlFiltered().slice(0, 500);
+    const empty = $('rtl-empty');
+    if (empty) empty.classList.toggle('hidden', rows.length > 0);
+    const body = $('rtl-rows');
+    if (!body) return;
+    body.innerHTML = rows.map((r) => `<tr data-rtl="${esc(r.vin)}" class="rtl-row">
+      <td><strong>${esc(r.vin)}</strong></td>
+      <td>${esc(r.product || '—')}${r.specs ? `<div class="hint">${esc(r.specs)}</div>` : ''}</td>
+      <td>${esc(r.location || '—')}</td>
+      <td>${esc(r.employee || '—')}</td>
+      <td>${esc(r.city || '—')}</td>
+      <td>${esc(r.company || '—')}</td>
+      <td>${esc(r.stockStatus || '—')}</td>
+      <td>${esc(r.deliveryNoteStatus || '—')}${r.deliveryNoteNumber ? ` · ${esc(r.deliveryNoteNumber)}` : ''}</td>
+      <td>${esc(r.salesRawStatus || '—')}</td>
+      <td>${esc((r.updatedAt || '').replace('T', ' ').slice(0, 16) || '—')}</td>
+    </tr>`).join('');
+  }
+
+  function openRtlDetail(vin) {
+    const row = state.rtl.find((r) => r.vin === vin);
+    const modal = $('rtl-detail');
+    if (!row || !modal) return;
+    $('rtl-detail-title').textContent = row.vin;
+    $('rtl-detail-reason').textContent = row.reason || '';
+    const pairs = [
+      ['Model', row.product],
+      ['Specifications', row.specs],
+      ['Location', row.location],
+      ['Employee', row.employee],
+      ['City', row.city],
+      ['Company', row.company],
+      ['Stock', row.stockStatus],
+      ['Why available or unavailable', row.reason],
+      ['Delivery note', row.deliveryNoteStatus || 'None'],
+      ['Delivery note number', row.deliveryNoteNumber],
+      ['Sales Raw', row.salesRawStatus],
+      ['Snapshot', row.snapshotAt],
+      ['Last movement', row.movementAt],
+      ['Source', row.source],
+      ['Warnings', (row.warnings || []).join(', ')],
+    ];
+    $('rtl-detail-body').innerHTML = pairs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v || '—')}</dd>`).join('');
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
   function bind() {
     $('login-btn').addEventListener('click', login);
     $('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
@@ -327,6 +432,26 @@
       state.q = $('search').value;
       render();
     });
+    ['rtl-q', 'rtl-stock', 'rtl-location', 'rtl-city', 'rtl-company', 'rtl-sales', 'rtl-day'].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener('input', renderRtl);
+      el.addEventListener('change', renderRtl);
+    });
+    const rtlBody = $('rtl-rows');
+    if (rtlBody) {
+      rtlBody.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-rtl]');
+        if (tr) openRtlDetail(tr.dataset.rtl);
+      });
+    }
+    const rtlClose = $('rtl-detail-close');
+    if (rtlClose) {
+      rtlClose.addEventListener('click', () => {
+        $('rtl-detail').classList.add('hidden');
+        $('rtl-detail').setAttribute('aria-hidden', 'true');
+      });
+    }
     $('view-tabs').addEventListener('click', (e) => {
       const btn = e.target.closest('.tab');
       if (!btn) return;

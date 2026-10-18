@@ -5257,7 +5257,7 @@ function pushLexusB2c(prevBuf, prevName, buf, name, slot = 'lexusB2c') {
   return { buffer: merged.buffer, name: name.replace(/\.(csv|xls|xlsx|xlsm)$/i, '') + '.xlsx', summary: merged.summary };
 }
 
-app.post('/api/report-sheet/push', (req, res) => {
+app.post('/api/report-sheet/push', async (req, res) => {
   try {
     ensureReportSheetDirs();
     ensureRtlDayRollover();
@@ -5287,6 +5287,7 @@ app.post('/api/report-sheet/push', (req, res) => {
     const fileNames = { ...(prevMeta.fileNames || {}) };
     let rtlSnapshot = null;
     let ytdPushSnapshot = null;
+    let deliveryRtl = null;
 
     for (const id of REPORT_SLOT_IDS) {
       const entry = filesIn[id];
@@ -5336,6 +5337,54 @@ app.post('/api/report-sheet/push', (req, res) => {
         } catch (snapErr) {
           console.error('[report-sheet/push] RTL snapshot', snapErr);
         }
+        try {
+          deliveryRtl = deliveryTransformation.syncFromRtlPush({
+            buffer: buf,
+            fileName: name,
+            pushId: rtlSnapshot && rtlSnapshot.id,
+            at,
+            source: 'admin-push',
+            fileDate: todayIsoRiyadh(),
+          });
+        } catch (syncErr) {
+          console.error('[report-sheet/push] delivery RTL sync', syncErr);
+          deliveryRtl = { ok: false, error: syncErr.message || 'Delivery Transformation sync failed' };
+        }
+      }
+    }
+
+    const remoteUrl = String(process.env.DELIVERY_RTL_SYNC_URL || '').trim();
+    const remoteSecret = String(process.env.DELIVERY_RTL_SYNC_SECRET || '').trim();
+    if (deliveryRtl && deliveryRtl.ok && remoteUrl && remoteSecret && filesIn.rtl && filesIn.rtl.base64) {
+      try {
+        const remoteRes = await fetch(remoteUrl, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-rtl-sync-secret': remoteSecret,
+          },
+          body: JSON.stringify({
+            base64: filesIn.rtl.base64,
+            fileName: fileNames.rtl,
+            pushId: rtlSnapshot && rtlSnapshot.id,
+            at,
+            fileDate: todayIsoRiyadh(),
+            source: 'admin-push',
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const remoteBody = await remoteRes.json().catch(() => ({}));
+        deliveryRtl = {
+          ...deliveryRtl,
+          remote: remoteRes.ok
+            ? { ok: true, status: remoteRes.status, uniqueVins: remoteBody.uniqueVins }
+            : { ok: false, status: remoteRes.status, error: remoteBody.error || remoteBody.message || 'Remote sync was not confirmed' },
+        };
+      } catch (remoteErr) {
+        deliveryRtl = {
+          ...deliveryRtl,
+          remote: { ok: false, error: remoteErr.message || 'Remote RTL sync failed' },
+        };
       }
     }
 
@@ -5376,6 +5425,7 @@ app.post('/api/report-sheet/push', (req, res) => {
       lexusB2c: b2cMerge.lexusB2c,
       toyotaB2c: b2cMerge.toyotaB2c,
       ytdSnapshot: ytdPushSnapshot,
+      deliveryRtl,
       rtlDaily: rtlSnapshot
         ? {
           id: rtlSnapshot.id,

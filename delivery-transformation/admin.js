@@ -6,26 +6,6 @@
   migrateCollectorSession();
 
   const $ = (id) => document.getElementById(id);
-  const VIEW_MODE = new URLSearchParams(location.search).get('view') === '1';
-
-  function applyViewChrome() {
-    if (!VIEW_MODE) return;
-    document.documentElement.classList.add('dtx-view');
-    document.body.classList.add('dtx-view');
-    document.title = 'Delivery — Toyota';
-    const brand = document.querySelector('#collector-app .brand span');
-    if (brand) brand.textContent = 'Delivery';
-    const opsHero = document.querySelector('#tab-ops .hero p');
-    if (opsHero) opsHero.textContent = 'Attendance, delivery notes, and employee performance. Pick a month, then open a company or employee.';
-    const gateH = document.querySelector('#collector-gate h1');
-    const gateP = document.querySelector('#collector-gate p');
-    if (gateH) gateH.textContent = 'Delivery';
-    if (gateP) gateP.textContent = 'View only · choose a month, then open VSND or Operations';
-    const gateBtn = $('collector-btn');
-    if (gateBtn) gateBtn.textContent = 'Open delivery';
-  }
-
-  applyViewChrome();
 
   function isCollector(user) {
     return !!(user && (user.id === 'collector' || user.role === 'admin'));
@@ -34,7 +14,6 @@
   function showCollector(user) {
     $('collector-gate').classList.add('hidden');
     $('collector-app').classList.remove('hidden');
-    applyViewChrome();
     startApp(user);
   }
 
@@ -73,9 +52,6 @@
       } catch {
         clearSession();
       }
-    }
-    if (VIEW_MODE && $('collector-app').classList.contains('hidden')) {
-      await collectorLogin();
     }
   }());
 
@@ -203,7 +179,7 @@
     const next = backup.nextAt ? fmtWhen(backup.nextAt) : '—';
     const snap = backup.snapshot || {};
     const live = backup.live || {};
-    meta.textContent = `Last saved ${last} · next scan ${next} · snapshot ${snap.vehicles || 0} VINs · live ${live.vehicles || 0} VINs`;
+    meta.textContent = `Last saved ${last} · next scan ${next} · snapshot ${snap.vehicles || 0} VINs, ${snap.prints || 0} prints, ${snap.attendance || 0} attendance · live ${live.vehicles || 0} VINs`;
   }
 
   function renderAttendance() {
@@ -906,8 +882,8 @@
       </div>`, { wide: true });
   }
 
-  function openCompanyCities(name) {
-    const c = (dash.companyCities || []).find((x) => x.company === name);
+  function openCompanyCities(name, source) {
+    const c = source || (dash.companyCities || []).find((x) => x.company === name);
     if (!c) return;
     openDrawer(`
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px">
@@ -1294,27 +1270,87 @@
 
     renderEntryAccuracy(a.entryAccuracy);
 
-    if ($('vsnd-top5-body')) renderFleetFreeLeft();
-    if ($('vsnd-aging-dist-body')) renderDaysToSalesPanel();
+    if ($('vsnd-aging-dist-body')) renderBoardCompanyCities();
     if ($('vsnd-emp-body')) renderDisplayCounter();
     if ($('vsnd-region-body')) renderCarrierPanel();
   }
 
-  function printedCityRows() {
-    const pivot = dash && dash.carrierPivot;
-    const map = new Map();
-    ((pivot && pivot.rows) || []).forEach((row) => {
-      Object.entries(row.cells || {}).forEach(([city, cell]) => {
-        const name = String(city || '').trim() || '—';
-        if (!map.has(name)) map.set(name, { city: name, count: 0, vins: [] });
-        const group = map.get(name);
-        (cell.vins || []).forEach((vin) => {
-          group.vins.push(vin);
-          group.count += 1;
+  function prevYm(ym) {
+    const m = String(ym || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return '';
+    let y = Number(m[1]);
+    let mo = Number(m[2]) - 1;
+    if (mo < 1) {
+      mo = 12;
+      y -= 1;
+    }
+    return `${y}-${String(mo).padStart(2, '0')}`;
+  }
+
+  function isVinDelivered(v) {
+    const s = String((v && v.status) || '').trim();
+    return !!String((v && v.invoiceDate) || '').trim() || s === 'Claimed' || s === 'تم التسليم';
+  }
+
+  function boardCompanyCities() {
+    const month = (slaDash && slaDash.month) || empMonth || '';
+    const prev = prevYm(month);
+    return ((dash && dash.companyCities) || []).map((c) => {
+      const cities = (c.cities || []).map((city) => {
+        const vins = (city.vins || []).filter((v) => {
+          const ym = String(v.printedAt || v.proformaDate || '').slice(0, 7);
+          if (!month) return true;
+          if (ym === month) return true;
+          return ym === prev && !isVinDelivered(v);
         });
-      });
+        return { city: city.city, count: vins.length, vins };
+      }).filter((city) => city.count);
+      return {
+        company: c.company,
+        total: cities.reduce((s, city) => s + city.count, 0),
+        cities,
+      };
+    }).filter((c) => c.total);
+  }
+
+  function renderBoardCompanyCities() {
+    const host = $('vsnd-aging-dist-body');
+    if (!host) return;
+    const more = $('vsnd-city-more');
+    if (more) {
+      more.onclick = (e) => {
+        e.stopPropagation();
+        const rows = boardCompanyCities();
+        if (!rows.length) return;
+        openCompanyCities(rows[0].company, rows[0]);
+      };
+    }
+    if (!dash) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading prints…</p>';
+      return;
+    }
+    const rows = boardCompanyCities();
+    if (!rows.length) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator prints this month. Last month’s undelivered prints stay in this chart.</p>';
+      return;
+    }
+    host.innerHTML = `<div class="vsnd-hbars">${rows.map((c) => {
+      const segs = (c.cities || []).map((city, i) => {
+        const w = (city.count / Math.max(c.total, 1)) * 100;
+        const color = CITY_COLORS[i % CITY_COLORS.length];
+        return `<i style="width:${w}%;background:${color}" title="${esc(city.city)} · ${city.count}"></i>`;
+      }).join('');
+      return `<button type="button" class="vsnd-hbar" data-board-co="${esc(c.company)}" title="${esc(c.company)} · ${c.total} printed">
+        <span class="vsnd-hbar-lbl">${esc(c.company)}</span>
+        <span class="vsnd-hbar-track board-city-track">${segs}</span>
+        <b>${esc(c.total)}</b>
+      </button>`;
+    }).join('')}</div>
+    <p class="hint" style="margin:6px 0 0">Printed by the coordinator this month, plus last month’s VINs that are still not delivered.</p>`;
+    host.querySelectorAll('[data-board-co]').forEach((b) => {
+      const row = rows.find((c) => c.company === b.dataset.boardCo);
+      b.addEventListener('click', () => openCompanyCities(b.dataset.boardCo, row));
     });
-    return [...map.values()].sort((a, b) => (b.count - a.count) || a.city.localeCompare(b.city, 'ar'));
   }
 
   function renderDaysToSalesPanel() {
@@ -1324,95 +1360,36 @@
     if (more) {
       more.onclick = (e) => {
         e.stopPropagation();
-        openPrintedCityDetails('');
+        openDaysToSalesDetails({});
       };
     }
-    if (!dash) {
-      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">Loading printed cities…</p>';
-      return;
-    }
-    const rows = printedCityRows();
-    const total = rows.reduce((sum, row) => sum + row.count, 0);
-    if (!total) {
-      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator prints yet.</p>';
+    const perf = slaDash && slaDash.companyPerformance;
+    const dist = (perf && perf.daysDist) || [];
+    const totals = (perf && perf.totals) || {};
+    const completed = totals.completedVins || 0;
+    if (!dist.length && !(totals.totalUniqueVins > 0)) {
+      host.innerHTML = '<p class="chart-empty" style="margin:0;font-size:.75rem">No coordinator assignments in this month yet.</p>';
       host.onclick = null;
       host.style.cursor = '';
       return;
     }
-    const top = rows[0];
-    const dist = rows.map((row, i) => ({
-      label: row.city,
-      count: row.count,
-      color: CITY_COLORS[i % CITY_COLORS.length],
-      pct: Math.round((row.count / total) * 1000) / 10,
-    }));
-    host.innerHTML = `<div class="print-city-chart">
-      <p class="hint print-city-top">Most printed · <b>${esc(top.city)}</b> · ${esc(top.count)} of ${esc(total)}</p>
-      <div class="print-city-row">
-        ${donutSvg(dist, String(top.count), 'Most', { size: 96 })}
-        <ul class="vsnd-legend-list is-clickable is-scroll">${dist.map((x, i) => `
-          <li class="vsnd-legend-hit${i === 0 ? ' is-top' : ''}" data-print-city="${esc(x.label)}" role="button" tabindex="0" title="Open ${esc(x.label)} printed VINs">
-            <i style="background:${esc(x.color)}"></i>
-            <span>${esc(x.label)}</span>
-            <b>${esc(x.count)}</b>
-            <em>${esc(x.pct)}%</em>
-          </li>`).join('')}</ul>
-      </div>
-    </div>`;
+    host.innerHTML = `${donutSvg(dist, String(completed), 'Sold', { size: 96 })}
+      <ul class="vsnd-legend-list is-clickable is-scroll">${dist.map((x) => `
+        <li class="vsnd-legend-hit" data-dts-bucket="${esc(x.label)}" role="button" tabindex="0" title="Open ${esc(x.label)} VINs">
+          <i style="background:${esc(x.color)}"></i>
+          <span>${esc(x.label)}</span>
+          <b>${esc(x.count)}</b>
+          <em>${esc(x.pct != null ? `${x.pct}%` : '')}</em>
+        </li>`).join('')}</ul>`;
     host.style.cursor = '';
     host.onclick = null;
-    host.querySelectorAll('[data-print-city]').forEach((el) => {
-      const open = () => openPrintedCityDetails(el.dataset.printCity || '');
+    host.querySelectorAll('[data-dts-bucket]').forEach((el) => {
+      const open = () => openDaysToSalesDetails({ bucket: el.dataset.dtsBucket || '' });
       el.addEventListener('click', (e) => { e.stopPropagation(); open(); });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
-  }
-
-  function openPrintedCityDetails(cityName) {
-    const rows = printedCityRows();
-    const total = rows.reduce((sum, row) => sum + row.count, 0);
-    const focus = cityName ? rows.filter((row) => row.city === cityName) : rows;
-    const vins = focus.flatMap((row) => row.vins.map((vin) => ({ ...vin, city: row.city })));
-    const top = rows[0];
-    openDrawer(`
-      <div class="drawer-head vsnd-sheet-head">
-        <div>
-          <h2>${cityName ? esc(cityName) : 'Printed cities'}</h2>
-          <p class="sub">Coordinator delivery notes${top ? ` · most printed ${esc(top.city)} (${esc(top.count)})` : ''}</p>
-        </div>
-        <button type="button" class="btn" id="detail-close">Close</button>
-      </div>
-      <div class="dts-summary">
-        <div class="dts-sum-card"><span>Printed</span><strong>${esc(cityName ? vins.length : total)}</strong></div>
-        <div class="dts-sum-card"><span>Cities</span><strong>${esc(cityName ? 1 : rows.length)}</strong></div>
-        <div class="dts-sum-card"><span>Most</span><strong>${top ? esc(top.city) : '—'}</strong></div>
-      </div>
-      <div class="table-wrap vsnd-sheet-wrap">
-        <table class="data vsnd-live-table">
-          <thead><tr><th>City</th><th class="num">Printed</th><th class="num">Share</th></tr></thead>
-          <tbody>${(cityName ? focus : rows).map((row) => `<tr>
-            <td><b>${esc(row.city)}</b></td>
-            <td class="num">${esc(row.count)}</td>
-            <td class="num">${total ? esc(Math.round((row.count / total) * 1000) / 10) : 0}%</td>
-          </tr>`).join('') || '<tr><td colspan="3">No prints</td></tr>'}</tbody>
-        </table>
-      </div>
-      <div class="table-wrap vsnd-sheet-wrap" style="margin-top:12px">
-        <table class="data vsnd-live-table">
-          <thead><tr><th>VIN</th><th>Product</th><th>الناقل</th><th>City</th><th>Printed</th><th>By</th></tr></thead>
-          <tbody>${vins.map((vin) => `<tr>
-            <td class="detail-vin">${esc(vin.vin || '—')}</td>
-            <td>${esc(vin.product || '—')}</td>
-            <td>${esc(vin.company || '—')}</td>
-            <td>${esc(vin.city || '—')}</td>
-            <td>${vin.printedAt ? esc(fmtWhen(vin.printedAt)) : '—'}</td>
-            <td>${esc(vin.printedBy || '—')}</td>
-          </tr>`).join('') || '<tr><td colspan="6">No printed VINs</td></tr>'}</tbody>
-        </table>
-      </div>
-    `, { wide: true });
   }
 
   function getDaysToSalesData() {
@@ -2513,9 +2490,8 @@
       renderCities();
       renderEmployees();
       renderSchedule();
-      renderDaysToSalesPanel();
       renderInventoryPanel();
-      renderFleetFreeLeft();
+      renderBoardCompanyCities();
       renderDisplayCounter();
       renderCarrierPanel();
       renderPrints();
@@ -2552,9 +2528,344 @@
     document.body.classList.toggle('vsnd-screen', tab === 'dash');
     if (tab === 'weights') loadWeights().catch((err) => { if ($('weight-error')) $('weight-error').textContent = err.message; });
     if (tab === 'schedule') loadSlaConfig().catch((err) => { if ($('sla-error')) $('sla-error').textContent = err.message; });
+    if (tab === 'assign') loadAutoAssign().catch((err) => { if ($('aa-hint')) $('aa-hint').textContent = err.message; });
+    if (tab === 'give') loadGive().catch((err) => { if ($('give-hint')) $('give-hint').textContent = err.message; });
+    if (tab === 'org') loadOrg().catch((err) => { if ($('org-msg')) $('org-msg').textContent = err.message; });
+  }
+
+  let orgData = { cities: [], companies: [] };
+
+  function orgMsg(text) {
+    if ($('org-msg')) $('org-msg').textContent = text || '';
+  }
+
+  function filteredOrg(list) {
+    const q = String(($('org-q') && $('org-q').value) || '').trim().toLowerCase();
+    const status = ($('org-status') && $('org-status').value) || '';
+    return list.filter((row) => {
+      if (status && row.status !== status) return false;
+      if (!q) return true;
+      return [row.name, row.country, row.code, row.cityName].join(' ').toLowerCase().includes(q);
+    });
+  }
+
+  function renderOrg() {
+    const citySel = document.querySelector('#org-company-form select[name="cityId"]');
+    if (citySel) {
+      const current = citySel.value;
+      const active = (orgData.cities || []).filter((c) => c.status === 'active' || c.id === current);
+      citySel.innerHTML = '<option value="">No city</option>' + active.map((c) =>
+        `<option value="${esc(c.id)}">${esc(c.name)}${c.status === 'inactive' ? ' · inactive' : ''}</option>`).join('');
+      citySel.value = current;
+    }
+    const cities = filteredOrg(orgData.cities || []);
+    const cityHost = $('org-cities');
+    if (cityHost) {
+      cityHost.innerHTML = `<thead><tr><th>City</th><th>Country</th><th>Status</th><th>Companies</th><th></th></tr></thead><tbody>${
+        cities.map((c) => `<tr>
+          <td>${esc(c.name)}</td><td>${esc(c.country || '')}</td><td>${esc(c.status)}</td>
+          <td>${esc((c.companies || []).length)}</td>
+          <td><button type="button" class="btn" data-edit-city="${esc(c.id)}">Edit</button></td>
+        </tr>`).join('') || '<tr><td colspan="5">No cities</td></tr>'
+      }</tbody>`;
+    }
+    const companies = filteredOrg(orgData.companies || []);
+    const companyHost = $('org-companies');
+    if (companyHost) {
+      companyHost.innerHTML = `<thead><tr><th>Company</th><th>Code</th><th>City</th><th>Status</th><th></th></tr></thead><tbody>${
+        companies.map((c) => `<tr>
+          <td>${esc(c.name)}</td><td>${esc(c.code || '—')}</td><td>${esc(c.cityName || '—')}</td><td>${esc(c.status)}</td>
+          <td><button type="button" class="btn" data-edit-company="${esc(c.id)}">Edit</button></td>
+        </tr>`).join('') || '<tr><td colspan="5">No companies</td></tr>'
+      }</tbody>`;
+    }
+  }
+
+  async function loadOrg() {
+    orgData = await api('/org');
+    renderOrg();
+  }
+
+  async function saveOrgCity(form) {
+    const body = {
+      id: form.id.value,
+      name: form.name.value,
+      country: form.country.value,
+      status: form.status.value,
+    };
+    if (body.status === 'inactive' && body.id && !window.confirm('Deactivate this city? Historical companies keep the link.')) return;
+    const path = body.id ? `/org/cities/${encodeURIComponent(body.id)}` : '/org/cities';
+    await api(path, { method: body.id ? 'PUT' : 'POST', json: body });
+    form.reset();
+    form.country.value = 'Saudi Arabia';
+    form.status.value = 'active';
+    orgMsg('City saved.');
+    await loadOrg();
+  }
+
+  async function saveOrgCompany(form) {
+    const body = {
+      id: form.id.value,
+      name: form.name.value,
+      code: form.code.value,
+      cityId: form.cityId.value,
+      status: form.status.value,
+    };
+    if (body.status === 'inactive' && body.id && !window.confirm('Deactivate this company? Inventory history is kept.')) return;
+    const path = body.id ? `/org/companies/${encodeURIComponent(body.id)}` : '/org/companies';
+    await api(path, { method: body.id ? 'PUT' : 'POST', json: body });
+    form.reset();
+    form.status.value = 'active';
+    orgMsg('Company saved.');
+    await loadOrg();
+  }
+
+  let giveEmployees = [];
+
+  function giveVinList(text) {
+    return [...new Set(String(text || '').toUpperCase().split(/[^A-Z0-9]+/).filter((s) => s.length >= 8))];
+  }
+
+  function giveOptions(selected) {
+    return `<option value="">Choose employee</option>${giveEmployees.map((e) =>
+      `<option value="${esc(e.id)}" ${e.id === selected ? 'selected' : ''}>${esc(e.name)}${e.onVacation ? ' · vacation' : ''}</option>`).join('')}`;
+  }
+
+  async function loadGive() {
+    const data = await api('/assignment');
+    giveEmployees = data.employees || [];
+    const sel = $('give-employee');
+    if (sel && !sel.dataset.ready) {
+      sel.innerHTML = giveOptions('');
+      sel.dataset.ready = '1';
+    } else if (sel && ![...sel.options].some((o) => o.value && giveEmployees.some((e) => e.id === o.value))) {
+      const current = sel.value;
+      sel.innerHTML = giveOptions(current);
+    }
+    const body = $('give-pending') && $('give-pending').querySelector('tbody');
+    if (!body) return;
+    const rows = data.rows || [];
+    body.innerHTML = rows.map((r) => `<tr>
+      <td>${esc(r.vin)}</td>
+      <td>${esc(r.salesType || '')}</td>
+      <td>${esc(r.salesAdvisor || '')}</td>
+      <td>${esc(r.proformaDate || '')}</td>
+      <td>${esc(r.suggestedEmployeeName || '—')}</td>
+      <td><select class="give-row-emp" data-vin="${esc(r.vin)}">${giveOptions('')}</select></td>
+    </tr>`).join('') || '<tr><td colspan="6">No VINs waiting. Type a VIN above to assign it now.</td></tr>';
+    body.querySelectorAll('.give-row-emp').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (!sel.value) return;
+        assignGiven([sel.dataset.vin], sel.value).catch((err) => alert(err.message || 'Could not assign'));
+      });
+    });
+  }
+
+  async function assignGiven(vins, employeeId) {
+    const hint = $('give-hint');
+    if (!vins.length) throw new Error('Type at least one VIN');
+    if (!employeeId) throw new Error('Choose an employee');
+    if (hint) hint.textContent = 'Assigning…';
+    const res = await api('/assignment/give', { method: 'POST', json: { vins, employeeId } });
+    const ok = (res.results || []).filter((r) => r.ok);
+    const msg = `${ok.length} assigned`;
+    if (hint) hint.textContent = msg;
+    toast(msg);
+    await loadGive();
+  }
+
+  let autoAssign = null;
+
+  function renderAutoAssign() {
+    const d = autoAssign;
+    if (!d) return;
+    const empHost = $('aa-employees');
+    const typeHost = $('aa-types');
+    if (!empHost || !typeHost) return;
+    const selectedEmp = new Set(d.selectedEmployees || []);
+    const selectedTypes = new Set(d.selectedSalesTypes || []);
+    empHost.innerHTML = (d.employees || []).map((e) =>
+      `<label><input type="checkbox" class="aa-emp" value="${esc(e.id)}" ${selectedEmp.has(e.id) ? 'checked' : ''} /> ${esc(e.name)}</label>`
+    ).join('') || '<span class="hint">No employees</span>';
+    const onlyHost = $('aa-only');
+    if (onlyHost) {
+      const only = new Set(d.advisorOnlyIds || []);
+      onlyHost.innerHTML = (d.employees || []).map((e) =>
+        `<label><input type="checkbox" class="aa-only" value="${esc(e.id)}" ${only.has(e.id) ? 'checked' : ''} /> ${esc(e.name)}</label>`
+      ).join('');
+    }
+    const types = [...new Set([...(d.salesTypes || []), ...(d.selectedSalesTypes || [])])];
+    typeHost.innerHTML = types.map((t) =>
+      `<label><input type="checkbox" class="aa-type" value="${esc(t)}" ${selectedTypes.has(t) ? 'checked' : ''} /> ${esc(t)}</label>`
+    ).join('') || '<span class="hint">No sales types on the sheet yet. Add one below.</span>';
+    const empSel = $('aa-advisor-emp');
+    if (empSel) {
+      empSel.innerHTML = (d.employees || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+    }
+    const list = $('aa-advisor-list');
+    if (list) list.innerHTML = (d.knownAdvisors || []).map((a) => `<option value="${esc(a)}"></option>`).join('');
+    const typeList = $('aa-type-list');
+    if (typeList) {
+      const typeNames = [...new Set([...(d.salesTypes || []), ...(d.selectedSalesTypes || [])])];
+      typeList.innerHTML = typeNames.map((t) => `<option value="${esc(t)}"></option>`).join('');
+    }
+    const exEmp = $('aa-ex-emp');
+    if (exEmp) {
+      exEmp.innerHTML = (d.employees || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+    }
+    const fallback = $('aa-fallback');
+    if (fallback) {
+      const cur = d.fallbackEmployeeId || '';
+      fallback.innerHTML = `<option value="">Leave unassigned</option>${(d.employees || []).map((e) =>
+        `<option value="${esc(e.id)}" ${e.id === cur ? 'selected' : ''}>${esc(e.name)}</option>`
+      ).join('')}`;
+    }
+    const exBody = $('aa-exclude-body');
+    if (exBody) {
+      exBody.innerHTML = (d.excludes || []).map((r, i) => `<tr>
+        <td>${esc(r.salesType)}</td>
+        <td>${esc(r.employeeName || r.employeeId)}</td>
+        <td><button type="button" class="btn aa-ex-x" data-i="${i}">Remove</button></td>
+      </tr>`).join('') || '<tr><td colspan="3">No blocked sales types.</td></tr>';
+      exBody.querySelectorAll('.aa-ex-x').forEach((b) => b.addEventListener('click', () => {
+        d.excludes.splice(Number(b.dataset.i), 1);
+        renderAutoAssign();
+      }));
+    }
+    const body = $('aa-advisor-body');
+    if (body) {
+      body.innerHTML = (d.advisors || []).map((r, i) => `<tr>
+        <td>${esc(r.advisor)}</td>
+        <td>${esc(r.employeeName || r.employeeId)}</td>
+        <td><button type="button" class="btn aa-advisor-x" data-i="${i}">Remove</button></td>
+      </tr>`).join('') || '<tr><td colspan="3">No sales advisor rules yet.</td></tr>';
+      body.querySelectorAll('.aa-advisor-x').forEach((b) => b.addEventListener('click', () => {
+        d.advisors.splice(Number(b.dataset.i), 1);
+        renderAutoAssign();
+      }));
+    }
+  }
+
+  async function loadAutoAssign() {
+    autoAssign = await api('/auto-assign');
+    if (!autoAssign.advisors) autoAssign.advisors = [];
+    if (!autoAssign.excludes) autoAssign.excludes = [];
+    renderAutoAssign();
+    if ($('aa-hint')) $('aa-hint').textContent = autoAssign.configured ? 'Saved rules are in use.' : 'Starting rules are shown. Save them to keep your edits.';
+  }
+
+  async function saveAutoAssign() {
+    const employees = [...document.querySelectorAll('.aa-emp:checked')].map((el) => el.value);
+    const salesTypes = [...document.querySelectorAll('.aa-type:checked')].map((el) => el.value);
+    const advisors = (autoAssign && autoAssign.advisors) || [];
+    const excludes = (autoAssign && autoAssign.excludes) || [];
+    const fallbackEmployeeId = String(($('aa-fallback') && $('aa-fallback').value) || '').trim();
+    const advisorOnlyIds = [...document.querySelectorAll('.aa-only:checked')].map((el) => el.value);
+    await api('/auto-assign', { method: 'PUT', json: { employees, salesTypes, advisors, excludes, fallbackEmployeeId, advisorOnlyIds } });
+    toast('Auto assign saved');
+    await loadAutoAssign();
+    if ($('aa-hint')) $('aa-hint').textContent = 'Saved. The next Assignment confirm uses these rules.';
   }
 
   document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  if ($('org-city-form')) {
+    $('org-city-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveOrgCity(e.target).catch((err) => orgMsg(err.message || 'Could not save the city'));
+    });
+  }
+  if ($('org-company-form')) {
+    $('org-company-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveOrgCompany(e.target).catch((err) => orgMsg(err.message || 'Could not save the company'));
+    });
+  }
+  if ($('org-q')) $('org-q').addEventListener('input', renderOrg);
+  if ($('org-status')) $('org-status').addEventListener('change', renderOrg);
+  if ($('org-refresh')) $('org-refresh').addEventListener('click', () => loadOrg().catch((err) => orgMsg(err.message)));
+  if ($('org-cities')) {
+    $('org-cities').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-edit-city]');
+      if (!btn) return;
+      const city = (orgData.cities || []).find((row) => row.id === btn.dataset.editCity);
+      const form = $('org-city-form');
+      if (!city || !form) return;
+      form.id.value = city.id;
+      form.name.value = city.name;
+      form.country.value = city.country || 'Saudi Arabia';
+      form.status.value = city.status || 'active';
+    });
+  }
+  if ($('org-companies')) {
+    $('org-companies').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-edit-company]');
+      if (!btn) return;
+      const company = (orgData.companies || []).find((row) => row.id === btn.dataset.editCompany);
+      const form = $('org-company-form');
+      if (!company || !form) return;
+      form.id.value = company.id;
+      form.name.value = company.name;
+      form.code.value = company.code || '';
+      form.cityId.value = company.cityId || '';
+      form.status.value = company.status || 'active';
+    });
+  }
+  if ($('give-form')) {
+    $('give-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const vins = giveVinList($('give-vins').value);
+      assignGiven(vins, $('give-employee').value).then(() => {
+        $('give-vins').value = '';
+      }).catch((err) => {
+        if ($('give-hint')) $('give-hint').textContent = err.message || 'Could not assign';
+        alert(err.message || 'Could not assign');
+      });
+    });
+  }
+  if ($('aa-type-add')) {
+    $('aa-type-add').addEventListener('click', () => {
+      const name = String(($('aa-type-new') && $('aa-type-new').value) || '').trim();
+      if (!name || !autoAssign) return;
+      if (!autoAssign.salesTypes.includes(name)) autoAssign.salesTypes.push(name);
+      if (!autoAssign.selectedSalesTypes.includes(name)) autoAssign.selectedSalesTypes.push(name);
+      $('aa-type-new').value = '';
+      renderAutoAssign();
+    });
+  }
+  if ($('aa-advisor-add')) {
+    $('aa-advisor-add').addEventListener('click', () => {
+      if (!autoAssign) return;
+      const advisor = String(($('aa-advisor') && $('aa-advisor').value) || '').trim();
+      const employeeId = String(($('aa-advisor-emp') && $('aa-advisor-emp').value) || '').trim();
+      const emp = (autoAssign.employees || []).find((e) => e.id === employeeId);
+      if (!advisor || !emp) return;
+      autoAssign.advisors = (autoAssign.advisors || []).filter((r) => r.advisor.toLowerCase() !== advisor.toLowerCase());
+      autoAssign.advisors.push({ advisor, employeeId: emp.id, employeeName: emp.name });
+      $('aa-advisor').value = '';
+      renderAutoAssign();
+    });
+  }
+  if ($('aa-ex-add')) {
+    $('aa-ex-add').addEventListener('click', () => {
+      if (!autoAssign) return;
+      const salesType = String(($('aa-ex-type') && $('aa-ex-type').value) || '').trim();
+      const employeeId = String(($('aa-ex-emp') && $('aa-ex-emp').value) || '').trim();
+      const emp = (autoAssign.employees || []).find((e) => e.id === employeeId);
+      if (!salesType || !emp) return;
+      autoAssign.excludes = (autoAssign.excludes || []).filter((r) => !(
+        r.salesType.toLowerCase() === salesType.toLowerCase() && r.employeeId === emp.id
+      ));
+      autoAssign.excludes.push({ salesType, employeeId: emp.id, employeeName: emp.name });
+      $('aa-ex-type').value = '';
+      renderAutoAssign();
+    });
+  }
+  if ($('aa-fallback')) {
+    $('aa-fallback').addEventListener('change', () => {
+      if (autoAssign) autoAssign.fallbackEmployeeId = $('aa-fallback').value;
+    });
+  }
+  if ($('aa-save')) $('aa-save').addEventListener('click', () => saveAutoAssign().catch((err) => alert(err.message)));
   $('detail-back').addEventListener('click', (e) => { if (e.target === $('detail-back')) closeDrawer(); });
   const empMonthInp = $('emp-month');
   if (empMonthInp) {
@@ -2614,7 +2925,7 @@
     }
   }
   if ($('xls-live')) {
-    $('xls-live').addEventListener('click', () => runExport('/export/live-sheet', 'DT-Live-Sheet.xlsx'));
+    $('xls-live').addEventListener('click', () => runExport('/export/data', 'DT-Printed-Live-Assignments.xlsx'));
   }
   if ($('xls-admin')) {
     $('xls-admin').addEventListener('click', () => {
@@ -2626,7 +2937,7 @@
   async function uploadFullExcel(file) {
     const hint = $('xls-all-hint');
     if (!file) return;
-    if (!confirm('Replace all Delivery Transformation data with this Excel? Live Sheet, attendance, prints, targets, SLA, and KPI settings will match the file.')) return;
+    if (!confirm('Read this Excel into Delivery Transformation? Extract all data replaces the saved records. The printed VINs, Live Sheet, and assignments file updates those sheets and leaves a blank cell as it is.')) return;
     if (hint) hint.textContent = `Uploading ${file.name}…`;
     try {
       const res = await fetch(`${window.DTX.API}/import/full`, {
@@ -2641,7 +2952,10 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
       const c = data.counts || {};
-      const msg = `Matched the file · ${c.Vehicles || 0} VINs · ${data.pending || 0} pending · ${c.Attendance || 0} attendance · ${c.Prints || 0} prints · ${c.Audit || 0} audit · ${c.Meta || 0} settings`;
+      const s = data.summary || {};
+      const msg = data.readable
+        ? `Read the Excel · ${s.live || 0} live rows · ${s.created || 0} new · ${s.assignments || 0} assignments · ${s.pending || 0} pending · ${s.prints || 0} printed rows`
+        : `Matched the file · ${c.Vehicles || 0} VINs · ${data.pending || 0} pending · ${c.Attendance || 0} attendance · ${c.Prints || 0} prints · ${c.Audit || 0} audit · ${c.Meta || 0} settings`;
       if (hint) hint.textContent = msg;
       toast('All data matched');
       if (typeof loadDash === 'function') loadDash().catch(() => {});
@@ -2654,6 +2968,7 @@
     const input = $('xls-all-file');
     if (input) input.click();
   }
+  if ($('xls-data')) $('xls-data').addEventListener('click', () => runExport('/export/data', 'DT-Printed-Live-Assignments.xlsx'));
   if ($('xls-all')) $('xls-all').addEventListener('click', () => runExport('/export/full', 'DT-All-Data.xlsx'));
   if ($('xls-all-card')) $('xls-all-card').addEventListener('click', () => runExport('/export/full', 'DT-All-Data.xlsx'));
   if ($('xls-all-upload')) $('xls-all-upload').addEventListener('click', pickFullExcel);
@@ -2676,6 +2991,12 @@
       } catch (err) {
         $('backup-hint').textContent = err.message || 'Could not save';
       }
+    });
+  }
+  if ($('backup-download')) {
+    $('backup-download').addEventListener('click', () => {
+      const at = backup && backup.lastAt ? String(backup.lastAt).slice(0, 16).replace(/[:T]/g, '-') : 'latest';
+      runExport('/backup/download', `DT-Snapshot-${at}.xlsx`);
     });
   }
   if ($('backup-restore')) {
@@ -2801,10 +3122,65 @@
         </div>`).join('') || '<span class="hint">—</span>';
     }
 
+    const vinFilters = { employee: [], status: [], month: '' };
+
+    function filterList(v) {
+      return (Array.isArray(v) ? v : []).map((x) => String(x || '').trim()).filter(Boolean);
+    }
+
+    function paintVinFilter(id, options, selected, onToggle) {
+      const root = document.getElementById(id);
+      if (!root) return;
+      const btn = root.querySelector('.multi-filter-btn');
+      const menu = root.querySelector('.multi-filter-menu');
+      const picked = filterList(selected);
+      if (btn) {
+        btn.textContent = picked.length ? picked.map((v) => {
+          const hit = options.find((o) => o.value === v);
+          return hit ? hit.label : v;
+        }).join(' · ') : (btn.dataset.empty || 'All');
+        btn.classList.toggle('is-on', picked.length > 0);
+      }
+      if (!menu || menu.dataset.open === '1') return;
+      menu.innerHTML = options.map((o) => `<label class="multi-filter-opt"><input type="checkbox" value="${esc(o.value)}" ${picked.includes(o.value) ? 'checked' : ''} /> ${esc(o.label)}</label>`).join('')
+        || '<span class="hint">No choices</span>';
+      menu.querySelectorAll('input').forEach((el) => {
+        el.addEventListener('change', () => onToggle(el.value, el.checked));
+      });
+    }
+
+    function setVinFilter(key, value, on) {
+      const cur = filterList(vinFilters[key]).filter((x) => x !== value);
+      if (on) cur.push(value);
+      vinFilters[key] = cur;
+      loadAll();
+    }
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.multi-filter-btn');
+      if (btn) {
+        const menu = btn.parentElement.querySelector('.multi-filter-menu');
+        const open = menu && menu.dataset.open === '1';
+        document.querySelectorAll('.multi-filter-menu').forEach((m) => { m.hidden = true; m.dataset.open = ''; });
+        if (menu && !open) {
+          menu.hidden = false;
+          menu.dataset.open = '1';
+        }
+        return;
+      }
+      if (e.target.closest('.multi-filter')) return;
+      document.querySelectorAll('.multi-filter-menu').forEach((m) => { m.hidden = true; m.dataset.open = ''; });
+    });
+
     async function loadAll() {
       const q = $('search').value.trim();
+      const qs = new URLSearchParams();
+      if (q) qs.set('q', q);
+      if (vinFilters.month) qs.set('month', vinFilters.month);
+      if (vinFilters.employee.length) qs.set('employee', vinFilters.employee.join(','));
+      if (vinFilters.status.length) qs.set('status', vinFilters.status.join(','));
       const [live, audit] = await Promise.all([
-        api(`/live-sheet${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+        api(`/live-sheet${qs.toString() ? `?${qs}` : ''}`),
         api('/audit?limit=100'),
       ]);
       const rows = live.rows || [];
@@ -2819,7 +3195,9 @@
       bars($('by-status'), live.byStatus);
       bars($('by-employee'), live.byEmployee);
       bars($('by-carrier'), live.byCarrier);
-      $('live-meta').textContent = `${live.total} VINs · synced ${new Date(live.at).toLocaleTimeString()}`;
+      $('live-meta').textContent = `${live.total} VINs · synced ${new Date(live.at).toLocaleTimeString()} · assign any month from the Employee column`;
+      paintVinFilter('vin-employee-filter', (meta.employees || []).map((e) => ({ value: e.name, label: e.name })), vinFilters.employee, (value, on) => setVinFilter('employee', value, on));
+      paintVinFilter('vin-status-filter', (meta.statuses || []).map((s) => ({ value: s, label: s })), vinFilters.status, (value, on) => setVinFilter('status', value, on));
       DTXLive.renderTable($('live-table'), rows, {
         mode: 'admin',
         onOpen: (vin) => DTXLive.openDrawer(vin, { mode: 'admin', onSaved: loadAll }),
@@ -2850,6 +3228,8 @@
       t = setTimeout(loadAll, 250);
     });
     $('refresh-btn').addEventListener('click', loadAll);
+    const vinMonth = $('vin-month');
+    if (vinMonth) vinMonth.addEventListener('change', (e) => { vinFilters.month = e.target.value; loadAll(); });
     loadAll().catch((e) => console.error(e));
   }());
 

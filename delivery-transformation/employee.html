@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="employee.css?v=20261005assignlock" />
+  <link rel="stylesheet" href="employee.css?v=20261010c" />
 </head>
 <body>
   <div class="login-screen" id="login-screen">
@@ -66,6 +66,7 @@
             <strong id="raw-status-time">—</strong>
           </div>
           <input type="search" class="top-search" id="global-search" placeholder="Search VIN / order / product…" />
+          <button type="button" class="btn" id="extract-live" hidden>Extract Live Sheet</button>
           <button type="button" class="btn" id="refresh-btn">Refresh</button>
         </div>
       </header>
@@ -133,15 +134,18 @@
                   <input type="month" id="live-month" />
                 </label>
                 <input type="search" id="live-q" placeholder="Search VIN / order / product…" />
-                <select id="live-employee">
-                  <option value="">All employees</option>
-                </select>
-                <select id="live-carrier">
-                  <option value="">All الناقل</option>
-                </select>
-                <select id="live-status">
-                  <option value="">All statuses</option>
-                </select>
+                <div class="multi-filter" id="live-employee-filter">
+                  <button type="button" class="multi-filter-btn" data-empty="All employees">All employees</button>
+                  <div class="multi-filter-menu" hidden></div>
+                </div>
+                <div class="multi-filter" id="live-carrier-filter">
+                  <button type="button" class="multi-filter-btn" data-empty="All الناقل">All الناقل</button>
+                  <div class="multi-filter-menu" hidden></div>
+                </div>
+                <div class="multi-filter" id="live-status-filter">
+                  <button type="button" class="multi-filter-btn" data-empty="All statuses">All statuses</button>
+                  <div class="multi-filter-menu" hidden></div>
+                </div>
                 <button type="button" class="btn" id="live-refresh">Refresh now</button>
               </div>
             </div>
@@ -150,7 +154,7 @@
             <p class="hint live-save-toast" id="live-save-toast" hidden></p>
             <div class="sel-bar" id="live-sel-bar"></div>
             <div class="live-copy-bar" id="live-copy-bar">
-              <span class="live-copy-info" id="live-copy-info">Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers</span>
+              <span class="live-copy-info" id="live-copy-info">Click a cell — VIN and entry boxes included — drag or Shift+click · Ctrl+C copies · double-click a VIN to open it</span>
               <button type="button" class="btn live-copy-btn" id="live-copy-btn" disabled>Copy</button>
               <button type="button" class="btn live-copy-btn" id="live-copy-values" disabled title="Values only, no header row">Copy values</button>
               <button type="button" class="btn live-copy-btn" id="live-cf-clear" hidden>Clear column filters</button>
@@ -167,17 +171,19 @@
           <div class="kpi-row" id="my-kpis"></div>
           <div class="card">
             <h2>My delivery schedule</h2>
-            <p class="hint">Same VINs as before · column filters and copy only change what you see · saved data stays the same for everyone</p>
+            <p class="hint">All your assigned VINs on one page · edits save automatically and stay after refresh or logout · tick VINs to keep them in view, assign, unassign or remove</p>
             <div id="my-save-toast" class="save-toast" hidden>Saved ✓</div>
             <div class="toolbar" id="my-toolbar">
               <input type="search" id="my-q" placeholder="Search VIN / order / product…" />
-              <select id="my-employee"><option value="">All employees</option></select>
-              <select id="my-status"><option value="">All statuses</option></select>
+              <div class="multi-filter" id="my-status-filter">
+                <button type="button" class="multi-filter-btn" data-empty="All statuses">All statuses</button>
+                <div class="multi-filter-menu" hidden></div>
+              </div>
               <button type="button" class="btn" id="my-clear">Clear</button>
             </div>
             <div class="sel-bar" id="my-sel-bar"></div>
             <div class="live-copy-bar" id="my-copy-bar">
-              <span class="live-copy-info" id="my-copy-info">Click a cell, drag or Shift+click to select · Ctrl+C copies as a table with headers</span>
+              <span class="live-copy-info" id="my-copy-info">Click a cell — VIN and entry boxes included — drag or Shift+click · Ctrl+C copies · double-click a VIN to open it</span>
               <button type="button" class="btn live-copy-btn" id="my-copy-btn" disabled>Copy</button>
               <button type="button" class="btn live-copy-btn" id="my-copy-values" disabled title="Values only, no header row">Copy values</button>
               <button type="button" class="btn live-copy-btn" id="my-cf-clear" hidden>Clear column filters</button>
@@ -198,7 +204,8 @@
                 <p class="hint" id="asg-hint">
                   Unique Sales Raw VINs with a <b>Proforma Date (column P)</b> and <b>no Invoice Date (column V)</b>,
                   that are not already on the system.
-                  The employee name stays on the VIN. Tick <b>Change assign</b> to give that VIN to someone else.
+                  Sales advisors set in admin go to that employee. Bank orders stay off the blocked employees.
+                  Anything still not assigned goes to the leftover employee. The rest are split so everyone has the <b>same number in each sales type</b>.
                 </p>
               </div>
             </div>
@@ -256,9 +263,13 @@
           <div class="card">
             <h2>Upload VINs</h2>
             <p class="hint">
-              Upload the <b>Delivery sheet</b> Excel. Only VINs whose <b>Proforma Date</b> is in
-              <b id="upload-month">this month</b> are added or updated; every other row is skipped.
+              Upload the <b>Delivery sheet</b> Excel. VINs whose <b>Proforma Date</b> is in
+              <b id="upload-month">this month</b> are added or updated.
+              From <b id="upload-prev-month">last month</b>, only statuses
+              <b>فسح، الغاء، بطاقة، صادرة، مرور، رجوع مرور</b> are taken.
+              Older rows are skipped.
               <b>PIC</b> assigns the employee. Existing employee entries (status, dates…) are never overwritten.
+              An <b>Extract Live Sheet</b> file can be uploaded here and will be read back.
               الناقل is assigned on the Live Sheet by Hanouf or Rasha only — the coordinator's memo uses that company.
             </p>
             <div class="raw-status-card">
@@ -279,8 +290,8 @@
           <div class="card">
             <h2>Upload Sales Raw</h2>
             <p class="hint">
-              Upload <b>Sales Raw Data</b>. VINs already on the Live Sheet are ignored, so their saved details stay the same.
-              New VINs with a Proforma Date and no Invoice Date go to Assignment.
+              Upload <b>Sales Raw Data</b> to refresh vehicle details (Product, Order, Sales Type, S/A, Owner, Customer,
+              GT / Vehicle Location, Phone) on <b>every VIN</b> on the Live Sheet, any month. Everyone sees the update time in the top bar.
             </p>
             <div class="raw-status-card">
               <div class="lbl">Last Sales Raw update</div>
@@ -317,6 +328,6 @@
   </div>
 
   <script src="shared.js?v=20261003scope2"></script>
-  <script src="employee.js?v=20261005assignlock"></script>
+  <script src="employee.js?v=20261010c"></script>
 </body>
 </html>
