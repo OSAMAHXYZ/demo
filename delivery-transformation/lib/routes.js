@@ -20,6 +20,7 @@ const { createStore } = require('./store');
 const {
   parseDeliverySheet,
   parseSalesRaw,
+  parseCoordinatorSheet,
   parseReadableWorkbook,
   normalizeDate,
   normalizeStatus,
@@ -157,7 +158,6 @@ const SHEET_STATUS_ORDER = [
   'PSFU',
   'تم التسليم',
   'جاهز للتسليم',
-  'تسليم متقدم',
   'صادرة',
   'مرور',
   'رجوع مرور',
@@ -165,6 +165,7 @@ const SHEET_STATUS_ORDER = [
   'فسح',
   'معلقة',
   'الغاء',
+  'تسليم متقدم',
 ];
 
 function sheetStatusRank(v) {
@@ -1261,7 +1262,7 @@ function createDeliveryTransformationRouter(opts = {}) {
     // view=sheet: coordinator's read-only copy of the full Live Sheet (printed VINs included)
     const sheetView = isCoordinator && String((req.query && req.query.view) || '') === 'sheet';
     let list = store.allVehicles();
-    if (isCoordinator && !sheetView) {
+    if (isCoordinator) {
       list = list.filter((v) => !isCoordinatorPrinted(v));
     }
     if (q) {
@@ -1736,8 +1737,8 @@ function createDeliveryTransformationRouter(opts = {}) {
 
   /**
    * Hanouf uploads the delivery sheet.
-   * Current month: every VIN. Last month: only فسح / الغاء / بطاقة / صادرة / مرور / رجوع مرور.
-   * Older rows are skipped. Existing employee entries are never overwritten.
+   * Every VIN is added, including last month and older proforma dates.
+   * Existing employee entries are never overwritten.
    */
   router.post(
     '/upload',
@@ -1779,6 +1780,9 @@ function createDeliveryTransformationRouter(opts = {}) {
         skippedNoDate: 0,
         updatedOtherMonth: 0,
         duplicates: 0,
+        coordinatorSheet: '',
+        coordinatorNotes: 0,
+        coordinatorCompanies: 0,
       };
 
       parsed.items.forEach((item) => {
@@ -1789,41 +1793,9 @@ function createDeliveryTransformationRouter(opts = {}) {
         seen.add(item.vin);
         const proforma = item.raw.proformaDate || item.raw.date || '';
         const rowMonth = proforma.slice(0, 7);
-        const status = String((item.ops && item.ops.opsStatus) || '').trim();
-        const isCurrent = !!proforma && rowMonth === month;
         const isLastMonth = !!proforma && rowMonth === prevMonth;
-        const takeLastMonth = isLastMonth && LAST_MONTH_UPLOAD_STATUSES.includes(status);
+        const isOlder = !!proforma && rowMonth !== month && !isLastMonth;
         let v = store.getVehicle(item.vin);
-        if (!isCurrent && !takeLastMonth) {
-          if (v && !isLastMonth) {
-            // Already on the Live Sheet from an older month: refresh non-blank details, never clear or reassign.
-            if (!v.raw) v.raw = emptyRaw();
-            let changed = false;
-            Object.entries(item.raw).forEach(([k, val]) => {
-              if (!val || String(v.raw[k] ?? '') === String(val)) return;
-              v.raw[k] = val;
-              changed = true;
-            });
-            if (changed) {
-              v.rawUpdatedAt = now;
-              store.upsertVehicle(item.vin, v);
-              summary.updated += 1;
-              summary.updatedOtherMonth += 1;
-            }
-            return;
-          }
-          if (!proforma) {
-            summary.skippedNoDate += 1;
-            return;
-          }
-          if (isLastMonth) {
-            summary.skippedLastMonthStatus += 1;
-            return;
-          }
-          summary.skippedOtherMonth += 1;
-          return;
-        }
-
         const isNew = !v;
         if (isNew) {
           const p = pendingMap()[item.vin];
@@ -1865,8 +1837,87 @@ function createDeliveryTransformationRouter(opts = {}) {
         store.upsertVehicle(item.vin, v);
         if (isNew) summary.created += 1;
         else summary.updated += 1;
-        if (takeLastMonth) summary.keptLastMonth += 1;
+        if (isLastMonth) summary.keptLastMonth += 1;
+        if (isOlder) summary.updatedOtherMonth += 1;
       });
+
+      let coordinator = { sheet: '', notes: [] };
+      try {
+        coordinator = parseCoordinatorSheet(buf);
+      } catch (_) {
+        coordinator = { sheet: '', notes: [] };
+      }
+      const noteGroups = new Map();
+      const alreadyNoted = new Set();
+      (store.data.prints || []).forEach((print) => {
+        (Array.isArray(print.vins) ? print.vins : []).forEach((row) => {
+          const key = normVin(row && row.vin);
+          if (key) alreadyNoted.add(key);
+        });
+      });
+      coordinator.notes.forEach((note) => {
+        const vin = normVin(note.vin);
+        if (!vin) return;
+        let vehicle = store.getVehicle(vin);
+        if (!vehicle) {
+          vehicle = {
+            vin,
+            raw: { ...emptyRaw(), vin, product: note.product || '', userName: note.customer || '' },
+            ops: { ...emptyOps() },
+            createdAt: now,
+            createdBy: req.dtUser.name,
+          };
+        }
+        if (!vehicle.ops) vehicle.ops = { ...emptyOps() };
+        if (!vehicle.raw) vehicle.raw = { ...emptyRaw(), vin };
+        if (!String(vehicle.ops.coordinatorPrintedAt || '').trim()) {
+          vehicle.ops.coordinatorPrintedAt = note.printedAt || now;
+          vehicle.ops.coordinatorPrintedBy = note.printedBy || req.dtUser.name;
+          vehicle.ops.coordinatorPrintKind = 'memo';
+        }
+        if (note.company) vehicle.ops.coordinatorPrintCompany = note.company;
+        if (note.city && !String(vehicle.ops.coordinatorPrintCity || '').trim()) vehicle.ops.coordinatorPrintCity = note.city;
+        if (note.invoice && !String(vehicle.ops.coordinatorPrintInvoice || '').trim()) vehicle.ops.coordinatorPrintInvoice = note.invoice;
+        if (note.product && !String(vehicle.raw.product || '').trim()) vehicle.raw.product = note.product;
+        if (note.customer && !String(vehicle.raw.userName || '').trim()) vehicle.raw.userName = note.customer;
+        vehicle.ops.updatedAt = now;
+        vehicle.ops.updatedBy = req.dtUser.name;
+        store.upsertVehicle(vin, vehicle);
+        summary.coordinatorNotes += 1;
+        if (alreadyNoted.has(vin)) return;
+        alreadyNoted.add(vin);
+        const groupKey = [
+          note.company,
+          note.invoice || '',
+          String(note.printedAt || now).slice(0, 10),
+        ].join('|');
+        if (!noteGroups.has(groupKey)) {
+          noteGroups.set(groupKey, {
+            id: `prn_upload_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+            at: note.printedAt || now,
+            kind: 'memo',
+            label: '',
+            company: note.company,
+            city: note.city || '',
+            vins: [],
+            printedBy: note.printedBy || req.dtUser.name,
+            invoiceNumber: note.invoice || '',
+            source: 'hanouf-upload',
+          });
+        }
+        noteGroups.get(groupKey).vins.push({
+          vin,
+          product: note.product || '',
+          customer: note.customer || '',
+          remarks: note.note || '',
+        });
+      });
+      if (noteGroups.size) {
+        if (!Array.isArray(store.data.prints)) store.data.prints = [];
+        noteGroups.forEach((print) => store.data.prints.unshift(print));
+      }
+      summary.coordinatorSheet = coordinator.sheet || '';
+      summary.coordinatorCompanies = noteGroups.size;
 
       recordImport('lastUpload', summary);
       store.pushAudit({
@@ -1874,7 +1925,7 @@ function createDeliveryTransformationRouter(opts = {}) {
         user: req.dtUser.name,
         action: 'upload_vins',
         oldValue: filename,
-        newValue: `${month}: ${summary.created} new · ${summary.updated} updated · last month kept ${summary.keptLastMonth} · last month other status ${summary.skippedLastMonthStatus} · older skipped ${summary.skippedOtherMonth}`,
+        newValue: `${month}: ${summary.created} new · ${summary.updated} updated · last month ${summary.keptLastMonth} · older ${summary.updatedOtherMonth}`,
       });
       store.save();
       return res.json({ ok: true, summary });

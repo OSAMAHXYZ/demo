@@ -7,7 +7,6 @@ const STATUSES = Object.freeze([
   'PSFU',
   'تم التسليم',
   'جاهز للتسليم',
-  'تسليم متقدم',
   'صادرة',
   'مرور',
   'رجوع مرور',
@@ -15,6 +14,7 @@ const STATUSES = Object.freeze([
   'فسح',
   'معلقة',
   'الغاء',
+  'تسليم متقدم',
 ]);
 
 /** Last month's Delivery sheet rows are imported only when status is one of these. */

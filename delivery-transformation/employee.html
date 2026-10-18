@@ -263,11 +263,11 @@
           <div class="card">
             <h2>Upload VINs</h2>
             <p class="hint">
-              Upload the <b>Delivery sheet</b> Excel. VINs whose <b>Proforma Date</b> is in
-              <b id="upload-month">this month</b> are added or updated.
-              From <b id="upload-prev-month">last month</b>, only statuses
-              <b>فسح، الغاء، بطاقة، صادرة، مرور، رجوع مرور</b> are taken.
-              Older rows are skipped.
+              Upload the <b>Delivery sheet</b> Excel. Every VIN is added, including
+              <b id="upload-month">this month</b>, <b id="upload-prev-month">last month</b>,
+              and older proforma dates.
+              A <b>Coordinator</b> sheet in the same file is read as delivery notes:
+              Admin sees them by company, and the coordinator no longer sees those cars.
               <b>PIC</b> assigns the employee. Existing employee entries (status, dates…) are never overwritten.
               An <b>Extract Live Sheet</b> file can be uploaded here and will be read back.
               الناقل is assigned on the Live Sheet by Hanouf or Rasha only — the coordinator's memo uses that company.

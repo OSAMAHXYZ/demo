@@ -846,6 +846,12 @@ body.vsnd-screen .pdf-win {
 .vsnd-row.tone-traffic .vsnd-total { background: #d3ebf8; }
 .vsnd-row.tone-traffic .vsnd-total-btn { color: #0369a1; }
 
+.vsnd-row.tone-traffic-return .vsnd-status,
+.vsnd-row.tone-traffic-return .vsnd-cell.zone-ok { background: #eef0ff; }
+.vsnd-row.tone-traffic-return .vsnd-ico { background: #d9defa; color: #4338ca; }
+.vsnd-row.tone-traffic-return .vsnd-total { background: #e0e4fb; }
+.vsnd-row.tone-traffic-return .vsnd-total-btn { color: #4338ca; }
+
 .vsnd-row.tone-card .vsnd-status,
 .vsnd-row.tone-card .vsnd-cell.zone-ok { background: #fdecef; }
 .vsnd-row.tone-card .vsnd-ico { background: #f8c9d1; color: #be123c; }

@@ -374,13 +374,14 @@ const VSND_ROWS = Object.freeze([
   { status: 'PSFU', label: 'PSFU', tone: 'psfu', icon: '🚚' },
   { status: 'تم التسليم', label: 'تم التسليم', tone: 'delivered', icon: '🚗' },
   { status: 'جاهز للتسليم', label: 'جاهز للتسليم', tone: 'ready', icon: '📦' },
-  { status: 'تسليم متقدم', label: 'تسليم متقدم', tone: 'advance', icon: '🚐' },
   { status: 'صادرة', label: 'صادر', tone: 'issued', icon: '📋' },
   { status: 'مرور', label: 'مرور', tone: 'traffic', icon: '📄' },
+  { status: 'رجوع مرور', label: 'رجوع مرور', tone: 'traffic-return', icon: '↩' },
   { status: 'بطاقة', label: 'بطاقة', tone: 'card', icon: '🪪' },
   { status: 'فسح', label: 'فسح', tone: 'clearance', icon: '🏢' },
   { status: 'معلقة', label: 'معلقة', tone: 'hold', icon: '⏸' },
   { status: 'الغاء', label: 'الغاء', tone: 'cancel', icon: '✕' },
+  { status: 'تسليم متقدم', label: 'تسليم متقدم', tone: 'advance', icon: '🚐' },
 ]);
 
 function previousMonthKey(ym) {
@@ -777,6 +778,7 @@ function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, r
     'تسليم متقدم': '#ea580c',
     'صادرة': '#7c3aed',
     'مرور': '#0284c7',
+    'رجوع مرور': '#4f46e5',
     'بطاقة': '#e11d48',
     'فسح': '#0f766e',
     'معلقة': '#64748b',
@@ -791,7 +793,11 @@ function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, r
       color: statusColors[r.status] || '#64748b',
     }))
     .filter((x) => x.count > 0)
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      const ia = VSND_ROWS.findIndex((r) => r.status === a.status);
+      const ib = VSND_ROWS.findIndex((r) => r.status === b.status);
+      return (ia === -1 ? VSND_ROWS.length : ia) - (ib === -1 ? VSND_ROWS.length : ib);
+    });
 
   const vsndStatusMap = new Map();
   vsnd.forEach((v) => {
@@ -810,7 +816,11 @@ function buildVsndAnalytics({ vehicles, ym, today, todayDay, days, psfuTarget, r
         color: statusColors[status] || '#64748b',
       };
     })
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      const ia = VSND_ROWS.findIndex((r) => r.status === a.status);
+      const ib = VSND_ROWS.findIndex((r) => r.status === b.status);
+      return (ia === -1 ? VSND_ROWS.length : ia) - (ib === -1 ? VSND_ROWS.length : ib);
+    });
 
   let onTrack = 0;
   let dueToday = 0;

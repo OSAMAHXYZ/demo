@@ -3109,8 +3109,17 @@
     $('add-employee').innerHTML = '<option value="">— Unassigned —</option>'
       + (meta.employees || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
 
-    function bars(el, counts) {
-      const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
+    function bars(el, counts, order) {
+      const entries = Object.entries(counts || {});
+      if (Array.isArray(order) && order.length) {
+        entries.sort((a, b) => {
+          const ia = order.indexOf(a[0]);
+          const ib = order.indexOf(b[0]);
+          return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib);
+        });
+      } else {
+        entries.sort((a, b) => b[1] - a[1]);
+      }
       const max = Math.max(1, ...entries.map((e) => e[1]));
       el.innerHTML = entries.map(([k, n]) => `
         <div style="display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center;margin:4px 0;font-size:.8rem">
@@ -3192,7 +3201,7 @@
         ['Unassigned', rows.length - assigned],
         ['With الناقل', withCarrier],
       ].map(([l, n]) => `<div class="kpi"><strong>${n}</strong><span>${esc(l)}</span></div>`).join('');
-      bars($('by-status'), live.byStatus);
+      bars($('by-status'), live.byStatus, meta.statuses);
       bars($('by-employee'), live.byEmployee);
       bars($('by-carrier'), live.byCarrier);
       $('live-meta').textContent = `${live.total} VINs · synced ${new Date(live.at).toLocaleTimeString()} · assign any month from the Employee column`;

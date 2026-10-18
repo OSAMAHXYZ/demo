@@ -194,6 +194,7 @@ function parseDeliverySheet(buffer) {
   let liveSheet = null;
   readSheets(buffer).forEach(({ name, rows }) => {
     if (/^(printed vins|assignments)$/i.test(String(name || '').trim())) return;
+    if (isCoordinatorSheetName(name)) return;
     const h = findHeaderRow(rows);
     if (h === -1) return;
     const headers = rows[h].map(cellString);
@@ -279,6 +280,69 @@ function parseSalesRaw(buffer) {
   return best;
 }
 
+function isCoordinatorSheetName(name) {
+  return /coordinator|delivery\s*note|printed copies|مذكر/i.test(String(name || '').trim());
+}
+
+const COORDINATOR_HEADERS = Object.freeze({
+  vin: HEADER_MAP.vin,
+  company: ['company', 'company name', 'الناقل', 'الشركة', 'carrier', 'transporter'],
+  city: ['city', 'المدينة', 'مدينة', 'branch', 'الفرع'],
+  invoice: ['invoice', 'invoice number', 'رقم الفاتورة', 'مذكرة', 'memo'],
+  product: ['product', 'model', 'المنتج', 'السيارة'],
+  customer: ['customer', 'customer name', 'العميل', 'اسم العميل'],
+  printedAt: ['at', 'printed at', 'print date', 'تاريخ الطباعة', 'التاريخ'],
+  printedBy: ['printed by', 'coordinator', 'المنسق', 'طبع بواسطة'],
+  note: ['note', 'notes', 'remarks', 'ملاحظات', 'الملاحظات'],
+});
+
+/**
+ * Coordinator worksheet inside Hanouf's upload.
+ * Each row is a delivery note: the VIN is delivered and belongs to a company.
+ */
+function parseCoordinatorSheet(buffer) {
+  const empty = { sheet: '', notes: [] };
+  if (!buffer || !buffer.length) return empty;
+  let sheets;
+  try {
+    sheets = readSheets(buffer);
+  } catch {
+    return empty;
+  }
+  const namedSheets = sheets.filter((sheet) => isCoordinatorSheetName(sheet.name));
+  const pool = namedSheets.length ? namedSheets : sheets.slice(1);
+  let best = empty;
+  pool.forEach(({ name, rows }) => {
+    const h = findHeaderRow(rows);
+    if (h === -1) return;
+    const headers = rows[h].map(cellString);
+    const idx = buildColumnIndex(headers, COORDINATOR_HEADERS);
+    if (idx.vin == null || idx.company == null) return;
+    if (!namedSheets.length && idx.invoice == null && idx.printedBy == null && idx.printedAt == null) return;
+    const notes = [];
+    rows.slice(h + 1).forEach((row) => {
+      if (!Array.isArray(row)) return;
+      const vin = normVin(row[idx.vin]);
+      if (!looksLikeVin(vin)) return;
+      const company = idx.company == null ? '' : cellString(row[idx.company]);
+      if (!company) return;
+      notes.push({
+        vin,
+        company,
+        city: idx.city == null ? '' : cellString(row[idx.city]),
+        invoice: idx.invoice == null ? '' : cellString(row[idx.invoice]),
+        product: idx.product == null ? '' : cellString(row[idx.product]),
+        customer: idx.customer == null ? '' : cellString(row[idx.customer]),
+        printedAt: idx.printedAt == null ? '' : (normalizeDate(row[idx.printedAt]) || cellString(row[idx.printedAt])),
+        printedBy: idx.printedBy == null ? '' : cellString(row[idx.printedBy]),
+        note: idx.note == null ? '' : cellString(row[idx.note]),
+      });
+    });
+    if (notes.length > best.notes.length) best = { sheet: name, notes };
+  });
+  return best;
+}
+
 function readNamedSheet(wb, re) {
   const name = (wb.SheetNames || []).find((n) => re.test(String(n || '').trim()));
   if (!name) return null;
@@ -310,5 +374,6 @@ module.exports = {
   parseLeadTime,
   parseDeliverySheet,
   parseSalesRaw,
+  parseCoordinatorSheet,
   parseReadableWorkbook,
 };

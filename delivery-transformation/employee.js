@@ -829,7 +829,7 @@
         : ['My VINs', 'Your schedule · edit your work'],
       assignment: ['Assignment', 'VIN numbers only · Proforma Date (column P) filled · Invoice Date (column V) empty · no duplicate VINs'],
       targets: ['Team Targets', 'Each employee · VINs by sales type · total · target · Ach%'],
-      upload: ['Upload VINs', `Delivery sheet · ${state.meta.currentMonth || 'this month'} all VINs · ${state.meta.previousMonth || 'last month'} only فسح، الغاء، بطاقة، صادرة، مرور، رجوع مرور`],
+      upload: ['Upload VINs', `Delivery sheet · every VIN is uploaded, including ${state.meta.previousMonth || 'last month'} and older proforma dates`],
       'sales-raw': ['Sales Raw', 'Refreshes vehicle details on every VIN · الغاء VINs stay on the sheet'],
       appointment: ['Appointment', 'Guest Exp = Yes · set date, time, and a timer for everyone'],
     };
@@ -1219,13 +1219,13 @@
           <div><strong>${s.rows}</strong><span>Rows read</span></div>
           <div><strong>${s.created}</strong><span>New VINs</span></div>
           <div><strong>${s.updated}</strong><span>VINs updated</span></div>
-          <div><strong>${s.updatedOtherMonth || 0}</strong><span>Existing VINs refreshed · other month</span></div>
           <div><strong>${s.assigned}</strong><span>Assigned from PIC</span></div>
           <div><strong>${s.skippedVacation || 0}</strong><span>Not assigned · PIC on vacation</span></div>
-          <div><strong>${s.keptLastMonth || 0}</strong><span>Last month kept · فسح / الغاء / بطاقة / صادرة / مرور / رجوع مرور</span></div>
-          <div><strong>${s.skippedLastMonthStatus || 0}</strong><span>Last month skipped · other status</span></div>
-          <div><strong>${s.skippedOtherMonth}</strong><span>Skipped · older than last month</span></div>
-          <div><strong>${s.skippedNoDate}</strong><span>New VINs skipped · no proforma date</span></div>
+          <div><strong>${s.keptLastMonth || 0}</strong><span>Last month included</span></div>
+          <div><strong>${s.updatedOtherMonth || 0}</strong><span>Older proforma dates included</span></div>
+          <div><strong>${s.duplicates || 0}</strong><span>Repeated VIN in the file</span></div>
+          <div><strong>${s.coordinatorNotes || 0}</strong><span>Delivery notes · coordinator sheet${s.coordinatorSheet ? ` (${esc(s.coordinatorSheet)})` : ''}</span></div>
+          <div><strong>${s.coordinatorCompanies || 0}</strong><span>Companies on those notes</span></div>
         </div>
         <p class="hint" style="margin-top:8px">Upload only adds new VINs and fills in existing ones · nothing on the Live Sheet is removed or cleared.</p>`;
       await loadImportPanels();
