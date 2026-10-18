@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261016cp4" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261008lead"></script>
@@ -187,6 +187,10 @@
           <span class="side-nav-icon" aria-hidden="true">☎</span>
           <span class="side-nav-label">CRM &amp; Contact</span>
         </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="ytd" id="tab-ytd">
+          <span class="side-nav-icon" aria-hidden="true">▤</span>
+          <span class="side-nav-label">YTD sales</span>
+        </button>
       </nav>
       <div class="sidebar-footer">
         <a class="side-nav-item side-nav-link" href="data-uploader.html">
@@ -264,6 +268,24 @@
         </div>
         <p class="admin-lead">Drop the contact file and the CRM export here, then click <b>Push to live</b>.</p>
         <div id="contact-admin-host"></div>
+      </div>
+
+      <div class="card admin-section-card" id="ytd-sales-files">
+        <div class="pbi-viz-head">
+          <h2>YTD sales</h2>
+          <span class="admin-section-tag">YTD Sales dashboard</span>
+        </div>
+        <p class="admin-lead">Drop the YTD sales file here, then click <b>Push to live</b>. The Salesman Performance sheet fills the YTD Sales dashboard.</p>
+        <section class="grid-5">
+          <label class="slot" id="ytd-slot">
+            <input id="ytd-sales-file" type="file" accept=".xlsx,.xls,.xlsm,.csv" />
+            <div class="n">Y</div>
+            <h3>YTD sales</h3>
+            <p class="ar">Salesman Performance</p>
+            <span class="meta" id="ytd-sales-meta">Drop or click · .xlsx / .xls</span>
+          </label>
+        </section>
+        <p class="hint" id="ytd-sales-result"></p>
       </div>
     </section>
 
@@ -894,13 +916,15 @@
     const allocation = $("#panel-allocation");
     const gec = $("#panel-gec");
     const focusContact = which === "contact";
-    if (focusContact) which = "uploads";
+    const focusYtd = which === "ytd";
+    if (focusContact || focusYtd) which = "uploads";
     uploads.hidden = which !== "uploads";
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.adminPanel === (focusContact ? "contact" : which));
+      const active = focusContact ? "contact" : (focusYtd ? "ytd" : which);
+      btn.classList.toggle("active", btn.dataset.adminPanel === active);
     });
     if (which === "allocation") renderAllocationPanel();
     if (which === "gec") { renderGecControl(); renderGecFound(); }
@@ -909,6 +933,10 @@
     }
     if (focusContact) {
       const card = document.getElementById("contact-files");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (focusYtd) {
+      const card = document.getElementById("ytd-sales-files");
       if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
@@ -1099,6 +1127,58 @@
     }
   }
 
+  let ytdSalesFile = null;
+
+  function paintYtdSales() {
+    const slot = document.getElementById("ytd-slot");
+    const meta = document.getElementById("ytd-sales-meta");
+    if (!slot || !meta) return;
+    slot.classList.toggle("loaded", !!ytdSalesFile);
+    meta.innerHTML = ytdSalesFile
+      ? `<b>${escapeHtml(ytdSalesFile.name)}</b><br>${formatBytes(ytdSalesFile.size)} <span class="pill slot-draft">Draft · not live</span>`
+      : "Drop or click · .xlsx / .xls";
+  }
+
+  function readYtdSalesFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result || "");
+        const split = text.indexOf(",");
+        resolve(split >= 0 ? text.slice(split + 1) : "");
+      };
+      reader.onerror = () => reject(new Error("Could not read the YTD sales file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function publishYtdSales() {
+    const note = document.getElementById("ytd-sales-result");
+    if (!ytdSalesFile) return null;
+    const base64 = await readYtdSalesFile(ytdSalesFile);
+    const res = await fetch("/api/report-sheet/ytd-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName: ytdSalesFile.name, base64 }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = data.error || "YTD sales was not published.";
+      if (note) note.textContent = message;
+      return { ok: false, message };
+    }
+    const count = data.latest && data.latest.months ? Object.keys(data.latest.months).length : 0;
+    const message = data.duplicate
+      ? "YTD sales was already imported."
+      : `YTD sales is live${count ? ` · ${count} month${count === 1 ? "" : "s"}` : ""}.`;
+    ytdSalesFile = null;
+    const input = document.getElementById("ytd-sales-file");
+    if (input) input.value = "";
+    paintYtdSales();
+    if (note) note.textContent = message;
+    return { ok: true, message };
+  }
+
   async function pushToLive() {
     showError("");
     setStatus("Pushing to all devices…", "busy");
@@ -1212,11 +1292,23 @@
         contactNote = ` · Contact / CRM not published: ${detail}`;
         contactResult = { ok: false, message: detail };
       }
+      let ytdResult = null;
+      let ytdNote = "";
+      try {
+        ytdResult = await publishYtdSales();
+        if (ytdResult && ytdResult.message) ytdNote = ` · ${ytdResult.message}`;
+      } catch (err) {
+        const detail = err.message || "YTD sales was not published.";
+        ytdNote = ` · YTD sales not published: ${detail}`;
+        ytdResult = { ok: false, message: detail };
+      }
+      const extraFailed = (contactResult && contactResult.ok === false) || (ytdResult && ytdResult.ok === false);
       const slotCount = Object.keys(filesBySlot).length;
       if (!slotCount) {
-        if (contactResult && contactResult.ok) setStatus(contactResult.message, "ok");
-        else if (pushedClear && server) setStatus(`Live files cleared · settings pushed${contactNote}`, contactResult && contactResult.ok === false ? "err" : "ok");
-        else setStatus(`Pushed settings only — upload at least one Excel file, then Push again.${contactNote}`, "err");
+        if ((contactResult && contactResult.ok) || (ytdResult && ytdResult.ok)) {
+          setStatus(`${(contactResult && contactResult.message) || ""}${ytdNote}`.replace(/^\s*·\s*/, ""), extraFailed ? "err" : "ok");
+        } else if (pushedClear && server) setStatus(`Live files cleared · settings pushed${contactNote}${ytdNote}`, extraFailed ? "err" : "ok");
+        else setStatus(`Pushed settings only — upload at least one Excel file, then Push again.${contactNote}${ytdNote}`, "err");
         return;
       }
       const srOk = dataStamp.hasSales;
@@ -1235,9 +1327,9 @@
       }).join("");
       setStatus(
         srOk
-          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}${contactNote}`
-          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}${contactNote}`,
-        contactResult && contactResult.ok === false ? "err" : (server ? "ok" : "busy")
+          ? `Pushed ${slotCount} file(s) to live — open Live Dashboard and it will load${rtlNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`
+          : `Pushed ${slotCount} file(s) to live — add Sales Raw for Sales Report${rtlNote}${lexusNote}${serverNote}${contactNote}${ytdNote}`,
+        extraFailed ? "err" : (server ? "ok" : "busy")
       );
       // Open / focus the live dashboard so Push visibly loads the panels
       try {
@@ -1464,6 +1556,16 @@
     renderGecFound();
   });
 
+  const ytdSalesInput = document.getElementById("ytd-sales-file");
+  if (ytdSalesInput) {
+    ytdSalesInput.addEventListener("change", () => {
+      ytdSalesFile = ytdSalesInput.files && ytdSalesInput.files[0] ? ytdSalesInput.files[0] : null;
+      paintYtdSales();
+      const note = document.getElementById("ytd-sales-result");
+      if (note) note.textContent = "";
+    });
+  }
+
   showAdminPanel("uploads");
   renderTargetsPanel();
   renderAllocationPanel();
@@ -1473,7 +1575,7 @@
   });
 })();
 </script>
-<script src="contact-performance.js?v=20261016cp3"></script>
+<script src="contact-performance.js?v=20261017cp7"></script>
 <script>
   if (window.ContactPerformance) {
     window.ContactPerformance.mountAdmin(document.getElementById("contact-admin-host"));

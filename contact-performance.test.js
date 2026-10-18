@@ -124,6 +124,55 @@ async function main() {
   const noTxn = api.parseTable(Buffer.from('Prospect,Status\nA,Open\n', 'utf8'), 'crm.csv', 'crm', XLSX);
   assert(noTxn.errors.some((line) => /Column C/.test(line)), 'missing column C blocks');
 
+  const shiftedContact = workbook('Daily', [
+    ['Advisor', 'Lead Number', 'Initial Contact', 'Showroom', 'Created Date'],
+    ['Sara Nasser', '9001', 'Yes', 'Jeddah', '01.10.2026'],
+    ['Ali M', '9002', 'No', 'Riyadh', '02.10.2026'],
+    ['Nora', '9003', '', 'Dammam', '03.10.2026'],
+    ['Hadi', '9004', 'In Progress', 'Jeddah', '04.10.2026'],
+  ]);
+  const shiftedCrm = Buffer.from([
+    'Prospect,Lead Number,CRM Status,Employee Responsible,Centre',
+    'A,9001,Open,Sara Nasser,Jeddah',
+    'B,9002,Open,Ali M,Riyadh',
+    'C,9003,Open,Nora,Dammam',
+    'D,9004,Open,Hadi,Jeddah',
+  ].join('\n'), 'utf8');
+  const shiftedParsed = api.parseTable(shiftedContact, 'daily.xlsx', 'contact', XLSX);
+  assert(!shiftedParsed.errors.length, shiftedParsed.errors.join('; '));
+  assert(shiftedParsed.sheetName === 'Daily', 'worksheet with Lead Number is used');
+  assert(shiftedParsed.columns.leadNumber === 1, 'lead number header is used when column C is not the id');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9001' && row.bucket === 'contacted'), 'yes initial contact counts as contacted');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9002' && row.bucket === 'not_contacted'), 'no initial contact counts as not contacted');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9003' && row.bucket === 'missing'), 'blank initial contact stays missing');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9004' && row.bucket === 'in_progress'), 'in progress stays separate');
+  const shiftedCrmParsed = api.parseTable(shiftedCrm, 'crm.csv', 'crm', XLSX);
+  assert(!shiftedCrmParsed.errors.length, shiftedCrmParsed.errors.join('; '));
+  assert(shiftedCrmParsed.columns.transactionNo === 1, 'crm lead number is the match key');
+  const shiftedData = api.buildDataset(shiftedParsed, shiftedCrmParsed);
+  const shiftedSummary = api.summarize(shiftedData, { employee: '', centre: '', source: '', leadType: '', crm: '', q: '' });
+  assert(shiftedSummary.kpis.totalCrm === 4, `shifted crm ${shiftedSummary.kpis.totalCrm}`);
+  const saraShift = shiftedSummary.advisors.find((row) => row.name === 'Sara Nasser');
+  const aliShift = shiftedSummary.advisors.find((row) => row.name === 'Ali M');
+  const noraShift = shiftedSummary.advisors.find((row) => row.name === 'Nora');
+  const hadiShift = shiftedSummary.advisors.find((row) => row.name === 'Hadi');
+  assert(saraShift && saraShift.contacted === 1 && saraShift.inProgress === 0 && saraShift.ach === 100, 'shifted sara achievement');
+  assert(aliShift && aliShift.notContacted === 1 && aliShift.contacted === 0 && aliShift.ach === 0, 'no is not contacted');
+  assert(noraShift && noraShift.unknown === 1 && noraShift.contacted === 0, 'blank initial contact is unknown');
+  assert(hadiShift && hadiShift.inProgress === 1 && hadiShift.contacted === 0 && hadiShift.ach === 0, 'in progress is not contacted');
+  assert(shiftedSummary.advisors.reduce((sum, row) => sum + row.total, 0) === shiftedSummary.employees.reduce((sum, row) => sum + row.matched, 0), 'advisors and employees use the same matched leads');
+
+  const multi = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(multi, XLSX.utils.aoa_to_sheet([['Name'], ['x']]), 'Notes');
+  XLSX.utils.book_append_sheet(multi, XLSX.utils.aoa_to_sheet([
+    ['Lead Number', 'Employee Responsible', 'Initial Contact'],
+    ['42', 'Sara Nasser', 'Yes'],
+  ]), 'Tracking');
+  const multiParsed = api.parseTable(XLSX.write(multi, { type: 'buffer', bookType: 'xlsx' }), 'multi.xlsx', 'contact', XLSX);
+  assert(!multiParsed.errors.length, multiParsed.errors.join('; '));
+  assert(multiParsed.sheetName === 'Tracking', 'sheet with Lead Number is selected');
+  assert(multiParsed.rows.some((row) => row.leadNumber === '42' && row.bucket === 'contacted'), 'lead from the named sheet');
+
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-test-'));
   const routes = [];
   const app = {

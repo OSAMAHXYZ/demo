@@ -14,23 +14,23 @@ const IN_PROGRESS = new Set(['in progress', 'inprogress', 'pending', 'follow up'
 
 const CONTACT_FIELDS = {
   leadNumber: ['lead number', 'lead no', 'lead #', 'lead id'],
-  initialContact: ['initial contact', 'first contact'],
-  employeeName: ['employee responsible', 'responsible employee', 'employee name'],
-  createdDate: ['created date', 'date created', 'create date'],
-  status: ['status', 'contact status', 'lead status'],
+  initialContact: ['initial contact', 'first contact', 'initial contact status', 'first contact status'],
+  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee'],
+  createdDate: ['created date', 'date created', 'create date', 'created on'],
+  status: ['status', 'contact status', 'lead status', 'crm contact status'],
   source: ['source', 'lead source'],
-  centre: ['centre name', 'center name', 'centre', 'center', 'branch'],
+  centre: ['centre name', 'center name', 'centre', 'center', 'branch', 'showroom', 'showroom name'],
   leadType: ['lead type'],
 };
 const CRM_FIELDS = {
-  transactionNo: ['transaction no', 'transaction no.', 'transaction number', 'transaction #', 'txn no', 'txn number'],
+  transactionNo: ['transaction no', 'transaction no.', 'transaction number', 'transaction #', 'txn no', 'txn number', 'lead number', 'lead no', 'lead #', 'lead id'],
   prospect: ['prospect', 'prospect name', 'customer', 'customer name'],
   model: ['model', 'vehicle model'],
-  status: ['status', 'crm status'],
-  employeeName: ['employee responsible', 'responsible employee', 'employee name'],
+  status: ['crm status', 'status'],
+  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee'],
   telephone: ['telephone', 'telephone no', 'telephone no.', 'phone', 'phone no', 'mobile', 'mobile no', 'mobile number'],
   employeeNumber: ['employee number', 'employee no', 'employee no.', 'emp no', 'employee id'],
-  centre: ['centre', 'center', 'centre name', 'center name', 'branch'],
+  centre: ['centre', 'center', 'centre name', 'center name', 'branch', 'showroom', 'showroom name'],
 };
 
 function normHeader(value) {
@@ -77,6 +77,25 @@ function classifyContactStatus(raw) {
   if (CONTACTED.has(compact) || compact.includes('contacted') || compact === 'contact' || (compact.includes('reached') && !compact.includes('not'))) return 'contacted';
   if (IN_PROGRESS.has(compact)) return 'in_progress';
   return 'unknown';
+}
+
+function classifyInitialContact(raw) {
+  const compact = normHeader(raw).replace(/[_-]+/g, ' ');
+  if (!compact) return 'missing';
+  if (/^(no|n|false|0)$/.test(compact)) return 'not_contacted';
+  if (/^(yes|y|true|1)$/.test(compact)) return 'contacted';
+  return classifyContactStatus(raw);
+}
+
+function headerMatches(label, aliases) {
+  const norm = normHeader(label);
+  return !!norm && aliases.some((alias) => normHeader(alias) === norm);
+}
+
+function chooseTrackedColumn(labels, namedCol, aliases, lockedIndex) {
+  if (lockedIndex >= 0 && headerMatches(labels[lockedIndex], aliases)) return lockedIndex;
+  if (namedCol >= 0) return namedCol;
+  return -1;
 }
 
 function fmtDate(date) {
@@ -258,16 +277,38 @@ function readWorkbook(buffer, filename, XLSX) {
   }
 }
 
-function pickSheet(wb, role) {
+function sheetHasHeader(ws, XLSX, aliases) {
+  if (!ws || !XLSX) return false;
+  try {
+    return !!locateHeader(sheetMatrix(ws, XLSX), aliases);
+  } catch (err) {
+    return false;
+  }
+}
+
+function pickSheet(wb, role, XLSX) {
   const names = (wb && wb.SheetNames) || [];
   if (!names.length) return { error: 'The file has no worksheet.' };
   if (role === 'contact') {
     const exact = names.find((name) => normHeader(name) === 'export');
     if (exact) return { name: exact };
+    const found = names.find((name) => sheetHasHeader(wb.Sheets[name], XLSX, CONTACT_FIELDS.leadNumber));
+    if (found) {
+      return {
+        name: found,
+        warning: names.length === 1
+          ? `Worksheet "${found}" was used. The expected worksheet name is Export.`
+          : `Worksheet "${found}" was used because it contains Lead Number. The expected worksheet name is Export.`,
+      };
+    }
     if (names.length === 1) {
       return { name: names[0], warning: `Worksheet "${names[0]}" was used. The expected worksheet name is Export.` };
     }
-    return { error: `Expected an Export worksheet. Found: ${names.join(', ')}.` };
+    return { error: `Expected an Export worksheet with a Lead Number header. Found: ${names.join(', ')}.` };
+  }
+  const found = names.find((name) => sheetHasHeader(wb.Sheets[name], XLSX, CRM_FIELDS.transactionNo));
+  if (found && found !== names[0]) {
+    return { name: found, warning: `Worksheet "${found}" was used because it contains the lead identifier.` };
   }
   return { name: names[0] };
 }
@@ -288,7 +329,7 @@ function locateHeader(matrix, requiredAliases) {
 function parseTable(buffer, filename, role, XLSX) {
   const opened = readWorkbook(buffer, filename, XLSX);
   if (opened.error) return { errors: [opened.error], warnings: [], rows: [] };
-  const picked = pickSheet(opened.wb, role);
+  const picked = pickSheet(opened.wb, role, XLSX);
   if (picked.error) return { errors: [picked.error], warnings: [], rows: [] };
   const warnings = picked.warning ? [picked.warning] : [];
   if (opened.encoding && opened.encoding !== 'workbook') {
@@ -309,21 +350,26 @@ function parseTable(buffer, filename, role, XLSX) {
     columns[key] = findColumn(located.labels, fields[key]);
   });
   const namedCol = columns[idKey];
-  columns[idKey] = MATCH_COL;
+  columns[idKey] = chooseTrackedColumn(located.labels, namedCol, fields[idKey], MATCH_COL);
   const columnCHeader = located.labels[MATCH_COL] || '';
-  if (namedCol >= 0 && namedCol !== MATCH_COL) {
+  if (columns[idKey] === MATCH_COL && namedCol >= 0 && namedCol !== MATCH_COL) {
     warnings.push(`The named identifier is not in column C. Matching uses column C${columnCHeader ? ` ("${columnCHeader}")` : ''}.`);
-  } else if (!columnCHeader) {
-    warnings.push('Column C has no header. Its values are still used as the match key.');
+  } else if (columns[idKey] >= 0 && columns[idKey] !== MATCH_COL) {
+    const header = located.labels[columns[idKey]] || 'identifier';
+    warnings.push(`Matching uses "${header}" from the header row.`);
+  } else if (columns[idKey] < 0) {
+    warnings.push('No identifier header was found.');
   }
   if (role === 'contact') {
     const namedStatus = columns.status;
-    columns.status = EXPORT_STATUS_COL;
+    columns.status = chooseTrackedColumn(located.labels, namedStatus, CONTACT_FIELDS.status, EXPORT_STATUS_COL);
     const statusHeader = located.labels[EXPORT_STATUS_COL] || '';
-    if (namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
+    if (columns.status === EXPORT_STATUS_COL && namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
       warnings.push(`Contact status is read from column G${statusHeader ? ` ("${statusHeader}")` : ''}, not the other status column.`);
-    } else if (!statusHeader) {
-      warnings.push('Column G has no header. Its values are still used as the contact status.');
+    } else if (columns.status >= 0 && columns.status !== EXPORT_STATUS_COL) {
+      warnings.push(`Contact status is read from "${located.labels[columns.status] || 'status'}".`);
+    } else if (columns.status < 0) {
+      warnings.push('Contact status column was not found. Initial Contact is used when it is filled in.');
     }
   }
   if (role === 'contact' && columns.employeeName < 0) warnings.push('Column not found: Employee Responsible. Matched leads use the CRM employee when that column is present.');
@@ -348,15 +394,21 @@ function parseTable(buffer, filename, role, XLSX) {
       const created = dateFromCell(columns.createdDate >= 0 ? line[columns.createdDate] : null, XLSX);
       if (created.invalid) invalidDates += 1;
       const statusRaw = columns.status >= 0 ? clip(cellText(line[columns.status]), 120) : '';
+      const initialContact = columns.initialContact >= 0 ? clip(cellText(line[columns.initialContact]), 120) : '';
+      let bucket = classifyContactStatus(statusRaw);
+      if (bucket === 'missing' && initialContact) {
+        const fromInitial = classifyInitialContact(initialContact);
+        if (fromInitial !== 'missing') bucket = fromInitial;
+      }
       rows.push({
         key,
         leadNumber: key,
-        initialContact: columns.initialContact >= 0 ? clip(cellText(line[columns.initialContact]), 120) : '',
+        initialContact,
         employeeName: columns.employeeName >= 0 ? clip(cellText(line[columns.employeeName]), 160) : '',
         createdDisplay: created.display,
         createdSort: created.sort,
         statusRaw,
-        bucket: classifyContactStatus(statusRaw),
+        bucket,
         source: columns.source >= 0 ? clip(cellText(line[columns.source]), 160) : '',
         centre: columns.centre >= 0 ? clip(cellText(line[columns.centre]), 160) : '',
         leadType: columns.leadType >= 0 ? clip(cellText(line[columns.leadType]), 160) : '',
@@ -386,8 +438,11 @@ function parseTable(buffer, filename, role, XLSX) {
   if (invalidDates) warnings.push(`${invalidDates} created date${invalidDates === 1 ? '' : 's'} could not be read and were kept as text.`);
   const withKey = rows.filter((row) => row.key).length;
   if (!withKey) {
+    const idHeader = columns[idKey] >= 0 ? String(located.labels[columns[idKey]] || '').trim() : '';
+    const headers = located.labels.map((label) => String(label || '').trim()).filter(Boolean).slice(0, 24);
+    const where = idHeader ? `"${idHeader}"` : 'Column C';
     return {
-      errors: [`Column C in the ${role === 'contact' ? 'contact-tracking file' : 'CRM export'} has no values to match. Publication has been blocked.`],
+      errors: [`${where} in the ${role === 'contact' ? 'contact-tracking file' : 'CRM export'} has no values to match. Publication has been blocked. Headers found: ${headers.join(', ') || 'none'}.`],
       warnings,
       rows: [],
       sheetName: picked.name,
@@ -950,6 +1005,28 @@ function emptyStore() {
   return { activeId: '', byPeriod: {}, publications: [], drafts: [], audit: [] };
 }
 
+function unpublishedMessage() {
+  return 'No contact file and CRM export are stored. On Admin, drop both files under CRM & Contact, then click Push to live.';
+}
+
+function readDiagnostics(parsed) {
+  const rows = parsed && Array.isArray(parsed.rows) ? parsed.rows : [];
+  return {
+    sheet: parsed && parsed.sheetName ? parsed.sheetName : '',
+    rows: rows.length,
+    withId: rows.filter((row) => row.key).length,
+    columns: parsed && parsed.columns ? parsed.columns : {},
+    errors: parsed && parsed.errors ? parsed.errors.length : 0,
+  };
+}
+
+function logContactRead(action, contactParsed, crmParsed) {
+  console.log(`[contact-performance] ${action} ${JSON.stringify({
+    contact: readDiagnostics(contactParsed),
+    crm: readDiagnostics(crmParsed),
+  })}`);
+}
+
 function attachContactPerformance(app, options) {
   const dir = options.dir;
   const password = String(options.password || '');
@@ -1046,6 +1123,13 @@ function attachContactPerformance(app, options) {
       period: active ? active.period : '',
       contactFile: active ? active.contactFile : '',
       crmFile: active ? active.crmFile : '',
+      diagnostic: {
+        published: Boolean(store.activeId),
+        publications: store.publications.length,
+        contactFile: Boolean(active && active.contactFile),
+        crmFile: Boolean(active && active.crmFile),
+        message: store.activeId ? '' : unpublishedMessage(),
+      },
       periods: Object.keys(store.byPeriod).sort().map((period) => {
         const item = store.publications.find((row) => row.id === store.byPeriod[period]);
         return item ? { id: item.id, period: item.period, at: item.at, contactFile: item.contactFile, crmFile: item.crmFile } : null;
@@ -1057,7 +1141,26 @@ function attachContactPerformance(app, options) {
     const store = readStore();
     const id = String(req.query.publication || store.byPeriod[req.query.period] || store.activeId || '');
     const dataset = loadDataset(id);
-    if (!dataset) return res.json({ empty: true, kpis: null, distribution: [], crmBars: [], employees: [], advisors: [], options: {}, reconciliation: null });
+    if (!dataset) {
+      console.log(`[contact-performance] summary empty ${JSON.stringify({ activeId: store.activeId || '', requested: id || '', publications: store.publications.length })}`);
+      return res.json({
+        empty: true,
+        kpis: null,
+        distribution: [],
+        crmBars: [],
+        employees: [],
+        advisors: [],
+        options: {},
+        reconciliation: null,
+        diagnostic: {
+          published: false,
+          publications: store.publications.length,
+          contactFile: false,
+          crmFile: false,
+          message: unpublishedMessage(),
+        },
+      });
+    }
     const summary = summarize(dataset, readQuery(req));
     const pub = store.publications.find((item) => item.id === id) || null;
     res.setHeader('Cache-Control', 'no-store');
@@ -1105,6 +1208,7 @@ function attachContactPerformance(app, options) {
     audit(store, 'upload_started', `Validation started for ${period}.`);
     const contactParsed = parseTable(contactFile.buf, contactFile.name, 'contact', XLSX);
     const crmParsed = parseTable(crmFile.buf, crmFile.name, 'crm', XLSX);
+    logContactRead('preview', contactParsed, crmParsed);
     const dataset = buildDataset(contactParsed, crmParsed);
     if (dataset.errors.length) {
       audit(store, 'publication_failed', dataset.errors[0].slice(0, 180));
@@ -1113,6 +1217,7 @@ function attachContactPerformance(app, options) {
         error: 'Publication has been blocked.',
         errors: dataset.errors,
         warnings: dataset.warnings,
+        diagnostics: { contact: readDiagnostics(contactParsed), crm: readDiagnostics(crmParsed) },
       });
     }
     const id = `cp_${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
@@ -1300,6 +1405,8 @@ function attachContactPerformance(app, options) {
 module.exports = {
   attachContactPerformance,
   classifyContactStatus,
+  classifyInitialContact,
+  chooseTrackedColumn,
   normalizeId,
   parseTable,
   buildDataset,

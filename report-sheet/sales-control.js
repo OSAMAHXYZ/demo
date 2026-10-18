@@ -319,9 +319,10 @@
         <div class="sc-card-nums">
           <button type="button" class="sc-num is-del" data-drill="records" data-ch="${c.id}" data-metric="delivered" title="${esc(c.title)} · delivered VINs"><span>Delivered</span><b class="gec-num" data-v="del"></b></button>
           <button type="button" class="sc-num is-pro" data-drill="records" data-ch="${c.id}" data-metric="proforma" title="${esc(c.title)} · pro-forma VINs"><span>Pro-Forma</span><b class="gec-num" data-v="pro"></b></button>
-          <div class="sc-num is-ratio" title="Monthly target from Admin"><span>Target</span><b class="gec-num" data-v="ratio"></b></div>
+          <div class="sc-num is-ratio" title="Achievement = (Pro-forma + Delivered) ÷ Target"><span>Target</span><b class="gec-num" data-v="ratio"></b><em class="sc-target-ach" data-v="ach"></em><em class="sc-target-left">Remaining <span data-v="left"></span></em></div>
         </div>
         <div class="sc-card-bar" aria-hidden="true"><i class="d" data-v="bar-del"></i><i class="p" data-v="bar-pro"></i></div>
+        <div class="sc-card-acc" title="Accessories follow the sales advisor. Experience Center advisors are on Experience Automall. Every other advisor is on Telesales. Number · amount · remaining (target − amount − in progress)."><span>Accessories</span><strong data-v="acc-line"></strong></div>
         <div class="sc-card-status"><span data-v="status-ico"></span><b data-v="status"></b><em data-v="status-tip"></em></div>
       </article>`).join("");
 
@@ -721,6 +722,7 @@
     const v = state.view;
     const sel = state.filters.channel;
     const max = Math.max(1, ...v.channels.map((c) => Math.max(c.delivered, c.proforma)));
+    const accessories = typeof state.ctx.channelAccessories === "function" ? state.ctx.channelAccessories(state.live) : null;
     v.channels.forEach((c) => {
       const { card, v: e } = state.cardEls[c.id];
       card.classList.toggle("is-selected", sel === c.id);
@@ -728,8 +730,21 @@
       setNum(e.del, c.delivered);
       setNum(e.pro, c.proforma);
       e.ratio.textContent = targetText(c.id);
+      const target = channelTargetOf(c.id);
+      const achieved = (Number(c.delivered) || 0) + (Number(c.proforma) || 0);
+      if (target > 0) {
+        e.ach.textContent = pct1((achieved / target) * 100);
+        e.left.textContent = n(target - achieved);
+      } else {
+        e.ach.textContent = "—";
+        e.left.textContent = "—";
+      }
       e["bar-del"].style.width = `${((c.delivered / max) * 100).toFixed(1)}%`;
       e["bar-pro"].style.width = `${((c.proforma / max) * 100).toFixed(1)}%`;
+      const acc = accessories && accessories[c.id];
+      e["acc-line"].textContent = accessories && accessories.hasFile && acc
+        ? `${n(acc.count)} · Amount ${n(acc.amount)} · Remaining ${n(acc.remaining)}`
+        : "—";
       const st = state.ctx.statusFor(c.delivered, c.proforma, c.id);
       e["status-ico"].textContent = st.icon;
       e.status.textContent = st.title;

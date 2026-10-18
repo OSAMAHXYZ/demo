@@ -164,27 +164,64 @@
       state.charts = [];
     }
 
+    function missingMessage() {
+      const diagnostic = state.diagnostic || (state.summary && state.summary.diagnostic) || null;
+      return (diagnostic && diagnostic.message)
+        || "No contact file and CRM export are stored. On Admin, drop both files under CRM & Contact, then click Push to live.";
+    }
+
+    function showStale(message) {
+      const stale = host.querySelector("#cp-stale");
+      if (!stale) return;
+      stale.hidden = false;
+      stale.textContent = message;
+    }
+
     async function loadMeta() {
       const meta = await getJson("/api/contact-performance/meta");
       state.periods = meta.periods || [];
       state.activeId = meta.activeId || "";
+      state.diagnostic = meta.diagnostic || null;
       return meta;
     }
 
     async function loadAll() {
       const refresh = host.querySelector("#cp-refresh");
       if (refresh) refresh.disabled = true;
+      const previous = state.summary && !state.summary.empty ? state.summary : null;
       try {
-        await loadMeta();
+        const meta = await loadMeta();
         const summary = await getJson(`/api/contact-performance/summary?${query()}`);
+        const recon = summary.reconciliation || {};
+        console.info("[contact-performance]", {
+          published: Boolean(meta.activeId),
+          publications: meta.diagnostic ? meta.diagnostic.publications : 0,
+          contactFile: meta.diagnostic ? Boolean(meta.diagnostic.contactFile) : Boolean(meta.contactFile),
+          crmFile: meta.diagnostic ? Boolean(meta.diagnostic.crmFile) : Boolean(meta.crmFile),
+          summaryEmpty: Boolean(summary.empty),
+          contactRows: recon.contactRows || 0,
+          crmRows: recon.crmRows || 0,
+          totalCrm: summary.kpis ? summary.kpis.totalCrm : 0,
+          advisors: Array.isArray(summary.advisors) ? summary.advisors.length : 0,
+        });
+        if (summary.empty && previous) {
+          showStale("Refresh did not return the published dataset. The numbers on screen are unchanged.");
+          return;
+        }
         state.summary = summary;
+        if (summary.diagnostic) state.diagnostic = summary.diagnostic;
         if (summary.publicationId) state.publication = summary.publicationId;
         render();
-        await loadLeads();
+        if (!summary.empty) await loadLeads();
         const stale = host.querySelector("#cp-stale");
         if (stale) stale.hidden = true;
       } catch (err) {
-        host.querySelector("#cp-sub").textContent = err.message || "The dashboard could not be loaded.";
+        if (previous) {
+          showStale(err.message || "Refresh failed. The published numbers on screen are unchanged.");
+        } else {
+          host.querySelector("#cp-sub").textContent = err.message || "The dashboard could not be loaded.";
+          showStale(err.message || "The dashboard could not be loaded.");
+        }
       } finally {
         if (refresh) refresh.disabled = false;
       }
@@ -210,7 +247,7 @@
       const sub = host.querySelector("#cp-sub");
       const fresh = host.querySelector("#cp-fresh");
       if (summary.empty) {
-        sub.textContent = "An administrator publishes the contact-tracking file and the CRM export from Admin → Data Management.";
+        sub.textContent = missingMessage();
         fresh.className = "cp-pill";
         fresh.innerHTML = "<i></i><span>Not published</span>";
       } else {
@@ -229,6 +266,9 @@
       equation.textContent = recon
         ? `${recon.equation}. Contact-tracking-only records: ${fmt(recon.contactOnly)}. Unknown contact status is not counted as Not Contacted. ACH% is N/A until an approved contact target exists.`
         : "";
+      if (summary.empty) {
+        host.querySelector("#cp-lead-wrap").innerHTML = `<div class="cp-empty">${esc(missingMessage())}</div>`;
+      }
     }
 
     function fieldSelect(key, label, options, current) {
@@ -283,10 +323,14 @@
     }
 
     function renderKpis() {
-      const kpis = (state.summary && state.summary.kpis) || {};
+      if (!state.summary || state.summary.empty) {
+        host.querySelector("#cp-kpis").innerHTML = `<div class="cp-empty">${esc(missingMessage())}</div>`;
+        return;
+      }
+      const kpis = state.summary.kpis || {};
       const cards = [
         ["", "Total CRM Leads", fmt(kpis.totalCrm), "Unique transactions", ""],
-        ["matched", "Matched Leads", fmt(kpis.matched), "Column C in both files", "info"],
+        ["matched", "Matched Leads", fmt(kpis.matched), "Same lead identifier in both files", "info"],
         ["contacted", "Contacted Leads", fmt(kpis.exportContacted), `${pct(kpis.contactedOfCrm)} of CRM total`, "ok"],
         ["not_contacted", "Not Contacted Leads", fmt(kpis.exportNotContacted), `${pct(kpis.notContactedOfCrm)} of CRM total`, "bad"],
         ["in_progress", "In Progress Leads", fmt(kpis.inProgress), "Matched, in progress", "wait"],
@@ -307,6 +351,11 @@
       const summary = state.summary || {};
       const distribution = summary.distribution || [];
       const legend = host.querySelector("#cp-donut-legend");
+      if (summary.empty) {
+        legend.innerHTML = `<li class="cp-empty">${esc(missingMessage())}</li>`;
+        renderAdvisors();
+        return;
+      }
       legend.innerHTML = distribution.map((item) => {
         const share = item.key === "contacted" || item.key === "not_contacted"
           ? `${Number(item.pct || 0).toFixed(1)}% of CRM`
@@ -377,84 +426,28 @@
       if (count) count.textContent = rows.length ? `${fmt(rows.length)} advisors · ${fmt(leadTotal)} valid leads` : "No leads";
       const box = host.querySelector("#cp-advisor-box");
       if (!box) return;
-      if (!rows.length || !global.Chart) {
-        box.style.height = "";
-        box.innerHTML = `<div class="cp-empty">${state.summary && !state.summary.empty && !global.Chart ? "The chart library did not load." : (state.summary && !state.summary.empty ? "No advisor leads for the current filters." : "Waiting for the latest Admin Push.")}</div>`;
+      box.style.height = "";
+      if (!rows.length) {
+        box.innerHTML = `<div class="cp-empty">${state.summary && !state.summary.empty ? "No advisor leads for the current filters." : esc(missingMessage())}</div>`;
         return;
       }
-      box.innerHTML = `<canvas id="cp-advisor-bars"></canvas>`;
-      box.style.height = `${Math.max(160, rows.length * 32 + 36)}px`;
-      const tick = document.body.classList.contains("cp-mode") ? "#e8eef7" : "#172b4d";
       const achLabel = (row) => (row.ach == null || !Number.isFinite(Number(row.ach)) ? "N/A" : `${Number(row.ach).toFixed(1)}%`);
-      state.charts.push(new global.Chart(box.querySelector("#cp-advisor-bars"), {
-        type: "bar",
-        plugins: [{
-          id: "advisorAch",
-          afterDatasetsDraw(chart) {
-            const { ctx, chartArea } = chart;
-            const meta = chart.getDatasetMeta(0);
-            ctx.save();
-            ctx.fillStyle = tick;
-            ctx.font = "600 11px Manrope, Segoe UI, sans-serif";
-            ctx.textAlign = "left";
-            ctx.textBaseline = "middle";
-            meta.data.forEach((bar, index) => {
-              ctx.fillText(achLabel(rows[index]), chartArea.right + 8, bar.y);
-            });
-            ctx.restore();
-          },
-        }],
-        data: {
-          labels: rows.map((row) => row.name),
-          datasets: [
-            { label: "Contacted", data: rows.map((row) => row.contacted), backgroundColor: COLORS.contacted, stack: "leads", maxBarThickness: 16 },
-            { label: "Not Contacted", data: rows.map((row) => row.notContacted), backgroundColor: COLORS.not_contacted, stack: "leads", maxBarThickness: 16 },
-            { label: "In Progress", data: rows.map((row) => row.inProgress), backgroundColor: COLORS.in_progress, stack: "leads", maxBarThickness: 16 },
-            { label: "Unknown", data: rows.map((row) => row.unknown), backgroundColor: COLORS.unknown, stack: "leads", maxBarThickness: 16 },
-          ],
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          maintainAspectRatio: false,
-          layout: { padding: { right: 52 } },
-          plugins: {
-            legend: { position: "top", labels: { boxWidth: 10, color: tick, font: { size: 11 } } },
-            tooltip: {
-              callbacks: {
-                footer(items) {
-                  const row = rows[items[0].dataIndex];
-                  const share = (value) => (value == null || !Number.isFinite(Number(value)) ? "N/A" : `${Number(value).toFixed(1)}%`);
-                  return [
-                    `Total leads ${fmt(row.total)}`,
-                    `Contact ACH ${share(row.ach)}`,
-                    `Not Contacted ${share(row.notContactedPct)}`,
-                    `In Progress ${share(row.inProgressPct)}`,
-                  ];
-                },
-              },
-            },
-          },
-          scales: {
-            x: { stacked: true, ticks: { precision: 0, color: "#8d9bb0" }, grid: { color: "rgba(148, 163, 184, 0.16)" } },
-            y: {
-              stacked: true,
-              ticks: {
-                color: tick,
-                font: { size: 11 },
-                autoSkip: false,
-                callback(value, index) {
-                  const row = rows[index] || rows[value];
-                  const name = row ? row.name : "";
-                  const short = name.length > 22 ? `${name.slice(0, 21)}…` : name;
-                  return row ? `${short} · ${fmt(row.total)}` : "";
-                },
-              },
-              grid: { display: false },
-            },
-          },
-        },
-      }));
+      const share = (value) => (value == null || !Number.isFinite(Number(value)) ? "N/A" : `${Number(value).toFixed(1)}%`);
+      box.innerHTML = `<ul class="cp-ach-legend">
+        <li><i style="background:${COLORS.contacted}"></i>Contacted</li>
+        <li><i style="background:${COLORS.not_contacted}"></i>Not Contacted</li>
+        <li><i style="background:${COLORS.in_progress}"></i>In Progress</li>
+        <li><i style="background:${COLORS.unknown}"></i>Unknown</li>
+      </ul>
+      <ul class="cp-ach-list">${rows.map((row) => {
+        const part = (count, color) => (count > 0 && row.total > 0 ? `<i style="width:${(count / row.total) * 100}%;background:${color}"></i>` : "");
+        return `<li>
+          <span class="cp-ach-name" title="${esc(row.name)}">${esc(row.name)}</span>
+          <span class="cp-ach-bar" title="Contacted ${fmt(row.contacted)} · Not Contacted ${fmt(row.notContacted)} (${share(row.notContactedPct)}) · In Progress ${fmt(row.inProgress)} (${share(row.inProgressPct)}) · Unknown ${fmt(row.unknown)}">${part(row.contacted, COLORS.contacted)}${part(row.notContacted, COLORS.not_contacted)}${part(row.inProgress, COLORS.in_progress)}${part(row.unknown, COLORS.unknown)}</span>
+          <span class="cp-ach-total">${fmt(row.total)}</span>
+          <b class="cp-ach-pct">${achLabel(row)}</b>
+        </li>`;
+      }).join("")}</ul>`;
     }
 
     function renderEmployees() {
@@ -483,7 +476,7 @@
         <td class="num">${esc(pct(row.contactRate))}</td>
         <td>N/A</td>
         <td><span class="cp-meter" title="Contact rate from matched leads"><span style="width:${Math.max(0, Math.min(100, row.contactRate || 0))}%"></span></span>${esc(pct(row.contactRate))} <span class="cp-vol">${fmt(row.matched)} leads</span></td>
-      </tr>`).join("") : `<tr><td colspan="10"><div class="cp-empty">${all.length ? "No employees match that search." : "No employees for the current filters."}</div></td></tr>`;
+      </tr>`).join("") : `<tr><td colspan="10"><div class="cp-empty">${state.summary && state.summary.empty ? esc(missingMessage()) : (all.length ? "No employees match that search." : "No employees for the current filters.")}</div></td></tr>`;
       host.querySelector("#cp-emp-wrap").innerHTML = `<table class="cp-table">
         <thead><tr>
           ${head("rank", "Rank")}${head("name", "Employee")}${head("number", "Employee no.")}
@@ -715,7 +708,7 @@
         <input id="cp-file-contact" type="file" accept=".xlsx,.xls,.csv,.txt" />
         <div class="n">C</div>
         <h3>Contact file</h3>
-        <p class="ar">Export worksheet</p>
+        <p class="ar">Lead Number worksheet</p>
         <span class="meta" id="cp-meta-contact">Drop or click · .xlsx / .xls / .csv</span>
       </label>
       <label class="slot" id="cp-slot-crm">

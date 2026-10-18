@@ -13,13 +13,13 @@
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261008lead"></script>
   <script src="gec-dashboard.js?v=20261008dmy"></script>
-  <script src="sales-control.js?v=20261006ch1"></script>
+  <script src="sales-control.js?v=20261018sc4"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
   <script src="plan-tracker.js?v=20261011pt1"></script>
-  <script src="contact-performance.js?v=20261016cp3"></script>
+  <script src="contact-performance.js?v=20261017cp7"></script>
   <script src="ytd-history.js?v=20261015ytd2"></script>
   <script src="lexus-control/lexus-core.js?v=20261015lx1"></script>
   <script src="lexus-control/lexus-tracker.js?v=20261015lx1"></script>
@@ -30,13 +30,13 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
   <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
-  <link rel="stylesheet" href="sales-control.css?v=20260928sc1" />
+  <link rel="stylesheet" href="sales-control.css?v=20261018sc4" />
   <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
   <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261013alloc6" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261016cp4" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -19827,6 +19827,25 @@
     }
   }
 
+  function summaryChannelAccessories(live, prevMonthKey) {
+    const blank = () => ({ count: 0, amount: 0, remaining: 0 });
+    const by = { lexus: blank(), telesales: blank(), b2c: blank(), guest: blank() };
+    const acc = buildAccessoriesMetrics(live, prevMonthKey);
+    const guestKeys = guestExpEmployeeKeys();
+    const channelOf = (key) => (key && guestKeys.has(key) ? "guest" : "telesales");
+    acc.byKey.forEach((row, key) => {
+      const bucket = by[channelOf(key)];
+      bucket.amount += Number(row.sold) || 0;
+      bucket.remaining += Number(row.remaining) || 0;
+    });
+    (slots.accessories.rows || []).forEach((row) => {
+      if (!accessoriesInPeriod(row, live, prevMonthKey)) return;
+      by[channelOf(nameKey(row.salesman))].count += 1;
+    });
+    by.hasFile = !!acc.hasFile;
+    return by;
+  }
+
   function guestExpEmployeeKeys() {
     const keys = new Set();
     (employeeTargets || []).forEach((e) => {
@@ -20318,6 +20337,10 @@
         return { min: toIsoDateInput(b.min), max: toIsoDateInput(b.max) };
       },
       channelTargets,
+      channelAccessories: (live) => summaryChannelAccessories(
+        live,
+        (live && (live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : ""))) || ""
+      ),
       lastUpdated: Number(Store.readDataPushStamp().at) || 0,
       onRefresh: () => refreshFromAdmin("Sales refreshed", { force: true }),
       onExit: () => {

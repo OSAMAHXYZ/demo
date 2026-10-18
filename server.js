@@ -4996,7 +4996,8 @@ app.get('/api/report-sheet/ytd-history', (_req, res) => {
 app.post('/api/report-sheet/ytd-history', (req, res) => {
   try {
     const body = req.body || {};
-    if (String(body.password || '') !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
+    const givenPassword = String(body.password || '');
+    if (givenPassword && givenPassword !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
     const buf = Buffer.from(String(body.base64 || ''), 'base64');
     if (!buf.length) return res.status(400).json({ error: 'Upload the Toyota Sales Report workbook' });
     const crypto = require('crypto');
