@@ -1047,7 +1047,7 @@
           ${users.map((u) => {
             const inW = ((u.stockIn || 0) / max) * 100;
             const outW = ((u.stockOut || 0) / max) * 100;
-            return `<div class="inv-hbar-row" title="${esc(u.name)} · ${u.stockIn || 0} in · ${u.stockOut || 0} out">
+            return `<div class="inv-hbar-row" title="${esc(u.name)} · ${u.stockIn || 0} in · ${u.stockOut || 0} out · ${u.notes || 0} delivery notes">
               <span class="inv-hbar-name">${esc(u.name)}</span>
               <span class="inv-hbar-tracks">
                 <span class="inv-hbar-track in"><i style="width:${inW}%"></i></span>
@@ -1085,6 +1085,7 @@
             <div class="inv-detail-nums">
               <span><em>In</em><b>${esc(u.stockIn || 0)}</b></span>
               <span><em>Out</em><b>${esc(u.stockOut || 0)}</b></span>
+              <span><em>Notes</em><b>${esc(u.notes || 0)}</b></span>
               <span><em>Claims</em><b>${esc(u.claims || 0)}</b></span>
             </div>
             <div class="table-wrap vsnd-sheet-wrap" style="max-height:28vh">

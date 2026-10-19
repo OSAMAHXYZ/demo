@@ -1530,13 +1530,48 @@ function createDeliveryTransformationRouter(opts = {}) {
       }
     });
 
+    // One delivery note = one VIN. Warehouse and display prints are not delivery notes.
+    const notesByPrinter = {};
+    const notedVins = new Set();
+    const addDeliveryNote = (vin, printedBy) => {
+      const key = normVin(vin);
+      if (!key || notedVins.has(key)) return;
+      notedVins.add(key);
+      const who = String(printedBy || '').trim().toLowerCase();
+      notesByPrinter[who] = (notesByPrinter[who] || 0) + 1;
+    };
+    (store.data.prints || []).forEach((print) => {
+      if (!print || print.kind === 'warehouse' || print.kind === 'display') return;
+      (Array.isArray(print.vins) ? print.vins : []).forEach((row) => {
+        const vin = typeof row === 'string' ? row : (row && row.vin);
+        addDeliveryNote(vin, print.printedBy);
+      });
+    });
+    store.allVehicles().forEach((v) => {
+      if (!isCoordinatorPrinted(v)) return;
+      const kind = String(v.ops.coordinatorPrintKind || '');
+      if (kind === 'warehouse' || kind === 'display') return;
+      addDeliveryNote(v.vin, v.ops.coordinatorPrintedBy);
+    });
+    const notesFor = (user) => {
+      const keys = new Set([
+        String(user.name || '').trim().toLowerCase(),
+        String(user.id || '').trim().toLowerCase(),
+      ].filter(Boolean));
+      let count = 0;
+      keys.forEach((key) => { count += notesByPrinter[key] || 0; });
+      return count;
+    };
+
     const users = USERS.filter((u) => u.canInventory).map((u) => {
       const stock = pool.filter((r) => r.stockOwnerId === u.id);
+      const notes = notesFor(u);
       return {
         id: u.id,
         name: u.name,
         stockIn: stock.length,
-        stockOut: releasedByUser[u.name] || 0,
+        stockOut: (releasedByUser[u.name] || 0) + notes,
+        notes,
         claims: claimedByUser[u.name] || 0,
         display: stock.filter((r) => r.label === 'display').length,
         delivery: stock.filter((r) => r.label === 'delivery').length,
@@ -1544,7 +1579,15 @@ function createDeliveryTransformationRouter(opts = {}) {
       };
     });
     const stockIn = users.reduce((s, u) => s + u.stockIn, 0);
-    const stockOut = users.reduce((s, u) => s + u.stockOut, 0);
+    const attributedPrinters = new Set();
+    users.forEach((u) => {
+      attributedPrinters.add(String(u.name || '').trim().toLowerCase());
+      attributedPrinters.add(String(u.id || '').trim().toLowerCase());
+    });
+    const unassignedNotes = Object.entries(notesByPrinter).reduce((sum, [who, count]) => (
+      attributedPrinters.has(who) ? sum : sum + count
+    ), 0);
+    const stockOut = users.reduce((s, u) => s + u.stockOut, 0) + unassignedNotes;
     const displayRows = pool.filter((r) => r.label === 'display');
     const deliveryRows = pool.filter((r) => r.label === 'delivery');
 
@@ -1561,6 +1604,7 @@ function createDeliveryTransformationRouter(opts = {}) {
       mine: pool.filter((r) => r.stockOwnerId === me).length,
       stockIn,
       stockOut,
+      deliveryNotes: notedVins.size,
       display: displayRows.length,
       delivery: deliveryRows.length,
       displayRows,
