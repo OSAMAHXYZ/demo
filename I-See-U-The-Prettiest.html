@@ -99,7 +99,7 @@ textarea{width:100%;min-height:90px;border-radius:16px;border:1.5px solid var(--
   <section class="screen" id="sEnd">
     <h1 id="endTitle">Thank you</h1>
     <p id="endText"></p>
-    <div id="fallback"><p>Please send me your answer here:</p><a id="fbLink" target="_blank" rel="noopener"><button>Send my answer</button></a></div>
+    <div id="fallback"><p>Send your answer to him as a love ticket:</p><a id="fbLink" href="my-princess.html"><button type="button">Send my answer</button></a></div>
   </section>
 </main>
 
@@ -117,14 +117,29 @@ var st = {answer:"", call:"", reason:"", at:Date.now()};
 function go(id){$('arrow').style.display='none';document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('on')});$(id).classList.add('on');}
 if(HER_NAME){$('hello').textContent="Hey "+HER_NAME;}
 
+function princessUrl(){
+  var q = new URLSearchParams();
+  if(HER_NAME) q.set('n', HER_NAME);
+  if(st.answer) q.set('a', st.answer);
+  if(st.call) q.set('c', st.call);
+  if(st.reason) q.set('r', st.reason);
+  q.set('t', String(st.updated || st.at || Date.now()));
+  return 'my-princess.html?' + q.toString();
+}
+function showSend(){
+  var link = $('fbLink');
+  if(!link) return;
+  link.href = princessUrl();
+  link.removeAttribute('target');
+  $('fallback').style.display = 'block';
+}
 function save(){
   st.updated = Date.now();
-  var msg = "My answer: "+(st.answer||"-")+(st.call?" | Call: "+st.call:"")+(st.reason?" | Why: "+st.reason:"");
-  var fail = function(){
-    if(MY_WHATSAPP){$('fbLink').href="https://wa.me/"+MY_WHATSAPP+"?text="+encodeURIComponent(msg);$('fallback').style.display='block';}
-  };
-  if(!db){fail();return;}
-  try{db.collection("answers").doc(sid).set(Object.assign({},st)).catch(fail);}catch(e){fail();}
+  st.name = HER_NAME || '';
+  try{ localStorage.setItem('prettiest-answer', JSON.stringify(st)); }catch(e){}
+  showSend();
+  if(!db) return;
+  try{ db.collection("answers").doc(sid).set(Object.assign({},st)).catch(function(){}); }catch(e){}
 }
 
 function hearts(){
