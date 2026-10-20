@@ -37,7 +37,1181 @@
   <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
-  <link rel="stylesheet" href="executive-skin.css?v=20261020ex2" />
+  <style id="executive-skin">
+/* =====================================================================
+   EXECUTIVE SKIN · Toyota ALJ Report Sheet
+   Visual layer only. Load it LAST, after every other stylesheet.
+   It changes colours, type, surfaces, spacing polish and states.
+   It does not change IDs, markup, data, filters or calculations.
+   Remove the <link> tag to return to the previous look.
+   v2: all cockpit pages share one palette; no entrance animation
+   ===================================================================== */
+
+/* ---------- 1. Design tokens ---------- */
+:root {
+  --ex-font: "Manrope", "Outfit", "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
+  --ex-num: "Space Grotesk", "Manrope", "Outfit", sans-serif;
+
+  --ex-red: #eb0a1e;
+  --ex-red-deep: #c40718;
+  --ex-red-soft: rgba(235, 10, 30, 0.08);
+  --ex-green: #0f9d76;
+  --ex-green-soft: rgba(15, 157, 118, 0.10);
+  --ex-amber: #d97706;
+  --ex-amber-soft: rgba(217, 119, 6, 0.10);
+  --ex-blue: #2563eb;
+  --ex-blue-soft: rgba(37, 99, 235, 0.08);
+
+  /* light surfaces (generic panels) */
+  --ex-bg: #f3f5f9;
+  --ex-surface: #ffffff;
+  --ex-surface-2: #f7f9fc;
+  --ex-line: #e3e8f0;
+  --ex-line-strong: #cfd6e2;
+  --ex-ink: #0b1324;
+  --ex-ink-2: #334155;
+  --ex-muted: #64748b;
+
+  /* dark cockpit surfaces (sales, BO, allocation… charts are drawn for dark) */
+  --cx-bg: #070d18;
+  --cx-surface: #0e1728;
+  --cx-surface-2: #132036;
+  --cx-raise: #18263f;
+  --cx-line: rgba(148, 163, 184, 0.13);
+  --cx-line-strong: rgba(148, 163, 184, 0.24);
+  --cx-ink: #eef3fa;
+  --cx-ink-2: #c9d4e3;
+  --cx-muted: #8d9bb0;
+
+  /* chrome */
+  --ex-side-bg: #0a1220;
+  --ex-side-ink: #c9d4e3;
+  --ex-side-muted: #6f7f97;
+
+  --ex-radius: 14px;
+  --ex-radius-sm: 10px;
+  --ex-shadow: 0 1px 2px rgba(11, 19, 36, 0.04), 0 10px 28px -14px rgba(11, 19, 36, 0.18);
+  --ex-shadow-hover: 0 2px 4px rgba(11, 19, 36, 0.05), 0 18px 40px -18px rgba(11, 19, 36, 0.28);
+  --cx-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 34px -18px rgba(0, 0, 0, 0.7);
+  --ex-ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+body.theme-dark {
+  --ex-bg: var(--cx-bg);
+  --ex-surface: var(--cx-surface);
+  --ex-surface-2: var(--cx-surface-2);
+  --ex-line: var(--cx-line);
+  --ex-line-strong: var(--cx-line-strong);
+  --ex-ink: var(--cx-ink);
+  --ex-ink-2: var(--cx-ink-2);
+  --ex-muted: var(--cx-muted);
+  --ex-shadow: var(--cx-shadow);
+  --ex-shadow-hover: 0 20px 44px -20px rgba(0, 0, 0, 0.85);
+}
+
+/* ---------- 2. Base ---------- */
+body.live-app {
+  font-family: var(--ex-font);
+  background: var(--ex-bg);
+  color: var(--ex-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01";
+}
+body.live-app .app-main,
+body.live-app .app-content { background: transparent; }
+
+body.live-app ::selection { background: rgba(235, 10, 30, 0.18); }
+
+body.live-app *::-webkit-scrollbar { width: 10px; height: 10px; }
+body.live-app *::-webkit-scrollbar-track { background: transparent; }
+body.live-app *::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+body.live-app *::-webkit-scrollbar-thumb:hover { background-color: rgba(100, 116, 139, 0.6); }
+
+body.live-app :focus-visible {
+  outline: 2px solid var(--ex-red);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* all figures line up in columns */
+body.live-app .val,
+body.live-app .num,
+body.live-app td.num,
+body.live-app .sr-kpi-val,
+body.live-app .boe-kpi-val,
+body.live-app .bo-kpi .val,
+body.live-app .kpi .value,
+body.live-app strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 3. Sidebar ---------- */
+body.live-app .app-sidebar {
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(235, 10, 30, 0.10), transparent 60%),
+    var(--ex-side-bg);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--ex-side-ink);
+}
+body.live-app .sidebar-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+body.live-app .sidebar-mark {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px -8px rgba(235, 10, 30, 0.55);
+}
+body.live-app .sidebar-brand-text strong {
+  color: #fff;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+}
+body.live-app .sidebar-brand-text span { color: var(--ex-side-muted); letter-spacing: 0.04em; }
+body.live-app .sidebar-section-label {
+  color: var(--ex-side-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+body.live-app .side-nav-item {
+  position: relative;
+  color: var(--ex-side-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background .18s var(--ex-ease), color .18s var(--ex-ease);
+}
+body.live-app .side-nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+body.live-app .side-nav-item.active {
+  background: linear-gradient(90deg, rgba(235, 10, 30, 0.20), rgba(235, 10, 30, 0.04));
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(235, 10, 30, 0.22);
+}
+body.live-app .side-nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--ex-red);
+  box-shadow: 0 0 12px rgba(235, 10, 30, 0.8);
+}
+body.live-app .side-nav-icon {
+  color: var(--ex-side-muted);
+  transition: color .18s;
+}
+body.live-app .side-nav-item:hover .side-nav-icon,
+body.live-app .side-nav-item.active .side-nav-icon { color: var(--ex-red); }
+body.live-app .sidebar-footer { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+body.live-app .sidebar-user-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+body.live-app .sidebar-user-avatar {
+  background: linear-gradient(135deg, var(--ex-red), #7a0510);
+  color: #fff;
+  font-weight: 800;
+}
+body.live-app .sidebar-user-meta strong { color: #fff; }
+body.live-app .sidebar-user-meta span { color: var(--ex-side-muted); }
+body.live-app .sidebar-collapse-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ex-side-ink);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+/* ---------- 4. Top bar ---------- */
+body.live-app .app-topbar {
+  background: color-mix(in srgb, var(--ex-surface) 86%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--ex-line);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset;
+}
+body.live-app .app-topbar-eyebrow {
+  color: var(--ex-red);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+body.live-app .app-page-title {
+  color: var(--ex-ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+body.live-app .app-topbar-search {
+  background: var(--ex-surface-2);
+  border: 1px solid var(--ex-line);
+  border-radius: 12px;
+  transition: border-color .18s, box-shadow .18s;
+}
+body.live-app .app-topbar-search:focus-within {
+  border-color: rgba(235, 10, 30, 0.45);
+  box-shadow: 0 0 0 4px var(--ex-red-soft);
+}
+body.live-app .app-topbar-search input {
+  background: transparent;
+  color: var(--ex-ink);
+}
+body.live-app .app-search-kbd {
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-line);
+  color: var(--ex-muted);
+  border-radius: 6px;
+  font-family: var(--ex-num);
+}
+
+/* status pills */
+body.live-app .app-topbar .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: var(--ex-surface-2);
+  border: 1px solid var(--ex-line);
+  color: var(--ex-muted);
+}
+body.live-app .app-topbar .status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .85;
+}
+body.live-app .app-topbar .status.ok { color: var(--ex-green); background: var(--ex-green-soft); border-color: rgba(15, 157, 118, 0.25); }
+body.live-app .app-topbar .status.busy { color: var(--ex-amber); background: var(--ex-amber-soft); border-color: rgba(217, 119, 6, 0.25); }
+body.live-app .app-topbar .status.err { color: var(--ex-red); background: var(--ex-red-soft); border-color: rgba(235, 10, 30, 0.25); }
+body.live-app #live-badge.ok::before { animation: ex-pulse 2s ease-in-out infinite; }
+
+@keyframes ex-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 157, 118, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(15, 157, 118, 0); }
+}
+
+/* ---------- 5. Buttons & form controls (generic panels) ---------- */
+body.live-app .btn,
+body.live-app .btn-ghost {
+  font-family: var(--ex-font);
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1px solid var(--ex-line-strong);
+  background: var(--ex-surface);
+  color: var(--ex-ink-2);
+  transition: background .16s, border-color .16s, color .16s, transform .16s, box-shadow .16s;
+}
+body.live-app .btn:hover:not(:disabled),
+body.live-app .btn-ghost:hover:not(:disabled) {
+  border-color: var(--ex-ink-2);
+  color: var(--ex-ink);
+  transform: translateY(-1px);
+}
+body.live-app .btn-primary {
+  font-family: var(--ex-font);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+  border: 1px solid var(--ex-red-deep);
+  background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
+  color: #fff;
+  box-shadow: 0 8px 18px -10px rgba(235, 10, 30, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform .16s, box-shadow .16s, filter .16s;
+}
+body.live-app .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow: 0 12px 24px -12px rgba(235, 10, 30, 1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+body.live-app .btn:disabled,
+body.live-app .btn-primary:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+body.live-app #dashboard select,
+body.live-app #dashboard input[type="search"],
+body.live-app #dashboard input[type="text"],
+body.live-app #dashboard input[type="date"],
+body.live-app #dashboard input[type="number"] {
+  font-family: var(--ex-font);
+  border-radius: 10px;
+  transition: border-color .16s, box-shadow .16s;
+}
+body.live-app #dashboard select:focus,
+body.live-app #dashboard input:focus {
+  outline: none;
+  border-color: rgba(235, 10, 30, 0.5);
+  box-shadow: 0 0 0 4px var(--ex-red-soft);
+}
+
+/* ---------- 6. Generic cards, KPIs, tables (light panels) ---------- */
+body.live-app .card {
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-line);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--ex-shadow);
+}
+body.live-app .card h2,
+body.live-app .pbi-viz-head h2 {
+  color: var(--ex-ink);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+body.live-app .hint,
+body.live-app .foot { color: var(--ex-muted); }
+
+body.live-app .wait-card {
+  border-top: 3px solid var(--ex-red);
+}
+body.live-app .wait-card h2 { font-size: 1.25rem; }
+body.live-app .banner.load { border-radius: 10px; }
+body.live-app .banner.err {
+  border-radius: 10px;
+  background: var(--ex-red-soft);
+  color: var(--ex-red-deep);
+  border: 1px solid rgba(235, 10, 30, 0.25);
+}
+
+/* classic KPI tiles */
+body.live-app .kpi {
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-line);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--ex-shadow);
+  transition: transform .2s var(--ex-ease), box-shadow .2s var(--ex-ease), border-color .2s;
+}
+body.live-app .kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ex-shadow-hover);
+  border-color: rgba(235, 10, 30, 0.35);
+}
+body.live-app .kpi .label {
+  color: var(--ex-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.live-app .kpi .value {
+  font-family: var(--ex-num);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ex-ink);
+}
+
+/* tables */
+body.live-app .table-wrap,
+body.live-app .xl-table-wrap {
+  border-radius: var(--ex-radius-sm);
+}
+body.live-app .table-wrap table thead th,
+body.live-app .xl-table-wrap table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* badges */
+body.live-app .badge {
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+}
+body.live-app .badge.ok { background: var(--ex-green-soft); color: var(--ex-green); }
+body.live-app .badge.warn { background: var(--ex-amber-soft); color: var(--ex-amber); }
+body.live-app .badge.bad { background: var(--ex-red-soft); color: var(--ex-red); }
+
+/* footer */
+body.live-app .page-foot {
+  color: var(--ex-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--ex-line);
+}
+
+/* ---------- 7. Dark cockpit panels ----------
+   These panels draw their charts with light text on dark,
+   so they stay dark in both themes and get the refined palette. */
+body.live-app #panel-salesreport,
+body.live-app #panel-ytdsales,
+body.live-app #panel-bodashboard,
+body.live-app #panel-boerrors,
+body.live-app #panel-boallocstock,
+body.live-app #panel-plantracker,
+body.live-app #panel-reservedvehicles,
+body.live-app #bo-dash,
+body.live-app #boe-dash,
+body.live-app #bas-dash,
+body.live-app #pt-dash,
+body.live-app #rv-dash {
+  /* the page's own colour names, so inline text and empty states turn light too */
+  --ink: var(--cx-ink);
+  --muted: var(--cx-muted);
+  --surface-2: var(--cx-surface-2);
+  --ex-surface: var(--cx-surface);
+  --ex-surface-2: var(--cx-surface-2);
+  --ex-line: var(--cx-line);
+  --ex-line-strong: var(--cx-line-strong);
+  --ex-ink: var(--cx-ink);
+  --ex-ink-2: var(--cx-ink-2);
+  --ex-muted: var(--cx-muted);
+  --ex-shadow: var(--cx-shadow);
+  color: var(--cx-ink);
+}
+
+/* cockpit page backdrop */
+body.live-app.sr-mode .app-content,
+body.live-app.bo-dash-mode .app-content,
+body.live-app.alloc-mode .app-content,
+body.live-app.boe-mode .app-content,
+body.live-app.ytd-mode .app-content,
+body.live-app.pt-wide-mode .app-content,
+body.live-app.rv-mode .app-content {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(235, 10, 30, 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(37, 99, 235, 0.06), transparent 60%),
+    var(--cx-bg);
+}
+
+/* cockpit cards */
+body.live-app #panel-salesreport .sr-mock-card,
+body.live-app #panel-salesreport .sr-emp-rail,
+body.live-app #panel-salesreport .sr-kpi-card,
+body.live-app #panel-salesreport .sr-sched-table-card,
+body.live-app #panel-salesreport .sr-sched-kpi,
+body.live-app #panel-salesreport .sr-fold,
+body.live-app #bo-dash .card,
+body.live-app #bo-dash .bo-kpi,
+body.live-app #boe-dash .card,
+body.live-app #boe-dash .boe-kpi,
+body.live-app #boe-dash .boe-breakdown,
+body.live-app #bas-dash .card,
+body.live-app #bas-dash .bo-kpi,
+body.live-app #pt-dash .pt-card,
+body.live-app #rv-dash .bo-kpi,
+body.live-app #rv-dash .rv-board-card,
+body.live-app #rv-dash .rv-audit,
+body.live-app #panel-ytdsales .ytd-card,
+body.live-app #panel-ytdsales .ytd-kpi,
+body.live-app #panel-ytdsales .ytd-trend {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
+    var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--cx-shadow);
+  color: var(--cx-ink);
+}
+
+/* clickable cockpit tiles lift on hover */
+body.live-app #panel-salesreport .sr-tap,
+body.live-app #bo-dash .bo-tap,
+body.live-app #boe-dash .boe-kpi,
+body.live-app #panel-ytdsales .ytd-card {
+  transition: transform .2s var(--ex-ease), border-color .2s, box-shadow .2s;
+}
+body.live-app #panel-salesreport .sr-tap:hover,
+body.live-app #bo-dash .bo-tap:hover,
+body.live-app #boe-dash .boe-kpi:hover,
+body.live-app #panel-ytdsales .ytd-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(235, 10, 30, 0.35);
+  box-shadow: 0 22px 44px -22px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(235, 10, 30, 0.12);
+}
+
+/* cockpit card titles */
+body.live-app #panel-salesreport .sr-mock-card-title,
+body.live-app #panel-salesreport .sr-emp-rail-title,
+body.live-app #bo-dash h2,
+body.live-app #boe-dash h2,
+body.live-app #bas-dash h2,
+body.live-app #pt-dash h3,
+body.live-app #rv-dash h3,
+body.live-app #panel-ytdsales h3 {
+  color: var(--cx-ink);
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+body.live-app #panel-salesreport .sr-mock-card-sub,
+body.live-app #panel-salesreport .sr-emp-rail-meta,
+body.live-app #bo-dash .hint,
+body.live-app #boe-dash .hint,
+body.live-app #bas-dash .hint,
+body.live-app #pt-dash .pt-card-h span,
+body.live-app #panel-ytdsales .ytd-sub { color: var(--cx-muted); }
+
+/* cockpit KPI typography */
+body.live-app #panel-salesreport .sr-kpi-lab,
+body.live-app #bo-dash .bo-kpi .lab,
+body.live-app #bas-dash .bo-kpi .lbl,
+body.live-app #rv-dash .bo-kpi .lab,
+body.live-app #boe-dash .boe-kpi-lab {
+  color: var(--cx-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+body.live-app #panel-salesreport .sr-kpi-val,
+body.live-app #bo-dash .bo-kpi .val,
+body.live-app #bas-dash .bo-kpi .val,
+body.live-app #rv-dash .bo-kpi .val,
+body.live-app #boe-dash .boe-kpi-val {
+  font-family: var(--ex-num);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+body.live-app #panel-salesreport .sr-kpi-desc,
+body.live-app #bo-dash .bo-kpi .sub,
+body.live-app #bas-dash .bo-kpi .sub,
+body.live-app #boe-dash .boe-kpi-note { color: var(--cx-muted); }
+
+/* accent bar on top of each cockpit KPI tile */
+body.live-app #panel-salesreport .sr-kpi-card,
+body.live-app #bo-dash .bo-kpi,
+body.live-app #bas-dash .bo-kpi,
+body.live-app #boe-dash .boe-kpi {
+  position: relative;
+  overflow: hidden;
+}
+body.live-app #panel-salesreport .sr-kpi-card::after,
+body.live-app #bo-dash .bo-kpi::after,
+body.live-app #bas-dash .bo-kpi::after,
+body.live-app #boe-dash .boe-kpi::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.45), transparent);
+  pointer-events: none;
+}
+body.live-app #bo-dash .bo-kpi.ok::after,
+body.live-app #bas-dash .bo-kpi.ok::after { background: linear-gradient(90deg, transparent, var(--ex-green), transparent); }
+body.live-app #bo-dash .bo-kpi.warn::after,
+body.live-app #bas-dash .bo-kpi.warn::after { background: linear-gradient(90deg, transparent, var(--ex-amber), transparent); }
+body.live-app #bo-dash .bo-kpi.bad::after,
+body.live-app #bas-dash .bo-kpi.bad::after,
+body.live-app #panel-salesreport .sr-kpi-card.is-over::after { background: linear-gradient(90deg, transparent, var(--ex-red), transparent); }
+body.live-app #panel-salesreport .sr-kpi-card.is-ok::after { background: linear-gradient(90deg, transparent, var(--ex-green), transparent); }
+
+/* cockpit tables */
+body.live-app #panel-salesreport table thead th,
+body.live-app #bo-dash table thead th,
+body.live-app #boe-dash table thead th,
+body.live-app #bas-dash table thead th,
+body.live-app #pt-dash table thead th,
+body.live-app #rv-dash table thead th,
+body.live-app #panel-ytdsales table thead th {
+  background: var(--cx-surface-2);
+  color: var(--cx-muted);
+  border-bottom: 1px solid var(--cx-line-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.live-app #panel-salesreport table tbody td,
+body.live-app #bo-dash table tbody td,
+body.live-app #boe-dash table tbody td,
+body.live-app #bas-dash table tbody td,
+body.live-app #pt-dash table tbody td,
+body.live-app #rv-dash table tbody td,
+body.live-app #panel-ytdsales table tbody td {
+  border-bottom: 1px solid var(--cx-line);
+  color: var(--cx-ink-2);
+}
+body.live-app #panel-salesreport table tbody tr:hover td,
+body.live-app #bo-dash table tbody tr:hover td,
+body.live-app #boe-dash table tbody tr:hover td,
+body.live-app #bas-dash table tbody tr:hover td,
+body.live-app #pt-dash table tbody tr:hover td,
+body.live-app #rv-dash table tbody tr:hover td,
+body.live-app #panel-ytdsales table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.035);
+}
+body.live-app #panel-salesreport table tfoot td,
+body.live-app #bo-dash table tfoot td,
+body.live-app #bas-dash table tfoot td,
+body.live-app #panel-ytdsales table tfoot td {
+  background: var(--cx-raise);
+  color: #fff;
+  font-weight: 800;
+  border-top: 1px solid var(--cx-line-strong);
+}
+
+/* cockpit controls */
+body.live-app #panel-salesreport select,
+body.live-app #panel-salesreport input,
+body.live-app #bo-dash select,
+body.live-app #bo-dash input,
+body.live-app #boe-dash select,
+body.live-app #boe-dash input,
+body.live-app #bas-dash select,
+body.live-app #bas-dash input,
+body.live-app #pt-dash select,
+body.live-app #pt-dash input,
+body.live-app #rv-dash select,
+body.live-app #rv-dash input,
+body.live-app #panel-ytdsales select {
+  background-color: var(--cx-surface-2);
+  color: var(--cx-ink);
+  border: 1px solid var(--cx-line-strong);
+  color-scheme: dark;
+}
+body.live-app #panel-salesreport .btn,
+body.live-app #bo-dash .btn,
+body.live-app #boe-dash .btn,
+body.live-app #bas-dash .btn,
+body.live-app #pt-dash .btn,
+body.live-app #rv-dash .btn {
+  background: var(--cx-surface-2);
+  color: var(--cx-ink-2);
+  border-color: var(--cx-line-strong);
+}
+body.live-app #panel-salesreport .btn:hover:not(:disabled),
+body.live-app #bo-dash .btn:hover:not(:disabled),
+body.live-app #boe-dash .btn:hover:not(:disabled),
+body.live-app #bas-dash .btn:hover:not(:disabled),
+body.live-app #pt-dash .btn:hover:not(:disabled),
+body.live-app #rv-dash .btn:hover:not(:disabled) {
+  background: var(--cx-raise);
+  color: #fff;
+  border-color: rgba(235, 10, 30, 0.45);
+}
+
+/* ---------- 8. Sales Dashboard header & toolbar ---------- */
+body.live-app #panel-salesreport .sr-eyebrow {
+  color: var(--ex-red);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+body.live-app #panel-salesreport .sr-title {
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+body.live-app #panel-salesreport .sr-sub { color: var(--cx-muted); }
+body.live-app #panel-salesreport .sr-brand-word {
+  color: #fff;
+  letter-spacing: 0.2em;
+  font-weight: 800;
+}
+body.live-app #panel-salesreport .sr-live-pill {
+  background: var(--ex-green-soft);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+body.live-app #panel-salesreport .sr-live-pill i {
+  background: #34d399;
+  animation: ex-pulse 2s ease-in-out infinite;
+}
+body.live-app #panel-salesreport .sr-day-chip,
+body.live-app #panel-salesreport .sr-range-pills,
+body.live-app #panel-salesreport .sr-date-range,
+body.live-app #panel-salesreport .sr-filter-chip {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+}
+body.live-app #panel-salesreport .sr-range-pill {
+  color: var(--cx-muted);
+  font-weight: 700;
+  border-radius: 9px;
+  transition: background .16s, color .16s;
+}
+body.live-app #panel-salesreport .sr-range-pill:hover { color: #fff; }
+body.live-app #panel-salesreport .sr-range-pill.is-active {
+  background: var(--ex-red);
+  color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(235, 10, 30, 0.9);
+}
+body.live-app #panel-salesreport .sr-tool-btn,
+body.live-app #panel-salesreport .sr-icon-btn {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  color: var(--cx-ink-2);
+  border-radius: 10px;
+  transition: background .16s, color .16s, border-color .16s;
+}
+body.live-app #panel-salesreport .sr-tool-btn:hover,
+body.live-app #panel-salesreport .sr-icon-btn:hover,
+body.live-app #panel-salesreport .sr-tool-btn.is-active {
+  background: var(--cx-raise);
+  color: #fff;
+  border-color: rgba(235, 10, 30, 0.45);
+}
+body.live-app #panel-salesreport .sr-export-btn {
+  background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
+  color: #fff;
+  border: 1px solid var(--ex-red-deep);
+  border-radius: 10px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px -10px rgba(235, 10, 30, 0.9);
+}
+
+/* employee rail */
+body.live-app #panel-salesreport .sr-emp-row {
+  border-radius: 10px;
+  color: var(--cx-ink-2);
+  transition: background .14s, color .14s;
+}
+body.live-app #panel-salesreport .sr-emp-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+body.live-app #panel-salesreport .sr-emp-row.active {
+  background: linear-gradient(90deg, rgba(235, 10, 30, 0.2), rgba(235, 10, 30, 0.03));
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--ex-red);
+}
+body.live-app #panel-salesreport .sr-emp-counts {
+  font-family: var(--ex-num);
+  color: var(--cx-muted);
+}
+
+/* progress bars */
+body.live-app #panel-salesreport .sr-perf-progress-track,
+body.live-app #panel-salesreport .sr-acc-progress-track {
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  overflow: hidden;
+}
+body.live-app #panel-salesreport .sr-perf-progress-fill {
+  background: linear-gradient(90deg, #b5061a, var(--ex-red) 60%, #ff5a6a);
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgba(235, 10, 30, 0.55);
+  transition: width .8s var(--ex-ease);
+}
+
+/* Wide buttons inside cards */
+body.live-app .pbi-expand {
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background .16s, color .16s, border-color .16s;
+}
+body.live-app #panel-salesreport .pbi-expand,
+body.live-app #bo-dash .pbi-expand,
+body.live-app #bas-dash .pbi-expand {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+}
+body.live-app #panel-salesreport .pbi-expand:hover,
+body.live-app #bo-dash .pbi-expand:hover,
+body.live-app #bas-dash .pbi-expand:hover {
+  background: var(--ex-red);
+  border-color: var(--ex-red);
+  color: #fff;
+}
+
+/* ---------- 9. Wide modal & drawers ---------- */
+body.live-app .pbi-wide-backdrop {
+  background: rgba(3, 7, 15, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+body.live-app .pbi-wide-modal {
+  border-radius: 18px;
+  border: 1px solid var(--ex-line);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+}
+body.live-app .pbi-wide-head {
+  border-bottom: 1px solid var(--ex-line);
+}
+body.live-app .pbi-wide-head h2 {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+body.live-app #pbi-wide-close,
+body.live-app #emp-drawer-close,
+body.live-app #aa-drill-close {
+  border-radius: 10px;
+  font-weight: 800;
+  border: 1px solid var(--ex-line-strong);
+  background: var(--ex-surface-2);
+  color: var(--ex-ink);
+  cursor: pointer;
+  transition: background .16s, color .16s, border-color .16s;
+}
+body.live-app #pbi-wide-close:hover,
+body.live-app #emp-drawer-close:hover,
+body.live-app #aa-drill-close:hover {
+  background: var(--ex-red);
+  border-color: var(--ex-red);
+  color: #fff;
+}
+body.live-app .drawer-backdrop {
+  background: rgba(3, 7, 15, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+body.live-app .emp-drawer {
+  box-shadow: -30px 0 70px -30px rgba(0, 0, 0, 0.6);
+  border-left: 1px solid var(--ex-line);
+}
+body.live-app .emp-drawer-head h3 {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+body.live-app .emp-stat {
+  border-radius: 12px;
+  border: 1px solid var(--ex-line);
+}
+body.live-app .emp-stat .v {
+  font-family: var(--ex-num);
+  font-weight: 700;
+}
+
+/* ---------- 10. Shared cockpit pieces: empty states, toolbars, headers ---------- */
+body.live-app :is(#panel-bodashboard, #panel-boerrors, #panel-boallocstock, #panel-plantracker, #panel-reservedvehicles) .bo-empty,
+body.live-app #bas-dash .act-header {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
+    var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-top: 3px solid var(--ex-red);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--cx-shadow);
+  color: var(--cx-ink);
+}
+body.live-app :is(#panel-bodashboard, #panel-boerrors, #panel-boallocstock, #panel-plantracker, #panel-reservedvehicles) .bo-empty a { color: #ff5a6a; }
+body.live-app #bas-dash .act-header { border-top-width: 1px; }
+body.live-app #bas-dash .act-eyebrow {
+  color: var(--ex-red);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+body.live-app #bas-dash .act-title {
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+body.live-app #bas-dash .act-sub,
+body.live-app #bas-dash .act-refresh-stamp .lab { color: var(--cx-muted); }
+body.live-app #bas-dash .act-refresh-stamp strong {
+  color: #fff;
+  font-family: var(--ex-num);
+}
+
+/* filter bars on every cockpit page */
+body.live-app :is(#bo-dash, #boe-dash, #bas-dash, #pt-dash, #rv-dash) .bo-toolbar,
+body.live-app #bas-dash .bas-alloc-toolbar {
+  background: var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--ex-radius);
+  padding: 10px 12px;
+  gap: 8px;
+}
+body.live-app #bas-dash .bas-toolbar-divider { background: var(--cx-line-strong); }
+body.live-app #bas-dash .bas-date-field span { color: var(--cx-muted); font-weight: 700; }
+
+/* ---------- 10b. Matched Vehicles (Allocation page) ---------- */
+body.live-app #bas-alloc-section > summary.bas-section-head { list-style: none; }
+body.live-app #bas-alloc-section > summary::-webkit-details-marker { display: none; }
+body.live-app #bas-alloc-section .bas-section-head h2 { color: #fff; }
+body.live-app #bas-alloc-section .bas-section-head .hint { color: var(--cx-muted); }
+body.live-app #bas-alloc-table table thead th { white-space: nowrap; }
+body.live-app #bas-alloc-table table tbody tr { cursor: pointer; }
+body.live-app #bas-alloc-table table tbody tr.is-selected td {
+  background: rgba(235, 10, 30, 0.10);
+}
+body.live-app #bas-alloc-table table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--ex-red);
+}
+body.live-app #bas-alloc-table .bas-vin {
+  font-family: var(--ex-num);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+body.live-app #bas-alloc-table .mv-copy {
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--cx-line-strong);
+  background: transparent;
+  color: var(--cx-muted);
+  font: 700 0.66rem var(--ex-font);
+  cursor: pointer;
+}
+body.live-app #bas-alloc-table .mv-copy:hover { color: #fff; border-color: var(--ex-red); }
+body.live-app #bas-dash .mv-detail {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--ex-radius);
+  color: var(--cx-ink-2);
+}
+body.live-app #bas-dash .mv-detail-empty { color: var(--cx-muted); }
+body.live-app #bas-dash .badge.na {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--cx-muted);
+}
+body.live-app #bas-dash .bas-foot { color: var(--cx-muted); }
+
+/* ---------- 11. Presentation mode (toggled by executive-present.js) ---------- */
+body.live-app.ex-present .app-sidebar,
+body.live-app.ex-present .sidebar-backdrop,
+body.live-app.ex-present .sidebar-toggle,
+body.live-app.ex-present .app-topbar-search,
+body.live-app.ex-present #clear-btn,
+body.live-app.ex-present .page-foot {
+  display: none !important;
+}
+body.live-app.ex-present .app-main { width: 100%; max-width: none; }
+/* Fixed full-screen panels keep the sidebar offset unless it is cleared here. */
+body.live-app.ex-present #panel-boallocstock,
+body.live-app.ex-present #panel-reservedvehicles { left: 0 !important; }
+body.live-app.ex-present .app-page-title { font-size: 1.5rem; }
+body.live-app .ex-present-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+body.live-app .ex-present-btn svg { width: 15px; height: 15px; }
+body.live-app.ex-present .ex-present-btn {
+  background: var(--ex-ink);
+  color: var(--ex-surface);
+  border-color: var(--ex-ink);
+}
+
+/* ---------- 12. Print / PDF for leadership packs ---------- */
+@media print {
+  body.live-app .app-sidebar,
+  body.live-app .app-topbar-search,
+  body.live-app .app-topbar-actions,
+  body.live-app .sr-dash-toolbar,
+  body.live-app .pbi-expand,
+  body.live-app .page-foot { display: none !important; }
+  body.live-app .card,
+  body.live-app .sr-mock-card,
+  body.live-app .sr-kpi-card,
+  body.live-app .bo-kpi {
+    break-inside: avoid;
+    box-shadow: none !important;
+    animation: none !important;
+  }
+  body.live-app { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ---------- 13. Top bar matches the dark cockpit pages ---------- */
+body.live-app.sr-mode .app-topbar,
+body.live-app.bo-dash-mode .app-topbar,
+body.live-app.alloc-mode .app-topbar,
+body.live-app.boe-mode .app-topbar,
+body.live-app.ytd-mode .app-topbar,
+body.live-app.pt-wide-mode .app-topbar,
+body.live-app.rv-mode .app-topbar {
+  --ex-surface: var(--cx-surface);
+  --ex-surface-2: var(--cx-surface-2);
+  --ex-line: var(--cx-line);
+  --ex-line-strong: var(--cx-line-strong);
+  --ex-ink: var(--cx-ink);
+  --ex-ink-2: var(--cx-ink-2);
+  --ex-muted: var(--cx-muted);
+  background: rgba(7, 13, 24, 0.82);
+  box-shadow: none;
+  color-scheme: dark;
+}
+
+/* ---------- 14. Reserved Vehicles · dark-safe rows, chips, lists ---------- */
+/* row tints were made for a light page; keep the meaning, drop the white */
+body.live-app #rv-dash table tbody tr,
+body.live-app #rv-dash table tbody tr td {
+  background-color: transparent;
+  color: var(--cx-ink-2);
+}
+body.live-app #rv-dash table tbody tr.rv-row-inqueue td {
+  background-color: rgba(37, 99, 235, 0.08);
+}
+body.live-app #rv-dash table tbody tr.rv-row-inqueue td:first-child {
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+body.live-app #rv-dash table tbody tr.rv-row-noprof td {
+  background-color: rgba(217, 119, 6, 0.08);
+}
+body.live-app #rv-dash table tbody tr.rv-row-noprof td:first-child {
+  box-shadow: inset 3px 0 0 var(--ex-amber);
+}
+body.live-app #rv-dash table tbody tr:hover td { background-color: rgba(255, 255, 255, 0.045); }
+body.live-app #rv-dash table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+body.live-app #rv-dash .mono,
+body.live-app #rv-dash strong.mono { color: #fff; font-family: var(--ex-num); }
+body.live-app #rv-dash .rv-muted { color: var(--cx-muted); }
+
+/* queue position, next-in-queue list, colour-pair chips */
+body.live-app #rv-dash .rv-pos {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+  font: 800 0.8rem var(--ex-num);
+  margin-right: 6px;
+}
+body.live-app #rv-dash .rv-next-list li {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 10px;
+  color: var(--cx-ink-2);
+}
+body.live-app #rv-dash .rv-next-list li.rv-next-empty { background: transparent; border-style: dashed; }
+body.live-app #rv-dash .rv-next-rank {
+  background: rgba(235, 10, 30, 0.14);
+  color: #ff6b7a;
+  border-radius: 6px;
+  font: 800 0.7rem var(--ex-num);
+}
+body.live-app #rv-dash .rv-sales-emp { color: var(--cx-muted); }
+body.live-app #rv-dash .rv-pair-chip {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 999px;
+}
+body.live-app #rv-dash .rv-pair-chip b { color: #fff; }
+body.live-app #rv-dash .rv-pair-chip em { color: var(--cx-muted); }
+body.live-app #rv-dash .rv-vin-btn {
+  background: transparent;
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 8px;
+  color: #fff;
+  font: 600 0.8rem var(--ex-num);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+body.live-app #rv-dash .rv-vin-btn:hover { border-color: var(--ex-red); background: rgba(235, 10, 30, 0.08); }
+
+/* head strip, sheet chips, banners, side lists, pager */
+body.live-app #rv-dash .rv-head-actions {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+}
+body.live-app #rv-dash .rv-live-dot { color: #34d399; font-weight: 800; }
+body.live-app #rv-dash .rv-updated { color: var(--cx-muted); }
+body.live-app #rv-dash .rv-sheets-lab { color: var(--cx-muted); letter-spacing: 0.08em; }
+body.live-app #rv-dash .rv-sheet-chip {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 999px;
+}
+body.live-app #rv-dash .rv-sheet-chip.active,
+body.live-app #rv-dash .rv-sheet-chip.is-active,
+body.live-app #rv-dash .rv-sheet-chip[aria-pressed="true"] {
+  background: rgba(235, 10, 30, 0.16);
+  border-color: var(--ex-red);
+  color: #fff;
+}
+body.live-app #rv-dash .rv-banner {
+  background: rgba(37, 99, 235, 0.10);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: var(--cx-ink-2);
+  border-radius: 10px;
+}
+body.live-app #rv-dash :is(.rv-mkt-list, .rv-history-list, .rv-audit-table) > * {
+  border-color: var(--cx-line);
+}
+body.live-app #rv-dash .rv-mkt-card {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 10px;
+  color: var(--cx-ink-2);
+}
+body.live-app #rv-dash .rv-pager button {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 8px;
+}
+body.live-app #rv-dash .rv-status { border-radius: 999px; font-weight: 800; }
+body.live-app #rv-dash .rv-board-h h3 { color: #fff; }
+body.live-app #rv-dash .rv-board-h p { color: var(--cx-muted); }
+
+/* ---------- 15. Dropdowns & date inputs: no clipped text ---------- */
+body.live-app :is(#panel-salesreport, #bo-dash, #boe-dash, #bas-dash, #pt-dash, #rv-dash, #panel-ytdsales) :is(select, input[type="date"], input[type="search"], input[type="text"]) {
+  height: auto;
+  min-height: 38px;
+  line-height: 1.3;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 0.86rem;
+}
+body.live-app #rv-dash .bo-toolbar label {
+  color: var(--cx-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+body.live-app #rv-dash .bo-toolbar label :is(select, input) {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+/* ---------- 16. Day / Dark toggle matches the other top-bar buttons ---------- */
+body.live-app .app-topbar #theme-toggle,
+body.live-app .app-topbar #theme-toggle[aria-pressed="true"] {
+  background: var(--ex-surface-2);
+  color: var(--ex-ink);
+  border: 1px solid var(--ex-line-strong);
+  box-shadow: none;
+}
+body.live-app .app-topbar #theme-toggle:hover {
+  border-color: rgba(235, 10, 30, 0.5);
+}
+
+  </style>
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -23205,6 +24379,65 @@
   }
 })();
 </script>
-<script src="executive-present.js?v=20261019ex1"></script>
+<script id="executive-present">
+/* Executive presentation mode · visual only.
+   Adds a "Present" button to the top bar. It hides the sidebar, search and
+   footer and opens full screen. It never touches data, filters or panels. */
+(function () {
+  "use strict";
+
+  function setPresent(on) {
+    document.body.classList.toggle("ex-present", on);
+    var btn = document.getElementById("ex-present-btn");
+    if (btn) {
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.lastChild.textContent = on ? " Exit" : " Present";
+    }
+    // charts recalculate their size after the sidebar hides or returns
+    setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 60);
+  }
+
+  function init() {
+    var actions = document.querySelector(".app-topbar-actions");
+    if (!actions || document.getElementById("ex-present-btn")) return;
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "ex-present-btn";
+    btn.className = "btn ex-present-btn";
+    btn.title = "Presentation mode · full screen without the side menu";
+    btn.setAttribute("aria-pressed", "false");
+    btn.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+    btn.appendChild(document.createTextNode(" Present"));
+
+    var theme = document.getElementById("theme-toggle");
+    actions.insertBefore(btn, theme || actions.firstChild);
+
+    btn.addEventListener("click", function () {
+      var on = !document.body.classList.contains("ex-present");
+      setPresent(on);
+      try {
+        if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        } else if (!on && document.fullscreenElement) {
+          document.exitFullscreen().catch(function () {});
+        }
+      } catch (e) { /* full screen is optional */ }
+    });
+
+    // leaving full screen with Esc also leaves presentation mode
+    document.addEventListener("fullscreenchange", function () {
+      if (!document.fullscreenElement && document.body.classList.contains("ex-present")) {
+        setPresent(false);
+      }
+    });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
 </body>
 </html>
