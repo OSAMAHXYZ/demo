@@ -546,6 +546,188 @@
 .gcc-conv-bo { padding: 0 24px 22px; }
 .gcc-conv-bo h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 @media (max-width: 760px) { .gcc-conv-chart { grid-template-columns: 1fr; justify-items: center; } .gcc-conv-legend { width: 100%; } }
+/* ---------- 2026 redesign · reference layout (7 rows, one screen) + Employee Focus ---------- */
+.gcc {
+  --page: #eef1f7;
+  --line: #e6eaf2;
+  --indigo: #6366f1;
+  background:
+    radial-gradient(900px 420px at 0% -8%, rgba(99, 102, 241, 0.08), transparent 62%),
+    radial-gradient(800px 380px at 100% -10%, rgba(235, 10, 30, 0.05), transparent 60%),
+    radial-gradient(1000px 500px at 50% 120%, rgba(16, 185, 129, 0.05), transparent 60%),
+    var(--page);
+  grid-template-rows: 46px 44px 100px 168px minmax(0, 1fr) minmax(0, 1.35fr) 38px;
+  gap: clamp(7px, 0.9vh, 11px);
+  padding: clamp(8px, 1vh, 14px) clamp(12px, 1vw, 20px);
+}
+
+/* Header (~44px) */
+.gcc-header { gap: 14px; }
+.gcc-logo { width: 34px; height: 34px; border-radius: 10px; }
+.gcc-logo .gcc-ic { width: 17px; height: 17px; }
+.gcc-brand-text strong { font-size: 15px; }
+.gcc-brand-text span { font-size: 9.5px; margin-top: 2px; }
+#gec-host .gcc .gcc-btn { height: 32px; }
+#gec-host .gcc .gcc-icon-btn { width: 32px; height: 32px; }
+.gcc-live { height: 26px; }
+
+/* Filter bar (~42px) · equal white boxes, dark text on white, visible value + arrow */
+.gcc-filterbar { display: flex; align-items: stretch; gap: 8px; min-width: 0; position: relative; z-index: 6; }
+.gcc-filterbar .gcc-f {
+  flex: 1 1 0; height: 44px; padding: 5px 12px; border-radius: 12px; background: #fff;
+  border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); cursor: pointer; position: relative;
+}
+.gcc-filterbar .gcc-f > span { font-size: 9px; }
+.gcc-filterbar .gcc-f::after {
+  content: "▾"; position: absolute; right: 10px; top: 50%; transform: translateY(-38%);
+  font-size: 11px; color: var(--dim); pointer-events: none;
+}
+.gcc-filterbar .gcc-f-date::after { content: "▾"; }
+#gec-host .gcc .gcc-filterbar .gcc-f select {
+  color-scheme: light; appearance: none; -webkit-appearance: none;
+  width: 100%; min-width: 0; max-width: none; height: 20px; padding-right: 14px;
+  color: #0f172a !important; background: transparent; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+#gec-host .gcc .gcc-filterbar .gcc-f select option { color: #0f172a; background: #fff; }
+.gcc-filterbar .gcc-fchips { align-self: center; }
+.gcc-filterbar .gcc-btn.is-ghost { align-self: center; }
+#gec-host .gcc .gcc-f.gcc-f-date { min-width: 0; flex: 1 1 0; min-height: 44px; }
+.gcc-date-range { font-size: 12.5px; }
+
+/* KPI row (~98px) */
+.gcc-kpis { min-height: 0; }
+.gcc-kpi { justify-content: center; padding: 9px 16px 8px; gap: 3px; }
+.gcc-kpi-val { font-size: clamp(22px, 2.7vh, 30px); }
+.gcc-kpi-top { gap: 7px; }
+.gcc-kpi-ic { width: 26px; height: 26px; border-radius: 8px; }
+.gcc-kpi-sub { font-size: 11.5px; }
+.gcc-kpi.is-alert-value { background: radial-gradient(160px 90px at 100% 0%, #ffe4e6, transparent 74%), #fff5f6; }
+.gcc-kpi.is-alert-value .gcc-kpi-val { color: #ef4444; }
+
+/* Journeys (~160px) · footnotes always visible */
+.gcc-journey-foot { display: flex; }
+
+/* Perf row · 3 columns */
+.gcc-perf-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr); }
+.gcc-perf-stack { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* #1 strip · one horizontal bar */
+.gcc-strip {
+  flex: none; display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer;
+  border-radius: 14px; padding: 8px 14px 8px 10px; color: #fff; position: relative; overflow: hidden;
+  transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
+}
+.gcc-strip.is-promoter { background: linear-gradient(120deg, #6d28d9, #a855f7); box-shadow: 0 12px 26px -16px rgba(109, 40, 217, 0.8); }
+.gcc-strip.is-advisor { background: linear-gradient(120deg, #0f766e, #14b8a6); box-shadow: 0 12px 26px -16px rgba(15, 118, 110, 0.8); }
+.gcc-strip::before { content: ""; position: absolute; width: 110px; height: 110px; border-radius: 50%; right: 4px; top: -70px; background: rgba(255, 255, 255, 0.1); pointer-events: none; }
+.gcc-strip:hover { transform: translateY(-1px); }
+.gcc-strip.is-dim { opacity: 0.6; }
+.gcc-strip.is-focus { outline: 2px solid var(--indigo); outline-offset: 2px; }
+.gcc-strip .gcc-avatar.is-xl { width: 40px; height: 40px; font-size: 14px; }
+.gcc-strip-id { display: flex; flex-direction: column; min-width: 110px; flex: 1 1 auto; position: relative; z-index: 1; }
+.gcc-strip-id strong { font-size: 15.5px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcc-strip-id small { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.gcc-strip-id small .gcc-ic { width: 12px; height: 12px; color: #fde68a; }
+.gcc-strip-chips { display: flex; gap: 8px; flex: none; position: relative; z-index: 1; }
+.gcc-strip .gcc-metric {
+  background: rgba(255, 255, 255, 0.16); border-radius: 11px; padding: 5px 10px; align-items: flex-start; min-width: 62px;
+}
+.gcc-strip .gcc-metric:hover { background: rgba(255, 255, 255, 0.26); }
+.gcc-strip .gcc-metric small { color: rgba(255, 255, 255, 0.85); }
+.gcc-strip .gcc-metric b { font-size: 17px; color: #fff; }
+.gcc-strip .gcc-metric:not(.is-na):not(.is-rate):hover b { color: #fff; }
+
+/* Selection (Employee Focus) */
+.gcc-prow.is-focus, .gcc-arow.is-focus { border-color: var(--indigo); outline: 2px solid var(--indigo); outline-offset: -1px; background: #eef2ff; }
+
+/* Employee Focus */
+.gcc-focus .gcc-card-head { margin-bottom: 6px; }
+.gcc-focus .gcc-seg button.is-on { color: var(--text); }
+.gcc-focus-picker { display: flex; gap: 6px; flex: none; margin-bottom: 8px; }
+#gec-host .gcc .gcc-focus-picker input[type="search"] {
+  flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 9px;
+  background: #f8fafc; color: var(--text); font-size: 12px; color-scheme: light;
+}
+#gec-host .gcc .gcc-focus-picker select {
+  flex: 1.2; min-width: 0; height: 30px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 9px;
+  background: #fff; color: #0f172a; font-size: 12px; font-weight: 600; color-scheme: light;
+}
+.gcc-focus-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
+.gcc-focus-profile { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
+.gcc-focus-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.gcc-focus-id b { font-size: 14.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcc-focus-id small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcc-focus-chip { flex: none; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #f1f5f9; color: var(--muted); white-space: nowrap; }
+.gcc-focus-chip.is-above { background: #e6f7f0; color: #047857; }
+.gcc-focus-chip.is-below { background: #ffedf1; color: #be123c; }
+.gcc-ftiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; flex: none; }
+.gcc-ftile {
+  border: 1px solid var(--line); border-left: 3px solid var(--tone, var(--line-2)); border-radius: 10px;
+  padding: 5px 8px; display: flex; flex-direction: column; gap: 0; min-width: 0; background: #fff;
+}
+.gcc-ftile span { font-size: 9px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.gcc-ftile b { font-size: 16px; font-weight: 700; line-height: 1.15; }
+.gcc-ftile small { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcc-focus-chart-wrap { flex: 1; min-height: 34px; display: flex; flex-direction: column; position: relative; }
+.gcc-focus-chart { flex: 1; width: 100%; min-height: 0; }
+.gcc-focus-chart rect { fill: #818cf8; }
+.gcc-focus-chart .gcc-focus-line { fill: none; stroke: #10b981; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.gcc-focus-chart .gcc-focus-axis { stroke: #e2e8f0; stroke-width: 1; }
+.gcc-focus-chart text { font-size: 7.5px; fill: #94a3b8; font-family: var(--num); }
+.gcc-focus-chart-lab { position: absolute; top: 0; right: 0; font-size: 10px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.gcc-focus-chart-lab i.is-bar { width: 8px; height: 8px; border-radius: 2px; background: #818cf8; }
+.gcc-focus-chart-lab i.is-line { width: 12px; height: 3px; border-radius: 2px; background: #10b981; }
+.gcc-focus-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; flex: none; }
+.gcc-focus-tabs { display: flex; align-items: center; gap: 5px; flex: none; flex-wrap: wrap; }
+#gec-host .gcc .gcc-focus-tabs button:not(.gcc-link) {
+  height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff;
+  color: var(--muted); font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+#gec-host .gcc .gcc-focus-tabs button:not(.gcc-link).is-on { background: #eef2ff; border-color: var(--indigo); color: #4338ca; }
+.gcc-focus-open { margin-left: auto; }
+
+/* Attention (~36px) */
+.gcc-attention { height: 38px; border-radius: 12px; }
+
+@media (max-width: 1700px) {
+  .gcc-ftile span { font-size: 8.5px; letter-spacing: 0.05em; }
+  .gcc-ftile small { font-size: 9.5px; }
+  .gcc-strip-id { min-width: 0; }
+  .gcc-strip .gcc-metric { min-width: 0; padding: 4px 7px; }
+  .gcc-strip .gcc-metric b { font-size: 14.5px; }
+}
+@media (max-height: 1020px) {
+  .gcc { grid-template-rows: 42px 40px 88px 148px minmax(0, 0.9fr) minmax(0, 1.35fr) 36px; }
+}
+@media (max-height: 950px) {
+  .gcc { font-size: 12px; grid-template-rows: 40px 38px 80px 136px minmax(0, 0.82fr) minmax(0, 1.4fr) 34px; }
+  .gcc-journey-foot { display: flex; font-size: 11px; margin-top: 4px; }
+  .gcc-attention { height: 34px; }
+  .gcc-focus-body { gap: 5px; }
+  .gcc-ftile { padding: 3px 7px; }
+  .gcc-ftile b { font-size: 13.5px; }
+  .gcc-focus-chart-wrap { min-height: 20px; }
+  .gcc-filterbar .gcc-f { height: auto; padding: 3px 12px; gap: 0; }
+  .gcc-filterbar .gcc-f-date { height: auto; }
+  .gcc-filterbar .gcc-date-btn { font-size: 13px; padding-top: 0; padding-bottom: 0; }
+  #gec-host .gcc .gcc-f.gcc-f-date { min-height: 0; }
+  #gec-host .gcc .gcc-date-btn { min-height: 0; }
+  .gcc-filterbar .gcc-f select { font-size: 13px; }
+  .gcc-kpi { padding: 7px 14px 6px; }
+  .gcc-kpi-val { font-size: 24px; }
+}
+@media (max-width: 1700px) {
+  .gcc-header { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 0; }
+}
+@media (max-width: 1500px) {
+  .gcc-strip { padding: 6px 10px 6px 8px; gap: 8px; }
+  .gcc-strip .gcc-metric { min-width: 58px; padding: 4px 8px; }
+  .gcc-strip .gcc-metric b { font-size: 14.5px; }
+  .gcc-strip-id strong { font-size: 13.5px; }
+  .gcc-strip-chips { gap: 5px; }
+  .gcc-focus-rates { gap: 3px 10px; }
+  .gcc-ftile b { font-size: 14px; }
+}
 .gcc-pill.st-error { background: #ffedf1; color: #be123c; }
 .gcc-flag { color: #be123c; font-weight: 800; }
 
@@ -605,10 +787,8 @@
   .gcc-kpi-top { gap: 7px; }
   .gcc-kpi-ic { width: 24px; height: 24px; border-radius: 8px; }
   .gcc-kpi-ic .gcc-ic { width: 14px; height: 14px; }
-  .gcc-journey-foot { display: none; }
   .gcc-hero-rates { gap: 10px; }
   .gcc-bar-track { height: 4px; }
-  .gcc-attention { height: 40px; }
 }
 @media (max-height: 820px) {
   .gcc-prow-head {

@@ -29,6 +29,7 @@
       promoter: { mode: "period", day: "", rank: "leads" },
       advisor: { mode: "period", day: "", rank: "leads" },
     },
+    focus: { kind: "promoter", name: "", tab: "all", query: "" },
     chart: null,
     resizeObserver: null,
     resizeTimer: null,
@@ -147,22 +148,6 @@
             <span class="gcc-logo" aria-hidden="true">${icon("route")}</span>
             <div class="gcc-brand-text"><strong>GEC CONTROL CENTER</strong><span>GUEST EXPERIENCE CENTER</span></div>
           </div>
-          <div class="gcc-filters">
-            <div class="gcc-f gcc-f-date" data-fwrap="date">
-              <button type="button" class="gcc-date-btn" data-act="open-cal" aria-label="Choose dates from the file">
-                <span>Date</span>
-                <b class="gcc-date-range" data-el="date-range">Dates in the file</b>
-              </button>
-              <div class="gcc-cal" data-el="calendar" hidden></div>
-            </div>
-            <label class="gcc-f" data-fwrap="promoter"><span>Promoter</span><select data-f="promoter"></select></label>
-            <label class="gcc-f" data-fwrap="consultant"><span>Sales Advisor</span><select data-f="consultant" dir="auto"></select></label>
-            <label class="gcc-f" data-fwrap="model"><span>Model</span><select data-f="model" dir="auto"></select></label>
-            <label class="gcc-f" data-fwrap="source"><span>Source</span><select data-f="source"></select></label>
-            <label class="gcc-f" data-fwrap="status"><span>Status</span><select data-f="status"></select></label>
-            <span class="gcc-fchips" data-el="chips"></span>
-            <button type="button" class="gcc-btn is-ghost" data-act="reset" data-el="reset">Reset</button>
-          </div>
           <div class="gcc-actions">
             <span class="gcc-live is-off" data-el="live"><i></i><b>LIVE</b></span>
             <span class="gcc-updated"><small>Last updated</small><b data-el="updated">—</b></span>
@@ -173,6 +158,23 @@
             <button type="button" class="gcc-icon-btn is-exit" data-act="exit" title="Back to report" aria-label="Back to report">${icon("close")}</button>
           </div>
         </header>
+
+        <section class="gcc-filterbar" aria-label="Filters">
+          <div class="gcc-f gcc-f-date" data-fwrap="date">
+            <button type="button" class="gcc-date-btn" data-act="open-cal" aria-label="Choose dates from the file">
+              <span>Date</span>
+              <b class="gcc-date-range" data-el="date-range">Dates in the file</b>
+            </button>
+            <div class="gcc-cal" data-el="calendar" hidden></div>
+          </div>
+          <label class="gcc-f" data-fwrap="promoter"><span>Promoter</span><select data-f="promoter"></select></label>
+          <label class="gcc-f" data-fwrap="consultant"><span>Sales Advisor</span><select data-f="consultant" dir="auto"></select></label>
+          <label class="gcc-f" data-fwrap="model"><span>Model</span><select data-f="model" dir="auto"></select></label>
+          <label class="gcc-f" data-fwrap="source"><span>Source</span><select data-f="source"></select></label>
+          <label class="gcc-f" data-fwrap="status"><span>Status</span><select data-f="status"></select></label>
+          <span class="gcc-fchips" data-el="chips"></span>
+          <button type="button" class="gcc-btn is-ghost" data-act="reset" data-el="reset">Reset</button>
+        </section>
 
         <section class="gcc-kpis" data-el="kpis"></section>
 
@@ -221,6 +223,20 @@
             </div>
             <div class="gcc-perf-body" data-el="advisor"></div>
           </article>
+          <article class="gcc-card gcc-focus">
+            <div class="gcc-card-head">
+              <h2><span class="gcc-h-ic t-indigo">${icon("target")}</span>Employee Focus</h2>
+              <div class="gcc-seg" role="group" aria-label="Employee type">
+                <button type="button" data-act="focus-kind" data-kind="promoter">Promoter</button>
+                <button type="button" data-act="focus-kind" data-kind="advisor">Sales advisor</button>
+              </div>
+            </div>
+            <div class="gcc-focus-picker">
+              <input type="search" data-focus-search placeholder="Search employee…" aria-label="Search employee" />
+              <select data-focus-person aria-label="Choose employee"></select>
+            </div>
+            <div class="gcc-focus-body" data-el="focus"></div>
+          </article>
         </section>
 
         <footer class="gcc-attention" data-el="attention"></footer>
@@ -255,6 +271,8 @@
   function bindEvents() {
     const root = state.root;
     root.addEventListener("click", (e) => {
+      const sel = e.target.closest("[data-select]");
+      if (sel && !e.target.closest("[data-drill]")) { selectFocus(sel.dataset.select, sel.dataset.name); return; }
       const drill = e.target.closest("[data-drill]");
       const act = e.target.closest("[data-act]");
       // Innermost target wins (a number inside a clickable row opens that number).
@@ -277,12 +295,19 @@
       if (drill) { e.preventDefault(); onDrill(drill); return; }
       const act = t.closest && t.closest("[data-act]");
       if (act) { e.preventDefault(); onAction(act); return; }
+      const sel = t.closest && t.closest("[data-select]");
+      if (sel) { e.preventDefault(); selectFocus(sel.dataset.select, sel.dataset.name); return; }
       if (t.matches("tr[data-row]")) { e.preventDefault(); onModalRow(Number(t.dataset.row)); }
     });
     root.addEventListener("change", (e) => {
       const t = e.target;
       if (t.dataset && t.dataset.f) { setFilter(t.dataset.f, t.value || ""); return; }
+      if (t.dataset && t.dataset.focusPerson !== undefined) { selectFocus(state.focus.kind, t.value || ""); return; }
       if (t === el("m-allcols")) { state.modal.allCols = t.checked; renderModalTable(); }
+    });
+    root.addEventListener("input", (e) => {
+      const t = e.target;
+      if (t.dataset && t.dataset.focusSearch !== undefined) { state.focus.query = t.value || ""; renderFocusPicker(); }
     });
     el("m-search").addEventListener("input", (e) => { state.modal.search = e.target.value; renderModalTable(); });
     document.addEventListener("keydown", (e) => {
@@ -311,6 +336,7 @@
           if (!state.metrics || !state.root.getClientRects().length) return;
           renderPerf("promoter");
           renderPerf("advisor");
+          renderFocus();
         }, 90);
       });
       state.resizeObserver.observe(root);
@@ -354,7 +380,10 @@
       const i = days.indexOf(v.day);
       const next = days[Math.max(0, Math.min(days.length - 1, (i < 0 ? days.length - 1 : i) + Number(d.step)))];
       if (next) { v.day = next; renderPerf(d.panel); }
-    } else if (act === "info") openInfo();
+    }     else if (act === "focus-kind") { state.focus.kind = d.kind === "advisor" ? "advisor" : "promoter"; state.focus.tab = "all"; renderFocus(); }
+    else if (act === "focus-tab") { state.focus.tab = d.tab || "all"; renderFocus(); }
+    else if (act === "focus-open") openFocusLeads();
+    else if (act === "info") openInfo();
     else if (act === "validate") openValidation();
     else if (act === "unlisted") openUnlisted();
     else if (act === "registered") openRegistered();
@@ -611,6 +640,7 @@
     renderStatus();
     renderPerf("promoter");
     renderPerf("advisor");
+    renderFocus();
     renderAttention();
     renderEmpty();
     el("debug-btn").hidden = !state.debug;
@@ -724,6 +754,7 @@
       const c = kpiContent(d.key);
       const v = card.querySelector("[data-v]");
       card.classList.toggle("is-na", !!c.na);
+      card.classList.toggle("is-alert-value", d.key === "noProduct" && !c.na && Number(c.value) > 0);
       if (c.na) { cancelAnimationFrame(v._raf); v.textContent = "—"; delete v.dataset.num; } else tween(v, c.value, c.fmt);
       card.querySelector("[data-sub]").innerHTML = c.sub;
       if (d.side) card.querySelector("[data-side]").innerHTML = c.side || "";
@@ -1026,21 +1057,20 @@
     const top = list[0];
     const rankLab = { leads: "leads", visitors: "visitors", converted: "conversions" }[v.rank];
     const hero = `
-      <div class="gcc-hero is-promoter${sel && sel !== top.name ? " is-dim" : ""}" role="button" tabindex="0" data-drill="promoter" data-name="${esc(top.name)}" title="Open ${esc(top.name)}">
-        <div class="gcc-hero-top"><span class="gcc-hero-rank">${icon("crown")} #1 · Top promoter</span><span class="gcc-hero-when">${esc(whenLabel("promoter"))}</span></div>
-        <div class="gcc-hero-id">
-          <span class="gcc-avatar is-xl">${esc(initials(top.name))}</span>
-          <div><strong>${esc(top.name)}</strong><small>Emp. ${esc(empOf(top.name))} · most ${rankLab}</small></div>
-        </div>
-        <div class="gcc-hero-stats">
+      <div class="gcc-strip is-promoter${sel && sel !== top.name ? " is-dim" : ""}${state.focus.kind === "promoter" && state.focus.name === top.name ? " is-focus" : ""}" role="button" tabindex="0" data-select="promoter" data-name="${esc(top.name)}" title="Show ${esc(top.name)} in Employee Focus">
+        <span class="gcc-avatar is-xl">${esc(initials(top.name))}</span>
+        <span class="gcc-strip-id">
+          <strong>${esc(top.name)}</strong>
+          <small>${icon("crown")} #1 · Top promoter · Emp. ${esc(empOf(top.name))} · most ${rankLab} · ${esc(whenLabel("promoter"))} · V→L ${pct(top.visitorToLead)} · L→C ${pct(top.leadToConversion)}</small>
+        </span>
+        <span class="gcc-strip-chips">
           ${hasV ? cell("promoter", top.name, "visitors", n(top.visitors), "Visitors") : `<span class="gcc-metric is-na"><small>Visitors</small><b>—</b></span>`}
           ${cell("promoter", top.name, "leads", n(top.leads), "Leads")}
           ${cell("promoter", top.name, "converted", n(top.converted), "Converted")}
-        </div>
-        <div class="gcc-hero-rates">${rateBar("Visitor → Lead", top.visitorToLead, "light")}${rateBar("Lead → Conversion", top.leadToConversion, "light")}</div>
+        </span>
       </div>`;
-    const rows = list.slice(1).map((p, i) => `
-      <div class="gcc-prow${sel === p.name ? " is-selected" : ""}${sel && sel !== p.name ? " is-dim" : ""}" role="button" tabindex="0" data-drill="promoter" data-name="${esc(p.name)}" title="Open ${esc(p.name)}">
+    const rows = list.slice(1, 5).map((p, i) => `
+      <div class="gcc-prow${sel === p.name ? " is-selected" : ""}${state.focus.kind === "promoter" && state.focus.name === p.name ? " is-focus" : ""}${sel && sel !== p.name ? " is-dim" : ""}" role="button" tabindex="0" data-select="promoter" data-name="${esc(p.name)}" title="Show ${esc(p.name)} in Employee Focus">
         <span class="gcc-prow-rank gcc-num">${i + 2}</span>
         <span class="gcc-avatar t-${["blue", "cyan", "amber", "rose"][i % 4]}">${esc(initials(p.name))}</span>
         <span class="gcc-prow-name"><b>${esc(p.name)}</b><small>${esc(empOf(p.name))}</small></span>
@@ -1049,7 +1079,7 @@
         ${cell("promoter", p.name, "converted", n(p.converted), "Conv.")}
         <span class="gcc-prow-rates">${rateBar("V→L", p.visitorToLead, "violet")}${rateBar("L→C", p.leadToConversion, "green")}</span>
       </div>`).join("");
-    box.innerHTML = `<div class="gcc-perf-grid">${hero}<div class="gcc-perf-list">
+    box.innerHTML = `<div class="gcc-perf-stack">${hero}<div class="gcc-perf-list">
         <div class="gcc-prow-head" aria-hidden="true"><span></span><span>Promoter</span><span>Visitors</span><span>Leads</span><span>Conv.</span><span>V→L · L→C</span></div>
         <div class="gcc-rows">${rows}</div>
         <div class="gcc-perf-foot">
@@ -1080,22 +1110,21 @@
     const top = list[0];
     const rankLab = { leads: "leads received", responded: "sales responses", converted: "conversions" }[v.rank];
     const hero = `
-      <div class="gcc-hero is-advisor${sel && sel !== top.name ? " is-dim" : ""}" role="button" tabindex="0" data-drill="advisor" data-name="${esc(top.name)}" title="Open ${esc(top.name)}">
-        <div class="gcc-hero-top"><span class="gcc-hero-rank">${icon("star")} #1 · Top sales advisor</span><span class="gcc-hero-when">${esc(whenLabel("advisor"))}</span></div>
-        <div class="gcc-hero-id">
-          <span class="gcc-avatar is-xl">${esc(initials(top.name))}</span>
-          <div><strong dir="auto">${esc(top.name)}</strong><small>Most ${rankLab}</small></div>
-        </div>
-        <div class="gcc-hero-stats is-4">
+      <div class="gcc-strip is-advisor${sel && sel !== top.name ? " is-dim" : ""}${state.focus.kind === "advisor" && state.focus.name === top.name ? " is-focus" : ""}" role="button" tabindex="0" data-select="advisor" data-name="${esc(top.name)}" title="Show ${esc(top.name)} in Employee Focus">
+        <span class="gcc-avatar is-xl">${esc(initials(top.name))}</span>
+        <span class="gcc-strip-id">
+          <strong dir="auto">${esc(top.name)}</strong>
+          <small>${icon("star")} #1 · Top sales advisor · most ${rankLab} · ${esc(whenLabel("advisor"))} · Resp ${pct(top.responseRate)} · Conv ${pct(top.conversionRate)}</small>
+        </span>
+        <span class="gcc-strip-chips is-4">
           ${cell("advisor", top.name, "leads", n(top.leads), "Leads")}
           ${cell("advisor", top.name, "responded", n(top.responded), "Response")}
           ${cell("advisor", top.name, "salesOrders", n(top.salesOrders), "Orders")}
           ${cell("advisor", top.name, "converted", n(top.converted), "Converted")}
-        </div>
-        <div class="gcc-hero-rates">${rateBar("Response %", top.responseRate, "light")}${rateBar("Conversion %", top.conversionRate, "light")}</div>
+        </span>
       </div>`;
     const rowHtml = (c) => `
-      <div class="gcc-arow${sel === c.name ? " is-selected" : ""}${sel && sel !== c.name ? " is-dim" : ""}" role="button" tabindex="0" data-drill="advisor" data-name="${esc(c.name)}" title="Open ${esc(c.name)}">
+      <div class="gcc-arow${sel === c.name ? " is-selected" : ""}${state.focus.kind === "advisor" && state.focus.name === c.name ? " is-focus" : ""}${sel && sel !== c.name ? " is-dim" : ""}" role="button" tabindex="0" data-select="advisor" data-name="${esc(c.name)}" title="Show ${esc(c.name)} in Employee Focus">
         <span class="gcc-prow-rank gcc-num">${list.indexOf(c) + 1}</span>
         <span class="gcc-arow-name" dir="auto">${esc(c.name)}</span>
         ${cell("advisor", c.name, "leads", n(c.leads), "Leads")}
@@ -1105,12 +1134,12 @@
         ${cell("advisor", c.name, "converted", n(c.converted), "Conv.")}
         <span class="gcc-metric is-rate${c.conversionRate != null && c.conversionRate >= (src.kpis.conversionRate || 0) ? " is-good" : ""}"><small>Conv %</small><b class="gcc-num">${pct(c.conversionRate)}</b></span>
       </div>`;
-    const others = list.slice(1);
+    const others = list.slice(1, 5);
     const un = src.kpis.noAdvisor || 0;
     const pc = src.kpis.promoterConsultant || 0;
-    box.innerHTML = `<div class="gcc-perf-grid">${hero}<div class="gcc-perf-list">
+    box.innerHTML = `<div class="gcc-perf-stack">${hero}<div class="gcc-perf-list">
         <div class="gcc-arow-head" aria-hidden="true"><span></span><span>Advisor</span><span>Leads</span><span>Resp.</span><span>Resp %</span><span>Orders</span><span>Conv.</span><span>Conv %</span></div>
-        <div class="gcc-rows is-advisor" data-el="advisor-rows">${others.slice(0, 12).map(rowHtml).join("")}</div>
+        <div class="gcc-rows is-advisor" data-el="advisor-rows">${others.map(rowHtml).join("")}</div>
         <div class="gcc-perf-foot">
           <span class="gcc-foot-notes">
             ${un ? `<span class="gcc-sublink" role="button" tabindex="0" data-drill="kpi" data-key="noAdvisor" title="Assigned To is blank">${n(un)} no advisor</span>` : ""}
@@ -1120,21 +1149,168 @@
           <button type="button" class="gcc-link" data-act="rank-all" data-kind="advisor">All ${n(list.length)} advisors ↗</button>
         </div>
       </div></div>`;
-    // Keep only the rows that fit (no half rows, no scroll).
-    const rowsEl = box.querySelector('[data-el="advisor-rows"]');
-    const kids = rowsEl.children;
-    if (kids.length) {
-      const avail = rowsEl.clientHeight;
-      const gap = parseFloat(getComputedStyle(rowsEl).rowGap) || 0;
-      const rowH = kids[0].offsetHeight + gap;
-      const fit = Math.max(1, Math.floor((avail + gap) / rowH));
-      let shown = others.slice(0, fit);
-      if (sel && sel !== top.name && !shown.some((c) => c.name === sel)) {
-        const s = others.find((c) => c.name === sel);
-        if (s) shown = [...shown.slice(0, fit - 1), s];
+  }
+
+  // ---------- Employee Focus (read-only; same aggregates as the tables above) ----------
+
+  function focusListFor(kind, src) {
+    const v = state.view[kind];
+    return kind === "promoter"
+      ? rankList(src.promoters || [], v.rank, ["leads", "converted", "visitors"])
+      : rankList(src.consultants || [], v.rank, ["leads", "converted", "responded"]);
+  }
+
+  function selectFocus(kind, name) {
+    if (!name) return;
+    state.focus.kind = kind === "advisor" ? "advisor" : "promoter";
+    state.focus.name = name;
+    state.focus.tab = "all";
+    renderPerf(state.focus.kind);
+    renderFocus();
+  }
+
+  function renderFocusPicker() {
+    const sel = state.root && state.root.querySelector("[data-focus-person]");
+    if (!sel || !state.metrics) return;
+    const kind = state.focus.kind;
+    const list = focusListFor(kind, perfSource(kind));
+    const q = state.focus.query.trim().toLowerCase();
+    const shown = q ? list.filter((p) => p.name.toLowerCase().includes(q)) : list;
+    sel.innerHTML = shown.map((p) => `<option value="${esc(p.name)}"${p.name === state.focus.name ? " selected" : ""}>${esc(p.name)}</option>`).join("")
+      || `<option value="">No match</option>`;
+    if (state.focus.name && !shown.some((p) => p.name === state.focus.name) && shown.length) sel.value = shown[0].name;
+    else if (state.focus.name) sel.value = state.focus.name;
+  }
+
+  function focusDailySvg(base) {
+    const days = new Map();
+    base.forEach((r) => { if (!r.day) return; const x = days.get(r.day) || { leads: 0, converted: 0 }; x.leads += 1; x.converted += r.converted ? 1 : 0; days.set(r.day, x); });
+    const keys = [...days.keys()].sort();
+    if (!keys.length) return "";
+    const MAXB = 24;
+    let buckets = keys.map((k) => ({ key: k, ...days.get(k) }));
+    if (buckets.length > MAXB) {
+      const size = Math.ceil(buckets.length / MAXB);
+      const grouped = [];
+      for (let i = 0; i < buckets.length; i += size) {
+        const part = buckets.slice(i, i + size);
+        grouped.push({ key: part[0].key, leads: part.reduce((s, b) => s + b.leads, 0), converted: part.reduce((s, b) => s + b.converted, 0) });
       }
-      if (shown.length !== kids.length || shown.some((c, i) => others[i] !== c)) rowsEl.innerHTML = shown.map(rowHtml).join("");
+      buckets = grouped;
     }
+    const W = 260, H = 64, baseY = 52, top = 6;
+    const max = Math.max(1, ...buckets.map((b) => b.leads));
+    const bw = W / buckets.length;
+    const bars = buckets.map((b, i) => {
+      const h = Math.max(b.leads ? 2 : 0, (b.leads / max) * (baseY - top));
+      return `<rect x="${(i * bw + 1.5).toFixed(1)}" y="${(baseY - h).toFixed(1)}" width="${Math.max(1.5, bw - 3).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5"><title>${esc(fmtDay(b.key, true))} · ${n(b.leads)} leads · ${n(b.converted)} converted</title></rect>`;
+    }).join("");
+    const pts = buckets.map((b, i) => `${(i * bw + bw / 2).toFixed(1)},${(baseY - (b.converted / max) * (baseY - top)).toFixed(1)}`).join(" ");
+    return `<svg class="gcc-focus-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily leads (bars) and converted (line)">
+      <line x1="0" y1="${baseY}" x2="${W}" y2="${baseY}" class="gcc-focus-axis"/>${bars}
+      <polyline points="${pts}" class="gcc-focus-line"/><text x="0" y="${H - 1}">${esc(fmtDay(buckets[0].key))}</text><text x="${W}" y="${H - 1}" text-anchor="end">${esc(fmtDay(buckets[buckets.length - 1].key))}</text>
+    </svg>`;
+  }
+
+  function renderFocus() {
+    const box = el("focus");
+    if (!box || !state.metrics) return;
+    const kind = state.focus.kind;
+    state.root.querySelectorAll("[data-act='focus-kind']").forEach((b) => b.classList.toggle("is-on", b.dataset.kind === kind));
+    const src = perfSource(kind);
+    const list = focusListFor(kind, src);
+    if (!list.length) {
+      box.innerHTML = `<div class="gcc-empty-note">${icon(kind === "promoter" ? "users" : "star")}<span>No ${kind === "promoter" ? "promoters" : "sales advisors"} in this selection.</span></div>`;
+      renderFocusPicker();
+      return;
+    }
+    if (!list.some((p) => p.name === state.focus.name)) state.focus.name = list[0].name;
+    const idx = list.findIndex((p) => p.name === state.focus.name);
+    const person = list[idx];
+    const key = kind === "promoter" ? "promoter" : "consultant";
+    const base = (src.rows || []).filter((r) => r[key] === person.name);
+    const totals = list.reduce((t, p) => {
+      ["visitors", "leads", "responded", "salesOrders", "converted"].forEach((k) => { t[k] += p[k] || 0; });
+      return t;
+    }, { visitors: 0, leads: 0, responded: 0, salesOrders: 0, converted: 0 });
+    const teamLC = ratio(totals.converted, totals.leads);
+    const myLC = kind === "promoter" ? person.leadToConversion : person.conversionRate;
+    const above = myLC != null && teamLC != null ? myLC >= teamLC : null;
+    const cmp = (value, avg, isRate) => {
+      if (value == null || avg == null) return `<small>team avg —</small>`;
+      const d = avg ? (value - avg) / Math.abs(avg) : 0;
+      const arrow = Math.abs(d) < 0.005 ? "→" : d > 0 ? "▲" : "▼";
+      return `<small>${arrow} ${isRate ? pct(avg) : (Math.round(avg * 10) / 10)} team avg</small>`;
+    };
+    const tile = (label, value, avg, tone, isRate) => `
+      <div class="gcc-ftile t-${tone}"><span>${esc(label)}</span><b class="gcc-num">${isRate ? pct(value) : n(value || 0)}</b>${cmp(isRate ? value : value, avg, isRate)}</div>`;
+    const M = Math.max(1, list.length);
+    const noOrder = predicateRows("noOrder", base).length;
+    const tiles = kind === "promoter" ? [
+      tile("Visitors", src.hasVisitors ? person.visitors : null, src.hasVisitors ? totals.visitors / M : null, "violet"),
+      tile("Leads", person.leads, totals.leads / M, "blue"),
+      tile("Responded", person.responded, totals.responded / M, "cyan"),
+      tile("Sales orders", person.salesOrders, totals.salesOrders / M, "amber"),
+      tile("Converted", person.converted, totals.converted / M, "green"),
+      tile("No order", noOrder, null, "rose"),
+    ].join("") : [
+      tile("Leads", person.leads, totals.leads / M, "blue"),
+      tile("Responded", person.responded, totals.responded / M, "cyan"),
+      tile("Response %", person.responseRate, ratio(totals.responded, totals.leads), "cyan", true),
+      tile("Orders", person.salesOrders, totals.salesOrders / M, "amber"),
+      tile("Converted", person.converted, totals.converted / M, "green"),
+      tile("Conv %", person.conversionRate, teamLC, "green", true),
+    ].join("");
+    const counts = {
+      all: base.length,
+      converted: predicateRows("converted", base).length,
+      salesOrders: predicateRows("salesOrders", base).length,
+      noOrder,
+    };
+    const tabBtn = (id, label) => `<button type="button" class="${state.focus.tab === id ? "is-on" : ""}" data-act="focus-tab" data-tab="${id}">${label} <b class="gcc-num">${n(counts[id])}</b></button>`;
+    const hasLeads = kind === "promoter" ? (person.leads > 0 || (person.visitors || 0) > 0) : person.leads > 0;
+    box.innerHTML = `
+      <div class="gcc-focus-profile">
+        <span class="gcc-avatar">${esc(initials(person.name))}</span>
+        <span class="gcc-focus-id">
+          <b dir="auto">${esc(person.name)}</b>
+          <small>${kind === "promoter" ? `Emp. ${esc(empOf(person.name) || "—")} · Promoter` : "Sales advisor"} · Rank #${idx + 1} of ${list.length} · ${esc(whenLabel(kind))}</small>
+        </span>
+        <span class="gcc-focus-chip ${above == null ? "" : above ? "is-above" : "is-below"}">${above == null ? "Team L→C —" : `${above ? "Above" : "Below"} team L→C ${pct(teamLC)}`}</span>
+      </div>
+      ${hasLeads ? `
+      <div class="gcc-ftiles">${tiles}</div>
+      <div class="gcc-focus-chart-wrap">${focusDailySvg(base)}<span class="gcc-focus-chart-lab"><i class="is-bar"></i>Leads <i class="is-line"></i>Converted · daily</span></div>
+      <div class="gcc-focus-rates">
+        ${kind === "promoter" ? rateBar("Visitor → Lead", person.visitorToLead, "violet") : rateBar("Response %", person.responseRate, "cyan")}
+        ${rateBar("Lead → Converted", myLC, "green")}
+        ${rateBar("Team L→C", teamLC, "slate")}
+        ${rateBar("Share of all leads", ratio(person.leads, totals.leads), "indigo")}
+      </div>
+      <div class="gcc-focus-tabs">
+        ${tabBtn("all", "All")}${tabBtn("converted", "Converted")}${tabBtn("salesOrders", "Sales order")}${tabBtn("noOrder", "No order")}
+        <button type="button" class="gcc-link gcc-focus-open" data-act="focus-open">Open lead list ↗</button>
+      </div>` : `<div class="gcc-empty-note"><span>No leads in the selection for ${esc(person.name)}.</span></div>`}`;
+    renderFocusPicker();
+  }
+
+  function openFocusLeads() {
+    const kind = state.focus.kind;
+    const name = state.focus.name;
+    if (!name) return;
+    const src = perfSource(kind);
+    const key = kind === "promoter" ? "promoter" : "consultant";
+    const base = src.rows.filter((r) => r[key] === name);
+    const tab = state.focus.tab;
+    const labels = { all: "All leads", converted: "Converted", salesOrders: "Sales Orders", noOrder: "NO ORDER (excluded)" };
+    const rows = tab === "all" ? base : predicateRows(tab, base);
+    openModal({
+      title: `${kind === "promoter" ? "Promoter" : "Sales advisor"} · ${name}`,
+      sub: `${whenLabel(kind)} · ${filterSubtitle(key)}`,
+      stats: leadStats(base),
+      views: [leadView(labels[tab] || "Leads", rows), ...(rows.length !== base.length ? [leadView("All leads", base)] : [])],
+      filterAction: { key, value: name },
+    });
   }
 
   // ---------- Attention ----------
