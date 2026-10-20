@@ -6,37 +6,39 @@
   <title>Sales Report Dashboard — Abdul Latif Jameel MOTORS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <!-- Fonts load without blocking the first paint; text shows in the fallback font until they arrive (display=swap). -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" /></noscript>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="employee-roster.js?v=20260928id1"></script>
-  <script src="data-store.js?v=20261006ch1"></script>
+  <script src="data-store.js?v=20261018ytd1"></script>
   <script src="gec-data.js?v=20261008lead"></script>
-  <script src="gec-dashboard.js?v=20261008dmy"></script>
-  <script src="sales-control.js?v=20261018sc4"></script>
+  <script src="gec-dashboard.js?v=20261014gec1"></script>
+  <script src="sales-control.js?v=20261018acc1"></script>
   <script src="allocation-plan-data.js?v=20260921sfx2"></script>
   <script src="inventory-command-center.js?v=20260907icc"></script>
   <script src="vin-color-match.js"></script>
   <script src="lib/bo-order-lookup.js?v=20260915rv3"></script>
-  <script src="plan-tracker.js?v=20261011pt1"></script>
-  <script src="contact-performance.js?v=20261017cp7"></script>
-  <script src="ytd-history.js?v=20261015ytd2"></script>
-  <script src="lexus-control/lexus-core.js?v=20261015lx1"></script>
-  <script src="lexus-control/lexus-tracker.js?v=20261015lx1"></script>
+  <script src="plan-tracker.js?v=20261019swap5"></script>
+  <script src="contact-performance.js?v=20261018fit1"></script>
+  <script src="lexus-control/lexus-core.js?v=20260930lx6"></script>
+  <script src="lexus-control/lexus-tracker.js?v=20260930lx6"></script>
   <script src="toyotaB2C-control/toyota-b2c-core.js?v=20260930tb1"></script>
   <script src="toyotaB2C-control/toyota-b2c-tracker.js?v=20260930tb1"></script>
-  <link rel="stylesheet" href="dashboard.css?v=20261013rv2" />
+  <link rel="stylesheet" href="dashboard.css?v=20261015rv1" />
   <link rel="stylesheet" href="ops-redesign-skin.css?v=20260914eu2" />
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa6" />
   <link rel="stylesheet" href="gec-dashboard.css?v=20260929view1" />
-  <link rel="stylesheet" href="sales-control.css?v=20261018sc4" />
-  <link rel="stylesheet" href="gec-control.css?v=20261007oct" />
+  <link rel="stylesheet" href="sales-control.css?v=20261018acc1" />
+  <link rel="stylesheet" href="gec-control.css?v=20261014gec1" />
   <link rel="stylesheet" href="lexus-control/lexus-tracker.css?v=20261004lxlight" />
   <link rel="stylesheet" href="toyotaB2C-control/toyota-b2c-tracker.css?v=20260930tb1" />
-  <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
+  <link rel="stylesheet" href="sales-cockpit.css?v=20261019ds2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
-  <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
+  <link rel="stylesheet" href="contact-performance.css?v=20261018fit1" />
   <style id="executive-skin">
 /* =====================================================================
    EXECUTIVE SKIN · Toyota ALJ Report Sheet
@@ -1211,6 +1213,349 @@ body.live-app .app-topbar #theme-toggle:hover {
   border-color: rgba(235, 10, 30, 0.5);
 }
 
+/* ---------- 17. Sales Report sheets (Employee Schedule, Pace) · fully dark ----------
+   The schedule's own styles were made for a white sheet; this turns the
+   whole window dark so no text ends up dark-on-dark or light-on-white. */
+body.live-app #panel-salesreport .sr-fold,
+body.live-app #panel-salesreport .sr-fold > .sr-fold-summary,
+body.live-app #panel-salesreport .sr-fold > .sr-fold-body,
+body.live-app #panel-salesreport .sr-schedule {
+  background: var(--cx-bg);
+  color: var(--cx-ink);
+}
+body.live-app #panel-salesreport[data-sr-sheet] .sr-fold[open] {
+  border: 1px solid var(--cx-line-strong);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+}
+body.live-app #panel-salesreport .sr-fold > .sr-fold-summary {
+  border-bottom: 1px solid var(--cx-line);
+  color: #fff;
+  font-weight: 800;
+}
+body.live-app #panel-salesreport .sr-sheet-close {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink);
+  border-radius: 10px;
+}
+body.live-app #panel-salesreport .sr-sheet-close:hover { background: var(--ex-red); border-color: var(--ex-red); color: #fff; }
+
+/* the four blocks inside the schedule */
+body.live-app #panel-salesreport :is(.sr-sched-head, .sr-sched-filters, .sr-sched-kpi-block, .sr-sched-table-card, .sr-pace-board) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
+    var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--cx-shadow);
+  color: var(--cx-ink);
+}
+body.live-app #panel-salesreport .sr-sched-head { border-top: 3px solid var(--ex-red); }
+body.live-app #panel-salesreport :is(.sr-sched-title, .sr-sched-table-title) { color: #fff; font-weight: 800; }
+body.live-app #panel-salesreport :is(.sr-sched-sub, .sr-sched-table-sub, .sr-sched-kpi-heading, .sr-sched-field .lab, .sr-sched-pager .foot, .sr-sched-pager label) {
+  color: var(--cx-muted);
+}
+body.live-app #panel-salesreport .sr-sched-kpi-heading,
+body.live-app #panel-salesreport .sr-sched-field .lab {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.live-app #panel-salesreport .sr-sched-info {
+  background: rgba(37, 99, 235, 0.10);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: var(--cx-ink-2);
+  border-radius: 10px;
+}
+
+/* buttons, date chip, search */
+body.live-app #panel-salesreport .sr-sched-btn {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink);
+  border-radius: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .16s, border-color .16s, color .16s;
+}
+body.live-app #panel-salesreport .sr-sched-btn:hover {
+  background: var(--cx-raise);
+  border-color: rgba(235, 10, 30, 0.5);
+  color: #fff;
+}
+body.live-app #panel-salesreport .sr-sched-btn--primary {
+  background: linear-gradient(180deg, #f2263a, var(--ex-red) 55%, var(--ex-red-deep));
+  border-color: var(--ex-red-deep);
+  color: #fff;
+  box-shadow: 0 8px 18px -10px rgba(235, 10, 30, 0.9);
+}
+body.live-app #panel-salesreport .sr-sched-datechip {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 10px;
+  color: #fff;
+}
+body.live-app #panel-salesreport .sr-sched-datechip strong { color: #fff; font-family: var(--ex-num); }
+body.live-app #panel-salesreport .sr-day-nav { background: transparent; color: var(--cx-muted); border: 0; }
+body.live-app #panel-salesreport .sr-day-nav:hover { color: #fff; }
+body.live-app #panel-salesreport .sr-sched-search {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 10px;
+  color: var(--cx-muted);
+}
+body.live-app #panel-salesreport .sr-sched-search input { background: transparent; border: 0; color: var(--cx-ink); }
+
+/* KPI tiles: values were dark on dark */
+body.live-app #panel-salesreport .sr-sched-kpi {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  color: var(--cx-ink);
+}
+body.live-app #panel-salesreport .sr-sched-kpi .lab {
+  color: var(--cx-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.live-app #panel-salesreport .sr-sched-kpi .val {
+  color: #fff;
+  font-family: var(--ex-num);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+body.live-app #panel-salesreport .sr-sched-kpi .sub { color: var(--cx-muted); }
+body.live-app #panel-salesreport .sr-sched-kpi.is-over .val { color: #ff6b7a; }
+
+/* schedule table: no white rows, tints kept as soft colour */
+body.live-app #panel-salesreport .sr-sched-table { background: transparent; }
+body.live-app #panel-salesreport .sr-sched-table thead th {
+  background: var(--cx-surface-2);
+  color: var(--cx-muted);
+  border-color: var(--cx-line-strong);
+}
+body.live-app #panel-salesreport .sr-sched-table tbody tr,
+body.live-app #panel-salesreport .sr-sched-table tbody td {
+  background-color: transparent;
+  color: var(--cx-ink-2);
+  border-color: var(--cx-line);
+}
+body.live-app #panel-salesreport .sr-sched-table tbody tr:hover td { background-color: rgba(255, 255, 255, 0.04); }
+body.live-app #panel-salesreport .sr-sched-table :is(th, td).col-yellow { background-color: rgba(245, 158, 11, 0.09); }
+body.live-app #panel-salesreport .sr-sched-table :is(th, td).col-pink { background-color: rgba(235, 10, 30, 0.09); }
+body.live-app #panel-salesreport .sr-sched-table :is(th, td).col-divide { border-left: 2px solid var(--ex-red); }
+body.live-app #panel-salesreport .sr-sched-table td.num { font-family: var(--ex-num); }
+body.live-app #panel-salesreport .sr-sched-table tfoot td,
+body.live-app #panel-salesreport .sr-sched-table .sr-total-row td {
+  background-color: var(--cx-raise);
+  color: #fff;
+  font-weight: 800;
+  border-top: 1px solid var(--cx-line-strong);
+}
+body.live-app #panel-salesreport .sr-sched-table .sr-total-row td.col-yellow { background-color: #2a2a2b; }
+body.live-app #panel-salesreport .sr-sched-table .sr-total-row td.col-pink { background-color: #2c1a24; }
+body.live-app #panel-salesreport .sr-sched-table .emp-name { color: #93c5fd; font-weight: 700; }
+body.live-app #panel-salesreport .sr-sched-table .emp-hint { color: var(--cx-muted); }
+body.live-app #panel-salesreport .sr-sched-table .xl-div0,
+body.live-app #panel-salesreport .sr-sched-table .is-cancel-over { color: #ff6b7a; font-weight: 700; }
+body.live-app #panel-salesreport .sr-sched-table .xl-vacation { color: #fbbf24; font-weight: 800; }
+body.live-app #panel-salesreport .sr-row-more {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink);
+  border-radius: 8px;
+}
+
+/* status pills, legend, counts, pager */
+body.live-app #panel-salesreport .sr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+body.live-app #panel-salesreport .sr-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+body.live-app #panel-salesreport .sr-status.is-on { background: rgba(16, 185, 129, 0.14); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+body.live-app #panel-salesreport .sr-status.is-below { background: rgba(235, 10, 30, 0.14); color: #ff6b7a; border-color: rgba(235, 10, 30, 0.35); }
+body.live-app #panel-salesreport .sr-status.is-vac { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3); }
+body.live-app #panel-salesreport .sr-status.is-na { background: rgba(148, 163, 184, 0.14); color: var(--cx-muted); border-color: var(--cx-line-strong); }
+body.live-app #panel-salesreport .sr-leg { color: var(--cx-muted); }
+body.live-app #panel-salesreport .sr-sched-count {
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  border-radius: 999px;
+  font-weight: 800;
+}
+body.live-app #panel-salesreport .sr-page-btn {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 8px;
+}
+body.live-app #panel-salesreport .sr-page-btn.is-active { background: var(--ex-red); border-color: var(--ex-red); color: #fff; }
+body.live-app #panel-salesreport .sr-page-btn:disabled { opacity: .4; }
+
+/* pace sheet cells */
+body.live-app #panel-salesreport .sr-pace-cell {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 10px;
+  color: var(--cx-ink-2);
+}
+
+/* ---------- 18. Elements from the newer page version ---------- */
+/* Matched Vehicles: match-strength tabs, column chooser, pager */
+body.live-app #bas-dash .mv-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  width: max-content;
+  max-width: 100%;
+}
+body.live-app #bas-dash .mv-score-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cx-muted);
+  font: 700 0.8rem var(--ex-font);
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+body.live-app #bas-dash .mv-score-tab:hover { color: #fff; }
+body.live-app #bas-dash .mv-score-tab.is-on {
+  background: var(--ex-red);
+  color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(235, 10, 30, 0.9);
+}
+body.live-app #bas-dash .mv-tab-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font: 800 0.72rem var(--ex-num);
+  text-align: center;
+}
+body.live-app #bas-dash .mv-cols > summary {
+  cursor: pointer;
+  padding: 7px 12px;
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 10px;
+  background: var(--cx-surface-2);
+  color: var(--cx-ink-2);
+  font-weight: 700;
+  font-size: 0.8rem;
+  list-style: none;
+}
+body.live-app #bas-dash .mv-cols[open] > summary { border-color: var(--ex-red); color: #fff; }
+body.live-app #bas-dash .mv-cols-list {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.8);
+  color: var(--cx-ink-2);
+}
+body.live-app #bas-dash .mv-cols-list input[type="checkbox"] { accent-color: var(--ex-red); }
+body.live-app #bas-dash .mv-pager { color: var(--cx-muted); }
+body.live-app #bas-dash .mv-pager button {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 8px;
+  cursor: pointer;
+}
+body.live-app #bas-dash .mv-pager button:hover:not(:disabled) { border-color: var(--ex-red); color: #fff; }
+body.live-app #bas-dash .mv-pager button:disabled { opacity: .4; cursor: default; }
+body.live-app #bas-dash .mv-page-label { color: var(--cx-ink-2); font-family: var(--ex-num); }
+
+/* Reserved Vehicles: new header, tabs, timer */
+body.live-app #rv-dash .rv-top {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%),
+    var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-top: 3px solid var(--ex-red);
+  border-radius: var(--ex-radius);
+  box-shadow: var(--cx-shadow);
+}
+body.live-app #rv-dash .rv-brand-word { color: #fff; font-weight: 800; letter-spacing: 0.2em; }
+body.live-app #rv-dash .rv-eye {
+  color: var(--ex-red);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+body.live-app #rv-dash .rv-title { color: #fff; font-weight: 800; letter-spacing: -0.02em; }
+body.live-app #rv-dash .rv-sub,
+body.live-app #rv-dash .rv-updated-k { color: var(--cx-muted); }
+body.live-app #rv-dash .rv-updated { color: #fff; font-family: var(--ex-num); }
+body.live-app #rv-dash .rv-exit {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink);
+  border-radius: 10px;
+  cursor: pointer;
+}
+body.live-app #rv-dash .rv-exit small { color: var(--cx-muted); }
+body.live-app #rv-dash .rv-exit:hover { border-color: var(--ex-red); background: rgba(235, 10, 30, 0.1); }
+body.live-app #rv-dash .rv-controls {
+  background: var(--cx-surface);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--ex-radius);
+}
+body.live-app #rv-dash .rv-controls label {
+  color: var(--cx-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+body.live-app #rv-dash .rv-controls label :is(select, input) { text-transform: none; letter-spacing: 0; font-weight: 600; }
+body.live-app #rv-dash .rv-sheet-tabs button,
+body.live-app #rv-dash .rv-sheet-tabs [role="tab"] {
+  background: var(--cx-surface-2);
+  border: 1px solid var(--cx-line-strong);
+  color: var(--cx-ink-2);
+  border-radius: 999px;
+}
+body.live-app #rv-dash .rv-sheet-tabs :is(.is-active, .active, [aria-selected="true"]) {
+  background: rgba(235, 10, 30, 0.16);
+  border-color: var(--ex-red);
+  color: #fff;
+}
+body.live-app #rv-dash .rv-vin { font-family: var(--ex-num); color: #fff; letter-spacing: 0.02em; }
+body.live-app #rv-dash .rv-timer { font-family: var(--ex-num); color: #fbbf24; font-weight: 700; }
+body.live-app #rv-dash .rv-was { color: var(--cx-muted); font-size: 0.72rem; }
+
+/* Sales Dashboard: multi-select employee sum */
+body.live-app #panel-salesreport .sr-emp-sum {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border-radius: 10px;
+  background: rgba(235, 10, 30, 0.12);
+  border: 1px solid rgba(235, 10, 30, 0.35);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
   </style>
   <style>
     body.delivery-mode .app-frame {
@@ -1471,7 +1816,7 @@ body.live-app .app-topbar #theme-toggle:hover {
               <span class="sr-emp-search-ico" aria-hidden="true">⌕</span>
               <input type="search" id="sr-name-search" placeholder="Search employee…" autocomplete="off" aria-label="Search sales employees" />
             </label>
-            <div class="sr-name-list" id="sr-name-list" role="listbox" aria-label="Sales employees"></div>
+            <div class="sr-name-list" id="sr-name-list" role="listbox" aria-multiselectable="true" aria-label="Sales employees"></div>
           </aside>
 
           <div class="sr-dash-main">
@@ -1807,12 +2152,7 @@ body.live-app .app-topbar #theme-toggle:hover {
           <div>
             <p class="ytd-kicker">Toyota · ALJ · Digital Retail</p>
             <h2 class="ytd-title">YTD Sales</h2>
-            <p class="ytd-sub" id="ytd-sub">Employee targets and invoice sales from Sales Raw. The Sales Report stays beside them and is not added to the invoice total.</p>
-          </div>
-          <div class="ytd-import">
-            <button type="button" id="ytd-import">Import report</button>
-            <p id="ytd-import-note" class="ytd-sub"></p>
-            <input id="ytd-import-file" type="file" accept=".xlsx,.xls,.xlsm" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0" />
+            <p class="ytd-sub">Past months use the YTD file from Admin Push. This month stays live. Target comes from the file. Actual is the Sales Raw column V count for each employee.</p>
           </div>
           <label class="ytd-year">
             <span>Year</span>
@@ -2231,20 +2571,34 @@ body.live-app .app-topbar #theme-toggle:hover {
           </ol>
         </div>
 
-        <div id="rv-dash" class="bo-dash rv-dash" hidden>
-          <div class="rv-head">
-            <div>
-              <h2 class="rv-title">Reserved Vehicles Tracker</h2>
-              <p class="rv-sub" id="rv-live-hint">E-Sales المحجوز · BO queue · Sales Raw column V</p>
+        <div id="rv-dash" class="bo-dash rv-dash rv-tower" hidden>
+          <header class="rv-top">
+            <div class="rv-top-copy">
+              <div class="rv-brand" aria-hidden="true">
+                <img class="rv-brand-logo" src="../images/logo/toyota.png" alt="" width="28" height="28" decoding="async" onerror="this.style.display='none'" />
+                <span class="rv-brand-word">TOYOTA</span>
+              </div>
+              <div class="rv-brand-copy">
+                <p class="rv-eye">ALJ DIGITAL RETAIL</p>
+                <h2 class="rv-title">Reserved Vehicles</h2>
+                <p class="rv-sub" id="rv-live-hint">E-Sales المحجوز · BO queue · Sales Raw column V</p>
+              </div>
             </div>
             <div class="rv-head-actions">
+              <input id="rv-search" type="search" placeholder="Search order, VIN, product, advisor…" autocomplete="off" />
+              <span class="rv-updated-wrap">
+                <span class="rv-updated-k">Last Updated</span>
+                <strong class="rv-updated" id="rv-updated">No push yet</strong>
+              </span>
               <span class="rv-live-dot" id="rv-live-dot">Live</span>
-              <span class="rv-updated" id="rv-updated">No push yet</span>
-              <input id="rv-search" type="search" placeholder="Search order, VIN, product, advisor…" />
               <button type="button" class="btn" id="rv-refresh">Refresh</button>
-              <button type="button" id="rv-excel-btn" class="btn-primary">Export Excel</button>
+              <button type="button" id="rv-excel-btn" class="btn-primary">Excel</button>
+              <button type="button" class="rv-exit" id="rv-exit" title="Back to Sales Report">
+                <span>↪ EXIT</span>
+                <small>Back to Sales Report</small>
+              </button>
             </div>
-          </div>
+          </header>
           <div class="rv-controls">
             <label>Push<select id="rv-push"><option value="">Current live sheet</option></select></label>
             <label>Compare from<select id="rv-push-from"><option value="">Earlier push</option></select></label>
@@ -2272,7 +2626,11 @@ body.live-app .app-topbar #theme-toggle:hover {
               <header class="rv-board-h">
                 <div>
                   <h3>Live sheet</h3>
-                  <p id="rv-live-meta">Loading the reserved-orders live sheet…</p>
+                  <p id="rv-live-meta">Same columns as the reserved orders admin live sheet</p>
+                </div>
+                <div class="rv-sheet-tabs" role="tablist">
+                  <button type="button" class="is-on" data-rv-sheet="live">Live</button>
+                  <button type="button" data-rv-sheet="removed">Removed</button>
                 </div>
               </header>
               <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
@@ -2284,7 +2642,7 @@ body.live-app .app-topbar #theme-toggle:hover {
               <header class="rv-board-h">
                 <div>
                   <h3 dir="rtl">طلبات التسويق</h3>
-                  <p id="rv-mkt-count">Orders advisors sent from the BO file</p>
+                  <p id="rv-mkt-count">Order number, advisor, and when it was sent</p>
                 </div>
               </header>
               <input id="rv-mkt-search" type="search" placeholder="Search marketing orders" aria-label="Search marketing orders" />
@@ -2293,8 +2651,8 @@ body.live-app .app-topbar #theme-toggle:hover {
             <article class="rv-board-card rv-history-card">
               <header class="rv-board-h">
                 <div>
-                  <h3>VIN Assignment History</h3>
-                  <p id="rv-history-count">Changes versus the previous push</p>
+                  <h3>VIN assignment</h3>
+                  <p id="rv-history-count">Who this VIN is with on reserved orders</p>
                 </div>
               </header>
               <input id="rv-history-search" type="search" placeholder="Search VIN or employee" aria-label="Search assignment history" />
@@ -2304,8 +2662,8 @@ body.live-app .app-topbar #theme-toggle:hover {
           <section class="rv-audit" id="rv-audit-card">
             <header class="rv-board-h">
               <div>
-                <h3>Push Snapshot / VIN Movement Audit</h3>
-                <p id="rv-audit-count">Each Admin Push keeps its own snapshot</p>
+                <h3>Push snapshots</h3>
+                <p id="rv-audit-count">Each push from reserved admin or the report sheet keeps live and removed VINs</p>
               </div>
             </header>
             <div class="rv-audit-table" id="rv-audit"></div>
@@ -2435,7 +2793,7 @@ body.live-app .app-topbar #theme-toggle:hover {
                   <tr>
                     <th>Received</th><th>VIN</th><th>Product</th><th>SFX</th><th>Year</th>
                     <th>Plan</th><th>Alloc date</th><th>Age</th><th>Search area</th>
-                    <th>Status</th><th>Delivery</th><th>Secondary status</th><th>Swap</th>
+                    <th>Status</th><th>Usage</th><th>Delivery</th><th>Secondary status</th><th>Swap</th>
                   </tr>
                 </thead>
               </table>
@@ -2501,7 +2859,7 @@ body.live-app .app-topbar #theme-toggle:hover {
                   <thead>
                     <tr>
                       <th>VIN</th><th>Product</th><th>SFX</th><th>Exterior</th><th>Interior</th><th>Model year</th><th>Received</th>
-                      <th>Allocation date</th><th>Age</th><th>Search area</th><th>Status</th><th>Secondary status</th>
+                      <th>Allocation date</th><th>Age</th><th>Search area</th><th>Status</th><th>Usage</th><th>Secondary status</th>
                     </tr>
                   </thead>
                   <tbody id="pt-vin-modal-body"></tbody>
@@ -2731,6 +3089,12 @@ body.live-app .app-topbar #theme-toggle:hover {
               <button type="button" class="btn" id="bas-alloc-collapse">Collapse</button>
             </div>
             <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-alloc-kpis"></div>
+            <div class="mv-tabs-bar" id="bas-alloc-tabs" role="tablist" aria-label="Match strength">
+              <button type="button" class="mv-score-tab is-on" data-mv-score="">Matched vehicles <span class="mv-tab-count">0</span></button>
+              <button type="button" class="mv-score-tab" data-mv-score="high">Strong ≥ 80% <span class="mv-tab-count">0</span></button>
+              <button type="button" class="mv-score-tab" data-mv-score="mid">Partial 60–79% <span class="mv-tab-count">0</span></button>
+              <button type="button" class="mv-score-tab" data-mv-score="low">Low &lt; 60% <span class="mv-tab-count">0</span></button>
+            </div>
             <div class="bas-alloc-toolbar">
               <input type="search" id="bas-alloc-search" placeholder="Search product, VIN, or segment" autocomplete="off" />
               <select id="bas-alloc-f-score">
@@ -2751,10 +3115,15 @@ body.live-app .app-topbar #theme-toggle:hover {
                 <option value="RTL">RTL Stock</option>
                 <option value="E-Sales">E-Sales Stock</option>
               </select>
+              <details class="mv-cols" id="bas-alloc-cols">
+                <summary class="btn">Columns</summary>
+                <div class="mv-cols-list" id="bas-alloc-cols-list"></div>
+              </details>
             </div>
             <div class="mv-split">
               <div class="mv-table-col">
                 <div class="table-wrap bas-table-wrap" id="bas-alloc-table"></div>
+                <div class="mv-pager" id="bas-alloc-pager"></div>
                 <p class="foot bas-foot" id="bas-alloc-foot"></p>
               </div>
               <aside class="mv-detail" id="bas-alloc-detail" aria-live="polite">
@@ -2878,6 +3247,7 @@ body.live-app .app-topbar #theme-toggle:hover {
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
     { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Guest Experience Center leads · GEC Dashboard" },
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Visitor log · Date · Promoter · Visit Purpose · GEC Dashboard" },
+    { id: "ytd", n: 11, title: "YTD Sales", ar: "مبيعات السنة", blurb: "Past months · target and total from Admin Push · checked against Sales Raw column V" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -3243,6 +3613,25 @@ body.live-app .app-topbar #theme-toggle:hover {
   function employeeNameFromCodeCells(headers, cells) {
     for (let i = 0; i < headers.length; i += 1) {
       if (!EMPLOYEE_CODE_HEADER.test(normHeader(headers[i]))) continue;
+      const name = employeeNameFromCode(cells[i]);
+      if (name) return name;
+    }
+    return "";
+  }
+
+  /**
+   * Accessories files: the salesman is identified by the HR employee ID column.
+   * 1) headers that clearly say salesman / employee code, 2) any "ID" / "Code" / salesman-like header whose cell holds a roster ID.
+   * Columns that carry other numbers (order, invoice, VIN, customer, amount, phone...) are never read as an employee ID.
+   */
+  const ACCESSORY_ID_HEADER = /^(id|code|emp|employee|salesman|salesperson|sales\s*man|sales\s*person|sales\s*employee|sales\s*id|user\s*id|hr\s*id)$|(^|[\s._-])(id|code)$|salesman|sales\s*employee|sales\s*person|employee|الرقم\s*الوظيفي|رقم\s*(الموظف|البائع|الوظيفي)/;
+  const ACCESSORY_ID_HEADER_SKIP = /order|invoice|vin|chassis|customer|client|document|doc\b|\bbo\b|ship|amount|price|vat|phone|mobile|account|contract|plate|item|material|branch|plant|showroom/;
+  function employeeNameFromIdColumns(headers, cells) {
+    const byHeader = employeeNameFromCodeCells(headers, cells);
+    if (byHeader) return byHeader;
+    for (let i = 0; i < headers.length; i += 1) {
+      const h = normHeader(headers[i]);
+      if (!h || ACCESSORY_ID_HEADER_SKIP.test(h) || !ACCESSORY_ID_HEADER.test(h)) continue;
       const name = employeeNameFromCode(cells[i]);
       if (name) return name;
     }
@@ -4246,6 +4635,7 @@ body.live-app .app-topbar #theme-toggle:hover {
    *   Col L = amount (accessories achieved)
    * Optional date column (by header) for period filter; undated rows still count in MTD.
    * Sheet 2 «VSND»: Col I VIN · Col L sales employee · Col S value (in progress / not delivered).
+   * A VIN on both sheets counts as achieved only, not also in progress.
    * Ach% = amount ÷ accessories target (settled pool share, else employee monthly target)
    */
   function parseAmount(v) {
@@ -4320,7 +4710,8 @@ body.live-app .app-topbar #theme-toggle:hover {
       if (!amount) continue;
 
       const vin = extractVinValue(line[idxI]) || upperTrim(cellToString(line[idxI]));
-      const salesman = employeeNameFromCodeCells(uniqueHeaders, line)
+      // The employee ID column decides the salesman; Col L (the name) is only the fallback.
+      const salesman = employeeNameFromIdColumns(uniqueHeaders, line)
         || resolveSalesmanName(cellToString(line[idxL]).trim());
       const obj = {
         vin,
@@ -4401,7 +4792,8 @@ body.live-app .app-topbar #theme-toggle:hover {
       const obj = {
         vin,
         amount,
-        salesman: "", // filled from Sales Raw VIN match at report time
+        salesman: "", // filled at report time: employee ID column first, then the Sales Raw VIN match
+        _idSalesman: employeeNameFromIdColumns(uniqueHeaders, line),
         accessoryDate: idxDate >= 0 ? parseDate(line[idxDate]) : null,
         _sheet: preferred,
         __cells: line,
@@ -4450,6 +4842,8 @@ body.live-app .app-topbar #theme-toggle:hover {
   function accessorySalesmanForRow(r, vinMap, vsndMap) {
     if (!r) return "";
     const vin = extractVinValue(r.vin);
+    // The employee ID on the achieved sheet wins; the VIN lookups only fill rows that carry no known ID.
+    if (r._idSalesman) return r._idSalesman;
     const candidates = [
       vin && vinMap ? vinMap.get(vin) : "",
       vin && vsndMap ? vsndMap.get(vin) : "",
@@ -5690,6 +6084,7 @@ body.live-app .app-topbar #theme-toggle:hover {
   }
 
   async function applyWorkbookPayload(payload) {
+    window._ytdFile = null;
     SLOT_DEFS.forEach((d) => {
       slots[d.id] = { file: null, rows: [], name: "" };
       if (d.id === "central") {
@@ -5739,6 +6134,18 @@ body.live-app .app-topbar #theme-toggle:hover {
             name: f.name,
             sheet: visitorSet ? visitorSet.sheetName || "" : "",
             visitors: visitorSet,
+          };
+          continue;
+        }
+        if (d.id === "ytd") {
+          const wb = bufferToWorkbook(f.name, f.buffer, {});
+          const ytd = ytdReadWorkbook(wb, f.name);
+          window._ytdFile = ytd;
+          slots.ytd = {
+            file: { name: f.name, size: f.size || f.buffer.byteLength },
+            rows: [],
+            name: f.name,
+            ytd,
           };
           continue;
         }
@@ -5804,6 +6211,16 @@ body.live-app .app-topbar #theme-toggle:hover {
     return salesPeriodMatch(r.accessoryDate, live, "month", prevMonthKey);
   }
 
+  /** VINs already on the achieved sheet. They stay achieved and are not also counted in progress. */
+  function accessoriesAchievedVins() {
+    const vins = new Set();
+    (slots.accessories.rows || []).forEach((r) => {
+      const vin = extractVinValue(r.vin);
+      if (vin) vins.add(vin);
+    });
+    return vins;
+  }
+
   function buildAccessoriesMetrics(live, prevMonthKey) {
     const settled = accessoriesSettled;
     const totalAdminTarget = employeeTargets.reduce((s, e) => s + effectiveEmployeeTarget(e), 0);
@@ -5811,27 +6228,32 @@ body.live-app .app-topbar #theme-toggle:hover {
     const vinMap = salesVinEmployeeMap(slots.sales.rows || []);
     const vsndMap = accessoriesVsndVinEmployeeMap();
     const soldByKey = new Map();
+    const soldCountByKey = new Map();
     let matchedRows = 0;
     let unmatchedVin = 0;
     (slots.accessories.rows || []).forEach((r) => {
       if (!accessoriesInPeriod(r, live, prevMonthKey)) return;
       const vin = extractVinValue(r.vin);
-      if (!vinMap.has(vin) && !vsndMap.has(vin)) unmatchedVin += 1;
+      if (!r._idSalesman && !vinMap.has(vin) && !vsndMap.has(vin)) unmatchedVin += 1;
       else matchedRows += 1;
       const salesman = accessorySalesmanForRow(r, vinMap, vsndMap);
       r.salesman = salesman; // keep detail tables / filters in sync
       const key = nameKey(salesman);
       if (!key) return;
       soldByKey.set(key, (soldByKey.get(key) || 0) + (Number(r.amount) || 0));
+      soldCountByKey.set(key, (soldCountByKey.get(key) || 0) + 1);
     });
 
     const progressByKey = new Map();
+    const progressCountByKey = new Map();
     let progressRows = 0;
     let progressUnmatched = 0;
+    const achievedVins = accessoriesAchievedVins();
     (slots.accessories.vsndRows || []).forEach((r) => {
       const amount = Number(r.amount) || 0;
       if (!amount) return;
       const vin = extractVinValue(r.vin);
+      if (vin && achievedVins.has(vin)) return;
       const candidates = [
         resolveSalesmanName(r._colL != null ? r._colL : r.salesman),
         vin ? vinMap.get(vin) : "",
@@ -5843,6 +6265,7 @@ body.live-app .app-topbar #theme-toggle:hover {
       if (!key) return;
       progressRows += 1;
       progressByKey.set(key, (progressByKey.get(key) || 0) + amount);
+      progressCountByKey.set(key, (progressCountByKey.get(key) || 0) + 1);
     });
 
     const byKey = new Map();
@@ -5862,7 +6285,9 @@ body.live-app .app-topbar #theme-toggle:hover {
         adminTarget,
         quota,
         sold,
+        soldCount: soldCountByKey.get(key) || 0,
         inProgress,
+        progressCount: progressCountByKey.get(key) || 0,
         achPct: quota > 0 ? sold / quota : null,
         combinedPct: quota > 0 ? (sold + inProgress) / quota : null,
         remaining,
@@ -5870,11 +6295,15 @@ body.live-app .app-topbar #theme-toggle:hover {
       });
       soldByKey.delete(key);
       progressByKey.delete(key);
+      soldCountByKey.delete(key);
+      progressCountByKey.delete(key);
     });
     const leftoverKeys = new Set([...soldByKey.keys(), ...progressByKey.keys()]);
     leftoverKeys.forEach((key) => {
       const sold = soldByKey.get(key) || 0;
       const inProgress = progressByKey.get(key) || 0;
+      const soldCount = soldCountByKey.get(key) || 0;
+      const progressCount = progressCountByKey.get(key) || 0;
       const fromFile = (slots.accessories.rows || []).find((r) => nameKey(r.salesman) === key)
         || (slots.accessories.vsndRows || []).find((r) => nameKey(r.salesman) === key);
       byKey.set(key, {
@@ -5882,7 +6311,9 @@ body.live-app .app-topbar #theme-toggle:hover {
         adminTarget: 0,
         quota: 0,
         sold,
+        soldCount,
         inProgress,
+        progressCount,
         achPct: null,
         remaining: 0,
         netTarget: 0,
@@ -7495,13 +7926,11 @@ body.live-app .app-topbar #theme-toggle:hover {
       const remaining = Math.max(0, q - s - p);
       return { quota: q, sold: s, inProgress: p, remaining, achPct: ach, combinedPct };
     };
-    if (srView.selectedKey && list[0]) {
-      const r = list[0];
-      const quota = Number(r._accQuota) || 0;
-      const sold = Number(r._accSold) || 0;
-      const inProgress = Number(r._accInProgress) || 0;
-      const ach = quota > 0 ? sold / quota : (r._accAchPct != null ? r._accAchPct : null);
-      return pack(quota, sold, inProgress, ach);
+    if (srHasSelection() && list.length) {
+      const quota = list.reduce((sum, row) => sum + (Number(row._accQuota) || 0), 0);
+      const sold = list.reduce((sum, row) => sum + (Number(row._accSold) || 0), 0);
+      const inProgress = list.reduce((sum, row) => sum + (Number(row._accInProgress) || 0), 0);
+      return pack(quota, sold, inProgress, quota > 0 ? sold / quota : null);
     }
     if (t.accQuota != null || t.accSold != null || t.accInProgress != null) {
       return pack(
@@ -7696,27 +8125,41 @@ body.live-app .app-topbar #theme-toggle:hover {
     openWideAccessories();
   }
 
+  const SALES_TYPE_ORDER = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
+
+  function salesTypeBucketOf(raw) {
+    const type = String(raw || inferSalesType("", false) || "Other").trim() || "Other";
+    return SALES_TYPE_ORDER.includes(type) ? type : "Other";
+  }
+
+  /** Same delivered-car rows as the Sales Report “Sales Type” card. */
+  function collectSalesReportDeliveries(live, prevMonthKey) {
+    const periodLive = live || window._globalLivePeriod || todayKeys();
+    const pmk = prevMonthKey || toYyyymm(new Date(periodLive.now.getFullYear(), periodLive.now.getMonth() - 1, 1));
+    const selectedKeys = srSelectedList();
+    const groups = Object.create(null);
+    SALES_TYPE_ORDER.forEach((t) => { groups[t] = []; });
+    salesDashboardRows().forEach((r) => {
+      if (!salesIsDeliveryInPeriod(r, periodLive, "month", pmk)) return;
+      const display = rosterSalesmanName(r._salesmanRaw || r.salesman);
+      if (!display) return;
+      if (selectedKeys.length && !selectedKeys.includes(nameKey(display))) return;
+      const bucket = salesTypeBucketOf(r.salesType);
+      if (!groups[bucket]) groups[bucket] = [];
+      groups[bucket].push(r);
+    });
+    return groups;
+  }
+
   function deliverySalesTypeBreakdown(sr) {
     const live = (sr && sr.live) || todayKeys();
     const prevMonthKey = (sr && sr.prevMonthKey) || toYyyymm(new Date(live.now.getFullYear(), live.now.getMonth() - 1, 1));
-    const selectedKey = srView.selectedKey || "";
-    const order = ["Cash", "Bank", "ALJUF", "Employee", "Fleet"];
-    const counts = Object.create(null);
-    order.forEach((t) => { counts[t] = 0; });
-    salesDashboardRows().forEach((r) => {
-      if (!salesIsDeliveryInPeriod(r, live, "month", prevMonthKey)) return;
-      const display = rosterSalesmanName(r._salesmanRaw || r.salesman);
-      if (!display) return;
-      if (selectedKey && nameKey(display) !== selectedKey) return;
-      const type = String(r.salesType || inferSalesType("", false) || "Other").trim() || "Other";
-      const bucket = order.includes(type) ? type : "Other";
-      counts[bucket] = (counts[bucket] || 0) + 1;
+    const groups = collectSalesReportDeliveries(live, prevMonthKey);
+    const keys = SALES_TYPE_ORDER.slice();
+    Object.keys(groups).forEach((k) => {
+      if (!keys.includes(k) && groups[k].length) keys.push(k);
     });
-    const keys = order.slice();
-    Object.keys(counts).forEach((k) => {
-      if (!keys.includes(k) && counts[k] > 0) keys.push(k);
-    });
-    return keys.map((type) => ({ type, count: counts[type] || 0 }));
+    return keys.map((type) => ({ type, count: (groups[type] || []).length }));
   }
 
   function renderWidePerfSalesType(sr) {
@@ -7730,11 +8173,10 @@ body.live-app .app-topbar #theme-toggle:hover {
     let target = 0;
     let del = 0;
     let prof = 0;
-    if (srView.selectedKey && rows[0]) {
-      const r = rows[0];
-      target = rowTargetNum(r);
-      del = Number(r["Delivery (Month)"]) || 0;
-      prof = Number(r["Proforma (Month)"]) || 0;
+    if (srHasSelection() && rows.length) {
+      target = rows.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      del = rows.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      prof = rows.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
     } else {
       target = Number(t.target) || 0;
       del = Number(t.deliveryMonth) || 0;
@@ -8726,6 +9168,9 @@ body.live-app .app-topbar #theme-toggle:hover {
   // Admin → GEC CONTROL saved (this laptop via storage event, others via live sync): re-classify without re-parsing.
   const onGecControlUpdated = () => { if (activePanel === "gec") renderGecPanel(); };
   window.addEventListener("gec-control-updated", onGecControlUpdated);
+  window.addEventListener("bo-error-rules-updated", () => {
+    if (activePanel === "boerrors") renderBoErrorsDashboard();
+  });
   window.addEventListener("storage", (e) => { if (e.key === Store.GEC_CONTROL_KEY) onGecControlUpdated(); });
 
   function switchPanel(panelId) {
@@ -8944,7 +9389,42 @@ body.live-app .app-topbar #theme-toggle:hover {
     saveGlobalDateFilter();
   }
 
-  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", plant: "", status: "", salesman: "", page: 1, pageSize: 10, schedulePeriod: "month" };
+  let srView = { search: "", filter: "", chartMode: "active", selectedKey: "", selectedKeys: [], plant: "", status: "", salesman: "", page: 1, pageSize: 10, schedulePeriod: "month" };
+
+  function srSelectedList() {
+    const raw = Array.isArray(srView.selectedKeys) ? srView.selectedKeys.slice() : [];
+    if (!raw.length && srView.selectedKey) raw.push(srView.selectedKey);
+    return [...new Set(raw.map((key) => nameKey(key) || key).filter(Boolean))];
+  }
+
+  function srHasSelection() {
+    return srSelectedList().length > 0;
+  }
+
+  function srRowSelected(key) {
+    const keys = srSelectedList();
+    if (!keys.length || !key) return false;
+    const resolved = nameKey(key) || key;
+    return keys.includes(resolved) || keys.includes(key);
+  }
+
+  function srWithoutSelection(run) {
+    const prevKey = srView.selectedKey;
+    const prevKeys = srView.selectedKeys;
+    srView.selectedKey = "";
+    srView.selectedKeys = [];
+    try {
+      return run();
+    } finally {
+      srView.selectedKey = prevKey;
+      srView.selectedKeys = prevKeys;
+    }
+  }
+
+  function srSelectedRows() {
+    const byKey = window._srRowsByKey || {};
+    return srSelectedList().map((key) => byKey[key]).filter(Boolean);
+  }
 
   function globalDatePresetLabel(preset) {
     if (preset === "today") return "Today";
@@ -9142,9 +9622,9 @@ body.live-app .app-topbar #theme-toggle:hover {
 
   function filterSrRows(baseRows) {
     let rows = baseRows.slice();
-    if (srView.selectedKey) {
-      const sel = nameKey(srView.selectedKey) || srView.selectedKey;
-      rows = rows.filter((r) => r._key === sel || r._key === srView.selectedKey);
+    const selectedKeys = srSelectedList();
+    if (selectedKeys.length) {
+      rows = rows.filter((r) => selectedKeys.includes(r._key) || selectedKeys.includes(nameKey(r._key)));
     }
     const q = srView.search.trim().toLowerCase();
     if (q) {
@@ -9748,12 +10228,13 @@ body.live-app .app-topbar #theme-toggle:hover {
     let delivery = t.deliveryMonth || 0;
     let scope = "Team MTD";
 
-    if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
-      const row = window._srRowsByKey[srView.selectedKey];
-      const m = row.month || row;
-      cancelled = Number(m["Cancelled BOs"]) || 0;
-      delivery = Number(m.Delivery) || 0;
-      scope = shortEmpLabel(row["Sales Employee"] || "Employee");
+    const pickedCancel = srSelectedRows();
+    if (pickedCancel.length) {
+      cancelled = pickedCancel.reduce((sum, row) => sum + (Number((row.month || row)["Cancelled BOs"]) || 0), 0);
+      delivery = pickedCancel.reduce((sum, row) => sum + (Number((row.month || row).Delivery) || 0), 0);
+      scope = pickedCancel.length === 1
+        ? shortEmpLabel(pickedCancel[0]["Sales Employee"] || "Employee")
+        : `${pickedCancel.length} selected`;
     }
 
     const ratio = cancelPctRatio(cancelled, delivery);
@@ -9898,30 +10379,38 @@ body.live-app .app-topbar #theme-toggle:hover {
       return;
     }
     const resolved = nameKey(key) || key;
-    // Toggle off if same name clicked again
-    srView.selectedKey = srView.selectedKey === resolved || srView.selectedKey === key ? "" : resolved;
+    const keys = srSelectedList();
+    const next = keys.filter((item) => item !== resolved && item !== key);
+    if (next.length === keys.length) next.push(resolved);
+    srView.selectedKeys = next;
+    srView.selectedKey = next.length === 1 ? next[0] : "";
     refreshSalesSelection();
   }
 
   function clearEmployeeFilter() {
     srView.selectedKey = "";
+    srView.selectedKeys = [];
     refreshSalesSelection();
   }
 
   function refreshSalesSelection() {
     const sr = window._data && window._data.salesReport;
     if (!sr) return;
+    const picked = srSelectedRows();
     const clearBtn = $("#sr-clear-sel");
     if (clearBtn) {
-      clearBtn.hidden = !srView.selectedKey;
-      clearBtn.disabled = !srView.selectedKey;
+      clearBtn.hidden = !picked.length;
+      clearBtn.disabled = !picked.length;
     }
     const bar = $("#sr-filter-bar");
     const nameEl = $("#sr-filter-name");
     if (bar && nameEl) {
-      if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
+      if (picked.length === 1) {
         bar.hidden = false;
-        nameEl.textContent = window._srRowsByKey[srView.selectedKey]["Sales Employee"] || srView.selectedKey;
+        nameEl.textContent = picked[0]["Sales Employee"] || srSelectedList()[0];
+      } else if (picked.length > 1) {
+        bar.hidden = false;
+        nameEl.textContent = `${picked.length} employees`;
       } else {
         bar.hidden = true;
         nameEl.textContent = "—";
@@ -9939,9 +10428,9 @@ body.live-app .app-topbar #theme-toggle:hover {
     renderSalesReportTable(sr);
     const hint = $("#sr-live-hint");
     if (hint) {
-      hint.textContent = srView.selectedKey
-        ? "Showing one employee only · click Clear or the name again to show all"
-        : "Click a name to filter this page to that person only";
+      hint.textContent = picked.length
+        ? `Showing ${picked.length} employee${picked.length === 1 ? "" : "s"} · numbers are their combined total · click a name again to remove it`
+        : "Click names to select one or more employees";
     }
   }
 
@@ -9970,7 +10459,8 @@ body.live-app .app-topbar #theme-toggle:hover {
     if (!sr || typeof sr !== "object") return buildDailyProfDelSeries(sr, selectedKey);
     let byKey = srDailySeriesCache.get(sr);
     if (!byKey) { byKey = new Map(); srDailySeriesCache.set(sr, byKey); }
-    const k = selectedKey || "";
+    const explicit = selectedKey != null ? String(selectedKey) : "";
+    const k = explicit || srSelectedList().slice().sort().join("|");
     if (!byKey.has(k)) byKey.set(k, buildDailyProfDelSeries(sr, k));
     return byKey.get(k);
   }
@@ -10026,9 +10516,6 @@ body.live-app .app-topbar #theme-toggle:hover {
   let ytdOpenMonth = "";
   let ytdInspect = false;
   let ytdTargetsLoaded = false;
-  let ytdHistory = null;
-  let ytdSnapshots = [];
-  let ytdSnapshotView = null;
   let ytdDirtyMonths = new Set();
   let ytdSaveMessage = { text: "Targets are stored on the server for each employee and month.", cls: "" };
   const ytdSaveChain = new Map();
@@ -10049,12 +10536,10 @@ body.live-app .app-topbar #theme-toggle:hover {
 
   function ytdSetSaveNote(text, cls) {
     ytdSaveMessage = { text, cls: cls || "" };
-    ["ytd-save-note", "ytd-import-note"].forEach((id) => {
-      const note = document.getElementById(id);
-      if (!note) return;
-      note.textContent = text;
-      note.className = "ytd-sub" + (cls ? " " + cls : "");
-    });
+    const note = $("#ytd-save-note");
+    if (!note) return;
+    note.textContent = text;
+    note.className = "ytd-save" + (cls ? " " + cls : "");
   }
 
   async function ytdEnsureTargets(force) {
@@ -10107,136 +10592,300 @@ body.live-app .app-topbar #theme-toggle:hover {
     return loose === "not assigned" || loose === "unassigned" || nameKey(name) === nameKey("Not assigned");
   }
 
+  const YTD_MONTH_NAMES = [
+    ["january", "jan"], ["february", "feb"], ["march", "mar"], ["april", "apr"],
+    ["may"], ["june", "jun"], ["july", "jul"], ["august", "aug"],
+    ["september", "sep", "sept"], ["october", "oct"], ["november", "nov"], ["december", "dec"],
+  ];
+
+  function ytdParseNumber(value) {
+    if (value == null || String(value).trim() === "") return null;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const n = Number(String(value).replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function ytdMonthToken(text) {
+    const n = normHeader(text);
+    if (!n) return null;
+    let month = null;
+    let year = null;
+    const iso = n.match(/\b(20\d{2})\D{0,2}(0?[1-9]|1[0-2])\b/);
+    const rev = n.match(/\b(0?[1-9]|1[0-2])\D{0,2}(20\d{2})\b/);
+    if (iso) { year = Number(iso[1]); month = Number(iso[2]) - 1; }
+    else if (rev) { month = Number(rev[1]) - 1; year = Number(rev[2]); }
+    YTD_MONTH_NAMES.forEach((names, index) => {
+      if (names.some((name) => n === name || n.startsWith(name + " ") || n.endsWith(" " + name) || n.includes(" " + name + " "))) month = index;
+    });
+    const yearWord = n.match(/\b(20\d{2})\b/);
+    if (year == null && yearWord) year = Number(yearWord[1]);
+    return month == null ? null : { month, year };
+  }
+
+  function ytdMetricKind(text) {
+    const n = normHeader(text);
+    if (!n) return "";
+    if (/\btarget\b|\bهدف\b/.test(n)) return "target";
+    if (/\b(total|actual|achieved|achievement|count|qty|quantity|sales)\b/.test(n)) return "total";
+    return "";
+  }
+
+  function ytdGuessYear(matrix, filename) {
+    const blob = [filename].concat((matrix || []).slice(0, 8).flat().map((cell) => cellToString(cell))).join(" ");
+    const years = [...blob.matchAll(/\b(20\d{2})\b/g)].map((hit) => Number(hit[1]));
+    if (!years.length) return new Date().getFullYear();
+    const tally = new Map();
+    years.forEach((year) => tally.set(year, (tally.get(year) || 0) + 1));
+    return [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  }
+
+  function ytdNameColumn(rows) {
+    for (let r = 0; r < rows.length; r += 1) {
+      const idx = (rows[r] || []).findIndex((cell) => {
+        const n = normHeader(cell);
+        return n === "employee" || n === "employee name" || n === "sales employee" || n === "salesman" || n === "salesman name" || n === "advisor" || n === "consultant" || n === "name";
+      });
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  }
+
+  function ytdPutFileValue(months, monthKey, rawName, metric, value) {
+    const nameText = String(rawName || "").trim();
+    if (!nameText || /^(total|grand total|sum)$/i.test(nameText) || ytdMonthToken(nameText)) return;
+    const name = resolveSalesmanName(nameText) || nameText;
+    const key = nameKey(name) || nameText.toLowerCase();
+    if (!key || value == null) return;
+    if (!months[monthKey]) months[monthKey] = {};
+    if (!months[monthKey][key]) months[monthKey][key] = { name, target: null, total: null };
+    months[monthKey][key][metric === "target" ? "target" : "total"] = value;
+    if (name) months[monthKey][key].name = name;
+  }
+
+  function ytdReadLongSheet(matrix, months, filename) {
+    let headerIdx = -1;
+    let nameIdx = -1;
+    let monthIdx = -1;
+    let targetIdx = -1;
+    let totalIdx = -1;
+    const scan = Math.min(matrix.length, 20);
+    for (let i = 0; i < scan; i += 1) {
+      const headers = matrix[i] || [];
+      const found = { name: -1, month: -1, target: -1, total: -1 };
+      headers.forEach((cell, index) => {
+        const n = normHeader(cell);
+        if (!n) return;
+        if (found.name < 0 && (n === "employee" || n === "employee name" || n === "salesman" || n === "salesman name" || n === "advisor" || n === "name")) found.name = index;
+        if (found.month < 0 && (n === "month" || n === "period" || n === "month name")) found.month = index;
+        if (found.target < 0 && ytdMetricKind(n) === "target" && !ytdMonthToken(n)) found.target = index;
+        if (found.total < 0 && ytdMetricKind(n) === "total" && !ytdMonthToken(n)) found.total = index;
+      });
+      if (found.name >= 0 && found.month >= 0 && (found.target >= 0 || found.total >= 0)) {
+        headerIdx = i; nameIdx = found.name; monthIdx = found.month; targetIdx = found.target; totalIdx = found.total;
+        break;
+      }
+    }
+    if (headerIdx < 0) return false;
+    const yearFallback = ytdGuessYear(matrix, filename);
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      const token = ytdMonthToken(cellToString(line[monthIdx]));
+      if (!token) continue;
+      const monthKey = ytdMonthKey(token.year || yearFallback, token.month);
+      if (targetIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "target", ytdParseNumber(line[targetIdx]));
+      if (totalIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "total", ytdParseNumber(line[totalIdx]));
+    }
+    return true;
+  }
+
+  function ytdReadWideSheet(matrix, months, sheetMonth, filename) {
+    let headerIdx = -1;
+    let monthHits = 0;
+    for (let i = 0; i < Math.min(matrix.length, 15); i += 1) {
+      const hits = (matrix[i] || []).filter((cell) => ytdMonthToken(cellToString(cell))).length;
+      if (hits > monthHits) { monthHits = hits; headerIdx = i; }
+    }
+    if (headerIdx < 0 || monthHits < 1) return ytdReadMonthSheet(matrix, months, sheetMonth, filename);
+    const top = matrix[headerIdx] || [];
+    const below = matrix[headerIdx + 1] || [];
+    const metricRow = below.filter((cell) => ytdMetricKind(cellToString(cell))).length >= 1;
+    const yearFallback = ytdGuessYear(matrix, filename);
+    const columns = [];
+    let carry = null;
+    top.forEach((cell, index) => {
+      const own = ytdMonthToken(cellToString(cell));
+      if (own) carry = own;
+      const token = own || carry;
+      const metric = (metricRow ? ytdMetricKind(cellToString(below[index])) : "") || ytdMetricKind(cellToString(cell)) || (token && !metricRow ? "total" : "");
+      if (!token || !metric) return;
+      columns.push({ index, key: ytdMonthKey(token.year || yearFallback, token.month), metric });
+    });
+    if (!columns.length) return false;
+    const nameIdx = ytdNameColumn(metricRow ? [below, top] : [top]);
+    for (let r = headerIdx + (metricRow ? 2 : 1); r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      columns.forEach((col) => ytdPutFileValue(months, col.key, line[nameIdx], col.metric, ytdParseNumber(line[col.index])));
+    }
+    return true;
+  }
+
+  function ytdReadMonthSheet(matrix, months, sheetMonth, filename) {
+    if (!sheetMonth) return false;
+    let headerIdx = -1;
+    const scan = Math.min(matrix.length, 20);
+    for (let i = 0; i < scan; i += 1) {
+      const cells = (matrix[i] || []).map((cell) => normHeader(cell));
+      const hasName = cells.some((n) => n === "employee" || n === "employee name" || n === "salesman" || n === "name" || n === "advisor");
+      const hasMetric = cells.some((n) => ytdMetricKind(n));
+      if (hasName && hasMetric) { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) return false;
+    const headers = matrix[headerIdx] || [];
+    const nameIdx = ytdNameColumn([headers]);
+    let targetIdx = -1;
+    let totalIdx = -1;
+    headers.forEach((cell, index) => {
+      const kind = ytdMetricKind(cellToString(cell));
+      if (kind === "target" && targetIdx < 0) targetIdx = index;
+      if (kind === "total" && totalIdx < 0) totalIdx = index;
+    });
+    if (targetIdx < 0 && totalIdx < 0) return false;
+    const monthKey = ytdMonthKey(sheetMonth.year || ytdGuessYear(matrix, filename), sheetMonth.month);
+    for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+      const line = matrix[r] || [];
+      if (targetIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "target", ytdParseNumber(line[targetIdx]));
+      if (totalIdx >= 0) ytdPutFileValue(months, monthKey, line[nameIdx], "total", ytdParseNumber(line[totalIdx]));
+    }
+    return true;
+  }
+
+  function ytdReadWorkbook(workbook, filename) {
+    const months = {};
+    ((workbook && workbook.SheetNames) || []).forEach((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) return;
+      const matrix = sheetMatrixFromColA(sheet);
+      if (!matrix || !matrix.length) return;
+      const sheetMonth = ytdMonthToken(sheetName);
+      if (ytdReadLongSheet(matrix, months, filename)) return;
+      ytdReadWideSheet(matrix, months, sheetMonth, filename);
+    });
+    return { filename: filename || "", months };
+  }
+
+  function ytdMonthPhase(key) {
+    const now = new Date();
+    const current = ytdMonthKey(now.getFullYear(), now.getMonth());
+    if (key < current) return "closed";
+    if (key === current) return "current";
+    return "future";
+  }
+
+  function ytdFilePeople(monthKey) {
+    const file = window._ytdFile;
+    if (!file || !file.months || !file.months[monthKey]) return {};
+    return file.months[monthKey];
+  }
+
   function ytdBuild() {
-    const rows = window._ytdInvoiceRows || [];
     const months = {};
     for (let i = 0; i < 12; i += 1) {
       const key = ytdMonthKey(ytdYear, i);
-      months[key] = {
-        key, month: i, actual: 0, unassigned: 0, report: 0, reportUnassigned: 0,
-        flagged: 0, employees: new Map(), records: [], flaggedRows: [],
-        actualVins: new Set(), reportVins: new Set(),
-      };
+      months[key] = { key, month: i, phase: ytdMonthPhase(key), employees: new Map(), records: [] };
     }
-    rows.forEach((row, index) => {
-      const vin = ytdCleanVin(row.vin);
-      if (row.reportDate instanceof Date && row.reportDate.getFullYear() === ytdYear) {
-        const bucket = months[ytdMonthKey(ytdYear, row.reportDate.getMonth())];
-        const token = vin || `blank-report:${index}`;
-        if (bucket && !bucket.reportVins.has(token)) {
-          bucket.reportVins.add(token);
-          if (ytdIsUnassigned(row.name)) bucket.reportUnassigned += 1;
-          else bucket.report += 1;
-        }
-      }
-      if (!(row.invoice instanceof Date) || row.invoice.getFullYear() !== ytdYear) {
-        if (row.reason && (!row.invoice || row.reason.indexOf("Invoice") >= 0)) {
-          const stamp = row.reportDate instanceof Date && row.reportDate.getFullYear() === ytdYear
-            ? months[ytdMonthKey(ytdYear, row.reportDate.getMonth())]
-            : null;
-          if (stamp) {
-            stamp.flagged += 1;
-            if (stamp.flaggedRows.length < 200) stamp.flaggedRows.push(row);
-          }
-        }
-        return;
-      }
-      const bucket = months[ytdMonthKey(ytdYear, row.invoice.getMonth())];
+    ((slots.sales && slots.sales.rows) || []).forEach((row) => {
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      if (!(date instanceof Date) || date.getFullYear() !== ytdYear) return;
+      const bucket = months[ytdMonthKey(ytdYear, date.getMonth())];
       if (!bucket) return;
-      if (row.reason || row.qty == null) {
-        bucket.flagged += 1;
-        if (bucket.flaggedRows.length < 200) bucket.flaggedRows.push(row);
-        return;
+      const rawName = String(row.salesman || row._salesmanRaw || "").trim();
+      const name = resolveSalesmanName(rawName) || rawName || "Not assigned";
+      const key = nameKey(name) || name.toLowerCase();
+      if (!bucket.employees.has(key)) {
+        bucket.employees.set(key, { key, name, id: row.salesmanCode || "", actual: 0, aside: ytdIsUnassigned(name) });
       }
-      const token = vin || `blank-actual:${index}`;
-      if (bucket.actualVins.has(token)) return;
-      bucket.actualVins.add(token);
-      const unassigned = ytdIsUnassigned(row.name);
-      if (unassigned) bucket.unassigned += row.qty;
-      else bucket.actual += row.qty;
-      const key = nameKey(row.name) || String(row.name || "").toLowerCase();
-      if (!bucket.employees.has(key)) bucket.employees.set(key, { key, name: row.name, id: row.id || "", actual: 0, aside: unassigned });
       const emp = bucket.employees.get(key);
-      if (row.id && !emp.id) emp.id = row.id;
-      emp.actual += row.qty;
-      if (bucket.records.length < 400) bucket.records.push(row);
+      emp.actual += 1;
+      if (row.salesmanCode && !emp.id) emp.id = row.salesmanCode;
+      if (bucket.records.length < 400) {
+        bucket.records.push({ name, date, vin: row.vin || "" });
+      }
     });
-    const roster = ((window._data && window._data.salesReport && window._data.salesReport.rows) || []);
-    Object.values(months).forEach((bucket) => {
-      const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
+    const current = Object.values(months).find((bucket) => bucket.phase === "current");
+    if (current) {
+      const roster = ((window._data && window._data.salesReport && window._data.salesReport.rows) || []);
+      const saved = (ytdTargets.months && ytdTargets.months[current.key]) || {};
       Object.keys(saved).forEach((key) => {
-        if (bucket.employees.has(key)) return;
+        if (current.employees.has(key)) return;
         const row = saved[key] || {};
-        bucket.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0 });
+        current.employees.set(key, { key, name: row.name || key, id: row.id || "", actual: 0, aside: false });
       });
-      if (!ytdHistory) roster.forEach((person) => {
-        const name = person["Sales Employee"] || person.salesman || "";
-        const key = person._key || nameKey(name);
-        if (!key || bucket.employees.has(key)) return;
-        bucket.employees.set(key, { key, name, id: person.salesmanCode || "", actual: 0 });
-      });
-    });
-    ytdApplyHistory(months);
-    return months;
-  }
-
-  function ytdApplyHistory(months) {
-    if (!ytdHistory || !ytdHistory.months) return;
-    const partial = new Set(ytdHistory.partialMonths || []);
-    Object.values(months).forEach((bucket) => {
-      const src = ytdHistory.months[bucket.key];
-      bucket.history = true;
-      bucket.partial = partial.has(bucket.key);
-      bucket.reportAt = Number(ytdHistory.at) || 0;
-      bucket.reportFile = ytdHistory.fileName || "";
-      bucket.reportEmployees = src && Array.isArray(src.employees) ? src.employees : [];
-      const values = bucket.reportEmployees.filter((emp) => emp.sales != null);
-      bucket.report = values.length ? values.reduce((sum, emp) => sum + Number(emp.sales), 0) : null;
-    });
-  }
-
-  function ytdEmployeeRows(bucket) {
-    const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
-    const targetFor = (key, id, fallback) => {
-      const stored = saved[key] || (id && saved[id]) || null;
-      if (stored && Number.isFinite(Number(stored.target))) return Number(stored.target);
-      return fallback == null ? null : fallback;
-    };
-    if (bucket.history && window.YtdHistory) {
-      const rawRows = [...bucket.employees.values()].map((emp) => ({
-        id: emp.id || "",
-        name: emp.name,
-        actual: emp.actual,
-        unassigned: !!emp.aside,
-        vins: [],
-      }));
-      const reconciled = window.YtdHistory.reconcileMonth(bucket.reportEmployees || [], rawRows, !!bucket.partial).map((emp) => {
-        const key = emp.id || nameKey(emp.name) || String(emp.name || "").toLowerCase();
-        const target = targetFor(key, emp.id, emp.target);
-        const actual = emp.raw == null ? null : emp.raw;
-        return { ...emp, key, name: emp.name, id: emp.id, actual, report: emp.report, target, ach: ytdAch(actual == null ? emp.report : actual, target), recon: emp.status, aside: emp.status === "Unassigned" };
-      });
-      const seen = new Set(reconciled.map((emp) => emp.key));
       roster.forEach((person) => {
         const name = person["Sales Employee"] || person.salesman || "";
         const key = person._key || nameKey(name);
-        if (!key || seen.has(key)) return;
-        const target = targetFor(key, person.salesmanCode || "", null);
-        reconciled.push({ key, name, id: person.salesmanCode || "", plant: person.Plant || "", report: null, actual: 0, target, ach: ytdAch(0, target), recon: "Pending / incomplete source", aside: false, vins: [] });
+        if (!key || current.employees.has(key)) return;
+        current.employees.set(key, { key, name, id: person.salesmanCode || "", actual: 0, aside: ytdIsUnassigned(name) });
       });
-      return reconciled.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      (employeeTargets || []).forEach((person) => {
+        const name = person && person.name;
+        const key = nameKey(name);
+        if (!key || isPlaceholderName(name) || current.employees.has(key)) return;
+        current.employees.set(key, { key, name, id: "", actual: 0, aside: false });
+      });
     }
+    Object.values(months).forEach((bucket) => {
+      if (bucket.phase !== "closed") return;
+      Object.entries(ytdFilePeople(bucket.key)).forEach(([key, row]) => {
+        if (bucket.employees.has(key)) {
+          if (row.name) bucket.employees.get(key).name = row.name;
+          return;
+        }
+        bucket.employees.set(key, { key, name: row.name || key, id: "", actual: 0, aside: ytdIsUnassigned(row.name) });
+      });
+    });
+    return months;
+  }
+
+  function ytdEmployeeRows(bucket) {
+    const closed = bucket.phase === "closed";
+    const filePeople = closed ? ytdFilePeople(bucket.key) : {};
+    const saved = (ytdTargets.months && ytdTargets.months[bucket.key]) || {};
     return [...bucket.employees.values()].map((emp) => {
-      const target = targetFor(emp.key, emp.id, null);
-      return { ...emp, target, report: null, recon: "", ach: ytdAch(emp.actual, target) };
-    }).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const file = filePeople[emp.key] || null;
+      let target = null;
+      let fileTotal = null;
+      if (closed) {
+        target = file && file.target != null ? Number(file.target) : null;
+        fileTotal = file && file.total != null ? Number(file.total) : null;
+      } else if (bucket.phase === "current") {
+        const stored = saved[emp.key];
+        if (stored && Number.isFinite(Number(stored.target))) target = Number(stored.target);
+        else {
+          const admin = (employeeTargets || []).find((person) => nameKey(person && person.name) === emp.key);
+          if (admin) target = effectiveEmployeeTarget(admin);
+        }
+      }
+      const hasFile = fileTotal != null;
+      const matched = closed && hasFile && fileTotal === emp.actual;
+      return { ...emp, target, fileTotal, hasFile, matched, ach: ytdAch(emp.actual, target) };
+    }).filter((emp) => closed ? (emp.hasFile || emp.actual > 0 || (emp.target != null && emp.target > 0)) : true)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }
 
   function ytdMonthTotals(bucket) {
     const people = ytdEmployeeRows(bucket);
     const target = people.reduce((sum, emp) => sum + (emp.target == null ? 0 : emp.target), 0);
     const hasTarget = people.some((emp) => emp.target != null && emp.target > 0);
-    return { people, target, actual: bucket.actual, unassigned: bucket.unassigned || 0, ach: ytdAch(bucket.actual, hasTarget ? target : 0), hasTarget };
+    const actual = people.reduce((sum, emp) => sum + (emp.aside ? 0 : emp.actual), 0);
+    const unassigned = people.reduce((sum, emp) => sum + (emp.aside ? emp.actual : 0), 0);
+    const compared = people.filter((emp) => !emp.aside);
+    const fileKnown = bucket.phase === "closed" && compared.some((emp) => emp.hasFile);
+    const fileTotal = fileKnown ? compared.reduce((sum, emp) => sum + (emp.fileTotal == null ? 0 : emp.fileTotal), 0) : null;
+    const matched = fileKnown && compared.length > 0 && compared.every((emp) => emp.hasFile && emp.fileTotal === emp.actual);
+    return {
+      people, target, actual, unassigned, fileTotal, fileKnown, matched,
+      ach: ytdAch(actual, hasTarget ? target : 0), hasTarget,
+    };
   }
 
   function paintYtd() {
@@ -10245,8 +10894,13 @@ body.live-app .app-topbar #theme-toggle:hover {
     const annualEl = $("#ytd-annual");
     if (!yearEl || !monthsEl || !annualEl) return;
     const years = new Set([new Date().getFullYear(), ytdYear]);
-    (window._ytdInvoiceRows || []).forEach((row) => {
-      if (row.invoice instanceof Date) years.add(row.invoice.getFullYear());
+    Object.keys((window._ytdFile && window._ytdFile.months) || {}).forEach((key) => {
+      const year = Number(String(key).slice(0, 4));
+      if (year) years.add(year);
+    });
+    ((slots.sales && slots.sales.rows) || []).forEach((row) => {
+      const date = salesRawColumnVDate(salesRawColumnVCell(row));
+      if (date instanceof Date) years.add(date.getFullYear());
     });
     yearEl.innerHTML = [...years].sort((a, b) => b - a).map((year) => `<option value="${year}"${year === ytdYear ? " selected" : ""}>${year}</option>`).join("");
     const updated = $("#ytd-updated");
@@ -10261,55 +10915,59 @@ body.live-app .app-topbar #theme-toggle:hover {
     let yearActual = 0;
     let yearUnassigned = 0;
     let yearTarget = 0;
-    let yearReport = 0;
+    let yearFile = 0;
+    let closedMonths = 0;
+    let okMonths = 0;
     monthsEl.innerHTML = Object.values(months).map((bucket) => {
       const totals = ytdMonthTotals(bucket);
       yearActual += totals.actual;
       yearUnassigned += totals.unassigned;
-      if (bucket.report != null) yearReport += bucket.report;
+      if (totals.fileKnown) yearFile += totals.fileTotal;
+      if (bucket.phase === "closed") {
+        closedMonths += 1;
+        if (totals.matched) okMonths += 1;
+      }
       if (totals.hasTarget) yearTarget += totals.target;
       const status = ytdStatus(totals.ach, totals.hasTarget);
       const gap = totals.hasTarget ? totals.target - totals.actual : null;
-      const gapText = gap == null ? "Set employee targets" : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
+      const gapText = gap == null ? (bucket.phase === "closed" ? "Target comes from the YTD file" : "This month stays live") : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
       const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
-      const diff = bucket.report == null ? null : totals.actual - bucket.report;
-      const matched = diff != null && Math.abs(diff) < 0.001;
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
-      const today = new Date();
-      const isPast = ytdYear < today.getFullYear() || (ytdYear === today.getFullYear() && bucket.month < today.getMonth());
-      const reconCls = bucket.partial ? "is-none" : matched ? "is-match" : diff == null ? "is-none" : "is-miss";
-      const reconText = bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : `Mismatch ${diff > 0 ? "+" : ""}${formatNumber(diff)}`;
-      const barCls = totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss";
+      const shortLabel = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" });
+      const reconCls = bucket.phase !== "closed" ? "is-live" : !totals.fileKnown ? "is-miss" : totals.matched ? "is-match" : "is-miss";
+      const reconText = bucket.phase === "current" ? "This month" : bucket.phase === "future" ? "Later" : !totals.fileKnown ? "No file" : totals.matched ? "OK" : "Mismatch";
+      const barCls = bucket.phase === "closed"
+        ? (totals.matched ? "is-hit" : "is-miss")
+        : (totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss");
       const progress = totals.hasTarget
         ? `<div class="ytd-progress"><div class="ytd-bar ${barCls}" role="img" aria-label="Achievement ${ytdPctText(totals.ach)}"><i style="width:${width.toFixed(1)}%"></i></div><p class="ytd-gap">${gapText}</p></div>`
         : "";
       const aside = totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : "";
-      return `<article class="ytd-card ${status.cls} ${reconCls}${isPast ? " is-past" : ""}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
+      return `<article class="ytd-card ${status.cls} ${reconCls}${bucket.phase === "closed" ? " is-past" : ""}${ytdOpenMonth === bucket.key ? " is-open" : ""}" data-ytd-month="${bucket.key}">
         <div class="ytd-card-top">
-          <div class="ytd-card-name"><strong>${label}</strong><small>${ytdYear}</small></div>
+          <div class="ytd-card-name"><strong><span class="ytd-month-long">${label}</span><span class="ytd-month-short">${shortLabel}</span></strong><small>${ytdYear}</small></div>
           <div class="ytd-badges">
-            <span class="ytd-status ${status.cls}">${status.label}</span>
             <span class="ytd-recon ${reconCls}">${reconText}</span>
           </div>
         </div>
         <div class="ytd-card-metrics">
           <span class="is-target"><em>Target</em><b class="${totals.hasTarget ? "" : "is-empty"}">${totals.hasTarget ? formatNumber(totals.target) : "No Target"}</b></span>
-          <span class="is-actual"><em>Raw</em><b>${formatNumber(totals.actual)}</b></span>
-          <span class="is-report"><em>Report</em><b>${formatNumber(bucket.report)}</b></span>
+          <span class="is-report"><em>File</em><b class="${totals.fileKnown ? "" : "is-empty"}">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</b></span>
+          <span class="is-actual"><em>Actual</em><b>${formatNumber(totals.actual)}</b></span>
           <span class="is-ach"><em>Ach%</em><b>${ytdPctText(totals.ach)}</b></span>
         </div>
         ${progress}
         <div class="ytd-card-foot">${aside}<button type="button" class="ytd-set" data-ytd-set="${bucket.key}">Open month</button></div>
       </article>`;
     }).join("");
-    const excluded = (window._ytdInvoiceRows || []).filter((row) => row.reason).length;
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
-    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Sum of monthly targets" : "No employee targets yet"}</em></article>
-      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Annual Actual</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw invoice date${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
-      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Raw actual ÷ annual target" : "Needs a target"}</em></article>
-      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>Sales Report Actual</span><strong>${ytdHistory ? formatNumber(yearReport) : formatNumber(yearReport)}</strong><em>${ytdHistory ? "Imported Salesman Performance · not added to raw" : "Sales Raw report-date count"}</em></article>
-      <article class="ytd-kpi is-excluded"><span class="ytd-kpi-ico" aria-hidden="true">!</span><span>Unassigned / excluded</span><strong>${formatNumber(yearUnassigned)} / ${formatNumber(excluded)}</strong><em>Unassigned invoices · rows with a blank date or qty</em></article>`;
+    const fileName = (window._ytdFile && window._ytdFile.filename) || "";
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "File targets for past months" : "Push the YTD file from Admin"}</em></article>
+      <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>File Total</span><strong>${yearFile > 0 || fileName ? formatNumber(yearFile) : "—"}</strong><em>${fileName ? escapeHtml(fileName) : "Past months only"}</em></article>
+      <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Actual · Column V</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw rows with a date in column V${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
+      <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
+      <article class="ytd-kpi ${okMonths === closedMonths && closedMonths ? "is-actual" : "is-excluded"}"><span class="ytd-kpi-ico" aria-hidden="true">${okMonths === closedMonths && closedMonths ? "✓" : "!"}</span><span>Past Months OK</span><strong>${closedMonths ? `${formatNumber(okMonths)} / ${formatNumber(closedMonths)}` : "—"}</strong><em>Green when each employee matches</em></article>`;
     paintYtdChart(Object.values(months));
     paintYtdDetail();
   }
@@ -10324,11 +10982,11 @@ body.live-app .app-topbar #theme-toggle:hover {
     const labels = buckets.map((bucket) => new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" }));
     const totals = buckets.map((bucket) => ytdMonthTotals(bucket));
     const datasets = [
-      { label: "Actual", data: buckets.map((bucket) => bucket.actual), backgroundColor: "rgba(52, 211, 153, 0.88)", borderRadius: 4, maxBarThickness: 16 },
-      { label: "Report", data: buckets.map((bucket) => bucket.report), backgroundColor: "rgba(139, 92, 246, 0.82)", borderRadius: 4, maxBarThickness: 16 },
+      { label: "Actual", data: totals.map((row) => row.actual), backgroundColor: "rgba(52, 211, 153, 0.88)", borderRadius: 4, maxBarThickness: 16 },
+      { label: "File", data: totals.map((row) => (row.fileKnown ? row.fileTotal : null)), backgroundColor: "rgba(139, 92, 246, 0.82)", borderRadius: 4, maxBarThickness: 16 },
     ];
-    if (buckets.some((bucket) => bucket.unassigned > 0)) {
-      datasets.push({ label: "Not assigned", data: buckets.map((bucket) => bucket.unassigned || 0), backgroundColor: "rgba(245, 158, 11, 0.88)", borderRadius: 4, maxBarThickness: 16 });
+    if (totals.some((row) => row.unassigned > 0)) {
+      datasets.push({ label: "Not assigned", data: totals.map((row) => row.unassigned || 0), backgroundColor: "rgba(245, 158, 11, 0.88)", borderRadius: 4, maxBarThickness: 16 });
     }
     if (totals.some((row) => row.hasTarget)) {
       datasets.push({
@@ -10382,11 +11040,23 @@ body.live-app .app-topbar #theme-toggle:hover {
     });
   }
 
-  function ytdRowState(emp) {
+  function ytdRowState(emp, phase) {
+    if (phase === "closed") {
+      if (!emp.hasFile) return { status: { label: "No file", cls: "is-bad" }, cls: "is-bad" };
+      if (emp.matched) return { status: { label: "OK", cls: "is-ok" }, cls: "is-ok" };
+      return { status: { label: "Mismatch", cls: "is-bad" }, cls: "is-bad" };
+    }
     const hasTarget = emp.target != null && emp.target > 0;
     const status = ytdStatus(emp.ach, hasTarget);
     const cls = emp.aside ? "is-aside" : status.cls === "is-below" ? "is-below" : "";
     return { status, cls };
+  }
+
+  function ytdCheckLabel(bucket, totals) {
+    if (bucket.phase === "current") return { text: "This month", cls: "is-live" };
+    if (bucket.phase === "future") return { text: "Later", cls: "is-live" };
+    if (!totals.fileKnown) return { text: "No file", cls: "is-miss" };
+    return totals.matched ? { text: "OK", cls: "is-match" } : { text: "Mismatch", cls: "is-miss" };
   }
 
   function paintYtdDetail() {
@@ -10397,76 +11067,62 @@ body.live-app .app-topbar #theme-toggle:hover {
     if (panel) panel.classList.toggle("is-detail-open", !!bucket);
     if (!bucket) { el.hidden = true; el.innerHTML = ""; return; }
     const totals = ytdMonthTotals(bucket);
-    const diff = bucket.report == null ? null : totals.actual - bucket.report;
-    const matched = diff != null && Math.abs(diff) < 0.001;
+    const closed = bucket.phase === "closed";
+    const diff = totals.fileKnown ? totals.actual - totals.fileTotal : null;
+    const check = ytdCheckLabel(bucket, totals);
     const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
-    const meta = window._ytdInvoiceMeta || {};
     const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
     const rows = totals.people.map((emp) => {
-      const state = ytdRowState(emp);
-      const gap = emp.report == null || emp.actual == null ? null : emp.actual - emp.report;
-      const recon = emp.recon || ytdDetailStatusText(state.status);
+      const state = ytdRowState(emp, bucket.phase);
+      const targetCell = closed
+        ? (emp.target == null ? "—" : formatNumber(emp.target))
+        : `<input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" />`;
+      const fileCell = closed ? (emp.hasFile ? formatNumber(emp.fileTotal) : "—") : "—";
       return `<tr class="${state.cls}" data-ytd-row="${escapeHtml(emp.key)}">
-      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.plant ? `<small>${escapeHtml(emp.plant)}</small>` : ""}</td>
-      <td>${escapeHtml(emp.id || "—")}</td>
-      <td>${formatNumber(emp.report)}</td>
-      <td>${formatNumber(emp.actual)}</td>
-      <td>${gap == null ? "—" : `${gap > 0 ? "+" : ""}${formatNumber(gap)}`}</td>
-      <td><input type="number" min="0" step="1" inputmode="decimal" data-ytd-target="${escapeHtml(emp.key)}" data-ytd-name="${escapeHtml(emp.name || "")}" data-ytd-id="${escapeHtml(emp.id || "")}" value="${emp.target == null ? "" : emp.target}" aria-label="Monthly target for ${escapeHtml(emp.name || "employee")}" /></td>
-      <td data-ytd-ach="${escapeHtml(emp.key)}">${ytdAchMarkup(emp)}</td>
-      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${escapeHtml(recon)}</span></td>
+      <td>${escapeHtml(emp.name || "—")}${emp.aside ? `<small class="ytd-aside">Not counted in the total</small>` : ""}${emp.id ? `<small>${escapeHtml(emp.id)}</small>` : ""}</td>
+      <td>${targetCell}</td>
+      <td data-ytd-file="${escapeHtml(emp.key)}">${fileCell}</td>
+      <td data-ytd-actual="${escapeHtml(emp.key)}">${formatNumber(emp.actual)}</td>
+      <td data-ytd-flag="${escapeHtml(emp.key)}"><span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span></td>
     </tr>`;
     }).join("");
     const inspectRows = ytdInspect ? `
       <div class="ytd-inspect">
-        <h4>Sales Raw records · ${escapeHtml(meta.invoiceHeader || "Invoice Date")} · ${escapeHtml(meta.sheet || "first worksheet")}</h4>
-        <table><thead><tr><th>Employee</th><th>Invoice date</th><th>Sales Qty</th><th>VIN</th></tr></thead><tbody>
-          ${bucket.records.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(formatRvDate ? formatRvDate(row.invoice) : row.invoice.toLocaleDateString("en-GB"))}</td><td>${formatNumber(row.qty)}</td><td>${escapeHtml(row.vin || "—")}</td></tr>`).join("") || `<tr><td colspan="4">No invoice rows in this month.</td></tr>`}
-        </tbody></table>
-        <h4>Needs review · blank invoice date or missing Sales Qty</h4>
-        <table><thead><tr><th>Employee</th><th>Reason</th></tr></thead><tbody>
-          ${bucket.flaggedRows.map((row) => `<tr><td>${escapeHtml(row.name || "—")}</td><td>${escapeHtml(row.reason || "Excluded")}</td></tr>`).join("") || `<tr><td colspan="2">None</td></tr>`}
+        <h4>Sales Raw · column V · ${formatNumber(bucket.records.length)} row${bucket.records.length === 1 ? "" : "s"}</h4>
+        <table><thead><tr><th>Employee</th><th>Column V</th><th>VIN</th></tr></thead><tbody>
+          ${bucket.records.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.date instanceof Date ? row.date.toLocaleDateString("en-GB") : "—")}</td><td>${escapeHtml(row.vin || "—")}</td></tr>`).join("") || `<tr><td colspan="3">No column V dates in this month.</td></tr>`}
         </tbody></table>
       </div>` : "";
+    const note = closed
+      ? "Target and file total come from the Admin Push YTD file. Actual is the Sales Raw column V count. Green means they are the same."
+      : "This month is not taken from the YTD file. Actual is the live Sales Raw column V count.";
     el.hidden = false;
     el.innerHTML = `<div class="ytd-detail-head">
         <div class="ytd-detail-title">
           <h3>${label}</h3>
-          <span class="ytd-recon ${matched ? "is-match" : "is-miss"}" data-ytd-sum="match">${matched ? "Match" : "Mismatch"}</span>
+          <span class="ytd-recon ${check.cls}" data-ytd-sum="match">${check.text}</span>
           <span class="ytd-status ${monthStatus.cls}" data-ytd-sum="pace" hidden>${monthStatus.label}</span>
         </div>
         <div class="ytd-detail-actions">
-          <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Inspect records"}</button>
-          <button type="button" class="ytd-text-btn" data-ytd-export>Export month</button>
-          <button type="button" class="ytd-save-btn" id="ytd-save-btn">Save targets</button>
+          <button type="button" class="ytd-text-btn${ytdInspect ? " is-on" : ""}" data-ytd-inspect>${ytdInspect ? "Hide records" : "Sales Raw rows"}</button>
+          ${closed ? "" : `<button type="button" class="ytd-save-btn" id="ytd-save-btn">Save targets</button>`}
           <button type="button" class="ytd-text-btn" data-ytd-close>Close</button>
         </div>
       </div>
       <div class="ytd-month-kpis">
-        <article class="is-target"><span>Monthly Target</span><strong data-ytd-sum="target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
-        <article class="is-actual"><span>Actual Sales</span><strong data-ytd-sum="actual">${formatNumber(totals.actual)}</strong></article>
-        <article class="is-report"><span>Report Actual</span><strong data-ytd-sum="report">${formatNumber(bucket.report)}</strong></article>
-        <article class="is-diff ${matched ? "is-match" : "is-miss"}"><span>Difference</span><strong data-ytd-sum="diff">${diff > 0 ? "+" : ""}${formatNumber(diff)}</strong></article>
-        <article class="is-pace ${monthStatus.cls}"><span>Achievement %</span><strong data-ytd-sum="ach">${ytdPctText(totals.ach)}</strong></article>
-        <article class="is-status ${matched ? "is-match" : "is-miss"}"><span>Reconciliation Status</span><strong data-ytd-sum="status">${matched ? "Match" : "Mismatch"}</strong></article>
+        <article class="is-target"><span>Target</span><strong data-ytd-sum="target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</strong></article>
+        <article class="is-report"><span>File has</span><strong data-ytd-sum="report">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</strong></article>
+        <article class="is-actual"><span>Actual has</span><strong data-ytd-sum="actual">${formatNumber(totals.actual)}</strong></article>
+        <article class="is-diff ${check.cls === "is-match" ? "is-match" : check.cls === "is-miss" ? "is-miss" : ""}"><span>Difference</span><strong data-ytd-sum="diff">${diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`}</strong></article>
+        <article class="is-status ${check.cls === "is-match" ? "is-match" : check.cls === "is-miss" ? "is-miss" : ""}"><span>Check</span><strong data-ytd-sum="status">${check.text}</strong></article>
       </div>
-      <p class="ytd-save${ytdSaveMessage.cls ? " " + ytdSaveMessage.cls : ""}" id="ytd-save-note">${escapeHtml(ytdSaveMessage.text)}</p>
+      <p class="ytd-save${ytdSaveMessage.cls && !closed ? " " + ytdSaveMessage.cls : ""}" id="ytd-save-note">${escapeHtml(closed ? note : ytdSaveMessage.text || note)}</p>
       <div class="ytd-table-wrap"><table class="ytd-table">
-        <thead><tr><th>Employee</th><th>ID</th><th>Report</th><th>Raw</th><th>Difference</th><th>Monthly Target</th><th>Achievement %</th><th>Status</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="8">No employees for this month.</td></tr>`}</tbody>
-        <tfoot><tr><td>Month total</td><td></td><td>${formatNumber(bucket.report)}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td>${diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`}</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td data-ytd-sum="foot-ach">${ytdPctText(totals.ach)}</td><td></td></tr></tfoot>
+        <thead><tr><th>Employee</th><th>Target</th><th>File</th><th>Actual</th><th>Status</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5">No employees for this month.</td></tr>`}</tbody>
+        <tfoot><tr><td>Month total</td><td data-ytd-sum="foot-target">${totals.hasTarget ? formatNumber(totals.target) : "—"}</td><td data-ytd-sum="foot-file">${totals.fileKnown ? formatNumber(totals.fileTotal) : "—"}</td><td>${formatNumber(totals.actual)}${totals.unassigned ? `<small class="ytd-aside">+ ${formatNumber(totals.unassigned)} not assigned</small>` : ""}</td><td data-ytd-sum="foot-ach">${check.text}</td></tr></tfoot>
       </table></div>
-      ${bucket.flagged && !ytdInspect ? `<p class="ytd-flag">${formatNumber(bucket.flagged)} row${bucket.flagged === 1 ? "" : "s"} excluded and flagged for review.</p>` : ""}
-      ${inspectRows}
-      ${ytdSnapshotHtml(bucket)}`;
-  }
-
-  function ytdSnapshotHtml(bucket) {
-    const rows = (ytdSnapshots || []).slice().reverse().slice(0, 12);
-    const list = rows.map((row) => `<li><button type="button" data-ytd-snap="${escapeHtml(row.id)}">${escapeHtml(new Date(row.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }))}</button> ${escapeHtml(row.fileName || "")}</li>`).join("") || "<li>No push snapshots yet. A snapshot is saved only when Admin Push stores Sales Raw.</li>";
-    const viewed = ytdSnapshotView && ytdSnapshotView.months && ytdSnapshotView.months[bucket.key];
-    const view = viewed ? `<p class="ytd-flag">Snapshot ${escapeHtml(ytdSnapshotView.id)} · ${escapeHtml(viewed.status || "")} · report ${formatNumber(viewed.report)} · raw ${formatNumber(viewed.raw)}</p>` : "";
-    return `<div class="ytd-inspect"><h4>Snapshot history</h4><ul>${list}</ul>${view}</div>`;
+      ${inspectRows}`;
   }
 
   function ytdDetailStatusText(status) {
@@ -10488,8 +11144,8 @@ body.live-app .app-topbar #theme-toggle:hover {
     const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
     if (!bucket) return;
     const totals = ytdMonthTotals(bucket);
-    const diff = bucket.report == null ? null : totals.actual - bucket.report;
-    const matched = diff != null && Math.abs(diff) < 0.001;
+    const diff = totals.fileKnown ? totals.actual - totals.fileTotal : null;
+    const check = ytdCheckLabel(bucket, totals);
     const monthStatus = ytdStatus(totals.ach, totals.hasTarget);
     const set = (name, text) => {
       const node = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
@@ -10497,117 +11153,42 @@ body.live-app .app-topbar #theme-toggle:hover {
     };
     set("target", totals.hasTarget ? formatNumber(totals.target) : "—");
     set("actual", formatNumber(totals.actual));
-    set("report", formatNumber(bucket.report));
+    set("report", totals.fileKnown ? formatNumber(totals.fileTotal) : "—");
     set("diff", diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`);
-    set("ach", ytdPctText(totals.ach));
-    set("status", bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : "Mismatch");
-    set("match", bucket.partial ? "Partial" : matched ? "Match" : diff == null ? "Pending" : "Mismatch");
+    set("status", check.text);
+    set("match", check.text);
     set("pace", monthStatus.label);
     set("foot-target", totals.hasTarget ? formatNumber(totals.target) : "—");
-    set("foot-ach", ytdPctText(totals.ach));
+    set("foot-file", totals.fileKnown ? formatNumber(totals.fileTotal) : "—");
+    set("foot-ach", check.text);
     const match = document.querySelector('#ytd-detail [data-ytd-sum="match"]');
-    if (match) match.className = `ytd-recon ${matched ? "is-match" : "is-miss"}`;
+    if (match) match.className = `ytd-recon ${check.cls}`;
     const pace = document.querySelector('#ytd-detail [data-ytd-sum="pace"]');
     if (pace) pace.className = `ytd-status ${monthStatus.cls}`;
     ["diff", "status"].forEach((name) => {
       const card = document.querySelector(`#ytd-detail [data-ytd-sum="${name}"]`);
       const article = card && card.closest("article");
       if (!article) return;
-      article.classList.toggle("is-match", matched);
-      article.classList.toggle("is-miss", !matched);
+      article.classList.toggle("is-match", check.cls === "is-match");
+      article.classList.toggle("is-miss", check.cls === "is-miss");
     });
-    const paceCard = document.querySelector('#ytd-detail [data-ytd-sum="ach"]');
-    const paceArticle = paceCard && paceCard.closest("article");
-    if (paceArticle) paceArticle.className = `is-pace ${monthStatus.cls}`;
     totals.people.forEach((emp) => {
-      const state = ytdRowState(emp);
-      const ach = document.querySelector(`#ytd-detail [data-ytd-ach="${CSS.escape(emp.key)}"]`);
+      const state = ytdRowState(emp, bucket.phase);
       const flag = document.querySelector(`#ytd-detail [data-ytd-flag="${CSS.escape(emp.key)}"]`);
       const row = document.querySelector(`#ytd-detail [data-ytd-row="${CSS.escape(emp.key)}"]`);
-      if (ach) ach.innerHTML = ytdAchMarkup(emp);
       if (flag) flag.innerHTML = `<span class="ytd-status ${state.status.cls}">${ytdDetailStatusText(state.status)}</span>`;
       if (row) row.className = state.cls;
     });
   }
 
-  async function ytdLoadServer() {
-    try {
-      const res = await fetch("/api/report-sheet/ytd-history", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        ytdHistory = data && data.latest ? data.latest : null;
-      }
-    } catch (e) { /* keep the last loaded import */ }
-    try {
-      const res = await fetch("/api/report-sheet/ytd-snapshots", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        ytdSnapshots = data && Array.isArray(data.snapshots) ? data.snapshots : [];
-      }
-    } catch (e) { /* history list stays as last loaded */ }
-    const sub = $("#ytd-sub");
-    if (sub && ytdHistory) {
-      const partial = (ytdHistory.partialMonths || []).join(", ");
-      sub.textContent = `Sales Report ${ytdHistory.fileName || ""} · as of ${ytdHistory.asOf || "—"}${partial ? ` · partial ${partial}` : ""}. Raw invoices are not added to the report.`;
-    }
-  }
-
   async function renderYtdSales() {
     await ytdEnsureTargets();
-    await ytdLoadServer();
     paintYtd();
-  }
-
-  function ytdExportMonth() {
-    const bucket = ytdOpenMonth && window._ytdMonths ? window._ytdMonths[ytdOpenMonth] : null;
-    if (!bucket) return;
-    const people = ytdEmployeeRows(bucket);
-    const lines = [["Employee", "ID", "Plant", "Report", "Raw", "Difference", "Target", "Achievement", "Status"]];
-    people.forEach((emp) => {
-      const gap = emp.report == null || emp.actual == null ? "" : emp.actual - emp.report;
-      lines.push([emp.name || "", emp.id || "", emp.plant || "", emp.report == null ? "" : emp.report, emp.actual == null ? "" : emp.actual, gap, emp.target == null ? "" : emp.target, emp.ach == null ? "" : emp.ach.toFixed(1), emp.recon || ""]);
-    });
-    const csv = lines.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ytd-${bucket.key}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  function ytdFileBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = String(reader.result || "");
-        const split = text.indexOf(",");
-        resolve(split >= 0 ? text.slice(split + 1) : text);
-      };
-      reader.onerror = () => reject(new Error("Could not read that file"));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function ytdImportReport(file, password) {
-    const base64 = await ytdFileBase64(file);
-    const res = await fetch("/api/report-sheet/ytd-history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, fileName: file.name, base64 }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 404) throw new Error("Import is not available on this server yet. Refresh the page after the update is deployed.");
-    if (!res.ok) throw new Error(data.error || "Import failed. Nothing was saved.");
-    ytdHistory = data.latest || null;
-    ytdTargetsLoaded = false;
-    await ytdEnsureTargets(true);
-    paintYtd();
-    return data;
   }
 
   function ytdRememberTarget(input) {
     if (!ytdOpenMonth || !input) return false;
+    if (ytdMonthPhase(ytdOpenMonth) !== "current") return false;
     if (!ytdTargets.months) ytdTargets.months = {};
     const saved = { ...(ytdTargets.months[ytdOpenMonth] || {}) };
     const key = input.dataset.ytdTarget;
@@ -10680,34 +11261,38 @@ body.live-app .app-topbar #theme-toggle:hover {
   function renderNameList(sr) {
     const el = $("#sr-name-list");
     if (!el) return;
-    const prev = srView.selectedKey;
-    srView.selectedKey = "";
-    const rows = chartRowsForMode(sr.rows || []);
-    srView.selectedKey = prev;
+    const rows = srWithoutSelection(() => chartRowsForMode(sr.rows || []));
 
     const q = srView.search.trim().toLowerCase();
     const list = q
       ? rows.filter((r) => String(r["Sales Employee"]).toLowerCase().includes(q) || String(r.Plant || "").toLowerCase().includes(q))
       : rows;
+    const picked = rows.filter((r) => srRowSelected(r._key));
+    const sumPro = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+    const sumDel = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
 
-    el.innerHTML = list.map((r) => {
-      const active = r._key === srView.selectedKey ? " active" : "";
+    const sumBar = picked.length
+      ? `<div class="sr-emp-sum" role="status"><span>${picked.length} selected · Sum</span><span class="sr-emp-counts" title="Proforma – Delivery">${formatNumber(sumPro)}-${formatNumber(sumDel)}</span></div>`
+      : "";
+    el.innerHTML = sumBar + (list.map((r) => {
+      const active = srRowSelected(r._key);
       const del = Number(r["Delivery (Month)"]) || 0;
       const pro = Number(r["Proforma (Month)"]) || 0;
       const label = shortEmpLabel(r["Sales Employee"]);
-      return `<button type="button" class="pbi-name sr-emp-row${active}" data-emp-key="${escapeHtml(r._key)}" role="option" aria-selected="${active ? "true" : "false"}">
+      return `<button type="button" class="pbi-name sr-emp-row${active ? " active" : ""}" data-emp-key="${escapeHtml(r._key)}" role="option" aria-selected="${active ? "true" : "false"}">
         <span class="sr-emp-av" style="--av:${srAvatarColor(label)}" aria-hidden="true">${escapeHtml(srInitials(label))}</span>
         <span class="nm">${escapeHtml(label)}</span>
         <span class="sr-emp-counts" title="Proforma – Delivery">${formatNumber(pro)}-${formatNumber(del)}</span>
         <span class="sr-emp-chev" aria-hidden="true">›</span>
       </button>`;
-    }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`;
+    }).join("") || `<p class="foot" style="margin:8px">No employees match.</p>`);
 
     const meta = $("#sr-name-list-meta");
     if (meta) {
-      meta.textContent = srView.selectedKey
-        ? "1 selected · click again to clear"
-        : `${list.length} names · Click to filter`;
+      meta.classList.toggle("is-sum", picked.length > 0);
+      meta.textContent = picked.length
+        ? `${picked.length} selected · ${formatNumber(sumPro)}-${formatNumber(sumDel)}`
+        : `${list.length} names · Click to select`;
     }
   }
 
@@ -10728,12 +11313,12 @@ body.live-app .app-topbar #theme-toggle:hover {
     let del = Number(t.deliveryMonth) || 0;
     let agents = (sr.rows || []).filter((r) => !r._vacation && rowTargetNum(r) > 0).length;
 
-    if (srView.selectedKey && window._srRowsByKey && window._srRowsByKey[srView.selectedKey]) {
-      const r = window._srRowsByKey[srView.selectedKey];
-      target = rowTargetNum(r);
-      prof = Number(r["Proforma (Month)"]) || 0;
-      del = Number(r["Delivery (Month)"]) || 0;
-      agents = r._vacation || target <= 0 ? 0 : 1;
+    const pickedPace = srSelectedRows();
+    if (pickedPace.length) {
+      target = pickedPace.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      prof = pickedPace.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+      del = pickedPace.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      agents = pickedPace.filter((row) => !row._vacation && rowTargetNum(row) > 0).length;
     }
 
     const aveDaily = workDays > 0 ? target / workDays : 0;
@@ -10781,11 +11366,11 @@ body.live-app .app-topbar #theme-toggle:hover {
     const delivery = Array(days).fill(0);
     for (let d = 1; d <= days; d += 1) labels.push(String(d));
 
-    const keyFilter = selectedKey ? String(selectedKey) : "";
+    const keyFilter = String(selectedKey || "").split("|").filter(Boolean);
     salesDashboardRows().forEach((r) => {
-      if (keyFilter) {
+      if (keyFilter.length) {
         const name = rosterSalesmanName(r._salesmanRaw || r.salesman);
-        if (nameKey(name) !== keyFilter) return;
+        if (!keyFilter.includes(nameKey(name))) return;
       }
       if (r.proformaDate && salesPeriodMatch(r.proformaDate, live, "month", prevMonthKey)) {
         const di = proformaDayIndex(r.proformaDate, live);
@@ -10863,8 +11448,8 @@ body.live-app .app-topbar #theme-toggle:hover {
     }
     const m = buildPaceBoardMetrics(sr);
     if (hint) {
-      hint.textContent = srView.selectedKey
-        ? "Filtered to selected advisor · remaining vs their target"
+      hint.textContent = srHasSelection()
+        ? `Filtered to ${srSelectedList().length} advisor${srSelectedList().length === 1 ? "" : "s"} · remaining vs their combined target`
         : `Team plan · ${formatNumber(m.agents)} active agents · target ${formatNumber(m.target)}`;
     }
     const cells = [
@@ -10913,28 +11498,43 @@ body.live-app .app-topbar #theme-toggle:hover {
     const rows = filterSrRows(sr.rows || []);
     const t = sr.totals || {};
     let cards;
-    if (srView.selectedKey && rows[0]) {
-      const r = rows[0];
-      const m = r.month || r;
-      const cancelN = Number(m["Cancelled BOs"]) || 0;
-      const del = Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
-      const pro = Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
-      const delPrev = Number(r["Delivery (Prev)"]) || 0;
-      const proPrev = Number(r["Proforma (Prev)"]) || 0;
+    if (srHasSelection() && rows.length) {
+      let del = 0;
+      let pro = 0;
+      let delPrev = 0;
+      let proPrev = 0;
+      let cancelN = 0;
+      let target = 0;
+      let except = 0;
+      let lexus = 0;
+      const lexusMap = sr.lexusDeliveryByKey || {};
+      rows.forEach((r) => {
+        const m = r.month || r;
+        del += Number(m.Delivery) || Number(r["Delivery (Month)"]) || 0;
+        pro += Number(m.Proforma) || Number(r["Proforma (Month)"]) || 0;
+        delPrev += Number(r["Delivery (Prev)"]) || 0;
+        proPrev += Number(r["Proforma (Prev)"]) || 0;
+        cancelN += Number(m["Cancelled BOs"]) || 0;
+        if (!r._vacation) target += rowTargetNum(r);
+        except += Number(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0);
+        lexus += Number(lexusMap[r._key]) || 0;
+      });
       const ratio = cancelPctRatio(cancelN, del);
       const cancelPct = ratio == null ? "—" : (Math.round(ratio * 1000) / 10) + "%";
       const cancelOver = ratio != null && ratio * 100 > 30;
-      const target = r._vacation ? null : rowTargetNum(r);
       const delPctVal = target ? (del / target) * 100 : null;
+      const who = rows.length === 1
+        ? shortEmpLabel(rows[0]["Sales Employee"] || "Selected employee")
+        : `${rows.length} selected · combined`;
       cards = [
-        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery", lexus: (sr.lexusDeliveryByKey && sr.lexusDeliveryByKey[srView.selectedKey]) || 0 },
+        { lab: "Delivery MTD", val: formatNumber(del), ico: "truck", tone: "blue", trend: momDeltaPct(del, delPrev), desc: "Delivered cars", spark: "delivery", lexus },
         { lab: "Proforma MTD", val: formatNumber(pro), ico: "doc", tone: "violet", trend: momDeltaPct(pro, proPrev), desc: "Proformas issued", spark: "proforma" },
-        { lab: "Prof + Del", val: formatNumber(r["Prof+Del"] ?? (pro + del)), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
-        { lab: "Proforma Except This Month", val: formatNumber(r["Proforma (Except Month)"] ?? r["Proforma (Prev)"] ?? 0), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
+        { lab: "Prof + Del", val: formatNumber(pro + del), ico: "layers", tone: "green", trend: momDeltaPct(pro + del, delPrev + proPrev), desc: "Proforma + Delivery", spark: "both" },
+        { lab: "Proforma Except This Month", val: formatNumber(except), ico: "clock", tone: "sky", trend: null, desc: "Proformas outside this month" },
         { lab: "DEL %", val: delPctVal == null ? "—" : delPctVal.toFixed(1) + "%", ico: "pct", tone: "red", trend: null, desc: "Delivery ÷ Target", meter: delPctVal },
-        { lab: "TARGET", val: r._vacation ? "VACATION" : formatNumber(target || 0), ico: "target", tone: "teal", trend: 0, desc: "Employee monthly target", meter: target ? ((pro + del) / target) * 100 : null },
+        { lab: "TARGET", val: formatNumber(target || 0), ico: "target", tone: "teal", trend: 0, desc: rows.length === 1 ? "Employee monthly target" : "Combined monthly target", meter: target ? ((pro + del) / target) * 100 : null },
         { lab: "CANCELLED BO %", val: escapeHtml(cancelPct), ico: "x", tone: "warn", over: cancelOver, ok: ratio != null && !cancelOver, trend: null, desc: "Cancelled ÷ (Delivery + Cancelled) · limit 30%", meter: ratio == null ? null : ratio * 100, mark: 30 },
-        { lab: "EMPLOYEES", val: "1", ico: "people", tone: "blue", trend: 0, desc: shortEmpLabel(r["Sales Employee"] || "Selected employee") },
+        { lab: "EMPLOYEES", val: formatNumber(rows.length), ico: "people", tone: "blue", trend: 0, desc: who },
       ];
     } else {
       const ratio = cancelPctRatio(t.cancelled || 0, t.deliveryMonth || 0);
@@ -10992,6 +11592,30 @@ body.live-app .app-topbar #theme-toggle:hover {
     const body = $("#sr-detail-body");
     if (!body) return;
 
+    const picked = srSelectedRows();
+    if (picked.length > 1) {
+      const pro = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
+      const del = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      const target = picked.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      const accSold = picked.reduce((sum, row) => sum + (Number(row._accSold) || 0), 0);
+      const accProgress = picked.reduce((sum, row) => sum + (Number(row._accInProgress) || 0), 0);
+      const accQuota = picked.reduce((sum, row) => sum + (Number(row._accQuota) || 0), 0);
+      if (title) title.textContent = `${picked.length} employees`;
+      if (sub) sub.textContent = "Combined totals for the selected names";
+      body.innerHTML = `
+        <p class="foot" style="margin:0 0 8px">${picked.map((row) => escapeHtml(shortEmpLabel(row["Sales Employee"]))).join(" · ")}</p>
+        <div class="emp-stat-grid">
+          <div class="emp-stat"><div class="k">Proforma</div><div class="v">${formatNumber(pro)}</div></div>
+          <div class="emp-stat"><div class="k">Delivery</div><div class="v">${formatNumber(del)}</div></div>
+          <div class="emp-stat"><div class="k">Prof + Del</div><div class="v">${formatNumber(pro + del)}</div></div>
+          <div class="emp-stat"><div class="k">Target</div><div class="v">${formatNumber(target)}</div></div>
+          <div class="emp-stat"><div class="k">Acc achieved</div><div class="v">${formatNumber(accSold)}</div></div>
+          <div class="emp-stat"><div class="k">Acc in progress</div><div class="v">${formatNumber(accProgress)}</div></div>
+          <div class="emp-stat"><div class="k">Acc target</div><div class="v">${formatNumber(accQuota)}</div></div>
+        </div>`;
+      return;
+    }
+
     if (!srView.selectedKey || !window._srRowsByKey || !window._srRowsByKey[srView.selectedKey]) {
       if (title) title.textContent = "Employee details";
       if (sub) sub.textContent = "Select a name to see only their Excel rows";
@@ -11042,7 +11666,7 @@ body.live-app .app-topbar #theme-toggle:hover {
 
   function chartRowsForMode(allRows) {
     const base = filterSrRows(allRows || []);
-    if (srView.selectedKey) return base;
+    if (srHasSelection()) return base;
 
     const mode = srView.chartMode || "active";
     const score = (r) =>
@@ -11112,6 +11736,11 @@ body.live-app .app-topbar #theme-toggle:hover {
       targetSum = rowTargetNum(singleRow);
       delSum = Number(singleRow["Delivery (Month)"]) || 0;
       profSum = Number(singleRow["Proforma (Month)"]) || 0;
+    } else if (srHasSelection() && sr && Array.isArray(sr.rows)) {
+      const picked = filterSrRows(sr.rows);
+      targetSum = picked.reduce((sum, row) => sum + rowTargetNum(row), 0);
+      delSum = picked.reduce((sum, row) => sum + (Number(row["Delivery (Month)"]) || 0), 0);
+      profSum = picked.reduce((sum, row) => sum + (Number(row["Proforma (Month)"]) || 0), 0);
     } else {
       const t = (sr && sr.totals) || {};
       targetSum = Number(t.target) || 0;
@@ -11318,10 +11947,7 @@ body.live-app .app-topbar #theme-toggle:hover {
       sub.textContent = `Working day ${todayWd} of ${workDays} · ${live.label || ""} · base = target ÷ ${workDays} · carry adds missed proforma to today`;
     }
 
-    const prev = srView.selectedKey;
-    srView.selectedKey = "";
-    let rows = chartRowsForMode(sr.rows || []);
-    srView.selectedKey = prev;
+    const rows = srWithoutSelection(() => chartRowsForMode(sr.rows || []));
 
     const list = rows
       .filter((r) => !r._vacation && rowTargetNum(r) > 0)
@@ -16580,7 +17206,19 @@ body.live-app .app-topbar #theme-toggle:hover {
         severity: "warn",
       };
     }
+    customBoeRules().forEach((rule) => {
+      defs[`custom_${rule.id}`] = {
+        id: `custom_${rule.id}`,
+        label: rule.name || "Submitted condition",
+        severity: rule.severity || "critical",
+      };
+    });
     return defs;
+  }
+
+  function customBoeRules() {
+    if (!window.BoeConditions || !window.ReportSheetStore || typeof ReportSheetStore.readBoErrorRules !== "function") return [];
+    return BoeConditions.activeRules(ReportSheetStore.readBoErrorRules());
   }
 
   function isBlankBoField(v) {
@@ -16869,6 +17507,13 @@ body.live-app .app-topbar #theme-toggle:hover {
         if (year === "2027") {
           pushErr("bad_model_year", yearLetter ? [yearLetter] : []);
         }
+      }
+
+      if (window.BoeConditions) {
+        customBoeRules().forEach((rule) => {
+          const hit = BoeConditions.rowMatches(r, rule, product);
+          if (hit && hit.pass) pushErr(`custom_${rule.id}`, hit.letters || []);
+        });
       }
 
       if (!errors.length) return;
@@ -19065,9 +19710,33 @@ body.live-app .app-topbar #theme-toggle:hover {
     return out;
   }
 
+  /**
+   * The pairing pass is the most expensive step on this page, so the result is reused while every input is the same:
+   * the four pushed row arrays (replaced as a whole by every Admin Push / refresh / clear), the roster identity map,
+   * the sales period, and the calendar day (BO aging uses today's date). Anything else forces a fresh run.
+   */
+  let basAllocMemo = null;
+  function basAllocMemoInputs(live) {
+    const stamp = (d) => (d && typeof d.getTime === "function" ? d.getTime() : String(d == null ? "" : d));
+    return [
+      slots.backorder.rows, slots.rtl.rows, slots.central.rows, slots.sales.rows,
+      NAME_IDENTITY_MAP, window.VinColorMatch,
+      live ? `${live.preset}|${live.filterMode}|${stamp(live.rangeFrom)}|${stamp(live.rangeTo)}` : "",
+      new Date().toDateString(),
+    ];
+  }
+
   function buildBasAllocatedVehicles() {
     if (!hasBackOrder()) return [];
     const live = ensureGlobalLivePeriod();
+    const inputs = basAllocMemoInputs(live);
+    if (basAllocMemo && basAllocMemo.inputs.every((v, i) => v === inputs[i])) return basAllocMemo.rows;
+    const rows = buildBasAllocatedVehiclesUncached(live);
+    basAllocMemo = { inputs, rows };
+    return rows;
+  }
+
+  function buildBasAllocatedVehiclesUncached(live) {
     const salesLookup = buildSalesVinLookup();
     const paired = buildVinColorPairedMatches();
 
@@ -19187,6 +19856,7 @@ body.live-app .app-topbar #theme-toggle:hover {
       overview: [
         field("Product", row.product),
         field("Suffix", row.sfx || row.boSuffix),
+        field("Model year", row.year),
         field("Segment", row.seg),
         field("Colors", colors),
         field("Stock source", row.source),
@@ -19319,6 +19989,15 @@ body.live-app .app-topbar #theme-toggle:hover {
     }).length;
     const low = allRows.filter((r) => (Number(r.matchScore) || 0) < 60).length;
 
+    // Score tabs drive the same score filter as the select, so both always agree.
+    const tabCounts = { "": allRows.length, high: hi, mid, low };
+    document.querySelectorAll("#bas-alloc-tabs [data-mv-score]").forEach((btn) => {
+      const key = btn.getAttribute("data-mv-score") || "";
+      const count = btn.querySelector(".mv-tab-count");
+      if (count) count.textContent = formatNumber(tabCounts[key] || 0);
+      btn.classList.toggle("is-on", key === (basAllocView.score || ""));
+    });
+
     const kpiEl = $("#bas-alloc-kpis");
     if (kpiEl) {
       kpiEl.innerHTML = [
@@ -19347,6 +20026,8 @@ body.live-app .app-topbar #theme-toggle:hover {
       tableEl.innerHTML = `<p class="foot" style="padding:16px">${allRows.length ? "No rows match filters." : "No confirmed BO matched to RTL / E-Sales yet · check RTL status (Sales order created / Vehicle allocation completed), product, suffix, and paired exterior/interior colors."}</p>`;
       if (footEl) footEl.textContent = "0 rows";
       paintBasAllocDetail(null);
+      const pagerEl = $("#bas-alloc-pager");
+      if (pagerEl) pagerEl.innerHTML = "";
       return;
     }
 
@@ -19359,19 +20040,19 @@ body.live-app .app-topbar #theme-toggle:hover {
       return String(a.boNumber || "").localeCompare(String(b.boNumber || ""), undefined, { numeric: true });
     });
 
-    const limit = Math.min(sorted.length, MAX_ROWS);
-    const show = sorted.slice(0, limit);
+    // Every matched row stays in `sorted`; only the current page is painted so a large result set stays fast.
+    const pageSize = basAllocPageSize();
+    const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+    const page = Math.min(Math.max(0, Number(basAllocView.page) || 0), pageCount - 1);
+    basAllocView.page = page;
+    const pageStart = page * pageSize;
+    const show = sorted.slice(pageStart, pageStart + pageSize);
     basAllocShown = show;
     const selectedRow = rows.find((row) => allocRowKey(row) === basAllocView.selected) || null;
     if (!selectedRow) basAllocView.selected = "";
 
-    const heads = [
-      "", "VIN", "Product", "Suffix", "Segment", "Colors", "Source", "E-Sales",
-      "BO Number", "Salesman", "Score", "Match", "Sales status", "Order Date", "Delivery",
-      "Aging", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
-      "Secondary status", "Primary status", "Usage", "Allocated location",
-      "Vehicle search area", "Sharing level",
-    ];
+    const heads = BAS_ALLOC_HEADS;
+    paintBasAllocColumnMenu();
 
     tableEl.innerHTML = `<table class="bas-table bas-alloc-table stock-file-table">
       <thead><tr>${heads.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>
@@ -19390,6 +20071,7 @@ body.live-app .app-topbar #theme-toggle:hover {
           `<span class="bas-vin">${escapeHtml(vin)}</span><button type="button" class="mv-copy" data-mv-copy="${escapeHtml(vin)}" title="Copy VIN">Copy</button>`,
           escapeHtml(r.product || "—"),
           escapeHtml(r.sfx || r.boSuffix || "—"),
+          escapeHtml(r.year || "—"),
           escapeHtml(r.seg || "—"),
           escapeHtml(colors),
           escapeHtml(r.source || "—"),
@@ -19424,11 +20106,73 @@ body.live-app .app-topbar #theme-toggle:hover {
     if (footEl) {
       const hasSales = hasSalesRaw();
       footEl.textContent = (show.length < sorted.length
-        ? `Showing ${formatNumber(show.length)} of ${formatNumber(sorted.length)}`
+        ? `Showing ${formatNumber(pageStart + 1)}–${formatNumber(pageStart + show.length)} of ${formatNumber(sorted.length)}`
         : `${formatNumber(sorted.length)} of ${formatNumber(allRows.length)}`) +
         ` matched vehicles (RTL/E-Sales Col K usage · RTL age J · loc Q · E-Sales age L · paired colors)` +
         (hasSales ? "" : " · upload Sales Raw for Delivered / Proforma status");
     }
+    paintBasAllocPager(page, pageCount, sorted.length);
+  }
+
+  /** Column labels of the matched-vehicle table. The column menu and the table share this list. */
+  const BAS_ALLOC_HEADS = [
+    "", "VIN", "Product", "Suffix", "Model year", "Segment", "Colors", "Source", "E-Sales",
+    "BO Number", "Salesman", "Score", "Match", "Sales status", "Order Date", "Delivery",
+    "Aging", "Stock Ext", "Stock Int", "Match pair", "BO Ext", "BO Int",
+    "Secondary status", "Primary status", "Usage", "Allocated location",
+    "Vehicle search area", "Sharing level",
+  ];
+  const BAS_ALLOC_COLS_KEY = "bas-alloc-hidden-cols";
+  const BAS_ALLOC_PAGE_SIZES = [50, 100, 250, 500];
+
+  function basAllocPageSize() {
+    const n = Number(basAllocView.pageSize);
+    return BAS_ALLOC_PAGE_SIZES.includes(n) ? n : 100;
+  }
+
+  function paintBasAllocPager(page, pageCount, total) {
+    const el = $("#bas-alloc-pager");
+    if (!el) return;
+    const size = basAllocPageSize();
+    el.innerHTML = `
+      <button type="button" class="btn" data-mv-page="first"${page <= 0 ? " disabled" : ""} aria-label="First page">«</button>
+      <button type="button" class="btn" data-mv-page="prev"${page <= 0 ? " disabled" : ""}>Prev</button>
+      <span class="mv-page-label">Page ${formatNumber(page + 1)} of ${formatNumber(pageCount)} · ${formatNumber(total)} rows</span>
+      <button type="button" class="btn" data-mv-page="next"${page >= pageCount - 1 ? " disabled" : ""}>Next</button>
+      <button type="button" class="btn" data-mv-page="last"${page >= pageCount - 1 ? " disabled" : ""} aria-label="Last page">»</button>
+      <label class="mv-page-size">Rows
+        <select id="bas-alloc-page-size">${BAS_ALLOC_PAGE_SIZES.map((n) => `<option value="${n}"${n === size ? " selected" : ""}>${n}</option>`).join("")}</select>
+      </label>`;
+  }
+
+  function basAllocHiddenCols() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BAS_ALLOC_COLS_KEY) || "[]");
+      return new Set((Array.isArray(raw) ? raw : []).map(Number).filter((n) => Number.isInteger(n) && n > 0 && n < BAS_ALLOC_HEADS.length));
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  /** Hide columns with one style rule, so the table markup and row data stay untouched. */
+  function applyBasAllocHiddenCols(hidden) {
+    let style = document.getElementById("bas-alloc-col-style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "bas-alloc-col-style";
+      document.head.appendChild(style);
+    }
+    style.textContent = [...hidden].map((i) => `#bas-alloc-table th:nth-child(${i + 1}),#bas-alloc-table td:nth-child(${i + 1}){display:none !important}`).join("\n");
+  }
+
+  function paintBasAllocColumnMenu() {
+    const host = $("#bas-alloc-cols-list");
+    if (!host) return;
+    const hidden = basAllocHiddenCols();
+    applyBasAllocHiddenCols(hidden);
+    if (host.dataset.ready === "1") return;
+    host.dataset.ready = "1";
+    host.innerHTML = BAS_ALLOC_HEADS.map((h, i) => (i === 0 ? "" : `<label><input type="checkbox" data-mv-col="${i}"${hidden.has(i) ? "" : " checked"}${i === 1 ? " disabled" : ""} /> ${escapeHtml(h)}</label>`)).join("");
   }
 
   function uniqueMatchedField(rows, field) {
@@ -20521,25 +21265,6 @@ body.live-app .app-topbar #theme-toggle:hover {
     }
   }
 
-  function summaryChannelAccessories(live, prevMonthKey) {
-    const blank = () => ({ count: 0, amount: 0, remaining: 0 });
-    const by = { lexus: blank(), telesales: blank(), b2c: blank(), guest: blank() };
-    const acc = buildAccessoriesMetrics(live, prevMonthKey);
-    const guestKeys = guestExpEmployeeKeys();
-    const channelOf = (key) => (key && guestKeys.has(key) ? "guest" : "telesales");
-    acc.byKey.forEach((row, key) => {
-      const bucket = by[channelOf(key)];
-      bucket.amount += Number(row.sold) || 0;
-      bucket.remaining += Number(row.remaining) || 0;
-    });
-    (slots.accessories.rows || []).forEach((row) => {
-      if (!accessoriesInPeriod(row, live, prevMonthKey)) return;
-      by[channelOf(nameKey(row.salesman))].count += 1;
-    });
-    by.hasFile = !!acc.hasFile;
-    return by;
-  }
-
   function guestExpEmployeeKeys() {
     const keys = new Set();
     (employeeTargets || []).forEach((e) => {
@@ -20548,6 +21273,31 @@ body.live-app .app-topbar #theme-toggle:hover {
       if (key) keys.add(key);
     });
     return keys;
+  }
+
+  /** Accessories follow the advisor: Experience Center → Automall, every other advisor → Telesales. */
+  function accessoriesChannelSplit(live) {
+    const empty = () => ({ count: 0, amount: 0, remaining: 0, quota: 0, sold: 0, inProgress: 0 });
+    const out = { lexus: empty(), telesales: empty(), b2c: empty(), guest: empty() };
+    const period = live || window._globalLivePeriod || null;
+    const prevMonthKey = period && (period.prevMonthKey || (period.prevRangeFrom ? toYyyymm(period.prevRangeFrom) : "")) || "";
+    const acc = buildAccessoriesMetrics(period, prevMonthKey);
+    const guestKeys = guestExpEmployeeKeys();
+    acc.byKey.forEach((row, key) => {
+      const dest = guestKeys.has(key) ? out.guest : out.telesales;
+      const sold = Number(row.sold) || 0;
+      const progress = Number(row.inProgress) || 0;
+      dest.sold += sold;
+      dest.inProgress += progress;
+      dest.amount += sold + progress;
+      dest.quota += Number(row.quota) || 0;
+      dest.count += (Number(row.soldCount) || 0) + (Number(row.progressCount) || 0);
+    });
+    ["guest", "telesales"].forEach((id) => {
+      const row = out[id];
+      row.remaining = Math.max(0, row.quota - row.sold - row.inProgress);
+    });
+    return out;
   }
 
   /** Lexus Sales channel — only these Sales Raw product codes (exact / code+digits). */
@@ -21025,16 +21775,21 @@ body.live-app .app-topbar #theme-toggle:hover {
       prevMonthKeyOf: (live) => live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : ""),
       trendPct: dvpTrendPct,
       statusFor: dvpStatusFor,
+      inferSalesType,
+      salesTypeGroups: (live, prevMonthKey) => collectSalesReportDeliveries(live, prevMonthKey),
+      salesTypeRecord: (r) => {
+        const rec = dvpVinRecord(r);
+        const bucket = dvpBucketForSaleRow(r, guestExpEmployeeKeys());
+        rec.channel = { lexus: "Lexus", telesales: "Telesales", b2c: "B2C", guest: "Automall" }[bucket] || "—";
+        return rec;
+      },
       formatDate: formatRvDate,
       dateBounds: () => {
         const b = salesDateBounds(slots.sales.rows || []);
         return { min: toIsoDateInput(b.min), max: toIsoDateInput(b.max) };
       },
       channelTargets,
-      channelAccessories: (live) => summaryChannelAccessories(
-        live,
-        (live && (live.prevMonthKey || (live.prevRangeFrom ? toYyyymm(live.prevRangeFrom) : ""))) || ""
-      ),
+      accessoriesFor: (period) => accessoriesChannelSplit(period),
       lastUpdated: Number(Store.readDataPushStamp().at) || 0,
       onRefresh: () => refreshFromAdmin("Sales refreshed", { force: true }),
       onExit: () => {
@@ -21627,6 +22382,41 @@ body.live-app .app-topbar #theme-toggle:hover {
   let rvSnapshotVersion = "";
   let rvHistoryPage = 1;
   let rvAuditPage = 1;
+  let rvSheetMode = "live";
+
+  function rvPad(n) { return String(n).padStart(2, "0"); }
+  function rvRemain(deadline) {
+    const end = new Date(deadline || "").getTime();
+    if (!Number.isFinite(end)) return "";
+    const ms = end - Date.now();
+    if (ms <= 0) return "EXPIRED";
+    const total = Math.floor(ms / 1000);
+    return `${rvPad(Math.floor(total / 3600))}:${rvPad(Math.floor((total % 3600) / 60))}:${rvPad(total % 60)}`;
+  }
+  function rvTimerText(dateText, deadline) {
+    if (!dateText) return "No Assignment Date";
+    const remain = rvRemain(deadline);
+    return remain ? `${dateText} ( ${remain} )` : dateText;
+  }
+  function rvAheadText(order, index) {
+    const item = (order.ahead || [])[index];
+    if (!item) return "—";
+    const orderNo = item.orderNumber && item.orderNumber !== "NO ORDER" ? item.orderNumber : "";
+    return ["#" + (item.queueNumber == null ? "" : item.queueNumber), orderNo, item.salesAdvisor || ""].filter(Boolean).join(" ") || "—";
+  }
+  function rvChannelOk(order) {
+    const area = String(order.area || "").toLowerCase();
+    const share = String(order.share || "").toLowerCase();
+    return area === "rtlesal" || share.includes("retail electronic sales");
+  }
+  function rvPushSource(item) {
+    const source = String((item && item.source) || "").toLowerCase();
+    if (source.includes("report")) return "Report sheet";
+    if (source.includes("reserved")) return "Reserved admin";
+    const who = String((item && item.uploadedBy) || "");
+    if (/report/i.test(who)) return "Report sheet";
+    return who || "Push";
+  }
 
   function rvColumnVStatus(vin) {
     if (!vin || typeof findSalesRawDetailForVin !== "function") return { label: "Unknown", cls: "na" };
@@ -21684,76 +22474,82 @@ body.live-app .app-topbar #theme-toggle:hover {
     });
     const q = String(needle || "").trim().toLowerCase();
     const orders = data.orders || [];
-    if (viewing && table) {
-      const shown = orders.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.status, order.paymentLabel, order.vehicle].join(" ").toLowerCase().includes(q));
+    document.querySelectorAll("[data-rv-sheet]").forEach((btn) => {
+      btn.classList.toggle("is-on", btn.getAttribute("data-rv-sheet") === rvSheetMode);
+    });
+    const liveOrders = orders.filter((order) => !order.removed);
+    const removedOrders = orders.filter((order) => order.removed);
+    const kpis = $("#rv-kpis");
+    if (kpis) {
+      const counts = (data.movement && data.movement.counts) || {};
+      const cards = [
+        ["Live VINs", new Set(liveOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-live"],
+        ["Removed VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed"],
+        ["Marketing", (data.requests || []).filter((item) => !item.cancelled).length, "rv-tone-mkt"],
+        ["Reassigned", counts.reassigned || 0, "rv-tone-move"],
+      ];
+      kpis.innerHTML = cards.map(([label, value, tone]) => `<div class="bo-kpi ${tone}"><span class="lab">${escapeHtml(label)}</span><strong class="val">${escapeHtml(String(value))}</strong></div>`).join("");
+    }
+    if (table) {
+      const pool = rvSheetMode === "removed" ? removedOrders : liveOrders;
+      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.suffix].join(" ").toLowerCase().includes(q));
+      const head = ["Salesman name", "Customer name", "Order number", "Model year", "Product", "Area", "Sharing level", "ALJ suffix", "Exterior color", "Interior color", "VIN number", "Reservation exp date", "Status", "Queue 1", "Queue 2", "Queue 3"];
       table.innerHTML = shown.length
-        ? `<table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Reservation</th><th>Sales Raw</th></tr></thead><tbody>${shown.slice(0, 200).map((order) => {
-            const sales = rvColumnVStatus(order.vin);
-            return `<tr>
-              <td>${order.queueNumber == null ? "—" : escapeHtml(String(order.queueNumber))}</td>
-              <td>${escapeHtml(order.orderNumber || "—")}</td>
-              <td>${escapeHtml(order.vin || "—")}</td>
-              <td>${escapeHtml(order.salesAdvisor || "—")}</td>
-              <td>${escapeHtml(order.paymentLabel || "—")}</td>
+        ? `<table><thead><tr>${head.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${shown.slice(0, 300).map((order) => {
+            const cancel = order.status === "الغاء";
+            const productCls = rvChannelOk(order) ? "" : " rv-cell-off";
+            const rowCls = [order.removed ? "rv-row-removed" : "", cancel ? "rv-row-cancel" : ""].filter(Boolean).join(" ");
+            const cells = [
+              order.salesAdvisor, order.customerName, order.orderNumber, order.modelYear, order.product, order.area, order.share, order.suffix, order.exterior, order.interior,
+            ].map((value, index) => `<td${index === 4 ? ` class="${productCls.trim()}"` : ""}>${escapeHtml(value || "—")}</td>`).join("");
+            return `<tr class="${rowCls}">${cells}
+              <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+              <td class="rv-timer" data-date="${escapeHtml(order.assignDate || "")}" data-deadline="${escapeHtml(order.deadline || "")}">${escapeHtml(rvTimerText(order.assignDate, order.deadline))}</td>
               <td>${escapeHtml(order.status || "—")}</td>
-              <td>${escapeHtml(sales.label)}</td>
+              <td>${escapeHtml(rvAheadText(order, 0))}</td>
+              <td>${escapeHtml(rvAheadText(order, 1))}</td>
+              <td>${escapeHtml(rvAheadText(order, 2))}</td>
             </tr>`;
           }).join("")}</tbody></table>`
-        : `<p class="foot">This snapshot has no rows.</p>`;
-      const kpis = $("#rv-kpis");
-      if (kpis) {
-        const vins = new Set(orders.map((order) => String(order.vin || "").trim().toUpperCase()).filter(Boolean));
-        const sales = orders.map((order) => rvColumnVStatus(order.vin));
-        const counts = (data.movement && data.movement.counts) || {};
-        const cards = [
-          ["Reserved VINs", vins.size],
-          ["In Queue", orders.filter((order) => order.queueNumber != null).length],
-          ["Delivered", sales.filter((item) => item.label === "Delivered").length],
-          ["Proforma", sales.filter((item) => item.label === "Proforma").length],
-          ["Matched", (data.report && data.report.matchedOrders) || 0],
-          ["Reassigned VINs", counts.reassigned || 0],
-        ];
-        kpis.innerHTML = cards.map(([label, value]) => `<div class="bo-kpi"><div class="lab">${escapeHtml(label)}</div><div class="val">${escapeHtml(String(value))}</div></div>`).join("");
-      }
-    } else if (table) table.innerHTML = "";
+        : `<p class="foot">${rvSheetMode === "removed" ? "No removed VINs in this sheet." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
+    }
     const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
-    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.employeeNumber} ${(item.fields || []).map((field) => field.value).join(" ")}`.toLowerCase().includes(mktQuery));
-    const openCount = requests.filter((item) => !item.cancelled).length;
-    if (mktCount) mktCount.textContent = requests.length ? `${openCount} open · ${requests.length - openCount} cancelled` : "Orders advisors sent from the BO file";
+    const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at}`.toLowerCase().includes(mktQuery));
+    if (mktCount) mktCount.textContent = requests.length ? `${requests.filter((item) => !item.cancelled).length} open` : "Order number, advisor, and when it was sent";
     mkt.innerHTML = requests.length
-      ? requests.slice(0, 40).map((item) => {
-          const vinField = (item.fields || []).find((field) => /vin/i.test(field.label));
-          return `<article class="rv-mkt-card${item.cancelled ? " is-cancelled" : ""}">
-            <header>
-              <b>${escapeHtml(item.orderNumber || "—")}</b>
-              ${item.cancelled ? `<span class="rv-mkt-cancel">Cancelled</span>` : ""}
-            </header>
-            <div class="rv-mkt-fields">
-              <div><span>VIN</span><b>${escapeHtml(vinField ? vinField.value : "—")}</b></div>
-              <div><span>Advisor</span><b>${escapeHtml(item.advisorName || "—")}</b></div>
-              <div><span>Sent</span><b>${escapeHtml(item.display || item.at || "—")}</b></div>
-            </div>
-          </article>`;
-        }).join("")
+      ? `<table><thead><tr><th>Order</th><th>Advisor</th><th>When</th></tr></thead><tbody>${requests.slice(0, 80).map((item) => `<tr class="${item.cancelled ? "is-cancelled" : ""}">
+          <td>${escapeHtml(item.orderNumber || "—")}</td>
+          <td>${escapeHtml(item.advisorName || "—")}</td>
+          <td>${escapeHtml(item.display || (item.at ? new Date(item.at).toLocaleString() : "—"))}</td>
+        </tr>`).join("")}</tbody></table>`
       : `<p class="foot">No marketing orders sent yet.</p>`;
     const historyQuery = String(($("#rv-history-search") || {}).value || "").trim().toLowerCase();
-    const movements = ((data.movement && data.movement.rows) || []).filter((row) => !historyQuery || `${row.vin} ${row.previousEmployee} ${row.currentEmployee} ${row.status}`.toLowerCase().includes(historyQuery));
+    const moveByVin = new Map(((data.movement && data.movement.rows) || []).map((row) => [String(row.vin || "").toUpperCase(), row]));
+    const assignments = orders.filter((order) => {
+      const move = moveByVin.get(String(order.vin || "").toUpperCase());
+      const hay = `${order.vin} ${order.salesAdvisor} ${order.orderNumber} ${order.status} ${move ? move.previousEmployee : ""}`;
+      return !historyQuery || hay.toLowerCase().includes(historyQuery);
+    });
     const historyCount = $("#rv-history-count");
-    const counts = (data.movement && data.movement.counts) || {};
-    if (historyCount) historyCount.textContent = data.movement ? `${counts.new || 0} new · ${counts.reassigned || 0} reassigned · ${counts.removed || 0} removed${counts.first ? " · first push" : ""}` : "Changes versus the previous push";
-    const pageSize = 8;
-    const pages = Math.max(1, Math.ceil(movements.length / pageSize));
+    if (historyCount) historyCount.textContent = `${liveOrders.length} live · ${removedOrders.length} removed · who has the VIN on reserved orders`;
+    const pageSize = 10;
+    const pages = Math.max(1, Math.ceil(assignments.length / pageSize));
     if (rvHistoryPage > pages) rvHistoryPage = pages;
-    const slice = movements.slice((rvHistoryPage - 1) * pageSize, rvHistoryPage * pageSize);
+    const slice = assignments.slice((rvHistoryPage - 1) * pageSize, rvHistoryPage * pageSize);
     history.innerHTML = slice.length
-      ? `<table><thead><tr><th>VIN</th><th>Previous</th><th>Current</th><th>Status</th></tr></thead><tbody>${slice.map((row) => `<tr>
-          <td>${escapeHtml(row.vin || "—")}</td>
-          <td>${escapeHtml(row.previousEmployee || "—")}</td>
-          <td>${escapeHtml(row.currentEmployee || "—")}</td>
-          <td><span class="rv-move rv-move-${escapeHtml(String(row.status || "").toLowerCase())}">${escapeHtml(row.status || "—")}</span></td>
-        </tr>`).join("")}</tbody></table>
+      ? `<table><thead><tr><th>VIN</th><th>With</th><th>Order</th><th>Last status</th><th></th></tr></thead><tbody>${slice.map((order) => {
+          const move = moveByVin.get(String(order.vin || "").toUpperCase());
+          const was = move && move.previousEmployee && move.previousEmployee !== order.salesAdvisor ? move.previousEmployee : "";
+          return `<tr>
+          <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+          <td>${escapeHtml(order.salesAdvisor || "—")}${was ? `<div class="rv-was">was ${escapeHtml(was)}</div>` : ""}</td>
+          <td>${escapeHtml(order.orderNumber || "—")}</td>
+          <td>${escapeHtml(order.status || "—")}</td>
+          <td><span class="rv-move ${order.removed ? "rv-move-removed" : "rv-move-new"}">${order.removed ? "Removed" : "Live"}</span></td>
+        </tr>`;
+        }).join("")}</tbody></table>
         <div class="rv-pager"><button type="button" data-rv-hist="-1" ${rvHistoryPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvHistoryPage} / ${pages}</span><button type="button" data-rv-hist="1" ${rvHistoryPage >= pages ? "disabled" : ""}>Next</button></div>`
-      : `<p class="foot">${data._error || "No VIN movement for this push yet."}</p>`;
+      : `<p class="foot">${data._error || "No VIN assignments on this sheet yet."}</p>`;
     const fromDate = ($("#rv-date-from") || {}).value || "";
     const toDate = ($("#rv-date-to") || {}).value || "";
     const auditRows = pushes.filter((item) => {
@@ -21766,35 +22562,47 @@ body.live-app .app-topbar #theme-toggle:hover {
     if (rvAuditPage > auditPages) rvAuditPage = auditPages;
     const auditSlice = auditRows.slice((rvAuditPage - 1) * 6, rvAuditPage * 6);
     const auditCount = $("#rv-audit-count");
-    if (auditCount) auditCount.textContent = `${pushes.length} stored snapshot${pushes.length === 1 ? "" : "s"} · same-day pushes stay separate`;
+    if (auditCount) auditCount.textContent = `${pushes.length} snapshot${pushes.length === 1 ? "" : "s"} · live VINs still on the sheet · removed VINs keep their last status`;
     audit.innerHTML = auditSlice.length
-      ? `<table><thead><tr><th>Push time</th><th>Push ID</th><th>Pushed by</th><th>VINs</th><th>New</th><th>Reassigned</th><th>Removed</th><th>Unchanged</th><th></th></tr></thead><tbody>${auditSlice.map((item) => {
+      ? `<table><thead><tr><th>Push</th><th>From</th><th>Live</th><th>Removed</th><th>Newly removed</th><th></th></tr></thead><tbody>${auditSlice.map((item) => {
           const move = item.movement || {};
           return `<tr>
             <td>${escapeHtml(item.display || item.at || "—")}</td>
-            <td>${escapeHtml(item.version || "—")}</td>
-            <td>${escapeHtml(item.uploadedBy || "—")}</td>
-            <td>${escapeHtml(String(item.totalVins || 0))}</td>
-            <td>${escapeHtml(String(move.new || 0))}</td>
-            <td>${escapeHtml(String(move.reassigned || 0))}</td>
+            <td>${escapeHtml(rvPushSource(item))}</td>
+            <td>${escapeHtml(String(item.liveVins || 0))}</td>
+            <td>${escapeHtml(String(item.removedVins || 0))}</td>
             <td>${escapeHtml(String(move.removed || 0))}</td>
-            <td>${escapeHtml(String(move.unchanged || 0))}</td>
-            <td><button type="button" class="btn" data-rv-view="${escapeHtml(item.version)}">View Snapshot</button></td>
+            <td><button type="button" class="btn" data-rv-view="${escapeHtml(item.version)}">View</button></td>
           </tr>`;
         }).join("")}</tbody></table>
         <div class="rv-pager"><button type="button" data-rv-audit="-1" ${rvAuditPage <= 1 ? "disabled" : ""}>Prev</button><span>${rvAuditPage} / ${auditPages}</span><button type="button" data-rv-audit="1" ${rvAuditPage >= auditPages ? "disabled" : ""}>Next</button></div>`
-      : `<p class="foot">No push snapshots stored yet. The next Admin Push saves one.</p>`;
+      : `<p class="foot">No push snapshots stored yet. The next push from reserved orders admin or the report sheet admin saves one.</p>`;
   }
 
   function bindRvBoardControls() {
     const root = $("#rv-dash");
     if (!root || root.dataset.rvBound) return;
     root.dataset.rvBound = "1";
+    if (!root.dataset.rvClock) {
+      root.dataset.rvClock = "1";
+      setInterval(() => {
+        if (typeof activePanel !== "undefined" && activePanel !== "reservedvehicles") return;
+        root.querySelectorAll(".rv-timer").forEach((el) => {
+          el.textContent = rvTimerText(el.getAttribute("data-date") || "", el.getAttribute("data-deadline") || "");
+        });
+      }, 1000);
+    }
     root.addEventListener("click", (e) => {
       const view = e.target.closest("[data-rv-view]");
       if (view) {
         rvSnapshotVersion = view.getAttribute("data-rv-view") || "";
         loadRvBoard(true);
+        return;
+      }
+      const sheetTab = e.target.closest("[data-rv-sheet]");
+      if (sheetTab) {
+        rvSheetMode = sheetTab.getAttribute("data-rv-sheet") || "live";
+        paintRvLiveSheet(($("#rv-live-search") || {}).value || "");
         return;
       }
       const hist = e.target.closest("[data-rv-hist]");
@@ -21841,6 +22649,11 @@ body.live-app .app-topbar #theme-toggle:hover {
     });
     const refresh = $("#rv-refresh");
     if (refresh) refresh.addEventListener("click", () => { const btn = $("#run-btn"); if (btn) btn.click(); });
+    const exit = $("#rv-exit");
+    if (exit) exit.addEventListener("click", () => {
+      if (typeof window.switchReportPanel === "function") window.switchReportPanel("salesreport");
+      else switchPanel("ytdsales");
+    });
   }
 
   async function loadRvBoard(force) {
@@ -21881,6 +22694,13 @@ body.live-app .app-topbar #theme-toggle:hover {
     const hint = $("#rv-live-hint");
     const sheetsEl = $("#rv-sheets");
     if (!empty || !dash || !wrap) return;
+    empty.hidden = true;
+    empty.style.display = "none";
+    dash.hidden = false;
+    wrap.innerHTML = "";
+    if (sheetsEl) sheetsEl.innerHTML = "";
+    loadRvBoard(false);
+    return;
 
     if (!hasReservedVehiclesInputs()) {
       if (rvSnapshotVersion) {
@@ -22711,6 +23531,7 @@ body.live-app .app-topbar #theme-toggle:hover {
       }
     });
     window._data = null;
+    window._ytdFile = null;
     document.body.classList.remove("sr-mode");
     setSrSheet("");
     $("#dashboard").classList.remove("show");
@@ -22823,6 +23644,7 @@ body.live-app .app-topbar #theme-toggle:hover {
       await refreshInFlight;
     } finally {
       refreshInFlight = null;
+      try { window.dispatchEvent(new CustomEvent("admin-push-updated")); } catch (err) { /* ignore */ }
     }
   }
 
@@ -23451,41 +24273,8 @@ body.live-app .app-topbar #theme-toggle:hover {
           });
           return;
         }
-        if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); return; }
-        if (e.target.closest("[data-ytd-export]")) { ytdExportMonth(); return; }
-        const snap = e.target.closest("[data-ytd-snap]");
-        if (snap) {
-          fetch(`/api/report-sheet/ytd-snapshots/${encodeURIComponent(snap.dataset.ytdSnap)}`, { cache: "no-store" })
-            .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-            .then((out) => {
-              if (!out.ok) throw new Error(out.data.error || "That snapshot could not be loaded.");
-              ytdSnapshotView = out.data;
-              paintYtdDetail();
-            })
-            .catch((err) => ytdSetSaveNote(err.message || "That snapshot could not be loaded.", "is-err"));
-          return;
-        }
+        if (e.target.closest("[data-ytd-inspect]")) { ytdInspect = !ytdInspect; paintYtdDetail(); }
       });
-      const ytdImport = $("#ytd-import");
-      const ytdFile = $("#ytd-import-file");
-      if (ytdImport && ytdFile) {
-        ytdImport.addEventListener("click", () => ytdFile.click());
-        ytdFile.addEventListener("change", () => {
-          const file = ytdFile.files && ytdFile.files[0];
-          ytdFile.value = "";
-          if (!file) return;
-          const password = window.prompt("Admin password");
-          if (!password) {
-            ytdSetSaveNote("Import cancelled. The admin password is required.", "is-err");
-            return;
-          }
-          ytdSetSaveNote("Importing the Sales Report…", "is-wait");
-          ytdImportReport(file, password).then((data) => {
-            const count = data.latest && data.latest.months ? Object.keys(data.latest.months).length : 0;
-            ytdSetSaveNote(data.duplicate ? "This report was already imported." : `Sales Report imported · ${count} month${count === 1 ? "" : "s"}.`, data.duplicate ? "" : "is-ok");
-          }).catch((err) => ytdSetSaveNote(err.message || "Import failed. Nothing was saved.", "is-err"));
-        });
-      }
       const ytdRefresh = $("#ytd-refresh");
       if (ytdRefresh) {
         ytdRefresh.addEventListener("click", () => {
@@ -23865,11 +24654,21 @@ body.live-app .app-topbar #theme-toggle:hover {
   function refreshBasFromFilters() {
     if (window._data) renderBoAllocStockDashboard(window._data);
   }
+  /** Run `fn` once after the user pauses typing. The typed value is still stored immediately by the caller. */
+  function debounceInput(fn, wait) {
+    let timer = 0;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait == null ? 220 : wait);
+    };
+  }
   const basSearchEl = $("#bas-search");
   if (basSearchEl) {
+    const runBasSearch = debounceInput(refreshBasFromFilters);
     basSearchEl.addEventListener("input", (e) => {
       basView.search = e.target.value;
-      refreshBasFromFilters();
+      basAllocView.page = 0;
+      runBasSearch();
     });
   }
   [
@@ -23973,30 +24772,76 @@ body.live-app .app-topbar #theme-toggle:hover {
   }
   const basAllocSearchEl = $("#bas-alloc-search");
   if (basAllocSearchEl) {
+    const runAllocSearch = debounceInput(refreshBasAllocFromFilters);
     basAllocSearchEl.addEventListener("input", (e) => {
       basAllocView.search = e.target.value || "";
-      refreshBasAllocFromFilters();
+      basAllocView.page = 0;
+      runAllocSearch();
     });
   }
+  // These three filters only change the matched-vehicle list, so only that section is repainted.
   const basAllocScoreEl = $("#bas-alloc-f-score");
   if (basAllocScoreEl) {
     basAllocScoreEl.addEventListener("change", (e) => {
       basAllocView.score = e.target.value;
-      refreshBasFromFilters();
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
     });
   }
   const basAllocStatusEl = $("#bas-alloc-f-status");
   if (basAllocStatusEl) {
     basAllocStatusEl.addEventListener("change", (e) => {
       basAllocView.salesStatus = e.target.value;
-      refreshBasFromFilters();
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
     });
   }
   const basAllocSourceEl = $("#bas-alloc-f-source");
   if (basAllocSourceEl) {
     basAllocSourceEl.addEventListener("change", (e) => {
       basAllocView.source = e.target.value;
-      refreshBasFromFilters();
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocTabsEl = $("#bas-alloc-tabs");
+  if (basAllocTabsEl) {
+    basAllocTabsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mv-score]");
+      if (!btn) return;
+      basAllocView.score = btn.getAttribute("data-mv-score") || "";
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocPagerEl = $("#bas-alloc-pager");
+  if (basAllocPagerEl) {
+    basAllocPagerEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mv-page]");
+      if (!btn || btn.disabled) return;
+      const move = btn.getAttribute("data-mv-page");
+      const page = Number(basAllocView.page) || 0;
+      basAllocView.page = move === "first" ? 0 : move === "prev" ? page - 1 : move === "next" ? page + 1 : Number.MAX_SAFE_INTEGER;
+      refreshBasAllocFromFilters();
+    });
+    basAllocPagerEl.addEventListener("change", (e) => {
+      if (e.target.id !== "bas-alloc-page-size") return;
+      basAllocView.pageSize = Number(e.target.value) || 100;
+      basAllocView.page = 0;
+      refreshBasAllocFromFilters();
+    });
+  }
+  const basAllocColsEl = $("#bas-alloc-cols-list");
+  if (basAllocColsEl) {
+    basAllocColsEl.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-mv-col]");
+      if (!box) return;
+      const hidden = basAllocHiddenCols();
+      const idx = Number(box.getAttribute("data-mv-col"));
+      if (box.checked) hidden.delete(idx);
+      else hidden.add(idx);
+      try { localStorage.setItem(BAS_ALLOC_COLS_KEY, JSON.stringify([...hidden])); } catch (_) { /* storage may be blocked */ }
+      applyBasAllocHiddenCols(hidden);
     });
   }
   document.querySelectorAll("#panel-boallocstock details.bas-section-card > summary.bas-section-head").forEach((summary) => {
