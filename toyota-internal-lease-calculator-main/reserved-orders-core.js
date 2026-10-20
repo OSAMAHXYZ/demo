@@ -1042,6 +1042,7 @@ const SEEDED_EMPLOYEES = [
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
     const alertsFile = path.join(options.storeDir, 'reserved-orders-alerts.json');
+    const notificationsFile = path.join(options.storeDir, 'reserved-orders-notifications.json');
     const marketingFile = path.join(options.storeDir, 'reserved-orders-marketing.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
@@ -1676,6 +1677,106 @@ function attachReservedOrders(app, options) {
         saveAlerts(alerts);
         audit(req, { user: 'Admin', role: 'admin', action: 'ALERTS_SAVED', entity: 'alert', source: 'admin', details: `${alerts.length} BO alert rule(s)` });
         res.json({ ok: true, alerts });
+    });
+    function loadNotifications() {
+        const data = readJson(notificationsFile, { items: [], reads: {} });
+        return {
+            items: Array.isArray(data && data.items) ? data.items : [],
+            reads: data && data.reads && typeof data.reads === 'object' ? data.reads : {}
+        };
+    }
+    function saveNotifications(store) {
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(notificationsFile, JSON.stringify(store, null, 2), 'utf8');
+    }
+    function cleanNotification(raw) {
+        const message = cleanText(raw && raw.message).slice(0, 2000);
+        if (!message) return null;
+        const recordIds = Array.isArray(raw && raw.recordIds)
+            ? [...new Set(raw.recordIds.map((id) => cleanText(id)).filter(Boolean))].slice(0, 500)
+            : [];
+        return {
+            id: `nt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            title: cleanText(raw && raw.title).slice(0, 120),
+            message,
+            audience: recordIds.length ? { mode: 'selected', recordIds } : { mode: 'all', recordIds: [] },
+            at: new Date().toISOString()
+        };
+    }
+    function notificationAudienceLabel(item, staff) {
+        if (!item.audience || item.audience.mode !== 'selected') return 'All employees';
+        const names = (item.audience.recordIds || []).map((id) => {
+            const person = (staff || []).find((p) => p.recordId === id);
+            return person ? person.name : id;
+        });
+        return names.length ? names.join(', ') : 'All employees';
+    }
+    function notificationForUser(item, user) {
+        if (!item.audience || item.audience.mode !== 'selected') return true;
+        return (item.audience.recordIds || []).includes(user.recordId);
+    }
+    app.get('/api/reserved-orders/notifications', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const store = loadNotifications();
+        const staff = loadStaff();
+        res.json({
+            notifications: store.items.slice().reverse().map((item) => ({
+                ...item,
+                audienceLabel: notificationAudienceLabel(item, staff),
+                seenCount: Object.keys(store.reads[item.id] || {}).length
+            })),
+            staff: staff.filter((person) => person.active !== false && person.name).map(publicStaff)
+        });
+    });
+    app.post('/api/reserved-orders/notifications', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const item = cleanNotification(req.body || {});
+        if (!item) return res.status(400).json({ error: 'Write the notification message first.' });
+        const store = loadNotifications();
+        store.items.push(item);
+        store.items = store.items.slice(-200);
+        saveNotifications(store);
+        audit(req, { user: 'Admin', role: 'admin', action: 'NOTIFICATION_SENT', entity: 'notification', source: 'admin', details: `${item.title || item.message.slice(0, 60)} · ${item.audience.mode === 'selected' ? item.audience.recordIds.length + ' employee(s)' : 'all employees'}` });
+        notify();
+        res.json({ ok: true, notification: item });
+    });
+    app.post('/api/reserved-orders/notifications/remove', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const id = cleanText(req.body && req.body.id);
+        const store = loadNotifications();
+        const before = store.items.length;
+        store.items = store.items.filter((item) => item.id !== id);
+        if (store.items.length === before) return res.status(404).json({ error: 'Notification not found.' });
+        delete store.reads[id];
+        saveNotifications(store);
+        audit(req, { user: 'Admin', role: 'admin', action: 'NOTIFICATION_REMOVED', entity: 'notification', source: 'admin', details: id });
+        notify();
+        res.json({ ok: true });
+    });
+    app.get('/api/reserved-orders/my-notifications', (req, res) => {
+        const user = sessionUser(req.query && req.query.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const store = loadNotifications();
+        const items = store.items.filter((item) => notificationForUser(item, user)).slice(-50).reverse().map((item) => ({
+            id: item.id,
+            title: item.title || '',
+            message: item.message,
+            at: item.at,
+            seen: Boolean((store.reads[item.id] || {})[user.recordId])
+        }));
+        res.json({ notifications: items, unread: items.filter((item) => !item.seen).length });
+    });
+    app.post('/api/reserved-orders/my-notifications/seen', (req, res) => {
+        const user = sessionUser(req.body && req.body.token);
+        if (!user) return res.status(401).json({ error: 'Sign in again.' });
+        const id = cleanText(req.body && req.body.id);
+        const store = loadNotifications();
+        const item = store.items.find((entry) => entry.id === id);
+        if (!item || !notificationForUser(item, user)) return res.status(404).json({ error: 'Notification not found.' });
+        if (!store.reads[id]) store.reads[id] = {};
+        store.reads[id][user.recordId] = new Date().toISOString();
+        saveNotifications(store);
+        res.json({ ok: true });
     });
     app.post('/api/reserved-orders/staff', (req, res) => {
         if (!requireAdmin(req, res)) return;

@@ -1,4 +1,4 @@
-/* BO Notifications — same BO error-condition UI as Reserved Orders admin (bo-rules-ui.js),
+/* BO Error Condition + Notifications — same BO error-condition UI as Reserved Orders admin (bo-rules-ui.js),
    scoped to the Report Sheet admin panel so it does not restyle the rest of Admin. */
 #panel-bonotifications {
   --red: #eb0a1e;
@@ -14,6 +14,14 @@
 #panel-bonotifications .muted { color: var(--muted); font-size: 12px; }
 #panel-bonotifications .err { color: #9b1c1c; font-size: 0.88rem; }
 #panel-bonotifications .solid { background: var(--red); color: #fff; border-color: var(--red); font-weight: 800; }
+#panel-notifications .notif-form { display: grid; gap: 12px; max-width: 760px; margin-top: 12px; }
+#panel-notifications .notif-form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: #667085; }
+#panel-notifications .notif-form input[type="text"], #panel-notifications .notif-form textarea { border: 1px solid #e6e8ee; border-radius: 8px; padding: 9px 10px; background: #fff; color: #172033; font: inherit; }
+#panel-notifications .notif-audience { border: 1px solid #e6e8ee; border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
+#panel-notifications .notif-audience legend { font-size: 12px; font-weight: 700; color: #667085; padding: 0 4px; }
+#panel-notifications .notif-radio { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 13px; }
+#panel-notifications #notif-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#panel-notifications #notif-list th, #panel-notifications #notif-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }
 #ytd-months-list { margin-top: 14px; }
 #ytd-months-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #ytd-months-list th, #ytd-months-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }

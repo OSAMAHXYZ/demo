@@ -186,7 +186,11 @@
         </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="bonotifications" id="tab-bonotifications">
           <span class="side-nav-icon" aria-hidden="true">⚠</span>
-          <span class="side-nav-label">BO Notifications</span>
+          <span class="side-nav-label">BO Error Condition</span>
+        </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="notifications" id="tab-notifications">
+          <span class="side-nav-icon" aria-hidden="true">✉</span>
+          <span class="side-nav-label">Notifications</span>
         </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="contact" id="tab-contact">
           <span class="side-nav-icon" aria-hidden="true">☎</span>
@@ -403,7 +407,7 @@
     <section class="admin-panel" id="panel-bonotifications" hidden>
       <div class="card admin-section-card">
         <div class="pbi-viz-head">
-          <h2>BO Notifications</h2>
+          <h2>BO Error Condition</h2>
           <span class="admin-section-tag">Order errors pushed to employees</span>
         </div>
         <p class="admin-lead">
@@ -417,10 +421,53 @@
           <label>Admin password
             <input type="password" id="bo-notif-pass" placeholder="Same password as Reserved Orders admin" autocomplete="current-password" />
           </label>
-          <button type="button" class="btn-primary" id="bo-notif-unlock-btn">Unlock BO Notifications</button>
+          <button type="button" class="btn-primary" id="bo-notif-unlock-btn">Unlock BO Error Condition</button>
           <span class="hint" id="bo-notif-unlock-note">Needed once per browser session — the rules are protected by the Reserved Orders admin password.</span>
         </div>
         <div id="boe-rules-root"></div>
+      </div>
+    </section>
+
+    <section class="admin-panel" id="panel-notifications" hidden>
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Notifications</h2>
+          <span class="admin-section-tag">Custom messages to employees</span>
+        </div>
+        <p class="admin-lead">
+          Send a free-text notification to employees — not a BO condition. It appears instantly in
+          <b>Reserved Orders</b> on the employee's Messages page. Send it to <b>all employees</b> or pick
+          specific names. This is separate from <b>BO Error Condition</b>, which pushes order errors.
+        </p>
+        <div class="bo-notif-unlock" id="notif-unlock">
+          <label>Admin password
+            <input type="password" id="notif-pass" placeholder="Same password as Reserved Orders admin" autocomplete="current-password" />
+          </label>
+          <button type="button" class="btn-primary" id="notif-unlock-btn">Unlock Notifications</button>
+          <span class="hint" id="notif-unlock-note">Needed once per browser session — notifications are protected by the Reserved Orders admin password.</span>
+        </div>
+        <div id="notif-body" hidden>
+          <div class="notif-form">
+            <label>Title <span class="hint">(optional)</span>
+              <input type="text" id="notif-title" maxlength="120" placeholder="e.g. Meeting tomorrow" />
+            </label>
+            <label>Message
+              <textarea id="notif-message" rows="4" maxlength="2000" placeholder="Write the notification message…"></textarea>
+            </label>
+            <fieldset class="notif-audience">
+              <legend>Send to</legend>
+              <label class="notif-radio"><input type="radio" name="notif-audience" value="all" checked /> All employees</label>
+              <label class="notif-radio"><input type="radio" name="notif-audience" value="selected" /> Selected employees</label>
+              <div id="notif-staff" class="br-picks" hidden></div>
+            </fieldset>
+            <div class="bo-notif-unlock">
+              <button type="button" class="btn-primary" id="notif-send">Send notification</button>
+              <span class="hint" id="notif-result"></span>
+            </div>
+          </div>
+          <h3 style="margin:18px 0 8px">Sent notifications</h3>
+          <div id="notif-list"><p class="foot" style="margin:0">Loading…</p></div>
+        </div>
       </div>
     </section>
 
@@ -951,7 +998,7 @@
     if (boNotifLoaded) return;
     boNotifLoaded = true;
     const note = $("#bo-notif-unlock-note");
-    if (note) note.textContent = "Loading BO Notifications…";
+    if (note) note.textContent = "Loading BO Error Condition…";
     const script = document.createElement("script");
     script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261020bon1";
     script.onload = () => {
@@ -960,7 +1007,7 @@
     };
     script.onerror = () => {
       boNotifLoaded = false;
-      if (note) note.textContent = "Could not load the BO Notifications page. Check the connection and try again.";
+      if (note) note.textContent = "Could not load the BO Error Condition page. Check the connection and try again.";
     };
     document.body.appendChild(script);
   }
@@ -970,12 +1017,73 @@
     if (note && !boNotifLoaded) note.textContent = "Enter the Reserved Orders admin password, then Unlock — needed once per browser session.";
   }
 
+  let notifLoaded = false;
+  function notifPassword() { return sessionStorage.getItem("reserved-orders-admin-pass") || ""; }
+  function initNotificationsPanel() {
+    if (notifLoaded) return;
+    if (notifPassword()) { notifLoaded = true; showNotifBody(); return; }
+    const note = $("#notif-unlock-note");
+    if (note) note.textContent = "Enter the Reserved Orders admin password, then Unlock — needed once per browser session.";
+  }
+  function showNotifBody() {
+    const unlock = $("#notif-unlock");
+    const body = $("#notif-body");
+    if (unlock) unlock.hidden = true;
+    if (body) body.hidden = false;
+    loadNotifications();
+  }
+  async function notifApi(url, options) {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error("Wrong admin password — unlock again.");
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    return data;
+  }
+  async function loadNotifications() {
+    const list = $("#notif-list");
+    const staffBox = $("#notif-staff");
+    if (!list) return;
+    try {
+      const data = await notifApi("/api/reserved-orders/notifications?password=" + encodeURIComponent(notifPassword()));
+      const staff = data.staff || [];
+      if (staffBox && !staffBox.dataset.filled) {
+        staffBox.dataset.filled = "1";
+        staffBox.innerHTML = staff.length
+          ? staff.map((p) => `<label><input type="checkbox" value="${escapeHtml(p.recordId)}" />${escapeHtml(p.name)}</label>`).join("")
+          : '<p class="muted">No employees found.</p>';
+      }
+      const items = data.notifications || [];
+      list.innerHTML = items.length ? `<table><thead><tr><th>When</th><th>Notification</th><th>To</th><th>Seen by</th><th></th></tr></thead><tbody>${items.map((item) => {
+        const at = item.at ? new Date(item.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+        return `<tr><td>${escapeHtml(at)}</td><td>${item.title ? `<b>${escapeHtml(item.title)}</b><br>` : ""}${escapeHtml(item.message || "")}</td><td>${escapeHtml(item.audienceLabel || "All employees")}</td><td>${Number(item.seenCount) || 0}</td><td><button type="button" class="btn" data-notif-remove="${escapeHtml(item.id)}">Remove</button></td></tr>`;
+      }).join("")}</tbody></table>` : '<p class="foot" style="margin:0">No notifications sent yet.</p>';
+      list.querySelectorAll("[data-notif-remove]").forEach((btn) => btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await notifApi("/api/reserved-orders/notifications/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: notifPassword(), id: btn.dataset.notifRemove }),
+          });
+          loadNotifications();
+        } catch (err) {
+          const note = $("#notif-result");
+          if (note) note.textContent = err.message;
+          btn.disabled = false;
+        }
+      }));
+    } catch (err) {
+      list.innerHTML = `<p class="foot" style="margin:0">${escapeHtml(err.message || "Could not load notifications.")}</p>`;
+    }
+  }
+
   function showAdminPanel(which) {
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
     const gec = $("#panel-gec");
     const boNotif = $("#panel-bonotifications");
+    const notifPanel = $("#panel-notifications");
     const focusContact = which === "contact";
     const focusYtd = which === "ytd";
     if (focusContact || focusYtd) which = "uploads";
@@ -984,7 +1092,9 @@
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
     if (boNotif) boNotif.hidden = which !== "bonotifications";
+    if (notifPanel) notifPanel.hidden = which !== "notifications";
     if (which === "bonotifications") initBoNotifications();
+    if (which === "notifications") initNotificationsPanel();
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       const active = focusContact ? "contact" : (focusYtd ? "ytd" : which);
       btn.classList.toggle("active", btn.dataset.adminPanel === active);
@@ -1583,6 +1693,62 @@
   });
   const boNotifPass = $("#bo-notif-pass");
   if (boNotifPass) boNotifPass.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); boNotifUnlockBtn.click(); } });
+  const notifUnlockBtn = $("#notif-unlock-btn");
+  if (notifUnlockBtn) notifUnlockBtn.addEventListener("click", async () => {
+    const pass = ($("#notif-pass") && $("#notif-pass").value || "").trim();
+    const note = $("#notif-unlock-note");
+    if (!pass) { if (note) note.textContent = "Enter the admin password first."; return; }
+    if (note) note.textContent = "Checking password…";
+    try {
+      const res = await fetch("/api/reserved-orders/notifications?password=" + encodeURIComponent(pass));
+      if (res.status === 401) { if (note) note.textContent = "Wrong admin password — notifications were not unlocked."; return; }
+      if (!res.ok) throw new Error("check failed");
+    } catch (err) { if (note) note.textContent = "Could not check the password. Try again."; return; }
+    sessionStorage.setItem("reserved-orders-admin-pass", pass);
+    notifLoaded = true;
+    showNotifBody();
+  });
+  const notifPass = $("#notif-pass");
+  if (notifPass && notifUnlockBtn) notifPass.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); notifUnlockBtn.click(); } });
+  document.querySelectorAll('input[name="notif-audience"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const box = $("#notif-staff");
+      const checked = document.querySelector('input[name="notif-audience"]:checked');
+      if (box) box.hidden = !checked || checked.value !== "selected";
+    });
+  });
+  const notifSend = $("#notif-send");
+  if (notifSend) notifSend.addEventListener("click", async () => {
+    const result = $("#notif-result");
+    const message = ($("#notif-message") && $("#notif-message").value || "").trim();
+    if (!message) { if (result) result.textContent = "Write the notification message first."; return; }
+    const selected = (document.querySelector('input[name="notif-audience"]:checked') || {}).value === "selected";
+    const recordIds = selected
+      ? [...document.querySelectorAll("#notif-staff input:checked")].map((input) => input.value).filter(Boolean)
+      : [];
+    if (selected && !recordIds.length) { if (result) result.textContent = "Pick at least one employee, or send to all employees."; return; }
+    notifSend.disabled = true;
+    if (result) result.textContent = "Sending…";
+    try {
+      await notifApi("/api/reserved-orders/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: notifPassword(),
+          title: ($("#notif-title") && $("#notif-title").value || "").trim(),
+          message,
+          recordIds,
+        }),
+      });
+      if ($("#notif-title")) $("#notif-title").value = "";
+      if ($("#notif-message")) $("#notif-message").value = "";
+      if (result) result.textContent = "Notification sent — employees see it now in Reserved Orders.";
+      loadNotifications();
+    } catch (err) {
+      if (result) result.textContent = err.message || "Notification was not sent.";
+    }
+    notifSend.disabled = false;
+  });
   $("#target-search").addEventListener("input", (e) => {
     targetSearch = e.target.value;
     renderTargetsPanel();

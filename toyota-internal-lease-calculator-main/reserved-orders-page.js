@@ -1192,6 +1192,38 @@
         boAlerts = data.alerts || [];
         paintMessageCenter();
         paintOrderErrors();
+        paintEmpNotifications();
+    }
+    async function paintEmpNotifications() {
+        const box = $('emp-notifications');
+        const session = readSession();
+        if (!box || !session) return;
+        try {
+            const res = await fetch('/api/reserved-orders/my-notifications?token=' + encodeURIComponent(session.token));
+            if (!res.ok) return;
+            const data = await res.json();
+            const items = data.notifications || [];
+            box.hidden = !items.length;
+            if (!items.length) { box.innerHTML = ''; return; }
+            box.innerHTML = items.map((item) => {
+                const at = item.at ? new Date(item.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                return `<article class="emp-notif${item.seen ? ' is-seen' : ''}">
+                    <div class="emp-notif-head"><b>${esc(item.title || 'Notification from admin')}</b><span>${esc(at)}</span></div>
+                    <p>${esc(item.message || '')}</p>
+                    ${item.seen ? '' : `<button type="button" data-notif-seen="${esc(item.id)}">Mark as read</button>`}
+                </article>`;
+            }).join('');
+            box.querySelectorAll('[data-notif-seen]').forEach((button) => button.addEventListener('click', async () => {
+                const current = readSession();
+                if (!current) return;
+                await fetch('/api/reserved-orders/my-notifications/seen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: current.token, id: button.dataset.notifSeen })
+                });
+                paintEmpNotifications();
+            }));
+        } catch (e) { /* notifications stay hidden offline */ }
     }
     async function markAlert(ruleId, status, boNumber) {
         const session = readSession();

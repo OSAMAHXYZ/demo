@@ -697,6 +697,15 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 .my-alerts:empty { display: none; }
 .my-alert { background: #fff; border: 1px solid #fecaca; border-left: 4px solid var(--red); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
 .my-alert h3 { margin: 0 0 6px; }
+.emp-notifications { display: grid; gap: 8px; margin-bottom: 12px; }
+.emp-notifications[hidden] { display: none; }
+.emp-notif { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid var(--warn); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; }
+.emp-notif.is-seen { background: #fff; border-color: var(--line); border-left-color: var(--line); opacity: 0.75; }
+.emp-notif-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.emp-notif-head b { font-size: 14px; }
+.emp-notif-head span { color: var(--muted); font-size: 12px; }
+.emp-notif p { margin: 0; font-size: 13px; color: #334155; white-space: pre-wrap; word-break: break-word; }
+.emp-notif button { justify-self: start; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 700; }
 .oe-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--red); color: #fff; font-size: 11px; font-weight: 800; vertical-align: middle; }
 .oe-badge[hidden] { display: none; }
 .order-errors { display: grid; gap: 12px; }
