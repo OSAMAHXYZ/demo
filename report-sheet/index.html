@@ -37,6 +37,7 @@
   <link rel="stylesheet" href="sales-cockpit.css?v=20261013boe2" />
   <link rel="stylesheet" href="alloc-tower.css?v=20261019alloc7" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
+  <link rel="stylesheet" href="executive-skin.css?v=20261020ex2" />
   <style>
     body.delivery-mode .app-frame {
       display: flex !important;
@@ -1476,16 +1477,14 @@
       <div class="panel-section" id="panel-boallocstock" style="display:none">
         <div class="bo-empty card bas-empty" id="bas-empty">
           <div class="bas-empty-icon" aria-hidden="true"></div>
-          <h2>Allocation Control Tower</h2>
+          <h2>Matched Vehicles</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Compare E-Sales allocation against back orders, stock, and RTL collection — one page for management.
+            Confirmed back orders matched to RTL and E-Sales stock by product, suffix and paired colours.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
-            <li>Set allocation numbers in <a href="admin.html">Admin</a> → tab <b>3 · Allocation Plan</b></li>
-            <li>Upload slot <b>1 · Back Order</b> for BO counts</li>
-            <li>Upload slot <b>2 · RTL Stock</b> for monthly collection tracker (Col J age)</li>
+            <li>Upload slot <b>1 · Back Order</b></li>
+            <li>Upload slot <b>2 · RTL Stock</b> and/or <b>3 · Stock Central</b></li>
             <li>Upload <b>Sales Raw</b> for Delivered / Proforma status on matched VINs</li>
-            <li>Optionally upload <b>Stock Central</b> for stock column in gap tables</li>
             <li>Click <b>Push to live</b> · return here · <b>Refresh</b></li>
           </ol>
         </div>
@@ -1498,8 +1497,8 @@
             </div>
               <div>
                 <p class="act-eyebrow">Toyota · ALJ Motors</p>
-                <h2 class="act-title">Allocation Control Tower</h2>
-                <p class="act-sub">BO Demand · Allocation · RTL Stock · Collection · Plan Performance</p>
+                <h2 class="act-title">Matched Vehicles</h2>
+                <p class="act-sub">Confirmed back orders · RTL then E-Sales stock · paired colours · live sales status</p>
           </div>
             </div>
             <div class="act-header-actions">
@@ -1534,354 +1533,13 @@
             <select id="bas-f-product"><option value="">All products</option></select>
             <select id="bas-f-sfx-top"><option value="">All suffixes</option></select>
             <select id="bas-f-seg"><option value="">All segments</option></select>
-            <select id="bas-f-status">
-              <option value="">All allocation status</option>
-              <option value="above">Above (allocation &gt; BO)</option>
-              <option value="below">Below (BO &gt; allocation)</option>
-              <option value="match">On track (equal)</option>
-            </select>
-            <input id="bas-search" type="search" placeholder="Search product / SFX / VIN / segment…" />
-            <label class="bas-filter-label" for="bas-search-area-desc">Search Area Desc
-              <input id="bas-search-area-desc" type="text" value="Retail Electronic Sales" readonly tabindex="-1" title="Only Retail Electronic Sales is read from Search Area Desc" />
-            </label>
             <button type="button" id="bas-clear-filters" class="btn">Clear filters</button>
           </div>
 
-          <div class="bo-kpis bas-kpi-row act-kpi-row" id="bas-kpis"></div>
-
-          <div class="act-charts">
-          <div class="act-main-grid">
-            <article class="card act-card act-hero-bars act-supply-card">
-              <div class="pbi-viz-head act-supply-head">
-                <div>
-                  <h2>Supply Gap by Product</h2>
-                  <span class="hint">Where customer demand exceeds available and allocated vehicles</span>
-                </div>
-                <div class="act-supply-tools">
-                  <label class="act-sort-lab">Sort
-                    <select id="act-sort-gap">
-                      <option value="gap" selected>Biggest Gap</option>
-                      <option value="bo">Highest Back Orders</option>
-                      <option value="stock">Highest Stock</option>
-                      <option value="lowcov">Lowest Coverage</option>
-                      <option value="bestcov">Best Coverage</option>
-                    </select>
-                  </label>
-                  <button type="button" class="btn act-supply-viewall" id="act-supply-viewall" hidden>View all</button>
-                </div>
-              </div>
-              <div class="act-supply-layout">
-                <div class="act-supply-chart">
-                  <div class="chart-box act-chart-box act-chart-box--bars"><canvas id="chart-act-product-bars"></canvas></div>
-                </div>
-                <aside class="act-supply-insight" id="act-supply-insight" aria-live="polite"></aside>
-              </div>
-              <div class="act-supply-rest" id="act-supply-rest" hidden></div>
-            </article>
-
-            <article class="card act-card act-hero-quad">
-              <div class="pbi-viz-head">
-                <h2>Demand vs Allocation Health</h2>
-                <span class="hint">X = Allocation ÷ BO · Y = BO demand · size = stock</span>
-              </div>
-              <div class="chart-box act-chart-box act-chart-box--quad"><canvas id="chart-act-health"></canvas></div>
-            </article>
-
-            <article class="card act-card act-hero-donut">
-              <div class="pbi-viz-head">
-                <h2>Allocation Status</h2>
-                <span class="hint">Suffix rows · live Excel</span>
-              </div>
-              <div class="chart-box act-chart-box act-chart-box--donut"><canvas id="chart-act-status"></canvas></div>
-              <div class="act-donut-mini" id="act-donut-mini"></div>
-            </article>
-          </div>
-
-          <div class="act-secondary-grid">
-            <article class="card act-card">
-              <div class="pbi-viz-head">
-                <h2>Daily RTL Collection vs Plan</h2>
-                <span class="hint">RES · plan pace vs daily arrivals</span>
-              </div>
-              <div class="act-daily-wrap">
-                <div class="chart-box act-chart-box act-chart-box--daily"><canvas id="chart-act-daily"></canvas></div>
-                <div class="act-daily-side" id="act-daily-side"></div>
-              </div>
-            </article>
-            <article class="card act-card">
-              <div class="pbi-viz-head">
-                <h2>Monthly RTL Collection</h2>
-                <span class="hint" id="act-monthly-hint">Active RTL file per calendar day</span>
-              </div>
-              <div class="chart-box act-chart-box act-chart-box--month"><canvas id="chart-act-monthly"></canvas></div>
-              <div class="act-monthly-kpis" id="act-monthly-kpis"></div>
-            </article>
-            <article class="card act-card">
-              <div class="pbi-viz-head">
-                <h2>Retail Electronic Sales</h2>
-                <span class="hint">All car types received · Search Area = Retail Electronic Sales</span>
-              </div>
-              <div class="act-res-kpis" id="act-res-kpis"></div>
-              <div class="act-res-chart-scroll">
-                <div class="chart-box act-chart-box act-chart-box--res" id="act-res-chart-box"><canvas id="chart-act-res-top"></canvas></div>
-              </div>
-            </article>
-          </div>
-
-          <div class="act-ops-grid">
-            <article class="card act-card">
-              <div class="pbi-viz-head"><h2>Top 10 Back Orders</h2></div>
-              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-bo"></canvas></div>
-              <ul class="act-top-fallback" id="act-top-fallback-bo"></ul>
-            </article>
-            <article class="card act-card">
-              <div class="pbi-viz-head"><h2>Top 10 Stock</h2></div>
-              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-stock"></canvas></div>
-              <ul class="act-top-fallback" id="act-top-fallback-stock"></ul>
-            </article>
-            <article class="card act-card">
-              <div class="pbi-viz-head"><h2>Top 10 Allocation Gaps</h2></div>
-              <div class="chart-box act-chart-box act-chart-box--top"><canvas id="chart-act-top-gap"></canvas></div>
-              <ul class="act-top-fallback" id="act-top-fallback-gap"></ul>
-            </article>
-          </div>
-          </div>
-
           <div class="act-details-block">
-            <article class="card act-card act-alerts-card">
-              <div class="pbi-viz-head">
-                <h2>Operational Alerts</h2>
-                <button type="button" class="pbi-expand" data-expand="act-alerts" id="act-alert-wide" title="Open full alerts table">Wide</button>
-              </div>
-              <div class="act-alert-tabs" id="act-alert-tabs" role="tablist">
-                <button type="button" class="act-alert-tab active" data-act-alert="shortfall">Shortfall</button>
-                <button type="button" class="act-alert-tab" data-act-alert="surplus">Surplus</button>
-                <button type="button" class="act-alert-tab" data-act-alert="late">RTL Free</button>
-              </div>
-              <div class="table-wrap act-alert-table" id="act-alert-table"></div>
-            </article>
-
-          <details class="card bas-section-card bas-section-all" open>
-            <summary class="bas-section-head">
-              <div class="bas-section-head-inner">
-              <span class="bas-section-badge">1</span>
-              <div class="pbi-viz-head">
-                <h2>All back orders vs allocation</h2>
-                <span class="hint">Gap = BO − Allocation · exact product + suffix match</span>
-              </div>
-              <span class="bas-fold-chev" aria-hidden="true">▾</span>
-              </div>
-            </summary>
-            <div class="bas-section-body">
-            <div class="bo-toolbar bas-table-filters" id="bas-table-filters">
-              <label class="bas-filter-label" for="bas-f-car">Car
-                <select id="bas-f-car"><option value="">All cars</option></select>
-              </label>
-              <label class="bas-filter-label" for="bas-f-sfx">Suffix
-                <select id="bas-f-sfx"><option value="">All suffixes</option></select>
-              </label>
-              <button type="button" id="bas-table-clear" class="btn">Clear car / suffix</button>
-            </div>
-            <div class="bas-result-strip" id="bas-table-summary" aria-live="polite"></div>
-            <div class="table-wrap bas-table-wrap" id="bas-table"></div>
-            <p class="foot bas-foot" id="bas-foot"></p>
-            </div>
-        </details>
-
-          <details class="card bas-section-card bas-section-conf bas-conf-block" open>
-            <summary class="bas-section-head">
-              <div class="bas-section-head-inner">
-              <span class="bas-section-badge">2</span>
-              <div class="pbi-viz-head">
-                <h2>Confirmed back orders vs allocation</h2>
-                <span class="hint">Only confirmed / allocated BO rows</span>
-              </div>
-              <span class="bas-fold-chev" aria-hidden="true">▾</span>
-              </div>
-            </summary>
-            <div class="bas-section-body">
-            <div class="bo-toolbar bas-table-filters" id="bas-conf-table-filters">
-              <label class="bas-filter-label" for="bas-f-car-conf">Car
-                <select id="bas-f-car-conf"><option value="">All cars</option></select>
-              </label>
-              <label class="bas-filter-label" for="bas-f-sfx-conf">Suffix
-                <select id="bas-f-sfx-conf"><option value="">All suffixes</option></select>
-              </label>
-            </div>
-            <div class="bas-result-strip" id="bas-conf-table-summary" aria-live="polite"></div>
-            <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-conf-kpis"></div>
-            <div class="bo-insights bas-insights-panel bas-insights-nested" id="bas-conf-insights"></div>
-            <div class="table-wrap bas-table-wrap" id="bas-conf-table"></div>
-            <p class="foot bas-foot" id="bas-conf-foot"></p>
-            </div>
-          </details>
-
-          <details class="card bas-section-card bas-section-month bas-month-block" id="bas-month-section" open>
-            <summary class="bas-section-head">
-              <div class="bas-section-head-inner">
-              <span class="bas-section-badge is-teal">3</span>
-              <div class="pbi-viz-head">
-                <h2>Monthly RTL collection</h2>
-                <span class="hint" id="bas-month-hint">Same-day Allocation Date on each RTL day file · RES schedule · Sales Raw delivered / proforma · free stock · moved out</span>
-              </div>
-              <span class="bas-fold-chev" aria-hidden="true">▾</span>
-              </div>
-            </summary>
-            <div class="bas-section-body">
-            <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-month-kpis"></div>
-
-            <div class="bas-day-panel">
-              <p class="bas-day-panel-label">Daily · Tot = Col J age 0 (any area) · RES = Retail Electronic Sales with Allocation Date on that file day</p>
-              <div class="bas-day-strip-wrap">
-                <div class="bas-day-strip" id="bas-day-strip"></div>
-              </div>
-            </div>
-
-            <div class="bas-retail-panel" id="bas-retail-panel">
-              <div class="bas-retail-head">
-                <div class="bas-retail-title">
-                  <h3>Retail Electronic Sales</h3>
-                  <span class="hint">Today’s file · flags for new RES / moved out · delivery from Sales Raw</span>
-                </div>
-                <div class="bas-retail-total-card" id="bas-retail-total-card">
-                  <span class="bas-retail-total-lab">In file</span>
-                  <span class="bas-retail-total-val" id="bas-retail-total">0</span>
-                </div>
-              </div>
-              <div class="table-wrap bas-table-wrap" id="bas-retail-table"></div>
-              <p class="foot bas-foot" id="bas-retail-foot"></p>
-            </div>
-
-            <div class="bas-usage-panel" id="bas-usage-panel">
-              <div class="bas-retail-head">
-                <div class="bas-retail-title">
-                  <h3>Usage by car</h3>
-                  <span class="hint">Search Area Desc = Retail Electronic Sales only · Usage description DB = Damage · DS = Display</span>
-                </div>
-                <div class="bas-usage-totals">
-                  <div class="bas-retail-total-card">
-                    <span class="bas-retail-total-lab">Damage · DB</span>
-                    <span class="bas-retail-total-val" id="bas-usage-damage">0</span>
-                  </div>
-                  <div class="bas-retail-total-card">
-                    <span class="bas-retail-total-lab">Display · DS</span>
-                    <span class="bas-retail-total-val" id="bas-usage-display">0</span>
-                  </div>
-                </div>
-              </div>
-              <div class="table-wrap bas-table-wrap" id="bas-usage-table"></div>
-              <p class="foot bas-foot" id="bas-usage-foot"></p>
-            </div>
-
-            <div class="table-wrap bas-month-table-wrap bas-table-wrap" id="bas-month-table"></div>
-            <p class="foot bas-foot" id="bas-month-foot"></p>
-
-            <div class="bas-free-stock-panel" id="bas-free-stock-panel">
-              <div class="bas-retail-head">
-                <div class="bas-retail-title">
-                  <h3>Free stock</h3>
-                  <span class="hint">New RES VINs that could not be placed on a month day (no AG / age outside month)</span>
-                </div>
-                <div class="bas-retail-total-card" id="bas-free-stock-total-card">
-                  <span class="bas-retail-total-lab">Free stock</span>
-                  <span class="bas-retail-total-val" id="bas-free-stock-total">0</span>
-                </div>
-              </div>
-              <div class="table-wrap bas-table-wrap" id="bas-free-stock-table"></div>
-              <p class="foot bas-foot" id="bas-free-stock-foot"></p>
-            </div>
-
-            <div class="bas-mini-grid">
-              <div class="bas-mini-section bas-mini-ok">
-                <h3 class="bas-subhead">Age 0 · on schedule</h3>
-                <div class="table-wrap bas-table-wrap" id="bas-age0-table"></div>
-              </div>
-              <div class="bas-mini-section bas-mini-change">
-                <h3 class="bas-subhead">Moved out of RES</h3>
-                <div class="table-wrap bas-table-wrap" id="bas-res-change-table"></div>
-              </div>
-              <div class="bas-mini-section bas-mini-late">
-                <h3 class="bas-subhead">Late · still in RTL (age ≥ 1)</h3>
-                <div class="table-wrap bas-table-wrap" id="bas-late-table"></div>
-              </div>
-            </div>
-
-            <div class="bas-day-panel bas-day-panel-list">
-              <p class="bas-day-panel-label">Day-by-day · RES with Allocation Date on that file day · Sales Raw delivered / proforma · free stock · moved out · click a number for VINs</p>
-              <div class="bas-day-ops" id="bas-day-ops"></div>
-              <div class="bas-day-ops-detail" id="bas-day-ops-detail" hidden>
-                <div class="bas-retail-head">
-                  <div class="bas-retail-title">
-                    <h3 id="bas-day-ops-detail-title">VIN list</h3>
-                    <span class="hint" id="bas-day-ops-detail-hint"></span>
-                  </div>
-                  <button type="button" class="btn" id="bas-day-ops-detail-close">Close</button>
-                </div>
-                <div class="table-wrap bas-table-wrap" id="bas-day-ops-table"></div>
-              </div>
-              <div class="bas-day-sections" id="bas-day-sections" hidden></div>
-            </div>
-
-            <!-- Retail Electronic Sales VIN Movement / Reconciliation (VIN-level) -->
-            <div class="bas-res-move-panel" id="bas-res-move-panel">
-              <div class="bas-retail-head">
-                <div class="bas-retail-title">
-                  <h3>Retail Electronic Sales VIN Movement</h3>
-                  <span class="hint">Distinct VIN ledger · day RTL snapshots · Sales Raw proforma / invoice · click a KPI to filter</span>
-                </div>
-                <button type="button" class="btn" id="bas-res-move-export">Export Excel</button>
-              </div>
-              <div class="bo-kpis bas-kpi-row bas-kpi-row-compact" id="bas-res-move-kpis"></div>
-              <div class="bas-res-move-flow" id="bas-res-move-flow" aria-hidden="true"></div>
-              <div class="bas-res-move-recon" id="bas-res-move-recon"></div>
-              <div class="bas-res-move-grid">
-                <div class="bas-mini-section">
-                  <h3 class="bas-subhead">Transfer analysis</h3>
-                  <div class="table-wrap bas-table-wrap" id="bas-res-move-transfers"></div>
-                </div>
-                <div class="bas-mini-section">
-                  <h3 class="bas-subhead">Data quality</h3>
-                  <div id="bas-res-move-quality"></div>
-                </div>
-              </div>
-              <div class="bas-alloc-toolbar bas-res-move-toolbar">
-                <input type="search" id="bas-res-move-q" placeholder="Search VIN / product / area…" autocomplete="off" />
-                <select id="bas-res-move-f-move">
-                  <option value="">All classifications</option>
-                  <option value="CURRENT">Current RES</option>
-                  <option value="PREVIOUS / CARRYOVER">Previous / Carryover</option>
-                  <option value="NEW ALLOCATION">New Allocation</option>
-                  <option value="TRANSFER IN">Transfer IN</option>
-                  <option value="TRANSFER OUT">Transfer OUT</option>
-                  <option value="PROFORMA">Proforma</option>
-                  <option value="INVOICE">Invoice</option>
-                  <option value="PROFORMA + INVOICE">Proforma + Invoice</option>
-                  <option value="REMOVED / NOT FOUND IN SALES RAW">Removed / Not found</option>
-                </select>
-                <select id="bas-res-move-f-presence">
-                  <option value="">Current + Removed</option>
-                  <option value="current">Current in latest RTL</option>
-                  <option value="removed">Missing from latest RTL</option>
-                </select>
-                <select id="bas-res-move-f-sales">
-                  <option value="">All Sales Raw</option>
-                  <option value="found">Found in Sales Raw</option>
-                  <option value="notfound">Not found in Sales Raw</option>
-                  <option value="proforma">Has Proforma</option>
-                  <option value="invoice">Has Invoice</option>
-                </select>
-                <button type="button" class="btn" id="bas-res-move-clear">Clear filters</button>
-              </div>
-              <p class="foot bas-foot" id="bas-res-move-foot"></p>
-              <div class="table-wrap bas-table-wrap" id="bas-res-move-table"></div>
-            </div>
-            </div>
-          </details>
-
           <details class="card bas-section-card bas-section-alloc" id="bas-alloc-section" open>
             <summary class="bas-section-head">
               <div class="bas-section-head-inner">
-              <span class="bas-section-badge is-violet">4</span>
               <div class="pbi-viz-head">
                 <h2>Matched &amp; allocated vehicles</h2>
                 <span class="hint">RTL then E-Sales · paired colors · live status</span>
@@ -1935,17 +1593,6 @@
           </div>
         </div>
 
-        <aside class="act-drawer" id="act-drawer" aria-hidden="true" hidden>
-          <div class="act-drawer-head">
-            <div>
-              <h3 id="act-drawer-title">Product</h3>
-              <p class="foot" id="act-drawer-sub">Allocation drill-down</p>
-            </div>
-            <button type="button" class="act-drawer-close-btn" id="act-drawer-close" aria-label="Close product panel">Close</button>
-          </div>
-          <div class="act-drawer-body" id="act-drawer-body"></div>
-        </aside>
-        <div class="act-drawer-backdrop" id="act-drawer-backdrop" hidden></div>
       </div>
 
       <!-- PANEL: Stock & BO Dashboard -->
@@ -7815,81 +7462,15 @@
   }
 
   function exportBasDashboardExcel() {
-    const d = window._data || data();
-    const hasData = hasBackOrder() || hasStockFiles() || Object.values(allocationValues).some((v) => Number(v) > 0);
-    if (!hasData) {
-      setStatus("No Allocation / BO / Stock data to export", "err");
+    if (!hasBackOrder() || !hasStockFiles()) {
+      setStatus("No Back Order / Stock data to export", "err");
       return;
     }
-    const allBuilt = buildBasRows(d);
-    const confBuilt = buildBasRows(d, { confirmedOnly: true });
-    const allRows = filteredBasRows(allBuilt);
-    const confRows = filteredBasRows(confBuilt);
-
-    const totalAlloc = allRows.reduce((s, r) => s + r.allocation, 0);
-    const totalBo = allRows.reduce((s, r) => s + r.boCount, 0);
-    const totalStock = allRows.reduce((s, r) => s + r.stockCount, 0);
-    const totalGap = totalBo - totalAlloc;
-    const below = allRows.filter((r) => r.status === "below").length;
-    const above = allRows.filter((r) => r.status === "above").length;
-
-    const wb = XLSX.utils.book_new();
-    appendKpiSheet(wb, "KPIs", [
-      { label: "Total allocation", val: totalAlloc, sub: "E-Sales plan" },
-      { label: "Matched back orders", val: totalBo, sub: "Same product + suffix" },
-      { label: "Available stock", val: totalStock, sub: "RTL + Central" },
-      { label: "Overall gap", val: totalGap, sub: totalGap <= 0 ? "Allocation above BO" : "BO above allocation" },
-      { label: "Suffixes below plan", val: below, sub: `${above} above` },
-    ]);
-    appendObjectSheet(wb, "Gap Highlights", basGapHighlightRows(allRows, "BO"));
-    appendObjectSheet(wb, "1 All BO vs Allocation", basRowsToExcel(allRows));
-    appendObjectSheet(wb, "2 Confirmed BO vs Alloc", basRowsToExcel(confRows));
-    appendObjectSheet(wb, "2 Confirmed Gap Highlights", basGapHighlightRows(confRows, "Confirmed BO"));
-
-    if (slotHasRows("rtl") || (getCachedRtlActiveMonth(basMonthContext().monthKey))) {
-      const { ctx, rows, matched, mode } = buildBasMonthlyData();
-      const filteredRows = filteredBasMonthlyRows(rows);
-      const retailCars = buildRetailElectronicSalesCars(ctx, mode === "daily" ? getCachedRtlActiveMonth(ctx.monthKey) : null);
-      appendObjectSheet(wb, "3 Monthly Collection Plan", filteredRows.map((r) => ({
-        Seg: r.seg || "",
-        Product: r.product || "",
-        SFX: r.sfx || "",
-        Allocation: r.allocation,
-        MTD: r.mtd,
-        Gap: (r.allocation || 0) - (r.mtd || 0),
-      })));
-      appendObjectSheet(wb, "3 Retail Electronic Sales", retailCars.map((c) => ({
-        Product: c.product || "",
-        VIN: c.vin || "",
-        Suffix: c.suffix || "",
-        Age: c.age != null ? c.age : "",
-        "Collection Date": c.collectionLabel || "",
-        "Search Area": c.searchAreaDesc || "",
-        Location: c.location || "",
-      })));
-      appendObjectSheet(wb, "3 Age 0 Today", matched.filter((c) => c.isTodayArrival).map((c) => ({
-        Product: c.product || c.allocProduct || "",
-        VIN: c.vin || "",
-        Suffix: c.suffix || c.allocSfx || "",
-        Age: c.age != null ? c.age : 0,
-        "Search Area": c.searchAreaDesc || "",
-        Location: c.location || "",
-      })));
-      appendObjectSheet(wb, "3 Late in RTL", matched.filter((c) => c.isLate).map((c) => ({
-        Product: c.product || c.allocProduct || "",
-        VIN: c.vin || "",
-        Suffix: c.suffix || c.allocSfx || "",
-        Age: c.age != null ? c.age : "",
-        "Search Area": c.searchAreaDesc || "",
-        Location: c.location || "",
-      })));
-    }
-
     const allocList = filteredBasAllocatedRows(buildBasAllocatedVehicles());
-    appendObjectSheet(wb, "4 Matched Allocated Vehicles", matchedAllocRowsToExcel(allocList));
-
-    downloadWorkbook(wb, `BO-Allocation-Stock-${excelFileStamp()}`);
-    setStatus(`Allocation Excel exported · one sheet per section`, "ok");
+    const wb = XLSX.utils.book_new();
+    appendObjectSheet(wb, "Matched Vehicles", matchedAllocRowsToExcel(allocList));
+    downloadWorkbook(wb, `Matched-Vehicles-${excelFileStamp()}`);
+    setStatus(`Matched vehicles exported · ${formatNumber(allocList.length)} rows`, "ok");
   }
 
   function exportStockBoDashboardExcel() {
@@ -13690,7 +13271,8 @@
   function renderBoAllocStockDashboard(d) {
     const empty = $("#bas-empty");
     const dash = $("#bas-dash");
-    const hasData = hasBackOrder() || hasStockFiles() || Object.values(allocationValues).some((v) => Number(v) > 0);
+    // Matching needs back orders and at least one stock file
+    const hasData = hasBackOrder() && hasStockFiles();
     if (!hasData) {
       if (empty) empty.hidden = false;
       if (dash) dash.hidden = true;
@@ -13701,76 +13283,14 @@
 
     const stamp = $("#act-refresh-time");
     if (stamp) stamp.textContent = typeof iccLastRefreshLabel === "function" ? iccLastRefreshLabel() : "—";
-    if ($("#act-sort-gap")) {
-      const sel = $("#act-sort-gap");
-      const v = basView.sortGap || "gap";
-      sel.value = [...sel.options].some((o) => o.value === v) ? v : "gap";
-      if (sel.value !== v) basView.sortGap = sel.value;
-    }
 
+    // Plan rows only feed the Product / Suffix / Segment dropdowns
     const allRows = buildBasRows(d);
-    const confirmedAllRows = buildBasRows(d, { confirmedOnly: true });
     const segs = [...new Set(allRows.map((r) => r.seg))].sort();
     fillBoSelect("#bas-f-seg", new Set(segs), basView.seg, "All segments");
     syncBasCarSuffixSelects(allRows);
-    if ($("#bas-f-status")) $("#bas-f-status").value = basView.status || "";
-    if ($("#bas-search")) $("#bas-search").value = basView.search || "";
 
-    const rows = filteredBasRows(allRows);
-    const confirmedRows = filteredBasRows(confirmedAllRows);
-    const metrics = computeBasTowerMetrics(d, rows);
-    actTowerCache = Object.assign(metrics, { allRows });
-
-    renderBasKpis(rows, {
-      totalDemand: metrics.totalDemand,
-      lateRtl: metrics.lateRtl,
-      resReceived: metrics.resReceived,
-    });
-    renderBasTowerCharts(metrics);
-
-    const paintToken = (renderBoAllocStockDashboard.token = (renderBoAllocStockDashboard.token || 0) + 1);
-    const paintHeavy = () => {
-      if (paintToken !== renderBoAllocStockDashboard.token || activePanel !== "boallocstock") return;
-      renderBasTable(rows);
-      renderBasKpis(confirmedAllRows, {
-        kpiEl: "#bas-conf-kpis",
-        boLabel: "Confirmed back orders",
-        boSub: "Confirmed only · same product + suffix",
-        compact: true,
-      });
-      renderBasInsights(confirmedAllRows, {
-        insightEl: "#bas-conf-insights",
-        boWord: "Confirmed BO",
-      });
-      renderBasTable(confirmedRows, {
-        tableEl: "#bas-conf-table",
-        footEl: "#bas-conf-foot",
-        summaryEl: "#bas-conf-table-summary",
-        boColHeader: "Confirmed BO",
-      });
-      renderBasMonthlyCollection(d);
-      renderBasAllocatedVehicles(d);
-    };
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(paintHeavy));
-    else paintHeavy();
-
-    // Load one active RTL file per calendar day, then refresh schedule + late KPIs.
-    // A full Refresh clears this cache first, so a new day file is still picked up.
-    const monthKey = basMonthContext().monthKey;
-    const sourceData = d;
-    ensureRtlActiveMonth(monthKey, false).then((pack) => {
-      if (!pack || activePanel !== "boallocstock" || window._data !== sourceData) return;
-      const nextRows = filteredBasRows(allRows);
-      const nextMetrics = computeBasTowerMetrics(sourceData, nextRows);
-      actTowerCache = Object.assign(nextMetrics, { allRows });
-      renderBasKpis(nextRows, {
-        totalDemand: nextMetrics.totalDemand,
-        lateRtl: nextMetrics.lateRtl,
-        resReceived: nextMetrics.resReceived,
-      });
-      renderBasTowerCharts(nextMetrics);
-      if (paintToken === renderBoAllocStockDashboard.token) renderBasMonthlyCollection(sourceData);
-    });
+    renderBasAllocatedVehicles(d);
   }
 
   function basMonthContext(refDate) {
@@ -23685,5 +23205,6 @@
   }
 })();
 </script>
+<script src="executive-present.js?v=20261019ex1"></script>
 </body>
 </html>
