@@ -761,13 +761,79 @@
         const center = $('mc-center');
         const board = $('order-board');
         const marketing = $('marketing-board');
-        if (center) center.classList.toggle('hidden', name === 'orders' || name === 'marketing');
+        const errors = $('order-errors');
+        if (center) center.classList.toggle('hidden', name === 'orders' || name === 'marketing' || name === 'errors');
         if (board) board.classList.toggle('hidden', name !== 'orders');
         if (marketing) marketing.classList.toggle('hidden', name !== 'marketing');
+        if (errors) errors.classList.toggle('hidden', name !== 'errors');
         document.querySelectorAll('#app .jump button').forEach((button) => button.classList.toggle('nav-on', button.dataset.view === name));
         if (name === 'message') loadAlertRules().then(paintMessageAlerts);
         if (name === 'inbox') paintMyAlerts();
+        if (name === 'errors') paintMyAlerts();
         if (name === 'marketing') loadMyMarketing();
+    }
+    function oeStatusLabel(order) {
+        const status = (order && order.status) || 'new';
+        if (status === 'completed') return { label: 'Done', cls: 'is-sent' };
+        if (status === 'in_progress') return { label: 'In progress', cls: 'is-progress' };
+        if (status === 'viewed') return { label: 'Viewed', cls: 'is-viewed' };
+        return { label: 'Needs action', cls: '' };
+    }
+    function paintOrderErrorBadge() {
+        const badge = $('oe-badge');
+        if (!badge) return;
+        const open = boAlerts.reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') === 'new').length, 0);
+        badge.hidden = !open;
+        badge.textContent = open ? String(open) : '';
+    }
+    function paintOrderErrors() {
+        const list = $('oe-list');
+        const summary = $('oe-summary');
+        if (!list) return;
+        paintOrderErrorBadge();
+        const items = boAlerts || [];
+        const totalOrders = items.reduce((sum, item) => sum + (item.orders || []).length, 0);
+        const openOrders = items.reduce((sum, item) => sum + (item.orders || []).filter((order) => (order.status || 'new') !== 'completed').length, 0);
+        if (summary) {
+            summary.innerHTML = `
+            <article class="is-need"><span>Error types pushed to you</span><strong>${items.length}</strong></article>
+            <article class="is-soon"><span>Your orders with errors</span><strong>${totalOrders}</strong></article>
+            <article class="is-sent"><span>Still open</span><strong>${openOrders}</strong></article>`;
+        }
+        if (!items.length) {
+            list.innerHTML = '<p class="mc-empty">No order errors were pushed to you. When admin pushes an error for one of your orders, it appears here.</p>';
+            return;
+        }
+        list.innerHTML = items.map((item) => {
+            const orders = item.orders || [];
+            const allDone = orders.length > 0 && orders.every((order) => (order.status || 'new') === 'completed');
+            const rows = orders.map((order) => {
+                const state = oeStatusLabel(order);
+                const wrong = order.currentValue != null && order.currentValue !== '' ? order.currentValue : (order.incorrectValue || 'blank');
+                return `<tr>
+                    <td><b>${esc(order.boNumber || '—')}</b></td>
+                    <td>${esc(order.product || item.product || '—')}</td>
+                    <td>${esc(order.orderDate || '—')}</td>
+                    <td>${esc(item.column || order.column || '—')}: <b>${esc(wrong)}</b></td>
+                    <td><span class="oe-status ${state.cls}">${state.label}</span></td>
+                </tr>`;
+            }).join('');
+            return `<article class="oe-card${allDone ? ' is-done' : ''}">
+                <div class="oe-card-head">
+                    <h2>${esc(item.name || 'Order error')}</h2>
+                    <span class="oe-status ${allDone ? 'is-sent' : ''}">${orders.length} order${orders.length === 1 ? '' : 's'}</span>
+                </div>
+                <p class="oe-what">In <b>${esc(item.column || 'the BO file')}</b>, the value <b>${esc(item.incorrectValue || 'blank')}</b> is wrong${item.correctValue ? ` — it should be <span class="oe-fix">${esc(item.correctValue)}</span>` : ''}.${item.product ? ` Car: ${esc(item.product)}.` : ''}</p>
+                ${item.message ? `<div class="oe-msg">${esc(item.message)}</div>` : ''}
+                <div style="overflow:auto;"><table class="oe-table"><thead><tr><th>Order number</th><th>Car</th><th>Order date</th><th>What is wrong</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No orders listed.</td></tr>'}</tbody></table></div>
+                <div class="oe-actions">
+                    ${allDone ? '' : `<button type="button" data-oe-viewed="${esc(item.ruleId)}">Mark as viewed</button>`}
+                    <button type="button" data-oe-open="${esc(item.ruleId)}">Open in Messages</button>
+                </div>
+            </article>`;
+        }).join('');
+        list.querySelectorAll('[data-oe-viewed]').forEach((button) => button.addEventListener('click', () => markAlert(button.dataset.oeViewed, 'viewed', '')));
+        list.querySelectorAll('[data-oe-open]').forEach((button) => button.addEventListener('click', () => showView('inbox')));
     }
     let marketingHit = null;
     function paintMarketing(order) {
@@ -1125,6 +1191,7 @@
         const data = await res.json();
         boAlerts = data.alerts || [];
         paintMessageCenter();
+        paintOrderErrors();
     }
     async function markAlert(ruleId, status, boNumber) {
         const session = readSession();

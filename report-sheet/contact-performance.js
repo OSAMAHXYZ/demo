@@ -86,6 +86,7 @@
         </div>
       </header>
       <div class="cp-banner" id="cp-stale" hidden></div>
+      <div class="cp-banner wait" id="cp-warnings" hidden></div>
       <div class="cp-filters" id="cp-filters"></div>
       <div class="cp-chips" id="cp-chips"></div>
       <div class="cp-kpis" id="cp-kpis"></div>
@@ -182,6 +183,7 @@
       state.periods = meta.periods || [];
       state.activeId = meta.activeId || "";
       state.diagnostic = meta.diagnostic || null;
+      state.lastError = meta.lastError || null;
       return meta;
     }
 
@@ -247,14 +249,25 @@
       const sub = host.querySelector("#cp-sub");
       const fresh = host.querySelector("#cp-fresh");
       if (summary.empty) {
-        sub.textContent = missingMessage();
+        const lastError = state.lastError || (state.diagnostic && state.diagnostic.lastError);
+        sub.textContent = lastError ? `Last import failed ${stamp(lastError.at)}: ${lastError.message}` : missingMessage();
         fresh.className = "cp-pill";
         fresh.innerHTML = "<i></i><span>Not published</span>";
       } else {
         const historical = summary.publicationId && state.activeId && summary.publicationId !== state.activeId;
-        sub.textContent = `${periodLabel(summary.period)} · ${summary.contactFile || "Contact file"} + ${summary.crmFile || "CRM file"} · Last updated ${stamp(summary.publishedAt)}`;
+        const counts = summary.counts || {};
+        const countText = counts.crmUnique != null
+          ? ` · ${fmt(counts.crmUnique)} CRM leads · ${fmt(counts.contactUnique)} contact records · ${fmt(counts.matched)} matched`
+          : "";
+        sub.textContent = `${periodLabel(summary.period)} · ${summary.contactFile || "Contact file"} + ${summary.crmFile || "CRM file"} · Last push ${stamp(summary.publishedAt)}${countText}`;
         fresh.className = historical ? "cp-pill is-historical" : "cp-pill";
         fresh.innerHTML = `<i></i><span>${historical ? "Historical snapshot" : "Published"} · ${esc(stamp(summary.publishedAt))}</span>`;
+      }
+      const warnBox = host.querySelector("#cp-warnings");
+      if (warnBox) {
+        const warnings = summary.warnings || [];
+        warnBox.hidden = !warnings.length;
+        warnBox.textContent = warnings.length ? `Import warnings: ${warnings.join(" ")}` : "";
       }
       renderFilters();
       renderChips();
@@ -770,6 +783,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ period, publishedBy: "Administrator", contactFile, crmFile }),
       });
+      if (preview.duplicate) {
+        host.querySelectorAll(".slot-draft").forEach((el) => el.remove());
+        note.textContent = "";
+        return { ok: true, message: "Same contact file and CRM export are already live for " + periodLabel(period) + " — no duplicate snapshot created." };
+      }
       await getJson("/api/contact-performance/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

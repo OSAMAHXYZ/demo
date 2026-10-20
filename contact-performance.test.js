@@ -232,11 +232,13 @@ async function main() {
   const metaBefore = await call('GET', '/api/contact-performance/meta');
   assert(!metaBefore.data.activeId, 'failed validation left no active dataset');
 
+  const contactBuf = contactFile();
+  const crmBuf = crmCsv();
   const preview = await call('POST', '/api/contact-performance/preview', {
     period: '2026-10',
     publishedBy: 'Admin',
-    contactFile: { name: 'contacts.xlsx', base64: contactFile().toString('base64') },
-    crmFile: { name: 'crm.txt', base64: crmCsv().toString('base64') },
+    contactFile: { name: 'contacts.xlsx', base64: contactBuf.toString('base64') },
+    crmFile: { name: 'crm.txt', base64: crmBuf.toString('base64') },
   }, true);
   assert(preview.status === 200 && preview.data.draftId, preview.data.error || 'preview failed');
   const stillEmpty = await call('GET', '/api/contact-performance/summary');
@@ -246,6 +248,20 @@ async function main() {
   const live = await call('GET', '/api/contact-performance/summary');
   assert(live.data.kpis.matched === 4, 'dashboard reads published data');
   assert(live.data.employees.every((row) => row.ach == null), 'no invented ACH');
+  assert(live.data.counts && live.data.counts.crmUnique === 5 && live.data.counts.matched === 4, 'summary carries push record counts');
+  assert(Array.isArray(live.data.warnings), 'summary carries import warnings');
+
+  assert(api.contentHash(Buffer.from('a'), Buffer.from('b')) === api.contentHash(Buffer.from('a'), Buffer.from('b')), 'content hash is stable');
+  assert(api.contentHash(Buffer.from('a'), Buffer.from('b')) !== api.contentHash(Buffer.from('a'), Buffer.from('c')), 'content hash changes with the CRM file');
+
+  const repeat = await call('POST', '/api/contact-performance/preview', {
+    period: '2026-10',
+    contactFile: { name: 'contacts.xlsx', base64: contactBuf.toString('base64') },
+    crmFile: { name: 'crm.txt', base64: crmBuf.toString('base64') },
+  }, true);
+  assert(repeat.status === 200 && repeat.data.duplicate === true, 'repeat push of the same files is a duplicate');
+  const metaAfterRepeat = await call('GET', '/api/contact-performance/meta');
+  assert(metaAfterRepeat.data.counts && metaAfterRepeat.data.counts.matched === 4, 'meta carries push record counts');
 
   const second = await call('POST', '/api/contact-performance/preview', {
     period: '2026-11',

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
+  <link rel="stylesheet" href="bo-notifications.css?v=20261020bon1" />
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261008lead"></script>
@@ -183,6 +184,10 @@
           <span class="side-nav-icon" aria-hidden="true">◎</span>
           <span class="side-nav-label">GEC Control</span>
         </button>
+        <button type="button" class="tab side-nav-item" data-admin-panel="bonotifications" id="tab-bonotifications">
+          <span class="side-nav-icon" aria-hidden="true">⚠</span>
+          <span class="side-nav-label">BO Notifications</span>
+        </button>
         <button type="button" class="tab side-nav-item" data-admin-panel="contact" id="tab-contact">
           <span class="side-nav-icon" aria-hidden="true">☎</span>
           <span class="side-nav-label">CRM &amp; Contact</span>
@@ -275,17 +280,23 @@
           <h2>YTD sales</h2>
           <span class="admin-section-tag">YTD Sales dashboard</span>
         </div>
-        <p class="admin-lead">Drop the YTD sales file here, then click <b>Push to live</b>. The Salesman Performance sheet fills the YTD Sales dashboard.</p>
+        <p class="admin-lead">Push YTD data <b>one month at a time</b>: choose the month, drop that month's YTD sales file (Salesman Performance), then click <b>Push to live</b>. Only the chosen month is replaced — other months stay as they are. The YTD Sales dashboard reads these pushed months; there is no upload on the dashboard.</p>
+        <div class="bo-notif-unlock">
+          <label>Month
+            <input type="month" id="ytd-month" aria-label="YTD month" />
+          </label>
+        </div>
         <section class="grid-5">
           <label class="slot" id="ytd-slot">
             <input id="ytd-sales-file" type="file" accept=".xlsx,.xls,.xlsm,.csv" />
             <div class="n">Y</div>
-            <h3>YTD sales</h3>
+            <h3>YTD sales · one month</h3>
             <p class="ar">Salesman Performance</p>
-            <span class="meta" id="ytd-sales-meta">Drop or click · .xlsx / .xls</span>
+            <span class="meta" id="ytd-sales-meta">Choose the month, then drop or click · .xlsx / .xls</span>
           </label>
         </section>
         <p class="hint" id="ytd-sales-result"></p>
+        <div id="ytd-months-list"><p class="foot" style="margin:0">Loading pushed months…</p></div>
       </div>
     </section>
 
@@ -389,6 +400,30 @@
       </div>
     </section>
 
+    <section class="admin-panel" id="panel-bonotifications" hidden>
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>BO Notifications</h2>
+          <span class="admin-section-tag">Order errors pushed to employees</span>
+        </div>
+        <p class="admin-lead">
+          Same conditions as the BO error rules in Reserved Orders admin. Put any condition on the current
+          <b>Back Order</b> file, <b>Test</b> it to see the errors per employee, then <b>Push</b> the rule.
+          Each employee then sees only <b>his own</b> error orders — and what the error is — under
+          <b>Order Errors</b> in Reserved Orders. Pushing here is per rule (the Push button inside the rule);
+          it does not need the Admin Push of Excel files.
+        </p>
+        <div class="bo-notif-unlock" id="bo-notif-unlock">
+          <label>Admin password
+            <input type="password" id="bo-notif-pass" placeholder="Same password as Reserved Orders admin" autocomplete="current-password" />
+          </label>
+          <button type="button" class="btn-primary" id="bo-notif-unlock-btn">Unlock BO Notifications</button>
+          <span class="hint" id="bo-notif-unlock-note">Needed once per browser session — the rules are protected by the Reserved Orders admin password.</span>
+        </div>
+        <div id="boe-rules-root"></div>
+      </div>
+    </section>
+
     <footer class="page-foot">Admin only · Push updates all live dashboards · <a href="index.html">Open live report</a></footer>
   </div>
       </div>
@@ -440,6 +475,7 @@
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Optional · visitor log · Date · Promoter (emp. no. or name) · Visit Purpose · optional Count · no personal info" },
     { id: "lexusB2c", n: 9, title: "Lexus B2C", ar: "لكزس · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Lexus Controller & Lexus Tracker" },
     { id: "toyotaB2c", n: 10, title: "Toyota B2C", ar: "تويوتا · طلبات الأفراد", blurb: "Sheet “Details” · Order No + Status · each Push adds new orders & updates existing ones (nothing is removed) · feeds the Toyota B2C Controller & B2C Tracker" },
+    { id: "reserved", n: 11, title: "Reserved File", ar: "الملف المحجوز", blurb: "Sheet E-Sales المحجوز (or first sheet) · order Col F · VIN Col L · product Col I · feeds Reserved Vehicles · replaces the reserved sheet inside Stock E-Sales when both are pushed" },
   ];
   const B2C_SLOTS = [
     { id: "lexusB2c", label: "Lexus B2C" },
@@ -910,11 +946,36 @@
     try { await Store.clearAdminDraft(); } catch { /* ignore */ }
   }
 
+  let boNotifLoaded = false;
+  function loadBoNotificationsUi() {
+    if (boNotifLoaded) return;
+    boNotifLoaded = true;
+    const note = $("#bo-notif-unlock-note");
+    if (note) note.textContent = "Loading BO Notifications…";
+    const script = document.createElement("script");
+    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261020bon1";
+    script.onload = () => {
+      const unlock = $("#bo-notif-unlock");
+      if (unlock) unlock.hidden = true;
+    };
+    script.onerror = () => {
+      boNotifLoaded = false;
+      if (note) note.textContent = "Could not load the BO Notifications page. Check the connection and try again.";
+    };
+    document.body.appendChild(script);
+  }
+  function initBoNotifications() {
+    if (sessionStorage.getItem("reserved-orders-admin-pass")) { loadBoNotificationsUi(); return; }
+    const note = $("#bo-notif-unlock-note");
+    if (note && !boNotifLoaded) note.textContent = "Enter the Reserved Orders admin password, then Unlock — needed once per browser session.";
+  }
+
   function showAdminPanel(which) {
     const uploads = $("#panel-uploads");
     const targets = $("#panel-targets");
     const allocation = $("#panel-allocation");
     const gec = $("#panel-gec");
+    const boNotif = $("#panel-bonotifications");
     const focusContact = which === "contact";
     const focusYtd = which === "ytd";
     if (focusContact || focusYtd) which = "uploads";
@@ -922,6 +983,8 @@
     targets.hidden = which !== "targets";
     if (allocation) allocation.hidden = which !== "allocation";
     if (gec) gec.hidden = which !== "gec";
+    if (boNotif) boNotif.hidden = which !== "bonotifications";
+    if (which === "bonotifications") initBoNotifications();
     document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
       const active = focusContact ? "contact" : (focusYtd ? "ytd" : which);
       btn.classList.toggle("active", btn.dataset.adminPanel === active);
@@ -938,6 +1001,7 @@
     if (focusYtd) {
       const card = document.getElementById("ytd-sales-files");
       if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      loadYtdMonthsList();
     }
   }
 
@@ -1129,14 +1193,60 @@
 
   let ytdSalesFile = null;
 
+  function ytdSelectedMonth() {
+    const input = document.getElementById("ytd-month");
+    return input && /^\d{4}-(0[1-9]|1[0-2])$/.test(input.value || "") ? input.value : "";
+  }
+
   function paintYtdSales() {
     const slot = document.getElementById("ytd-slot");
     const meta = document.getElementById("ytd-sales-meta");
     if (!slot || !meta) return;
     slot.classList.toggle("loaded", !!ytdSalesFile);
+    const month = ytdSelectedMonth();
     meta.innerHTML = ytdSalesFile
-      ? `<b>${escapeHtml(ytdSalesFile.name)}</b><br>${formatBytes(ytdSalesFile.size)} <span class="pill slot-draft">Draft · not live</span>`
-      : "Drop or click · .xlsx / .xls";
+      ? `<b>${escapeHtml(ytdSalesFile.name)}</b><br>${formatBytes(ytdSalesFile.size)}${month ? ` · for <b>${escapeHtml(month)}</b>` : ""} <span class="pill slot-draft">Draft · not live</span>`
+      : "Choose the month, then drop or click · .xlsx / .xls";
+  }
+
+  async function loadYtdMonthsList() {
+    const box = document.getElementById("ytd-months-list");
+    if (!box) return;
+    try {
+      const res = await fetch("/api/report-sheet/ytd-months", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const months = (data && data.months) || {};
+      const keys = Object.keys(months).sort();
+      if (!keys.length) {
+        box.innerHTML = '<p class="foot" style="margin:0">No YTD months pushed yet. Choose a month, drop its file, then Push to live.</p>';
+        return;
+      }
+      box.innerHTML = `<table class="br-table"><thead><tr><th>Month</th><th>Employees</th><th>File</th><th>Pushed</th><th></th></tr></thead><tbody>${keys.map((key) => {
+        const entry = months[key] || {};
+        const at = entry.at ? new Date(entry.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+        return `<tr><td><b>${escapeHtml(key)}</b></td><td>${(entry.employees || []).length}</td><td>${escapeHtml(entry.fileName || "—")}</td><td>${escapeHtml(at)}</td><td><button type="button" class="btn" data-ytd-remove="${escapeHtml(key)}">Remove</button></td></tr>`;
+      }).join("")}</tbody></table>`;
+      box.querySelectorAll("[data-ytd-remove]").forEach((btn) => btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const res = await fetch("/api/report-sheet/ytd-months/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ month: btn.dataset.ytdRemove }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Could not remove the month.");
+          const note = document.getElementById("ytd-sales-result");
+          if (note) note.textContent = `YTD month ${btn.dataset.ytdRemove} removed.`;
+        } catch (err) {
+          const note = document.getElementById("ytd-sales-result");
+          if (note) note.textContent = err.message || "Could not remove the month.";
+        }
+        loadYtdMonthsList();
+      }));
+    } catch (err) {
+      box.innerHTML = '<p class="foot" style="margin:0">Could not load the pushed YTD months.</p>';
+    }
   }
 
   function readYtdSalesFile(file) {
@@ -1155,26 +1265,30 @@
   async function publishYtdSales() {
     const note = document.getElementById("ytd-sales-result");
     if (!ytdSalesFile) return null;
-    const base64 = await readYtdSalesFile(ytdSalesFile);
-    const res = await fetch("/api/report-sheet/ytd-history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileName: ytdSalesFile.name, base64 }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const message = data.error || "YTD sales was not published.";
+    const month = ytdSelectedMonth();
+    if (!month) {
+      const message = "Choose the month for this YTD file first, then Push again.";
       if (note) note.textContent = message;
       return { ok: false, message };
     }
-    const count = data.latest && data.latest.months ? Object.keys(data.latest.months).length : 0;
-    const message = data.duplicate
-      ? "YTD sales was already imported."
-      : `YTD sales is live${count ? ` · ${count} month${count === 1 ? "" : "s"}` : ""}.`;
+    const base64 = await readYtdSalesFile(ytdSalesFile);
+    const res = await fetch("/api/report-sheet/ytd-months", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month, fileName: ytdSalesFile.name, base64 }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = data.error || "YTD month was not published.";
+      if (note) note.textContent = message;
+      return { ok: false, message };
+    }
+    const message = `YTD ${month} is live · ${data.count || 0} employees. Other months were not changed.`;
     ytdSalesFile = null;
     const input = document.getElementById("ytd-sales-file");
     if (input) input.value = "";
     paintYtdSales();
+    loadYtdMonthsList();
     if (note) note.textContent = message;
     return { ok: true, message };
   }
@@ -1453,6 +1567,22 @@
   document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
     btn.addEventListener("click", () => showAdminPanel(btn.dataset.adminPanel));
   });
+  const boNotifUnlockBtn = $("#bo-notif-unlock-btn");
+  if (boNotifUnlockBtn) boNotifUnlockBtn.addEventListener("click", async () => {
+    const pass = ($("#bo-notif-pass") && $("#bo-notif-pass").value || "").trim();
+    const note = $("#bo-notif-unlock-note");
+    if (!pass) { if (note) note.textContent = "Enter the admin password first."; return; }
+    if (note) note.textContent = "Checking password…";
+    try {
+      const res = await fetch("/api/reserved-orders/bo-rules?password=" + encodeURIComponent(pass));
+      if (res.status === 401) { if (note) note.textContent = "Wrong admin password — the rules were not unlocked."; return; }
+      if (!res.ok) throw new Error("check failed");
+    } catch (err) { if (note) note.textContent = "Could not check the password. Try again."; return; }
+    sessionStorage.setItem("reserved-orders-admin-pass", pass);
+    loadBoNotificationsUi();
+  });
+  const boNotifPass = $("#bo-notif-pass");
+  if (boNotifPass) boNotifPass.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); boNotifUnlockBtn.click(); } });
   $("#target-search").addEventListener("input", (e) => {
     targetSearch = e.target.value;
     renderTargetsPanel();
@@ -1572,6 +1702,16 @@
       if (note) note.textContent = "";
     });
   }
+  const ytdMonthInput = document.getElementById("ytd-month");
+  if (ytdMonthInput) {
+    if (!ytdMonthInput.value) {
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      ytdMonthInput.value = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+    }
+    ytdMonthInput.addEventListener("change", paintYtdSales);
+  }
+  loadYtdMonthsList();
 
   showAdminPanel("uploads");
   renderTargetsPanel();

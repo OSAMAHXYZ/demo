@@ -53,6 +53,7 @@
             </div>
             <nav class="jump">
                 <button type="button" class="nav-on" data-view="inbox">Messages</button>
+                <button type="button" data-view="errors">Order Errors <span id="oe-badge" class="oe-badge" hidden></span></button>
                 <button type="button" data-view="orders">Reserved Orders</button>
                 <button type="button" data-view="marketing">طلبات التسويق</button>
                 <a href="bo-order-lookup.html">BO Lookup</a>
@@ -82,6 +83,15 @@
                         <p class="mc-empty">Select an order to read and send its message.</p>
                     </section>
                 </div>
+            </section>
+            <section id="order-errors" class="order-errors hidden">
+                <header class="mc-head">
+                    <p>Toyota · ALJ · Sales CRM</p>
+                    <h1>Order Errors</h1>
+                </header>
+                <p class="oe-note">Errors admin pushed for <b>your</b> orders. Each card shows which order has the error, what is wrong, and what it should be.</p>
+                <section class="mc-summary" id="oe-summary" aria-label="Order error summary"></section>
+                <div id="oe-list"><p class="mc-empty">Loading your order errors…</p></div>
             </section>
             <section id="my-bo-alerts" class="my-alerts" hidden></section>
             <section class="kpis" id="kpis"></section>

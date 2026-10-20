@@ -26,7 +26,7 @@ const RTL_DAILY_FILES_DIR = path.join(RTL_DAILY_DIR, 'excel');
 const RTL_DAILY_INDEX = path.join(RTL_DAILY_DIR, 'index.json');
 const LEGACY_RTL_DAILY_DIR = path.join(ROOT, 'report-sheet-data', 'rtl-daily');
 const REPORT_SLOT_IDS = Object.freeze([
-  'backorder', 'rtl', 'central', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors', 'lexusB2c', 'toyotaB2c'
+  'backorder', 'rtl', 'central', 'reserved', 'sales', 'cancelled', 'accessories', 'gec', 'gecVisitors', 'lexusB2c', 'toyotaB2c'
 ]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Timestamped snapshot id: 2026-09-09T14-30-05-123-ab12 (or legacy YYYY-MM-DD). */
@@ -499,6 +499,7 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
   if (!esalesPath || !fs.existsSync(esalesPath)) return null;
   const boPath = reportSheetFilePath('backorder');
   const rtlPath = reportSheetFilePath('rtl');
+  const reservedPath = reportSheetFilePath('reserved');
   const names = fileNames || {};
   return reservedOrdersHub.refreshFromBuffers(
     fs.readFileSync(esalesPath),
@@ -506,7 +507,8 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
     {
       esalesName: names.central || 'E-Sales',
       boName: names.backorder || 'Back Order',
-      rtlBuffer: rtlPath && fs.existsSync(rtlPath) ? fs.readFileSync(rtlPath) : null
+      rtlBuffer: rtlPath && fs.existsSync(rtlPath) ? fs.readFileSync(rtlPath) : null,
+      reservedBuffer: reservedPath && fs.existsSync(reservedPath) ? fs.readFileSync(reservedPath) : null
     }
   );
 }
@@ -5043,6 +5045,103 @@ app.post('/api/report-sheet/ytd-history', (req, res) => {
   } catch (err) {
     console.error('[report-sheet/ytd-history]', err);
     return res.status(500).json({ error: err.message || 'Import failed. Nothing was saved.' });
+  }
+});
+
+const YTD_MONTHS_FILE = path.join(REPORT_SHEET_DIR, 'ytd-months.json');
+
+function loadYtdMonths() {
+  const data = readJsonFile(YTD_MONTHS_FILE, { months: {} });
+  return data && data.months && typeof data.months === 'object' ? { months: data.months } : { months: {} };
+}
+
+function saveYtdMonths(store) {
+  fs.mkdirSync(REPORT_SHEET_DIR, { recursive: true });
+  fs.writeFileSync(YTD_MONTHS_FILE, JSON.stringify(store));
+}
+
+/** YTD past months, pushed one month at a time from the Admin page. Pushing a month replaces only that month. */
+app.get('/api/report-sheet/ytd-months', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json(loadYtdMonths());
+});
+
+app.post('/api/report-sheet/ytd-months', (req, res) => {
+  try {
+    const body = req.body || {};
+    const givenPassword = String(body.password || '');
+    if (givenPassword && givenPassword !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
+    const month = String(body.month || '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'Choose the month first (YYYY-MM)' });
+    const buf = Buffer.from(String(body.base64 || ''), 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'Upload the YTD sales file for this month' });
+    const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
+    const names = wb.SheetNames || [];
+    const ordered = [
+      ...names.filter((n) => /salesman/i.test(n) && /perform/i.test(n)),
+      ...names,
+    ];
+    let parsed = null;
+    let sheetName = '';
+    ordered.forEach((name) => {
+      if (parsed && parsed.ok) return;
+      const attempt = YtdHistory.parsePerformance(ytdSheetMatrix(wb.Sheets[name]), { sheet: name });
+      if (attempt.ok) {
+        parsed = attempt;
+        sheetName = name;
+      } else if (!parsed) parsed = attempt;
+    });
+    if (!parsed || !parsed.ok) {
+      return res.status(400).json({
+        error: `${(parsed && parsed.error) || 'Could not read the workbook'}. Sheets found: ${names.join(', ') || 'none'}`,
+        warnings: parsed && parsed.warnings,
+      });
+    }
+    const entry = parsed.months && parsed.months[month];
+    if (!entry || !Array.isArray(entry.employees) || !entry.employees.length) {
+      const available = Object.keys(parsed.months || {}).sort();
+      return res.status(400).json({ error: `This file has no data for ${month}. Months found in the file: ${available.join(', ') || 'none'}` });
+    }
+    const employees = entry.employees.map((emp) => ({
+      id: String(emp.id || '').slice(0, 40),
+      name: String(emp.name || '').slice(0, 160),
+      target: emp.target == null ? null : Number(emp.target),
+      sales: emp.sales == null ? null : Number(emp.sales),
+    })).filter((emp) => emp.name || emp.id);
+    if (!employees.length) return res.status(400).json({ error: `This file has no employee rows for ${month}` });
+    const store = loadYtdMonths();
+    const at = Date.now();
+    store.months[month] = {
+      at,
+      fileName: String(body.fileName || 'YTD sales').slice(0, 180),
+      sheet: sheetName || parsed.sheet || '',
+      employees,
+    };
+    saveYtdMonths(store);
+    broadcastReportSheetUpdate(at);
+    return res.json({ ok: true, month, at, count: employees.length, months: Object.keys(store.months).sort() });
+  } catch (err) {
+    console.error('[report-sheet/ytd-months]', err);
+    return res.status(500).json({ error: err.message || 'YTD month was not published. Nothing was saved.' });
+  }
+});
+
+app.post('/api/report-sheet/ytd-months/remove', (req, res) => {
+  try {
+    const body = req.body || {};
+    const givenPassword = String(body.password || '');
+    if (givenPassword && givenPassword !== END_OF_MONTH_PASSWORD) return res.status(403).json({ error: 'Wrong password' });
+    const month = String(body.month || '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'Month must be YYYY-MM' });
+    const store = loadYtdMonths();
+    if (!store.months[month]) return res.status(404).json({ error: `No pushed data for ${month}` });
+    delete store.months[month];
+    saveYtdMonths(store);
+    broadcastReportSheetUpdate(Date.now());
+    return res.json({ ok: true, month, months: Object.keys(store.months).sort() });
+  } catch (err) {
+    console.error('[report-sheet/ytd-months/remove]', err);
+    return res.status(500).json({ error: err.message || 'Could not remove the month' });
   }
 });
 

@@ -594,7 +594,7 @@ function applyQueue(orders) {
     return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
 }
 
-function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin }) {
+function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, reservedSheets }) {
     const sheet = pickReservedSheet(sheets);
     if (!sheet) {
         return {
@@ -744,6 +744,73 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
         }));
     });
 
+    // Reserved File (uploaded on its own from Report Sheet Admin): its VINs are read too.
+    // A VIN that is already in the reserved sheet only takes column J from this file.
+    // A new VIN is added as an order with a blank assign date.
+    let reservedFileRows = 0;
+    let reservedFileNewVins = 0;
+    let reservedFileUpdatedVins = 0;
+    const reservedFileSheet = pickReservedSheet(reservedSheets || []) || (reservedSheets || [])[0] || null;
+    if (reservedFileSheet) {
+        const reservedFile = extractReservedRows(reservedFileSheet.grid || []);
+        (reservedFile.rows || []).forEach((row) => {
+            const vin = normalizeVin(row.vin);
+            if (!vin) return;
+            reservedFileRows += 1;
+            const existing = byVin.get(vin);
+            if (existing) {
+                const jField = (row.fields || []).find((field) => field.col === 'J');
+                const jValue = jField ? cleanText(jField.value) : cleanText(row.suffix);
+                if (jValue && jValue !== '—') {
+                    const fields = Array.isArray(existing.fields) ? existing.fields.slice() : [];
+                    const at = fields.findIndex((field) => field.col === 'J');
+                    const label = at >= 0 ? fields[at].label : 'J';
+                    if (at >= 0) fields[at] = { ...fields[at], value: jValue };
+                    else fields.push({ label, col: 'J', value: jValue });
+                    existing.fields = fields;
+                    reservedFileUpdatedVins += 1;
+                }
+                return;
+            }
+            const bo = backOrder.byVin.get(vin) || backOrder.byOrder.get(cleanText(row.orderNumber).toLowerCase()) || null;
+            const created = parseExcelDate(prefer(row.createdRaw, bo && bo.createdRaw));
+            const payment = normalizePayment(prefer(row.paymentRaw, bo && bo.paymentRaw));
+            const prev = earlierOrder(row, vin);
+            byVin.set(vin, carryForward(prev, {
+                key: `vin:${vin}`,
+                vin,
+                orderNumber: prefer(row.orderNumber, bo && bo.orderNumber) || 'NO ORDER',
+                salesAdvisor: cleanText(row.salesAdvisor) || 'UNASSIGNED',
+                customerName: prefer(row.customerName, bo && bo.customerName),
+                vehicle: cleanText(row.vehicle),
+                modelYear: cleanText(row.modelYear),
+                exterior: cleanText(row.exterior),
+                interior: cleanText(row.interior),
+                searchArea: cleanText(row.searchArea) || '—',
+                shareLevel: cleanText(row.shareLevel) || '—',
+                allocationAging: parseAgingDays(row.reservationAge),
+                fields: Array.isArray(row.fields) ? row.fields : [],
+                createdDate: localStamp(created),
+                createdDisplay: displayStamp(created),
+                assignDate: '',
+                assignDisplay: '',
+                paymentKind: payment.kind,
+                paymentLabel: payment.kind === 'unknown' ? 'UNKNOWN' : payment.label,
+                paymentHours: payment.hours,
+                deadline: '',
+                status: normalizeStatus(row.statusRaw),
+                statusChangedBy: '',
+                statusChangedAt: '',
+                history: [],
+                assignmentHistory: [],
+                matchedBackOrder: Boolean(bo),
+                sourceRow: row.rowIndex,
+                fromReservedFile: true
+            }));
+            reservedFileNewVins += 1;
+        });
+    }
+
     const orders = applyQueue(Array.from(byVin.values()));
     const advisors = new Set(orders.map((o) => o.salesAdvisor).filter((n) => n && n !== 'UNASSIGNED'));
     const paymentBreakdown = { cash: 0, bank: 0, other: 0, unknown: 0 };
@@ -758,6 +825,9 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin })
         unmatchedVins: orders.length - matched,
         missingVinRows: missingVin,
         duplicateVinRows,
+        reservedFileRows,
+        reservedFileNewVins,
+        reservedFileUpdatedVins,
         salesAdvisorCount: advisors.size,
         paymentBreakdown,
         earliestAssignDate: assignDates.length ? displayStamp(assignDates[0]) : '',
@@ -1332,7 +1402,8 @@ function attachReservedOrders(app, options) {
             boRows: bo.rows,
             boHeaders: bo.headers,
             previous: previous || loadLive().orders || [],
-            rtlByVin: indexRtlAging(names.rtlSheets || [])
+            rtlByVin: indexRtlAging(names.rtlSheets || []),
+            reservedSheets: names.reservedSheets || []
         });
         if (!built.ok) return built;
         const previousOrders = previous || loadLive().orders || [];
@@ -1359,7 +1430,7 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}, reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, column J updated ${built.report.reservedFileUpdatedVins || 0})`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
@@ -1863,7 +1934,8 @@ function attachReservedOrders(app, options) {
             const bo = backOrderFromBuffer(boBuffer);
             const meta = names || {};
             const rtlSheets = meta.rtlBuffer && meta.rtlBuffer.length ? sheetGridsFromBuffer(meta.rtlBuffer) : (meta.rtlSheets || []);
-            return publish(sheets, bo, Object.assign({}, meta, { rtlSheets }));
+            const reservedSheets = meta.reservedBuffer && meta.reservedBuffer.length ? sheetGridsFromBuffer(meta.reservedBuffer) : (meta.reservedSheets || []);
+            return publish(sheets, bo, Object.assign({}, meta, { rtlSheets, reservedSheets }));
         },
         reanalyzeActive(req) {
             if (boRulesApi) boRulesApi.reanalyzeActive(req || null, 'BO_FILE_UPDATED');

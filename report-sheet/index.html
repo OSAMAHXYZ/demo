@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2152,7 +2152,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
           <div>
             <p class="ytd-kicker">Toyota · ALJ · Digital Retail</p>
             <h2 class="ytd-title">YTD Sales</h2>
-            <p class="ytd-sub">Past months use the YTD file from Admin Push. This month stays live. Target comes from the file. Actual is the Sales Raw column V count for each employee.</p>
+            <p class="ytd-sub">Past months are pushed month by month from the Admin page. This month stays live. Target comes from the pushed month. Actual is the Sales Raw column V count for each employee.</p>
           </div>
           <label class="ytd-year">
             <span>Year</span>
@@ -2558,12 +2558,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
         <div class="bo-empty card" id="rv-empty">
           <h2>Reserved Vehicles Tracker</h2>
           <p style="color:var(--muted);margin:0 0 12px">
-            Reads <b>E-Sales المحجوز</b> only from Stock E-Sales (order <b>Col F</b> · VIN <b>Col L</b> · product <b>Col I</b> · suffix <b>Col J</b> · ext <b>Col M</b> · int <b>Col N</b>),
-            ranks each order with the BO queue algorithm, shows the next 3 queue orders, and checks Sales Raw for proforma.
+            Reads <b>E-Sales المحجوز</b> from the Reserved File (or from Stock E-Sales when no Reserved File is pushed) — order <b>Col F</b> · VIN <b>Col L</b> · product <b>Col I</b> · suffix <b>Col J</b> · ext <b>Col M</b> · int <b>Col N</b>.
+            It ranks each order with the BO queue algorithm, shows the next 3 queue orders, and checks Sales Raw for proforma.
           </p>
           <ol style="margin:0 0 14px;color:var(--ink);font-size:.9rem;line-height:1.55;padding-left:18px">
             <li>Open <a href="admin.html">Admin · Upload &amp; Push</a></li>
-            <li>Upload slot <b>3 · Stock Central / E-Sales</b> (must include sheet <b>E-Sales المحجوز</b>)</li>
+            <li>Upload slot <b>11 · Reserved File</b> (sheet <b>E-Sales المحجوز</b>, or its first sheet)</li>
             <li>Upload slot <b>1 · Back Order</b> for queue position (same logic as bo-order-lookup)</li>
             <li>Upload slot <b>4 · Sales Raw</b> for Proforma (Col P) / Delivery (Col V)</li>
             <li>Upload slot <b>2 · RTL Stock</b> optional for VIN location fallback</li>
@@ -3247,7 +3247,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     { id: "accessories", n: 6, title: "Accessories", ar: "الإكسسوارات", blurb: "Sheet 1 · Col D VIN · Col L amount · Sheet VSND · Col I VIN · Col L employee · Col S in-progress" },
     { id: "gec", n: 7, title: "GEC File", ar: "مركز تجربة الضيوف", blurb: "Guest Experience Center leads · GEC Dashboard" },
     { id: "gecVisitors", n: 8, title: "GEC Visitors", ar: "زوار مركز تجربة الضيوف", blurb: "Visitor log · Date · Promoter · Visit Purpose · GEC Dashboard" },
-    { id: "ytd", n: 11, title: "YTD Sales", ar: "مبيعات السنة", blurb: "Past months · target and total from Admin Push · checked against Sales Raw column V" },
+    { id: "reserved", n: 11, title: "Reserved File", ar: "الملف المحجوز", blurb: "Sheet E-Sales المحجوز (or first sheet) · order Col F · VIN Col L · feeds Reserved Vehicles" },
   ];
 
   const Store = window.ReportSheetStore;
@@ -5564,8 +5564,8 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }).filter((r) => r.vin);
   }
 
-  function esalesReservedStockRows(workbook) {
-    const sheetName = esalesReservedSheetName(workbook);
+  function esalesReservedStockRows(workbook, sheetNameOverride) {
+    const sheetName = sheetNameOverride || esalesReservedSheetName(workbook);
     if (!sheetName || !workbook.Sheets[sheetName]) return [];
     return sheetRows(workbook, sheetName).map((r, idx) => {
       const orderRaw = cellByLetter(r, "F");
@@ -6084,7 +6084,6 @@ body.live-app #panel-salesreport .sr-emp-sum {
   }
 
   async function applyWorkbookPayload(payload) {
-    window._ytdFile = null;
     SLOT_DEFS.forEach((d) => {
       slots[d.id] = { file: null, rows: [], name: "" };
       if (d.id === "central") {
@@ -6137,16 +6136,21 @@ body.live-app #panel-salesreport .sr-emp-sum {
           };
           continue;
         }
-        if (d.id === "ytd") {
+        if (d.id === "reserved") {
           const wb = bufferToWorkbook(f.name, f.buffer, {});
-          const ytd = ytdReadWorkbook(wb, f.name);
-          window._ytdFile = ytd;
-          slots.ytd = {
+          const sheetName = esalesReservedSheetName(wb) || (wb.SheetNames || [])[0] || "";
+          const rows = sheetName ? esalesReservedStockRows(wb, sheetName) : [];
+          slots.reserved = {
             file: { name: f.name, size: f.size || f.buffer.byteLength },
-            rows: [],
+            rows,
             name: f.name,
-            ytd,
+            sheet: sheetName,
           };
+          // The dedicated Reserved File wins over the reserved sheet inside Stock E-Sales.
+          if (rows.length && slots.central) {
+            slots.central.reservedRows = rows;
+            slots.central.reservedSheet = sheetName;
+          }
           continue;
         }
         const wb = bufferToWorkbook(f.name, f.buffer, { firstSheetOnly: d.id === "backorder" });
@@ -10560,6 +10564,34 @@ body.live-app #panel-salesreport .sr-emp-sum {
     ytdTargetsLoaded = true;
   }
 
+  let ytdMonthsLoaded = false;
+  // Past-month YTD figures are pushed month by month from the Admin page
+  // (POST /api/report-sheet/ytd-months). There is no YTD upload on this dashboard.
+  async function ytdLoadMonths(force) {
+    if (ytdMonthsLoaded && !force) return;
+    try {
+      const res = await fetch("/api/report-sheet/ytd-months", { cache: "no-store" });
+      if (!res.ok) throw new Error("ytd months unavailable");
+      const data = await res.json();
+      const pushed = data && data.months && typeof data.months === "object" ? data.months : {};
+      const months = {};
+      let fileName = "";
+      let latestAt = 0;
+      Object.keys(pushed).sort().forEach((key) => {
+        const entry = pushed[key] || {};
+        (entry.employees || []).forEach((emp) => {
+          ytdPutFileValue(months, key, emp.name || "", "target", emp.target == null ? null : Number(emp.target));
+          ytdPutFileValue(months, key, emp.name || "", "total", emp.sales == null ? null : Number(emp.sales));
+        });
+        if (Number(entry.at) >= latestAt) { latestAt = Number(entry.at) || 0; fileName = entry.fileName || fileName; }
+      });
+      window._ytdFile = { filename: fileName, months };
+    } catch (e) {
+      if (!window._ytdFile) window._ytdFile = { filename: "", months: {} };
+    }
+    ytdMonthsLoaded = true;
+  }
+
   function ytdMonthKey(year, monthIndex) {
     return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
   }
@@ -10930,12 +10962,12 @@ body.live-app #panel-salesreport .sr-emp-sum {
       if (totals.hasTarget) yearTarget += totals.target;
       const status = ytdStatus(totals.ach, totals.hasTarget);
       const gap = totals.hasTarget ? totals.target - totals.actual : null;
-      const gapText = gap == null ? (bucket.phase === "closed" ? "Target comes from the YTD file" : "This month stays live") : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
+      const gapText = gap == null ? (bucket.phase === "closed" ? "Target comes from the pushed month" : "This month stays live") : gap > 0 ? `Remaining ${formatNumber(gap)}` : gap < 0 ? `Above by ${formatNumber(Math.abs(gap))}` : "Target met";
       const width = totals.ach == null ? 0 : Math.max(0, Math.min(100, totals.ach));
       const label = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "long" });
       const shortLabel = new Date(ytdYear, bucket.month, 1).toLocaleString("en-US", { month: "short" });
       const reconCls = bucket.phase !== "closed" ? "is-live" : !totals.fileKnown ? "is-miss" : totals.matched ? "is-match" : "is-miss";
-      const reconText = bucket.phase === "current" ? "This month" : bucket.phase === "future" ? "Later" : !totals.fileKnown ? "No file" : totals.matched ? "OK" : "Mismatch";
+      const reconText = bucket.phase === "current" ? "This month" : bucket.phase === "future" ? "Later" : !totals.fileKnown ? "Not pushed" : totals.matched ? "OK" : "Mismatch";
       const barCls = bucket.phase === "closed"
         ? (totals.matched ? "is-hit" : "is-miss")
         : (totals.ach != null && totals.ach >= 100 ? "is-hit" : totals.ach != null && totals.ach >= 80 ? "is-on" : "is-miss");
@@ -10963,7 +10995,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const yearAch = ytdAch(yearActual, yearTarget);
     const achRing = yearAch == null ? 0 : Math.max(0, Math.min(100, yearAch));
     const fileName = (window._ytdFile && window._ytdFile.filename) || "";
-    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "File targets for past months" : "Push the YTD file from Admin"}</em></article>
+    annualEl.innerHTML = `<article class="ytd-kpi is-target"><span class="ytd-kpi-ico" aria-hidden="true">◎</span><span>Annual Target</span><strong>${yearTarget > 0 ? formatNumber(yearTarget) : "—"}</strong><em>${yearTarget > 0 ? "Targets pushed from Admin for past months" : "Push each past month from Admin"}</em></article>
       <article class="ytd-kpi is-report"><span class="ytd-kpi-ico" aria-hidden="true">▤</span><span>File Total</span><strong>${yearFile > 0 || fileName ? formatNumber(yearFile) : "—"}</strong><em>${fileName ? escapeHtml(fileName) : "Past months only"}</em></article>
       <article class="ytd-kpi is-actual"><span class="ytd-kpi-ico" aria-hidden="true">▣</span><span>Actual · Column V</span><strong>${formatNumber(yearActual)}</strong><em>Sales Raw rows with a date in column V${yearUnassigned ? ` · + ${formatNumber(yearUnassigned)} not assigned` : ""}</em></article>
       <article class="ytd-kpi is-ach"><span class="ytd-ring" style="--p:${achRing.toFixed(1)}" aria-hidden="true"><b>${yearAch == null ? "" : Math.round(yearAch)}</b></span><span>Annual Achievement %</span><strong>${ytdPctText(yearAch)}</strong><em>${yearTarget > 0 ? "Actual ÷ target" : "Needs a target"}</em></article>
@@ -11042,7 +11074,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
 
   function ytdRowState(emp, phase) {
     if (phase === "closed") {
-      if (!emp.hasFile) return { status: { label: "No file", cls: "is-bad" }, cls: "is-bad" };
+      if (!emp.hasFile) return { status: { label: "Not pushed", cls: "is-bad" }, cls: "is-bad" };
       if (emp.matched) return { status: { label: "OK", cls: "is-ok" }, cls: "is-ok" };
       return { status: { label: "Mismatch", cls: "is-bad" }, cls: "is-bad" };
     }
@@ -11055,7 +11087,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   function ytdCheckLabel(bucket, totals) {
     if (bucket.phase === "current") return { text: "This month", cls: "is-live" };
     if (bucket.phase === "future") return { text: "Later", cls: "is-live" };
-    if (!totals.fileKnown) return { text: "No file", cls: "is-miss" };
+    if (!totals.fileKnown) return { text: "Not pushed", cls: "is-miss" };
     return totals.matched ? { text: "OK", cls: "is-match" } : { text: "Mismatch", cls: "is-miss" };
   }
 
@@ -11094,7 +11126,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
         </tbody></table>
       </div>` : "";
     const note = closed
-      ? "Target and file total come from the Admin Push YTD file. Actual is the Sales Raw column V count. Green means they are the same."
+      ? "Target and file total come from the month pushed from Admin. Actual is the Sales Raw column V count. Green means they are the same."
       : "This month is not taken from the YTD file. Actual is the live Sales Raw column V count.";
     el.hidden = false;
     el.innerHTML = `<div class="ytd-detail-head">
@@ -11182,7 +11214,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
   }
 
   async function renderYtdSales() {
-    await ytdEnsureTargets();
+    await Promise.all([ytdEnsureTargets(), ytdLoadMonths()]);
     paintYtd();
   }
 
@@ -24282,6 +24314,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
           Promise.resolve(prev ? ytdCommit(prev) : true).then((ok) => {
             if (ok === false) return;
             ytdTargetsLoaded = false;
+            ytdMonthsLoaded = false;
             return Promise.resolve(refreshFromAdmin("YTD refreshed", { force: true })).catch(() => {});
           }).finally(() => renderYtdSales());
         });

@@ -1,5 +1,34 @@
 'use strict';
 
+/**
+ * Contact Performance — data flow (single source of truth: Admin Push).
+ *
+ * 1. Admin page (report-sheet/admin.html) collects two files in the
+ *    "CRM export and contact file" card (ContactPerformance.mountAdmin):
+ *    the contact file and the CRM export. Nothing is live yet.
+ * 2. The existing Push to live button (pushToLive) calls
+ *    ContactPerformance.publishDraft(), which sends both files as base64 JSON:
+ *      POST /api/contact-performance/preview  { period, publishedBy, contactFile, crmFile }
+ *    The server parses and validates both workbooks and stores a draft
+ *    (dataset JSON + source files under <dir>/datasets and <dir>/sources).
+ *    Invalid files return 422 and never touch the published dataset.
+ *      POST /api/contact-performance/publish { draftId }
+ *    The draft becomes the active publication for its period. Publications
+ *    are kept as historical snapshots (store.json: publications, byPeriod,
+ *    activeId, audit). A repeat push of the same files for the same period
+ *    returns { duplicate: true } and creates no new snapshot.
+ * 3. The dashboard (report-sheet/contact-performance.js) only reads:
+ *      GET /api/contact-performance/meta
+ *      GET /api/contact-performance/summary?publication=<id>&filters…
+ *      GET /api/contact-performance/leads?…  and /leads/:recordId
+ *    After a successful publish the server broadcasts
+ *    "contact_performance_updated" over the report-sheet WebSocket, which
+ *    data-store.js turns into a "contact-performance-updated" window event;
+ *    the dashboard reloads. It also polls meta every 45s. A failed refresh
+ *    keeps the last published numbers on screen.
+ * Storage: <PERSISTENT_ROOT>/contact-performance/{store.json,datasets,sources}.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -165,6 +194,15 @@ function findColumn(headers, aliases) {
     if (index >= 0) return index;
   }
   return -1;
+}
+
+/** Same files pushed again for the same period must not create a second snapshot. */
+function contentHash(contactBuf, crmBuf) {
+  const hash = crypto.createHash('sha256');
+  hash.update(contactBuf || Buffer.alloc(0));
+  hash.update(Buffer.from('\n--crm--\n'));
+  hash.update(crmBuf || Buffer.alloc(0));
+  return hash.digest('hex');
 }
 
 function passwordOk(given, expected) {
@@ -1116,6 +1154,7 @@ function attachContactPerformance(app, options) {
   app.get('/api/contact-performance/meta', (_req, res) => {
     const store = readStore();
     const active = store.publications.find((item) => item.id === store.activeId) || null;
+    const failed = store.audit.find((entry) => entry.event === 'publication_failed') || null;
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       activeId: store.activeId || '',
@@ -1123,6 +1162,9 @@ function attachContactPerformance(app, options) {
       period: active ? active.period : '',
       contactFile: active ? active.contactFile : '',
       crmFile: active ? active.crmFile : '',
+      counts: active ? (active.counts || null) : null,
+      warnings: active ? (active.warnings || []) : [],
+      lastError: failed ? { at: failed.at, message: failed.message } : null,
       diagnostic: {
         published: Boolean(store.activeId),
         publications: store.publications.length,
@@ -1171,6 +1213,8 @@ function attachContactPerformance(app, options) {
       publishedAt: pub ? pub.at : 0,
       contactFile: pub ? pub.contactFile : '',
       crmFile: pub ? pub.crmFile : '',
+      counts: pub ? (pub.counts || null) : null,
+      warnings: pub ? (pub.warnings || []) : [],
       active: id === store.activeId,
       ...summary,
     });
@@ -1220,12 +1264,32 @@ function attachContactPerformance(app, options) {
         diagnostics: { contact: readDiagnostics(contactParsed), crm: readDiagnostics(crmParsed) },
       });
     }
+    const hash = contentHash(contactFile.buf, crmFile.buf);
+    const existing = store.publications.find((item) => item.period === period && item.hash === hash);
+    if (existing) {
+      audit(store, 'publication_duplicate', `Same files already live for ${period}. No new snapshot created.`, existing.id);
+      writeStore(store);
+      return res.json({
+        ok: true,
+        duplicate: true,
+        existingId: existing.id,
+        period,
+        contactFile: existing.contactFile,
+        crmFile: existing.crmFile,
+        contactRows: dataset.contactRows,
+        crmRows: dataset.crmRows,
+        warnings: dataset.warnings,
+        reconciliation: dataset.reconciliation,
+        counts: publicCounts(dataset),
+      });
+    }
     const id = `cp_${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
     const previous = store.drafts[0];
     if (previous && previous.id) removePublicationFiles(previous.id);
     const draft = {
       id,
       period,
+      hash,
       at: Date.now(),
       by: clip(body.publishedBy || 'Administrator', 80) || 'Administrator',
       contactFile: contactFile.name,
@@ -1272,6 +1336,17 @@ function attachContactPerformance(app, options) {
     const draft = store.drafts.find((item) => item.id === draftId);
     if (!draft) return res.status(404).json({ error: 'Validate the files again. This preview is no longer available.' });
     if (!loadDataset(draftId)) return res.status(409).json({ error: 'The validated dataset is missing. Run validation again.' });
+    const existing = draft.hash
+      ? store.publications.find((item) => item.period === draft.period && item.hash === draft.hash)
+      : null;
+    if (existing) {
+      removePublicationFiles(draft.id);
+      cache.delete(draft.id);
+      store.drafts = store.drafts.filter((item) => item.id !== draft.id);
+      audit(store, 'publication_duplicate', `Same files already live for ${draft.period}. No new snapshot created.`, existing.id);
+      writeStore(store);
+      return res.json({ ok: true, duplicate: true, id: existing.id, at: existing.at, period: existing.period });
+    }
     const publication = { ...draft, status: 'published', at: Date.now() };
     store.publications.unshift(publication);
     store.publications = store.publications.slice(0, 60);
@@ -1404,6 +1479,7 @@ function attachContactPerformance(app, options) {
 
 module.exports = {
   attachContactPerformance,
+  contentHash,
   classifyContactStatus,
   classifyInitialContact,
   chooseTrackedColumn,

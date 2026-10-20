@@ -697,6 +697,27 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
 .my-alerts:empty { display: none; }
 .my-alert { background: #fff; border: 1px solid #fecaca; border-left: 4px solid var(--red); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
 .my-alert h3 { margin: 0 0 6px; }
+.oe-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--red); color: #fff; font-size: 11px; font-weight: 800; vertical-align: middle; }
+.oe-badge[hidden] { display: none; }
+.order-errors { display: grid; gap: 12px; }
+.order-errors.hidden { display: none; }
+.oe-note { margin: 0; color: var(--muted); font-size: 13px; }
+.oe-card { background: #fff; border: 1px solid #fecaca; border-left: 4px solid var(--red); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.oe-card.is-done { border-color: var(--line); border-left-color: var(--ok); }
+.oe-card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.oe-card-head h2 { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+.oe-what { margin: 0; font-size: 13px; color: #334155; }
+.oe-what b { color: var(--bad); }
+.oe-what .oe-fix { color: var(--ok); font-weight: 800; }
+.oe-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.oe-table th, .oe-table td { border-bottom: 1px solid var(--line); text-align: left; padding: 7px 6px; vertical-align: top; }
+.oe-status { display: inline-flex; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 800; background: #fef2f2; color: #b91c1c; }
+.oe-status.is-viewed { background: #e8f1fb; color: #1d4e89; }
+.oe-status.is-progress { background: #fffbeb; color: #b45309; }
+.oe-status.is-sent { background: var(--ok-bg); color: var(--ok); }
+.oe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.oe-actions button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 12px; font-weight: 700; }
+.oe-msg { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #334155; }
 @media (max-width: 1100px) {
   .br-workspace, .br-file { grid-template-columns: 1fr 1fr; }
   .br-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
