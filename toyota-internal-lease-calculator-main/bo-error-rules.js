@@ -768,6 +768,63 @@ function attachBoErrorRules(app, deps) {
         res.json({ ok: true, publicationId: publication.id, rule: publicRule(rule) });
     });
 
+    // Push a condition to chosen employees (or all) from the Report Sheet Admin
+    // Notifications panel. The publication carries its audience, and the employee
+    // side (my-bo-corrections) only shows the latest publication to that audience.
+    app.post('/api/reserved-orders/bo-rules/:id/push-targeted', (req, res) => {
+        if (!deps.requireAdmin(req, res)) return;
+        const store = loadStore();
+        const rule = store.rules.find((item) => item.id === req.params.id);
+        if (!rule) return res.status(404).json({ error: 'Rule not found.' });
+        if (!rule.current) applyAnalysis(store, rule, 'targeted-push', req);
+        const wanted = Array.isArray(req.body?.recordIds)
+            ? [...new Set(req.body.recordIds.map((id) => cellString(id)).filter(Boolean))]
+            : [];
+        const staff = (deps.loadStaff() || []).filter((person) => person && person.active !== false);
+        const chosen = wanted.length ? staff.filter((person) => wanted.includes(person.recordId)) : [];
+        const targeted = wanted.length > 0;
+        if (targeted && !chosen.length) return res.status(400).json({ error: 'None of the selected employees could be found.' });
+        const employees = ((rule.current && rule.current.employees) || []).filter((item) => {
+            if (!item || item.salesmanId === 'UNASSIGNED') return false;
+            if (!targeted) return true;
+            return chosen.some((person) => String(person.id) === String(item.salesmanId) || fold(person.name) === fold(item.salesmanName));
+        });
+        if (!employees.length) {
+            return res.status(400).json({ error: targeted
+                ? 'None of the selected employees have orders matching this condition in the current Back Order file.'
+                : 'No employee has orders matching this condition in the current Back Order file. Test the condition first.' });
+        }
+        const orderCount = employees.reduce((sum, item) => sum + (item.orders || []).length, 0);
+        const audienceKey = targeted ? chosen.map((person) => person.recordId).sort().join(',') : 'all';
+        const nextPrint = `${fingerprint(employees)}#${audienceKey}`;
+        const last = [...store.publications].reverse().find((item) => item.ruleId === rule.id);
+        if (last && last.fingerprint === nextPrint && !req.body?.confirmRepublish) {
+            return res.status(409).json({ error: 'This same result was already pushed to the same employees. Confirm to publish it again.', needsConfirm: true });
+        }
+        const publication = {
+            id: newId('pub'),
+            ruleId: rule.id,
+            publishedAt: new Date().toISOString(),
+            employeeCount: employees.length,
+            orderCount,
+            fingerprint: nextPrint,
+            employees,
+            audience: targeted
+                ? { mode: 'selected', recordIds: chosen.map((person) => person.recordId) }
+                : { mode: 'all', recordIds: [] }
+        };
+        store.publications.push(publication);
+        rule.notificationStatus = 'pushed';
+        employees.forEach((item) => {
+            const key = statusKey(rule.id, item);
+            if (!store.statuses[key]) store.statuses[key] = { status: 'new', at: publication.publishedAt, orders: {} };
+        });
+        saveStore(store);
+        const audienceText = targeted ? chosen.map((person) => person.name).join(', ') : 'all employees';
+        deps.audit(req, { user: 'Admin', role: 'admin', action: 'BO_ALERT_PUBLISHED', entity: 'bo-rule', source: 'notifications', details: `${rule.name} to ${employees.length} employee(s) / ${orderCount} order(s) · ${audienceText}` });
+        res.json({ ok: true, publicationId: publication.id, employeeCount: employees.length, orderCount, audience: audienceText, rule: publicRule(rule) });
+    });
+
     app.post('/api/reserved-orders/bo-rules/:id/archive', (req, res) => {
         if (!deps.requireAdmin(req, res)) return;
         const store = loadStore();
@@ -841,12 +898,19 @@ function attachBoErrorRules(app, deps) {
             phoneMaps.set(orderHeader, map);
             return map;
         }
+        const latestByRule = new Map();
+        store.publications.forEach((publication) => { latestByRule.set(publication.ruleId, publication); });
         const cards = [];
         store.publications.forEach((publication) => {
+            if (latestByRule.get(publication.ruleId) !== publication) return;
             const rule = store.rules.find((item) => item.id === publication.ruleId);
             if (!rule || rule.archived) return;
+            const targeted = publication.audience && publication.audience.mode === 'selected';
+            if (targeted && !(publication.audience.recordIds || []).includes(user.recordId)) return;
             const latest = rule.current && rule.current.employees;
-            const mine = (latest || publication.employees || []).find((item) => employeeCanSee(user, item));
+            const mine = targeted
+                ? ((publication.employees || []).find((item) => employeeCanSee(user, item)) || (latest || []).find((item) => employeeCanSee(user, item)))
+                : (latest || publication.employees || []).find((item) => employeeCanSee(user, item));
             if (!mine) return;
             const orderHeader = mappedHeader(table.headers, rule.fieldMap && rule.fieldMap.orderNumber, ['Back Order Number', 'BO Number', 'Order Number']);
             const phones = phonesFor(orderHeader);

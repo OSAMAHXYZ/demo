@@ -428,7 +428,8 @@
             meta('Reservation age', ageHtml(ageRaw), ageRaw),
             meta('Area', toneValue(area, String(area).trim().toLowerCase() === 'rtlesal'), area),
             meta('Share level', toneValue(share, String(share).trim().toLowerCase().includes('retail electronic sales')), share),
-            meta('Colors', esc(colors), colors)
+            meta('Colors', esc(colors), colors),
+            meta('Expiry date', esc(order.expiryDisplay || ''), order.expiryDisplay || '')
         ].join('');
         return `<article class="order-block${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}">
             <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
@@ -662,6 +663,7 @@
                 { label: 'Advisor', value: local && local.salesAdvisor },
                 { label: 'Payment', value: local && local.paymentLabel },
                 { label: 'Assign date', value: local && (local.assignDisplay || local.assignDate) },
+                ...((local && local.expiryDisplay) ? [{ label: 'Expiry date', value: local.expiryDisplay }] : []),
                 { label: 'Search area', value: local && local.searchArea },
                 { label: 'Share level', value: local && local.shareLevel }
             ])}

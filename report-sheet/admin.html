@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="responsive-layout.css?v=20260914eu2" />
   <link rel="stylesheet" href="enterprise-ui.css?v=20260915aa1" />
   <link rel="stylesheet" href="contact-performance.css?v=20261017cp6" />
-  <link rel="stylesheet" href="bo-notifications.css?v=20261020bon1" />
+  <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
   <script src="gec-data.js?v=20261008lead"></script>
@@ -417,13 +417,7 @@
           <b>Order Errors</b> in Reserved Orders. Pushing here is per rule (the Push button inside the rule);
           it does not need the Admin Push of Excel files.
         </p>
-        <div class="bo-notif-unlock" id="bo-notif-unlock">
-          <label>Admin password
-            <input type="password" id="bo-notif-pass" placeholder="Same password as Reserved Orders admin" autocomplete="current-password" />
-          </label>
-          <button type="button" class="btn-primary" id="bo-notif-unlock-btn">Unlock BO Error Condition</button>
-          <span class="hint" id="bo-notif-unlock-note">Needed once per browser session — the rules are protected by the Reserved Orders admin password.</span>
-        </div>
+        <p class="hint" id="bo-notif-unlock-note" style="margin:0 0 10px">No password needed — conditions load directly.</p>
         <div id="boe-rules-root"></div>
       </div>
     </section>
@@ -435,17 +429,11 @@
           <span class="admin-section-tag">Custom messages to employees</span>
         </div>
         <p class="admin-lead">
-          Send a free-text notification to employees — not a BO condition. It appears instantly in
+          No password needed. Send a free-text notification to employees — it appears instantly in
           <b>Reserved Orders</b> on the employee's Messages page. Send it to <b>all employees</b> or pick
-          specific names. This is separate from <b>BO Error Condition</b>, which pushes order errors.
+          specific names. Below, you can also push a <b>BO condition</b> to chosen employees so the error
+          orders appear under their names in <b>Order Errors</b>.
         </p>
-        <div class="bo-notif-unlock" id="notif-unlock">
-          <label>Admin password
-            <input type="password" id="notif-pass" placeholder="Same password as Reserved Orders admin" autocomplete="current-password" />
-          </label>
-          <button type="button" class="btn-primary" id="notif-unlock-btn">Unlock Notifications</button>
-          <span class="hint" id="notif-unlock-note">Needed once per browser session — notifications are protected by the Reserved Orders admin password.</span>
-        </div>
         <div id="notif-body" hidden>
           <div class="notif-form">
             <label>Title <span class="hint">(optional)</span>
@@ -463,6 +451,29 @@
             <div class="bo-notif-unlock">
               <button type="button" class="btn-primary" id="notif-send">Send notification</button>
               <span class="hint" id="notif-result"></span>
+            </div>
+          </div>
+          <div class="notif-bo">
+            <h3 style="margin:20px 0 6px">BO condition → Order Errors</h3>
+            <p class="admin-lead" style="margin:0 0 10px">
+              Pick a condition created in <b>BO Error Condition</b> (same builder), choose who receives it, then push.
+              Each selected employee sees only <b>his own</b> error orders — and what the error is — under his name in
+              <b>Order Errors</b> in Reserved Orders. The condition is checked against the current Back Order file when you push.
+            </p>
+            <div class="notif-form">
+              <label>BO condition
+                <select id="notif-bo-rule"><option value="">Loading conditions…</option></select>
+              </label>
+              <fieldset class="notif-audience">
+                <legend>Push to</legend>
+                <label class="notif-radio"><input type="radio" name="notif-bo-audience" value="all" checked /> All employees (each sees his own errors)</label>
+                <label class="notif-radio"><input type="radio" name="notif-bo-audience" value="selected" /> Selected employees</label>
+                <div id="notif-bo-staff" class="br-picks" hidden></div>
+              </fieldset>
+              <div class="bo-notif-unlock">
+                <button type="button" class="btn-primary" id="notif-bo-push">Push condition to Order Errors</button>
+                <span class="hint" id="notif-bo-result"></span>
+              </div>
             </div>
           </div>
           <h3 style="margin:18px 0 8px">Sent notifications</h3>
@@ -1000,30 +1011,22 @@
     const note = $("#bo-notif-unlock-note");
     if (note) note.textContent = "Loading BO Error Condition…";
     const script = document.createElement("script");
-    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261020bon1";
-    script.onload = () => {
-      const unlock = $("#bo-notif-unlock");
-      if (unlock) unlock.hidden = true;
-    };
+    script.src = "../toyota-internal-lease-calculator-main/bo-rules-ui.js?v=20261021np1";
+    script.onload = () => { if (note) note.textContent = ""; };
     script.onerror = () => {
       boNotifLoaded = false;
       if (note) note.textContent = "Could not load the BO Error Condition page. Check the connection and try again.";
     };
     document.body.appendChild(script);
   }
-  function initBoNotifications() {
-    if (sessionStorage.getItem("reserved-orders-admin-pass")) { loadBoNotificationsUi(); return; }
-    const note = $("#bo-notif-unlock-note");
-    if (note && !boNotifLoaded) note.textContent = "Enter the Reserved Orders admin password, then Unlock — needed once per browser session.";
-  }
+  function initBoNotifications() { loadBoNotificationsUi(); }
 
   let notifLoaded = false;
-  function notifPassword() { return sessionStorage.getItem("reserved-orders-admin-pass") || ""; }
+  function notifPassword() { return ""; }
   function initNotificationsPanel() {
     if (notifLoaded) return;
-    if (notifPassword()) { notifLoaded = true; showNotifBody(); return; }
-    const note = $("#notif-unlock-note");
-    if (note) note.textContent = "Enter the Reserved Orders admin password, then Unlock — needed once per browser session.";
+    notifLoaded = true;
+    showNotifBody();
   }
   function showNotifBody() {
     const unlock = $("#notif-unlock");
@@ -1035,23 +1038,24 @@
   async function notifApi(url, options) {
     const res = await fetch(url, options);
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401) throw new Error("Wrong admin password — unlock again.");
+    if (res.status === 401) throw new Error("The server rejected this request (401).");
     if (!res.ok) throw new Error(data.error || "Request failed");
     return data;
   }
   async function loadNotifications() {
     const list = $("#notif-list");
     const staffBox = $("#notif-staff");
+    const boStaffBox = $("#notif-bo-staff");
     if (!list) return;
     try {
-      const data = await notifApi("/api/reserved-orders/notifications?password=" + encodeURIComponent(notifPassword()));
+      const data = await notifApi("/api/reserved-orders/notifications");
       const staff = data.staff || [];
-      if (staffBox && !staffBox.dataset.filled) {
-        staffBox.dataset.filled = "1";
-        staffBox.innerHTML = staff.length
-          ? staff.map((p) => `<label><input type="checkbox" value="${escapeHtml(p.recordId)}" />${escapeHtml(p.name)}</label>`).join("")
-          : '<p class="muted">No employees found.</p>';
-      }
+      const staffHtml = staff.length
+        ? staff.map((p) => `<label><input type="checkbox" value="${escapeHtml(p.recordId)}" />${escapeHtml(p.name)}</label>`).join("")
+        : '<p class="muted">No employees found.</p>';
+      if (staffBox && !staffBox.dataset.filled) { staffBox.dataset.filled = "1"; staffBox.innerHTML = staffHtml; }
+      if (boStaffBox && !boStaffBox.dataset.filled) { boStaffBox.dataset.filled = "1"; boStaffBox.innerHTML = staffHtml; }
+      loadBoRuleOptions();
       const items = data.notifications || [];
       list.innerHTML = items.length ? `<table><thead><tr><th>When</th><th>Notification</th><th>To</th><th>Seen by</th><th></th></tr></thead><tbody>${items.map((item) => {
         const at = item.at ? new Date(item.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -1074,6 +1078,28 @@
       }));
     } catch (err) {
       list.innerHTML = `<p class="foot" style="margin:0">${escapeHtml(err.message || "Could not load notifications.")}</p>`;
+    }
+  }
+
+  let boRulesLoaded = false;
+  async function loadBoRuleOptions() {
+    const select = $("#notif-bo-rule");
+    if (!select || boRulesLoaded) return;
+    boRulesLoaded = true;
+    try {
+      const res = await fetch("/api/reserved-orders/bo-rules");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not load conditions.");
+      const rules = (data.rules || []).filter((rule) => rule && !rule.archived);
+      select.innerHTML = rules.length
+        ? rules.map((rule) => {
+          const state = rule.active === false ? " · paused" : "";
+          return `<option value="${escapeHtml(rule.id)}">${escapeHtml(rule.name || "Untitled condition")} · ${Number(rule.affectedEmployees) || 0} employees / ${Number(rule.affectedOrders) || 0} orders${state}</option>`;
+        }).join("")
+        : '<option value="">No conditions yet — create one in BO Error Condition</option>';
+    } catch (err) {
+      boRulesLoaded = false;
+      select.innerHTML = '<option value="">Could not load conditions</option>';
     }
   }
 
@@ -1677,39 +1703,50 @@
   document.querySelectorAll("[data-admin-panel]").forEach((btn) => {
     btn.addEventListener("click", () => showAdminPanel(btn.dataset.adminPanel));
   });
-  const boNotifUnlockBtn = $("#bo-notif-unlock-btn");
-  if (boNotifUnlockBtn) boNotifUnlockBtn.addEventListener("click", async () => {
-    const pass = ($("#bo-notif-pass") && $("#bo-notif-pass").value || "").trim();
-    const note = $("#bo-notif-unlock-note");
-    if (!pass) { if (note) note.textContent = "Enter the admin password first."; return; }
-    if (note) note.textContent = "Checking password…";
-    try {
-      const res = await fetch("/api/reserved-orders/bo-rules?password=" + encodeURIComponent(pass));
-      if (res.status === 401) { if (note) note.textContent = "Wrong admin password — the rules were not unlocked."; return; }
-      if (!res.ok) throw new Error("check failed");
-    } catch (err) { if (note) note.textContent = "Could not check the password. Try again."; return; }
-    sessionStorage.setItem("reserved-orders-admin-pass", pass);
-    loadBoNotificationsUi();
+  document.querySelectorAll('input[name="notif-bo-audience"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const box = $("#notif-bo-staff");
+      const checked = document.querySelector('input[name="notif-bo-audience"]:checked');
+      if (box) box.hidden = !checked || checked.value !== "selected";
+    });
   });
-  const boNotifPass = $("#bo-notif-pass");
-  if (boNotifPass) boNotifPass.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); boNotifUnlockBtn.click(); } });
-  const notifUnlockBtn = $("#notif-unlock-btn");
-  if (notifUnlockBtn) notifUnlockBtn.addEventListener("click", async () => {
-    const pass = ($("#notif-pass") && $("#notif-pass").value || "").trim();
-    const note = $("#notif-unlock-note");
-    if (!pass) { if (note) note.textContent = "Enter the admin password first."; return; }
-    if (note) note.textContent = "Checking password…";
+  const notifBoPush = $("#notif-bo-push");
+  if (notifBoPush) notifBoPush.addEventListener("click", async () => {
+    const result = $("#notif-bo-result");
+    const ruleId = ($("#notif-bo-rule") && $("#notif-bo-rule").value || "").trim();
+    if (!ruleId) { if (result) result.textContent = "Create a condition in BO Error Condition first."; return; }
+    const selected = (document.querySelector('input[name="notif-bo-audience"]:checked') || {}).value === "selected";
+    const recordIds = selected
+      ? [...document.querySelectorAll("#notif-bo-staff input:checked")].map((input) => input.value).filter(Boolean)
+      : [];
+    if (selected && !recordIds.length) { if (result) result.textContent = "Pick at least one employee, or push to all employees."; return; }
+    const pushOnce = async (confirmRepublish) => {
+      const res = await fetch("/api/reserved-orders/bo-rules/" + encodeURIComponent(ruleId) + "/push-targeted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordIds, confirmRepublish: !!confirmRepublish }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.needsConfirm && !confirmRepublish) {
+        if (window.confirm(data.error || "Publish the same result again?")) return pushOnce(true);
+        return null;
+      }
+      if (!res.ok) throw new Error(data.error || "Push failed.");
+      return data;
+    };
+    notifBoPush.disabled = true;
+    if (result) result.textContent = "Checking the condition against the Back Order file…";
     try {
-      const res = await fetch("/api/reserved-orders/notifications?password=" + encodeURIComponent(pass));
-      if (res.status === 401) { if (note) note.textContent = "Wrong admin password — notifications were not unlocked."; return; }
-      if (!res.ok) throw new Error("check failed");
-    } catch (err) { if (note) note.textContent = "Could not check the password. Try again."; return; }
-    sessionStorage.setItem("reserved-orders-admin-pass", pass);
-    notifLoaded = true;
-    showNotifBody();
+      const data = await pushOnce(false);
+      if (result) result.textContent = data
+        ? `Pushed — ${data.employeeCount} employee(s), ${data.orderCount} error order(s). They now show under each name in Order Errors.`
+        : "Push cancelled.";
+      if (data) loadNotifications();
+    } catch (err) {
+      if (result) result.textContent = err.message || "Push failed.";
+    }
+    notifBoPush.disabled = false;
   });
-  const notifPass = $("#notif-pass");
-  if (notifPass && notifUnlockBtn) notifPass.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); notifUnlockBtn.click(); } });
   document.querySelectorAll('input[name="notif-audience"]').forEach((radio) => {
     radio.addEventListener("change", () => {
       const box = $("#notif-staff");

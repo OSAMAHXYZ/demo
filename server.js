@@ -464,7 +464,7 @@ function broadcastReservedOrdersUpdate(updatedAt) {
     }
   }
 }
-function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, boName }) {
+function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, boName, reservedBuffer, reservedName }) {
   ensureReportSheetDirs();
   const meta = loadReportSheetMeta();
   const fileNames = { ...(meta.fileNames || {}) };
@@ -479,6 +479,11 @@ function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, bo
     fileNames.backorder = String(boName || fileNames.backorder || 'Back Order');
     slots.add('backorder');
   }
+  if (reservedBuffer && reservedBuffer.length) {
+    fs.writeFileSync(reportSheetFilePath('reserved'), reservedBuffer);
+    fileNames.reserved = String(reservedName || fileNames.reserved || 'Reserved File');
+    slots.add('reserved');
+  }
   const at = Date.now();
   const next = {
     ...meta,
@@ -490,7 +495,7 @@ function saveReservedFilesToReportSheet({ esalesBuffer, esalesName, boBuffer, bo
   };
   saveReportSheetMeta(next);
   broadcastReportSheetUpdate(at);
-  return { at, central: fileNames.central || '', backorder: fileNames.backorder || '' };
+  return { at, central: fileNames.central || '', backorder: fileNames.backorder || '', reserved: fileNames.reserved || '' };
 }
 
 function refreshReservedOrdersFromAdminPush(fileNames) {
@@ -8420,6 +8425,11 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const boPath = reportSheetFilePath('backorder');
     if (!boPath || !fs.existsSync(boPath)) return { headers: [], rows: [] };
     return reservedOrdersApi.backOrderTableFromBuffer(fs.readFileSync(boPath));
+  },
+  readStoredReserved() {
+    const reservedPath = reportSheetFilePath('reserved');
+    if (!reservedPath || !fs.existsSync(reservedPath)) return null;
+    return fs.readFileSync(reservedPath);
   },
   onSourceFiles(files) {
     return saveReservedFilesToReportSheet(files || {});

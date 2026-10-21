@@ -781,5 +781,9 @@
     });
     if (password() && document.getElementById('admin-app') && !document.getElementById('admin-app').classList.contains('hidden')) {
         load().catch(() => { root.innerHTML = '<p>Sign in to manage BO error rules.</p>'; });
+    } else if (!document.getElementById('admin-app')) {
+        // Embedded outside Reserved Orders admin (Report Sheet admin): the BO
+        // condition endpoints need no password, so load right away.
+        load().catch(() => {});
     }
 })();

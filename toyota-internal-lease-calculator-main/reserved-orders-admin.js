@@ -408,10 +408,12 @@
         $('push-error').textContent = '';
         const esales = $('esales-file').files[0];
         const bo = $('bo-file').files[0];
+        const reserved = $('reserved-file') ? $('reserved-file').files[0] : null;
         if (!esales) { $('push-error').textContent = 'Choose the E-Sales Excel first.'; return; }
         try {
             const body = { password: password(), esalesBase64: await fileToBase64(esales), esalesName: esales.name };
             if (bo) { body.boBase64 = await fileToBase64(bo); body.boName = bo.name; }
+            if (reserved) { body.reservedBase64 = await fileToBase64(reserved); body.reservedName = reserved.name; }
             const pushed = await api('/api/reserved-orders/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if ($('push-report') && pushed.reportSheet) $('push-report').textContent = 'Report Sheet admin now has these files too.';
             await refresh();

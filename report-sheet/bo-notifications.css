@@ -20,6 +20,8 @@
 #panel-notifications .notif-audience { border: 1px solid #e6e8ee; border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
 #panel-notifications .notif-audience legend { font-size: 12px; font-weight: 700; color: #667085; padding: 0 4px; }
 #panel-notifications .notif-radio { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 13px; }
+#panel-notifications .notif-bo { border-top: 1px solid #e6e8ee; margin-top: 20px; padding-top: 4px; max-width: 760px; }
+#panel-notifications .notif-bo select { border: 1px solid #e6e8ee; border-radius: 8px; padding: 9px 10px; background: #fff; color: #172033; font: inherit; width: 100%; }
 #panel-notifications #notif-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #panel-notifications #notif-list th, #panel-notifications #notif-list td { border-bottom: 1px solid #e6e8ee; text-align: left; padding: 7px 6px; vertical-align: top; }
 #ytd-months-list { margin-top: 14px; }

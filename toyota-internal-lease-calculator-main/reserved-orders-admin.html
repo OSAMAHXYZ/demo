@@ -92,9 +92,11 @@
                 <section class="panel stack">
                     <h2>Push live</h2>
                     <p>Stock E-Sales and Back Order are shared with the <a href="../report-sheet/admin.html">Report Sheet admin</a>. Pushing them here updates reserved orders and the report dashboard. Pushing those same two files there updates this page.</p>
+                    <p>The <b>Reserved Order File</b> can be pushed here any time, the same as the Admin Push in Report Sheet admin. Its VINs are merged once: a VIN already in E-Sales keeps one order and takes the Reserved File data (column J, blank fields, expiry date); a new VIN is added with a blank assign date. When no Reserved File is chosen, the last stored one is checked again on this push.</p>
                     <p id="push-source"></p>
                     <label>Stock E-Sales<input id="esales-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <label>Back Order<input id="bo-file" type="file" accept=".xlsx,.xls,.csv"></label>
+                    <label>Reserved Order File<input id="reserved-file" type="file" accept=".xlsx,.xls,.csv"></label>
                     <button class="solid" id="push-live" type="button">PUSH LIVE</button>
                     <div class="err" id="push-error"></div>
                     <div id="push-report"></div>
@@ -128,7 +130,7 @@
         </main>
         <aside id="drawer" class="drawer hidden"></aside>
     </div>
-    <script src="reserved-orders-admin.js"></script>
-    <script src="bo-rules-ui.js"></script>
+    <script src="reserved-orders-admin.js?v=20261021res1"></script>
+    <script src="bo-rules-ui.js?v=20261021np1"></script>
 </body>
 </html>

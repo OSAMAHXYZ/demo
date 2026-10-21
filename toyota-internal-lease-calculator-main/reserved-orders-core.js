@@ -436,6 +436,12 @@ function extractReservedRows(grid) {
     const createdCol = findHeaderIndex([/created\s*date/, /order\s*created/, /order\s*date/, /creation/], headers);
     const paymentCol = findHeaderIndex([/payment\s*type/, /payment/, /finance\s*type/, /طريقة الدفع/], headers);
     const statusCol = findHeaderIndex([/^status$/, /current\s*status/, /الحالة/], headers);
+    // Reservation expiry lives in the Reserved File; it is stored there as a
+    // real date. Found by header name so the exact column can move.
+    const expiryCol = findHeaderByPriority([
+        [/expir/, /انتهاء/, /صلاحية/],
+        [/valid\s*(until|to|thru)/, /reservation\s*end/]
+    ], headers);
 
     const rows = [];
     for (let r = headerIdx + 1; r < grid.length; r++) {
@@ -457,6 +463,7 @@ function extractReservedRows(grid) {
             assignRaw: cell(line, columnIndex('G')),
             paymentRaw: paymentCol >= 0 ? cell(line, paymentCol) : '',
             statusRaw: statusCol >= 0 ? cell(line, statusCol) : '',
+            expiryRaw: expiryCol >= 0 ? cell(line, expiryCol) : '',
             searchArea: filledCell(cell(line, columnIndex('B'))) || filledCell(cell(line, columnIndex('A'))),
             shareLevel: cell(line, columnIndex('C')),
             reservationAge: cell(line, columnIndex('P')),
@@ -592,6 +599,13 @@ function reconcileLiveOrders(previousOrders, builtOrders) {
 function applyQueue(orders) {
     const list = orders.map((order) => ({ ...order, queueNumber: calculateQueueNumber(order, orders) }));
     return list.map((order) => ({ ...order, ahead: getNextThreeOrders(order, list) }));
+}
+
+function reservedExpiryFields(row) {
+    const parsed = parseExcelDate(row && row.expiryRaw);
+    if (parsed) return { expiryDate: localStamp(parsed), expiryDisplay: displayStamp(parsed) };
+    const text = cleanText(row && row.expiryRaw);
+    return text ? { expiryDate: '', expiryDisplay: text } : null;
 }
 
 function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, reservedSheets }) {
@@ -745,11 +759,17 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
     });
 
     // Reserved File (uploaded on its own from Report Sheet Admin): its VINs are read too.
-    // A VIN that is already in the reserved sheet only takes column J from this file.
-    // A new VIN is added as an order with a blank assign date.
+    // A VIN that is already in the reserved sheet keeps ONE order (never duplicated):
+    // it takes column J from this file, any blank field the Reserved File can fill,
+    // and the reservation expiry date. A new VIN is added as an order with a blank
+    // assign date. VINs only in E-Sales simply have no expiry to display.
     let reservedFileRows = 0;
     let reservedFileNewVins = 0;
     let reservedFileUpdatedVins = 0;
+    let reservedFileExpiryVins = 0;
+    const countedUpdated = new Set();
+    const countedExpiry = new Set();
+    const blankText = (value) => { const text = cleanText(value); return !text || text === '—'; };
     const reservedFileSheet = pickReservedSheet(reservedSheets || []) || (reservedSheets || [])[0] || null;
     if (reservedFileSheet) {
         const reservedFile = extractReservedRows(reservedFileSheet.grid || []);
@@ -759,23 +779,53 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             reservedFileRows += 1;
             const existing = byVin.get(vin);
             if (existing) {
+                let touched = false;
+                const fields = Array.isArray(existing.fields) ? existing.fields.slice() : [];
                 const jField = (row.fields || []).find((field) => field.col === 'J');
                 const jValue = jField ? cleanText(jField.value) : cleanText(row.suffix);
                 if (jValue && jValue !== '—') {
-                    const fields = Array.isArray(existing.fields) ? existing.fields.slice() : [];
                     const at = fields.findIndex((field) => field.col === 'J');
                     const label = at >= 0 ? fields[at].label : 'J';
                     if (at >= 0) fields[at] = { ...fields[at], value: jValue };
                     else fields.push({ label, col: 'J', value: jValue });
-                    existing.fields = fields;
-                    reservedFileUpdatedVins += 1;
+                    touched = true;
                 }
+                (row.fields || []).forEach((field) => {
+                    if (!field || field.col === 'J' || blankText(field.value)) return;
+                    const at = fields.findIndex((item) => item.col === field.col);
+                    if (at >= 0 && blankText(fields[at].value)) { fields[at] = { ...fields[at], value: field.value }; touched = true; }
+                    else if (at < 0) { fields.push({ label: field.label, col: field.col, value: field.value }); touched = true; }
+                });
+                existing.fields = fields;
+                const fillScalar = (key, value) => {
+                    if (!blankText(value) && blankText(existing[key])) { existing[key] = cleanText(value); touched = true; }
+                };
+                fillScalar('customerName', row.customerName);
+                fillScalar('vehicle', row.vehicle);
+                fillScalar('modelYear', row.modelYear);
+                fillScalar('exterior', row.exterior);
+                fillScalar('interior', row.interior);
+                fillScalar('searchArea', row.searchArea);
+                fillScalar('shareLevel', row.shareLevel);
+                if (existing.salesAdvisor === 'UNASSIGNED' && !blankText(row.salesAdvisor)) {
+                    existing.salesAdvisor = cleanText(row.salesAdvisor);
+                    touched = true;
+                }
+                const expiry = reservedExpiryFields(row);
+                if (expiry) {
+                    existing.expiryDate = expiry.expiryDate;
+                    existing.expiryDisplay = expiry.expiryDisplay;
+                    if (!countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
+                }
+                if (touched && !countedUpdated.has(vin)) { countedUpdated.add(vin); reservedFileUpdatedVins += 1; }
                 return;
             }
             const bo = backOrder.byVin.get(vin) || backOrder.byOrder.get(cleanText(row.orderNumber).toLowerCase()) || null;
             const created = parseExcelDate(prefer(row.createdRaw, bo && bo.createdRaw));
             const payment = normalizePayment(prefer(row.paymentRaw, bo && bo.paymentRaw));
             const prev = earlierOrder(row, vin);
+            const expiry = reservedExpiryFields(row);
+            if (expiry && !countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
             byVin.set(vin, carryForward(prev, {
                 key: `vin:${vin}`,
                 vin,
@@ -794,6 +844,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 createdDisplay: displayStamp(created),
                 assignDate: '',
                 assignDisplay: '',
+                expiryDate: expiry ? expiry.expiryDate : '',
+                expiryDisplay: expiry ? expiry.expiryDisplay : '',
                 paymentKind: payment.kind,
                 paymentLabel: payment.kind === 'unknown' ? 'UNKNOWN' : payment.label,
                 paymentHours: payment.hours,
@@ -828,6 +880,7 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         reservedFileRows,
         reservedFileNewVins,
         reservedFileUpdatedVins,
+        reservedFileExpiryVins,
         salesAdvisorCount: advisors.size,
         paymentBreakdown,
         earliestAssignDate: assignDates.length ? displayStamp(assignDates[0]) : '',
@@ -1227,6 +1280,10 @@ function attachReservedOrders(app, options) {
         res.status(401).json({ error: 'Unauthorized: Invalid password' });
         return false;
     }
+    // BO error conditions and employee notifications are managed from the admin
+    // pages without a password (owner request, 2026-10-21). Every other admin
+    // endpoint keeps using requireAdmin above.
+    function openAdmin() { return true; }
     function ensureStaff() {
         let staff = loadStaff().map((person, index) => ({
             recordId: person.recordId || `emp-legacy-${person.id || 'x'}-${index}`,
@@ -1384,7 +1441,7 @@ function attachReservedOrders(app, options) {
     ensureStaff();
     const boRulesApi = require('./bo-error-rules').attachBoErrorRules(app, {
         storeDir: options.storeDir,
-        requireAdmin,
+        requireAdmin: openAdmin,
         audit,
         sessionUser,
         loadStaff,
@@ -1431,7 +1488,7 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}, reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, column J updated ${built.report.reservedFileUpdatedVins || 0})`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}, reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
@@ -1567,9 +1624,17 @@ function attachReservedOrders(app, options) {
             const bo = boBuffer
                 ? backOrderFromBuffer(boBuffer)
                 : (typeof options.readStoredBackOrder === 'function' ? options.readStoredBackOrder() : { headers: [], rows: [] });
+            // Reserved Order File: pushed with this request when chosen; otherwise
+            // the last file stored by an Admin Push is checked again on every push.
+            let reservedBuffer = req.body.reservedBase64 ? Buffer.from(String(req.body.reservedBase64), 'base64') : null;
+            if (!reservedBuffer && typeof options.readStoredReserved === 'function') {
+                try { reservedBuffer = options.readStoredReserved() || null; } catch (e) { reservedBuffer = null; }
+            }
+            const reservedSheets = reservedBuffer && reservedBuffer.length ? sheetGridsFromBuffer(reservedBuffer) : [];
             const built = publish(sheets, bo, {
                 esalesName: req.body.esalesName,
                 boName: req.body.boName || (req.body.boBase64 ? '' : 'admin-back-order'),
+                reservedSheets,
                 req,
                 source: 'reserved-admin',
                 actor: { name: 'Admin' }
@@ -1581,7 +1646,9 @@ function attachReservedOrders(app, options) {
                     esalesBuffer,
                     esalesName: req.body.esalesName,
                     boBuffer,
-                    boName: req.body.boName || ''
+                    boName: req.body.boName || '',
+                    reservedBuffer: req.body.reservedBase64 ? reservedBuffer : null,
+                    reservedName: req.body.reservedName || ''
                 });
             }
             res.json({ ok: true, updatedAt: loadLive().updatedAt, report: built.report, reportSheet });
@@ -1716,7 +1783,7 @@ function attachReservedOrders(app, options) {
         return (item.audience.recordIds || []).includes(user.recordId);
     }
     app.get('/api/reserved-orders/notifications', (req, res) => {
-        if (!requireAdmin(req, res)) return;
+        if (!openAdmin(req, res)) return;
         const store = loadNotifications();
         const staff = loadStaff();
         res.json({
@@ -1729,7 +1796,7 @@ function attachReservedOrders(app, options) {
         });
     });
     app.post('/api/reserved-orders/notifications', (req, res) => {
-        if (!requireAdmin(req, res)) return;
+        if (!openAdmin(req, res)) return;
         const item = cleanNotification(req.body || {});
         if (!item) return res.status(400).json({ error: 'Write the notification message first.' });
         const store = loadNotifications();
@@ -1741,7 +1808,7 @@ function attachReservedOrders(app, options) {
         res.json({ ok: true, notification: item });
     });
     app.post('/api/reserved-orders/notifications/remove', (req, res) => {
-        if (!requireAdmin(req, res)) return;
+        if (!openAdmin(req, res)) return;
         const id = cleanText(req.body && req.body.id);
         const store = loadNotifications();
         const before = store.items.length;
