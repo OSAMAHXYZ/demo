@@ -451,3 +451,152 @@ body.cp-mode .cp-detail {
   color: #e8eef7;
 }
 body.cp-mode .cp-detail::backdrop { background: rgba(6, 10, 18, 0.72); }
+
+/* =====================================================================
+   v2 layout · every section full height, page scrolls
+   The fit-to-screen grid gave each section a fixed slot by position, so
+   the Import-warnings banner pushed every section into the wrong slot
+   (empty gap, squeezed charts, one employee row). Sections now stack.
+   ===================================================================== */
+body.cp-mode #panel-contact { overflow-x: hidden; overflow-y: auto; }
+body.cp-mode #contact-performance-host { display: block; height: auto; min-height: 100%; }
+.cp-app,
+.cp-app.is-roster,
+.cp-app:has(.cp-chips:not(:empty)) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  padding: 16px 20px 32px;
+}
+.cp-app > * { flex: 0 0 auto; min-height: 0; }
+.cp-app.is-roster .cp-employees .cp-table-wrap { max-height: none; }
+
+/* cards */
+.cp-header, .cp-filters, .cp-card { border-radius: 14px; }
+.cp-card { padding: 14px 16px; overflow: visible; }
+.cp-card h3, .cp-section-head h3 { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; }
+.cp-section-head { flex-wrap: wrap; margin-bottom: 10px; }
+
+/* header */
+.cp-header { padding: 14px 18px; border-top: 3px solid var(--cp-red); }
+.cp-header h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.cp-header p { font-size: 12.5px; line-height: 1.45; }
+
+/* warnings / stale banners */
+.cp-banner { padding: 10px 14px; border-radius: 12px; font-size: 12.5px; line-height: 1.45; }
+
+/* filters */
+.cp-filters { padding: 12px 14px; gap: 10px; }
+.cp-field span { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.cp-field input, .cp-field select { height: 38px; border-radius: 10px; padding: 0 10px; }
+.cp-filters > .cp-btn { height: 38px; }
+
+/* KPI tiles: label / number / sub stacked (buttons were laying them out in a row) */
+.cp-kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.cp-kpi {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 104px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  position: relative;
+  transition: transform .18s, border-color .18s;
+}
+.cp-kpi:hover { transform: translateY(-2px); }
+.cp-kpi .lab {
+  width: 100%;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: normal;
+  line-height: 1.3;
+}
+.cp-kpi .val {
+  font-family: "Space Grotesk", Manrope, Outfit, sans-serif;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 0;
+}
+.cp-kpi .sub { width: 100%; font-size: 11.5px; white-space: normal; line-height: 1.35; }
+.cp-kpi.ok .val { color: var(--cp-ok); }
+.cp-kpi.bad .val { color: var(--cp-bad); }
+.cp-kpi.wait .val { color: var(--cp-wait); }
+.cp-kpi.unknown { border-top: 3px solid var(--cp-neutral); }
+.cp-note { font-size: 12px; line-height: 1.5; padding: 0 2px; }
+
+/* charts */
+.cp-charts { grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr); gap: 12px; align-items: stretch; }
+.cp-charts .cp-card { min-height: 300px; }
+.cp-chart-row { grid-template-columns: 210px 1fr; gap: 16px; flex: 1; min-height: 240px; align-items: center; overflow: visible; }
+.cp-chart-row .cp-chart-box { height: 230px; }
+.cp-legend { height: auto; overflow: visible; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.cp-legend button { grid-template-columns: 12px 1fr auto 96px; gap: 8px; padding: 7px 8px; border-radius: 9px; font-size: 13px; }
+.cp-legend button:hover { background: rgba(148, 163, 184, 0.1); }
+.cp-legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+.cp-legend b { font-family: "Space Grotesk", Manrope, sans-serif; font-variant-numeric: tabular-nums; }
+.cp-legend .muted { text-align: right; white-space: nowrap; }
+#cp-bar-box { min-height: 240px; }
+
+/* advisor achievement: every advisor visible */
+.cp-advisors { overflow: visible; min-height: 0; }
+.cp-advisors .cp-chart-box { height: auto !important; }
+.cp-ach-list { gap: 9px; }
+.cp-ach-list li { grid-template-columns: minmax(140px, 210px) minmax(120px, 1fr) 56px 64px; gap: 12px; }
+.cp-ach-name { font-size: 12.5px; font-weight: 700; }
+.cp-ach-bar { height: 16px; border-radius: 8px; }
+.cp-ach-total { font-size: 12.5px; }
+.cp-ach-pct { font-family: "Space Grotesk", Manrope, sans-serif; font-weight: 700; }
+
+/* tables: employees scroll inside, lead detail shows its full page of rows */
+.cp-table-wrap { flex: 0 0 auto; border-radius: 12px; }
+.cp-employees .cp-table-wrap { max-height: 520px; overflow: auto; }
+.cp-leads .cp-table-wrap { max-height: none; overflow-x: auto; overflow-y: visible; }
+.cp-table { font-size: 12.5px; }
+.cp-table th { padding: 10px 10px; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+.cp-table td { padding: 9px 10px; max-width: 220px; }
+.cp-employees .cp-table td, .cp-employees .cp-table th { height: 40px; padding: 8px 10px; }
+.cp-table td.num { font-family: "Space Grotesk", Manrope, sans-serif; }
+.cp-raw { display: block; margin-top: 3px; font-size: 10.5px; color: var(--cp-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.cp-pager { margin-top: 10px; font-size: 12.5px; }
+.cp-meter { width: 96px; height: 7px; }
+
+/* lead detail dialog */
+.cp-detail { width: min(640px, 94vw); border: 1px solid var(--cp-line); box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8); }
+.cp-detail form { padding: 20px 22px 22px; max-height: 82vh; overflow: auto; }
+.cp-detail h3 { font-size: 18px; margin-bottom: 14px; }
+.cp-detail dl { grid-template-columns: 180px 1fr; gap: 8px 14px; }
+.cp-detail dt { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 2px; }
+.cp-detail dd { word-break: break-word; }
+
+/* dark theme for the new parts */
+body.cp-mode .cp-header { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 40%), var(--cp-card); }
+body.cp-mode .cp-card, body.cp-mode .cp-filters, body.cp-mode .cp-kpi {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 14px 34px -20px rgba(0,0,0,0.8);
+}
+body.cp-mode .cp-kpi.is-on { border-color: #3b82f6; }
+body.cp-mode .cp-banner { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #cfe0ff; }
+body.cp-mode .cp-banner.wait { background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.32); color: #fbbf24; }
+body.cp-mode .cp-banner.bad, body.cp-mode #cp-stale { background: rgba(255,59,78,0.12); border: 1px solid rgba(255,59,78,0.35); color: #ff8a96; }
+body.cp-mode .cp-chip { border-radius: 999px; }
+body.cp-mode .cp-ach-bar { background: #1a2438; }
+body.cp-mode .cp-detail { border-color: rgba(148,163,184,0.25); }
+body.cp-mode .cp-detail dt { color: #8d9bb0; }
+
+@media (max-width: 1500px) { .cp-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1100px) {
+  .cp-charts { grid-template-columns: 1fr; }
+  .cp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .cp-app, .cp-app.is-roster { padding: 12px 12px 24px; }
+  .cp-chart-row { grid-template-columns: 1fr; }
+  .cp-ach-list li { grid-template-columns: minmax(90px, 130px) 1fr 44px 52px; gap: 8px; }
+}

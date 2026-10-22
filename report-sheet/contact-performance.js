@@ -349,8 +349,10 @@
         ["in_progress", "In Progress Leads", fmt(kpis.inProgress), "Matched, in progress", "wait"],
         ["contacted", "Contact Rate", pct(kpis.contactRate), "Contacted ÷ matched", ""],
       ];
+      const unknownItem = (state.summary.distribution || []).find((item) => item.key === "unknown");
+      if (unknownItem) cards.push(["unknown", "Unknown / Missing Status", fmt(unknownItem.count), `${Number(unknownItem.pct || 0).toFixed(1)}% · status not recognised`, "unknown"]);
       host.querySelector("#cp-kpis").innerHTML = cards.map((card, index) => {
-        const on = index < 5 && state.filters.contact === card[0] && card[0] !== "";
+        const on = (index < 5 || card[0] === "unknown") && state.filters.contact === card[0] && card[0] !== "";
         return `<button type="button" class="cp-kpi ${card[4]}${on ? " is-on" : ""}" data-kpi="${esc(card[0])}" data-kpi-index="${index}">
           <span class="lab">${esc(card[1])}</span>
           <span class="val">${esc(card[2])}</span>
@@ -524,7 +526,7 @@
         <td title="${esc(row.leadSource)}">${esc(row.leadSource || "—")}</td>
         <td title="${esc(row.leadType)}">${esc(row.leadType || "—")}</td>
         <td title="${esc(row.initialContact)}">${esc(row.initialContact || "—")}</td>
-        <td>${badge(row.bucket, row.contactStatus)}</td>
+        <td>${badge(row.bucket, row.contactStatus)}${row.contactStatusRaw && row.contactStatusRaw !== row.contactStatus ? `<span class="cp-raw" title="Value in the file: ${esc(row.contactStatusRaw)}">File: ${esc(row.contactStatusRaw)}</span>` : ""}</td>
         <td title="${esc(row.crmStatus)}">${esc(row.crmStatus || "—")}</td>
         <td>${esc(row.createdDate || "—")}</td>
       </tr>`).join("") : `<tr><td colspan="12"><div class="cp-empty">No leads match these filters.</div></td></tr>`;

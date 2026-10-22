@@ -60,6 +60,93 @@
         document.querySelectorAll('#admin-nav button').forEach((button) => button.classList.toggle('active', button.dataset.panel === name));
     }
 
+    // ---- Sales type analysis (column U) · display only ----
+    // Names shown under each code. Fill these in to match your codes, e.g. '01': 'Cash'.
+    const SALES_TYPE_NAMES = { '01': '', '13': '', '07': '', '08': '' };
+    const SALES_TYPE_ORDER = ['01', '13', '07', '08'];
+    // Sales types whose cars show the reservation expiry (the deadline the server already sends).
+    const EXPIRY_TYPES = new Set(['01']);
+    const SHEET_NAMES = { F: 'Order', I: 'Model', J: 'Suffix', K: 'Model year', L: 'VIN', M: 'Ext', N: 'Int', R: 'Vehicle status', S: 'Customer', T: 'Salesman', U: 'Sales type' };
+    let salesTypePick = null; // nothing listed until a card is clicked
+    let showNoVinRows = false;
+    function fieldOf(order, col) {
+        const field = (order.fields || []).find((item) => item.col === col || item.label === col);
+        return field && field.value != null ? String(field.value).trim() : '';
+    }
+    function salesTypeOf(order) {
+        const raw = fieldOf(order, 'U');
+        if (!raw) return '';
+        return /^\d$/.test(raw) ? '0' + raw : raw;
+    }
+    function hasVin(order) {
+        const vin = String(order.vin || fieldOf(order, 'L') || '').trim();
+        return /^[A-Z0-9]{10,20}$/i.test(vin);
+    }
+    function carRows() { return orders.filter(hasVin); }
+    function expiryText(order) {
+        const end = parseLocal(order.deadline);
+        if (!end) return 'No assign date';
+        return end.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function expiryCells(order) {
+        if (!EXPIRY_TYPES.has(salesTypeOf(order))) return '<td class="st-na">—</td><td class="st-na">—</td>';
+        return `<td>${esc(expiryText(order))}</td><td class="timer-cell st-timer" data-deadline="${esc(order.deadline || '')}">${esc(remain(order))}</td>`;
+    }
+    function renderSalesTypes() {
+        const cardsBox = $('st-cards');
+        if (!cardsBox) return;
+        const cars = carRows();
+        const counts = {};
+        cars.forEach((order) => { const key = salesTypeOf(order) || 'blank'; counts[key] = (counts[key] || 0) + 1; });
+        const extra = Object.keys(counts).filter((key) => !SALES_TYPE_ORDER.includes(key)).sort();
+        const keys = SALES_TYPE_ORDER.concat(extra);
+        const total = cars.length;
+        const expired = cars.filter((order) => EXPIRY_TYPES.has(salesTypeOf(order)) && remain(order) === 'EXPIRED').length;
+        $('st-meta').textContent = `${total} cars with a VIN in the live sheet · column U` + (expired ? ` · ${expired} reservation${expired === 1 ? '' : 's'} expired` : '');
+        const card = (key, label, name, value, tone) => {
+            const share = total ? Math.round((value / total) * 100) : 0;
+            return `<button type="button" class="st-card ${tone}${salesTypePick === key ? ' is-on' : ''}" data-st="${esc(key)}">
+                <span class="st-code">${esc(label)}</span>
+                <span class="st-name">${esc(name)}</span>
+                <strong>${value}</strong>
+                <span class="st-share"><i style="width:${share}%"></i></span>
+                <em>${share}% of cars</em>
+            </button>`;
+        };
+        const tones = { '01': 't-red', '13': 't-blue', '07': 't-violet', '08': 't-teal' };
+        cardsBox.innerHTML = card('', 'Total', 'All sales types', total, 't-total')
+            + keys.map((key) => card(key, key === 'blank' ? 'Blank' : key, key === 'blank' ? 'No sales type' : (SALES_TYPE_NAMES[key] || 'Sales type ' + key) + (EXPIRY_TYPES.has(key) ? ' · has expiry' : ''), counts[key] || 0, tones[key] || 't-grey')).join('');
+        renderSalesTypeDetail();
+    }
+    function renderSalesTypeDetail() {
+        const box = $('st-detail');
+        if (!box) return;
+        if (salesTypePick == null) { box.innerHTML = ''; return; }
+        const list = carRows()
+            .filter((order) => !salesTypePick || (salesTypeOf(order) || 'blank') === salesTypePick)
+            .sort((a, b) => (a.queueNumber || 0) - (b.queueNumber || 0));
+        const title = salesTypePick === '' ? 'All cars' : salesTypePick === 'blank' ? 'Cars with no sales type' : `Sales type ${salesTypePick}${SALES_TYPE_NAMES[salesTypePick] ? ' · ' + SALES_TYPE_NAMES[salesTypePick] : ''}`;
+        box.innerHTML = `<div class="st-detail-head"><h3>${esc(title)}</h3><span>${list.length} car${list.length === 1 ? '' : 's'}</span></div>
+            <div class="st-table"><table><thead><tr><th>Queue</th><th>Status</th><th>Type</th><th>Order</th><th>VIN</th><th>Model</th><th>Customer</th><th>Salesman</th><th>Expiry</th><th>Time left</th></tr></thead><tbody>${
+            list.map((order) => `<tr data-open="${esc(order.key)}" class="st-row">
+                <td><span class="q-pill">#${order.queueNumber == null ? '—' : order.queueNumber}</span></td>
+                <td>${statusPill(order.status)}</td>
+                <td><span class="st-type">${esc(salesTypeOf(order) || '—')}</span></td>
+                <td>${esc(order.orderNumber || fieldOf(order, 'F') || '—')}</td>
+                <td class="mono">${esc(order.vin || fieldOf(order, 'L') || '—')}</td>
+                <td>${esc(fieldOf(order, 'I') || order.vehicle || '—')}</td>
+                <td>${esc(fieldOf(order, 'S') || order.customerName || '—')}</td>
+                <td>${esc(fieldOf(order, 'T') || order.salesAdvisor || '—')}</td>
+                ${expiryCells(order)}
+            </tr>`).join('') || '<tr><td colspan="10" class="st-na">No cars</td></tr>'
+            }</tbody></table></div>`;
+    }
+    function statusPill(status) {
+        const value = String(status || '').trim();
+        const tone = value === 'الغاء' ? 'is-bad' : value === 'تم الفوترة' ? 'is-ok' : value === 'محجوز' ? 'is-hold' : value ? 'is-info' : 'is-none';
+        return `<span class="s-pill ${tone}">${esc(value || '—')}</span>`;
+    }
+
     function renderOverview() {
         const activeStaff = staff.filter((person) => person.active).length;
         const today = audit.filter((event) => String(event.at || '').slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
@@ -73,6 +160,7 @@
             const value = pay[key] || 0;
             return `<div class="bar"><span>${key}</span><i style="width:${Math.round(value / max * 100)}%"></i><b>${value}</b></div>`;
         }).join('');
+        renderSalesTypes();
     }
     function renderOrders() {
         const q = $('admin-search').value.trim().toLowerCase();
@@ -224,8 +312,19 @@
         if (!box) return;
         const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
         const cols = sheetColumns(orders);
-        const rows = orders.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
-        box.innerHTML = rows.length ? `<table><thead><tr>${cols.map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((order) => `<tr>${cols.map((label) => `<td>${esc(sheetValue(order, label))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="empty">No live rows yet. Push Stock E-Sales to fill this sheet.</p>';
+        const noVin = orders.filter((order) => !hasVin(order)).length;
+        const source = showNoVinRows ? orders : orders.filter(hasVin);
+        const rows = source.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
+        const head = (label) => SHEET_NAMES[label] ? `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(SHEET_NAMES[label])}</th>` : `<th>${esc(label)}</th>`;
+        const cell = (order, label) => {
+            const value = sheetValue(order, label);
+            if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;
+            if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
+            if (label === 'U' && value) return `<td><span class="st-type">${esc(salesTypeOf(order))}</span></td>`;
+            return `<td>${esc(value)}</td>`;
+        };
+        const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost" id="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
+        box.innerHTML = rows.length ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => `<tr class="${hasVin(order) ? '' : 'is-novin'}">${cols.map((label) => cell(order, label)).join('')}</tr>`).join('')}</tbody></table>` : `${note}<p class="empty">No live rows yet. Push Stock E-Sales to fill this sheet.</p>`;
     }
     function renderMarketing() {
         const body = $('marketing-rows');
@@ -431,6 +530,23 @@
         });
     }, 1000);
     if ($('sheet-search')) $('sheet-search').addEventListener('input', renderSheet);
+    if ($('live-sheet')) $('live-sheet').addEventListener('click', (event) => {
+        if (!event.target.closest('#sheet-novin-toggle')) return;
+        showNoVinRows = !showNoVinRows;
+        renderSheet();
+    });
+    if ($('st-cards')) $('st-cards').addEventListener('click', (event) => {
+        const card = event.target.closest('[data-st]');
+        if (!card) return;
+        salesTypePick = card.dataset.st;
+        renderSalesTypes();
+        const detail = $('st-detail');
+        if (detail && detail.scrollIntoView) detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    if ($('st-detail')) $('st-detail').addEventListener('click', (event) => {
+        const row = event.target.closest('[data-open]');
+        if (row) openOrder(row.dataset.open);
+    });
     try {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(`${protocol}//${location.host}`);
