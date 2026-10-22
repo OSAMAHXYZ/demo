@@ -908,8 +908,101 @@
   .mkt-fields b { color: #fff; font-size: 0.86rem; word-break: break-word; }
   .staff-row { border-bottom-color: var(--ro-line) !important; }
   .empty { color: var(--ro-muted); padding: 24px; text-align: center; }
-  /* frozen columns need solid fills on striped / hovered / no-VIN rows */
-  .excel-live tbody td:nth-child(-n+2) { background: #0e1728; }
-  .excel-live tbody tr:nth-child(even) td:nth-child(-n+2) { background: #0f1a2b; }
-  .excel-live tbody tr:hover td:nth-child(-n+2) { background: #1b1a2a; }
-  .excel-live tbody tr.is-novin td:nth-child(-n+2) { background: #15182a; }
+/* frozen columns need solid fills on striped / hovered / no-VIN rows */
+.excel-live tbody td:nth-child(-n+2) { background: #0e1728; }
+.excel-live tbody tr:nth-child(even) td:nth-child(-n+2) { background: #0f1a2b; }
+.excel-live tbody tr:hover td:nth-child(-n+2) { background: #1b1a2a; }
+.excel-live tbody tr.is-novin td:nth-child(-n+2) { background: #15182a; }
+
+/* =====================================================================
+   11. Light-box sweep · boxes the base sheet kept white
+   The base CSS is a light theme; anywhere it still paints a white or
+   pastel box, the skin's light text vanished on it. Repaint every one
+   of those boxes dark so text inside boxes reads on the whole page.
+   ===================================================================== */
+
+/* BO Message Builder: file strip, KPI strip, rule list, pickers */
+.br-file div, .br-kpis article, .br-picks, .br-rule-row, .br-msg,
+.br-apply, .br-test-out {
+  background: var(--ro-surface-2);
+  border-color: var(--ro-line);
+  color: var(--ro-ink-2);
+  box-shadow: none;
+}
+.br-kpis strong { color: #fff; font-family: var(--ro-num); }
+.br-file b, .br-kpis span, .br-form label > span, .br-label { color: var(--ro-muted); }
+.br-rule { color: var(--ro-ink-2); }
+.br-rule b { color: #fff; }
+.br-rule span, .br-sub { color: var(--ro-muted); }
+.br-picks label { color: var(--ro-ink-2); }
+.br-rule-row.is-selected { border-color: var(--ro-red); box-shadow: inset 3px 0 0 var(--ro-red); }
+#br-note { color: var(--ro-ink-2); }
+
+/* BO Message Builder: every control inside the boxes */
+#panel-alerts #br-search, .br-head button, .br-head input,
+.br-maps select, .br-cond select, .br-cond input, .br-cond button,
+#br-add-cond, #br-test, .br-review select, .br-pick-search,
+.br-form input, .br-form select, .br-form textarea, .br-wa textarea,
+.br-actions button, .br-table button, .br-buttons button, .br-wa button,
+.br-chips button {
+  background-color: var(--ro-surface-2);
+  border-color: var(--ro-line-strong);
+  color: var(--ro-ink);
+}
+#br-test { border-color: rgba(235, 10, 30, 0.55); color: #fff; font-weight: 700; }
+.br-chips button { color: var(--ro-ink-2); }
+.br-chips button:hover { border-color: var(--ro-red); color: #ff6b7a; }
+.br-form .br-picks label, .br-form .check { color: var(--ro-ink-2); }
+.br-table th, .br-table td { border-bottom-color: var(--ro-line); }
+.br-table tr.is-inactive { color: var(--ro-muted); }
+.br-template { background: var(--ro-surface-2); border-color: var(--ro-line-strong); color: var(--ro-ink-2); }
+.br-preview-box { background: #0b141a; }
+.br-preview-box::before { color: rgba(255, 255, 255, 0.35); }
+/* WhatsApp bubbles stay white with dark text, like the real app */
+.br-pill.on, .br-pill.sent { background: rgba(16, 185, 129, 0.14); color: var(--ro-green); }
+.br-pill.off, .br-pill.arch { background: rgba(148, 163, 184, 0.14); color: var(--ro-ink-2); }
+.br-pill.wait { background: rgba(235, 10, 30, 0.14); color: #ff6b7a; }
+.br-pill.part { background: rgba(251, 191, 36, 0.12); color: var(--ro-amber); }
+.br-flag { color: #ff6b7a; }
+
+/* Marketing requests (admin) */
+#admin-app .mkt-card { background: var(--ro-surface); border-color: var(--ro-line); color: var(--ro-ink-2); }
+#admin-app .mkt-card.is-cancelled { background: rgba(235, 10, 30, 0.06); border-color: rgba(235, 10, 30, 0.4); }
+#admin-app .mkt-fields div { background: var(--ro-surface-2); border: 1px solid var(--ro-line); }
+
+/* Employee page: alerts, notifications, Order Errors */
+.my-alert { background: rgba(235, 10, 30, 0.07); border-color: rgba(235, 10, 30, 0.35); border-left-color: var(--ro-red); color: var(--ro-ink-2); }
+.my-alert h3 { color: #fff; }
+.emp-notif { background: rgba(251, 191, 36, 0.08); border-color: rgba(251, 191, 36, 0.3); border-left-color: var(--ro-amber); color: var(--ro-ink-2); }
+.emp-notif.is-seen { background: var(--ro-surface-2); border-color: var(--ro-line); border-left-color: var(--ro-line-strong); }
+.emp-notif p { color: var(--ro-ink-2); }
+.emp-notif-head span { color: var(--ro-muted); }
+.emp-notif button, .oe-actions button {
+  background: var(--ro-surface-2);
+  border-color: var(--ro-line-strong);
+  color: var(--ro-ink);
+}
+.oe-card { background: var(--ro-surface); border-color: rgba(235, 10, 30, 0.35); border-left-color: var(--ro-red); color: var(--ro-ink-2); }
+.oe-card.is-done { border-color: var(--ro-line); border-left-color: var(--ro-green); }
+.oe-what { color: var(--ro-ink-2); }
+.oe-what b { color: #ff6b7a; }
+.oe-what .oe-fix { color: var(--ro-green); }
+.oe-msg { background: var(--ro-surface-2); border-color: var(--ro-line); color: var(--ro-ink-2); }
+.oe-status { background: rgba(235, 10, 30, 0.14); color: #ff6b7a; }
+.oe-status.is-viewed { background: rgba(96, 165, 250, 0.14); color: #93c5fd; }
+.oe-status.is-progress { background: rgba(251, 191, 36, 0.12); color: var(--ro-amber); }
+.oe-status.is-sent { background: rgba(16, 185, 129, 0.14); color: var(--ro-green); }
+.oe-table th, .oe-table td { border-bottom-color: var(--ro-line); }
+.ahead li { background: var(--ro-surface-2); border-color: var(--ro-line); color: var(--ro-ink-2); }
+.empty { background: var(--ro-surface-2); color: var(--ro-muted); }
+.order-col.timer-col { background: rgba(251, 191, 36, 0.07); }
+
+/* Message overlay: alert boxes and date stepper */
+#overlay-message .msg-alert { background: var(--ro-surface-2); border-color: var(--ro-line); color: var(--ro-ink-2); }
+#overlay-message .msg-alert.info { background: rgba(96, 165, 250, 0.1); border-color: rgba(96, 165, 250, 0.35); }
+#overlay-message .msg-alert.warning { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.35); }
+#overlay-message .msg-alert.urgent { background: rgba(235, 10, 30, 0.1); border-color: rgba(235, 10, 30, 0.4); }
+#overlay-message .msg-alert.sent { background: rgba(16, 185, 129, 0.1); border-color: rgba(52, 211, 153, 0.35); }
+#overlay-message .date-step button { background: var(--ro-surface-2); border-color: var(--ro-line-strong); color: var(--ro-ink); }
+#overlay-message .preview-box, #app .mc-preview-box { background: #0b141a; }
+#overlay-message .preview-box::before { color: rgba(255, 255, 255, 0.35); }
