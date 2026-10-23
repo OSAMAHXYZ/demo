@@ -280,19 +280,26 @@
         alerts = data.alerts || [];
         renderAlerts();
     }
+    function colIndex(letter) {
+        const text = String(letter || '').toUpperCase();
+        let n = 0;
+        for (let i = 0; i < text.length; i += 1) n = n * 26 + (text.charCodeAt(i) - 64);
+        return n;
+    }
     function sheetColumns(list) {
-        const cols = [];
-        const seen = new Set();
-        function add(label) {
-            const name = String(label || '').trim();
-            if (!name || seen.has(name)) return;
-            seen.add(name);
-            cols.push(name);
-        }
-        ['Queue', 'Status', 'Updated by', 'Updated at'].forEach(add);
-        list.forEach((order) => (order.fields || []).forEach((field) => add(field.label || field.col)));
-        if (cols.length === 4) ['Order', 'VIN', 'Advisor', 'Payment', 'Deadline'].forEach(add);
-        return cols;
+        const meta = ['Queue', 'Status', 'Updated by', 'Updated at'];
+        const titles = {};
+        const letters = new Set();
+        list.forEach((order) => (order.fields || []).forEach((field) => {
+            const col = String(field.col || '').trim().toUpperCase();
+            const label = String(field.label || '').trim();
+            if (!col) return;
+            letters.add(col);
+            if (label && !titles[col]) titles[col] = label;
+        }));
+        const excel = [...letters].sort((a, b) => colIndex(a) - colIndex(b));
+        if (!excel.length) return meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Deadline']);
+        return { cols: meta.concat(excel), titles };
     }
     function sheetValue(order, label) {
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
@@ -304,18 +311,27 @@
         if (label === 'Advisor') return order.salesAdvisor || '';
         if (label === 'Payment') return order.paymentLabel || '';
         if (label === 'Deadline') return order.deadline || '';
-        const field = (order.fields || []).find((item) => (item.label || item.col) === label);
+        const field = (order.fields || []).find((item) => String(item.col || '').toUpperCase() === String(label || '').toUpperCase()
+            || (item.label || item.col) === label);
         return field && field.value != null ? String(field.value) : '';
     }
     function renderSheet() {
         const box = $('live-sheet');
         if (!box) return;
         const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
-        const cols = sheetColumns(orders);
+        const packed = sheetColumns(orders);
+        const cols = Array.isArray(packed) ? packed : packed.cols;
+        const titles = Array.isArray(packed) ? {} : (packed.titles || {});
         const noVin = orders.filter((order) => !hasVin(order)).length;
         const source = showNoVinRows ? orders : orders.filter(hasVin);
         const rows = source.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
-        const head = (label) => SHEET_NAMES[label] ? `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(SHEET_NAMES[label])}</th>` : `<th>${esc(label)}</th>`;
+        const head = (label) => {
+            const named = SHEET_NAMES[label] || titles[label] || '';
+            if (/^[A-Z]{1,3}$/.test(label) && named) {
+                return `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(named)}</th>`;
+            }
+            return `<th>${esc(named || label)}</th>`;
+        };
         const cell = (order, label) => {
             const value = sheetValue(order, label);
             if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;

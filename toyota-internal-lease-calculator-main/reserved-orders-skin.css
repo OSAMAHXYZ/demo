@@ -866,8 +866,8 @@
   #pay-bars .bar:nth-child(4) i { background: linear-gradient(90deg, #475569, #94a3b8); box-shadow: none; }
   #pay-bars .bar b { text-align: right; font-family: var(--ro-num); color: #fff; }
   
-  /* live sheet */
-  .sheet-note { margin: 0 0 12px; }
+  /* live sheet — one dark grid; no sticky side columns (they overlapped cells when Status was wide) */
+  .sheet-note { margin: 0 0 12px; color: var(--ro-muted); }
   .sheet-novin {
     display: flex;
     align-items: center;
@@ -881,10 +881,47 @@
     font-weight: 600;
     position: sticky;
     left: 0;
+    z-index: 5;
   }
   .sheet-novin .ghost { min-height: 28px; font-size: 0.74rem; }
-  .excel-live table { font-size: 0.8rem; }
-  .excel-live thead th { z-index: 3; background: #15233a; }
+  .excel-live {
+    background: #0b1220 !important;
+    border: 1px solid var(--ro-line) !important;
+    border-radius: var(--ro-radius);
+    color: var(--ro-ink);
+  }
+  .excel-live table {
+    font-size: 0.8rem;
+    background: transparent !important;
+    color: var(--ro-ink) !important;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: max-content;
+    width: 100%;
+  }
+  .excel-live th,
+  .excel-live td {
+    position: static !important;
+    left: auto !important;
+    white-space: nowrap;
+    font-family: var(--ro-font);
+    vertical-align: middle;
+    box-sizing: border-box;
+  }
+  .excel-live thead th {
+    position: sticky !important;
+    top: 0;
+    z-index: 3;
+    background: #15233a !important;
+    color: #c9d4e3 !important;
+    border: 1px solid rgba(148, 163, 184, 0.16) !important;
+    border-bottom-color: rgba(148, 163, 184, 0.28) !important;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    padding: 8px 10px;
+  }
   .excel-live th .col-letter {
     display: inline-grid;
     place-items: center;
@@ -896,15 +933,36 @@
     color: var(--ro-muted);
     font: 800 0.62rem var(--ro-num);
   }
-  .excel-live tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.015); }
-  .excel-live tbody tr:hover td { background: rgba(235, 10, 30, 0.06); }
-  .excel-live tbody tr.is-novin td { color: #6f7f97; background: rgba(251, 191, 36, 0.04); }
-  /* freeze Queue + Status while scrolling sideways */
-  .excel-live th:nth-child(1), .excel-live td:nth-child(1) { position: sticky; left: 0; z-index: 2; background: var(--ro-surface); }
-  .excel-live th:nth-child(2), .excel-live td:nth-child(2) { position: sticky; left: 64px; z-index: 2; background: var(--ro-surface); box-shadow: 6px 0 10px -8px rgba(0, 0, 0, 0.8); }
-  .excel-live th:nth-child(1) { min-width: 64px; width: 64px; box-sizing: border-box; }
-  .excel-live td:nth-child(1) { min-width: 64px; width: 64px; box-sizing: border-box; }
-  .excel-live thead th:nth-child(1), .excel-live thead th:nth-child(2) { z-index: 4; background: #15233a; }
+  .excel-live tbody td {
+    background: #0e1728 !important;
+    color: #eef3fa !important;
+    border: 1px solid rgba(148, 163, 184, 0.1) !important;
+    padding: 7px 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .excel-live tbody tr:nth-child(even) td { background: #121c2e !important; color: #eef3fa !important; }
+  .excel-live tbody tr:hover td { background: #1a2438 !important; color: #fff !important; }
+  .excel-live tbody tr.is-novin td { color: #fbbf24 !important; background: rgba(251, 191, 36, 0.08) !important; }
+  .excel-live .col-queue { min-width: 56px; text-align: center; }
+  .excel-live .col-status { min-width: 120px; }
+  .excel-live .q-pill {
+    display: inline-grid;
+    place-items: center;
+    min-width: 34px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 7px;
+    background: rgba(96, 165, 250, 0.16);
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    color: #93c5fd;
+    font: 700 0.76rem var(--ro-num);
+  }
+  .excel-live .s-pill,
+  .excel-live .col-status .s-pill {
+    background: rgba(96, 165, 250, 0.14);
+    border-color: rgba(96, 165, 250, 0.32);
+    color: #93c5fd;
+  }
   
   /* orders table timer + drawer */
   .timer-cell { font-family: var(--ro-num); font-weight: 700; color: var(--ro-amber); white-space: nowrap; }
@@ -925,11 +983,6 @@
   .mkt-fields b { color: #fff; font-size: 0.86rem; word-break: break-word; }
   .staff-row { border-bottom-color: var(--ro-line) !important; }
   .empty { color: var(--ro-muted); padding: 24px; text-align: center; }
-/* frozen columns need solid fills on striped / hovered / no-VIN rows */
-.excel-live tbody td:nth-child(-n+2) { background: #0e1728; }
-.excel-live tbody tr:nth-child(even) td:nth-child(-n+2) { background: #0f1a2b; }
-.excel-live tbody tr:hover td:nth-child(-n+2) { background: #1b1a2a; }
-.excel-live tbody tr.is-novin td:nth-child(-n+2) { background: #15182a; }
 
 /* =====================================================================
    11. Light-box sweep · boxes the base sheet kept white
