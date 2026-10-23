@@ -12631,20 +12631,65 @@ body.rv-mode #rv-dash:not(.is-snapshot) #rv-live-table:empty { display: none; }
 body.rv-mode .rv-live-table table,
 body.rv-mode .rv-history-list table,
 body.rv-mode .rv-audit-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+body.rv-mode .rv-live-table th,
+body.rv-mode .rv-history-list th,
+body.rv-mode .rv-audit-table th,
+body.rv-mode .rv-table th,
 body.live-app.toyota-theme.rv-mode .rv-live-table th,
 body.live-app.toyota-theme.rv-mode .rv-history-list th,
 body.live-app.toyota-theme.rv-mode .rv-audit-table th,
 body.live-app.toyota-theme.rv-mode .rv-table th {
   background: #101a2b !important;
   color: #8d9bb0 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.18) !important;
 }
+/* Beat global even-row / hover light fills so text stays readable on the dark board */
+body.rv-mode .rv-live-table td,
+body.rv-mode .rv-history-list td,
+body.rv-mode .rv-audit-table td,
+body.rv-mode .rv-table td,
 body.live-app.toyota-theme.rv-mode .rv-live-table td,
 body.live-app.toyota-theme.rv-mode .rv-history-list td,
 body.live-app.toyota-theme.rv-mode .rv-audit-table td,
-body.live-app.toyota-theme.rv-mode .rv-table td {
+body.live-app.toyota-theme.rv-mode .rv-table td,
+body.rv-mode .rv-live-table tbody tr:nth-child(even) td,
+body.rv-mode .rv-history-list tbody tr:nth-child(even) td,
+body.rv-mode .rv-audit-table tbody tr:nth-child(even) td,
+body.rv-mode .rv-table tbody tr:nth-child(even) td,
+body.live-app.rv-mode table tbody tr:nth-child(even) td {
   background: #0c1422 !important;
   color: #e8eef7 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.12) !important;
 }
+body.rv-mode .rv-live-table tbody tr:nth-child(odd) td,
+body.rv-mode .rv-history-list tbody tr:nth-child(odd) td,
+body.rv-mode .rv-audit-table tbody tr:nth-child(odd) td,
+body.rv-mode .rv-table tbody tr:nth-child(odd) td {
+  background: #0a1220 !important;
+  color: #e8eef7 !important;
+}
+body.rv-mode .rv-live-table tbody tr:hover td,
+body.rv-mode .rv-history-list tbody tr:hover td,
+body.rv-mode .rv-audit-table tbody tr:hover td,
+body.rv-mode .rv-table tbody tr:hover td,
+body.live-app.rv-mode table tbody tr:hover td,
+body.live-app.theme-dark.rv-mode table tbody tr:hover td {
+  background: #15233a !important;
+  color: #fff !important;
+}
+body.rv-mode .rv-sales-emp,
+body.rv-mode .rv-muted,
+body.rv-mode .rv-board-h h3 { color: #e8eef7 !important; }
+body.rv-mode .rv-vin-btn { color: #93c5fd !important; }
+body.rv-mode .rv-vin-btn:hover,
+body.rv-mode .rv-vin-btn:focus-visible { color: #bfdbfe !important; }
+body.rv-mode .rv-table tbody tr.rv-row-noprof td { background: rgba(235, 10, 30, 0.12) !important; }
+body.rv-mode .rv-table tbody tr.rv-row-inqueue td { background: rgba(37, 99, 235, 0.14) !important; }
+body.rv-mode .rv-status-ok { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+body.rv-mode .rv-status-warn { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
+body.rv-mode .rv-status-info { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+body.rv-mode .rv-status-na { background: rgba(148, 163, 184, 0.14); color: #94a3b8; }
+body.rv-mode .rv-pos { background: rgba(59, 130, 246, 0.18); color: #93c5fd; }
 body.rv-mode .rv-move-new { color: #34d399; font-weight: 800; }
 body.rv-mode .rv-move-reassigned { color: #c4b5fd; font-weight: 800; }
 body.rv-mode .rv-move-removed { color: #ff3b4e; font-weight: 800; }
