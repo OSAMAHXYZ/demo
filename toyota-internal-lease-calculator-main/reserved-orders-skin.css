@@ -67,13 +67,30 @@
     box-sizing: border-box;
     transition: border-color .16s, box-shadow .16s;
   }
-  input::placeholder, textarea::placeholder { color: #6f7f97; }
-  input:focus, select:focus, textarea:focus {
+  /* Base sheet uses .toolbar/.field/.stack { background:#fff } — beat that so text stays visible */
+  .field input, .field select, .field textarea,
+  .toolbar input, .toolbar select,
+  .stack input, .stack select, .stack textarea,
+  #admin-app input:not([type="checkbox"]):not([type="radio"]),
+  #admin-app select,
+  #admin-app textarea {
+    background: var(--ro-surface-2) !important;
+    background-color: var(--ro-surface-2) !important;
+    color: var(--ro-ink) !important;
+    border-color: var(--ro-line-strong) !important;
+  }
+  input::placeholder, textarea::placeholder,
+  .toolbar input::placeholder, .field input::placeholder, .stack input::placeholder,
+  #admin-app input::placeholder, #admin-app textarea::placeholder { color: #8d9bb0 !important; }
+  input:focus, select:focus, textarea:focus,
+  .toolbar input:focus, .toolbar select:focus,
+  .field input:focus, .field select:focus, .field textarea:focus,
+  .stack input:focus, .stack select:focus, .stack textarea:focus {
     outline: none;
-    border-color: rgba(235, 10, 30, 0.55);
+    border-color: rgba(235, 10, 30, 0.55) !important;
     box-shadow: 0 0 0 4px rgba(235, 10, 30, 0.12);
   }
-  select option { background: var(--ro-surface); color: var(--ro-ink); }
+  select option, #admin-app select option { background: var(--ro-surface); color: var(--ro-ink); }
   input[type="checkbox"], input[type="radio"] { min-height: 0; accent-color: var(--ro-red); }
   input[type="file"] { padding: 7px; cursor: pointer; }
   input[type="file"]::file-selector-button {
