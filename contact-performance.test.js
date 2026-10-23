@@ -81,6 +81,7 @@ async function main() {
   assert(summary.kpis.matched === 4, 'kpi matched');
   assert(summary.kpis.contacted === 2, `contacted ${summary.kpis.contacted}`);
   assert(contact.columns.status === 6, 'contact status is export column G');
+  assert(contact.columns.employeeName === 4, 'contact employee is column E');
   assert(summary.kpis.exportContacted === 2, `export contacted ${summary.kpis.exportContacted}`);
   assert(summary.kpis.contactedOfCrm === 40, `contacted share ${summary.kpis.contactedOfCrm}`);
   const contactedSlice = summary.distribution.find((item) => item.key === 'contacted');
@@ -125,11 +126,12 @@ async function main() {
   assert(noTxn.errors.some((line) => /Column C/.test(line)), 'missing column C blocks');
 
   const shiftedContact = workbook('Daily', [
-    ['Advisor', 'Lead Number', 'Initial Contact', 'Showroom', 'Created Date'],
-    ['Sara Nasser', '9001', 'Yes', 'Jeddah', '01.10.2026'],
-    ['Ali M', '9002', 'No', 'Riyadh', '02.10.2026'],
-    ['Nora', '9003', '', 'Dammam', '03.10.2026'],
-    ['Hadi', '9004', 'In Progress', 'Jeddah', '04.10.2026'],
+    // A..G: Lead Number not in C; employee locked to E; status locked to G (blank → Initial Contact)
+    ['Pad', 'Lead Number', 'Initial Contact', 'Showroom', 'Advisor', 'Created Date', 'Status'],
+    ['', '9001', 'Yes', 'Jeddah', 'Sara Nasser', '01.10.2026', ''],
+    ['', '9002', 'No', 'Riyadh', 'Ali M', '02.10.2026', ''],
+    ['', '9003', '', 'Dammam', 'Nora', '03.10.2026', ''],
+    ['', '9004', 'In Progress', 'Jeddah', 'Hadi', '04.10.2026', ''],
   ]);
   const shiftedCrm = Buffer.from([
     'Prospect,Lead Number,CRM Status,Employee Responsible,Centre',
@@ -142,8 +144,10 @@ async function main() {
   assert(!shiftedParsed.errors.length, shiftedParsed.errors.join('; '));
   assert(shiftedParsed.sheetName === 'Daily', 'worksheet with Lead Number is used');
   assert(shiftedParsed.columns.leadNumber === 1, 'lead number header is used when column C is not the id');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9001' && row.bucket === 'contacted'), 'yes initial contact counts as contacted');
-  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9002' && row.bucket === 'not_contacted'), 'no initial contact counts as not contacted');
+  assert(shiftedParsed.columns.status === 6, 'shifted status is locked to column G');
+  assert(shiftedParsed.columns.employeeName === 4, 'shifted employee is locked to column E');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9001' && row.bucket === 'contacted' && row.employeeName === 'Sara Nasser'), 'yes initial contact counts as contacted');
+  assert(shiftedParsed.rows.some((row) => row.leadNumber === '9002' && row.bucket === 'not_contacted' && row.employeeName === 'Ali M'), 'no initial contact counts as not contacted');
   assert(shiftedParsed.rows.some((row) => row.leadNumber === '9003' && row.bucket === 'missing'), 'blank initial contact stays missing');
   assert(shiftedParsed.rows.some((row) => row.leadNumber === '9004' && row.bucket === 'in_progress'), 'in progress stays separate');
   const shiftedCrmParsed = api.parseTable(shiftedCrm, 'crm.csv', 'crm', XLSX);

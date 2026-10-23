@@ -36,17 +36,20 @@ const crypto = require('crypto');
 const MAX_BYTES = 30 * 1024 * 1024;
 const MAX_ROWS = 100000;
 const MATCH_COL = 2;
+/** Contact-tracking file: employee name is always column E (index 4). */
+const EMPLOYEE_NAME_COL = 4;
+/** Contact-tracking file: Contacted / Not Contacted status is always column G (index 6). */
 const EXPORT_STATUS_COL = 6;
-const CONTACTED = new Set(['contacted', 'contact done', 'reached', 'successfully contacted', 'contact successful']);
-const NOT_CONTACTED = new Set(['not contacted', 'not contact', 'no contact', 'uncontacted', 'not yet contacted']);
+const CONTACTED = new Set(['contacted', 'contact done', 'reached', 'successfully contacted', 'contact successful', 'contact complete', 'already contacted']);
+const NOT_CONTACTED = new Set(['not contacted', 'not contact', 'no contact', 'uncontacted', 'not yet contacted', 'not yet contact', 'awaiting contact']);
 const IN_PROGRESS = new Set(['in progress', 'inprogress', 'pending', 'follow up', 'followup', 'attempting', 'callback', 'call back', 'scheduled', 'working', 'open']);
 
 const CONTACT_FIELDS = {
   leadNumber: ['lead number', 'lead no', 'lead #', 'lead id'],
   initialContact: ['initial contact', 'first contact', 'initial contact status', 'first contact status'],
-  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee'],
+  employeeName: ['employee responsible', 'responsible employee', 'employee name', 'advisor', 'advisor name', 'sales advisor', 'salesman', 'sales consultant', 'employee', 'agent', 'agent name', 'user', 'user name'],
   createdDate: ['created date', 'date created', 'create date', 'created on'],
-  status: ['status', 'contact status', 'lead status', 'crm contact status'],
+  status: ['status', 'contact status', 'lead status', 'crm contact status', 'export status', 'contact result', 'result'],
   source: ['source', 'lead source'],
   centre: ['centre name', 'center name', 'centre', 'center', 'branch', 'showroom', 'showroom name'],
   leadType: ['lead type'],
@@ -400,17 +403,34 @@ function parseTable(buffer, filename, role, XLSX) {
   }
   if (role === 'contact') {
     const namedStatus = columns.status;
-    columns.status = chooseTrackedColumn(located.labels, namedStatus, CONTACT_FIELDS.status, EXPORT_STATUS_COL);
-    const statusHeader = located.labels[EXPORT_STATUS_COL] || '';
-    if (columns.status === EXPORT_STATUS_COL && namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
-      warnings.push(`Contact status is read from column G${statusHeader ? ` ("${statusHeader}")` : ''}, not the other status column.`);
-    } else if (columns.status >= 0 && columns.status !== EXPORT_STATUS_COL) {
-      warnings.push(`Contact status is read from "${located.labels[columns.status] || 'status'}".`);
-    } else if (columns.status < 0) {
+    const namedEmployee = columns.employeeName;
+    const hasColG = located.labels.length > EXPORT_STATUS_COL;
+    const hasColE = located.labels.length > EMPLOYEE_NAME_COL;
+    // Always lock Contacted / Not Contacted to column G when the sheet has that column.
+    columns.status = hasColG ? EXPORT_STATUS_COL : namedStatus;
+    // Always lock employee name to column E when the sheet has that column.
+    columns.employeeName = hasColE ? EMPLOYEE_NAME_COL : namedEmployee;
+    const statusHeader = String(located.labels[EXPORT_STATUS_COL] || '').trim();
+    const employeeHeader = String(located.labels[EMPLOYEE_NAME_COL] || '').trim();
+    if (columns.status === EXPORT_STATUS_COL) {
+      warnings.push(`Contact status (Contacted / Not Contacted) is read from column G${statusHeader ? ` ("${statusHeader}")` : ''}.`);
+      if (namedStatus >= 0 && namedStatus !== EXPORT_STATUS_COL) {
+        warnings.push(`Ignored other status column "${located.labels[namedStatus] || 'status'}".`);
+      }
+    } else if (columns.status >= 0) {
+      warnings.push(`Contact status is read from "${located.labels[columns.status] || 'status'}" (file has no column G).`);
+    } else {
       warnings.push('Contact status column was not found. Initial Contact is used when it is filled in.');
     }
+    if (columns.employeeName === EMPLOYEE_NAME_COL) {
+      warnings.push(`Employee name is read from column E${employeeHeader ? ` ("${employeeHeader}")` : ''}.`);
+      if (namedEmployee >= 0 && namedEmployee !== EMPLOYEE_NAME_COL) {
+        warnings.push(`Ignored other employee column "${located.labels[namedEmployee] || 'employee'}".`);
+      }
+    } else if (columns.employeeName < 0) {
+      warnings.push('Column not found: Employee Responsible (column E). Matched leads use the CRM employee when that column is present.');
+    }
   }
-  if (role === 'contact' && columns.employeeName < 0) warnings.push('Column not found: Employee Responsible. Matched leads use the CRM employee when that column is present.');
   ['initialContact', 'createdDate', 'source', 'centre', 'leadType'].forEach((key) => {
     if (role === 'contact' && columns[key] < 0) warnings.push(`Column not found: ${CONTACT_FIELDS[key][0]}.`);
   });
@@ -612,7 +632,8 @@ function buildDataset(contactParsed, crmParsed) {
   crmResolved.forEach((crm, key) => {
     const contact = contactResolved.get(key) || null;
     const contactConflict = contactGroups.has(key) && !contact;
-    const employeeName = crm.employeeName || (contact && contact.employeeName) || '';
+    // Prefer contact-file column E for the person name when present; CRM fills gaps.
+    const employeeName = (contact && contact.employeeName) || crm.employeeName || '';
     const employeeNumber = crm.employeeNumber || '';
     const employeeKey = employeeKeyFor(employeeNumber, employeeName);
     if (contactConflict) {
