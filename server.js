@@ -390,7 +390,7 @@ function defaultReportSheetMeta() {
 
 const GEC_CONTROL_GROUPS = ['visitor', 'lead', 'conversion'];
 
-/** Admin → GEC CONTROL rules: { visitor, lead, conversion: [{ name, enabled }] } or null when invalid. */
+/** Admin → GEC CONTROL rules: { visitor, lead, conversion: [{ name, enabled }], callOperator } or null when invalid. */
 function sanitizeGecControl(input) {
   if (!input || typeof input !== 'object') return null;
   if (!GEC_CONTROL_GROUPS.some((g) => Array.isArray(input[g]))) return null;
@@ -409,6 +409,8 @@ function sanitizeGecControl(input) {
       })
       .slice(0, 80);
   }
+  const callOp = String(input.callOperator == null ? '' : input.callOperator).replace(/\s+/g, ' ').trim().slice(0, 80);
+  out.callOperator = callOp || 'Ghadeer';
   return out;
 }
 

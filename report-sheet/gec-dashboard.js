@@ -229,6 +229,7 @@
               <div class="gcc-seg" role="group" aria-label="Employee type">
                 <button type="button" data-act="focus-kind" data-kind="promoter">Promoter</button>
                 <button type="button" data-act="focus-kind" data-kind="advisor">Sales advisor</button>
+                <button type="button" data-act="focus-kind" data-kind="operator">Call operator</button>
               </div>
             </div>
             <div class="gcc-focus-picker">
@@ -380,7 +381,12 @@
       const i = days.indexOf(v.day);
       const next = days[Math.max(0, Math.min(days.length - 1, (i < 0 ? days.length - 1 : i) + Number(d.step)))];
       if (next) { v.day = next; renderPerf(d.panel); }
-    }     else if (act === "focus-kind") { state.focus.kind = d.kind === "advisor" ? "advisor" : "promoter"; state.focus.tab = "all"; renderFocus(); }
+    } else if (act === "focus-kind") {
+      state.focus.kind = d.kind === "advisor" ? "advisor" : d.kind === "operator" ? "operator" : "promoter";
+      state.focus.tab = "all";
+      if (state.focus.kind === "operator") state.focus.name = "";
+      renderFocus();
+    }
     else if (act === "focus-tab") { state.focus.tab = d.tab || "all"; renderFocus(); }
     else if (act === "focus-open") openFocusLeads();
     else if (act === "info") openInfo();
@@ -500,13 +506,33 @@
 
   /** Metrics behind a performance panel: all promoters / advisors stay visible (the filtered one is highlighted). */
   function perfSource(kind) {
-    const v = state.view[kind];
+    const panel = kind === "operator" ? "advisor" : kind;
+    const v = state.view[panel] || state.view.advisor;
     const f = { ...state.filters, [kind === "promoter" ? "promoter" : "consultant"]: "" };
     if (v.mode === "daily") {
       if (!validDay(v.day)) v.day = defaultDay();
       if (v.day) { f.from = v.day; f.to = v.day; }
     }
     return computeWith(f);
+  }
+
+  /** Admin → GEC CONTROL call-operator name (default Ghadeer). */
+  function assignedCallOperator() {
+    try { return Data().getCallOperator(); } catch { return (cfg().DEFAULT_CALL_OPERATOR || "Ghadeer"); }
+  }
+
+  /** Match the assigned call operator against consultant names in the GEC file. */
+  function callOperatorList(consultants) {
+    const want = assignedCallOperator();
+    const wantKey = want.toLowerCase();
+    const list = consultants || [];
+    let hit = list.find((c) => String(c.name || "").toLowerCase() === wantKey);
+    if (!hit) hit = list.find((c) => {
+      const n = String(c.name || "").toLowerCase();
+      return n.includes(wantKey) || wantKey.includes(n);
+    });
+    if (hit) return [hit];
+    return [{ name: want, leads: 0, responded: 0, salesOrders: 0, converted: 0, responseRate: null, conversionRate: null }];
   }
 
   // ---------- Render ----------
@@ -1154,18 +1180,23 @@
   // ---------- Employee Focus (read-only; same aggregates as the tables above) ----------
 
   function focusListFor(kind, src) {
+    if (kind === "operator") return callOperatorList(src.consultants || []);
     const v = state.view[kind];
     return kind === "promoter"
       ? rankList(src.promoters || [], v.rank, ["leads", "converted", "visitors"])
       : rankList(src.consultants || [], v.rank, ["leads", "converted", "responded"]);
   }
 
+  function focusKindLabel(kind) {
+    return kind === "promoter" ? "Promoter" : kind === "operator" ? "Call operator" : "Sales advisor";
+  }
+
   function selectFocus(kind, name) {
     if (!name) return;
-    state.focus.kind = kind === "advisor" ? "advisor" : "promoter";
+    state.focus.kind = kind === "advisor" ? "advisor" : kind === "operator" ? "operator" : "promoter";
     state.focus.name = name;
     state.focus.tab = "all";
-    renderPerf(state.focus.kind);
+    if (state.focus.kind === "promoter" || state.focus.kind === "advisor") renderPerf(state.focus.kind);
     renderFocus();
   }
 
@@ -1219,17 +1250,22 @@
     state.root.querySelectorAll("[data-act='focus-kind']").forEach((b) => b.classList.toggle("is-on", b.dataset.kind === kind));
     const src = perfSource(kind);
     const list = focusListFor(kind, src);
+    const emptyLabel = kind === "promoter" ? "promoters" : kind === "operator" ? "call operators" : "sales advisors";
     if (!list.length) {
-      box.innerHTML = `<div class="gcc-empty-note">${icon(kind === "promoter" ? "users" : "star")}<span>No ${kind === "promoter" ? "promoters" : "sales advisors"} in this selection.</span></div>`;
+      box.innerHTML = `<div class="gcc-empty-note">${icon(kind === "promoter" ? "users" : "star")}<span>No ${emptyLabel} in this selection.</span></div>`;
       renderFocusPicker();
       return;
     }
-    if (!list.some((p) => p.name === state.focus.name)) state.focus.name = list[0].name;
+    if (kind === "operator") state.focus.name = list[0].name;
+    else if (!list.some((p) => p.name === state.focus.name)) state.focus.name = list[0].name;
     const idx = list.findIndex((p) => p.name === state.focus.name);
     const person = list[idx];
     const key = kind === "promoter" ? "promoter" : "consultant";
     const base = (src.rows || []).filter((r) => r[key] === person.name);
-    const totals = list.reduce((t, p) => {
+    const compareList = kind === "operator"
+      ? rankList(src.consultants || [], (state.view.advisor && state.view.advisor.rank) || "leads", ["leads", "converted", "responded"])
+      : list;
+    const totals = compareList.reduce((t, p) => {
       ["visitors", "leads", "responded", "salesOrders", "converted"].forEach((k) => { t[k] += p[k] || 0; });
       return t;
     }, { visitors: 0, leads: 0, responded: 0, salesOrders: 0, converted: 0 });
@@ -1244,7 +1280,7 @@
     };
     const tile = (label, value, avg, tone, isRate) => `
       <div class="gcc-ftile t-${tone}"><span>${esc(label)}</span><b class="gcc-num">${isRate ? pct(value) : n(value || 0)}</b>${cmp(isRate ? value : value, avg, isRate)}</div>`;
-    const M = Math.max(1, list.length);
+    const M = Math.max(1, compareList.length);
     const noOrder = predicateRows("noOrder", base).length;
     const tiles = kind === "promoter" ? [
       tile("Visitors", src.hasVisitors ? person.visitors : null, src.hasVisitors ? totals.visitors / M : null, "violet"),
@@ -1269,12 +1305,18 @@
     };
     const tabBtn = (id, label) => `<button type="button" class="${state.focus.tab === id ? "is-on" : ""}" data-act="focus-tab" data-tab="${id}">${label} <b class="gcc-num">${n(counts[id])}</b></button>`;
     const hasLeads = kind === "promoter" ? (person.leads > 0 || (person.visitors || 0) > 0) : person.leads > 0;
+    const roleLine = kind === "promoter"
+      ? `Emp. ${esc(empOf(person.name) || "—")} · Promoter · Rank #${idx + 1} of ${list.length}`
+      : kind === "operator"
+        ? `Call operator · assigned in Admin → GEC CONTROL${person.name.toLowerCase() !== assignedCallOperator().toLowerCase() ? ` · looking for “${esc(assignedCallOperator())}”` : ""}`
+        : `Sales advisor · Rank #${idx + 1} of ${list.length}`;
+    const whenKind = kind === "operator" ? "advisor" : kind;
     box.innerHTML = `
       <div class="gcc-focus-profile">
         <span class="gcc-avatar">${esc(initials(person.name))}</span>
         <span class="gcc-focus-id">
           <b dir="auto">${esc(person.name)}</b>
-          <small>${kind === "promoter" ? `Emp. ${esc(empOf(person.name) || "—")} · Promoter` : "Sales advisor"} · Rank #${idx + 1} of ${list.length} · ${esc(whenLabel(kind))}</small>
+          <small>${roleLine} · ${esc(whenLabel(whenKind))}</small>
         </span>
         <span class="gcc-focus-chip ${above == null ? "" : above ? "is-above" : "is-below"}">${above == null ? "Team L→C —" : `${above ? "Above" : "Below"} team L→C ${pct(teamLC)}`}</span>
       </div>
@@ -1290,7 +1332,7 @@
       <div class="gcc-focus-tabs">
         ${tabBtn("all", "All")}${tabBtn("converted", "Converted")}${tabBtn("salesOrders", "Sales order")}${tabBtn("noOrder", "No order")}
         <button type="button" class="gcc-link gcc-focus-open" data-act="focus-open">Open lead list ↗</button>
-      </div>` : `<div class="gcc-empty-note"><span>No leads in the selection for ${esc(person.name)}.</span></div>`}`;
+      </div>` : `<div class="gcc-empty-note"><span>${kind === "operator" ? `No leads matched for call operator “${esc(assignedCallOperator())}” in Assigned To.` : `No leads in the selection for ${esc(person.name)}.`}</span></div>`}`;
     renderFocusPicker();
   }
 
@@ -1304,12 +1346,13 @@
     const tab = state.focus.tab;
     const labels = { all: "All leads", converted: "Converted", salesOrders: "Sales Orders", noOrder: "NO ORDER (excluded)" };
     const rows = tab === "all" ? base : predicateRows(tab, base);
+    const whenKind = kind === "operator" ? "advisor" : kind;
     openModal({
-      title: `${kind === "promoter" ? "Promoter" : "Sales advisor"} · ${name}`,
-      sub: `${whenLabel(kind)} · ${filterSubtitle(key)}`,
+      title: `${focusKindLabel(kind)} · ${name}`,
+      sub: `${whenLabel(whenKind)} · ${filterSubtitle(key)}`,
       stats: leadStats(base),
       views: [leadView(labels[tab] || "Leads", rows), ...(rows.length !== base.length ? [leadView("All leads", base)] : [])],
-      filterAction: { key, value: name },
+      filterAction: kind === "operator" ? null : { key, value: name },
     });
   }
 
@@ -2033,7 +2076,8 @@
       <h4>GEC CONTROL · status rules (Admin → GEC CONTROL)</h4>
       <div class="gcc-ctl"><div><b>Visitor stage</b><div class="gcc-chips">${list("visitor")}</div></div>
         <div><b>Lead statuses</b><div class="gcc-chips">${list("lead")}</div></div>
-        <div><b>Conversion statuses</b><div class="gcc-chips">${list("conversion")}</div></div></div>
+        <div><b>Conversion statuses</b><div class="gcc-chips">${list("conversion")}</div></div>
+        <div><b>Call operator</b><div class="gcc-chips"><span class="gcc-chip">${esc(assignedCallOperator())}</span></div></div></div>
       <h4>Business rules</h4>
       <ul>
         <li><b>Transaction</b> — one unique ${col("txn")}. Rows without it are ignored; repeated numbers count once (latest row${ds && ds.colMap.modifiedDate != null ? ` by ${col("modifiedDate")}` : " in the sheet"}).</li>
@@ -2044,6 +2088,7 @@
         <li><b>Meet Sales Advisor</b> — <b>column AG</b> of the uploaded lead sheet contains both a date and a time. A date alone, a time alone, a blank, or any other text is not responded. <b>Sales Order</b> — ${col("salesOrder")} is an actual order number; <b>“NO ORDER”</b> and placeholders never count.</li>
         <li><b>Visitors</b> — every unique transaction whose <b>column O date</b> is inside the selected dates (all of them when no date is selected). <b>Visitor → Lead</b> = registered leads ÷ visitors. <b>Lead → Conversion</b> = converted ÷ leads.</li>
         <li><b>Sales advisors</b> — ${col("consultant")} on lead records, excluding the official promoters. Conversion % = converted ÷ leads received.</li>
+        <li><b>Call operator</b> — assigned in Admin → GEC CONTROL (default <b>${esc(Data().DEFAULT_CALL_OPERATOR || "Ghadeer")}</b>; currently <b>${esc(assignedCallOperator())}</b>). Employee Focus → Call operator matches that name against ${col("consultant")}.</li>
         <li><b>Response time / SLA</b> — not shown (timing data not validated).</li>
         <li><b>Top cars</b> — converted leads per ${col("model")}. Each converted Transaction No. (then its Sales Order number) is looked up in <b>Sales Raw Data</b> and <b>Back Order</b>: Sales Raw with a delivery / invoice date (Col V) → <b>Delivered</b>, without → <b>Pro-Forma</b>; only in Back Order → <b>Back Order</b> (unless its status says delivered / pro-forma); in neither → <b>Not found</b>.</li>
       </ul>

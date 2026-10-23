@@ -657,6 +657,8 @@
 
 /* Employee Focus */
 .gcc-focus .gcc-card-head { margin-bottom: 6px; }
+.gcc-focus .gcc-seg { flex-wrap: wrap; justify-content: flex-end; }
+#gec-host .gcc .gcc-focus .gcc-seg button { padding: 0 9px; font-size: 11.5px; }
 .gcc-focus .gcc-seg button.is-on { color: var(--text); }
 .gcc-focus-picker { display: flex; gap: 6px; flex: none; margin-bottom: 8px; }
 #gec-host .gcc .gcc-focus-picker input[type="search"] {

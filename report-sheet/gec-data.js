@@ -16,6 +16,8 @@
     "50651": "Haifa Alhasani",
     "50652": "Shahad Almutairi",
   };
+  /** Default Call Operator shown in Employee Focus until Admin → GEC CONTROL assigns someone else. */
+  const DEFAULT_CALL_OPERATOR = "Ghadeer";
   const UNKNOWN_PROMOTER = "Unknown Promoter";
   /** Employee Number blank → the customer was entered without a promoter. */
   const ASSIGNMENT_ERROR = "No promoter assigned";
@@ -68,6 +70,7 @@
 
   const config = {
     PROMOTER_MAP,
+    DEFAULT_CALL_OPERATOR,
     UNKNOWN_PROMOTER,
     ASSIGNMENT_ERROR,
     INVALID_PROMOTER,
@@ -105,13 +108,19 @@
 
   // ---------- GEC CONTROL (admin-configured status rules) ----------
 
+  function normalizeCallOperator(value) {
+    const name = str(value);
+    return name || DEFAULT_CALL_OPERATOR;
+  }
+
   function cloneControl(c) {
     const out = {};
     CONTROL_GROUPS.forEach((g) => { out[g] = (c[g] || []).map((x) => ({ name: x.name, enabled: !!x.enabled })); });
+    out.callOperator = normalizeCallOperator(c && c.callOperator);
     return out;
   }
 
-  /** Any stored shape → { visitor, lead, conversion: [{ name, enabled }] } (trimmed, de-duplicated per group). */
+  /** Any stored shape → { visitor, lead, conversion: [{ name, enabled }], callOperator } (trimmed, de-duplicated per group). */
   function normalizeControl(input) {
     let src = input;
     if (typeof src === "string") { try { src = JSON.parse(src); } catch { src = null; } }
@@ -124,10 +133,11 @@
         .map((x) => ({ name: str(x.name), enabled: x.enabled !== false }))
         .filter((x) => { const k = norm(x.name); if (seen.has(k)) return false; seen.add(k); return true; });
     });
+    out.callOperator = normalizeCallOperator(src.callOperator);
     return out;
   }
 
-  const controlSignature = (c) => CONTROL_GROUPS.map((g) => c[g].map((x) => `${norm(x.name)}${x.enabled ? "+" : "-"}`).join(",")).join("|");
+  const controlSignature = (c) => CONTROL_GROUPS.map((g) => c[g].map((x) => `${norm(x.name)}${x.enabled ? "+" : "-"}`).join(",")).join("|") + "|" + norm(c.callOperator || "");
 
   let activeControl = cloneControl(DEFAULT_CONTROL);
   let controlSig = controlSignature(activeControl);
@@ -157,6 +167,7 @@
 
   const getControl = () => cloneControl(activeControl);
   const defaultControl = () => cloneControl(DEFAULT_CONTROL);
+  const getCallOperator = () => normalizeCallOperator(activeControl.callOperator);
   const enabledStatuses = (group) => activeControl[group].filter((x) => x.enabled).map((x) => x.name);
 
   /**
@@ -1771,6 +1782,7 @@
   global.GecData = {
     config,
     PROMOTER_MAP,
+    DEFAULT_CALL_OPERATOR,
     UNKNOWN_PROMOTER,
     ASSIGNMENT_ERROR,
     INVALID_PROMOTER,
@@ -1780,8 +1792,10 @@
     classifyStatus,
     setControl,
     getControl,
+    getCallOperator,
     defaultControl,
     normalizeControl,
+    normalizeCallOperator,
     applyControl,
     enabledStatuses,
     isPromoterName,

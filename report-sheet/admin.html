@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="bo-notifications.css?v=20261021np1" />
   <script src="employee-roster.js?v=20260928id1"></script>
   <script src="data-store.js?v=20261006ch1"></script>
-  <script src="gec-data.js?v=20261008lead"></script>
+  <script src="gec-data.js?v=20261023op1"></script>
   <script src="allocation-plan-data.js"></script>
   <style>
     .gec-ctl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
@@ -38,6 +38,8 @@
     .gec-ctl-add { display: flex; gap: 6px; }
     .gec-ctl-add input { flex: 1; min-width: 0; }
     .gec-ctl-dirty { color: #d97706; font-weight: 700; }
+    .gec-call-op-field { display: grid; gap: 6px; max-width: 420px; font-size: 13px; font-weight: 700; }
+    .gec-call-op-field input { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.45); font: inherit; font-weight: 600; }
     #discard-draft-btn[hidden] { display: none; }
     .admin-channel-targets { flex-direction: column; align-items: stretch; }
     .admin-channel-targets-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; }
@@ -393,6 +395,21 @@
           A status in no list counts as a lead and is flagged under <b>Attention</b> on the dashboard until you classify it here.
         </p>
         <div class="gec-ctl-grid" id="gec-ctl-grid"></div>
+      </div>
+
+      <div class="card admin-section-card">
+        <div class="pbi-viz-head">
+          <h2>Call Operator</h2>
+          <span class="admin-section-tag">Employee Focus</span>
+        </div>
+        <p class="admin-lead">
+          Name shown under <b>Employee Focus → Call operator</b> on the GEC Control Center.
+          Matched against the GEC File’s <b>Assigned To</b> column (case-insensitive; partial name is fine).
+          Default for now is <b>Ghadeer</b>. Save GEC Control, then Push to live.
+        </p>
+        <label class="gec-call-op-field">Call operator name
+          <input type="text" id="gec-call-operator" maxlength="80" placeholder="Ghadeer" autocomplete="off" />
+        </label>
       </div>
 
       <div class="card admin-section-card">
@@ -1174,6 +1191,10 @@
         <form class="gec-ctl-add" data-gec-add="${g.id}"><input type="text" placeholder="Add status…" maxlength="80" aria-label="Add ${g.title.toLowerCase()}" /><button type="submit" class="btn">Add</button></form>
       </div>`;
     }).join("");
+    const callInput = $("#gec-call-operator");
+    if (callInput && document.activeElement !== callInput) {
+      callInput.value = gecDraft.callOperator || (Gec.DEFAULT_CALL_OPERATOR || "Ghadeer");
+    }
     if (gecDirty()) setGecHint('<span class="gec-ctl-dirty">Unsaved changes</span> — click <b>Save GEC Control</b>, then <b>Push to live</b> to apply them to every live dashboard');
     else if (gecStaged) setGecHint('<span class="gec-ctl-dirty">Saved as draft · not live</span> — click <b>Push to live</b> to apply it to every live GEC dashboard');
   }
@@ -1245,6 +1266,10 @@
   }
 
   async function saveGecControl() {
+    const callInput = $("#gec-call-operator");
+    if (callInput) {
+      gecDraft.callOperator = String(callInput.value || "").replace(/\s+/g, " ").trim() || (Gec.DEFAULT_CALL_OPERATOR || "Ghadeer");
+    }
     const control = Gec.normalizeControl(gecDraft);
     gecDraft = control;
     const liveControl = JSON.stringify(Gec.normalizeControl(Store.readGecControl()));
@@ -1890,11 +1915,20 @@
   });
   $("#gec-control-save").addEventListener("click", saveGecControl);
   $("#gec-control-reset").addEventListener("click", () => {
-    if (!confirm("Reset GEC Control to the default status lists? (Click Save to apply.)")) return;
+    if (!confirm("Reset GEC Control to the default status lists and Call Operator (Ghadeer)? (Click Save to apply.)")) return;
     gecDraft = Gec.defaultControl();
     renderGecControl();
     renderGecFound();
   });
+  const gecCallOp = $("#gec-call-operator");
+  if (gecCallOp) {
+    gecCallOp.addEventListener("input", () => {
+      gecDraft.callOperator = String(gecCallOp.value || "").replace(/\s+/g, " ").trim() || (Gec.DEFAULT_CALL_OPERATOR || "Ghadeer");
+      if (gecDirty()) setGecHint('<span class="gec-ctl-dirty">Unsaved changes</span> — click <b>Save GEC Control</b>, then <b>Push to live</b> to apply them to every live dashboard');
+      else if (gecStaged) setGecHint('<span class="gec-ctl-dirty">Saved as draft · not live</span> — click <b>Push to live</b> to apply it to every live GEC dashboard');
+      else setGecHint("Save keeps the rules as a draft · they reach the live GEC dashboards only when you click Push to live");
+    });
+  }
 
   const ytdSalesInput = document.getElementById("ytd-sales-file");
   if (ytdSalesInput) {
