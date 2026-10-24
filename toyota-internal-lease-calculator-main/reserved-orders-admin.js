@@ -80,7 +80,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. Duplicate VINs merge E-Sales + Reserved File info, with Expiry taken from the Reserved Order File. Non-duplicates are kept even when some fields are empty.'
+        merged: 'One row per VIN. Matching VINs merge into Both (Expiry from Reserved File). Reserved-only rows use Reserved columns only — empty fields stay empty.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -89,6 +89,11 @@
     function isBlankSheetValue(value) {
         const text = String(value == null ? '' : value).trim();
         return !text || text === '—' || text === '-';
+    }
+    function isPlaceholderValue(value) {
+        const text = String(value == null ? '' : value).trim().toLowerCase();
+        return !text || text === '—' || text === '-' || text === 'unassigned' || text === 'unknown'
+            || text === 'no order' || text === 'vin not found';
     }
     function fieldValueFromList(fields, letter) {
         const want = String(letter || '').toUpperCase();
@@ -124,70 +129,180 @@
         return /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(text) || /^\d{4}-\d{2}-\d{2}/.test(text);
     }
     function looksLikeVinText(value) {
-        return /^[A-HJ-NPR-Z0-9]{10,20}$/i.test(String(value || '').trim());
+        return /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(String(value || '').trim());
     }
-    function firstFilled() {
+    function cleanProductText(value) {
+        const text = String(value == null ? '' : value).trim();
+        if (!text || looksLikeVinText(text) || looksLikeDateText(text) || isPlaceholderValue(text)) return '';
+        return text;
+    }
+    function cleanPersonText(value) {
+        const text = String(value == null ? '' : value).trim();
+        if (!text || isPlaceholderValue(text) || looksLikeVinText(text) || looksLikeDateText(text)) return '';
+        return text;
+    }
+    function cleanOrderText(value) {
+        const text = String(value == null ? '' : value).trim();
+        if (!text || isPlaceholderValue(text)) return '';
+        return text;
+    }
+    function firstReal() {
         for (let i = 0; i < arguments.length; i += 1) {
-            if (!isBlankSheetValue(arguments[i])) return String(arguments[i]).trim();
+            const text = String(arguments[i] == null ? '' : arguments[i]).trim();
+            if (text && !isPlaceholderValue(text)) return text;
         }
         return '';
+    }
+    function formatExpiryValue(order, reservedFields) {
+        if (order && order.expiryDisplay && !isPlaceholderValue(order.expiryDisplay)) return String(order.expiryDisplay).trim();
+        if (order && order.expiryDate) {
+            const parsed = parseLocal(order.expiryDate);
+            if (parsed) return parsed.toLocaleDateString('en-GB');
+            if (!isPlaceholderValue(order.expiryDate) && !String(order.expiryDate).includes('T')) return String(order.expiryDate).trim();
+        }
+        const fromJ = fieldValueFromList(reservedFields, 'J');
+        return looksLikeDateText(fromJ) || fromJ ? fromJ : '';
+    }
+    function combineOrdersByVin(a, b) {
+        const aE = orderInSheet(a, 'esales');
+        const bE = orderInSheet(b, 'esales');
+        const aR = orderInSheet(a, 'reserved');
+        const bR = orderInSheet(b, 'reserved');
+        const esalesSide = aE ? a : bE ? b : null;
+        const reservedSide = aR ? a : bR ? b : null;
+        const base = esalesSide || reservedSide || a;
+        return Object.assign({}, base, {
+            inEsales: aE || bE,
+            inReservedFile: aR || bR,
+            fromReservedFile: Boolean((a && a.fromReservedFile) || (b && b.fromReservedFile)),
+            esalesFields: (esalesSide && (esalesSide.esalesFields || esalesSide.fields)) || [],
+            reservedFields: (reservedSide && (reservedSide.reservedFields || (reservedSide.fromReservedFile ? reservedSide.fields : null))) || [],
+            vin: firstReal(a.vin, b.vin),
+            orderNumber: cleanOrderText(a.orderNumber) || cleanOrderText(b.orderNumber) || base.orderNumber,
+            customerName: cleanPersonText(a.customerName) || cleanPersonText(b.customerName) || '',
+            vehicle: cleanProductText(a.vehicle) || cleanProductText(b.vehicle) || '',
+            modelYear: firstReal(a.modelYear, b.modelYear),
+            exterior: firstReal(a.exterior, b.exterior),
+            interior: firstReal(a.interior, b.interior),
+            salesAdvisor: cleanPersonText(a.salesAdvisor) || cleanPersonText(b.salesAdvisor) || '',
+            paymentLabel: firstReal(
+                (a.paymentLabel && String(a.paymentLabel).toUpperCase() !== 'UNKNOWN') ? a.paymentLabel : '',
+                (b.paymentLabel && String(b.paymentLabel).toUpperCase() !== 'UNKNOWN') ? b.paymentLabel : ''
+            ),
+            searchArea: firstReal(aE ? a.searchArea : '', bE ? b.searchArea : ''),
+            expiryDisplay: (reservedSide && reservedSide.expiryDisplay) || a.expiryDisplay || b.expiryDisplay || '',
+            expiryDate: (reservedSide && reservedSide.expiryDate) || a.expiryDate || b.expiryDate || '',
+            ahead: (Array.isArray(a.ahead) && a.ahead.length ? a.ahead : null)
+                || (Array.isArray(b.ahead) && b.ahead.length ? b.ahead : null)
+                || a.ahead || b.ahead || [],
+            queueNumber: a.queueNumber != null ? a.queueNumber : b.queueNumber,
+            status: a.status || b.status,
+            boQueuePosition: a.boQueuePosition != null ? a.boQueuePosition : b.boQueuePosition,
+            boQueueSize: a.boQueueSize != null ? a.boQueueSize : b.boQueueSize,
+            boOrdersAhead: a.boOrdersAhead != null ? a.boOrdersAhead : b.boOrdersAhead
+        });
     }
     function buildMergedOrder(order) {
         const inE = orderInSheet(order, 'esales');
         const inR = orderInSheet(order, 'reserved');
         const esales = orderSheetFields(order, 'esales');
         const reserved = orderSheetFields(order, 'reserved');
-        const eProduct = fieldValueFromList(esales, 'I');
-        const eSuffix = fieldValueFromList(esales, 'J');
+        const eProduct = cleanProductText(fieldValueFromList(esales, 'I'));
+        const eSuffixRaw = fieldValueFromList(esales, 'J');
+        const eSuffix = (!looksLikeDateText(eSuffixRaw) && !looksLikeVinText(eSuffixRaw)) ? eSuffixRaw : '';
         const eVin = fieldValueFromList(esales, 'L');
         const rVin = fieldValueFromList(reserved, 'I');
+        const rProduct = cleanProductText(fieldValueFromList(reserved, 'E'));
         const rSuffix = fieldValueFromList(reserved, 'F');
-        const rExpiry = fieldValueFromList(reserved, 'J');
-        const vin = firstFilled(order.vin, looksLikeVinText(eVin) ? eVin : '', looksLikeVinText(rVin) ? rVin : '');
-        const product = firstFilled(
-            (!looksLikeVinText(eProduct) && !looksLikeDateText(eProduct)) ? eProduct : '',
-            fieldValueFromList(reserved, 'E'),
-            order.vehicle
+        const vin = firstReal(
+            looksLikeVinText(order.vin) ? order.vin : '',
+            looksLikeVinText(eVin) ? eVin : '',
+            looksLikeVinText(rVin) ? rVin : ''
         );
-        const suffix = firstFilled(
-            (!looksLikeDateText(eSuffix) && !looksLikeVinText(eSuffix)) ? eSuffix : '',
-            rSuffix
-        );
-        const values = {
-            Source: inE && inR ? 'Both' : inE ? 'E-Sales' : 'Reserved',
-            VIN: vin,
-            Order: firstFilled(order.orderNumber, fieldValueFromList(esales, 'F'), fieldValueFromList(reserved, 'C')),
-            Customer: firstFilled(order.customerName, fieldValueFromList(esales, 'S'), fieldValueFromList(reserved, 'B')),
-            Product: product,
-            'Model Year': firstFilled(order.modelYear, fieldValueFromList(esales, 'K'), fieldValueFromList(reserved, 'D')),
-            SFX: suffix,
-            Exterior: firstFilled(order.exterior, fieldValueFromList(esales, 'M'), fieldValueFromList(reserved, 'G')),
-            Interior: firstFilled(order.interior, fieldValueFromList(esales, 'N'), fieldValueFromList(reserved, 'H')),
-            Advisor: firstFilled(order.salesAdvisor, fieldValueFromList(esales, 'T'), fieldValueFromList(reserved, 'T')),
-            Payment: firstFilled(order.paymentLabel, fieldValueFromList(esales, 'payment')),
-            Area: firstFilled(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'), fieldValueFromList(reserved, 'A'))
-        };
-        // Duplicate VINs: expiry always from Reserved Order File when present.
-        let expiry = '';
-        if (inR) {
-            expiry = firstFilled(order.expiryDisplay, order.expiryDate, rExpiry);
-            if (order.expiryDate && !order.expiryDisplay) {
-                const parsed = parseLocal(order.expiryDate);
-                if (parsed) expiry = parsed.toLocaleDateString('en-GB');
-            }
+        // Reserved-only rows use Reserved File columns only; empty stays empty.
+        // E-Sales-only rows use E-Sales columns only. Both: fill blanks from the other, expiry from Reserved.
+        let values;
+        if (inR && !inE) {
+            values = {
+                Source: 'Reserved',
+                VIN: vin,
+                Order: cleanOrderText(fieldValueFromList(reserved, 'C')) || cleanOrderText(order.orderNumber),
+                Customer: cleanPersonText(fieldValueFromList(reserved, 'B')) || cleanPersonText(order.customerName),
+                Product: rProduct,
+                'Model Year': firstReal(fieldValueFromList(reserved, 'D'), order.modelYear),
+                SFX: rSuffix,
+                Exterior: firstReal(fieldValueFromList(reserved, 'G')),
+                Interior: firstReal(fieldValueFromList(reserved, 'H')),
+                Advisor: '',
+                Payment: '',
+                Area: ''
+            };
+        } else if (inE && !inR) {
+            values = {
+                Source: 'E-Sales',
+                VIN: vin,
+                Order: cleanOrderText(order.orderNumber) || cleanOrderText(fieldValueFromList(esales, 'F')),
+                Customer: cleanPersonText(order.customerName) || cleanPersonText(fieldValueFromList(esales, 'S')),
+                Product: eProduct || cleanProductText(order.vehicle),
+                'Model Year': firstReal(order.modelYear, fieldValueFromList(esales, 'K')),
+                SFX: eSuffix,
+                Exterior: firstReal(order.exterior, fieldValueFromList(esales, 'M')),
+                Interior: firstReal(order.interior, fieldValueFromList(esales, 'N')),
+                Advisor: cleanPersonText(order.salesAdvisor) || cleanPersonText(fieldValueFromList(esales, 'T')),
+                Payment: firstReal(
+                    (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''
+                ),
+                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'))
+            };
         } else {
-            expiry = firstFilled(order.expiryDisplay, order.expiryDate);
+            values = {
+                Source: 'Both',
+                VIN: vin,
+                Order: cleanOrderText(order.orderNumber) || cleanOrderText(fieldValueFromList(esales, 'F')) || cleanOrderText(fieldValueFromList(reserved, 'C')),
+                Customer: cleanPersonText(order.customerName) || cleanPersonText(fieldValueFromList(esales, 'S')) || cleanPersonText(fieldValueFromList(reserved, 'B')),
+                Product: eProduct || rProduct || cleanProductText(order.vehicle),
+                'Model Year': firstReal(order.modelYear, fieldValueFromList(esales, 'K'), fieldValueFromList(reserved, 'D')),
+                SFX: eSuffix || rSuffix,
+                Exterior: firstReal(order.exterior, fieldValueFromList(esales, 'M'), fieldValueFromList(reserved, 'G')),
+                Interior: firstReal(order.interior, fieldValueFromList(esales, 'N'), fieldValueFromList(reserved, 'H')),
+                Advisor: cleanPersonText(order.salesAdvisor) || cleanPersonText(fieldValueFromList(esales, 'T')),
+                Payment: firstReal(
+                    (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''
+                ),
+                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'))
+            };
         }
+        const expiry = inR ? formatExpiryValue(order, reserved) : '';
         const mergedFields = MERGED_COL_ORDER.map((label) => ({
             label,
             col: label,
-            value: values[label] == null || values[label] === '' ? '—' : values[label]
+            value: values[label] == null ? '' : values[label]
         }));
         return Object.assign({}, order, {
             mergeSource: values.Source,
             mergedExpiry: expiry,
-            mergedFields
+            mergedFields,
+            vin: vin || order.vin
         });
+    }
+    function buildMergedList(list) {
+        const byVin = new Map();
+        (list || []).forEach((order) => {
+            if (!orderInSheet(order, 'merged')) return;
+            const vin = String(order.vin || fieldValueFromList(orderSheetFields(order, 'esales'), 'L')
+                || fieldValueFromList(orderSheetFields(order, 'reserved'), 'I') || '').trim().toUpperCase();
+            if (!looksLikeVinText(vin)) return;
+            if (byVin.has(vin)) byVin.set(vin, combineOrdersByVin(byVin.get(vin), order));
+            else byVin.set(vin, order);
+        });
+        return Array.from(byVin.values())
+            .map(buildMergedOrder)
+            .sort((a, b) => {
+                const rank = { Both: 0, 'E-Sales': 1, Reserved: 2 };
+                const d = (rank[a.mergeSource] != null ? rank[a.mergeSource] : 9) - (rank[b.mergeSource] != null ? rank[b.mergeSource] : 9);
+                if (d) return d;
+                return (a.queueNumber || 0) - (b.queueNumber || 0);
+            });
     }
     function salesTypeOf(order) {
         const raw = fieldOf(order, 'U');
@@ -491,34 +606,23 @@
         if (label === 'Updated by') return order.statusChangedBy || '';
         if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
         if (label === 'Expiry') {
-            if (source === 'merged' && order.mergedExpiry != null && order.mergedExpiry !== '') return order.mergedExpiry;
+            if (source === 'merged') return order.mergedExpiry || '';
             if (order.expiryDisplay) return order.expiryDisplay;
             if (order.expiryDate) {
                 const parsed = parseLocal(order.expiryDate);
                 return parsed ? parsed.toLocaleDateString('en-GB') : order.expiryDate;
             }
-            if (source === 'merged') {
-                const field = (order.mergedFields || []).find((item) => item.label === 'Expiry');
-                return field && field.value != null && field.value !== '—' ? String(field.value) : '';
-            }
             const j = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === 'J');
             return j && j.value != null && j.value !== '—' ? String(j.value) : '';
         }
-        if (label === 'Source') return order.mergeSource || '';
-        if (label === 'Order') {
-            if (source === 'merged') {
-                const field = (order.mergedFields || []).find((item) => item.label === 'Order');
-                if (field && !isBlankSheetValue(field.value)) return String(field.value);
-            }
-            return order.orderNumber || '';
+        if (source === 'merged') {
+            if (label === 'Source') return order.mergeSource || '';
+            const merged = (order.mergedFields || []).find((item) => item.label === label || item.col === label);
+            if (merged) return merged.value == null || merged.value === '—' ? '' : String(merged.value);
+            return '';
         }
-        if (label === 'VIN') {
-            if (source === 'merged') {
-                const field = (order.mergedFields || []).find((item) => item.label === 'VIN');
-                if (field && !isBlankSheetValue(field.value)) return String(field.value);
-            }
-            return order.vin || '';
-        }
+        if (label === 'Order') return order.orderNumber || '';
+        if (label === 'VIN') return order.vin || '';
         if (label === 'Advisor') return order.salesAdvisor || '';
         if (label === 'Payment') return order.paymentLabel || '';
         if (label === 'Deadline') return order.deadline || '';
@@ -604,15 +708,13 @@
     function renderSheet() {
         const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
         const reservedList = orders.filter((order) => orderInSheet(order, 'reserved'));
-        const mergedList = orders
-            .filter((order) => orderInSheet(order, 'merged'))
-            .map(buildMergedOrder);
+        const mergedList = buildMergedList(orders);
         const esalesCount = $('sheet-count-esales');
         const reservedCount = $('sheet-count-reserved');
         const mergedCount = $('sheet-count-merged');
         if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
         if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
-        if (mergedCount) mergedCount.textContent = String(mergedList.filter(hasVin).length);
+        if (mergedCount) mergedCount.textContent = String(mergedList.length);
         renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
         renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
         renderOneSheet($('live-sheet-merged'), 'merged', mergedList);
