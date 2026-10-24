@@ -67,6 +67,12 @@
     // Sales types whose cars show the reservation expiry (the deadline the server already sends).
     const EXPIRY_TYPES = new Set(['01']);
     const SHEET_NAMES = { F: 'Order', I: 'Model', J: 'Suffix', K: 'Model year', L: 'VIN', M: 'Ext', N: 'Int', R: 'Vehicle status', S: 'Customer', T: 'Salesman', U: 'Sales type' };
+    // Reserved Order File uses a different Excel layout than E-Sales — never reuse SHEET_NAMES above.
+    const RESERVED_SHEET_NAMES = {
+        A: 'Area', B: 'Name', C: 'Order NO.', D: 'Model Year', E: 'Product',
+        F: 'SFX', G: 'Exterior Color', H: 'Interior Color', I: 'VIN', J: 'Expiry'
+    };
+    const RESERVED_COL_ORDER = ['B', 'C', 'I', 'E', 'D', 'F', 'G', 'H', 'J'];
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
     let sheetSource = 'esales';
@@ -309,8 +315,19 @@
         for (let i = 0; i < text.length; i += 1) n = n * 26 + (text.charCodeAt(i) - 64);
         return n;
     }
+    function normalizeReservedTitle(col, label) {
+        const letter = String(col || '').toUpperCase();
+        const text = String(label || '').trim();
+        const lower = text.toLowerCase();
+        if (letter === 'I' && (!text || /^model$/i.test(text) || /^i$/i.test(text) || /vin|chassis|هيكل/.test(lower))) return 'VIN';
+        if (letter === 'J' && (!text || /suffix|sfx|^j$/i.test(lower) || /expir|انتهاء|صلاحية|valid|date/.test(lower))) return 'Expiry';
+        if (letter === 'F' && (/^order$/i.test(text) || /^f$/i.test(text))) return 'SFX';
+        return text;
+    }
     function sheetColumns(list, source) {
-        const meta = ['Queue', 'Status', 'Updated by', 'Updated at'];
+        const meta = source === 'reserved'
+            ? ['Queue', 'Status', 'Expiry']
+            : ['Queue', 'Status', 'Updated by', 'Updated at'];
         const titles = {};
         const letters = new Set();
         list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
@@ -318,10 +335,29 @@
             const label = String(field.label || '').trim();
             if (!col) return;
             letters.add(col);
-            if (label && !titles[col]) titles[col] = label;
+            if (!titles[col]) {
+                titles[col] = source === 'reserved'
+                    ? (normalizeReservedTitle(col, label) || RESERVED_SHEET_NAMES[col] || label)
+                    : label;
+            }
         }));
-        const excel = [...letters].sort((a, b) => colIndex(a) - colIndex(b));
-        if (!excel.length) return meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Deadline']);
+        const hasValue = (col) => list.some((order) => {
+            const value = sheetValue(order, col, source);
+            return value && value !== '—';
+        });
+        let excel = [...letters].filter(hasValue).sort((a, b) => colIndex(a) - colIndex(b));
+        if (source === 'reserved') {
+            const preferred = RESERVED_COL_ORDER.filter((col) => letters.has(col) && hasValue(col));
+            const rest = excel.filter((col) => !preferred.includes(col));
+            // J is shown as the Expiry meta column — drop the duplicate Excel letter column.
+            excel = preferred.concat(rest).filter((col) => col !== 'J');
+            titles.Expiry = 'Expiry';
+        }
+        if (!excel.length) {
+            return source === 'reserved'
+                ? meta.concat(['Order', 'VIN', 'Product', 'Model Year'])
+                : meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Deadline']);
+        }
         return { cols: meta.concat(excel), titles };
     }
     function sheetValue(order, label, source) {
@@ -329,11 +365,22 @@
         if (label === 'Status') return order.status || '';
         if (label === 'Updated by') return order.statusChangedBy || '';
         if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
+        if (label === 'Expiry') {
+            if (order.expiryDisplay) return order.expiryDisplay;
+            if (order.expiryDate) {
+                const parsed = parseLocal(order.expiryDate);
+                return parsed ? parsed.toLocaleDateString('en-GB') : order.expiryDate;
+            }
+            const j = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === 'J');
+            return j && j.value != null && j.value !== '—' ? String(j.value) : '';
+        }
         if (label === 'Order') return order.orderNumber || '';
         if (label === 'VIN') return order.vin || '';
         if (label === 'Advisor') return order.salesAdvisor || '';
         if (label === 'Payment') return order.paymentLabel || '';
         if (label === 'Deadline') return order.deadline || '';
+        if (label === 'Product') return order.vehicle || '';
+        if (label === 'Model Year') return order.modelYear || '';
         const field = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === String(label || '').toUpperCase()
             || (item.label || item.col) === label);
         return field && field.value != null ? String(field.value) : '';
@@ -365,7 +412,9 @@
         const visible = showNoVinRows ? list : list.filter(hasVin);
         const rows = visible.filter((order) => !needle || cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle)));
         const head = (label) => {
-            const named = SHEET_NAMES[label] || titles[label] || '';
+            const named = source === 'reserved'
+                ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
+                : (SHEET_NAMES[label] || titles[label] || label);
             if (/^[A-Z]{1,3}$/.test(label) && named) {
                 return `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(named)}</th>`;
             }
