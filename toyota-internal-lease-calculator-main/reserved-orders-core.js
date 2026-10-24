@@ -696,6 +696,10 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             shareLevel: cleanText(row.shareLevel) || '—',
             allocationAging: parseAgingDays(row.reservationAge),
             fields: Array.isArray(row.fields) ? row.fields : [],
+            esalesFields: Array.isArray(row.fields) ? row.fields : [],
+            reservedFields: [],
+            inEsales: true,
+            inReservedFile: false,
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -740,6 +744,10 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             shareLevel: cleanText(row.shareLevel) || '—',
             allocationAging: parseAgingDays(row.reservationAge),
             fields: Array.isArray(row.fields) ? row.fields : [],
+            esalesFields: Array.isArray(row.fields) ? row.fields : [],
+            reservedFields: [],
+            inEsales: true,
+            inReservedFile: false,
             createdDate: localStamp(created),
             createdDisplay: displayStamp(created),
             assignDate: localStamp(assign),
@@ -780,6 +788,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             const existing = byVin.get(vin);
             if (existing) {
                 let touched = false;
+                existing.reservedFields = Array.isArray(row.fields) ? row.fields : [];
+                existing.inReservedFile = true;
                 const fields = Array.isArray(existing.fields) ? existing.fields.slice() : [];
                 const jField = (row.fields || []).find((field) => field.col === 'J');
                 const jValue = jField ? cleanText(jField.value) : cleanText(row.suffix);
@@ -840,6 +850,10 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 shareLevel: cleanText(row.shareLevel) || '—',
                 allocationAging: parseAgingDays(row.reservationAge),
                 fields: Array.isArray(row.fields) ? row.fields : [],
+                esalesFields: [],
+                reservedFields: Array.isArray(row.fields) ? row.fields : [],
+                inEsales: false,
+                inReservedFile: true,
                 createdDate: localStamp(created),
                 createdDisplay: displayStamp(created),
                 assignDate: '',

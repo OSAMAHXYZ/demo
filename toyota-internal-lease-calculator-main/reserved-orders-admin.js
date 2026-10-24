@@ -69,9 +69,32 @@
     const SHEET_NAMES = { F: 'Order', I: 'Model', J: 'Suffix', K: 'Model year', L: 'VIN', M: 'Ext', N: 'Int', R: 'Vehicle status', S: 'Customer', T: 'Salesman', U: 'Sales type' };
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
+    let sheetSource = 'esales';
+    const SHEET_NOTES = {
+        esales: 'Columns and rows from the Stock E-Sales push. Status and queue stay in sync with the employee page.',
+        reserved: 'Columns and rows from the Reserved Order File push. VINs already in E-Sales appear here with Reserved File values only.'
+    };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
         return field && field.value != null ? String(field.value).trim() : '';
+    }
+    function orderInSheet(order, source) {
+        if (source === 'reserved') {
+            if (order.inReservedFile != null) return Boolean(order.inReservedFile);
+            return Boolean(order.fromReservedFile);
+        }
+        if (order.inEsales != null) return Boolean(order.inEsales);
+        return !order.fromReservedFile;
+    }
+    function orderSheetFields(order, source) {
+        if (source === 'reserved') {
+            if (Array.isArray(order.reservedFields)) return order.reservedFields;
+            if (order.fromReservedFile) return order.fields || [];
+            return [];
+        }
+        if (Array.isArray(order.esalesFields)) return order.esalesFields;
+        if (order.inEsales === false) return [];
+        return order.fields || [];
     }
     function salesTypeOf(order) {
         const raw = fieldOf(order, 'U');
@@ -286,11 +309,11 @@
         for (let i = 0; i < text.length; i += 1) n = n * 26 + (text.charCodeAt(i) - 64);
         return n;
     }
-    function sheetColumns(list) {
+    function sheetColumns(list, source) {
         const meta = ['Queue', 'Status', 'Updated by', 'Updated at'];
         const titles = {};
         const letters = new Set();
-        list.forEach((order) => (order.fields || []).forEach((field) => {
+        list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
             const col = String(field.col || '').trim().toUpperCase();
             const label = String(field.label || '').trim();
             if (!col) return;
@@ -301,7 +324,7 @@
         if (!excel.length) return meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Deadline']);
         return { cols: meta.concat(excel), titles };
     }
-    function sheetValue(order, label) {
+    function sheetValue(order, label, source) {
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
         if (label === 'Updated by') return order.statusChangedBy || '';
@@ -311,20 +334,36 @@
         if (label === 'Advisor') return order.salesAdvisor || '';
         if (label === 'Payment') return order.paymentLabel || '';
         if (label === 'Deadline') return order.deadline || '';
-        const field = (order.fields || []).find((item) => String(item.col || '').toUpperCase() === String(label || '').toUpperCase()
+        const field = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === String(label || '').toUpperCase()
             || (item.label || item.col) === label);
         return field && field.value != null ? String(field.value) : '';
     }
-    function renderSheet() {
-        const box = $('live-sheet');
+    function setSheetSource(next) {
+        sheetSource = next === 'reserved' ? 'reserved' : 'esales';
+        document.querySelectorAll('.sheet-source').forEach((button) => {
+            const on = button.dataset.sheet === sheetSource;
+            button.classList.toggle('active', on);
+            button.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        const esalesBox = $('live-sheet-esales');
+        const reservedBox = $('live-sheet-reserved');
+        if (esalesBox) esalesBox.classList.toggle('hidden', sheetSource !== 'esales');
+        if (reservedBox) reservedBox.classList.toggle('hidden', sheetSource !== 'reserved');
+        const note = $('sheet-note');
+        if (note) note.textContent = SHEET_NOTES[sheetSource] || SHEET_NOTES.esales;
+        const search = $('sheet-search');
+        if (search) search.placeholder = sheetSource === 'reserved' ? 'Search Reserved Order File' : 'Search Stock E-Sales';
+        renderSheet();
+    }
+    function renderOneSheet(box, source, list) {
         if (!box) return;
         const needle = ($('sheet-search') && $('sheet-search').value || '').trim().toLowerCase();
-        const packed = sheetColumns(orders);
+        const packed = sheetColumns(list, source);
         const cols = Array.isArray(packed) ? packed : packed.cols;
         const titles = Array.isArray(packed) ? {} : (packed.titles || {});
-        const noVin = orders.filter((order) => !hasVin(order)).length;
-        const source = showNoVinRows ? orders : orders.filter(hasVin);
-        const rows = source.filter((order) => !needle || cols.some((label) => sheetValue(order, label).toLowerCase().includes(needle)));
+        const noVin = list.filter((order) => !hasVin(order)).length;
+        const visible = showNoVinRows ? list : list.filter(hasVin);
+        const rows = visible.filter((order) => !needle || cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle)));
         const head = (label) => {
             const named = SHEET_NAMES[label] || titles[label] || '';
             if (/^[A-Z]{1,3}$/.test(label) && named) {
@@ -333,14 +372,32 @@
             return `<th>${esc(named || label)}</th>`;
         };
         const cell = (order, label) => {
-            const value = sheetValue(order, label);
+            const value = sheetValue(order, label, source);
             if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
-            if (label === 'U' && value) return `<td><span class="st-type">${esc(salesTypeOf(order))}</span></td>`;
+            if (label === 'U' && value) {
+                const st = /^\d$/.test(value) ? '0' + value : value;
+                return `<td><span class="st-type">${esc(st)}</span></td>`;
+            }
             return `<td>${esc(value)}</td>`;
         };
-        const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost" id="sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
-        box.innerHTML = rows.length ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => `<tr class="${hasVin(order) ? '' : 'is-novin'}">${cols.map((label) => cell(order, label)).join('')}</tr>`).join('')}</tbody></table>` : `${note}<p class="empty">No live rows yet. Push Stock E-Sales to fill this sheet.</p>`;
+        const emptyMsg = source === 'reserved'
+            ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
+            : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
+        const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
+        box.innerHTML = rows.length
+            ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => `<tr class="${hasVin(order) ? '' : 'is-novin'}">${cols.map((label) => cell(order, label)).join('')}</tr>`).join('')}</tbody></table>`
+            : `${note}<p class="empty">${emptyMsg}</p>`;
+    }
+    function renderSheet() {
+        const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
+        const reservedList = orders.filter((order) => orderInSheet(order, 'reserved'));
+        const esalesCount = $('sheet-count-esales');
+        const reservedCount = $('sheet-count-reserved');
+        if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
+        if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
+        renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
+        renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
     }
     function renderMarketing() {
         const body = $('marketing-rows');
@@ -546,10 +603,17 @@
         });
     }, 1000);
     if ($('sheet-search')) $('sheet-search').addEventListener('input', renderSheet);
-    if ($('live-sheet')) $('live-sheet').addEventListener('click', (event) => {
-        if (!event.target.closest('#sheet-novin-toggle')) return;
-        showNoVinRows = !showNoVinRows;
-        renderSheet();
+    document.querySelectorAll('.sheet-source').forEach((button) => {
+        button.addEventListener('click', () => setSheetSource(button.dataset.sheet));
+    });
+    ['live-sheet-esales', 'live-sheet-reserved'].forEach((id) => {
+        const box = $(id);
+        if (!box) return;
+        box.addEventListener('click', (event) => {
+            if (!event.target.closest('.sheet-novin-toggle')) return;
+            showNoVinRows = !showNoVinRows;
+            renderSheet();
+        });
     });
     if ($('st-cards')) $('st-cards').addEventListener('click', (event) => {
         const card = event.target.closest('[data-st]');
