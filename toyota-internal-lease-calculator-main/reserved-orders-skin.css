@@ -866,10 +866,10 @@
   #pay-bars .bar:nth-child(4) i { background: linear-gradient(90deg, #475569, #94a3b8); box-shadow: none; }
   #pay-bars .bar b { text-align: right; font-family: var(--ro-num); color: #fff; }
   
-  /* live sheet — two source sheets (E-Sales / Reserved Order File) */
+  /* live sheet — E-Sales / Reserved Order File / Merged */
   .sheet-sources {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
     margin: 0 0 14px;
   }
@@ -942,6 +942,17 @@
     border-color: rgba(251, 146, 60, 0.4);
     color: #fdba74;
   }
+  .sheet-source[data-sheet="merged"].active {
+    border-color: rgba(52, 211, 153, 0.5);
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.18), 0 12px 28px rgba(16, 185, 129, 0.14);
+    background: linear-gradient(165deg, #12261f 0%, #0e1a16 100%);
+  }
+  .sheet-source[data-sheet="merged"].active .sheet-source-kicker { color: #6ee7b7; }
+  .sheet-source[data-sheet="merged"].active .sheet-source-count {
+    background: rgba(52, 211, 153, 0.14);
+    border-color: rgba(52, 211, 153, 0.38);
+    color: #6ee7b7;
+  }
   .sheet-toolbar { margin-bottom: 10px; }
   #live-sheet-reserved.excel-live thead th {
     background: #2a1c14 !important;
@@ -956,7 +967,47 @@
     border-color: rgba(251, 146, 60, 0.35);
     color: #fdba74;
   }
-  @media (max-width: 720px) {
+  #live-sheet-merged.excel-live thead th {
+    background: #143028 !important;
+    color: #d1fae5 !important;
+  }
+  #live-sheet-merged.excel-live .q-pill {
+    background: rgba(52, 211, 153, 0.14);
+    border-color: rgba(52, 211, 153, 0.35);
+    color: #6ee7b7;
+  }
+  #live-sheet-merged.excel-live .ahead-chip {
+    background: rgba(52, 211, 153, 0.12);
+    border-color: rgba(52, 211, 153, 0.3);
+    color: #d1fae5;
+  }
+  #live-sheet-merged.excel-live .ahead-chip b { color: #6ee7b7; }
+  .excel-live .source-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+  .excel-live .source-pill.is-esales {
+    background: rgba(96, 165, 250, 0.14);
+    border-color: rgba(96, 165, 250, 0.32);
+    color: #93c5fd;
+  }
+  .excel-live .source-pill.is-reserved {
+    background: rgba(251, 146, 60, 0.14);
+    border-color: rgba(251, 146, 60, 0.32);
+    color: #fdba74;
+  }
+  .excel-live .source-pill.is-both {
+    background: rgba(52, 211, 153, 0.14);
+    border-color: rgba(52, 211, 153, 0.32);
+    color: #6ee7b7;
+  }
+  @media (max-width: 900px) {
     .sheet-sources { grid-template-columns: 1fr; }
   }
 

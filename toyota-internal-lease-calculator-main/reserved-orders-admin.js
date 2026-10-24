@@ -73,18 +73,34 @@
         F: 'SFX', G: 'Exterior Color', H: 'Interior Color', I: 'VIN', J: 'Expiry'
     };
     const RESERVED_COL_ORDER = ['B', 'C', 'I', 'E', 'D', 'F', 'G', 'H', 'J'];
+    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area'];
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
     let sheetSource = 'esales';
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
-        reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.'
+        reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
+        merged: 'One row per VIN. Duplicate VINs merge E-Sales + Reserved File info, with Expiry taken from the Reserved Order File. Non-duplicates are kept even when some fields are empty.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
         return field && field.value != null ? String(field.value).trim() : '';
     }
+    function isBlankSheetValue(value) {
+        const text = String(value == null ? '' : value).trim();
+        return !text || text === '—' || text === '-';
+    }
+    function fieldValueFromList(fields, letter) {
+        const want = String(letter || '').toUpperCase();
+        const hit = (fields || []).find((item) => String(item.col || '').toUpperCase() === want);
+        if (!hit || hit.value == null) return '';
+        const text = String(hit.value).trim();
+        return text === '—' || text === '-' ? '' : text;
+    }
     function orderInSheet(order, source) {
+        if (source === 'merged') {
+            return orderInSheet(order, 'esales') || orderInSheet(order, 'reserved');
+        }
         if (source === 'reserved') {
             if (order.inReservedFile != null) return Boolean(order.inReservedFile);
             return Boolean(order.fromReservedFile);
@@ -93,6 +109,7 @@
         return !order.fromReservedFile;
     }
     function orderSheetFields(order, source) {
+        if (source === 'merged') return Array.isArray(order.mergedFields) ? order.mergedFields : [];
         if (source === 'reserved') {
             if (Array.isArray(order.reservedFields)) return order.reservedFields;
             if (order.fromReservedFile) return order.fields || [];
@@ -101,6 +118,76 @@
         if (Array.isArray(order.esalesFields)) return order.esalesFields;
         if (order.inEsales === false) return [];
         return order.fields || [];
+    }
+    function looksLikeDateText(value) {
+        const text = String(value || '').trim();
+        return /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(text) || /^\d{4}-\d{2}-\d{2}/.test(text);
+    }
+    function looksLikeVinText(value) {
+        return /^[A-HJ-NPR-Z0-9]{10,20}$/i.test(String(value || '').trim());
+    }
+    function firstFilled() {
+        for (let i = 0; i < arguments.length; i += 1) {
+            if (!isBlankSheetValue(arguments[i])) return String(arguments[i]).trim();
+        }
+        return '';
+    }
+    function buildMergedOrder(order) {
+        const inE = orderInSheet(order, 'esales');
+        const inR = orderInSheet(order, 'reserved');
+        const esales = orderSheetFields(order, 'esales');
+        const reserved = orderSheetFields(order, 'reserved');
+        const eProduct = fieldValueFromList(esales, 'I');
+        const eSuffix = fieldValueFromList(esales, 'J');
+        const eVin = fieldValueFromList(esales, 'L');
+        const rVin = fieldValueFromList(reserved, 'I');
+        const rSuffix = fieldValueFromList(reserved, 'F');
+        const rExpiry = fieldValueFromList(reserved, 'J');
+        const vin = firstFilled(order.vin, looksLikeVinText(eVin) ? eVin : '', looksLikeVinText(rVin) ? rVin : '');
+        const product = firstFilled(
+            (!looksLikeVinText(eProduct) && !looksLikeDateText(eProduct)) ? eProduct : '',
+            fieldValueFromList(reserved, 'E'),
+            order.vehicle
+        );
+        const suffix = firstFilled(
+            (!looksLikeDateText(eSuffix) && !looksLikeVinText(eSuffix)) ? eSuffix : '',
+            rSuffix
+        );
+        const values = {
+            Source: inE && inR ? 'Both' : inE ? 'E-Sales' : 'Reserved',
+            VIN: vin,
+            Order: firstFilled(order.orderNumber, fieldValueFromList(esales, 'F'), fieldValueFromList(reserved, 'C')),
+            Customer: firstFilled(order.customerName, fieldValueFromList(esales, 'S'), fieldValueFromList(reserved, 'B')),
+            Product: product,
+            'Model Year': firstFilled(order.modelYear, fieldValueFromList(esales, 'K'), fieldValueFromList(reserved, 'D')),
+            SFX: suffix,
+            Exterior: firstFilled(order.exterior, fieldValueFromList(esales, 'M'), fieldValueFromList(reserved, 'G')),
+            Interior: firstFilled(order.interior, fieldValueFromList(esales, 'N'), fieldValueFromList(reserved, 'H')),
+            Advisor: firstFilled(order.salesAdvisor, fieldValueFromList(esales, 'T'), fieldValueFromList(reserved, 'T')),
+            Payment: firstFilled(order.paymentLabel, fieldValueFromList(esales, 'payment')),
+            Area: firstFilled(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'), fieldValueFromList(reserved, 'A'))
+        };
+        // Duplicate VINs: expiry always from Reserved Order File when present.
+        let expiry = '';
+        if (inR) {
+            expiry = firstFilled(order.expiryDisplay, order.expiryDate, rExpiry);
+            if (order.expiryDate && !order.expiryDisplay) {
+                const parsed = parseLocal(order.expiryDate);
+                if (parsed) expiry = parsed.toLocaleDateString('en-GB');
+            }
+        } else {
+            expiry = firstFilled(order.expiryDisplay, order.expiryDate);
+        }
+        const mergedFields = MERGED_COL_ORDER.map((label) => ({
+            label,
+            col: label,
+            value: values[label] == null || values[label] === '' ? '—' : values[label]
+        }));
+        return Object.assign({}, order, {
+            mergeSource: values.Source,
+            mergedExpiry: expiry,
+            mergedFields
+        });
     }
     function salesTypeOf(order) {
         const raw = fieldOf(order, 'U');
@@ -355,6 +442,13 @@
         return `<td class="col-ahead"><div class="ahead-stack">${meta}<div class="ahead-chips">${chips}</div></div></td>`;
     }
     function sheetColumns(list, source) {
+        if (source === 'merged') {
+            const meta = ['Queue', 'Status', 'BO ahead', 'Expiry'];
+            const titles = { Expiry: 'Expiry', Source: 'Source' };
+            MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
+            // Keep every merged column so non-duplicate rows with blanks still appear.
+            return { cols: meta.concat(MERGED_COL_ORDER), titles };
+        }
         const meta = source === 'reserved'
             ? ['Queue', 'Status', 'BO ahead', 'Expiry']
             : ['Queue', 'Status', 'BO ahead', 'Updated by', 'Updated at'];
@@ -397,16 +491,34 @@
         if (label === 'Updated by') return order.statusChangedBy || '';
         if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
         if (label === 'Expiry') {
+            if (source === 'merged' && order.mergedExpiry != null && order.mergedExpiry !== '') return order.mergedExpiry;
             if (order.expiryDisplay) return order.expiryDisplay;
             if (order.expiryDate) {
                 const parsed = parseLocal(order.expiryDate);
                 return parsed ? parsed.toLocaleDateString('en-GB') : order.expiryDate;
             }
+            if (source === 'merged') {
+                const field = (order.mergedFields || []).find((item) => item.label === 'Expiry');
+                return field && field.value != null && field.value !== '—' ? String(field.value) : '';
+            }
             const j = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === 'J');
             return j && j.value != null && j.value !== '—' ? String(j.value) : '';
         }
-        if (label === 'Order') return order.orderNumber || '';
-        if (label === 'VIN') return order.vin || '';
+        if (label === 'Source') return order.mergeSource || '';
+        if (label === 'Order') {
+            if (source === 'merged') {
+                const field = (order.mergedFields || []).find((item) => item.label === 'Order');
+                if (field && !isBlankSheetValue(field.value)) return String(field.value);
+            }
+            return order.orderNumber || '';
+        }
+        if (label === 'VIN') {
+            if (source === 'merged') {
+                const field = (order.mergedFields || []).find((item) => item.label === 'VIN');
+                if (field && !isBlankSheetValue(field.value)) return String(field.value);
+            }
+            return order.vin || '';
+        }
         if (label === 'Advisor') return order.salesAdvisor || '';
         if (label === 'Payment') return order.paymentLabel || '';
         if (label === 'Deadline') return order.deadline || '';
@@ -417,7 +529,7 @@
         return field && field.value != null ? String(field.value) : '';
     }
     function setSheetSource(next) {
-        sheetSource = next === 'reserved' ? 'reserved' : 'esales';
+        sheetSource = next === 'reserved' || next === 'merged' ? next : 'esales';
         document.querySelectorAll('.sheet-source').forEach((button) => {
             const on = button.dataset.sheet === sheetSource;
             button.classList.toggle('active', on);
@@ -425,12 +537,20 @@
         });
         const esalesBox = $('live-sheet-esales');
         const reservedBox = $('live-sheet-reserved');
+        const mergedBox = $('live-sheet-merged');
         if (esalesBox) esalesBox.classList.toggle('hidden', sheetSource !== 'esales');
         if (reservedBox) reservedBox.classList.toggle('hidden', sheetSource !== 'reserved');
+        if (mergedBox) mergedBox.classList.toggle('hidden', sheetSource !== 'merged');
         const note = $('sheet-note');
         if (note) note.textContent = SHEET_NOTES[sheetSource] || SHEET_NOTES.esales;
         const search = $('sheet-search');
-        if (search) search.placeholder = sheetSource === 'reserved' ? 'Search Reserved Order File' : 'Search Stock E-Sales';
+        if (search) {
+            search.placeholder = sheetSource === 'reserved'
+                ? 'Search Reserved Order File'
+                : sheetSource === 'merged'
+                    ? 'Search merged sheet'
+                    : 'Search Stock E-Sales';
+        }
         renderSheet();
     }
     function renderOneSheet(box, source, list) {
@@ -440,13 +560,18 @@
         const cols = Array.isArray(packed) ? packed : packed.cols;
         const titles = Array.isArray(packed) ? {} : (packed.titles || {});
         const noVin = list.filter((order) => !hasVin(order)).length;
-        const visible = showNoVinRows ? list : list.filter(hasVin);
+        // Merged sheet keeps non-duplicate rows even when some fields are empty.
+        const visible = source === 'merged'
+            ? (showNoVinRows ? list : list.filter((order) => hasVin(order) || orderInSheet(order, 'esales') || orderInSheet(order, 'reserved')))
+            : (showNoVinRows ? list : list.filter(hasVin));
         const rows = visible.filter((order) => !needle || cols.some((label) => sheetValue(order, label, source).toLowerCase().includes(needle)));
         const head = (label) => {
-            const named = source === 'reserved'
-                ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
-                : (SHEET_NAMES[label] || titles[label] || label);
-            if (/^[A-Z]{1,3}$/.test(label) && named) {
+            const named = source === 'merged'
+                ? (titles[label] || label)
+                : source === 'reserved'
+                    ? (titles[label] || RESERVED_SHEET_NAMES[label] || label)
+                    : (SHEET_NAMES[label] || titles[label] || label);
+            if (/^[A-Z]{1,3}$/.test(label) && named && source !== 'merged') {
                 return `<th title="Column ${esc(label)}"><span class="col-letter">${esc(label)}</span>${esc(named)}</th>`;
             }
             return `<th>${esc(named || label)}</th>`;
@@ -456,15 +581,21 @@
             if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'BO ahead') return aheadCellHtml(order);
+            if (label === 'Source') {
+                const tone = value === 'Both' ? 'is-both' : value === 'Reserved' ? 'is-reserved' : 'is-esales';
+                return `<td class="col-source"><span class="source-pill ${tone}">${esc(value || '—')}</span></td>`;
+            }
             if (label === 'U' && value) {
                 const st = /^\d$/.test(value) ? '0' + value : value;
                 return `<td><span class="st-type">${esc(st)}</span></td>`;
             }
             return `<td>${esc(value)}</td>`;
         };
-        const emptyMsg = source === 'reserved'
-            ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
-            : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
+        const emptyMsg = source === 'merged'
+            ? 'No merged rows yet. Push Stock E-Sales and/or the Reserved Order File.'
+            : source === 'reserved'
+                ? 'No Reserved Order File rows yet. Push the Reserved Order File on Data push.'
+                : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
         const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
         box.innerHTML = rows.length
             ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => `<tr class="${hasVin(order) ? '' : 'is-novin'}">${cols.map((label) => cell(order, label)).join('')}</tr>`).join('')}</tbody></table>`
@@ -473,12 +604,18 @@
     function renderSheet() {
         const esalesList = orders.filter((order) => orderInSheet(order, 'esales'));
         const reservedList = orders.filter((order) => orderInSheet(order, 'reserved'));
+        const mergedList = orders
+            .filter((order) => orderInSheet(order, 'merged'))
+            .map(buildMergedOrder);
         const esalesCount = $('sheet-count-esales');
         const reservedCount = $('sheet-count-reserved');
+        const mergedCount = $('sheet-count-merged');
         if (esalesCount) esalesCount.textContent = String(esalesList.filter(hasVin).length);
         if (reservedCount) reservedCount.textContent = String(reservedList.filter(hasVin).length);
+        if (mergedCount) mergedCount.textContent = String(mergedList.filter(hasVin).length);
         renderOneSheet($('live-sheet-esales'), 'esales', esalesList);
         renderOneSheet($('live-sheet-reserved'), 'reserved', reservedList);
+        renderOneSheet($('live-sheet-merged'), 'merged', mergedList);
     }
     function renderMarketing() {
         const body = $('marketing-rows');
@@ -687,7 +824,7 @@
     document.querySelectorAll('.sheet-source').forEach((button) => {
         button.addEventListener('click', () => setSheetSource(button.dataset.sheet));
     });
-    ['live-sheet-esales', 'live-sheet-reserved'].forEach((id) => {
+    ['live-sheet-esales', 'live-sheet-reserved', 'live-sheet-merged'].forEach((id) => {
         const box = $(id);
         if (!box) return;
         box.addEventListener('click', (event) => {
