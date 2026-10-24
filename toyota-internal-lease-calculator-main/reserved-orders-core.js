@@ -1022,6 +1022,30 @@ function colorsMatchLoose(lookup, a, b) {
     return left === right;
 }
 
+function productKey(lookup, value) {
+    return lookup.normalizeText(value).replace(/[^a-z0-9]+/g, '');
+}
+
+function productsMatch(lookup, a, b) {
+    const left = lookup.normalizeText(a).replace(/\s+/g, ' ');
+    const right = lookup.normalizeText(b).replace(/\s+/g, ' ');
+    if (!left || !right) return false;
+    if (left === right) return true;
+    const leftKey = productKey(lookup, a);
+    const rightKey = productKey(lookup, b);
+    if (leftKey && rightKey && leftKey === rightKey) return true;
+    if (leftKey.length >= 3 && rightKey.length >= 3 && (leftKey.includes(rightKey) || rightKey.includes(leftKey))) return true;
+    return false;
+}
+
+function suffixesMatch(lookup, a, b) {
+    const left = lookup.normalizeText(a);
+    const right = lookup.normalizeText(b);
+    if (!left || !right) return false;
+    if (left === right) return true;
+    return left.replace(/^0+/, '') === right.replace(/^0+/, '');
+}
+
 /**
  * E-Sales columns: I product, J suffix, M ext, N int.
  * Reserved Order File columns: E product, F sfx, G ext, H int (I is VIN, J is expiry).
@@ -1041,8 +1065,18 @@ function orderQueueSpec(order) {
     if (!exterior) exterior = columnFromFields(reserved, 'G') || cleanText(order && order.exterior);
     if (!interior) interior = columnFromFields(reserved, 'H') || cleanText(order && order.interior);
 
-    if (!product) product = pickQueueField(order, ['E', 'I', '=vehicle']);
-    if (!suffix) suffix = pickQueueField(order, ['F', 'J']);
+    // Merged fields may have Reserved File expiry in J — never treat a date as suffix.
+    if (!product) {
+        const fromI = reservedColumn(order, 'I');
+        product = (!fromI || looksLikeVinValue(fromI) || looksLikeDateValue(fromI))
+            ? (reservedColumn(order, 'E') || cleanText(order && order.vehicle))
+            : fromI;
+    }
+    if (!suffix) {
+        const fromF = reservedColumn(order, 'F');
+        const fromJ = reservedColumn(order, 'J');
+        suffix = fromF || ((fromJ && !looksLikeDateValue(fromJ) && !looksLikeVinValue(fromJ)) ? fromJ : '');
+    }
     if (!exterior) exterior = pickQueueField(order, ['G', 'M', '=exterior']);
     if (!interior) interior = pickQueueField(order, ['H', 'N', '=interior']);
 
@@ -1052,16 +1086,15 @@ function orderQueueSpec(order) {
     if (!interior) interior = fieldByLabel(order, [/interior/, /^int$/i, /int(erior)?\s*color/i]);
 
     if (looksLikeDateValue(suffix) || looksLikeVinValue(suffix)) suffix = '';
-    if (looksLikeVinValue(product)) product = '';
+    if (looksLikeVinValue(product) || looksLikeDateValue(product)) product = '';
     if (looksLikeDateValue(exterior) || looksLikeVinValue(exterior)) exterior = '';
     if (looksLikeDateValue(interior) || looksLikeVinValue(interior)) interior = '';
     return { product, suffix, exterior, interior };
 }
 
 /**
- * First 3 back-order numbers in the same Product + Suffix + color queue
- * (same rules as bo-hub/bo-order-lookup.html). Empty rows fall back to a
- * looser same-product / suffix / colors match across Ext/Int priority slots.
+ * First 3 back-order numbers for an order. Prefer same product+suffix+colors
+ * (BO lookup rules); if that is empty, fall back to same product+suffix.
  */
 function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
@@ -1076,23 +1109,78 @@ function withColorQueue(orders, table) {
     const extCols = [1, 2, 3].map((n) => lookup.resolvePriorityColumn(headers, 'ext', n));
     const intCols = [1, 2, 3].map((n) => lookup.resolvePriorityColumn(headers, 'int', n));
     const salesmanColumn = lookup.resolveColumn(headers, [/salesman\s*name/i, /salesman/i, /sales\s*advisor/i]);
-    const allEntries = suffixColumn && extCols[0] && intCols[0]
+    const allEntries = suffixColumn && productColumn
         ? lookup.mergeOrderEntries(rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols)
         : [];
     const cache = new Map();
+
+    const pushRowMatch = (matched, seen, row) => {
+        const orderNumber = orderColumn ? String(row[orderColumn] ?? '').trim() : '';
+        const orderNorm = lookup.normalizeText(orderNumber);
+        if (!orderNorm || seen.has(orderNorm)) return;
+        seen.add(orderNorm);
+        matched.push({
+            orderNumber,
+            orderNorm,
+            product: productColumn ? row[productColumn] : '',
+            suffix: suffixColumn ? row[suffixColumn] : '',
+            reservationDate: dateColumn ? lookup.parseDateValue(row[dateColumn]) : null,
+            reservationDateRaw: dateColumn ? row[dateColumn] : '',
+            pairs: [],
+            row
+        });
+    };
+
+    const queueFromRows = (spec, mode) => {
+        if (!productColumn || !suffixColumn || !spec.product || !spec.suffix) return [];
+        const productNorm = lookup.normalizeText(spec.product);
+        const suffixNorm = lookup.normalizeText(spec.suffix);
+        const extNorm = normalizeColorCode(lookup, spec.exterior);
+        const intNorm = normalizeColorCode(lookup, spec.interior);
+        const key = `rows\u0001${mode}\u0001${productNorm}\u0001${suffixNorm}\u0001${extNorm}\u0001${intNorm}`;
+        if (cache.has(key)) return cache.get(key);
+        const matched = [];
+        const seen = new Set();
+        rows.forEach((row) => {
+            if (!productsMatch(lookup, row[productColumn], spec.product)) return;
+            if (!suffixesMatch(lookup, row[suffixColumn], spec.suffix)) return;
+            if (mode === 'colors') {
+                if (!extNorm || !intNorm) return;
+                const hasExt = [extCols[0], extCols[1], extCols[2]].some((col) => col && colorsMatchLoose(lookup, extNorm, row[col]));
+                const hasInt = [intCols[0], intCols[1], intCols[2]].some((col) => col && colorsMatchLoose(lookup, intNorm, row[col]));
+                if (!hasExt || !hasInt) return;
+            } else if (mode === 'ext') {
+                if (!extNorm) return;
+                const hasExt = [extCols[0], extCols[1], extCols[2]].some((col) => col && colorsMatchLoose(lookup, extNorm, row[col]));
+                if (!hasExt) return;
+            } else if (mode === 'int') {
+                if (!intNorm) return;
+                const hasInt = [intCols[0], intCols[1], intCols[2]].some((col) => col && colorsMatchLoose(lookup, intNorm, row[col]));
+                if (!hasInt) return;
+            }
+            pushRowMatch(matched, seen, row);
+        });
+        const sorted = lookup.sortQueueEntries(matched);
+        cache.set(key, sorted);
+        return sorted;
+    };
+
     const queueFor = (refEntry, mode) => {
         const productNorm = lookup.normalizeText(refEntry.product);
         const suffixNorm = lookup.normalizeText(refEntry.suffix);
         const pairKey = (refEntry.pairs || []).map((pair) => `${pair.extNorm}/${pair.intNorm}`).sort().join('|');
-        const key = `${mode}\u0001${productNorm}\u0001${suffixNorm}\u0001${pairKey}`;
+        const key = `entries\u0001${mode}\u0001${productNorm}\u0001${suffixNorm}\u0001${pairKey}`;
         if (!cache.has(key)) {
             cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
-                if (productColumn && productNorm && lookup.normalizeText(entry.product) !== productNorm) return false;
-                if (suffixColumn && suffixNorm && lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
+                if (productNorm && !productsMatch(lookup, entry.product, refEntry.product)) return false;
+                if (suffixNorm && !suffixesMatch(lookup, entry.suffix, refEntry.suffix)) return false;
+                if (mode === 'product-suffix') return true;
                 if (mode === 'strict') return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
                 const refPair = (refEntry.pairs || [])[0];
-                if (!refPair) return false;
+                if (!refPair) return mode === 'product-suffix';
                 const pairs = Array.isArray(entry.pairs) ? entry.pairs : [];
+                if (mode === 'ext') return pairs.some((pair) => colorsMatchLoose(lookup, refPair.exterior, pair.exterior));
+                if (mode === 'int') return pairs.some((pair) => colorsMatchLoose(lookup, refPair.interior, pair.interior));
                 const hasExt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.exterior, pair.exterior));
                 const hasInt = pairs.some((pair) => colorsMatchLoose(lookup, refPair.interior, pair.interior));
                 return hasExt && hasInt;
@@ -1100,78 +1188,63 @@ function withColorQueue(orders, table) {
         }
         return cache.get(key) || [];
     };
-    const looseQueueFromRows = (spec) => {
-        if (!productColumn || !suffixColumn || !spec.product || !spec.suffix || !spec.exterior || !spec.interior) return [];
-        const productNorm = lookup.normalizeText(spec.product);
-        const suffixNorm = lookup.normalizeText(spec.suffix);
-        const extNorm = normalizeColorCode(lookup, spec.exterior);
-        const intNorm = normalizeColorCode(lookup, spec.interior);
-        const key = `rows\u0001${productNorm}\u0001${suffixNorm}\u0001${extNorm}\u0001${intNorm}`;
-        if (cache.has(key)) return cache.get(key);
-        const matched = [];
-        const seen = new Set();
-        rows.forEach((row) => {
-            if (lookup.normalizeText(row[productColumn]) !== productNorm) return;
-            if (lookup.normalizeText(row[suffixColumn]) !== suffixNorm) return;
-            const hasExt = [extCols[0], extCols[1], extCols[2]].some((col) => col && colorsMatchLoose(lookup, extNorm, row[col]));
-            const hasInt = [intCols[0], intCols[1], intCols[2]].some((col) => col && colorsMatchLoose(lookup, intNorm, row[col]));
-            if (!hasExt || !hasInt) return;
-            const orderNumber = orderColumn ? String(row[orderColumn] ?? '').trim() : '';
-            const orderNorm = lookup.normalizeText(orderNumber);
-            if (!orderNorm || seen.has(orderNorm)) return;
-            seen.add(orderNorm);
-            matched.push({
-                orderNumber,
-                orderNorm,
-                product: row[productColumn],
-                suffix: row[suffixColumn],
-                reservationDate: dateColumn ? lookup.parseDateValue(row[dateColumn]) : null,
-                reservationDateRaw: dateColumn ? row[dateColumn] : '',
-                pairs: [],
-                row
-            });
-        });
-        const sorted = lookup.sortQueueEntries(matched);
-        cache.set(key, sorted);
-        return sorted;
-    };
-    const toAhead = (queue, salesmanCol) => queue.slice(0, 3).map((entry, index) => ({
+
+    const toAhead = (queue) => queue.slice(0, 3).map((entry, index) => ({
         queueNumber: index + 1,
         boPosition: index + 1,
         orderNumber: entry.orderNumber,
-        salesAdvisor: salesmanCol && entry.row ? String(entry.row[salesmanCol] || '').trim() : '',
+        salesAdvisor: salesmanColumn && entry.row ? String(entry.row[salesmanColumn] || '').trim() : '',
         vehicle: [entry.product, entry.suffix].filter(Boolean).join(' ')
     }));
+
     return list.map((order) => {
-        if (!allEntries.length && !rows.length) return { ...order, ahead: [] };
+        if (!rows.length) return { ...order, ahead: [] };
         const needle = lookup.normalizeText(order.orderNumber);
         let refEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
         const spec = orderQueueSpec(order);
-        const specRef = (spec.product && spec.suffix && spec.exterior && spec.interior) ? {
+        const specRef = (spec.product && spec.suffix) ? {
             orderNumber: order.orderNumber || '',
             orderNorm: needle,
             product: spec.product,
             suffix: spec.suffix,
-            pairs: [{
+            pairs: (spec.exterior && spec.interior) ? [{
                 tier: 1,
                 exterior: spec.exterior,
                 interior: spec.interior,
                 extNorm: lookup.normalizeText(spec.exterior),
                 intNorm: lookup.normalizeText(spec.interior)
-            }]
+            }] : []
         } : null;
         if (!refEntry && specRef) refEntry = specRef;
 
-        let queue = refEntry ? queueFor(refEntry, 'strict') : [];
-        if (!queue.length && specRef) queue = queueFor(specRef, 'strict');
-        if (!queue.length && specRef) queue = queueFor(specRef, 'loose');
-        if (!queue.length && refEntry && refEntry !== specRef) queue = queueFor(refEntry, 'loose');
-        if (!queue.length && specRef) queue = looseQueueFromRows(spec);
+        let queue = [];
+        if (refEntry && refEntry.pairs && refEntry.pairs.length) {
+            queue = queueFor(refEntry, 'strict');
+            if (!queue.length) queue = queueFor(refEntry, 'loose');
+        }
+        if (!queue.length && specRef && specRef.pairs.length) {
+            queue = queueFor(specRef, 'strict');
+            if (!queue.length) queue = queueFor(specRef, 'loose');
+            if (!queue.length) queue = queueFromRows(spec, 'colors');
+        }
+        if (!queue.length && specRef && spec.exterior) {
+            queue = queueFor(specRef, 'ext');
+            if (!queue.length) queue = queueFromRows(spec, 'ext');
+        }
+        if (!queue.length && specRef && spec.interior) {
+            queue = queueFor(specRef, 'int');
+            if (!queue.length) queue = queueFromRows(spec, 'int');
+        }
+        // Last resort for empty cells: first 3 on same product + suffix.
+        if (!queue.length && specRef) {
+            queue = queueFor(specRef, 'product-suffix');
+            if (!queue.length) queue = queueFromRows(spec, 'product-suffix');
+        }
 
         const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
         return {
             ...order,
-            ahead: toAhead(queue, salesmanColumn),
+            ahead: toAhead(queue),
             boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
             boOrdersAhead: posIdx >= 0 ? posIdx : null,
             boQueueSize: queue.length || null
