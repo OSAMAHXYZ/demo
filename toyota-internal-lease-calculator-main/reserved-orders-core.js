@@ -938,22 +938,28 @@ function emptyReport() {
     };
 }
 
-function reservedColumn(order, letter) {
+function columnFromFields(fields, letter) {
     const want = String(letter || '').toUpperCase();
+    const list = Array.isArray(fields) ? fields : [];
+    const hit = list.find((field) => {
+        const label = String(field.label || '').trim().toUpperCase();
+        const col = String(field.col || '').trim().toUpperCase();
+        return label === want || col === want;
+    });
+    const value = hit ? String(hit.value == null ? '' : hit.value).trim() : '';
+    if (!value || value === '—' || value === '-') return '';
+    return value;
+}
+
+function reservedColumn(order, letter) {
     const pools = [
         order && order.esalesFields,
         order && order.fields,
         order && order.reservedFields
     ];
     for (let p = 0; p < pools.length; p++) {
-        const fields = Array.isArray(pools[p]) ? pools[p] : [];
-        const hit = fields.find((field) => {
-            const label = String(field.label || '').trim().toUpperCase();
-            const col = String(field.col || '').trim().toUpperCase();
-            return label === want || col === want;
-        });
-        const value = hit ? String(hit.value == null ? '' : hit.value).trim() : '';
-        if (value && value !== '—' && value !== '-') return value;
+        const value = columnFromFields(pools[p], letter);
+        if (value) return value;
     }
     return '';
 }
@@ -966,19 +972,55 @@ function looksLikeDateValue(value) {
     return false;
 }
 
+function looksLikeVinValue(value) {
+    return /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(String(value || '').trim());
+}
+
+function pickQueueField(order, preferred) {
+    for (let i = 0; i < preferred.length; i++) {
+        const item = preferred[i];
+        const value = typeof item === 'string'
+            ? (item.startsWith('=') ? cleanText(order && order[item.slice(1)]) : reservedColumn(order, item))
+            : '';
+        if (!value) continue;
+        if (looksLikeDateValue(value) || looksLikeVinValue(value)) continue;
+        return value;
+    }
+    return '';
+}
+
+/**
+ * E-Sales columns: I product, J suffix, M ext, N int.
+ * Reserved Order File columns: E product, F sfx, G ext, H int (I is VIN, J is expiry).
+ */
 function orderQueueSpec(order) {
-    const product = reservedColumn(order, 'I') || reservedColumn(order, 'E') || cleanText(order && order.vehicle);
-    let suffix = reservedColumn(order, 'J');
-    if (!suffix || looksLikeDateValue(suffix)) suffix = reservedColumn(order, 'F') || '';
-    if (looksLikeDateValue(suffix)) suffix = '';
-    const exterior = reservedColumn(order, 'M') || reservedColumn(order, 'G') || cleanText(order && order.exterior);
-    const interior = reservedColumn(order, 'N') || reservedColumn(order, 'H') || cleanText(order && order.interior);
+    const esales = order && order.esalesFields;
+    const reserved = order && order.reservedFields;
+    let product = columnFromFields(esales, 'I');
+    let suffix = columnFromFields(esales, 'J');
+    let exterior = columnFromFields(esales, 'M');
+    let interior = columnFromFields(esales, 'N');
+    if (looksLikeDateValue(suffix) || looksLikeVinValue(suffix)) suffix = '';
+    if (looksLikeVinValue(product)) product = '';
+
+    if (!product) product = columnFromFields(reserved, 'E') || cleanText(order && order.vehicle);
+    if (!suffix) suffix = columnFromFields(reserved, 'F');
+    if (!exterior) exterior = columnFromFields(reserved, 'G') || cleanText(order && order.exterior);
+    if (!interior) interior = columnFromFields(reserved, 'H') || cleanText(order && order.interior);
+
+    if (!product) product = pickQueueField(order, ['E', 'I', '=vehicle']);
+    if (!suffix) suffix = pickQueueField(order, ['F', 'J']);
+    if (!exterior) exterior = pickQueueField(order, ['G', 'M', '=exterior']);
+    if (!interior) interior = pickQueueField(order, ['H', 'N', '=interior']);
+
+    if (looksLikeDateValue(suffix) || looksLikeVinValue(suffix)) suffix = '';
+    if (looksLikeVinValue(product)) product = '';
     return { product, suffix, exterior, interior };
 }
 
 /**
- * First up-to-3 back-order numbers standing ahead of this order in the same
- * Product + Suffix + color queue (same rules as bo-hub/bo-order-lookup.html).
+ * First 3 back-order numbers in the same Product + Suffix + color queue
+ * (same rules as bo-hub/bo-order-lookup.html). Shown for every matching row.
  */
 function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
@@ -997,13 +1039,29 @@ function withColorQueue(orders, table) {
         ? lookup.mergeOrderEntries(rows, orderColumn, dateColumn, productColumn, suffixColumn, extCols, intCols)
         : [];
     const cache = new Map();
+    const queueFor = (refEntry) => {
+        const productNorm = lookup.normalizeText(refEntry.product);
+        const suffixNorm = lookup.normalizeText(refEntry.suffix);
+        const pairKey = (refEntry.pairs || []).map((pair) => `${pair.extNorm}/${pair.intNorm}`).sort().join('|');
+        const key = `${productNorm}\u0001${suffixNorm}\u0001${pairKey}`;
+        if (!cache.has(key)) {
+            cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
+                if (productColumn && productNorm && lookup.normalizeText(entry.product) !== productNorm) return false;
+                if (suffixColumn && suffixNorm && lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
+                return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
+            })));
+        }
+        return cache.get(key) || [];
+    };
     return list.map((order) => {
         if (!allEntries.length) return { ...order, ahead: [] };
         const needle = lookup.normalizeText(order.orderNumber);
         let refEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
+        const spec = orderQueueSpec(order);
         if (!refEntry) {
-            const spec = orderQueueSpec(order);
-            if (!spec.suffix || !spec.exterior || !spec.interior) return { ...order, ahead: [] };
+            if (!spec.product || !spec.suffix || !spec.exterior || !spec.interior) {
+                return { ...order, ahead: [] };
+            }
             refEntry = {
                 orderNumber: order.orderNumber || '',
                 orderNorm: needle,
@@ -1018,23 +1076,27 @@ function withColorQueue(orders, table) {
                 }]
             };
         }
-        const productNorm = lookup.normalizeText(refEntry.product);
-        const suffixNorm = lookup.normalizeText(refEntry.suffix);
-        const pairKey = (refEntry.pairs || []).map((pair) => `${pair.extNorm}/${pair.intNorm}`).sort().join('|');
-        const key = `${productNorm}\u0001${suffixNorm}\u0001${pairKey}`;
-        if (!cache.has(key)) {
-            cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
-                if (productColumn && productNorm && lookup.normalizeText(entry.product) !== productNorm) return false;
-                if (suffixColumn && suffixNorm && lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
-                return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
-            })));
+        let queue = queueFor(refEntry);
+        // If BO row matched but color pairs produced an empty line, retry from sheet colors.
+        if (!queue.length && spec.product && spec.suffix && spec.exterior && spec.interior) {
+            queue = queueFor({
+                product: spec.product,
+                suffix: spec.suffix,
+                pairs: [{
+                    tier: 1,
+                    exterior: spec.exterior,
+                    interior: spec.interior,
+                    extNorm: lookup.normalizeText(spec.exterior),
+                    intNorm: lookup.normalizeText(spec.interior)
+                }]
+            });
         }
-        const queue = cache.get(key) || [];
         const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
-        const aheadEntries = posIdx > 0 ? queue.slice(0, posIdx).slice(0, 3) : [];
+        // Always show the first 3 orders in this BO queue (same as lookup "top of line").
+        const aheadEntries = queue.slice(0, 3);
         const ahead = aheadEntries.map((entry, index) => ({
             queueNumber: index + 1,
-            boPosition: queue.indexOf(entry) + 1,
+            boPosition: index + 1,
             orderNumber: entry.orderNumber,
             salesAdvisor: salesmanColumn && entry.row ? String(entry.row[salesmanColumn] || '').trim() : '',
             vehicle: [entry.product, entry.suffix].filter(Boolean).join(' ')
@@ -1044,7 +1106,7 @@ function withColorQueue(orders, table) {
             ahead,
             boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
             boOrdersAhead: posIdx >= 0 ? posIdx : null,
-            boQueueSize: queue.length
+            boQueueSize: queue.length || null
         };
     });
 }

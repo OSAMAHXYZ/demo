@@ -346,9 +346,12 @@
             const title = ['#' + (rank == null ? '' : rank), orderNo, who].filter(Boolean).join(' ');
             return `<span class="ahead-chip" title="${esc(title)}"><b>#${esc(String(rank == null ? '' : rank))}</b>${orderNo ? `<span>${esc(orderNo)}</span>` : ''}${who ? `<i>${esc(who)}</i>` : ''}</span>`;
         }).join('');
-        const meta = order.boQueuePosition != null
-            ? `<span class="ahead-pos">BO #${esc(String(order.boQueuePosition))}${order.boQueueSize != null ? '/' + esc(String(order.boQueueSize)) : ''}</span>`
-            : '';
+        let meta = '';
+        if (order.boQueuePosition != null) {
+            meta = `<span class="ahead-pos">BO #${esc(String(order.boQueuePosition))}${order.boQueueSize != null ? '/' + esc(String(order.boQueueSize)) : ''}</span>`;
+        } else if (order.boQueueSize != null) {
+            meta = `<span class="ahead-pos">BO queue · ${esc(String(order.boQueueSize))}</span>`;
+        }
         return `<td class="col-ahead"><div class="ahead-stack">${meta}<div class="ahead-chips">${chips}</div></div></td>`;
     }
     function sheetColumns(list, source) {
