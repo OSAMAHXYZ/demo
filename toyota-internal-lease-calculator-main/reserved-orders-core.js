@@ -940,17 +940,46 @@ function emptyReport() {
 
 function reservedColumn(order, letter) {
     const want = String(letter || '').toUpperCase();
-    const fields = Array.isArray(order && order.fields) ? order.fields : [];
-    const hit = fields.find((field) => {
-        const label = String(field.label || '').trim().toUpperCase();
-        const col = String(field.col || '').trim().toUpperCase();
-        return label === want || col === want;
-    });
-    const value = hit ? String(hit.value == null ? '' : hit.value).trim() : '';
-    if (!value || value === '—' || value === '-') return '';
-    return value;
+    const pools = [
+        order && order.esalesFields,
+        order && order.fields,
+        order && order.reservedFields
+    ];
+    for (let p = 0; p < pools.length; p++) {
+        const fields = Array.isArray(pools[p]) ? pools[p] : [];
+        const hit = fields.find((field) => {
+            const label = String(field.label || '').trim().toUpperCase();
+            const col = String(field.col || '').trim().toUpperCase();
+            return label === want || col === want;
+        });
+        const value = hit ? String(hit.value == null ? '' : hit.value).trim() : '';
+        if (value && value !== '—' && value !== '-') return value;
+    }
+    return '';
 }
 
+function looksLikeDateValue(value) {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(text)) return true;
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) return true;
+    return false;
+}
+
+function orderQueueSpec(order) {
+    const product = reservedColumn(order, 'I') || reservedColumn(order, 'E') || cleanText(order && order.vehicle);
+    let suffix = reservedColumn(order, 'J');
+    if (!suffix || looksLikeDateValue(suffix)) suffix = reservedColumn(order, 'F') || '';
+    if (looksLikeDateValue(suffix)) suffix = '';
+    const exterior = reservedColumn(order, 'M') || reservedColumn(order, 'G') || cleanText(order && order.exterior);
+    const interior = reservedColumn(order, 'N') || reservedColumn(order, 'H') || cleanText(order && order.interior);
+    return { product, suffix, exterior, interior };
+}
+
+/**
+ * First up-to-3 back-order numbers standing ahead of this order in the same
+ * Product + Suffix + color queue (same rules as bo-hub/bo-order-lookup.html).
+ */
 function withColorQueue(orders, table) {
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
     const headers = table && Array.isArray(table.headers) ? table.headers : [];
@@ -969,41 +998,54 @@ function withColorQueue(orders, table) {
         : [];
     const cache = new Map();
     return list.map((order) => {
-        const product = reservedColumn(order, 'I');
-        const suffix = reservedColumn(order, 'J');
-        const exterior = reservedColumn(order, 'M');
-        const interior = reservedColumn(order, 'N');
-        if (!allEntries.length || !suffix || !exterior || !interior) return { ...order, ahead: [] };
-        const key = [product, suffix, exterior, interior].map((item) => lookup.normalizeText(item)).join('\u0001');
-        if (!cache.has(key)) {
-            const refPair = {
-                tier: 1,
-                exterior,
-                interior,
-                extNorm: lookup.normalizeText(exterior),
-                intNorm: lookup.normalizeText(interior)
+        if (!allEntries.length) return { ...order, ahead: [] };
+        const needle = lookup.normalizeText(order.orderNumber);
+        let refEntry = needle ? allEntries.find((entry) => entry.orderNorm === needle) : null;
+        if (!refEntry) {
+            const spec = orderQueueSpec(order);
+            if (!spec.suffix || !spec.exterior || !spec.interior) return { ...order, ahead: [] };
+            refEntry = {
+                orderNumber: order.orderNumber || '',
+                orderNorm: needle,
+                product: spec.product,
+                suffix: spec.suffix,
+                pairs: [{
+                    tier: 1,
+                    exterior: spec.exterior,
+                    interior: spec.interior,
+                    extNorm: lookup.normalizeText(spec.exterior),
+                    intNorm: lookup.normalizeText(spec.interior)
+                }]
             };
-            const productNorm = lookup.normalizeText(product);
-            const suffixNorm = lookup.normalizeText(suffix);
+        }
+        const productNorm = lookup.normalizeText(refEntry.product);
+        const suffixNorm = lookup.normalizeText(refEntry.suffix);
+        const pairKey = (refEntry.pairs || []).map((pair) => `${pair.extNorm}/${pair.intNorm}`).sort().join('|');
+        const key = `${productNorm}\u0001${suffixNorm}\u0001${pairKey}`;
+        if (!cache.has(key)) {
             cache.set(key, lookup.sortQueueEntries(allEntries.filter((entry) => {
                 if (productColumn && productNorm && lookup.normalizeText(entry.product) !== productNorm) return false;
-                if (lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
-                return lookup.entryMatchesRefPair(entry.pairs, refPair);
+                if (suffixColumn && suffixNorm && lookup.normalizeText(entry.suffix) !== suffixNorm) return false;
+                return lookup.orderPairsMatch(refEntry.pairs, entry.pairs);
             })));
         }
-        const needle = lookup.normalizeText(order.orderNumber);
-        const ahead = [];
-        cache.get(key).forEach((entry) => {
-            if (ahead.length >= 3) return;
-            if (needle && entry.orderNorm === needle) return;
-            ahead.push({
-                queueNumber: ahead.length + 1,
-                orderNumber: entry.orderNumber,
-                salesAdvisor: salesmanColumn ? String(entry.row[salesmanColumn] || '').trim() : '',
-                vehicle: [entry.product, entry.suffix].filter(Boolean).join(' ')
-            });
-        });
-        return { ...order, ahead };
+        const queue = cache.get(key) || [];
+        const posIdx = needle ? queue.findIndex((entry) => entry.orderNorm === needle) : -1;
+        const aheadEntries = posIdx > 0 ? queue.slice(0, posIdx).slice(0, 3) : [];
+        const ahead = aheadEntries.map((entry, index) => ({
+            queueNumber: index + 1,
+            boPosition: queue.indexOf(entry) + 1,
+            orderNumber: entry.orderNumber,
+            salesAdvisor: salesmanColumn && entry.row ? String(entry.row[salesmanColumn] || '').trim() : '',
+            vehicle: [entry.product, entry.suffix].filter(Boolean).join(' ')
+        }));
+        return {
+            ...order,
+            ahead,
+            boQueuePosition: posIdx >= 0 ? posIdx + 1 : null,
+            boOrdersAhead: posIdx >= 0 ? posIdx : null,
+            boQueueSize: queue.length
+        };
     });
 }
 
@@ -1673,12 +1715,13 @@ function attachReservedOrders(app, options) {
     app.get('/api/reserved-orders/admin', (req, res) => {
         if (!requireAdmin(req, res)) return;
         const live = loadLive();
+        const orders = withColorQueue(live.orders || [], loadBoTable());
         res.json({
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
-            orders: live.orders || [],
+            orders,
             staff: loadStaff().map(publicStaff),
             archive: readJson(path.join(archiveDir, 'index.json'), []),
             auditCount: readAudit().length

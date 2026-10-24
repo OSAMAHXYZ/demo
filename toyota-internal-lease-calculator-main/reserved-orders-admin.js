@@ -77,8 +77,8 @@
     let showNoVinRows = false;
     let sheetSource = 'esales';
     const SHEET_NOTES = {
-        esales: 'Columns and rows from the Stock E-Sales push. Status and queue stay in sync with the employee page.',
-        reserved: 'Columns and rows from the Reserved Order File push. VINs already in E-Sales appear here with Reserved File values only.'
+        esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
+        reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -324,10 +324,37 @@
         if (letter === 'F' && (/^order$/i.test(text) || /^f$/i.test(text))) return 'SFX';
         return text;
     }
+    function aheadText(order) {
+        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
+        if (!ahead.length) return '';
+        return ahead.map((item) => {
+            const rank = item.boPosition != null ? item.boPosition : item.queueNumber;
+            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? item.orderNumber : '';
+            const who = item.salesAdvisor || '';
+            return ['#' + (rank == null ? '' : rank), orderNo, who].filter(Boolean).join(' ');
+        }).join(' · ');
+    }
+    function aheadCellHtml(order) {
+        const ahead = Array.isArray(order.ahead) ? order.ahead : [];
+        if (!ahead.length) {
+            return '<td class="col-ahead"><span class="ahead-empty">—</span></td>';
+        }
+        const chips = ahead.map((item) => {
+            const rank = item.boPosition != null ? item.boPosition : item.queueNumber;
+            const orderNo = item.orderNumber && item.orderNumber !== 'NO ORDER' ? String(item.orderNumber) : '';
+            const who = item.salesAdvisor || '';
+            const title = ['#' + (rank == null ? '' : rank), orderNo, who].filter(Boolean).join(' ');
+            return `<span class="ahead-chip" title="${esc(title)}"><b>#${esc(String(rank == null ? '' : rank))}</b>${orderNo ? `<span>${esc(orderNo)}</span>` : ''}${who ? `<i>${esc(who)}</i>` : ''}</span>`;
+        }).join('');
+        const meta = order.boQueuePosition != null
+            ? `<span class="ahead-pos">BO #${esc(String(order.boQueuePosition))}${order.boQueueSize != null ? '/' + esc(String(order.boQueueSize)) : ''}</span>`
+            : '';
+        return `<td class="col-ahead"><div class="ahead-stack">${meta}<div class="ahead-chips">${chips}</div></div></td>`;
+    }
     function sheetColumns(list, source) {
         const meta = source === 'reserved'
-            ? ['Queue', 'Status', 'Expiry']
-            : ['Queue', 'Status', 'Updated by', 'Updated at'];
+            ? ['Queue', 'Status', 'BO ahead', 'Expiry']
+            : ['Queue', 'Status', 'BO ahead', 'Updated by', 'Updated at'];
         const titles = {};
         const letters = new Set();
         list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
@@ -363,6 +390,7 @@
     function sheetValue(order, label, source) {
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
+        if (label === 'BO ahead') return aheadText(order);
         if (label === 'Updated by') return order.statusChangedBy || '';
         if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
         if (label === 'Expiry') {
@@ -424,6 +452,7 @@
             const value = sheetValue(order, label, source);
             if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
+            if (label === 'BO ahead') return aheadCellHtml(order);
             if (label === 'U' && value) {
                 const st = /^\d$/.test(value) ? '0' + value : value;
                 return `<td><span class="st-type">${esc(st)}</span></td>`;
