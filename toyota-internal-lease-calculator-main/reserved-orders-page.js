@@ -531,8 +531,8 @@
             meta('SFX', esc(sfx), sfx),
             meta('Model year', esc(year), year),
             meta('Reservation age', ageHtml(ageRaw), ageRaw),
-            meta('Area', toneValue(area, String(area).trim().toLowerCase() === 'rtlesal'), area),
-            meta('Share level', toneValue(share, String(share).trim().toLowerCase().includes('retail electronic sales')), share),
+            meta('Area', toneValue(area, retailMatch(area)), area),
+            meta('Share level', toneValue(share, retailMatch(share)), share),
             meta('Colors', esc(colors), colors)
         ].join('');
         return `<article class="order-block${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}">

@@ -105,14 +105,27 @@
     const SALES_TYPE_ORDER = ['01', '13', '07', '08'];
     // Sales types whose cars show the reservation expiry (the deadline the server already sends).
     const EXPIRY_TYPES = new Set(['01']);
-    const SHEET_NAMES = { F: 'Order', I: 'Model', J: 'Suffix', K: 'Model year', L: 'VIN', M: 'Ext', N: 'Int', R: 'Vehicle status', S: 'Customer', T: 'Salesman', U: 'Sales type' };
+    const SHEET_NAMES = {
+        B: 'Area', C: 'Share level', F: 'Order', I: 'Model', J: 'Suffix', K: 'Model year',
+        L: 'VIN', M: 'Ext', N: 'Int', R: 'Vehicle status', S: 'Customer', T: 'Salesman', U: 'Sales type'
+    };
     // Reserved Order File uses a different Excel layout than E-Sales — never reuse SHEET_NAMES above.
     const RESERVED_SHEET_NAMES = {
         A: 'Area', B: 'Name', C: 'Order NO.', D: 'Model Year', E: 'Product',
         F: 'SFX', G: 'Exterior Color', H: 'Interior Color', I: 'VIN', J: 'Expiry'
     };
     const RESERVED_COL_ORDER = ['B', 'C', 'I', 'E', 'D', 'F', 'G', 'H', 'J'];
-    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area'];
+    const MERGED_COL_ORDER = ['Source', 'VIN', 'Order', 'Customer', 'Product', 'Model Year', 'SFX', 'Exterior', 'Interior', 'Advisor', 'Payment', 'Area', 'Share level'];
+    function retailOk(value) {
+        const text = String(value || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
+        if (!text || text === '—' || text === '-') return false;
+        return text === 'rtlesal' || text.includes('retail electronic sales');
+    }
+    function isAreaOrShareLabel(label) {
+        const key = String(label || '').trim().toLowerCase();
+        return key === 'area' || key === 'share level' || key === 'share' || key === 'sharing level'
+            || key === 'search area' || key === 'b' || key === 'c';
+    }
     let salesTypePick = null; // nothing listed until a card is clicked
     let showNoVinRows = false;
     let sheetSource = 'esales';
@@ -272,7 +285,8 @@
                 Interior: firstReal(fieldValueFromList(reserved, 'H')),
                 Advisor: '',
                 Payment: '',
-                Area: ''
+                Area: '',
+                'Share level': ''
             };
         } else {
             values = {
@@ -289,7 +303,8 @@
                 Payment: firstReal(
                     (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''
                 ),
-                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'))
+                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A')),
+                'Share level': firstReal(order.shareLevel, fieldValueFromList(esales, 'C'))
             };
         }
         const expiry = inR ? formatExpiryValue(order, reserved) : '';
@@ -669,11 +684,22 @@
             // J is shown as the Expiry meta column — drop the duplicate Excel letter column.
             excel = preferred.concat(rest).filter((col) => col !== 'J');
             titles.Expiry = 'Expiry';
+        } else {
+            // Keep Area (B) and Share level (C) visible together on Stock E-Sales.
+            ['B', 'C'].forEach((col) => {
+                if (!letters.has(col)) letters.add(col);
+                if (!titles[col]) titles[col] = SHEET_NAMES[col] || col;
+            });
+            const preferred = ['B', 'C'].filter((col) => letters.has(col));
+            const rest = excel.filter((col) => !preferred.includes(col));
+            excel = preferred.concat(rest);
+            titles.B = titles.B || 'Area';
+            titles.C = titles.C || 'Share level';
         }
         if (!excel.length) {
             return source === 'reserved'
                 ? meta.concat(['Order', 'VIN', 'Product', 'Model Year'])
-                : meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Deadline']);
+                : meta.concat(['Order', 'VIN', 'Advisor', 'Payment', 'Area', 'Share level', 'Deadline']);
         }
         return { cols: meta.concat(excel), titles };
     }
@@ -706,6 +732,12 @@
         if (label === 'Deadline') return order.deadline || '';
         if (label === 'Product') return order.vehicle || '';
         if (label === 'Model Year') return order.modelYear || '';
+        if (label === 'Area' || label === 'B') {
+            return firstReal(order.searchArea, fieldValueFromList(orderSheetFields(order, source), 'B'), fieldValueFromList(orderSheetFields(order, source), 'A'));
+        }
+        if (label === 'Share level' || label === 'C') {
+            return firstReal(order.shareLevel, fieldValueFromList(orderSheetFields(order, source), 'C'));
+        }
         const field = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === String(label || '').toUpperCase()
             || (item.label || item.col) === label);
         return field && field.value != null ? String(field.value) : '';
@@ -775,6 +807,12 @@
             if (label === 'U' && value) {
                 const st = /^\d$/.test(value) ? '0' + value : value;
                 return `<td><span class="st-type">${esc(st)}</span></td>`;
+            }
+            const title = (source === 'merged' ? label : (SHEET_NAMES[label] || titles[label] || label));
+            if (isAreaOrShareLabel(label) || isAreaOrShareLabel(title)) {
+                if (!value) return `<td class="cell-retail cell-retail-empty"></td>`;
+                const ok = retailOk(value);
+                return `<td class="cell-retail ${ok ? 'cell-retail-ok' : 'cell-retail-bad'}">${esc(value)}</td>`;
             }
             return `<td>${esc(value)}</td>`;
         };

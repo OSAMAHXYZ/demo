@@ -1444,3 +1444,21 @@
 }
 #drawer .note-item { margin-bottom: 8px; }
 #drawer #leader-note-input { margin-top: 6px; }
+
+/* Area / Share level · RTLESAL or retail electronic sales = ok, else red */
+.excel-live td.cell-retail-ok {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #6ee7b7 !important;
+  font-weight: 700;
+}
+.excel-live td.cell-retail-bad {
+  background: rgba(235, 10, 30, 0.28) !important;
+  color: #fecaca !important;
+  font-weight: 800;
+}
+.excel-live tbody tr:hover td.cell-retail-bad {
+  background: rgba(235, 10, 30, 0.4) !important;
+}
+.excel-live td.cell-retail-empty {
+  background: rgba(148, 163, 184, 0.08) !important;
+}
