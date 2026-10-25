@@ -286,12 +286,15 @@
             });
     }
     function salesTypeOf(order) {
-        const raw = fieldOf(order, 'U');
+        const raw = fieldOf(order, 'U') || fieldValueFromList(orderSheetFields(order, 'esales'), 'U');
         if (!raw) return '';
-        return /^\d$/.test(raw) ? '0' + raw : raw;
+        const text = String(raw).trim();
+        if (/^\d$/.test(text)) return '0' + text;
+        if (/^\d+\.0+$/.test(text)) return String(parseInt(text, 10)).padStart(2, '0');
+        return text;
     }
     function hasVin(order) {
-        const vin = String(order.vin || fieldOf(order, 'L') || '').trim();
+        const vin = String(order.vin || fieldOf(order, 'L') || fieldValueFromList(orderSheetFields(order, 'esales'), 'L') || '').trim();
         return /^[A-Z0-9]{10,20}$/i.test(vin);
     }
     function carRows() { return orders.filter(hasVin); }
@@ -366,12 +369,24 @@
             ['Current orders', orders.length], ['Archived versions', archive.length], ['Audit events', audit.length],
             ['Employees', staff.length], ['Active employees', activeStaff], ["Today's changes", today]
         ].map(([label, value]) => `<article class="kpi"><em>${label}</em><strong>${value}</strong></article>`).join('');
-        const pay = report.paymentBreakdown || {};
-        const max = Math.max(1, pay.cash || 0, pay.bank || 0, pay.other || 0, pay.unknown || 0);
-        $('pay-bars').innerHTML = ['cash', 'bank', 'other', 'unknown'].map((key) => {
-            const value = pay[key] || 0;
-            return `<div class="bar"><span>${key}</span><i style="width:${Math.round(value / max * 100)}%"></i><b>${value}</b></div>`;
-        }).join('');
+        // Mirror Sales type analysis (column U) — Stock E-Sales has no Payment column,
+        // so the old cash/bank report stayed Unknown for every row.
+        const typeCounts = {};
+        carRows().forEach((order) => {
+            const key = salesTypeOf(order) || 'blank';
+            typeCounts[key] = (typeCounts[key] || 0) + 1;
+        });
+        const typeKeys = SALES_TYPE_ORDER.concat(
+            Object.keys(typeCounts).filter((key) => !SALES_TYPE_ORDER.includes(key)).sort()
+        ).filter((key) => typeCounts[key]);
+        const typeMax = Math.max(1, ...typeKeys.map((key) => typeCounts[key] || 0));
+        $('pay-bars').innerHTML = typeKeys.map((key) => {
+            const value = typeCounts[key] || 0;
+            const label = key === 'blank'
+                ? 'Blank'
+                : (SALES_TYPE_NAMES[key] ? `${key} · ${SALES_TYPE_NAMES[key]}` : `Type ${key}`);
+            return `<div class="bar"><span>${esc(label)}</span><i style="width:${Math.round(value / typeMax * 100)}%"></i><b>${value}</b></div>`;
+        }).join('') || '<div class="bar"><span>No cars</span><i style="width:0%"></i><b>0</b></div>';
         renderSalesTypes();
     }
     function renderOrders() {

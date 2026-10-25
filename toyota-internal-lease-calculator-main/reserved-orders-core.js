@@ -129,10 +129,11 @@ function normalizePayment(value) {
     const raw = cleanText(value);
     if (!raw) return { kind: 'unknown', label: 'UNKNOWN', hours: 48 };
     const folded = raw.toLowerCase().replace(/[_./-]+/g, ' ').replace(/\s+/g, ' ').trim();
-    const bank = /\b(bank|banking|finance|financing|loan|credit)\b|تمويل|بنك|مصرف/.test(folded);
+    const bank = /\b(bank|banking|finance|financing|loan|credit|aljuf)\b|تمويل|بنك|مصرف/.test(folded);
     const cash = /\b(cash|cod)\b|نقد/.test(folded);
     if (bank && !cash) return { kind: 'bank', label: raw, hours: 72 };
     if (cash) return { kind: 'cash', label: raw, hours: 48 };
+    // Sales-type codes (01, 13, …) and other sheet values count as Other, not Unknown.
     return { kind: 'other', label: raw, hours: 48 };
 }
 
@@ -495,6 +496,7 @@ function extractReservedRows(grid) {
     const customerCol = findHeaderIndex([/customer\s*name/, /customer/, /guest/, /العميل/], headers);
     const createdCol = findHeaderIndex([/created\s*date/, /order\s*created/, /order\s*date/, /creation/], headers);
     const paymentCol = findHeaderIndex([/payment\s*type/, /payment/, /finance\s*type/, /طريقة الدفع/], headers);
+    const salesTypeCol = findHeaderIndex([/sales\s*type/, /نوع البيع/, /طريقة البيع/], headers);
     const statusCol = findHeaderIndex([/^status$/, /current\s*status/, /الحالة/], headers);
     // Reservation expiry lives in the Reserved File; it is stored there as a
     // real date. Found by header name so the exact column can move.
@@ -521,7 +523,9 @@ function extractReservedRows(grid) {
             customerName: customerCol >= 0 ? cell(line, customerCol) : '',
             createdRaw: createdCol >= 0 ? cell(line, createdCol) : '',
             assignRaw: cell(line, columnIndex('G')),
-            paymentRaw: paymentCol >= 0 ? cell(line, paymentCol) : '',
+            paymentRaw: paymentCol >= 0
+                ? cell(line, paymentCol)
+                : (salesTypeCol >= 0 ? cell(line, salesTypeCol) : cell(line, columnIndex('U'))),
             statusRaw: statusCol >= 0 ? cell(line, statusCol) : '',
             expiryRaw: expiryCol >= 0 ? cell(line, expiryCol) : '',
             searchArea: filledCell(cell(line, columnIndex('B'))) || filledCell(cell(line, columnIndex('A'))),
