@@ -247,6 +247,69 @@
   .login-card p, .login-card .sub { margin: 0; color: var(--ro-muted); font-size: 0.88rem; line-height: 1.5; }
   .login-card .solid { width: 100%; min-height: 46px; font-size: 0.95rem; margin-top: 4px; }
   .login-note { text-align: center; font-size: 0.76rem !important; }
+
+  /* Employee split login: light panel + white card — do not inherit dark-app field colors */
+  #login.login-split {
+    background: #f3f0ea !important;
+  }
+  #login .login-panel {
+    background: #f3f0ea;
+  }
+  #login .login-card {
+    background: #fff !important;
+    border: 1px solid rgba(28, 27, 26, 0.08) !important;
+    border-top: 3px solid var(--ro-red) !important;
+    box-shadow: 0 22px 50px -30px rgba(28, 27, 26, 0.45) !important;
+    color: #1c1b1a;
+  }
+  #login .login-card h2 {
+    color: #141312 !important;
+  }
+  #login .login-card .sub,
+  #login .login-card p {
+    color: #6e675f !important;
+  }
+  #login .login-card .field > span:first-child {
+    color: #6e675f !important;
+  }
+  #login .login-card .field input,
+  #login .login-card .field select {
+    background: #fff !important;
+    background-color: #fff !important;
+    color: #141312 !important;
+    border: 1px solid rgba(28, 27, 26, 0.16) !important;
+    border-radius: 12px;
+  }
+  #login .login-card .field input::placeholder {
+    color: #9a948c !important;
+  }
+  #login .login-card .field input:focus,
+  #login .login-card .field select:focus {
+    border-color: rgba(235, 10, 30, 0.55) !important;
+    box-shadow: 0 0 0 4px rgba(235, 10, 30, 0.12) !important;
+  }
+  #login .login-card select option {
+    background: #fff;
+    color: #141312;
+  }
+  #login .login-ghost {
+    background: #f6f4f0 !important;
+    color: #3a3632 !important;
+    border: 1px solid rgba(28, 27, 26, 0.14) !important;
+  }
+  #login .login-ghost:hover {
+    background: #efece6 !important;
+    color: #141312 !important;
+    border-color: rgba(235, 10, 30, 0.4) !important;
+  }
+  #login .login-note {
+    background: #fff6f6 !important;
+    color: #7f1d1d !important;
+    border: 1px solid rgba(235, 10, 30, 0.16) !important;
+    text-align: left !important;
+  }
+  #login .err { color: #9b1c1c !important; }
+
   @media (max-width: 860px) {
     .login-split { grid-template-columns: 1fr; }
     .login-brand { padding: 28px 22px; gap: 18px; border-right: 0; border-bottom: 1px solid var(--ro-line); }
