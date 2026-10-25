@@ -8,7 +8,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { BoOrderLookup } = require('./scripts/bo-order-lookup');
 
-const STATUSES = [
+const DEFAULT_STATUSES = [
     'تم الفوترة',
     'الغاء',
     'موظف',
@@ -23,7 +23,33 @@ const STATUSES = [
     'ان اساين'
 ];
 
-const STATUS_SET = new Set(STATUSES.map((s) => s.toLowerCase()));
+let STATUSES = DEFAULT_STATUSES.slice();
+let STATUS_SET = new Set(STATUSES.map((s) => s.toLowerCase()));
+
+function syncStatusCache(list) {
+    const cleaned = [];
+    const seen = new Set();
+    (list || []).forEach((item) => {
+        const text = cleanText(item);
+        if (!text) return;
+        const key = text.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        cleaned.push(text);
+    });
+    if (!cleaned.length) cleaned.push(...DEFAULT_STATUSES);
+    STATUSES = cleaned;
+    STATUS_SET = new Set(STATUSES.map((s) => s.toLowerCase()));
+    return STATUSES.slice();
+}
+
+function getStatuses() {
+    return STATUSES.slice();
+}
+
+function isKnownStatus(value) {
+    return STATUS_SET.has(String(value || '').trim().toLowerCase());
+}
 
 const COL = { order: 5, assign: 6, product: 8, suffix: 9, vin: 11, exterior: 12, interior: 13, searchArea: 15 };
 
@@ -31,17 +57,41 @@ function pad2(n) {
     return String(n).padStart(2, '0');
 }
 
+function saudiDateParts(date) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Riyadh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(date);
+    const get = (type) => (parts.find((part) => part.type === type) || {}).value || '00';
+    return {
+        year: get('year'),
+        month: get('month'),
+        day: get('day'),
+        hour: get('hour'),
+        minute: get('minute'),
+        second: get('second')
+    };
+}
+
 function localStamp(date) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+    const p = saudiDateParts(date);
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
 }
 
 function displayStamp(date) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    let h = date.getHours();
+    const p = saudiDateParts(date);
+    let h = Number(p.hour);
     const ap = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
-    return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()} ${pad2(h)}:${pad2(date.getMinutes())} ${ap}`;
+    return `${p.day}/${p.month}/${p.year} ${pad2(h)}:${p.minute} ${ap} (Saudi)`;
 }
 
 function parseLocalStamp(value) {
@@ -865,16 +915,17 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         return {
             ...record,
             key: prev.key || record.key,
-            status: normalizeStatus(prev.status),
+            status: cleanText(prev.status) || normalizeStatus(record.status),
             statusChangedBy: prev.statusChangedBy || '',
             statusChangedAt: prev.statusChangedAt || '',
+            statusChangedDisplay: prev.statusChangedDisplay || '',
+            statusChangedEmployeeNumber: prev.statusChangedEmployeeNumber || '',
             history: Array.isArray(prev.history) ? prev.history : [],
             assignmentHistory,
             leaderNote: prev.leaderNote || '',
             leaderNoteBy: prev.leaderNoteBy || '',
             leaderNoteAt: prev.leaderNoteAt || '',
-            leaderNoteDisplay: prev.leaderNoteDisplay || '',
-            teamNotes: Array.isArray(prev.teamNotes) ? prev.teamNotes : []
+            leaderNoteDisplay: prev.leaderNoteDisplay || ''
         };
     }
 
@@ -1547,9 +1598,25 @@ function attachReservedOrders(app, options) {
     const notificationsFile = path.join(options.storeDir, 'reserved-orders-notifications.json');
     const marketingFile = path.join(options.storeDir, 'reserved-orders-marketing.json');
     const staffFile = path.join(options.storeDir, 'reserved-orders-staff.json');
+    const statusesFile = path.join(options.storeDir, 'reserved-orders-statuses.json');
     const auditFile = path.join(options.storeDir, 'reserved-orders-audit.jsonl');
     const archiveDir = path.join(options.storeDir, 'reserved-orders-archive');
     const sessions = new Map();
+
+    function loadStatuses() {
+        const data = readJson(statusesFile, null);
+        if (Array.isArray(data) && data.length) return syncStatusCache(data);
+        const seeded = syncStatusCache(DEFAULT_STATUSES);
+        saveStatuses(seeded);
+        return seeded;
+    }
+    function saveStatuses(list) {
+        const next = syncStatusCache(list);
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(statusesFile, JSON.stringify(next, null, 2), 'utf8');
+        return next;
+    }
+    loadStatuses();
 
     function loadLive() {
         const data = readJson(liveFile, null);
@@ -2122,14 +2189,27 @@ function attachReservedOrders(app, options) {
     app.get('/api/reserved-orders/live', (req, res) => {
         const live = loadLive();
         const orders = withColorQueue(live.orders || [], loadBoTable());
-        res.json({ updatedAt: live.updatedAt || '', report: live.report || {}, orders: orders.map(publicOrder) });
+        res.json({
+            updatedAt: live.updatedAt || '',
+            report: live.report || {},
+            statuses: loadStatuses(),
+            orders: orders.map(publicOrder)
+        });
+    });
+    app.get('/api/reserved-orders/statuses', (req, res) => {
+        res.json({ statuses: loadStatuses() });
     });
     function applyOrderStatus(order, rawStatus, actor) {
         const now = new Date();
         const oldStatus = order.status || '';
-        order.status = normalizeStatus(rawStatus);
+        const matched = STATUSES.find((item) => item.toLowerCase() === String(rawStatus || '').trim().toLowerCase());
+        const nextStatus = matched || cleanText(rawStatus);
+        const changedDisplay = displayStamp(now);
+        order.status = nextStatus;
         order.statusChangedBy = actor.name || 'Admin';
         order.statusChangedAt = localStamp(now);
+        order.statusChangedDisplay = changedDisplay;
+        order.statusChangedEmployeeNumber = actor.employeeNumber || '';
         order.history = Array.isArray(order.history) ? order.history : [];
         order.history.push({
             status: order.status,
@@ -2138,7 +2218,7 @@ function attachReservedOrders(app, options) {
             employeeNumber: actor.employeeNumber || '',
             recordId: actor.recordId || '',
             changedAt: order.statusChangedAt,
-            changedDisplay: displayStamp(now),
+            changedDisplay,
             source: actor.source || ''
         });
         return { oldStatus, now };
@@ -2146,8 +2226,9 @@ function attachReservedOrders(app, options) {
     app.post('/api/reserved-orders/status', (req, res) => {
         const user = sessionUser(req.body?.token);
         if (!user) return res.status(401).json({ error: 'Session expired. Sign in again.' });
+        loadStatuses();
         const rawStatus = String(req.body?.status || '').trim();
-        if (!STATUS_SET.has(rawStatus.toLowerCase())) return res.status(400).json({ error: 'Unknown status.' });
+        if (!isKnownStatus(rawStatus)) return res.status(400).json({ error: 'Unknown status.' });
         const live = loadLive();
         const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
         if (!order) return res.status(404).json({ error: 'Order not found.' });
@@ -2194,8 +2275,9 @@ function attachReservedOrders(app, options) {
     });
     app.post('/api/reserved-orders/admin/status', (req, res) => {
         if (!requireAdmin(req, res)) return;
+        loadStatuses();
         const rawStatus = String(req.body?.status || '').trim();
-        if (!STATUS_SET.has(rawStatus.toLowerCase())) return res.status(400).json({ error: 'Unknown status.' });
+        if (!isKnownStatus(rawStatus)) return res.status(400).json({ error: 'Unknown status. Add it in Settings first.' });
         const live = loadLive();
         const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
         if (!order) return res.status(404).json({ error: 'Order not found.' });
@@ -2220,7 +2302,43 @@ function attachReservedOrders(app, options) {
             details: 'Admin changed status from merged sheet'
         });
         notify();
-        res.json({ ok: true, order: publicOrder(order) });
+        res.json({ ok: true, order });
+    });
+    app.post('/api/reserved-orders/admin/statuses', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const action = String(req.body?.action || 'replace').toLowerCase();
+        const current = loadStatuses();
+        let next = current.slice();
+        if (action === 'add') {
+            const text = cleanText(req.body?.status);
+            if (!text) return res.status(400).json({ error: 'Enter a status name.' });
+            if (text.length > 80) return res.status(400).json({ error: 'Status name is too long.' });
+            if (isKnownStatus(text)) return res.status(400).json({ error: 'That status already exists.' });
+            next.push(text);
+        } else if (action === 'remove') {
+            const text = cleanText(req.body?.status);
+            if (!text) return res.status(400).json({ error: 'Pick a status to remove.' });
+            if (text === 'محجوز') return res.status(400).json({ error: 'The default status محجوز cannot be removed.' });
+            next = next.filter((item) => item.toLowerCase() !== text.toLowerCase());
+            if (!next.length) next = DEFAULT_STATUSES.slice();
+        } else if (action === 'replace') {
+            if (!Array.isArray(req.body?.statuses)) return res.status(400).json({ error: 'Send a statuses list.' });
+            next = req.body.statuses;
+        } else {
+            return res.status(400).json({ error: 'Unknown action.' });
+        }
+        const saved = saveStatuses(next);
+        audit(req, {
+            user: 'Admin',
+            role: 'admin',
+            action: action === 'add' ? 'STATUS_ADDED' : (action === 'remove' ? 'STATUS_REMOVED' : 'STATUSES_UPDATED'),
+            entity: 'statuses',
+            newValue: saved.join(' | '),
+            source: 'admin',
+            details: 'Admin updated the shared status list for employees'
+        });
+        notify();
+        res.json({ ok: true, statuses: saved });
     });
     app.post('/api/reserved-orders/admin/leader-note', (req, res) => {
         if (!requireAdmin(req, res)) return;
@@ -2252,70 +2370,7 @@ function attachReservedOrders(app, options) {
         res.json({ ok: true, order: publicOrder(order) });
     });
     app.post('/api/reserved-orders/team-note', (req, res) => {
-        const user = sessionUser(req.body?.token);
-        if (!user) return res.status(401).json({ error: 'Session expired. Sign in again.' });
-        const live = loadLive();
-        const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
-        if (!order) return res.status(404).json({ error: 'Order not found.' });
-        const text = String(req.body?.note || '').trim().slice(0, 2000);
-        const noteId = String(req.body?.noteId || '').trim();
-        const now = new Date();
-        order.teamNotes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
-        let action = 'TEAM_NOTE_ADDED';
-        let oldValue = '';
-        if (noteId) {
-            const index = order.teamNotes.findIndex((item) => item.id === noteId);
-            if (index < 0) return res.status(404).json({ error: 'Note not found.' });
-            if (order.teamNotes[index].recordId && order.teamNotes[index].recordId !== user.recordId) {
-                return res.status(403).json({ error: 'You can only edit your own note.' });
-            }
-            oldValue = order.teamNotes[index].text || '';
-            if (!text) {
-                order.teamNotes.splice(index, 1);
-                action = 'TEAM_NOTE_REMOVED';
-            } else {
-                order.teamNotes[index] = Object.assign({}, order.teamNotes[index], {
-                    text,
-                    by: user.name,
-                    employeeNumber: user.employeeNumber || '',
-                    recordId: user.recordId || '',
-                    updatedAt: localStamp(now),
-                    updatedDisplay: displayStamp(now)
-                });
-                action = 'TEAM_NOTE_UPDATED';
-            }
-        } else {
-            if (!text) return res.status(400).json({ error: 'Write a note first.' });
-            order.teamNotes.push({
-                id: `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-                text,
-                by: user.name,
-                employeeNumber: user.employeeNumber || '',
-                recordId: user.recordId || '',
-                at: localStamp(now),
-                display: displayStamp(now),
-                updatedAt: localStamp(now),
-                updatedDisplay: displayStamp(now)
-            });
-        }
-        live.updatedAt = now.toISOString();
-        saveLive(live);
-        audit(req, {
-            user: user.name,
-            employeeNumber: user.employeeNumber,
-            recordId: user.recordId,
-            role: user.role,
-            action,
-            entity: 'order',
-            vin: order.vin,
-            orderNumber: order.orderNumber,
-            oldValue,
-            newValue: text,
-            source: 'employee',
-            details: 'Team note on reserved order'
-        });
-        notify();
-        res.json({ ok: true, order: publicOrder(order) });
+        res.status(403).json({ error: 'Only admin can write notes. Employees cannot add notes.' });
     });
     app.post('/api/reserved-orders/push', (req, res) => {
         try {
@@ -2373,6 +2428,7 @@ function attachReservedOrders(app, options) {
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
+            statuses: loadStatuses(),
             orders,
             sold,
             staff: loadStaff().map(publicStaff),
@@ -2868,8 +2924,12 @@ function attachReservedOrders(app, options) {
 }
 
 module.exports = {
-    STATUSES,
-    STATUS_SET,
+    DEFAULT_STATUSES,
+    get STATUSES() { return getStatuses(); },
+    get STATUS_SET() { return new Set(getStatuses().map((s) => s.toLowerCase())); },
+    getStatuses,
+    syncStatusCache,
+    isKnownStatus,
     parseDottedDmy,
     parseExcelDate,
     parseLocalStamp,

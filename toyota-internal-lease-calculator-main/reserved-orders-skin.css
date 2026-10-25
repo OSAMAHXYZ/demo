@@ -1369,15 +1369,22 @@
 /* Order notes · leader + team */
 #app .order-notes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   padding: 14px 16px 16px;
   border-top: 2px solid rgba(251, 191, 36, 0.45);
   background: rgba(15, 23, 42, 0.55);
 }
-@media (max-width: 900px) {
-  #app .order-notes { grid-template-columns: 1fr; }
+.excel-live .col-updated-by b { display: block; color: #eef3fa; }
+.excel-live .col-updated-by small,
+.excel-live .saudi-time,
+#drawer .saudi-time { color: #fbbf24; }
+.excel-live .col-updated-at { min-width: 140px; white-space: normal !important; }
+#drawer .status-history-row {
+  padding: 8px 0;
+  border-bottom: 1px solid #e6e8ee;
 }
+#drawer .status-history-row b { display: block; }
 .excel-live .col-notes {
   min-width: 220px;
   max-width: 280px;
@@ -1502,4 +1509,37 @@
 }
 .excel-live td.cell-retail-empty {
   background: rgba(148, 163, 184, 0.08) !important;
+}
+
+/* Admin · shared status list */
+.status-settings .status-add-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0 8px;
+}
+.status-settings .status-add-row input {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+.status-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.status-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+}
+.status-list li span {
+  font-weight: 700;
 }

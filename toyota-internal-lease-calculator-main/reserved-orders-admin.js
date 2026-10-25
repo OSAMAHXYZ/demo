@@ -1,5 +1,5 @@
 (function () {
-    const STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
+    let STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
     const passKey = 'reserved-orders-admin-pass';
     let orders = [];
     let sold = [];
@@ -132,7 +132,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Use Leader note / Team notes columns — leader notes are written by admin; team notes come from employees.'
+        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Change Status here or on Orders — employees see it live. Add new statuses in Settings. Leader note is admin-only. Updated by / Updated at show who changed status and when (Saudi time).'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -466,31 +466,40 @@
             <td>${paymentCell(order)}</td>
             <td class="col-status">${statusSelectHtml(order)}</td>
             <td class="timer-cell" data-deadline="${esc(deadline)}">${esc(remain(order))}</td>
-            <td>${order.leaderNote || (order.teamNotes && order.teamNotes.length) ? '<span class="s-pill is-info" title="Has notes">Notes</span> ' : ''}<button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
+            <td>${order.statusChangedBy ? `<div><b>${esc(order.statusChangedBy)}</b><br><small class="saudi-time">${esc(order.statusChangedDisplay || order.statusChangedAt || '')}</small></div>` : ''}${order.leaderNote ? '<span class="s-pill is-info" title="Has leader note">Note</span> ' : ''}<button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
         </tr>`;
         }).join('');
     }
     function openOrder(key) {
         const order = orders.find((item) => item.key === key);
         if (!order) return;
-        const history = (order.history || []).map((item) => `<div><b>${esc(item.changedDisplay || item.changedAt)}</b><br>${esc(item.oldStatus || '')} → ${esc(item.status)} · ${esc(item.changedBy)} · ${esc(item.employeeNumber || '')}</div>`).join('') || '<div>No status changes yet</div>';
+        const history = (order.history || []).slice().reverse().map((item) => `<div class="status-history-row">
+            <b>${esc(item.changedBy || '—')}${item.employeeNumber ? ' · ' + esc(item.employeeNumber) : ''}</b>
+            <span class="saudi-time">${esc(item.changedDisplay || item.changedAt || '—')}</span>
+            <div>${esc(item.oldStatus || '—')} → <strong>${esc(item.status || '—')}</strong></div>
+        </div>`).join('') || '<div>No status changes yet</div>';
         const related = audit.filter((event) => event.vin === order.vin || event.orderNumber === order.orderNumber).slice(0, 30);
-        const teamNotes = (order.teamNotes || []).map((note) => `<div class="note-item"><header><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header><p dir="auto">${esc(note.text || '')}</p></div>`).join('') || '<div class="muted">No team notes yet.</div>';
+        const lastBy = order.statusChangedBy
+            ? `${order.statusChangedBy}${order.statusChangedEmployeeNumber ? ' · ' + order.statusChangedEmployeeNumber : ''}`
+            : '—';
+        const lastAt = order.statusChangedDisplay
+            || (parseLocal(order.statusChangedAt)
+                ? parseLocal(order.statusChangedAt).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) + ' (Saudi)'
+                : (order.statusChangedAt || '—'));
         $('drawer').classList.remove('hidden');
         $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
             <h2>Order #${esc(order.orderNumber || 'NO ORDER')}</h2>
             <p>${esc(order.vin)} · ${esc(order.vehicle || '')}<br>Status ${esc(order.status)} · Queue #${order.queueNumber == null ? '—' : order.queueNumber}<br>Deadline ${esc(order.deadline || 'NO ASSIGN DATE')}</p>
+            <p><b>Last status change:</b> ${esc(lastBy)} · <span class="saudi-time">${esc(lastAt)}</span></p>
             <h3>Leader note</h3>
-            <p class="muted">Visible to the whole team on the employee page.</p>
+            <p class="muted">Only admin can write notes. Employees can read this on their page.</p>
             <textarea id="leader-note-input" rows="4" maxlength="2000" placeholder="Write a leader note for this order">${esc(order.leaderNote || '')}</textarea>
             <div style="display:flex;gap:8px;margin:8px 0 16px;align-items:center;">
                 <button class="solid" type="button" id="leader-note-save">Save leader note</button>
                 <button class="ghost" type="button" id="leader-note-clear">Clear</button>
                 <span class="muted" id="leader-note-feedback"></span>
             </div>
-            <h3>Team notes</h3>
-            <div class="mkt-fields">${teamNotes}</div>
-            <h3>Status history</h3>${history}
+            <h3>Status history (Saudi time)</h3>${history}
             <h3>Audit</h3>${related.map((event) => `<div>${esc(event.display || event.at)} · ${esc(event.action)} · ${esc(event.user)}</div>`).join('') || '<div>No audit events</div>'}`;
         $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
         const saveLeader = async (text) => {
@@ -651,16 +660,26 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Expiry'];
-            const titles = { Expiry: 'Expiry', Source: 'Source', 'Leader note': 'Leader note', 'Team notes': 'Team notes' };
+            const meta = ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry'];
+            const titles = {
+                Expiry: 'Expiry',
+                Source: 'Source',
+                'Leader note': 'Leader note',
+                'Updated by': 'Updated by',
+                'Updated at': 'Updated at (Saudi)'
+            };
             MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
             // Keep every merged column so non-duplicate rows with blanks still appear.
             return { cols: meta.concat(MERGED_COL_ORDER), titles };
         }
         const meta = source === 'reserved'
-            ? ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Expiry']
-            : ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Updated by', 'Updated at'];
-        const titles = { 'Leader note': 'Leader note', 'Team notes': 'Team notes' };
+            ? ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry']
+            : ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead'];
+        const titles = {
+            'Leader note': 'Leader note',
+            'Updated by': 'Updated by',
+            'Updated at': 'Updated at (Saudi)'
+        };
         const letters = new Set();
         list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
             const col = String(field.col || '').trim().toUpperCase();
@@ -707,14 +726,26 @@
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
         if (label === 'Leader note') return order.leaderNote || '';
-        if (label === 'Team notes') {
-            return (Array.isArray(order.teamNotes) ? order.teamNotes : [])
-                .map((note) => `${note.by || 'Team'}: ${note.text || ''}`)
-                .join(' | ');
-        }
         if (label === 'BO ahead') return aheadText(order);
-        if (label === 'Updated by') return order.statusChangedBy || '';
-        if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
+        if (label === 'Updated by') {
+            const who = order.statusChangedBy || '';
+            const id = order.statusChangedEmployeeNumber || '';
+            return who ? (id ? `${who} · ${id}` : who) : '';
+        }
+        if (label === 'Updated at') {
+            if (order.statusChangedDisplay) return order.statusChangedDisplay;
+            const parsed = parseLocal(order.statusChangedAt);
+            if (!parsed) return order.statusChangedAt || '';
+            return parsed.toLocaleString('en-GB', {
+                timeZone: 'Asia/Riyadh',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }) + ' (Saudi)';
+        }
         if (label === 'Expiry') {
             if (source === 'merged') return order.mergedExpiry || '';
             if (order.expiryDisplay) return order.expiryDisplay;
@@ -812,10 +843,15 @@
                     ${order.leaderNoteDisplay ? `<small>${esc(order.leaderNoteBy || 'Admin')} · ${esc(order.leaderNoteDisplay)}</small>` : ''}
                 </td>`;
             }
-            if (label === 'Team notes') {
-                const notes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
-                if (!notes.length) return '<td class="col-notes col-team-notes"><span class="ahead-empty">No team notes</span></td>';
-                return `<td class="col-notes col-team-notes">${notes.map((note) => `<div class="sheet-team-note"><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span><p dir="auto">${esc(note.text || '')}</p></div>`).join('')}</td>`;
+            if (label === 'Updated by') {
+                return value
+                    ? `<td class="col-updated-by"><b>${esc(order.statusChangedBy || value)}</b>${order.statusChangedEmployeeNumber ? `<small>${esc(order.statusChangedEmployeeNumber)}</small>` : ''}</td>`
+                    : '<td class="col-updated-by"><span class="ahead-empty">—</span></td>';
+            }
+            if (label === 'Updated at') {
+                return value
+                    ? `<td class="col-updated-at"><span class="saudi-time">${esc(value)}</span></td>`
+                    : '<td class="col-updated-at"><span class="ahead-empty">—</span></td>';
             }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'BO ahead') return aheadCellHtml(order);
@@ -937,7 +973,20 @@
             </tr>`).join('')
             : '<tr><td colspan="8" class="st-na">No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw.</td></tr>';
     }
-    function renderAll() { renderOverview(); renderOrders(); renderSold(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); }
+    function renderStatusSettings() {
+        const list = $('status-list');
+        if (!list) return;
+        list.innerHTML = STATUSES.map((item) => {
+            const locked = item === 'محجوز';
+            return `<li>
+                <span dir="auto">${esc(item)}</span>
+                ${locked
+                    ? '<small class="muted">default</small>'
+                    : `<button class="ghost" type="button" data-remove-status="${esc(item)}">Remove</button>`}
+            </li>`;
+        }).join('');
+    }
+    function renderAll() { renderOverview(); renderOrders(); renderSold(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); renderStatusSettings(); }
 
     async function refresh() {
         const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
@@ -946,6 +995,7 @@
         staff = data.staff || [];
         archive = data.archive || [];
         report = data.report || {};
+        if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
         $('admin-updated').textContent = data.updatedAt ? `Last push ${new Date(data.updatedAt).toLocaleString()}` : 'No live push yet';
         const source = $('push-source');
         if (source) {
@@ -1005,6 +1055,58 @@
         if (select.value === select.dataset.prev) return;
         adminSetStatus(select.dataset.key, select.value, select);
     });
+    async function saveStatusList(action, status) {
+        const err = $('status-error');
+        if (err) err.textContent = '';
+        try {
+            const data = await api('/api/reserved-orders/admin/statuses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password(), action, status })
+            });
+            if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
+            if ($('status-new')) $('status-new').value = '';
+            renderStatusSettings();
+            renderOrders();
+            renderSheet();
+            const filter = $('admin-status');
+            if (filter) {
+                const current = filter.value;
+                filter.innerHTML = '<option value="">Status</option>' + STATUSES.map((item) => `<option>${esc(item)}</option>`).join('');
+                filter.value = current;
+            }
+        } catch (e) {
+            if (err) err.textContent = e.message || 'Could not update statuses.';
+        }
+    }
+    if ($('status-add')) {
+        $('status-add').addEventListener('click', () => {
+            const value = (($('status-new') || {}).value || '').trim();
+            if (!value) {
+                if ($('status-error')) $('status-error').textContent = 'Enter a status name.';
+                return;
+            }
+            saveStatusList('add', value);
+        });
+    }
+    if ($('status-new')) {
+        $('status-new').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if ($('status-add')) $('status-add').click();
+            }
+        });
+    }
+    if ($('status-list')) {
+        $('status-list').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-remove-status]');
+            if (!button) return;
+            const name = button.dataset.removeStatus;
+            if (!name || name === 'محجوز') return;
+            if (!confirm(`Remove status "${name}"? Orders already using it keep that status until changed.`)) return;
+            saveStatusList('remove', name);
+        });
+    }
     $('audit-rows').addEventListener('click', (event) => {
         const button = event.target.closest('[data-audit]');
         if (!button) return;
@@ -1190,22 +1292,27 @@
         if (!key || !status) return;
         try {
             selectEl.disabled = true;
-            await api('/api/reserved-orders/admin/status', {
+            const data = await api('/api/reserved-orders/admin/status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: password(), key, status })
             });
             const order = orders.find((item) => item.key === key);
+            const next = data.order || {};
             if (order) {
-                order.status = status;
-                order.statusChangedBy = 'Admin';
-                order.statusChangedAt = new Date().toISOString().slice(0, 19);
+                order.status = next.status || status;
+                order.statusChangedBy = next.statusChangedBy || 'Admin';
+                order.statusChangedEmployeeNumber = next.statusChangedEmployeeNumber || '';
+                order.statusChangedAt = next.statusChangedAt || '';
+                order.statusChangedDisplay = next.statusChangedDisplay || '';
+                if (Array.isArray(next.history)) order.history = next.history;
             }
             selectEl.dataset.prev = status;
             selectEl.classList.add('is-saved');
             setTimeout(() => selectEl.classList.remove('is-saved'), 900);
             renderOrders();
             renderSalesTypes();
+            renderSheet();
         } catch (e) {
             if (selectEl.dataset.prev != null) selectEl.value = selectEl.dataset.prev;
             if (e.message !== 'unauthorized') alert(e.message || 'Could not update status.');

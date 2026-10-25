@@ -1,5 +1,5 @@
 (function () {
-    const STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
+    let STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
     const CARS = [
         ['Camry', 'images/cars/camry.png'], ['Corolla', 'images/cars/corolla.png'], ['Crown', 'images/cars/crown.png'],
         ['Fortuner', 'images/cars/fortuner.png'], ['Highlander', 'images/cars/highlander.png'], ['Hilux', 'images/cars/hilux.png'],
@@ -145,9 +145,10 @@
         }
         const next = Array.isArray(data.orders) ? data.orders : [];
         orders = next;
+        if (Array.isArray(data.statuses) && data.statuses.length) STATUSES = data.statuses;
         const stamp = $('updated-at');
         if (stamp) stamp.textContent = data.updatedAt ? `Live data ${new Date(data.updatedAt).toLocaleString()}` : 'Waiting for a live push';
-        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || ''].join('|');
+        const payload = [data.updatedAt || '', next.length, next[0] && next[0].statusChangedAt || '', next[0] && next[0].status || '', STATUSES.join('|')].join('|');
         if (payload === loadLive.last && document.querySelector('#cards .lane')) return tickTimers();
         loadLive.last = payload;
         fillFilters();
@@ -457,7 +458,16 @@
     }
     function statusWhen(value) {
         const date = parseLocal(value);
-        return date ? date.toLocaleString() : '';
+        if (!date) return String(value || '');
+        return date.toLocaleString('en-GB', {
+            timeZone: 'Asia/Riyadh',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        }) + ' (Saudi)';
     }
     function personKey(value) {
         return String(value || '').replace(/\u00a0/g, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -560,7 +570,7 @@
                     <small>${esc(order.statusChangedBy || 'No update yet')}${order.statusChangedAt ? ' · ' + esc(statusWhen(order.statusChangedAt)) : ''}</small>
                 </div>
                 ${canUpdateOrder(order)
-                    ? `<div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}</select></div>`
+                    ? `<div class="status-row"><select class="status-select" aria-label="Change status">${STATUSES.map((status) => `<option value="${esc(status)}"${status === order.status ? ' selected' : ''}>${esc(status)}</option>`).join('')}${order.status && !STATUSES.includes(order.status) ? `<option value="${esc(order.status)}" selected>${esc(order.status)}</option>` : ''}</select></div>`
                     : '<p class="status-lock">Only the assigned advisor can update</p>'}
             </div>
             </div>
@@ -570,36 +580,13 @@
         </article>`;
     }
     function notesHtml(order) {
-        const session = readSession();
-        const teamNotes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
-        const mine = session ? teamNotes.find((note) => note.recordId === session.recordId) : null;
         const leader = String(order.leaderNote || '').trim();
-        const list = teamNotes.map((note) => {
-            const mineNote = session && note.recordId === session.recordId;
-            return `<div class="note-item${mineNote ? ' is-mine' : ''}">
-                <header><b>${esc(note.by || 'Team')}${mineNote ? ' (you)' : ''}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header>
-                <p dir="auto">${esc(note.text || '')}</p>
-            </div>`;
-        }).join('');
         return `<section class="order-notes" data-notes-key="${esc(order.key)}">
             <div class="note-block leader-note">
                 <h4>Leader note</h4>
                 ${leader
                     ? `<p dir="auto">${esc(leader)}</p><small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small>`
                     : '<p class="muted">No leader note from admin yet.</p>'}
-            </div>
-            <div class="note-block team-notes">
-                <h4>Team notes · visible to admin and all employees</h4>
-                ${list || '<p class="muted">No employee notes yet.</p>'}
-                <label class="note-compose">
-                    <span>Your note for this order</span>
-                    <textarea class="team-note-input" rows="3" maxlength="2000" placeholder="Write a note here — admin and other employees can read it">${mine ? esc(mine.text || '') : ''}</textarea>
-                </label>
-                <div class="note-actions">
-                    <button type="button" class="solid note-save" data-note-id="${esc(mine && mine.id || '')}">${mine ? 'Update my note' : 'Save my note'}</button>
-                    ${mine ? '<button type="button" class="ghost note-clear" data-note-id="' + esc(mine.id) + '">Remove my note</button>' : ''}
-                    <span class="note-feedback muted" hidden></span>
-                </div>
             </div>
         </section>`;
     }
@@ -634,29 +621,6 @@
             const note = document.querySelector(`[data-key="${CSS.escape(key)}"] .status-lock`);
             if (note) note.textContent = data.error || 'Only the assigned advisor can update this order.';
         }
-    }
-    async function saveTeamNote(key, note, noteId, feedback) {
-        const session = readSession();
-        if (!session) return endSession('logout');
-        if (feedback) {
-            feedback.hidden = false;
-            feedback.textContent = 'Saving…';
-        }
-        const res = await fetch('/api/reserved-orders/team-note', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: session.token, key, note, noteId: noteId || undefined })
-        });
-        if (res.status === 401) return endSession('logout');
-        touch();
-        loadLive.last = '';
-        await loadLive();
-        if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            if (feedback) feedback.textContent = data.error || 'Could not save note.';
-            return;
-        }
-        if (feedback) feedback.textContent = note ? 'Saved.' : 'Removed.';
     }
 
     async function loadAlertRules() {
@@ -1178,23 +1142,6 @@
         if (button) applyKpi(button.dataset.kpi);
     });
     $('cards').addEventListener('click', (event) => {
-        const noteSave = event.target.closest('.note-save');
-        if (noteSave) {
-            const box = noteSave.closest('.order-notes');
-            if (!box) return;
-            const input = box.querySelector('.team-note-input');
-            const feedback = box.querySelector('.note-feedback');
-            saveTeamNote(box.dataset.notesKey, input ? input.value : '', noteSave.dataset.noteId || '', feedback);
-            return;
-        }
-        const noteClear = event.target.closest('.note-clear');
-        if (noteClear) {
-            const box = noteClear.closest('.order-notes');
-            if (!box) return;
-            const feedback = box.querySelector('.note-feedback');
-            saveTeamNote(box.dataset.notesKey, '', noteClear.dataset.noteId || '', feedback);
-            return;
-        }
         const toggle = event.target.closest('.bo-toggle');
         if (!toggle) return;
         const row = toggle.nextElementSibling;
