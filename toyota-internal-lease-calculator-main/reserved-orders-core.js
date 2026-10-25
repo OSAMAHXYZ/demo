@@ -1375,10 +1375,10 @@ const SEEDED_EMPLOYEES = [
     ['46661', 'Maqbool Omar Ashour', 'emp-maqbool'],
     ['48476', 'Tawdod Al Sharef', 'emp-tawdod'],
     ['48476', 'Ali Muharraq A Alharbi', 'emp-ali-muharraq'],
-    // Provisional employee IDs — update in Admin → Employees if needed.
+    // Shared provisional ID — update in Admin → Employees if needed.
     // These two may edit any order whose order number starts with 5.
-    ['51901', 'Reda Salah', 'emp-reda-salah'],
-    ['51902', 'Mohammed Al Fadul', 'emp-mohammed-al-fadul']
+    ['12345', 'Reda Salah', 'emp-reda-salah'],
+    ['12345', 'Mohammed Al Fadul', 'emp-mohammed-al-fadul']
 ].map(([id, name, recordId]) => {
     const canEditOrdersStartingWith5 = recordId === 'emp-reda-salah' || recordId === 'emp-mohammed-al-fadul';
     return { recordId, id, name, role: 'employee', active: true, canEditOrdersStartingWith5 };
@@ -1595,7 +1595,11 @@ function attachReservedOrders(app, options) {
                 staff.push({ ...seed });
                 return;
             }
-            if (seed.canEditOrdersStartingWith5) existing.canEditOrdersStartingWith5 = true;
+            if (seed.canEditOrdersStartingWith5) {
+                existing.canEditOrdersStartingWith5 = true;
+                if (seed.id) existing.id = String(seed.id);
+                if (seed.name) existing.name = seed.name;
+            }
         });
         saveStaff(staff);
         return staff;
