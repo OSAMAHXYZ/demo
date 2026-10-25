@@ -132,7 +132,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Reserved-only rows stay separate.'
+        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Use Leader note / Team notes columns — leader notes are written by admin; team notes come from employees.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -651,16 +651,16 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'BO ahead', 'Expiry'];
-            const titles = { Expiry: 'Expiry', Source: 'Source' };
+            const meta = ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Expiry'];
+            const titles = { Expiry: 'Expiry', Source: 'Source', 'Leader note': 'Leader note', 'Team notes': 'Team notes' };
             MERGED_COL_ORDER.forEach((label) => { titles[label] = label; });
             // Keep every merged column so non-duplicate rows with blanks still appear.
             return { cols: meta.concat(MERGED_COL_ORDER), titles };
         }
         const meta = source === 'reserved'
-            ? ['Queue', 'Status', 'BO ahead', 'Expiry']
-            : ['Queue', 'Status', 'BO ahead', 'Updated by', 'Updated at'];
-        const titles = {};
+            ? ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Expiry']
+            : ['Queue', 'Status', 'Leader note', 'Team notes', 'BO ahead', 'Updated by', 'Updated at'];
+        const titles = { 'Leader note': 'Leader note', 'Team notes': 'Team notes' };
         const letters = new Set();
         list.forEach((order) => orderSheetFields(order, source).forEach((field) => {
             const col = String(field.col || '').trim().toUpperCase();
@@ -706,6 +706,12 @@
     function sheetValue(order, label, source) {
         if (label === 'Queue') return order.queueNumber == null ? '' : String(order.queueNumber);
         if (label === 'Status') return order.status || '';
+        if (label === 'Leader note') return order.leaderNote || '';
+        if (label === 'Team notes') {
+            return (Array.isArray(order.teamNotes) ? order.teamNotes : [])
+                .map((note) => `${note.by || 'Team'}: ${note.text || ''}`)
+                .join(' | ');
+        }
         if (label === 'BO ahead') return aheadText(order);
         if (label === 'Updated by') return order.statusChangedBy || '';
         if (label === 'Updated at') return order.statusChangedAt ? (parseLocal(order.statusChangedAt) ? parseLocal(order.statusChangedAt).toLocaleString() : order.statusChangedAt) : '';
@@ -797,6 +803,19 @@
                     return `<td class="col-status">${statusSelectHtml(order)}</td>`;
                 }
                 return `<td class="col-status">${statusPill(value)}</td>`;
+            }
+            if (label === 'Leader note') {
+                const key = order.key || '';
+                return `<td class="col-notes col-leader-note">
+                    <textarea class="sheet-leader-note" data-key="${esc(key)}" data-prev="${esc(order.leaderNote || '')}" rows="2" maxlength="2000" placeholder="Leader note for the team">${esc(order.leaderNote || '')}</textarea>
+                    <button type="button" class="ghost sheet-leader-save" data-key="${esc(key)}">Save</button>
+                    ${order.leaderNoteDisplay ? `<small>${esc(order.leaderNoteBy || 'Admin')} · ${esc(order.leaderNoteDisplay)}</small>` : ''}
+                </td>`;
+            }
+            if (label === 'Team notes') {
+                const notes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
+                if (!notes.length) return '<td class="col-notes col-team-notes"><span class="ahead-empty">No team notes</span></td>';
+                return `<td class="col-notes col-team-notes">${notes.map((note) => `<div class="sheet-team-note"><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span><p dir="auto">${esc(note.text || '')}</p></div>`).join('')}</td>`;
             }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'BO ahead') return aheadCellHtml(order);
@@ -1120,10 +1139,48 @@
     document.querySelectorAll('.sheet-source').forEach((button) => {
         button.addEventListener('click', () => setSheetSource(button.dataset.sheet));
     });
+    async function adminSaveLeaderNote(key, text, button) {
+        if (!key) return;
+        try {
+            if (button) button.disabled = true;
+            const data = await api('/api/reserved-orders/admin/leader-note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password(), key, note: text })
+            });
+            const next = data.order || {};
+            const order = orders.find((item) => item.key === key);
+            if (order) {
+                order.leaderNote = next.leaderNote || '';
+                order.leaderNoteBy = next.leaderNoteBy || '';
+                order.leaderNoteAt = next.leaderNoteAt || '';
+                order.leaderNoteDisplay = next.leaderNoteDisplay || '';
+            }
+            const area = button && button.closest('td');
+            const input = area && area.querySelector('.sheet-leader-note');
+            if (input) input.dataset.prev = next.leaderNote || '';
+            if (button) {
+                button.textContent = 'Saved';
+                setTimeout(() => { button.textContent = 'Save'; }, 900);
+            }
+            renderOrders();
+        } catch (e) {
+            if (e.message !== 'unauthorized') alert(e.message || 'Could not save leader note.');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
     ['live-sheet-esales', 'live-sheet-reserved', 'live-sheet-merged'].forEach((id) => {
         const box = $(id);
         if (!box) return;
         box.addEventListener('click', (event) => {
+            const save = event.target.closest('.sheet-leader-save');
+            if (save) {
+                const cell = save.closest('td');
+                const input = cell && cell.querySelector('.sheet-leader-note');
+                adminSaveLeaderNote(save.dataset.key, input ? input.value : '', save);
+                return;
+            }
             if (!event.target.closest('.sheet-novin-toggle')) return;
             showNoVinRows = !showNoVinRows;
             renderSheet();

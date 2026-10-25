@@ -574,28 +574,30 @@
         const teamNotes = Array.isArray(order.teamNotes) ? order.teamNotes : [];
         const mine = session ? teamNotes.find((note) => note.recordId === session.recordId) : null;
         const leader = String(order.leaderNote || '').trim();
-        const others = teamNotes.filter((note) => !session || note.recordId !== session.recordId);
-        const list = others.map((note) => `<div class="note-item">
-            <header><b>${esc(note.by || 'Team')}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header>
-            <p dir="auto">${esc(note.text || '')}</p>
-        </div>`).join('');
+        const list = teamNotes.map((note) => {
+            const mineNote = session && note.recordId === session.recordId;
+            return `<div class="note-item${mineNote ? ' is-mine' : ''}">
+                <header><b>${esc(note.by || 'Team')}${mineNote ? ' (you)' : ''}</b><span>${esc(note.updatedDisplay || note.display || '')}</span></header>
+                <p dir="auto">${esc(note.text || '')}</p>
+            </div>`;
+        }).join('');
         return `<section class="order-notes" data-notes-key="${esc(order.key)}">
             <div class="note-block leader-note">
                 <h4>Leader note</h4>
                 ${leader
                     ? `<p dir="auto">${esc(leader)}</p><small>${esc(order.leaderNoteBy || 'Admin')}${order.leaderNoteDisplay ? ' · ' + esc(order.leaderNoteDisplay) : ''}</small>`
-                    : '<p class="muted">No leader note yet.</p>'}
+                    : '<p class="muted">No leader note from admin yet.</p>'}
             </div>
             <div class="note-block team-notes">
-                <h4>Team notes</h4>
-                ${list || '<p class="muted">No team notes yet.</p>'}
+                <h4>Team notes · visible to admin and all employees</h4>
+                ${list || '<p class="muted">No employee notes yet.</p>'}
                 <label class="note-compose">
-                    <span>Your note</span>
-                    <textarea class="team-note-input" rows="2" maxlength="2000" placeholder="Add a note the admin and team can see">${mine ? esc(mine.text || '') : ''}</textarea>
+                    <span>Your note for this order</span>
+                    <textarea class="team-note-input" rows="3" maxlength="2000" placeholder="Write a note here — admin and other employees can read it">${mine ? esc(mine.text || '') : ''}</textarea>
                 </label>
                 <div class="note-actions">
-                    <button type="button" class="solid note-save" data-note-id="${esc(mine && mine.id || '')}">${mine ? 'Update note' : 'Save note'}</button>
-                    ${mine ? '<button type="button" class="ghost note-clear" data-note-id="' + esc(mine.id) + '">Remove</button>' : ''}
+                    <button type="button" class="solid note-save" data-note-id="${esc(mine && mine.id || '')}">${mine ? 'Update my note' : 'Save my note'}</button>
+                    ${mine ? '<button type="button" class="ghost note-clear" data-note-id="' + esc(mine.id) + '">Remove my note</button>' : ''}
                     <span class="note-feedback muted" hidden></span>
                 </div>
             </div>
