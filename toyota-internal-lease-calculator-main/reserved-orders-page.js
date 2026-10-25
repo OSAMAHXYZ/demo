@@ -8,7 +8,7 @@
         ['Veloz', 'images/cars/veloz.png'], ['Urban Cruiser', 'images/cars/urban cruiser.png'], ['Corolla Cross', 'images/cars/corolla cross.png'],
         ['GR86', 'images/cars/gr86.png']
     ];
-    const IDLE_MS = 3 * 60 * 1000;
+    const IDLE_MS = 30 * 60 * 1000;
     const sessionKey = 'reserved-orders-session';
     let orders = [];
     let carsData = {};
