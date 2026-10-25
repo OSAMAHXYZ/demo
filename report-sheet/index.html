@@ -2630,7 +2630,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
                 </div>
                 <div class="rv-sheet-tabs" role="tablist">
                   <button type="button" class="is-on" data-rv-sheet="live">Live</button>
-                  <button type="button" data-rv-sheet="removed">Removed</button>
+                  <button type="button" data-rv-sheet="removed">Sold VINs</button>
                 </div>
               </header>
               <input id="rv-live-search" type="search" placeholder="Search the live sheet" aria-label="Search the live sheet" />
@@ -22514,9 +22514,13 @@ body.live-app #panel-salesreport .sr-emp-sum {
     const kpis = $("#rv-kpis");
     if (kpis) {
       const counts = (data.movement && data.movement.counts) || {};
+      const delivered = removedOrders.filter((order) => order.soldKind === "delivered").length;
+      const proforma = removedOrders.filter((order) => order.soldKind === "proforma").length;
       const cards = [
         ["Live VINs", new Set(liveOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-live"],
-        ["Removed VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed"],
+        ["Sold VINs", new Set(removedOrders.map((order) => String(order.vin || "").toUpperCase()).filter(Boolean)).size, "rv-tone-removed"],
+        ["Delivered", delivered, "rv-tone-live"],
+        ["Proforma", proforma, "rv-tone-mkt"],
         ["Marketing", (data.requests || []).filter((item) => !item.cancelled).length, "rv-tone-mkt"],
         ["Reassigned", counts.reassigned || 0, "rv-tone-move"],
       ];
@@ -22524,13 +22528,28 @@ body.live-app #panel-salesreport .sr-emp-sum {
     }
     if (table) {
       const pool = rvSheetMode === "removed" ? removedOrders : liveOrders;
-      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.suffix].join(" ").toLowerCase().includes(q));
-      const head = ["Salesman name", "Customer name", "Order number", "Model year", "Product", "Area", "Sharing level", "ALJ suffix", "Exterior color", "Interior color", "VIN number", "Reservation exp date", "Status", "Queue 1", "Queue 2", "Queue 3"];
+      const shown = pool.filter((order) => !q || [order.orderNumber, order.vin, order.salesAdvisor, order.customerName, order.product, order.area, order.share, order.status, order.suffix, order.soldLabel, order.soldKind].join(" ").toLowerCase().includes(q));
+      const head = rvSheetMode === "removed"
+        ? ["Sold as", "Salesman name", "Customer name", "Order number", "Product", "VIN number", "Last status", "Invoice (V)", "Where"]
+        : ["Salesman name", "Customer name", "Order number", "Model year", "Product", "Area", "Sharing level", "ALJ suffix", "Exterior color", "Interior color", "VIN number", "Reservation exp date", "Status", "Queue 1", "Queue 2", "Queue 3"];
       table.innerHTML = shown.length
         ? `<table><thead><tr>${head.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${shown.slice(0, 300).map((order) => {
+            if (rvSheetMode === "removed") {
+              return `<tr class="rv-row-removed" data-rv-sold="${escapeHtml(order.vin || "")}" style="cursor:pointer" title="Open RTL / Sales Raw row">
+                <td><strong>${escapeHtml(order.soldLabel || order.soldKind || "Sold")}</strong></td>
+                <td>${escapeHtml(order.salesAdvisor || "—")}</td>
+                <td>${escapeHtml(order.customerName || "—")}</td>
+                <td>${escapeHtml(order.orderNumber || "—")}</td>
+                <td>${escapeHtml(order.product || order.vehicle || "—")}</td>
+                <td class="rv-vin">${escapeHtml(order.vin || "—")}</td>
+                <td>${escapeHtml(order.status || "—")}</td>
+                <td>${escapeHtml(order.invoiceDate || "—")}</td>
+                <td>${order.rtlFound ? "RTL" : "—"}${order.salesFound ? (order.rtlFound ? " + Sales Raw" : "Sales Raw") : ""}</td>
+              </tr>`;
+            }
             const cancel = order.status === "الغاء";
             const productCls = rvChannelOk(order) ? "" : " rv-cell-off";
-            const rowCls = [order.removed ? "rv-row-removed" : "", cancel ? "rv-row-cancel" : ""].filter(Boolean).join(" ");
+            const rowCls = [cancel ? "rv-row-cancel" : ""].filter(Boolean).join(" ");
             const cells = [
               order.salesAdvisor, order.customerName, order.orderNumber, order.modelYear, order.product, order.area, order.share, order.suffix, order.exterior, order.interior,
             ].map((value, index) => `<td${index === 4 ? ` class="${productCls.trim()}"` : ""}>${escapeHtml(value || "—")}</td>`).join("");
@@ -22543,7 +22562,7 @@ body.live-app #panel-salesreport .sr-emp-sum {
               <td>${escapeHtml(rvAheadText(order, 2))}</td>
             </tr>`;
           }).join("")}</tbody></table>`
-        : `<p class="foot">${rvSheetMode === "removed" ? "No removed VINs in this sheet." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
+        : `<p class="foot">${rvSheetMode === "removed" ? "No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw." : "No live rows yet. Push from reserved orders admin or the report sheet admin."}</p>`;
     }
     const mktQuery = String(($("#rv-mkt-search") || {}).value || "").trim().toLowerCase();
     const requests = (data.requests || []).filter((item) => !mktQuery || `${item.orderNumber} ${item.advisorName} ${item.display || item.at}`.toLowerCase().includes(mktQuery));
@@ -22625,6 +22644,19 @@ body.live-app #panel-salesreport .sr-emp-sum {
       }, 1000);
     }
     root.addEventListener("click", (e) => {
+      const soldRow = e.target.closest("[data-rv-sold]");
+      if (soldRow) {
+        const vin = soldRow.getAttribute("data-rv-sold") || "";
+        const order = ((rvBoardOrders && rvBoardOrders.orders) || []).find((item) => String(item.vin || "").toUpperCase() === String(vin).toUpperCase() && item.removed);
+        const box = $("#rv-compare-result");
+        if (order && box) {
+          box.hidden = false;
+          const rtl = order.rtlDescription || (order.rtlFound ? "RTL row captured" : "Not in current RTL Stock");
+          const sales = order.salesDescription || (order.salesFound ? `Sales Raw${order.invoiceDate ? " · invoice " + order.invoiceDate : " · no col V invoice (proforma)"}` : "Not in current Sales Raw");
+          box.innerHTML = `<strong>${escapeHtml(order.soldLabel || "Sold")} · ${escapeHtml(vin)}</strong><br><b>RTL:</b> ${escapeHtml(rtl)}<br><b>Sales Raw:</b> ${escapeHtml(sales)}`;
+        }
+        return;
+      }
       const view = e.target.closest("[data-rv-view]");
       if (view) {
         rvSnapshotVersion = view.getAttribute("data-rv-view") || "";

@@ -508,6 +508,7 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
   const rtlPath = reportSheetFilePath('rtl');
   const reservedPath = reportSheetFilePath('reserved');
   const names = fileNames || {};
+  const salesPath = reportSheetFilePath('sales');
   return reservedOrdersHub.refreshFromBuffers(
     fs.readFileSync(esalesPath),
     boPath && fs.existsSync(boPath) ? fs.readFileSync(boPath) : null,
@@ -515,7 +516,10 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
       esalesName: names.central || 'E-Sales',
       boName: names.backorder || 'Back Order',
       rtlBuffer: rtlPath && fs.existsSync(rtlPath) ? fs.readFileSync(rtlPath) : null,
-      reservedBuffer: reservedPath && fs.existsSync(reservedPath) ? fs.readFileSync(reservedPath) : null
+      salesBuffer: salesPath && fs.existsSync(salesPath) ? fs.readFileSync(salesPath) : null,
+      reservedBuffer: reservedPath && fs.existsSync(reservedPath) ? fs.readFileSync(reservedPath) : null,
+      source: 'report-sheet-admin',
+      actor: { name: 'Admin Push' }
     }
   );
 }
@@ -8432,6 +8436,16 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
     const reservedPath = reportSheetFilePath('reserved');
     if (!reservedPath || !fs.existsSync(reservedPath)) return null;
     return fs.readFileSync(reservedPath);
+  },
+  readStoredRtl() {
+    const rtlPath = reportSheetFilePath('rtl');
+    if (!rtlPath || !fs.existsSync(rtlPath)) return null;
+    return fs.readFileSync(rtlPath);
+  },
+  readStoredSales() {
+    const salesPath = reportSheetFilePath('sales');
+    if (!salesPath || !fs.existsSync(salesPath)) return null;
+    return fs.readFileSync(salesPath);
   },
   onSourceFiles(files) {
     return saveReservedFilesToReportSheet(files || {});

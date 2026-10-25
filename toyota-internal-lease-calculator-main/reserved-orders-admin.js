@@ -2,6 +2,7 @@
     const STATUSES = ['تم الفوترة', 'الغاء', 'موظف', 'محجوز', 'انتظار تحويل', 'انتظار رد الضيف', 'efc', 'b2c', 'التزام زميل اخر', 'DB', 'ابيان', 'ان اساين'];
     const passKey = 'reserved-orders-admin-pass';
     let orders = [];
+    let sold = [];
     let staff = [];
     let archive = [];
     let audit = [];
@@ -781,11 +782,71 @@
             }).join('')
             : '<p class="empty">No marketing orders sent yet.</p>';
     }
-    function renderAll() { renderOverview(); renderOrders(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); }
+    function soldTone(kind) {
+        if (kind === 'delivered') return 'is-ok';
+        if (kind === 'proforma') return 'is-info';
+        return 'is-none';
+    }
+    function openSoldDetail(vin) {
+        const item = sold.find((row) => String(row.vin || '').toUpperCase() === String(vin || '').toUpperCase());
+        if (!item) return;
+        const rtlFields = (item.rtlRow || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
+        const salesFields = (item.salesRow || []).map((field) => `<div><span>${esc(field.label)}</span><b>${esc(field.value)}</b></div>`).join('');
+        $('drawer').classList.remove('hidden');
+        $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
+            <h2>Sold VIN ${esc(item.vin || '')}</h2>
+            <p><span class="s-pill ${soldTone(item.soldKind)}">${esc(item.soldLabel || item.soldKind || 'Sold')}</span>
+            · Order ${esc(item.orderNumber || '—')} · Advisor ${esc(item.salesAdvisor || '—')}<br>
+            Last status ${esc(item.lastStatus || item.status || '—')} · Removed ${esc(item.removedDisplay || item.removedAt || '—')}</p>
+            <h3>Where it is</h3>
+            <p>${item.rtlFound
+                ? `Found in RTL Stock${item.rtlSheetName ? ' · ' + esc(item.rtlSheetName) : ''}${item.rtlRowIndex ? ' · row ' + esc(String(item.rtlRowIndex)) : ''}${item.rtlSearchArea ? ' · area ' + esc(item.rtlSearchArea) : ''}`
+                : 'Not found in the current RTL Stock file.'}</p>
+            <p>${item.salesFound
+                ? `Found in Sales Raw${item.salesSheetName ? ' · ' + esc(item.salesSheetName) : ''}${item.invoiceDate ? ' · invoice (col V) ' + esc(item.invoiceDate) : ' · no invoice date in column V (proforma)'}${item.proformaDate ? ' · proforma ' + esc(item.proformaDate) : ''}`
+                : 'Not found in the current Sales Raw file.'}</p>
+            <h3>RTL row</h3>
+            <div class="mkt-fields">${rtlFields || `<div><span>RTL</span><b>${esc(item.rtlDescription || 'No RTL row captured')}</b></div>`}</div>
+            <h3>Sales Raw row</h3>
+            <div class="mkt-fields">${salesFields || `<div><span>Sales Raw</span><b>${esc(item.salesDescription || 'No Sales Raw row captured')}</b></div>`}</div>`;
+        $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
+    }
+    function renderSold() {
+        const box = $('sold-rows');
+        if (!box) return;
+        const q = ($('sold-search') && $('sold-search').value || '').trim().toLowerCase();
+        const kind = ($('sold-kind') && $('sold-kind').value) || '';
+        const rows = sold.filter((item) => {
+            if (kind && item.soldKind !== kind) return false;
+            if (!q) return true;
+            return [item.vin, item.orderNumber, item.salesAdvisor, item.customerName, item.soldLabel, item.lastStatus]
+                .join(' ').toLowerCase().includes(q);
+        });
+        const meta = $('sold-meta');
+        if (meta) {
+            const delivered = sold.filter((item) => item.soldKind === 'delivered').length;
+            const proforma = sold.filter((item) => item.soldKind === 'proforma').length;
+            meta.textContent = `${sold.length} sold VIN${sold.length === 1 ? '' : 's'} · ${delivered} delivered · ${proforma} proforma · click Where to open the RTL / Sales Raw row`;
+        }
+        box.innerHTML = rows.length
+            ? rows.map((item) => `<tr>
+                <td><span class="s-pill ${soldTone(item.soldKind)}">${esc(item.soldLabel || item.soldKind || 'Sold')}</span></td>
+                <td class="mono">${esc(item.vin || '—')}</td>
+                <td>${esc(item.orderNumber || '—')}</td>
+                <td>${esc(item.salesAdvisor || '—')}</td>
+                <td>${esc(item.lastStatus || item.status || '—')}</td>
+                <td>${esc(item.invoiceDate || '—')}</td>
+                <td>${esc(item.removedDisplay || item.removedAt || '—')}</td>
+                <td><button class="ghost" type="button" data-sold="${esc(item.vin || '')}">Where</button></td>
+            </tr>`).join('')
+            : '<tr><td colspan="8" class="st-na">No sold VINs yet. They appear when a push removes a VIN that is still in RTL or Sales Raw.</td></tr>';
+    }
+    function renderAll() { renderOverview(); renderOrders(); renderSold(); renderSheet(); renderStaff(); renderArchive(); renderAudit(); renderReport(); renderAlerts(); renderMarketing(); }
 
     async function refresh() {
         const data = await api('/api/reserved-orders/admin?password=' + encodeURIComponent(password()));
         orders = data.orders || [];
+        sold = data.sold || [];
         staff = data.staff || [];
         archive = data.archive || [];
         report = data.report || {};
@@ -833,8 +894,15 @@
     $('admin-out').addEventListener('click', () => { sessionStorage.removeItem(passKey); showGate(''); });
     $('admin-nav').addEventListener('click', (event) => { const button = event.target.closest('[data-panel]'); if (button) showPanel(button.dataset.panel); });
     ['admin-search', 'admin-status', 'admin-payment', 'admin-expired'].forEach((id) => $(id).addEventListener('input', renderOrders));
+    ['sold-search', 'sold-kind'].forEach((id) => { if ($(id)) $(id).addEventListener('input', renderSold); });
     ['audit-q', 'audit-employee', 'audit-action'].forEach((id) => $(id).addEventListener('input', renderAudit));
     $('admin-rows').addEventListener('click', (event) => { const button = event.target.closest('[data-open]'); if (button) openOrder(button.dataset.open); });
+    if ($('sold-rows')) {
+        $('sold-rows').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-sold]');
+            if (button) openSoldDetail(button.dataset.sold);
+        });
+    }
     $('admin-rows').addEventListener('change', (event) => {
         const select = event.target.closest('.admin-status-select');
         if (!select) return;

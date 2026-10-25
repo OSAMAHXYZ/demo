@@ -369,6 +369,158 @@ function indexRtlAging(sheets) {
     return map;
 }
 
+function pickSalesRawSheet(sheets) {
+    const list = sheets || [];
+    return list.find((sheet) => /raw\s*data|row\s*data|rowdata|sales/i.test(String(sheet && sheet.name || '')))
+        || list[0]
+        || null;
+}
+
+function fieldsDescription(fields) {
+    return (fields || [])
+        .map((field) => {
+            const label = cleanText(field && field.label);
+            const value = cleanText(field && field.value);
+            if (!label || !value || value === '—') return '';
+            return `${label}: ${value}`;
+        })
+        .filter(Boolean)
+        .join(' · ');
+}
+
+/** Full RTL Stock row per VIN — used when a reserved VIN disappears from the live push. */
+function indexRtlStockRows(sheets) {
+    const map = new Map();
+    const sheet = pickRtlSheet(sheets);
+    if (!sheet) return map;
+    const grid = sheet.grid || [];
+    const headerIdx = detectHeaderRow(grid);
+    const headers = grid[headerIdx] || [];
+    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/], headers);
+    const vinIndex = vinCol >= 0 ? vinCol : columnIndex('E');
+    for (let r = headerIdx + 1; r < grid.length; r++) {
+        const line = grid[r] || [];
+        const vin = normalizeVin(cell(line, vinIndex));
+        if (!vin || !/^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin) || map.has(vin)) continue;
+        const fields = rowFields(headers, line);
+        map.set(vin, {
+            sheetName: sheet.name || 'RTL',
+            rowIndex: r + 1,
+            fields,
+            description: fieldsDescription(fields),
+            searchArea: cleanText(cell(line, columnIndex('B'))) || cleanText(cell(line, columnIndex('A'))),
+            product: cleanText(cell(line, findHeaderIndex([/^product$/i, /^model$/i], headers)))
+        });
+    }
+    return map;
+}
+
+/**
+ * Sales Raw by VIN. Column V = invoice / delivery date (blank V ⇒ open proforma).
+ * Matches report-sheet Sales Raw convention.
+ */
+function indexSalesRawByVin(sheets) {
+    const map = new Map();
+    const sheet = pickSalesRawSheet(sheets);
+    if (!sheet) return map;
+    const grid = sheet.grid || [];
+    const headerIdx = detectHeaderRow(grid);
+    const headers = grid[headerIdx] || [];
+    const vinCol = findHeaderIndex([/\bvin\b/, /chassis/, /رقم الهيكل/, /vehicle\s*identification/], headers);
+    const colV = columnIndex('V');
+    const colA = columnIndex('A');
+    const colP = columnIndex('P');
+    for (let r = headerIdx + 1; r < grid.length; r++) {
+        const line = grid[r] || [];
+        if (!(line || []).some((value) => cleanText(value))) continue;
+        let vin = vinCol >= 0 ? normalizeVin(cell(line, vinCol)) : '';
+        if (!vin || !/^[A-HJ-NPR-Z0-9]{11,17}$/i.test(vin)) {
+            for (let i = 0; i < line.length; i++) {
+                if (i === colA || i === colP || i === colV) continue;
+                const candidate = normalizeVin(cell(line, i));
+                if (candidate && /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(candidate)) {
+                    vin = candidate;
+                    break;
+                }
+            }
+        }
+        if (!vin || map.has(vin)) continue;
+        const invoiceParsed = parseExcelDate(cell(line, colV));
+        const fields = rowFields(headers, line);
+        map.set(vin, {
+            sheetName: sheet.name || 'Sales Raw',
+            rowIndex: r + 1,
+            salesman: cleanText(cell(line, colA)),
+            hasInvoice: Boolean(invoiceParsed),
+            invoiceDate: invoiceParsed ? localStamp(invoiceParsed) : '',
+            invoiceDisplay: invoiceParsed ? displayStamp(invoiceParsed) : cleanText(cell(line, colV)),
+            proformaDate: (() => {
+                const parsed = parseExcelDate(cell(line, colP));
+                return parsed ? displayStamp(parsed) : cleanText(cell(line, colP));
+            })(),
+            fields,
+            description: fieldsDescription(fields)
+        });
+    }
+    return map;
+}
+
+function classifyRemovedOrder(order, rtlMap, salesMap) {
+    const vin = normalizeVin(order && order.vin);
+    const rtl = vin ? rtlMap.get(vin) : null;
+    const sales = vin ? salesMap.get(vin) : null;
+    let soldKind = 'untracked';
+    let soldLabel = 'Removed';
+    if (sales && sales.hasInvoice) {
+        soldKind = 'delivered';
+        soldLabel = 'Delivered';
+    } else if (sales || rtl) {
+        soldKind = 'proforma';
+        soldLabel = 'Proforma';
+    }
+    const now = new Date();
+    return {
+        key: order.key || (vin ? `vin:${vin}` : ''),
+        vin: vin || order.vin || '',
+        orderNumber: order.orderNumber || '',
+        salesAdvisor: order.salesAdvisor || '',
+        customerName: order.customerName || '',
+        vehicle: order.vehicle || '',
+        modelYear: order.modelYear || '',
+        exterior: order.exterior || '',
+        interior: order.interior || '',
+        status: order.status || '',
+        lastStatus: order.status || '',
+        paymentLabel: order.paymentLabel || '',
+        removed: true,
+        sold: true,
+        soldKind,
+        soldLabel,
+        removedAt: now.toISOString(),
+        removedDisplay: displayStamp(now),
+        rtlFound: Boolean(rtl),
+        salesFound: Boolean(sales),
+        rtlSheetName: rtl ? rtl.sheetName : '',
+        rtlRowIndex: rtl ? rtl.rowIndex : null,
+        rtlDescription: rtl ? rtl.description : '',
+        rtlSearchArea: rtl ? rtl.searchArea : '',
+        rtlRow: rtl ? rtl.fields : [],
+        salesSheetName: sales ? sales.sheetName : '',
+        salesRowIndex: sales ? sales.rowIndex : null,
+        salesDescription: sales ? sales.description : '',
+        invoiceDate: sales ? sales.invoiceDisplay : '',
+        proformaDate: sales ? sales.proformaDate : '',
+        salesRow: sales ? sales.fields : []
+    };
+}
+
+function reconcileLiveOrders(previousOrders, builtOrders) {
+    const previous = previousOrders || [];
+    const built = builtOrders || [];
+    const removed = previous.filter((order) => order && !pushedOrderMatches(order, built));
+    return { orders: built, removed };
+}
+
 function detectHeaderRow(grid) {
     const limit = Math.min(grid.length, 40);
     for (let r = 0; r < limit; r++) {
@@ -651,13 +803,6 @@ function pushedOrderMatches(order, pushed) {
         for (const token of tokens) if (other.has(token)) return true;
         return false;
     });
-}
-
-function reconcileLiveOrders(previousOrders, builtOrders) {
-    const previous = previousOrders || [];
-    const built = builtOrders || [];
-    const removed = previous.filter((order) => order && !pushedOrderMatches(order, built));
-    return { orders: built, removed };
 }
 
 function applyQueue(orders) {
@@ -1392,6 +1537,7 @@ const SEEDED_EMPLOYEES = [
 
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
+    const soldFile = path.join(options.storeDir, 'reserved-orders-sold.json');
     const alertsFile = path.join(options.storeDir, 'reserved-orders-alerts.json');
     const notificationsFile = path.join(options.storeDir, 'reserved-orders-notifications.json');
     const marketingFile = path.join(options.storeDir, 'reserved-orders-marketing.json');
@@ -1408,6 +1554,48 @@ function attachReservedOrders(app, options) {
     function saveLive(data) {
         fs.mkdirSync(options.storeDir, { recursive: true });
         fs.writeFileSync(liveFile, JSON.stringify(data, null, 2), 'utf8');
+    }
+    function loadSold() {
+        const data = readJson(soldFile, []);
+        return Array.isArray(data) ? data : [];
+    }
+    function saveSold(data) {
+        fs.mkdirSync(options.storeDir, { recursive: true });
+        fs.writeFileSync(soldFile, JSON.stringify(data, null, 2), 'utf8');
+    }
+    function mergeSoldRecords(existing, incoming) {
+        const byVin = new Map();
+        (existing || []).forEach((item) => {
+            const vin = normalizeVin(item && item.vin);
+            if (vin) byVin.set(vin, item);
+        });
+        (incoming || []).forEach((item) => {
+            const vin = normalizeVin(item && item.vin);
+            if (!vin) return;
+            const prev = byVin.get(vin) || {};
+            byVin.set(vin, Object.assign({}, prev, item, {
+                firstRemovedAt: prev.firstRemovedAt || prev.removedAt || item.removedAt,
+                firstRemovedDisplay: prev.firstRemovedDisplay || prev.removedDisplay || item.removedDisplay
+            }));
+        });
+        return Array.from(byVin.values()).sort((a, b) => String(b.removedAt || '').localeCompare(String(a.removedAt || '')));
+    }
+    function dropSoldVins(sold, liveVins) {
+        const live = new Set((liveVins || []).map((vin) => normalizeVin(vin)).filter(Boolean));
+        return (sold || []).filter((item) => {
+            const vin = normalizeVin(item && item.vin);
+            return vin && !live.has(vin);
+        });
+    }
+    function sheetsFromStored(reader) {
+        if (typeof reader !== 'function') return [];
+        try {
+            const buffer = reader();
+            if (!buffer || !buffer.length) return [];
+            return sheetGridsFromBuffer(buffer);
+        } catch (e) {
+            return [];
+        }
     }
     function loadStaff() {
         const data = readJson(staffFile, []);
@@ -1786,24 +1974,48 @@ function attachReservedOrders(app, options) {
         return backOrderTableFromBuffer(buffer);
     }
     function publish(sheets, bo, names, previous) {
+        const rtlSheets = names.rtlSheets && names.rtlSheets.length
+            ? names.rtlSheets
+            : sheetsFromStored(options.readStoredRtl);
+        const salesSheets = names.salesSheets && names.salesSheets.length
+            ? names.salesSheets
+            : sheetsFromStored(options.readStoredSales);
+        const previousOrders = previous || loadLive().orders || [];
         const built = buildReservedDataset({
             sheets,
             boRows: bo.rows,
             boHeaders: bo.headers,
-            previous: previous || loadLive().orders || [],
-            rtlByVin: indexRtlAging(names.rtlSheets || []),
+            previous: previousOrders,
+            rtlByVin: indexRtlAging(rtlSheets),
             reservedSheets: names.reservedSheets || []
         });
         if (!built.ok) return built;
-        const previousOrders = previous || loadLive().orders || [];
         const reconciled = reconcileLiveOrders(previousOrders, built.orders);
         const removed = reconciled.removed;
         const orders = applyQueue(reconciled.orders);
+        // Existing VIN status is carried forward in buildReservedDataset; only new VINs start fresh.
+        // Removed VINs → Sold: Col V invoice = Delivered; found without invoice = Proforma.
+        const rtlMap = indexRtlStockRows(rtlSheets);
+        const salesMap = indexSalesRawByVin(salesSheets);
+        const soldIncoming = removed.map((order) => classifyRemovedOrder(order, rtlMap, salesMap));
+        const soldKept = dropSoldVins(loadSold(), orders.map((order) => order.vin));
+        const sold = mergeSoldRecords(soldKept, soldIncoming);
+        saveSold(sold);
+        const deliveredCount = soldIncoming.filter((item) => item.soldKind === 'delivered').length;
+        const proformaCount = soldIncoming.filter((item) => item.soldKind === 'proforma').length;
         const live = {
             updatedAt: new Date().toISOString(),
             esalesName: names.esalesName || '',
             boName: names.boName || '',
-            report: Object.assign({}, built.report, { removedOrders: removed.length, keptOrders: 0, orderCount: orders.length }),
+            report: Object.assign({}, built.report, {
+                removedOrders: removed.length,
+                soldCaptured: soldIncoming.length,
+                soldDelivered: deliveredCount,
+                soldProforma: proformaCount,
+                soldTotal: sold.length,
+                keptOrders: 0,
+                orderCount: orders.length
+            }),
             orders
         };
         const previousKeys = new Set(previousOrders.map((order) => order.key));
@@ -1819,19 +2031,29 @@ function attachReservedOrders(app, options) {
             entity: 'dataset',
             source: names.source || 'admin-push',
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length}, reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
+            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length} (delivered ${deliveredCount}, proforma ${proformaCount}), reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
         });
         if (created) {
             audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
         }
         if (removed.length) {
-            const sample = removed.map((order) => order.vin && order.vin !== 'VIN NOT FOUND' ? order.vin : (order.orderNumber || order.key)).filter(Boolean).slice(0, 30);
-            audit(names.req, { user: 'System', role: 'system', action: 'ORDER_REMOVED', entity: 'order', source: 'import', details: `${removed.length} VIN(s) removed because they are not in the latest push${sample.length ? ': ' + sample.join(', ') : ''}` });
+            const sample = soldIncoming.map((item) => {
+                const vin = item.vin && item.vin !== 'VIN NOT FOUND' ? item.vin : (item.orderNumber || item.key);
+                return vin ? `${vin} (${item.soldLabel})` : '';
+            }).filter(Boolean).slice(0, 30);
+            audit(names.req, {
+                user: 'System',
+                role: 'system',
+                action: 'ORDER_REMOVED',
+                entity: 'order',
+                source: 'import',
+                details: `${removed.length} VIN(s) moved to Sold VINs${sample.length ? ': ' + sample.join(', ') : ''}`
+            });
         }
         audit(names.req, { user: 'System', role: 'system', action: 'QUEUE_RECALCULATED', entity: 'queue', source: 'import', details: `Queue ranked for ${built.orders.length} orders` });
         notify();
         if (boRulesApi) boRulesApi.reanalyzeActive(names.req, 'BO_FILE_UPDATED');
-        return { ...built, version };
+        return { ...built, version, sold: soldIncoming, report: live.report };
     }
 
     app.get('/api/reserved-orders/staff-names', (req, res) => {
@@ -2012,10 +2234,14 @@ function attachReservedOrders(app, options) {
                 try { reservedBuffer = options.readStoredReserved() || null; } catch (e) { reservedBuffer = null; }
             }
             const reservedSheets = reservedBuffer && reservedBuffer.length ? sheetGridsFromBuffer(reservedBuffer) : [];
+            const rtlSheets = sheetsFromStored(options.readStoredRtl);
+            const salesSheets = sheetsFromStored(options.readStoredSales);
             const built = publish(sheets, bo, {
                 esalesName: req.body.esalesName,
                 boName: req.body.boName || (req.body.boBase64 ? '' : 'admin-back-order'),
                 reservedSheets,
+                rtlSheets,
+                salesSheets,
                 req,
                 source: 'reserved-admin',
                 actor: { name: 'Admin' }
@@ -2041,16 +2267,32 @@ function attachReservedOrders(app, options) {
         if (!requireAdmin(req, res)) return;
         const live = loadLive();
         const orders = withColorQueue(live.orders || [], loadBoTable());
+        const sold = loadSold();
         res.json({
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
             orders,
+            sold,
             staff: loadStaff().map(publicStaff),
             archive: readJson(path.join(archiveDir, 'index.json'), []),
             auditCount: readAudit().length
         });
+    });
+    app.get('/api/reserved-orders/sold', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const kind = String(req.query.kind || '').toLowerCase();
+        let sold = loadSold();
+        if (kind === 'delivered' || kind === 'proforma' || kind === 'untracked') {
+            sold = sold.filter((item) => item.soldKind === kind);
+        }
+        res.json({ sold, counts: {
+            total: loadSold().length,
+            delivered: loadSold().filter((item) => item.soldKind === 'delivered').length,
+            proforma: loadSold().filter((item) => item.soldKind === 'proforma').length,
+            untracked: loadSold().filter((item) => item.soldKind === 'untracked').length
+        } });
     });
     app.get('/api/reserved-orders/audit', (req, res) => {
         if (!requireAdmin(req, res)) return;
@@ -2387,9 +2629,32 @@ function attachReservedOrders(app, options) {
             orderNumber: order.orderNumber || '',
             vin: order.vin || '',
             salesAdvisor: order.salesAdvisor || '',
+            customerName: order.customerName || '',
             paymentLabel: order.paymentLabel || '',
-            status: order.status || '',
-            vehicle: order.vehicle || ''
+            status: order.status || order.lastStatus || '',
+            vehicle: order.vehicle || '',
+            product: order.vehicle || order.product || '',
+            modelYear: order.modelYear || '',
+            suffix: order.suffix || '',
+            exterior: order.exterior || '',
+            interior: order.interior || '',
+            area: order.searchArea || order.rtlSearchArea || '',
+            share: order.shareLevel || '',
+            assignDate: order.assignDate || '',
+            deadline: order.deadline || order.expiryDate || '',
+            removed: order.removed === true,
+            sold: order.sold === true,
+            soldKind: order.soldKind || '',
+            soldLabel: order.soldLabel || '',
+            removedAt: order.removedAt || '',
+            removedDisplay: order.removedDisplay || '',
+            rtlFound: order.rtlFound === true,
+            salesFound: order.salesFound === true,
+            rtlDescription: order.rtlDescription || '',
+            rtlRow: Array.isArray(order.rtlRow) ? order.rtlRow : [],
+            salesDescription: order.salesDescription || '',
+            invoiceDate: order.invoiceDate || '',
+            proformaDate: order.proformaDate || ''
         };
     }
     function archiveIndex() {
@@ -2460,13 +2725,15 @@ function attachReservedOrders(app, options) {
         const movement = latest && latest.version ? (movementForVersion(latest.version) || { counts: {}, rows: [] }) : { counts: { new: 0, reassigned: 0, removed: 0, unchanged: 0, ambiguous: 0, first: true }, rows: [] };
         const store = loadMarketing().slice().reverse();
         const bo = store.some((item) => !Array.isArray(item.fields) || !item.fields.length) ? loadBoTable() : null;
+        const soldOrders = loadSold().map((item) => compactBoardOrder(Object.assign({}, item, { removed: true, sold: true })));
         res.json({
             viewing: '',
             updatedAt: live.updatedAt || '',
             esalesName: live.esalesName || '',
             boName: live.boName || '',
             report: live.report || {},
-            orders: (live.orders || []).map(compactBoardOrder),
+            orders: (live.orders || []).map(compactBoardOrder).concat(soldOrders),
+            sold: soldOrders,
             requests: store.map((item) => publicMarketing(item, bo)),
             pushes,
             movement,
@@ -2483,9 +2750,16 @@ function attachReservedOrders(app, options) {
             const sheets = sheetGridsFromBuffer(esalesBuffer);
             const bo = backOrderFromBuffer(boBuffer);
             const meta = names || {};
-            const rtlSheets = meta.rtlBuffer && meta.rtlBuffer.length ? sheetGridsFromBuffer(meta.rtlBuffer) : (meta.rtlSheets || []);
-            const reservedSheets = meta.reservedBuffer && meta.reservedBuffer.length ? sheetGridsFromBuffer(meta.reservedBuffer) : (meta.reservedSheets || []);
-            return publish(sheets, bo, Object.assign({}, meta, { rtlSheets, reservedSheets }));
+            const rtlSheets = meta.rtlBuffer && meta.rtlBuffer.length
+                ? sheetGridsFromBuffer(meta.rtlBuffer)
+                : (meta.rtlSheets && meta.rtlSheets.length ? meta.rtlSheets : sheetsFromStored(options.readStoredRtl));
+            const salesSheets = meta.salesBuffer && meta.salesBuffer.length
+                ? sheetGridsFromBuffer(meta.salesBuffer)
+                : (meta.salesSheets && meta.salesSheets.length ? meta.salesSheets : sheetsFromStored(options.readStoredSales));
+            const reservedSheets = meta.reservedBuffer && meta.reservedBuffer.length
+                ? sheetGridsFromBuffer(meta.reservedBuffer)
+                : (meta.reservedSheets || []);
+            return publish(sheets, bo, Object.assign({}, meta, { rtlSheets, salesSheets, reservedSheets }));
         },
         reanalyzeActive(req) {
             if (boRulesApi) boRulesApi.reanalyzeActive(req || null, 'BO_FILE_UPDATED');

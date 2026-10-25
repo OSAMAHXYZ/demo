@@ -36,6 +36,7 @@
             <nav class="admin-nav" id="admin-nav">
                 <button class="ghost active" type="button" data-panel="overview">Overview</button>
                 <button class="ghost" type="button" data-panel="orders">Orders</button>
+                <button class="ghost" type="button" data-panel="sold">Sold VINs</button>
                 <button class="ghost" type="button" data-panel="marketing">طلبات التسويق</button>
                 <button class="ghost" type="button" data-panel="sheet">Live sheet</button>
                 <button class="ghost" type="button" data-panel="employees">Employees</button>
@@ -73,6 +74,19 @@
                     <select id="admin-expired"><option value="">All timers</option><option value="expired">Expired only</option></select>
                 </div>
                 <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
+            </section>
+            <section id="panel-sold" class="hidden">
+                <div class="toolbar">
+                    <input class="search" id="sold-search" placeholder="VIN, order, advisor">
+                    <select id="sold-kind">
+                        <option value="">All sold</option>
+                        <option value="delivered">Delivered (invoice col V)</option>
+                        <option value="proforma">Proforma</option>
+                        <option value="untracked">Not found in RTL / Sales Raw</option>
+                    </select>
+                </div>
+                <p class="st-sub" id="sold-meta" style="margin:0 0 10px;">VINs that left the reserved push · matched in RTL Stock and Sales Raw</p>
+                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Sold as</th><th>VIN</th><th>Order</th><th>Advisor</th><th>Last status</th><th>Invoice (V)</th><th>Removed</th><th>Where</th></tr></thead><tbody id="sold-rows"></tbody></table></div>
             </section>
             <section id="panel-marketing" class="hidden">
                 <section class="panel marketing-admin" style="overflow:auto;">
@@ -164,6 +178,6 @@
         </main>
         <aside id="drawer" class="drawer hidden"></aside>
     </div>
-    <script src="reserved-orders-admin.js?v=20261025admst2"></script>
+    <script src="reserved-orders-admin.js?v=20261025sold1"></script>
     <script src="bo-rules-ui.js?v=20261021np1"></script>
 </body></html>
