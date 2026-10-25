@@ -8465,6 +8465,10 @@ reservedOrdersHub = reservedOrdersApi.attachReservedOrders(app, {
   }
 });
 
+require('./toyota-internal-lease-calculator-main/lease-calculator-api').attachLeaseCalculatorApi(app, {
+  password: '1234'
+});
+
 require('./toyota-internal-lease-calculator-main/bo-data-api').attachBoDataApi(app, {
   XLSX,
   express,

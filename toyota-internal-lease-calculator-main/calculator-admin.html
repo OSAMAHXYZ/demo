@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calculator Admin · Profit rates & 50/50 offer</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --ink: #f1f5f9;
+            --muted: #94a3b8;
+            --line: rgba(148, 163, 184, 0.22);
+            --accent: #EB0A1E;
+            --ok: #34d399;
+            --warn: #fbbf24;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "IBM Plex Sans", system-ui, sans-serif;
+            background:
+                radial-gradient(900px 420px at 10% -10%, rgba(235, 10, 30, 0.18), transparent 55%),
+                radial-gradient(700px 380px at 100% 0%, rgba(52, 211, 153, 0.08), transparent 50%),
+                var(--bg);
+            color: var(--ink);
+        }
+        .gate, .app { max-width: 1180px; margin: 0 auto; padding: 28px 18px 48px; }
+        .gate { display: grid; place-items: center; min-height: 100vh; }
+        .gate-card, .panel {
+            background: rgba(30, 41, 59, 0.92);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 24px;
+            width: min(420px, 100%);
+        }
+        .hidden { display: none !important; }
+        h1, h2, h3 { font-family: "DM Sans", sans-serif; margin: 0 0 8px; letter-spacing: -0.02em; }
+        h1 { font-size: 1.65rem; }
+        p { color: var(--muted); margin: 0 0 16px; line-height: 1.45; }
+        label { display: block; font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+        input[type="password"], input[type="number"], input[type="text"], select {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #0b1220;
+            color: var(--ink);
+            font: inherit;
+        }
+        input[type="number"] { max-width: 110px; }
+        .btn {
+            border: 0;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font: 700 0.92rem "DM Sans", sans-serif;
+            cursor: pointer;
+            background: #334155;
+            color: #fff;
+        }
+        .btn.primary { background: var(--accent); }
+        .btn:disabled { opacity: 0.55; cursor: default; }
+        .top {
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+            justify-content: space-between; margin-bottom: 18px;
+        }
+        .top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .err { color: #fecaca; font-size: 0.9rem; min-height: 1.2em; margin-top: 8px; }
+        .ok { color: var(--ok); font-size: 0.9rem; min-height: 1.2em; margin-top: 8px; }
+        .bank-tabs {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+        }
+        .bank-tabs button {
+            border: 1px solid var(--line);
+            background: #0b1220;
+            color: var(--ink);
+            border-radius: 999px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font: 700 0.85rem "DM Sans", sans-serif;
+        }
+        .bank-tabs button.active {
+            background: rgba(235, 10, 30, 0.2);
+            border-color: var(--accent);
+            color: #fecaca;
+        }
+        .panel { width: auto; margin-bottom: 16px; }
+        .offer-row {
+            display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;
+            padding: 14px 16px; border-radius: 12px; background: #0b1220; border: 1px solid var(--line);
+        }
+        .offer-row label.check {
+            display: flex; align-items: center; gap: 10px; margin: 0; color: var(--ink); font-size: 1rem; cursor: pointer;
+        }
+        .offer-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+        .offer-fields {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 14px;
+        }
+        .offer-fields.disabled { opacity: 0.45; pointer-events: none; }
+        .meta-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 14px;
+        }
+        .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+        th {
+            position: sticky; top: 0; background: #162033; color: #cbd5e1;
+            font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        tbody tr:nth-child(even) td { background: rgba(15, 23, 42, 0.45); }
+        td.car { font-weight: 700; white-space: nowrap; }
+        .rate-inputs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .rate-inputs span { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+        .toolbar {
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 12px;
+        }
+        .toolbar .field { min-width: 140px; }
+        a.link { color: #93c5fd; text-decoration: none; font-weight: 700; }
+        a.link:hover { text-decoration: underline; }
+        .pill {
+            display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 800;
+            background: rgba(52, 211, 153, 0.15); color: var(--ok);
+        }
+        .pill.off { background: rgba(148, 163, 184, 0.15); color: var(--muted); }
+    </style>
+</head>
+<body>
+    <section id="gate" class="gate">
+        <form class="gate-card" id="gate-form">
+            <h1>Calculator Admin</h1>
+            <p>Set profit rate for each car in each bank, and turn the 50/50 offer on or off.</p>
+            <label for="admin-password">Admin password</label>
+            <input id="admin-password" type="password" required autocomplete="current-password">
+            <div class="err" id="gate-error"></div>
+            <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn primary" type="submit">Continue</button>
+                <a class="btn" href="hub.html">Hub</a>
+                <a class="btn" href="simple-app.html">Calculator</a>
+            </div>
+        </form>
+    </section>
+
+    <main id="app" class="app hidden">
+        <div class="top">
+            <div>
+                <h1>Calculator Admin</h1>
+                <p style="margin:0;">Profit rates feed the Payment Estimator. 50/50 OFFER checkbox controls the offer tab.</p>
+            </div>
+            <div class="top-actions">
+                <a class="link" href="simple-app.html">Open calculator</a>
+                <a class="link" href="hub.html">Hub</a>
+                <button class="btn" type="button" id="btn-reload">Reload</button>
+                <button class="btn primary" type="button" id="btn-save">Save changes</button>
+                <button class="btn" type="button" id="btn-out">Sign out</button>
+            </div>
+        </div>
+        <div class="ok" id="save-ok"></div>
+        <div class="err" id="save-err"></div>
+
+        <div class="bank-tabs" id="bank-tabs"></div>
+
+        <section class="panel" id="bank-panel">
+            <h2 id="bank-title">Bank</h2>
+            <div class="meta-grid">
+                <div>
+                    <label>Default profit rate %</label>
+                    <input type="number" id="default-profit" min="0" max="100" step="0.01">
+                </div>
+                <div>
+                    <label>Interest rate %</label>
+                    <input type="number" id="interest-rate" min="0" max="100" step="0.01">
+                </div>
+                <div>
+                    <label>Admin fees %</label>
+                    <input type="number" id="admin-fees" min="0" max="100" step="0.01">
+                </div>
+            </div>
+
+            <h3 style="margin-top:20px;">50/50 OFFER</h3>
+            <div class="offer-row">
+                <label class="check">
+                    <input type="checkbox" id="has-5050">
+                    This bank has a <strong>50% / 50%</strong> offer
+                </label>
+                <span id="offer-pill" class="pill off">OFF</span>
+            </div>
+            <div class="offer-fields" id="offer-fields">
+                <div>
+                    <label>Offer years</label>
+                    <input type="number" id="offer-years" min="0" max="10" step="1">
+                </div>
+                <div>
+                    <label>First %</label>
+                    <input type="number" id="offer-first" min="0" max="100" step="1">
+                </div>
+                <div>
+                    <label>Second %</label>
+                    <input type="number" id="offer-second" min="0" max="100" step="1">
+                </div>
+                <div>
+                    <label>Offer profit rate %</label>
+                    <input type="number" id="offer-profit" min="0" max="100" step="0.01">
+                </div>
+                <div>
+                    <label>Crown offer profit %</label>
+                    <input type="number" id="offer-crown" min="0" max="100" step="0.01">
+                </div>
+                <div>
+                    <label>Offer admin fees %</label>
+                    <input type="number" id="offer-admin" min="0" max="100" step="0.01">
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="toolbar">
+                <div class="field" style="flex:1 1 180px;">
+                    <label>Filter cars</label>
+                    <input type="text" id="car-filter" placeholder="Search car or year" dir="auto">
+                </div>
+                <div class="field">
+                    <label>Year filter</label>
+                    <select id="year-filter">
+                        <option value="">All years</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026">2026</option>
+                        <option value="2027">2027</option>
+                    </select>
+                </div>
+                <button class="btn" type="button" id="btn-add-rate">Add car rate</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Car / key</th>
+                            <th>Year</th>
+                            <th>Profit rate % (ST)</th>
+                            <th>NST %</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rate-rows"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+    (function () {
+        const PASS_KEY = 'calculator-admin-pass';
+        const YEARS = ['2024', '2025', '2026', '2027'];
+        const CAR_KEYS = [
+            'Yaris', 'Corolla', 'Corolla_HEV', 'Camry', 'Camry_HEV', 'Crown', 'GR86', 'Supra',
+            'Raize', 'Urban_Cruiser', 'Corolla_Cross', 'RAV4', 'Fortuner', 'Prado',
+            'Land_Cruiser', 'Highlander', 'Veloz', 'Innova', 'Hilux_DC', 'Hilux_SC'
+        ];
+
+        let banks = [];
+        let cars = {};
+        let activeBankId = null;
+        let dirty = false;
+
+        const $ = (id) => document.getElementById(id);
+        function password() { return sessionStorage.getItem(PASS_KEY) || ''; }
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+        function num(el, fallback) {
+            const n = Number(el && el.value);
+            return Number.isFinite(n) ? n : fallback;
+        }
+        function markDirty() {
+            dirty = true;
+            $('save-ok').textContent = '';
+            $('save-err').textContent = '';
+        }
+        function showGate(msg) {
+            $('gate').classList.remove('hidden');
+            $('app').classList.add('hidden');
+            $('gate-error').textContent = msg || '';
+        }
+        function showApp() {
+            $('gate').classList.add('hidden');
+            $('app').classList.remove('hidden');
+        }
+        function activeBank() {
+            return banks.find((b) => b.id === activeBankId) || banks[0] || null;
+        }
+        function rateKey(carKey, year) {
+            return `${carKey}_${year}`;
+        }
+        function parseRateKey(key) {
+            const m = String(key || '').match(/^(.*)_(\d{4})$/);
+            if (!m) return { car: key, year: '' };
+            return { car: m[1], year: m[2] };
+        }
+        function ensureSpecialRates(bank) {
+            if (!bank.specialRates || typeof bank.specialRates !== 'object') bank.specialRates = {};
+            return bank.specialRates;
+        }
+        function seedMissingRates(bank) {
+            const rates = ensureSpecialRates(bank);
+            const defaultRate = Number(bank.profitRate) || Number(bank.interestRate) || 0;
+            const carNames = Object.keys(cars || {});
+            const keys = new Set(CAR_KEYS);
+            carNames.forEach((name) => {
+                const key = String(name).replace(/\s+/g, '_');
+                keys.add(key);
+            });
+            YEARS.forEach((year) => {
+                keys.forEach((carKey) => {
+                    const k = rateKey(carKey, year);
+                    if (!rates[k]) {
+                        // Only seed current/common years lightly for known cars already present
+                        if (rates[rateKey(carKey, '2025')] || rates[rateKey(carKey, '2026')] || Object.keys(rates).some((x) => x.startsWith(carKey + '_'))) {
+                            // leave missing years blank unless bank already has that car
+                        }
+                    }
+                });
+            });
+            return rates;
+        }
+
+        async function api(url, options) {
+            const res = await fetch(url, options);
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 401) {
+                sessionStorage.removeItem(PASS_KEY);
+                showGate('Password was not accepted.');
+                throw new Error('unauthorized');
+            }
+            if (!res.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        function renderTabs() {
+            $('bank-tabs').innerHTML = banks.map((bank) => {
+                const on = bank.id === activeBankId ? ' active' : '';
+                const offer = bank.hasSpecialOffer ? ' · 50/50' : '';
+                return `<button type="button" data-bank="${bank.id}" class="${on}">${esc(bank.name || ('Bank ' + bank.id))}${offer}</button>`;
+            }).join('');
+        }
+
+        function syncOfferUi(bank) {
+            const on = Boolean(bank.hasSpecialOffer);
+            $('has-5050').checked = on;
+            $('offer-pill').textContent = on ? 'ON' : 'OFF';
+            $('offer-pill').className = on ? 'pill' : 'pill off';
+            $('offer-fields').classList.toggle('disabled', !on);
+            $('offer-years').value = bank.specialOfferYears != null ? bank.specialOfferYears : 2;
+            $('offer-first').value = bank.specialOfferFirstPercent != null ? bank.specialOfferFirstPercent : 50;
+            $('offer-second').value = bank.specialOfferSecondPercent != null ? bank.specialOfferSecondPercent : 50;
+            $('offer-profit').value = bank.specialOfferProfitRate != null ? bank.specialOfferProfitRate : 0;
+            $('offer-crown').value = bank.specialOfferCrownProfitRate != null ? bank.specialOfferCrownProfitRate : 0;
+            $('offer-admin').value = bank.specialOfferAdminFees != null ? bank.specialOfferAdminFees : 0;
+        }
+
+        function collectBankMeta(bank) {
+            bank.profitRate = num($('default-profit'), bank.profitRate || 0);
+            bank.interestRate = num($('interest-rate'), bank.interestRate || 0);
+            bank.adminFees = num($('admin-fees'), bank.adminFees || 0);
+            bank.hasSpecialOffer = $('has-5050').checked;
+            bank.specialOfferYears = num($('offer-years'), 0);
+            bank.specialOfferFirstPercent = num($('offer-first'), 50);
+            bank.specialOfferSecondPercent = num($('offer-second'), 50);
+            bank.specialOfferProfitRate = num($('offer-profit'), 0);
+            bank.specialOfferCrownProfitRate = num($('offer-crown'), 0);
+            bank.specialOfferAdminFees = num($('offer-admin'), 0);
+        }
+
+        function collectRatesFromDom(bank) {
+            const rates = ensureSpecialRates(bank);
+            document.querySelectorAll('#rate-rows tr[data-key]').forEach((row) => {
+                const key = row.dataset.key;
+                const st = Number(row.querySelector('[data-st]')?.value);
+                const nst = Number(row.querySelector('[data-nst]')?.value);
+                if (!Number.isFinite(st) && !Number.isFinite(nst)) {
+                    delete rates[key];
+                    return;
+                }
+                const value = Number.isFinite(st) ? st : nst;
+                rates[key] = {
+                    ST: Number.isFinite(st) ? st : value,
+                    NST: Number.isFinite(nst) ? nst : value
+                };
+            });
+        }
+
+        function renderRates() {
+            const bank = activeBank();
+            if (!bank) {
+                $('rate-rows').innerHTML = '<tr><td colspan="5">No banks loaded.</td></tr>';
+                return;
+            }
+            const q = ($('car-filter').value || '').trim().toLowerCase();
+            const yearFilter = $('year-filter').value;
+            const rates = seedMissingRates(bank);
+            const keys = Object.keys(rates).sort((a, b) => a.localeCompare(b));
+            const rows = keys.filter((key) => {
+                const { car, year } = parseRateKey(key);
+                if (yearFilter && year !== yearFilter) return false;
+                if (!q) return true;
+                return key.toLowerCase().includes(q) || car.toLowerCase().includes(q);
+            });
+            $('rate-rows').innerHTML = rows.length
+                ? rows.map((key) => {
+                    const { car, year } = parseRateKey(key);
+                    const rate = rates[key] || {};
+                    const st = rate.ST != null ? rate.ST : '';
+                    const nst = rate.NST != null ? rate.NST : st;
+                    return `<tr data-key="${esc(key)}">
+                        <td class="car">${esc(car.replace(/_/g, ' '))}</td>
+                        <td>${esc(year || '—')}</td>
+                        <td><div class="rate-inputs"><span>ST</span><input type="number" min="0" max="100" step="0.01" data-st value="${esc(st)}"></div></td>
+                        <td><div class="rate-inputs"><span>NST</span><input type="number" min="0" max="100" step="0.01" data-nst value="${esc(nst)}"></div></td>
+                        <td><button class="btn" type="button" data-remove="${esc(key)}">Remove</button></td>
+                    </tr>`;
+                }).join('')
+                : '<tr><td colspan="5">No rates for this filter. Use Add car rate.</td></tr>';
+        }
+
+        function renderBank() {
+            const bank = activeBank();
+            if (!bank) return;
+            $('bank-title').textContent = bank.name || ('Bank ' + bank.id);
+            $('default-profit').value = bank.profitRate != null ? bank.profitRate : (bank.interestRate || 0);
+            $('interest-rate').value = bank.interestRate != null ? bank.interestRate : 0;
+            $('admin-fees').value = bank.adminFees != null ? bank.adminFees : 0;
+            syncOfferUi(bank);
+            renderRates();
+        }
+
+        function selectBank(id) {
+            const prev = activeBank();
+            if (prev) {
+                collectBankMeta(prev);
+                collectRatesFromDom(prev);
+            }
+            activeBankId = id;
+            renderTabs();
+            renderBank();
+        }
+
+        async function load() {
+            const data = await api('/api/banks');
+            banks = Array.isArray(data.banks) ? data.banks : [];
+            cars = data.cars || {};
+            if (!banks.length) throw new Error('No banks found in admin-data.json');
+            if (activeBankId == null || !banks.some((b) => b.id === activeBankId)) {
+                activeBankId = banks[0].id;
+            }
+            dirty = false;
+            renderTabs();
+            renderBank();
+            $('save-ok').textContent = 'Loaded ' + banks.length + ' banks.';
+        }
+
+        async function save() {
+            const bank = activeBank();
+            if (bank) {
+                collectBankMeta(bank);
+                collectRatesFromDom(bank);
+            }
+            $('save-ok').textContent = 'Saving…';
+            $('save-err').textContent = '';
+            try {
+                await api('/api/banks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password(), banks })
+                });
+                dirty = false;
+                renderTabs();
+                $('save-ok').textContent = 'Saved. Calculator will use these rates on refresh.';
+            } catch (e) {
+                if (e.message !== 'unauthorized') $('save-err').textContent = e.message || 'Save failed.';
+            }
+        }
+
+        $('gate-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            sessionStorage.setItem(PASS_KEY, $('admin-password').value);
+            $('admin-password').value = '';
+            try {
+                await load();
+                showApp();
+            } catch (e) {
+                if (e.message !== 'unauthorized') $('gate-error').textContent = e.message || 'Could not load.';
+            }
+        });
+        $('btn-out').addEventListener('click', () => {
+            sessionStorage.removeItem(PASS_KEY);
+            showGate('');
+        });
+        $('btn-reload').addEventListener('click', async () => {
+            try { await load(); } catch (e) { if (e.message !== 'unauthorized') $('save-err').textContent = e.message; }
+        });
+        $('btn-save').addEventListener('click', save);
+        $('bank-tabs').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-bank]');
+            if (!btn) return;
+            selectBank(Number(btn.dataset.bank));
+        });
+        ['default-profit', 'interest-rate', 'admin-fees', 'offer-years', 'offer-first', 'offer-second', 'offer-profit', 'offer-crown', 'offer-admin']
+            .forEach((id) => $(id).addEventListener('input', markDirty));
+        $('has-5050').addEventListener('change', () => {
+            const bank = activeBank();
+            if (!bank) return;
+            bank.hasSpecialOffer = $('has-5050').checked;
+            if (bank.hasSpecialOffer && !bank.specialOfferYears) bank.specialOfferYears = 2;
+            if (bank.hasSpecialOffer && bank.specialOfferFirstPercent == null) bank.specialOfferFirstPercent = 50;
+            if (bank.hasSpecialOffer && bank.specialOfferSecondPercent == null) bank.specialOfferSecondPercent = 50;
+            syncOfferUi(bank);
+            markDirty();
+            renderTabs();
+        });
+        $('car-filter').addEventListener('input', () => {
+            const bank = activeBank();
+            if (bank) collectRatesFromDom(bank);
+            renderRates();
+        });
+        $('year-filter').addEventListener('change', () => {
+            const bank = activeBank();
+            if (bank) collectRatesFromDom(bank);
+            renderRates();
+        });
+        $('rate-rows').addEventListener('input', markDirty);
+        $('rate-rows').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-remove]');
+            if (!btn) return;
+            const bank = activeBank();
+            if (!bank) return;
+            collectRatesFromDom(bank);
+            delete ensureSpecialRates(bank)[btn.dataset.remove];
+            markDirty();
+            renderRates();
+        });
+        $('btn-add-rate').addEventListener('click', () => {
+            const bank = activeBank();
+            if (!bank) return;
+            collectRatesFromDom(bank);
+            const car = prompt('Car key (example: Yaris, Urban_Cruiser, Hilux_DC)');
+            if (!car) return;
+            const year = prompt('Model year (2024 / 2025 / 2026 / 2027)', '2026');
+            if (!year) return;
+            const carKey = String(car).trim().replace(/\s+/g, '_');
+            const key = rateKey(carKey, String(year).trim());
+            const rates = ensureSpecialRates(bank);
+            if (rates[key]) {
+                alert('That rate already exists.');
+                return;
+            }
+            const fallback = Number(bank.profitRate) || 0;
+            rates[key] = { ST: fallback, NST: fallback };
+            markDirty();
+            renderRates();
+        });
+
+        if (password()) {
+            load().then(showApp).catch(() => showGate('Sign in again.'));
+        }
+    })();
+    </script>
+</body>
+</html>
