@@ -1374,8 +1374,15 @@ const SEEDED_EMPLOYEES = [
     ['50863', 'Muhannad Abdullah Makdour Minyawi', 'emp-muhannad'],
     ['46661', 'Maqbool Omar Ashour', 'emp-maqbool'],
     ['48476', 'Tawdod Al Sharef', 'emp-tawdod'],
-    ['48476', 'Ali Muharraq A Alharbi', 'emp-ali-muharraq']
-].map(([id, name, recordId]) => ({ recordId, id, name, role: 'employee', active: true }));
+    ['48476', 'Ali Muharraq A Alharbi', 'emp-ali-muharraq'],
+    // Provisional employee IDs — update in Admin → Employees if needed.
+    // These two may edit any order whose order number starts with 5.
+    ['51901', 'Reda Salah', 'emp-reda-salah'],
+    ['51902', 'Mohammed Al Fadul', 'emp-mohammed-al-fadul']
+].map(([id, name, recordId]) => {
+    const canEditOrdersStartingWith5 = recordId === 'emp-reda-salah' || recordId === 'emp-mohammed-al-fadul';
+    return { recordId, id, name, role: 'employee', active: true, canEditOrdersStartingWith5 };
+});
 
 function attachReservedOrders(app, options) {
     const liveFile = path.join(options.storeDir, 'reserved-orders-live.json');
@@ -1575,16 +1582,35 @@ function attachReservedOrders(app, options) {
             id: String(person.id || ''),
             name: String(person.name || ''),
             role: person.role === 'admin' ? 'admin' : 'employee',
-            active: person.active !== false
+            active: person.active !== false,
+            canEditOrdersStartingWith5: !!person.canEditOrdersStartingWith5
         }));
         SEEDED_EMPLOYEES.forEach((seed) => {
-            if (!staff.some((person) => person.recordId === seed.recordId)) staff.push({ ...seed });
+            let existing = staff.find((person) => person.recordId === seed.recordId);
+            if (!existing && seed.canEditOrdersStartingWith5) {
+                const seedName = String(seed.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                existing = staff.find((person) => String(person.name || '').replace(/\s+/g, ' ').trim().toLowerCase() === seedName);
+            }
+            if (!existing) {
+                staff.push({ ...seed });
+                return;
+            }
+            if (seed.canEditOrdersStartingWith5) existing.canEditOrdersStartingWith5 = true;
         });
         saveStaff(staff);
         return staff;
     }
     function personKey(value) {
         return cleanText(value).replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+    function orderNumberStartsWith5(order) {
+        return String(order && order.orderNumber || '').trim().startsWith('5');
+    }
+    function isOrder5Editor(user) {
+        if (!user) return false;
+        if (user.canEditOrdersStartingWith5) return true;
+        const key = personKey(user.name);
+        return key === 'reda salah' || key === 'mohammed al fadul';
     }
     function responsibleAdvisor(order) {
         const fields = Array.isArray(order && order.fields) ? order.fields : [];
@@ -1594,6 +1620,7 @@ function attachReservedOrders(app, options) {
         return text;
     }
     function advisorOwnsOrder(user, order) {
+        if (isOrder5Editor(user) && orderNumberStartsWith5(order)) return true;
         const advisor = personKey(responsibleAdvisor(order));
         if (!user || !advisor) return false;
         if (personKey(user.name) === advisor) return true;
@@ -1604,7 +1631,16 @@ function attachReservedOrders(app, options) {
         if (!session) return null;
         const person = loadStaff().find((item) => item.recordId === session.recordId && item.active !== false);
         if (!person) return null;
-        return { name: person.name, employeeNumber: person.id, recordId: person.recordId, role: person.role || 'employee' };
+        const canEditOrdersStartingWith5 = !!person.canEditOrdersStartingWith5
+            || personKey(person.name) === 'reda salah'
+            || personKey(person.name) === 'mohammed al fadul';
+        return {
+            name: person.name,
+            employeeNumber: person.id,
+            recordId: person.recordId,
+            role: person.role || 'employee',
+            canEditOrdersStartingWith5
+        };
     }
     function clientIp(req) {
         return String((req && req.headers && req.headers['x-forwarded-for']) || (req && req.ip) || '').split(',')[0].trim();
@@ -1817,7 +1853,17 @@ function attachReservedOrders(app, options) {
         const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
         sessions.set(token, { recordId: person.recordId });
         audit(req, { user: person.name, employeeNumber: person.id, recordId: person.recordId, role: person.role, action: 'LOGIN', entity: 'session', source: 'employee' });
-        res.json({ token, name: person.name, recordId: person.recordId, employeeNumber: person.id, role: person.role || 'employee' });
+        const canEditOrdersStartingWith5 = !!person.canEditOrdersStartingWith5
+            || personKey(person.name) === 'reda salah'
+            || personKey(person.name) === 'mohammed al fadul';
+        res.json({
+            token,
+            name: person.name,
+            recordId: person.recordId,
+            employeeNumber: person.id,
+            role: person.role || 'employee',
+            canEditOrdersStartingWith5
+        });
     });
     app.post('/api/reserved-orders/logout', (req, res) => {
         const user = sessionUser(req.body?.token);

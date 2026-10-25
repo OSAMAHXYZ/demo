@@ -462,9 +462,19 @@
     function personKey(value) {
         return String(value || '').replace(/\u00a0/g, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
     }
+    function orderNumberStartsWith5(order) {
+        return String(order && order.orderNumber || '').trim().startsWith('5');
+    }
+    function isOrder5Editor(session) {
+        if (!session) return false;
+        if (session.canEditOrdersStartingWith5) return true;
+        const key = personKey(session.name);
+        return key === 'reda salah' || key === 'mohammed al fadul';
+    }
     function canUpdateOrder(order) {
         const session = readSession();
         if (!session || !order) return false;
+        if (isOrder5Editor(session) && orderNumberStartsWith5(order)) return true;
         const advisor = personKey(columnText(order, 'T') || order.salesAdvisor);
         if (!advisor || advisor === 'unassigned') return false;
         if (personKey(session.name) === advisor) return true;
@@ -1072,7 +1082,14 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { $('login-error').textContent = data.error || 'Could not sign in.'; return; }
-        writeSession({ token: data.token, name: data.name, employeeNumber: data.employeeNumber, recordId: data.recordId, last: Date.now() });
+        writeSession({
+            token: data.token,
+            name: data.name,
+            employeeNumber: data.employeeNumber,
+            recordId: data.recordId,
+            canEditOrdersStartingWith5: !!data.canEditOrdersStartingWith5,
+            last: Date.now()
+        });
         $('employee-id').value = '';
         openApp();
     });
