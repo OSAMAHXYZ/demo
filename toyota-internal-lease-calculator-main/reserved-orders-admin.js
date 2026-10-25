@@ -52,13 +52,41 @@
         }
         return order && order.deadline || '';
     }
-    function remain(order) {
+    function remainMs(order) {
         const end = parseLocal(orderDeadline(order));
-        if (!end) return 'NO ASSIGN DATE';
-        const ms = end.getTime() - Date.now();
+        return end ? end.getTime() - Date.now() : null;
+    }
+    function remain(order) {
+        const ms = remainMs(order);
+        if (ms == null) return 'NO ASSIGN DATE';
         if (ms <= 0) return 'EXPIRED';
         const total = Math.floor(ms / 1000);
         return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+    }
+    // Green until 4h past expiry; yellow from 4–8h overdue; red after another 4h (8h+ overdue).
+    function timerTone(ms) {
+        if (ms == null) return '';
+        if (ms > -4 * 3600000) return 'is-ok';
+        if (ms > -8 * 3600000) return 'is-warn';
+        return 'is-bad';
+    }
+    function isCancelledStatus(order) {
+        return String(order && order.status || '').trim() === 'الغاء';
+    }
+    function formatExpiryDate(order) {
+        if (order && order.expiryDisplay && String(order.expiryDisplay).trim()) return String(order.expiryDisplay).trim();
+        if (order && order.expiryDate && parseLocal(order.expiryDate)) {
+            return parseLocal(order.expiryDate).toLocaleString('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: true
+            });
+        }
+        const end = parseLocal(orderDeadline(order));
+        if (!end) return '—';
+        return end.toLocaleString('en-GB', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: true
+        });
     }
     function statusSelectHtml(order) {
         const value = order.status || '';
@@ -353,13 +381,13 @@
     }
     function carRows() { return orders.filter(hasVin); }
     function expiryText(order) {
-        const end = parseLocal(order.deadline);
-        if (!end) return 'No assign date';
-        return end.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return formatExpiryDate(order);
     }
     function expiryCells(order) {
         if (!EXPIRY_TYPES.has(salesTypeOf(order))) return '<td class="st-na">—</td><td class="st-na">—</td>';
-        return `<td>${esc(expiryText(order))}</td><td class="timer-cell st-timer" data-deadline="${esc(order.deadline || '')}">${esc(remain(order))}</td>`;
+        const deadline = orderDeadline(order);
+        const ms = remainMs(order);
+        return `<td>${esc(expiryText(order))}</td><td class="timer-cell st-timer ${timerTone(ms)}" data-deadline="${esc(deadline || '')}">${esc(remain(order))}</td>`;
     }
     function renderSalesTypes() {
         const cardsBox = $('st-cards');
@@ -397,7 +425,7 @@
         const title = salesTypePick === '' ? 'All cars' : salesTypePick === 'blank' ? 'Cars with no sales type' : `Sales type ${salesTypePick}${SALES_TYPE_NAMES[salesTypePick] ? ' · ' + SALES_TYPE_NAMES[salesTypePick] : ''}`;
         box.innerHTML = `<div class="st-detail-head"><h3>${esc(title)}</h3><span>${list.length} car${list.length === 1 ? '' : 's'}</span></div>
             <div class="st-table"><table><thead><tr><th>Queue</th><th>Status</th><th>Type</th><th>Order</th><th>VIN</th><th>Model</th><th>Customer</th><th>Salesman</th><th>Expiry</th><th>Time left</th></tr></thead><tbody>${
-            list.map((order) => `<tr data-open="${esc(order.key)}" class="st-row">
+            list.map((order) => `<tr data-open="${esc(order.key)}" class="st-row${isCancelledStatus(order) ? ' row-cancelled' : ''}">
                 <td><span class="q-pill">#${order.queueNumber == null ? '—' : order.queueNumber}</span></td>
                 <td>${statusPill(order.status)}</td>
                 <td><span class="st-type">${esc(salesTypeOf(order) || '—')}</span></td>
@@ -458,14 +486,16 @@
         }).sort((a, b) => (a.queueNumber || 0) - (b.queueNumber || 0));
         $('admin-rows').innerHTML = rows.map((order) => {
             const deadline = orderDeadline(order);
-            return `<tr>
+            const ms = remainMs(order);
+            return `<tr class="${isCancelledStatus(order) ? 'row-cancelled' : ''}">
             <td>#${order.queueNumber == null ? '—' : order.queueNumber}</td>
             <td>${esc(order.orderNumber || 'NO ORDER')}</td>
             <td>${esc(order.vin || 'VIN NOT FOUND')}</td>
             <td>${esc(order.salesAdvisor || 'UNASSIGNED')}</td>
             <td>${paymentCell(order)}</td>
             <td class="col-status">${statusSelectHtml(order)}</td>
-            <td class="timer-cell" data-deadline="${esc(deadline)}">${esc(remain(order))}</td>
+            <td class="col-expiry">${esc(formatExpiryDate(order))}</td>
+            <td class="timer-cell ${timerTone(ms)}" data-deadline="${esc(deadline)}">${esc(remain(order))}</td>
             <td>${order.statusChangedBy ? `<div><b>${esc(order.statusChangedBy)}</b><br><small class="saudi-time">${esc(order.statusChangedDisplay || order.statusChangedAt || '')}</small></div>` : ''}${order.leaderNote ? '<span class="s-pill is-info" title="Has leader note">Note</span> ' : ''}<button class="ghost" type="button" data-open="${esc(order.key)}">View</button></td>
         </tr>`;
         }).join('');
@@ -489,7 +519,7 @@
         $('drawer').classList.remove('hidden');
         $('drawer').innerHTML = `<button class="ghost" id="close-drawer" type="button">Close</button>
             <h2>Order #${esc(order.orderNumber || 'NO ORDER')}</h2>
-            <p>${esc(order.vin)} · ${esc(order.vehicle || '')}<br>Status ${esc(order.status)} · Queue #${order.queueNumber == null ? '—' : order.queueNumber}<br>Deadline ${esc(order.deadline || 'NO ASSIGN DATE')}</p>
+            <p>${esc(order.vin)} · ${esc(order.vehicle || '')}<br>Status ${esc(order.status)} · Queue #${order.queueNumber == null ? '—' : order.queueNumber}<br>Expiry ${esc(formatExpiryDate(order))} · Time left ${esc(remain(order))}</p>
             <p><b>Last status change:</b> ${esc(lastBy)} · <span class="saudi-time">${esc(lastAt)}</span></p>
             <h3>Leader note</h3>
             <p class="muted">Only admin can write notes. Employees can read this on their page.</p>
@@ -660,9 +690,10 @@
     }
     function sheetColumns(list, source) {
         if (source === 'merged') {
-            const meta = ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry'];
+            const meta = ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left'];
             const titles = {
-                Expiry: 'Expiry',
+                Expiry: 'Expiry date',
+                'Time left': 'Time left',
                 Source: 'Source',
                 'Leader note': 'Leader note',
                 'Updated by': 'Updated by',
@@ -673,9 +704,11 @@
             return { cols: meta.concat(MERGED_COL_ORDER), titles };
         }
         const meta = source === 'reserved'
-            ? ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry']
-            : ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead'];
+            ? ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left']
+            : ['Queue', 'Status', 'Updated by', 'Updated at', 'Leader note', 'BO ahead', 'Expiry', 'Time left'];
         const titles = {
+            Expiry: 'Expiry date',
+            'Time left': 'Time left',
             'Leader note': 'Leader note',
             'Updated by': 'Updated by',
             'Updated at': 'Updated at (Saudi)'
@@ -747,15 +780,10 @@
             }) + ' (Saudi)';
         }
         if (label === 'Expiry') {
-            if (source === 'merged') return order.mergedExpiry || '';
-            if (order.expiryDisplay) return order.expiryDisplay;
-            if (order.expiryDate) {
-                const parsed = parseLocal(order.expiryDate);
-                return parsed ? parsed.toLocaleDateString('en-GB') : order.expiryDate;
-            }
-            const j = orderSheetFields(order, source).find((item) => String(item.col || '').toUpperCase() === 'J');
-            return j && j.value != null && j.value !== '—' ? String(j.value) : '';
+            if (source === 'merged' && order.mergedExpiry) return order.mergedExpiry;
+            return formatExpiryDate(order);
         }
+        if (label === 'Time left') return remain(order);
         if (source === 'merged') {
             if (label === 'Source') return order.mergeSource || '';
             const merged = (order.mergedFields || []).find((item) => item.label === label || item.col === label);
@@ -854,6 +882,11 @@
                     : '<td class="col-updated-at"><span class="ahead-empty">—</span></td>';
             }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
+            if (label === 'Expiry') return `<td class="col-expiry">${esc(value || '—')}</td>`;
+            if (label === 'Time left') {
+                const ms = remainMs(order);
+                return `<td class="timer-cell ${timerTone(ms)}" data-deadline="${esc(orderDeadline(order) || '')}">${esc(value || '—')}</td>`;
+            }
             if (label === 'BO ahead') return aheadCellHtml(order);
             if (label === 'Source') {
                 const tone = value === 'Both' ? 'is-both' : value === 'Reserved' ? 'is-reserved' : 'is-esales';
@@ -878,7 +911,13 @@
                 : 'No Stock E-Sales rows yet. Push Stock E-Sales to fill this sheet.';
         const note = noVin ? `<div class="sheet-novin">${noVin} row${noVin === 1 ? '' : 's'} without a VIN ${showNoVinRows ? 'shown' : 'hidden'} (totals or extra tables in the file) <button type="button" class="ghost sheet-novin-toggle">${showNoVinRows ? 'Hide them' : 'Show them'}</button></div>` : '';
         box.innerHTML = rows.length
-            ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => `<tr class="${hasVin(order) ? '' : 'is-novin'}">${cols.map((label) => cell(order, label)).join('')}</tr>`).join('')}</tbody></table>`
+            ? `${note}<table><thead><tr>${cols.map(head).join('')}</tr></thead><tbody>${rows.map((order) => {
+                const classes = [
+                    hasVin(order) ? '' : 'is-novin',
+                    isCancelledStatus(order) ? 'row-cancelled' : ''
+                ].filter(Boolean).join(' ');
+                return `<tr class="${classes}">${cols.map((label) => cell(order, label)).join('')}</tr>`;
+            }).join('')}</tbody></table>`
             : `${note}<p class="empty">${emptyMsg}</p>`;
     }
     function renderSheet() {
@@ -1230,8 +1269,15 @@
     setInterval(() => {
         document.querySelectorAll('.timer-cell').forEach((cell) => {
             const end = parseLocal(cell.dataset.deadline);
-            if (!end) { cell.textContent = 'NO ASSIGN DATE'; return; }
+            if (!end) {
+                cell.textContent = 'NO ASSIGN DATE';
+                cell.classList.remove('is-ok', 'is-warn', 'is-bad');
+                return;
+            }
             const ms = end.getTime() - Date.now();
+            cell.classList.remove('is-ok', 'is-warn', 'is-bad');
+            const tone = timerTone(ms);
+            if (tone) cell.classList.add(tone);
             if (ms <= 0) { cell.textContent = 'EXPIRED'; return; }
             const total = Math.floor(ms / 1000);
             cell.textContent = `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;

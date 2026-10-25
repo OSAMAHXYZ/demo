@@ -414,38 +414,49 @@ body.dash #app.tower-app { height: 100vh; min-height: 0; }
     flex: 0 0 auto;
 }
 #app .order-block.expired { box-shadow: inset 3px 0 0 #fb7185; }
-#app .order-block.cancelled {
-    background: #7f1d1d;
-    border-color: #EB0A1E;
-    box-shadow: 0 0 0 1px rgba(235, 10, 30, 0.55), 0 10px 28px rgba(127, 29, 29, 0.45);
-    color: #fff;
-}
+#app .order-block.cancelled,
 #app .order-block.cancelled .lane,
+#app .order-block.cancelled .order-notes,
 #app .order-block.cancelled .excel-row,
-#app .order-block.cancelled .bo-toggle { color: #fff; }
+#app .order-block.cancelled .bo-toggle {
+    background: #9f1239 !important;
+    border-color: #EB0A1E !important;
+    color: #fff !important;
+}
+#app .order-block.cancelled {
+    box-shadow: 0 0 0 2px rgba(235, 10, 30, 0.75), 0 12px 32px rgba(127, 29, 29, 0.55);
+}
 #app .order-block.cancelled .excel-row,
 #app .order-block.cancelled .bo-toggle,
 #app .order-block.cancelled .thumb,
-#app .order-block.cancelled .status-row select {
-    background: #5c1018;
-    border-color: rgba(255, 255, 255, 0.18);
-    color: #fff;
+#app .order-block.cancelled .status-row select,
+#app .order-block.cancelled .note-block {
+    background: #7f1d1d !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    color: #fff !important;
 }
 #app .order-block.cancelled .lane .muted,
 #app .order-block.cancelled .meta > span,
 #app .order-block.cancelled .excel-field span,
 #app .order-block.cancelled .status-lock,
 #app .order-block.cancelled .status-glow small,
-#app .order-block.cancelled .ahead-empty { color: #fecaca; }
+#app .order-block.cancelled .ahead-empty,
+#app .order-block.cancelled .order-notes .muted,
+#app .order-block.cancelled .order-notes small { color: #fecaca !important; }
 #app .order-block.cancelled .meta > b,
 #app .order-block.cancelled .lane-id > b,
 #app .order-block.cancelled .excel-field b,
-#app .order-block.cancelled .ahead-list b { color: #fff; }
+#app .order-block.cancelled .ahead-list b,
+#app .order-block.cancelled .order-notes p,
+#app .order-block.cancelled .order-notes h4 { color: #fff !important; }
 #app .order-block.cancelled .badge.cancel {
-    background: #EB0A1E;
-    color: #fff;
+    background: #EB0A1E !important;
+    color: #fff !important;
     box-shadow: 0 0 18px rgba(255, 90, 100, 0.9);
 }
+#app .order-block.cancelled .timer.ok,
+#app .order-block.cancelled .timer.soon,
+#app .order-block.cancelled .timer.expired { color: #fecaca !important; }
 #app .lane.no-specs { grid-template-columns: 168px minmax(280px, 1fr) 228px; }
 #app .lane {
     display: grid;

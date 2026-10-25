@@ -861,7 +861,38 @@
   .st-table td { white-space: nowrap; }
   .st-row { cursor: pointer; }
   .st-na { color: #6f7f97; }
-  .st-timer { font-family: var(--ro-num); font-weight: 700; color: var(--ro-amber); }
+  .st-timer { font-family: var(--ro-num); font-weight: 700; color: #34d399; }
+  .st-timer.is-ok,
+  .timer-cell.is-ok { color: #34d399 !important; }
+  .st-timer.is-warn,
+  .timer-cell.is-warn { color: #fbbf24 !important; }
+  .st-timer.is-bad,
+  .timer-cell.is-bad { color: #fb7185 !important; }
+  #admin-app tr.row-cancelled > td {
+    background: rgba(235, 10, 30, 0.22) !important;
+    color: #fecaca !important;
+    border-color: rgba(235, 10, 30, 0.35) !important;
+  }
+  #admin-app tr.row-cancelled .s-pill,
+  #admin-app tr.row-cancelled .saudi-time,
+  #admin-app tr.row-cancelled .muted,
+  #admin-app tr.row-cancelled .ahead-empty { color: #fecaca !important; }
+  #admin-app tr.row-cancelled .admin-status-select,
+  #admin-app tr.row-cancelled .ghost {
+    background: rgba(127, 29, 29, 0.85) !important;
+    color: #fff !important;
+    border-color: rgba(235, 10, 30, 0.55) !important;
+  }
+  #admin-app .excel-live tr.row-cancelled > td {
+    background: #9f1239 !important;
+    color: #fff !important;
+  }
+  #admin-app .excel-live tr.row-cancelled > td.cell-retail-ok,
+  #admin-app .excel-live tr.row-cancelled > td.cell-retail-bad,
+  #admin-app .excel-live tr.row-cancelled > td.cell-retail-empty {
+    background: #7f1d1d !important;
+    color: #fecaca !important;
+  }
   .mono { font-family: var(--ro-num); letter-spacing: 0.02em; }
   
   /* shared pills */
@@ -1254,7 +1285,8 @@
   }
   
   /* orders table timer + drawer */
-  .timer-cell { font-family: var(--ro-num); font-weight: 700; color: var(--ro-amber); white-space: nowrap; }
+  .timer-cell { font-family: var(--ro-num); font-weight: 700; color: #34d399; white-space: nowrap; }
+  .col-expiry { white-space: nowrap; font-size: 12px; }
   .drawer h2 { color: #fff; margin: 14px 0 6px; }
   .drawer h3 { color: #fff; margin: 18px 0 8px; font-size: 0.92rem; }
   .drawer p, .drawer div { color: var(--ro-ink-2); line-height: 1.55; font-size: 0.86rem; }

@@ -912,6 +912,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 at: localStamp(new Date())
             });
         }
+        // Existing VIN: keep the original deadline clock — do not recount on re-push.
+        const keepClock = Boolean(prev.deadline || prev.assignDate || prev.expiryDate);
         return {
             ...record,
             key: prev.key || record.key,
@@ -925,7 +927,16 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             leaderNote: prev.leaderNote || '',
             leaderNoteBy: prev.leaderNoteBy || '',
             leaderNoteAt: prev.leaderNoteAt || '',
-            leaderNoteDisplay: prev.leaderNoteDisplay || ''
+            leaderNoteDisplay: prev.leaderNoteDisplay || '',
+            deadline: keepClock && prev.deadline ? prev.deadline : (record.deadline || prev.deadline || ''),
+            assignDate: keepClock && prev.assignDate ? prev.assignDate : (record.assignDate || prev.assignDate || ''),
+            assignDisplay: keepClock && prev.assignDisplay ? prev.assignDisplay : (record.assignDisplay || prev.assignDisplay || ''),
+            paymentHours: keepClock && prev.paymentHours != null ? prev.paymentHours : record.paymentHours,
+            paymentKind: keepClock && prev.paymentKind ? prev.paymentKind : record.paymentKind,
+            paymentLabel: keepClock && prev.paymentLabel ? prev.paymentLabel : record.paymentLabel,
+            expiryDate: record.expiryDate || prev.expiryDate || '',
+            expiryDisplay: record.expiryDisplay || prev.expiryDisplay || '',
+            timerStartedAt: prev.timerStartedAt || prev.assignDate || prev.createdDate || record.assignDate || localStamp(new Date())
         };
     }
 
@@ -1057,6 +1068,8 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
                 if (expiry) {
                     existing.expiryDate = expiry.expiryDate;
                     existing.expiryDisplay = expiry.expiryDisplay;
+                    // Only seed the clock once — never recount on later pushes.
+                    if (!existing.deadline && expiry.expiryDate) existing.deadline = expiry.expiryDate;
                     if (!countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
                 }
                 if (!countedUpdated.has(vin)) { countedUpdated.add(vin); reservedFileUpdatedVins += 1; }

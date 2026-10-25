@@ -46,20 +46,21 @@
         const remain = formatRemain(ms);
         return remain ? `${dateText} ( ${remain} )` : dateText;
     }
+    // Green until 4h past expiry; yellow from 4–8h overdue; red after 8h overdue.
     function timerClass(ms) {
         if (ms == null) return '';
-        if (ms <= 0) return 'expired';
-        if (ms <= 6 * 3600000) return 'soon';
-        return 'ok';
+        if (ms > -4 * 3600000) return 'ok';
+        if (ms > -8 * 3600000) return 'soon';
+        return 'expired';
     }
     function isExpired(order) { const ms = remainingMs(order); return ms != null && ms <= 0; }
     function isCompleted(order) { return order.status === 'تم الفوترة'; }
     function isCancelled(order) { return order.status === 'الغاء'; }
     function isActive(order) { return !isExpired(order) && !isCompleted(order) && !isCancelled(order); }
     function isSoon(order) {
-        if (!isActive(order)) return false;
+        if (isCancelled(order) || isCompleted(order)) return false;
         const ms = remainingMs(order);
-        return ms != null && ms > 0 && ms <= 6 * 3600000;
+        return ms != null && ms <= -4 * 3600000 && ms > -8 * 3600000;
     }
     function hasNoAssign(order) { return remainingMs(order) == null; }
     function queueLabel(n) {
@@ -564,6 +565,7 @@
             </div>
             <div class="lane-side">
                 <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(expiryOn || '')}">${esc(timerLabel(expiryOn, ms))}</div>
+                <span class="muted time-left">${ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left')}</span>
                 <span class="muted">${hours} HOURS</span>
                 <div class="status-glow">
                     <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
@@ -597,11 +599,13 @@
             const ms = end ? end.getTime() - Date.now() : null;
             el.textContent = timerLabel(el.dataset.date || '', ms);
             el.className = `timer ${timerClass(ms)}`;
+            const left = el.parentElement && el.parentElement.querySelector('.time-left');
+            if (left) left.textContent = ms == null ? 'No timer' : (ms <= 0 ? 'EXPIRED' : formatRemain(ms) + ' left');
             const card = el.closest('.lane');
             const expired = ms != null && ms <= 0;
             if (card) card.classList.toggle('expired', expired);
             const block = el.closest('.order-block');
-            if (block) block.classList.toggle('expired', expired);
+            if (block && !block.classList.contains('cancelled')) block.classList.toggle('expired', expired);
         });
     }
     async function changeStatus(key, status) {

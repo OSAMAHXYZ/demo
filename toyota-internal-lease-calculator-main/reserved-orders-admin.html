@@ -6,7 +6,7 @@
     <title>Reserved Orders Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="reserved-orders.css">
-    <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025idle30">
+    <link rel="stylesheet" href="reserved-orders-skin.css?v=20261025timer1">
 </head>
 <body>
     <section id="gate" class="login-screen">
@@ -73,7 +73,7 @@
                     <select id="admin-payment"><option value="">Payment</option><option value="cash">Cash</option><option value="bank">Bank</option><option value="other">Other</option><option value="unknown">Blank / unknown</option></select>
                     <select id="admin-expired"><option value="">All timers</option><option value="expired">Expired only</option></select>
                 </div>
-                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Timer</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
+                <div class="panel" style="overflow:auto;"><table><thead><tr><th>Queue</th><th>Order</th><th>VIN</th><th>Advisor</th><th>Payment</th><th>Status</th><th>Expiry date</th><th>Time left</th><th></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
             </section>
             <section id="panel-sold" class="hidden">
                 <div class="toolbar">
@@ -188,6 +188,6 @@
         </main>
         <aside id="drawer" class="drawer hidden"></aside>
     </div>
-    <script src="reserved-orders-admin.js?v=20261025idle30"></script>
+    <script src="reserved-orders-admin.js?v=20261025timer1"></script>
     <script src="bo-rules-ui.js?v=20261021np1"></script>
 </body></html>
