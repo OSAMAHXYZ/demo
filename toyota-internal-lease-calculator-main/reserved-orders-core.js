@@ -1895,6 +1895,25 @@ function attachReservedOrders(app, options) {
         const orders = withColorQueue(live.orders || [], loadBoTable());
         res.json({ updatedAt: live.updatedAt || '', report: live.report || {}, orders: orders.map(publicOrder) });
     });
+    function applyOrderStatus(order, rawStatus, actor) {
+        const now = new Date();
+        const oldStatus = order.status || '';
+        order.status = normalizeStatus(rawStatus);
+        order.statusChangedBy = actor.name || 'Admin';
+        order.statusChangedAt = localStamp(now);
+        order.history = Array.isArray(order.history) ? order.history : [];
+        order.history.push({
+            status: order.status,
+            oldStatus,
+            changedBy: order.statusChangedBy,
+            employeeNumber: actor.employeeNumber || '',
+            recordId: actor.recordId || '',
+            changedAt: order.statusChangedAt,
+            changedDisplay: displayStamp(now),
+            source: actor.source || ''
+        });
+        return { oldStatus, now };
+    }
     app.post('/api/reserved-orders/status', (req, res) => {
         const user = sessionUser(req.body?.token);
         if (!user) return res.status(401).json({ error: 'Session expired. Sign in again.' });
@@ -1920,22 +1939,13 @@ function attachReservedOrders(app, options) {
             });
             return res.status(403).json({ error: 'Only the advisor responsible for this order can update it.' });
         }
-        const now = new Date();
-        const oldStatus = order.status || '';
-        order.status = normalizeStatus(rawStatus);
-        order.statusChangedBy = user.name;
-        order.statusChangedAt = localStamp(now);
-        order.history = Array.isArray(order.history) ? order.history : [];
-        order.history.push({
-            status: order.status,
-            oldStatus,
-            changedBy: user.name,
+        const { oldStatus } = applyOrderStatus(order, rawStatus, {
+            name: user.name,
             employeeNumber: user.employeeNumber,
             recordId: user.recordId,
-            changedAt: order.statusChangedAt,
-            changedDisplay: displayStamp(now)
+            source: 'employee'
         });
-        live.updatedAt = now.toISOString();
+        live.updatedAt = new Date().toISOString();
         saveLive(live);
         audit(req, {
             user: user.name,
@@ -1949,6 +1959,36 @@ function attachReservedOrders(app, options) {
             oldValue: oldStatus,
             newValue: order.status,
             source: 'employee'
+        });
+        notify();
+        res.json({ ok: true, order: publicOrder(order) });
+    });
+    app.post('/api/reserved-orders/admin/status', (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        const rawStatus = String(req.body?.status || '').trim();
+        if (!STATUS_SET.has(rawStatus.toLowerCase())) return res.status(400).json({ error: 'Unknown status.' });
+        const live = loadLive();
+        const order = (live.orders || []).find((item) => item.key === String(req.body?.key || ''));
+        if (!order) return res.status(404).json({ error: 'Order not found.' });
+        const { oldStatus } = applyOrderStatus(order, rawStatus, {
+            name: 'Admin',
+            employeeNumber: '',
+            recordId: '',
+            source: 'admin-merged'
+        });
+        live.updatedAt = new Date().toISOString();
+        saveLive(live);
+        audit(req, {
+            user: 'Admin',
+            role: 'admin',
+            action: 'STATUS_CHANGED',
+            entity: 'order',
+            vin: order.vin,
+            orderNumber: order.orderNumber,
+            oldValue: oldStatus,
+            newValue: order.status,
+            source: 'admin-merged',
+            details: 'Admin changed status from merged sheet'
         });
         notify();
         res.json({ ok: true, order: publicOrder(order) });

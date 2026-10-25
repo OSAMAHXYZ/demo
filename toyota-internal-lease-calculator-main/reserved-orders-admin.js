@@ -678,7 +678,19 @@
         };
         const cell = (order, label) => {
             const value = sheetValue(order, label, source);
-            if (label === 'Status') return `<td class="col-status">${statusPill(value)}</td>`;
+            if (label === 'Status') {
+                if (source === 'merged' && order.key) {
+                    const options = STATUSES.map((item) => {
+                        const selected = item === value ? ' selected' : '';
+                        return `<option value="${esc(item)}"${selected}>${esc(item)}</option>`;
+                    }).join('');
+                    const extra = value && !STATUSES.includes(value)
+                        ? `<option value="${esc(value)}" selected>${esc(value)}</option>`
+                        : '';
+                    return `<td class="col-status"><select class="admin-status-select" data-key="${esc(order.key)}" data-prev="${esc(value || '')}" title="Change status" aria-label="Change status for ${esc(order.vin || order.orderNumber || 'order')}">${extra}${options}</select></td>`;
+                }
+                return `<td class="col-status">${statusPill(value)}</td>`;
+            }
             if (label === 'Queue') return `<td class="col-queue">${value ? `<span class="q-pill">#${esc(value)}</span>` : ''}</td>`;
             if (label === 'BO ahead') return aheadCellHtml(order);
             if (label === 'Source') {
@@ -931,6 +943,42 @@
             renderSheet();
         });
     });
+    async function adminSetStatus(key, status, selectEl) {
+        if (!key || !status) return;
+        try {
+            selectEl.disabled = true;
+            await api('/api/reserved-orders/admin/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password(), key, status })
+            });
+            const order = orders.find((item) => item.key === key);
+            if (order) {
+                order.status = status;
+                order.statusChangedBy = 'Admin';
+                order.statusChangedAt = new Date().toISOString().slice(0, 19);
+            }
+            selectEl.dataset.prev = status;
+            selectEl.classList.add('is-saved');
+            setTimeout(() => selectEl.classList.remove('is-saved'), 900);
+            renderOrders();
+            renderSalesTypes();
+        } catch (e) {
+            if (selectEl.dataset.prev != null) selectEl.value = selectEl.dataset.prev;
+            if (e.message !== 'unauthorized') alert(e.message || 'Could not update status.');
+        } finally {
+            selectEl.disabled = false;
+        }
+    }
+    const mergedBox = $('live-sheet-merged');
+    if (mergedBox) {
+        mergedBox.addEventListener('change', (event) => {
+            const select = event.target.closest('.admin-status-select');
+            if (!select) return;
+            if (select.value === select.dataset.prev) return;
+            adminSetStatus(select.dataset.key, select.value, select);
+        });
+    }
     if ($('st-cards')) $('st-cards').addEventListener('click', (event) => {
         const card = event.target.closest('[data-st]');
         if (!card) return;
