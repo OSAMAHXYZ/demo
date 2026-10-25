@@ -42,7 +42,7 @@
         return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
     }
     function timerLabel(dateText, ms) {
-        if (!dateText) return 'No Assignment Date';
+        if (!dateText) return 'No Expiry Date';
         const remain = formatRemain(ms);
         return remain ? `${dateText} ( ${remain} )` : dateText;
     }
@@ -335,7 +335,43 @@
         if (raw && !looksLikeVinText(raw) && !/^[A-Z0-9]{2,4}$/i.test(raw)) return dateText(raw);
         return order.assignDisplay || '';
     }
+    function expiryText(order) {
+        if (!isBlankValue(order.expiryDisplay)) {
+            return String(order.expiryDisplay).replace(/\u00a0/g, ' ').trim();
+        }
+        if (!isBlankValue(order.expiryDate)) {
+            const parsed = parseLocal(order.expiryDate);
+            if (parsed) {
+                const p = (n) => String(n).padStart(2, '0');
+                return `${p(parsed.getDate())}.${p(parsed.getMonth() + 1)}.${parsed.getFullYear()}`;
+            }
+            const iso = String(order.expiryDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (iso) return `${iso[3]}.${iso[2]}.${iso[1]}`;
+            return String(order.expiryDate).trim();
+        }
+        if (isReservedFileOrder(order)) {
+            const fromJ = reservedField(order, 'J');
+            return looksLikeDateText(fromJ) || fromJ ? fromJ : '';
+        }
+        return '';
+    }
+    function expiryDeadline(order) {
+        const raw = order.expiryDate || '';
+        if (parseLocal(raw)) return raw;
+        const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}T23:59:59`;
+        const display = expiryText(order);
+        const dmy = String(display).match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+        if (dmy) {
+            const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+            const p = (n) => String(n).padStart(2, '0');
+            return `${year}-${p(dmy[2])}-${p(dmy[1])}T23:59:59`;
+        }
+        return '';
+    }
     function columnDeadline(order) {
+        const fromExpiry = expiryDeadline(order);
+        if (fromExpiry) return fromExpiry;
         if (order.deadline) return order.deadline;
         const raw = columnText(order, 'G');
         const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -444,7 +480,6 @@
         let share;
         let colors;
         let advisor;
-        let assignedOn;
         if (reservedOnly) {
             // Reserved Order File layout: E product, F sfx, D year, G/H colors, B name, C order, I VIN, J expiry.
             sfx = reservedField(order, 'F');
@@ -457,7 +492,6 @@
             colors = [reservedField(order, 'G') || order.exterior, reservedField(order, 'H') || order.interior]
                 .filter((item) => !isBlankValue(item)).join(' / ');
             advisor = '';
-            assignedOn = '';
         } else {
             sfx = columnText(order, 'J');
             if (looksLikeDateText(sfx)) sfx = '';
@@ -469,8 +503,8 @@
             share = columnText(order, 'C');
             colors = [columnText(order, 'M'), columnText(order, 'N')].filter((item) => !isBlankValue(item)).join(' / ');
             advisor = columnText(order, 'T');
-            assignedOn = assignText(order);
         }
+        const expiryOn = expiryText(order);
         const customer = reservedOnly
             ? (firstText(order, order.customerName, (label) => label === 'name' || label === 'customer' || label === 'customer name' || label === 'العميل') || reservedField(order, 'B'))
             : firstText(order, order.customerName, (label) => label === 'customer' || label === 'customer name' || label === 'العميل');
@@ -486,8 +520,7 @@
             meta('Reservation age', ageHtml(ageRaw), ageRaw),
             meta('Area', toneValue(area, String(area).trim().toLowerCase() === 'rtlesal'), area),
             meta('Share level', toneValue(share, String(share).trim().toLowerCase().includes('retail electronic sales')), share),
-            meta('Colors', esc(colors), colors),
-            meta('Expiry date', esc(order.expiryDisplay || ''), order.expiryDisplay || '')
+            meta('Colors', esc(colors), colors)
         ].join('');
         return `<article class="order-block${isExpired(order) ? ' expired' : ''}${isCancelled(order) ? ' cancelled' : ''}">
             <div class="lane${isExpired(order) ? ' expired' : ''}${specs ? '' : ' no-specs'}" data-key="${esc(order.key)}">
@@ -502,12 +535,12 @@
             <div class="lane-assign">
                 <span class="assign-pill ${assigned ? 'on' : 'off'}">${assigned ? 'Assigned' : 'Unassigned'}</span>
                 ${assigned ? meta('Advisor', esc(advisor), advisor) : ''}
-                ${assignedOn ? meta('Assignment date', esc(assignedOn), assignedOn) : ''}
+                ${expiryOn ? meta('Expiry date', esc(expiryOn), expiryOn) : ''}
                 ${(!reservedOnly && order.paymentLabel && order.paymentLabel !== 'UNKNOWN') ? meta('Payment', esc(order.paymentLabel), order.paymentLabel) : ''}
                 <div class="meta ahead-meta"><span>Upcoming queue</span>${aheadHtml(order)}</div>
             </div>
             <div class="lane-side">
-                <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(assignedOn || '')}">${esc(timerLabel(assignedOn, ms))}</div>
+                <div class="timer ${timerClass(ms)}" data-deadline="${esc(deadline || '')}" data-date="${esc(expiryOn || '')}">${esc(timerLabel(expiryOn, ms))}</div>
                 <span class="muted">${hours} HOURS</span>
                 <div class="status-glow">
                     <span class="badge ${badge(order.status)}" dir="auto">${esc(order.status || 'محجوز')}</span>
