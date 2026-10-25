@@ -51,6 +51,18 @@ function isKnownStatus(value) {
     return STATUS_SET.has(String(value || '').trim().toLowerCase());
 }
 
+function pushSourceLabel(source) {
+    const key = String(source || '').trim().toLowerCase();
+    if (key === 'report-sheet-admin' || key === 'report-sheet') {
+        return 'Report Sheet admin (report-sheet/admin.html)';
+    }
+    if (key === 'reserved-admin' || key === 'reserved-orders-admin') {
+        return 'Reserved Orders admin (reserved-orders-admin.html)';
+    }
+    if (key === 'admin-push') return 'Admin push';
+    return source || 'Unknown push page';
+}
+
 const COL = { order: 5, assign: 6, product: 8, suffix: 9, vin: 11, exterior: 12, interior: 13, searchArea: 15 };
 
 function pad2(n) {
@@ -2107,6 +2119,8 @@ function attachReservedOrders(app, options) {
         const created = built.orders.filter((order) => !previousKeys.has(order.key)).length;
         const updated = built.orders.length - created;
         saveLive(live);
+        const pushSource = names.source || 'admin-push';
+        const pushOrigin = pushSourceLabel(pushSource);
         const version = writeArchive(live, names.actor || { name: 'Admin Push' }, previousOrders);
         audit(names.req, {
             user: (names.actor && names.actor.name) || 'Admin',
@@ -2114,12 +2128,19 @@ function attachReservedOrders(app, options) {
             role: 'admin',
             action: 'PUSH_LIVE',
             entity: 'dataset',
-            source: names.source || 'admin-push',
+            source: pushSource,
             newValue: version,
-            details: `Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length} (delivered ${deliveredCount}, proforma ${proformaCount}), reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
+            details: `Pushed from ${pushOrigin}. Reserved ${built.report.reservedVinCount}, matched ${built.report.matchedOrders}, new ${created}, updated ${updated}, removed ${removed.length} (delivered ${deliveredCount}, proforma ${proformaCount}), reserved file VINs ${built.report.reservedFileRows || 0} (new ${built.report.reservedFileNewVins || 0}, updated ${built.report.reservedFileUpdatedVins || 0}, with expiry ${built.report.reservedFileExpiryVins || 0})`
         });
         if (created) {
-            audit(names.req, { user: 'System', role: 'system', action: 'ORDER_CREATED', entity: 'order', source: 'import', details: `${created} reserved order(s) added` });
+            audit(names.req, {
+                user: 'System',
+                role: 'system',
+                action: 'ORDER_CREATED',
+                entity: 'order',
+                source: pushSource,
+                details: `${created} reserved order(s) added · from ${pushOrigin}`
+            });
         }
         if (removed.length) {
             const sample = soldIncoming.map((item) => {
@@ -2131,11 +2152,18 @@ function attachReservedOrders(app, options) {
                 role: 'system',
                 action: 'ORDER_REMOVED',
                 entity: 'order',
-                source: 'import',
-                details: `${removed.length} VIN(s) moved to Sold VINs${sample.length ? ': ' + sample.join(', ') : ''}`
+                source: pushSource,
+                details: `${removed.length} VIN(s) moved to Sold VINs · from ${pushOrigin}${sample.length ? ': ' + sample.join(', ') : ''}`
             });
         }
-        audit(names.req, { user: 'System', role: 'system', action: 'QUEUE_RECALCULATED', entity: 'queue', source: 'import', details: `Queue ranked for ${built.orders.length} orders` });
+        audit(names.req, {
+            user: 'System',
+            role: 'system',
+            action: 'QUEUE_RECALCULATED',
+            entity: 'queue',
+            source: pushSource,
+            details: `Queue ranked for ${built.orders.length} orders · from ${pushOrigin}`
+        });
         notify();
         if (boRulesApi) boRulesApi.reanalyzeActive(names.req, 'BO_FILE_UPDATED');
         return { ...built, version, sold: soldIncoming, report: live.report };
@@ -2412,7 +2440,7 @@ function attachReservedOrders(app, options) {
                 salesSheets,
                 req,
                 source: 'reserved-admin',
-                actor: { name: 'Admin' }
+                actor: { name: 'Admin · Reserved Orders' }
             });
             if (!built.ok) return res.status(400).json({ error: built.error, report: built.report });
             let reportSheet = null;

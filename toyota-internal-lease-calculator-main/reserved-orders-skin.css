@@ -1602,3 +1602,15 @@
 .status-list li span {
   font-weight: 700;
 }
+
+#admin-app .col-audit-source {
+  white-space: nowrap;
+  font-weight: 700;
+  color: #93c5fd;
+}
+#admin-app .col-audit-details {
+  max-width: 320px;
+  white-space: normal;
+  font-size: 12px;
+  color: #cbd5e1;
+}

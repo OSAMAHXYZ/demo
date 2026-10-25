@@ -519,7 +519,7 @@ function refreshReservedOrdersFromAdminPush(fileNames) {
       salesBuffer: salesPath && fs.existsSync(salesPath) ? fs.readFileSync(salesPath) : null,
       reservedBuffer: reservedPath && fs.existsSync(reservedPath) ? fs.readFileSync(reservedPath) : null,
       source: 'report-sheet-admin',
-      actor: { name: 'Admin Push' }
+      actor: { name: 'Admin · Report Sheet' }
     }
   );
 }

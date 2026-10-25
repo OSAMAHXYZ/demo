@@ -575,6 +575,14 @@
             <td><button class="ghost" type="button" data-version="${esc(item.version)}">View</button></td>
         </tr>`).join('');
     }
+    function auditSourceLabel(source) {
+        const key = String(source || '').trim().toLowerCase();
+        if (key === 'report-sheet-admin' || key === 'report-sheet') return 'Report Sheet admin';
+        if (key === 'reserved-admin' || key === 'reserved-orders-admin') return 'Reserved Orders admin';
+        if (key === 'admin-push') return 'Admin push';
+        if (!key) return '—';
+        return String(source);
+    }
     function renderAudit() {
         const q = $('audit-q').value.trim().toLowerCase();
         const employee = $('audit-employee').value.trim().toLowerCase();
@@ -586,9 +594,16 @@
             return true;
         });
         $('audit-rows').innerHTML = rows.map((event) => `<tr>
-            <td>${esc(event.display || event.at)}</td><td>${esc(event.user)}<br>${esc(event.employeeNumber)}</td>
-            <td>${esc(event.role)}</td><td>${esc(event.action)}</td><td>${esc(event.vin)}</td><td>${esc(event.orderNumber)}</td>
-            <td>${esc(event.oldValue)}</td><td>${esc(event.newValue)}</td>
+            <td>${esc(event.display || event.at)}</td>
+            <td>${esc(event.user)}<br>${esc(event.employeeNumber || '')}</td>
+            <td>${esc(event.role || '')}</td>
+            <td>${esc(event.action || '')}</td>
+            <td class="col-audit-source">${esc(auditSourceLabel(event.source))}</td>
+            <td>${esc(event.vin || '')}</td>
+            <td>${esc(event.orderNumber || '')}</td>
+            <td>${esc(event.oldValue || '')}</td>
+            <td>${esc(event.newValue || '')}</td>
+            <td class="col-audit-details" title="${esc(event.details || '')}">${esc(event.details || '')}</td>
             <td><button class="ghost" type="button" data-audit="${esc(event.at)}">View</button></td>
         </tr>`).join('');
     }
