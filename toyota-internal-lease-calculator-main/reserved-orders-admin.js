@@ -80,7 +80,7 @@
     const SHEET_NOTES = {
         esales: 'Columns and rows from the Stock E-Sales push. BO ahead shows the first 3 orders in front in the same Back Order product / suffix / color queue.',
         reserved: 'Columns and rows from the Reserved Order File push. BO ahead uses the same Back Order queue rules as BO Order Lookup.',
-        merged: 'One row per VIN. Matching VINs merge into Both (Expiry from Reserved File). Reserved-only rows use Reserved columns only — empty fields stay empty.'
+        merged: 'One row per VIN. If the VIN is in both files, Stock E-Sales info is kept and only Expiry comes from the Reserved Order File. Reserved-only rows stay separate.'
     };
     function fieldOf(order, col) {
         const field = (order.fields || []).find((item) => item.col === col || item.label === col);
@@ -170,36 +170,35 @@
         const bR = orderInSheet(b, 'reserved');
         const esalesSide = aE ? a : bE ? b : null;
         const reservedSide = aR ? a : bR ? b : null;
+        // Duplicate VIN: one row — all Stock E-Sales info, expiry only from Reserved File.
+        if (esalesSide && reservedSide) {
+            return Object.assign({}, esalesSide, {
+                inEsales: true,
+                inReservedFile: true,
+                fromReservedFile: false,
+                esalesFields: esalesSide.esalesFields || esalesSide.fields || [],
+                reservedFields: reservedSide.reservedFields || reservedSide.fields || [],
+                fields: esalesSide.esalesFields || esalesSide.fields || esalesSide.fields || [],
+                expiryDisplay: reservedSide.expiryDisplay || esalesSide.expiryDisplay || '',
+                expiryDate: reservedSide.expiryDate || esalesSide.expiryDate || '',
+                ahead: (Array.isArray(esalesSide.ahead) && esalesSide.ahead.length ? esalesSide.ahead : null)
+                    || (Array.isArray(reservedSide.ahead) && reservedSide.ahead.length ? reservedSide.ahead : null)
+                    || esalesSide.ahead || [],
+                boQueuePosition: esalesSide.boQueuePosition != null ? esalesSide.boQueuePosition : reservedSide.boQueuePosition,
+                boQueueSize: esalesSide.boQueueSize != null ? esalesSide.boQueueSize : reservedSide.boQueueSize,
+                boOrdersAhead: esalesSide.boOrdersAhead != null ? esalesSide.boOrdersAhead : reservedSide.boOrdersAhead
+            });
+        }
         const base = esalesSide || reservedSide || a;
         return Object.assign({}, base, {
             inEsales: aE || bE,
             inReservedFile: aR || bR,
-            fromReservedFile: Boolean((a && a.fromReservedFile) || (b && b.fromReservedFile)),
+            fromReservedFile: !esalesSide && Boolean((a && a.fromReservedFile) || (b && b.fromReservedFile)),
             esalesFields: (esalesSide && (esalesSide.esalesFields || esalesSide.fields)) || [],
-            reservedFields: (reservedSide && (reservedSide.reservedFields || (reservedSide.fromReservedFile ? reservedSide.fields : null))) || [],
+            reservedFields: (reservedSide && (reservedSide.reservedFields || reservedSide.fields)) || [],
             vin: firstReal(a.vin, b.vin),
-            orderNumber: cleanOrderText(a.orderNumber) || cleanOrderText(b.orderNumber) || base.orderNumber,
-            customerName: cleanPersonText(a.customerName) || cleanPersonText(b.customerName) || '',
-            vehicle: cleanProductText(a.vehicle) || cleanProductText(b.vehicle) || '',
-            modelYear: firstReal(a.modelYear, b.modelYear),
-            exterior: firstReal(a.exterior, b.exterior),
-            interior: firstReal(a.interior, b.interior),
-            salesAdvisor: cleanPersonText(a.salesAdvisor) || cleanPersonText(b.salesAdvisor) || '',
-            paymentLabel: firstReal(
-                (a.paymentLabel && String(a.paymentLabel).toUpperCase() !== 'UNKNOWN') ? a.paymentLabel : '',
-                (b.paymentLabel && String(b.paymentLabel).toUpperCase() !== 'UNKNOWN') ? b.paymentLabel : ''
-            ),
-            searchArea: firstReal(aE ? a.searchArea : '', bE ? b.searchArea : ''),
             expiryDisplay: (reservedSide && reservedSide.expiryDisplay) || a.expiryDisplay || b.expiryDisplay || '',
-            expiryDate: (reservedSide && reservedSide.expiryDate) || a.expiryDate || b.expiryDate || '',
-            ahead: (Array.isArray(a.ahead) && a.ahead.length ? a.ahead : null)
-                || (Array.isArray(b.ahead) && b.ahead.length ? b.ahead : null)
-                || a.ahead || b.ahead || [],
-            queueNumber: a.queueNumber != null ? a.queueNumber : b.queueNumber,
-            status: a.status || b.status,
-            boQueuePosition: a.boQueuePosition != null ? a.boQueuePosition : b.boQueuePosition,
-            boQueueSize: a.boQueueSize != null ? a.boQueueSize : b.boQueueSize,
-            boOrdersAhead: a.boOrdersAhead != null ? a.boOrdersAhead : b.boOrdersAhead
+            expiryDate: (reservedSide && reservedSide.expiryDate) || a.expiryDate || b.expiryDate || ''
         });
     }
     function buildMergedOrder(order) {
@@ -219,8 +218,7 @@
             looksLikeVinText(eVin) ? eVin : '',
             looksLikeVinText(rVin) ? rVin : ''
         );
-        // Reserved-only rows use Reserved File columns only; empty stays empty.
-        // E-Sales-only rows use E-Sales columns only. Both: fill blanks from the other, expiry from Reserved.
+        // Reserved-only → Reserved columns. E-Sales or Both → Stock E-Sales info only; expiry from Reserved.
         let values;
         if (inR && !inE) {
             values = {
@@ -237,9 +235,9 @@
                 Payment: '',
                 Area: ''
             };
-        } else if (inE && !inR) {
+        } else {
             values = {
-                Source: 'E-Sales',
+                Source: inE && inR ? 'Both' : 'E-Sales',
                 VIN: vin,
                 Order: cleanOrderText(order.orderNumber) || cleanOrderText(fieldValueFromList(esales, 'F')),
                 Customer: cleanPersonText(order.customerName) || cleanPersonText(fieldValueFromList(esales, 'S')),
@@ -248,23 +246,6 @@
                 SFX: eSuffix,
                 Exterior: firstReal(order.exterior, fieldValueFromList(esales, 'M')),
                 Interior: firstReal(order.interior, fieldValueFromList(esales, 'N')),
-                Advisor: cleanPersonText(order.salesAdvisor) || cleanPersonText(fieldValueFromList(esales, 'T')),
-                Payment: firstReal(
-                    (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''
-                ),
-                Area: firstReal(order.searchArea, fieldValueFromList(esales, 'B'), fieldValueFromList(esales, 'A'))
-            };
-        } else {
-            values = {
-                Source: 'Both',
-                VIN: vin,
-                Order: cleanOrderText(order.orderNumber) || cleanOrderText(fieldValueFromList(esales, 'F')) || cleanOrderText(fieldValueFromList(reserved, 'C')),
-                Customer: cleanPersonText(order.customerName) || cleanPersonText(fieldValueFromList(esales, 'S')) || cleanPersonText(fieldValueFromList(reserved, 'B')),
-                Product: eProduct || rProduct || cleanProductText(order.vehicle),
-                'Model Year': firstReal(order.modelYear, fieldValueFromList(esales, 'K'), fieldValueFromList(reserved, 'D')),
-                SFX: eSuffix || rSuffix,
-                Exterior: firstReal(order.exterior, fieldValueFromList(esales, 'M'), fieldValueFromList(reserved, 'G')),
-                Interior: firstReal(order.interior, fieldValueFromList(esales, 'N'), fieldValueFromList(reserved, 'H')),
                 Advisor: cleanPersonText(order.salesAdvisor) || cleanPersonText(fieldValueFromList(esales, 'T')),
                 Payment: firstReal(
                     (order.paymentLabel && String(order.paymentLabel).toUpperCase() !== 'UNKNOWN') ? order.paymentLabel : ''

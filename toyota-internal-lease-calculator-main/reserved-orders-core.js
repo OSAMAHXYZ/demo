@@ -826,18 +826,15 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
         }));
     });
 
-    // Reserved File (uploaded on its own from Report Sheet Admin): its VINs are read too.
-    // A VIN that is already in the reserved sheet keeps ONE order (never duplicated):
-    // it takes column J from this file, any blank field the Reserved File can fill,
-    // and the reservation expiry date. A new VIN is added as an order with a blank
-    // assign date. VINs only in E-Sales simply have no expiry to display.
+    // Reserved Order File: each VIN appears once.
+    // Duplicate with Stock E-Sales → keep all E-Sales info; take only the expiry date from Reserved.
+    // Reserved-only VIN → add as a new order (blank assign date).
     let reservedFileRows = 0;
     let reservedFileNewVins = 0;
     let reservedFileUpdatedVins = 0;
     let reservedFileExpiryVins = 0;
     const countedUpdated = new Set();
     const countedExpiry = new Set();
-    const blankText = (value) => { const text = cleanText(value); return !text || text === '—'; };
     const reservedFileSheet = pickReservedSheet(reservedSheets || []) || (reservedSheets || [])[0] || null;
     if (reservedFileSheet) {
         const reservedFile = extractReservedRows(reservedFileSheet.grid || []);
@@ -847,47 +844,16 @@ function buildReservedDataset({ sheets, boRows, boHeaders, previous, rtlByVin, r
             reservedFileRows += 1;
             const existing = byVin.get(vin);
             if (existing) {
-                let touched = false;
                 existing.reservedFields = Array.isArray(row.fields) ? row.fields : [];
                 existing.inReservedFile = true;
-                const fields = Array.isArray(existing.fields) ? existing.fields.slice() : [];
-                const jField = (row.fields || []).find((field) => field.col === 'J');
-                const jValue = jField ? cleanText(jField.value) : cleanText(row.suffix);
-                if (jValue && jValue !== '—') {
-                    const at = fields.findIndex((field) => field.col === 'J');
-                    const label = at >= 0 ? fields[at].label : 'J';
-                    if (at >= 0) fields[at] = { ...fields[at], value: jValue };
-                    else fields.push({ label, col: 'J', value: jValue });
-                    touched = true;
-                }
-                (row.fields || []).forEach((field) => {
-                    if (!field || field.col === 'J' || blankText(field.value)) return;
-                    const at = fields.findIndex((item) => item.col === field.col);
-                    if (at >= 0 && blankText(fields[at].value)) { fields[at] = { ...fields[at], value: field.value }; touched = true; }
-                    else if (at < 0) { fields.push({ label: field.label, col: field.col, value: field.value }); touched = true; }
-                });
-                existing.fields = fields;
-                const fillScalar = (key, value) => {
-                    if (!blankText(value) && blankText(existing[key])) { existing[key] = cleanText(value); touched = true; }
-                };
-                fillScalar('customerName', row.customerName);
-                fillScalar('vehicle', row.vehicle);
-                fillScalar('modelYear', row.modelYear);
-                fillScalar('exterior', row.exterior);
-                fillScalar('interior', row.interior);
-                fillScalar('searchArea', row.searchArea);
-                fillScalar('shareLevel', row.shareLevel);
-                if (existing.salesAdvisor === 'UNASSIGNED' && !blankText(row.salesAdvisor)) {
-                    existing.salesAdvisor = cleanText(row.salesAdvisor);
-                    touched = true;
-                }
+                // Keep E-Sales fields/scalars untouched — only attach expiry from Reserved File.
                 const expiry = reservedExpiryFields(row);
                 if (expiry) {
                     existing.expiryDate = expiry.expiryDate;
                     existing.expiryDisplay = expiry.expiryDisplay;
                     if (!countedExpiry.has(vin)) { countedExpiry.add(vin); reservedFileExpiryVins += 1; }
                 }
-                if (touched && !countedUpdated.has(vin)) { countedUpdated.add(vin); reservedFileUpdatedVins += 1; }
+                if (!countedUpdated.has(vin)) { countedUpdated.add(vin); reservedFileUpdatedVins += 1; }
                 return;
             }
             const bo = backOrder.byVin.get(vin) || backOrder.byOrder.get(cleanText(row.orderNumber).toLowerCase()) || null;

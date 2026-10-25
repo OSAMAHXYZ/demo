@@ -287,8 +287,11 @@
     }
     function isReservedFileOrder(order) {
         if (!order) return false;
+        // Duplicate VIN in both files → treat as E-Sales (expiry still comes from Reserved).
+        if (order.inEsales === true) return false;
+        if (Array.isArray(order.esalesFields) && order.esalesFields.length) return false;
         if (order.inEsales === false || order.fromReservedFile) return true;
-        if (order.inReservedFile && !(Array.isArray(order.esalesFields) && order.esalesFields.length)) return true;
+        if (order.inReservedFile) return true;
         return false;
     }
     function reservedField(order, letter) {
